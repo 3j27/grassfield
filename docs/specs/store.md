@@ -1,6 +1,8 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
-Status: step 0 (this spec, ADR-0037 and the parity matrix). Nothing is built. The owner's open choices (ADR-0037 ST1 to ST9)
-are marked **open** where they change behaviour; the install path waits for ADR-0033's PASS (ST4).
+Status: step 0 (this spec, ADR-0037 and the parity matrix). Nothing is built. The owner answered ADR-0037 ST1 (§4 amended),
+ST2 (AUR opt-in, Flathub optional), ST3 (the sheet alone for per-user installs) and ST8 (the only Dock badge stays on
+Settings) on 2026-10-27; the choices still open (ST5, ST6, ST7, ST9) are marked **open**; the install path waits for
+ADR-0033's PASS (ST4).
 Decisions and evidence: `docs/decisions/ADR-0037-store.md` (probes S0 to S11). Parity and measures:
 `docs/audits/store-2026-10-27/parity.md`. App id `org.grassfield.Store`, binary `grassfield-store`, package `grassfield-store`.
 Name: "Grassfield Store" in both languages (a product name, like other stores in French). Never "App Store" or "Arcade" (§14).
@@ -26,7 +28,8 @@ brings, on Grassfield over an unmodified Omarchy 4.
 Non-goals:
 - no account, purchase, payment, subscription, gift card, Family Sharing, region, content restrictions;
 - no ratings or reviews (no identity leaves the machine); no stories, events, videos;
-- no per-app update of repository or AUR apps (Arch: no partial upgrade), no automatic updates, no pause or resume;
+- no per-app update of repository or AUR apps (Arch: no partial upgrade; Flatpaks have one), no automatic updates, no pause
+  or resume;
 - no `pacman -Sy`, no `--overwrite`, no removal of `db.lck`, no root code of the Store's own under P1;
 - no installer of its own: pacman, yay and Omarchy's commands install (ADR-0037 b);
 - no publication of the catalog before the owner's decision (ADR-0033 h).
@@ -58,8 +61,10 @@ Search (step 2)
 - SR6. Typing in the sidebar field (Ctrl+F focuses it) shows results while typing from the local merged catalog (our catalog,
   AppStream, the `[omarchy]` list): name, keywords, summary and package name, ranked name-prefix first; Esc clears, then
   leaves the field. Empty result: "No Results for “…”" (« Aucun résultat pour « … » »).
-- SR7. AUR results (only when the AUR source is on, ADR-0037 ST2/ST7) appear after Return in their own section "From the
-  AUR (not reviewed)" (« Depuis l'AUR (non vérifié) »), with votes and the out-of-date flag.
+- SR7. AUR results (only when the AUR source is turned on, ADR-0037 ST2/ST7) appear after Return in their own section "From
+  the AUR (not reviewed)" (« Depuis l'AUR (non vérifié) »), with votes and the out-of-date flag.
+- SR7b. Flathub apps (only when Flathub is turned on, ST2) are part of the local search (their AppStream is in the user's
+  installation), each with the "Flathub" badge.
 
 Categories (step 2)
 - SR8. A grid of the catalog's categories (symbol, name); a category opens its list, sorted by name, with a source filter
@@ -74,17 +79,21 @@ Product page (step 2)
   Licence, Homepage and Bug tracker (buttons that open the browser on click, https only). For an Omarchy setup: "What this
   setup changes" (our catalog's text) and the recipe's name. For the AUR: Maintainer (or "Orphaned"), Votes, Popularity, Last
   updated, "Flagged out of date" when so, and "View Build Script" (the PKGBUILD as plain text in a sheet, fetched on click).
+  For a Flatpak: the app id, the runtime, "Can access" (its permissions in plain words: files, devices, network) and
+  Flathub's verified-developer flag when its AppStream carries one.
 - SR12. An app with several launchers names the one "Open" uses; an app with none (a command-line tool) says so and has no
   "Open".
 
 Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
-- SR13. The button: "Get" (« Obtenir ») when not installed; "Open" (« Ouvrir ») when installed with a launcher; a progress
+- SR13. The button: "Get" (« Obtenir ») when not installed; "Open" (« Ouvrir ») when installed with a launcher ("Update"
+  « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
   without a launcher. Disabled with a tooltip when offline, while an update or another package manager runs, or when the source
   is turned off.
 - SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »), "Install from the AUR"
   (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
-  --print` as the user), for a setup what it changes, for the AUR the warning (SR16). Cancel (Esc) closes it and nothing runs.
+  --print` as the user), for a setup what it changes, for the AUR the warning (SR16), for a Flatpak what it can reach and the
+  runtimes it pulls. Cancel (Esc) closes it and nothing runs.
 - SR15. Before the operation runs, the plan check of ADR-0037 e.4: a plan that upgrades an installed package, an unresolvable
   plan, or a package file the mirror no longer has → the sheet says "Update your system first" (« Mettez d'abord le système à
   jour ») with "Open Software Update"; `db.lck` present or Omarchy's update lock held → "Another installation or an update is
@@ -96,7 +105,7 @@ Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
   script de construction s'exécute sur cet ordinateur, puis le paquet est installé avec les droits d'administrateur.
   N'installez que ce en quoi vous avez confiance. »
 - SR17. The authentication is the path's: sudo's prompt in Omarchy's terminal (P1) or the polkit dialog (P2). Per-user installs
-  (web apps): **open** ADR-0037 ST3 (the sheet alone, or the user's own password through a polkit `auth_self` action).
+  (web apps, Flatpaks): the sheet alone, its default button being the consent; no password (owner, ST3, 2026-10-27).
 - SR18. One operation at a time; later ones wait in the queue (shown on their buttons and in a queue popover in the toolbar,
   where a waiting one can be removed). The running one shows progress: indeterminate while downloading, then "n of N" from
   pacman's log; P1 also names the terminal ("Installing in Terminal…" « Installation dans le Terminal… »).
@@ -111,24 +120,28 @@ Get, Open, Uninstall (step 3; the path is ADR-0037 ST4)
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
   app's item. Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
   S10), or the setup's removal recipe and the user data it deletes (our catalog's `removes`), or the web app's launcher and
-  icon. A package other installed packages need is not removable (S10: "removing glib2 breaks dependency … required by
+  icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
+  need is not removable (S10: "removing glib2 breaks dependency … required by
   accountsservice"): the sheet says which ones need it, and nothing runs. Default button "Uninstall" (« Désinstaller »),
   destructive style.
 
 Installed (step 2 read-only, step 3 actions)
 - SR23. The apps installed from the Store's sources that have a launcher or a catalog entry: explicitly installed packages
   (`pacman -Qe`) with an AppStream or catalog entry, setups whose packages are present, Omarchy web apps
-  (`~/.local/share/applications/*.desktop` whose Exec is `omarchy-launch-webapp`), AUR packages (`pacman -Qm`). Each with Open
-  and Uninstall…. Grouped by source, sorted by name.
+  (`~/.local/share/applications/*.desktop` whose Exec is `omarchy-launch-webapp`), AUR packages (`pacman -Qm`), Flatpaks of
+  the user's installation (`flatpak list --user --app`, when Flathub is on). Each with Open and Uninstall…. Grouped by source,
+  sorted by name.
 
-Updates (step 4; **open** ADR-0037 ST8)
+Updates (step 4; ADR-0037 d, owner ST8)
 - SR24. From ADR-0033's result (`software-update.json`): the installed apps with an update, each marked "Updates with the
   system" (« Mise à jour avec le système »), then "N other system packages", the Grassfield and Omarchy releases as Software
   Update names them, and "Update All…" (« Tout mettre à jour… ») which starts ADR-0033's "Update Now". "Check Now" asks the shell
   to check (ADR-0033). States: checking, up to date (with the last check time), update running, failed (offline or
   unavailable, with the last success), blocking (ADR-0033 a2: a link to Software Update's "Turn Off…").
-- SR25. The sidebar's Updates row shows the number of apps with an update. The Dock badge follows ST8 (recommended: none on
-  the Store's tile; Software Update's badge on Settings).
+  Flatpaks (Flathub on) form their own group: "Update" per app and "Update All" for the group (`flatpak update --user`),
+  checked by the Store when it opens and on "Check Now" (`flatpak remote-ls --user --updates`).
+- SR25. The sidebar's Updates row shows the number of apps with an update, Flatpaks included. The Store's Dock tile has no
+  badge: the only update badge is Software Update's, on Settings (owner, ST8).
 
 Catalog and network (step 1)
 - SR26. The catalog is fetched at start when the cached one is older than 6 h, and on Ctrl+R (« Actualiser »), never while the
@@ -139,7 +152,10 @@ Catalog and network (step 1)
   query leaves for Grassfield's host. The Store's settings window lists what is fetched and from where, in plain words.
 
 Settings window (Ctrl+, ; step 2 reads, step 3 writes)
-- SR28. "Sources": switches for the optional sources (AUR, and Flathub if chosen), each with one line saying what it means.
+- SR28. "Sources": switches for the optional sources, both off until turned on, each with one line saying what it means: AUR;
+  Flathub, shown only when the `flatpak` package is installed (otherwise the line "Flathub needs the flatpak package" with a
+  link to its product page); turning Flathub on adds the Flathub remote to the user's installation
+  (`flatpak remote-add --user --if-not-exists`).
   "Screenshots": the ST6 switch. "Catalog": the channel and the date of the catalog in use, "Refresh". Stored through the
   settings contract (ADR-0020).
 
@@ -215,7 +231,7 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 | A5 | plan check: a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman | L0 |
 | A6 | queue: one at a time; success read from the system (an exit 0 with a partial install is "interrupted") | unit with the fake installer | L0 |
 | A7 | recovery: each start case of SR20 | unit with recorded `store.json` | L0 |
-| A8 | real install, open (`uwsm-app` argv), uninstall of a repository package, a web app and a setup | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
+| A8 | real install, open (`uwsm-app` argv), uninstall of a repository package, a web app, a setup and a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
 | A10 | F1 geometry and tints against the parity matrix | measurement script on the captures | L1 |
 | A11 | keyboard paths and accessible names | QML tests + checklist | L0/L1 |
@@ -226,7 +242,9 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 - ADR-0033: the channel URL tree and key; `software-update.json` (with the added list of other updates, ADR-0037 d); "Update
   Now"; the request to check.
 - `store.json` (state, `version: 1`); Store preference keys in `grassfield.json` (schema, ADR-0020).
-- Launch: ADR-0011 (`apps/appscope.h`). Badge: ADR-0018 (if ST8 gives the Store one).
+- Launch: ADR-0011 (`apps/appscope.h`). Badge: none of the Store's own (ST8); Software Update's on Settings (ADR-0033 U18).
+- Flatpak 1.18 (when installed): `flatpak install|uninstall|update --user --noninteractive`, `flatpak remote-ls --user
+  --updates`, `flatpak list --user --app`, `flatpak remote-info --show-metadata`, `flatpak remote-add --user --if-not-exists`.
 - Omarchy 4.0.4 commands, pinned in `docs/upstream/omarchy.lock` with the step that uses them: `omarchy-install-app`,
   `omarchy-install-and-launch`, `omarchy-pkg-add`, `omarchy-pkg-aur-add`, `omarchy-pkg-drop`,
   `omarchy-launch-floating-terminal-with-presentation`, `omarchy-webapp-install`, `omarchy-webapp-remove`, the recipes the
@@ -234,7 +252,8 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 
 ## Dependencies (verified versions, S3 and S8; at step 1 again)
 `grassfield-desktop` (same version), `archlinux-appstream-data` 20261017-1 and `appstream-qt` 1.2.1 (if ST5 = A),
-`kimageformats` (JPEG XL icons), `gnupg` (`gpgv`), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's, only for the AUR).
+`kimageformats` (JPEG XL icons), `gnupg` (`gpgv`), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's, only for the AUR),
+`flatpak` 1.18.4 as an `optdepends` only (ST2; not installed on the owner's machine).
 
 ## Degraded behavior
 - No catalog (no hosting yet, offline at first start, verification failed): no editorial sections; AppStream and pacman still
@@ -244,7 +263,9 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 - No `archlinux-appstream-data` (ST5 ≠ A): pacman's descriptions only, catalog icons where we have them, generic icons
   elsewhere.
 - Omarchy's commands missing (a non-Omarchy system): no install, no uninstall; the Store browses and opens.
-- No shell (Updates): the Store shows the last `software-update.json` and its date; "Check Now" is disabled.
+- No shell (Updates): the Store shows the last `software-update.json` and its date; "Check Now" is disabled for system updates
+  (Flatpak updates are still checked by the Store).
+- No `flatpak`: no Flathub source, no Flatpak group; the settings say how to get it.
 
 ## Automated tests · Manual verification steps
 - Unit (C++ and QML, offscreen): A1 to A7, A9, A11. Fake pacman (`GRASSFIELD_STORE_FIXTURE`: a script answering `-Sl`, `-Si`,
@@ -268,6 +289,8 @@ Shortcuts are shown in the menus in the user's shortcut style (`apps/shortcutsty
 - Omarchy's recipes are Omarchy's: their effects are those of the installed Omarchy release; our catalog's text describes the
   release it was written against (4.0.4), and CI checks the names, not the behaviour.
 - A replayed old catalog is refused only once a newer one has been seen on that machine.
+- Flatpaks are not updated by `omarchy update` (the Store updates them) and have no Dock badge (ST8); cancelling a Flatpak
+  operation is offered only once step 3 has measured what it leaves.
 - Screenshots come from third-party hosts (ST6).
 - Visual parity of the product page, search, Categories and Updates rests on the guide and the macOS 27 Settings panes: no
   public capture of those pages exists (parity matrix).

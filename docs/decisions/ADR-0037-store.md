@@ -1,7 +1,7 @@
 # ADR-0037: Grassfield Store: an app that installs, opens and uninstalls apps through Omarchy, with a signed catalog
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
-PASS). Every choice marked **open** waits for the owner ("Owner decisions"); the install path (b) stays open until ADR-0033
-passes its review. · Date: 2026-10-27 · Decider: owner (every open choice), integrator (merge after the opus PASS) ·
+PASS). The owner answered ST1, ST2, ST3 and ST8 on 2026-10-27 ("Owner decisions"); ST5, ST6, ST7 and ST9 stay open with the
+integrator's recommendation; the install path (b, ST4) stays open until ADR-0033 passes its review. · Date: 2026-10-27 · Decider: owner (every open choice), integrator (merge after the opus PASS) ·
 Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs, 0036 tiling are taken by open PRs)
 
 This ADR is also part of the contract between this repository (the app, `apps/store`, packaged as `grassfield-store`) and
@@ -24,10 +24,11 @@ Behaviour, keyboard, accessibility, refusals and limits: `docs/specs/store.md`. 
   for the AUR; no root execution outside pacman or Omarchy; offline behaviour defined.
 - Nothing is published: both repositories stay private (no release, tag, secret or visibility change).
 
-### Conflicts with earlier rules (decision ST1)
-- master-prompt §4 lists as a non-goal: "A pacman-based app store. An App Center is Flatpak-only and post-1.0." The brief
+### Conflicts with earlier rules (decision ST1, answered)
+- master-prompt §4 listed as a non-goal: "A pacman-based app store. An App Center is Flatpak-only and post-1.0." The brief
   asks for exactly a pacman-based store now. The owner's instruction in the session comes first (master-prompt §0), but §0
-  also says to stop and ask when two rules conflict: ST1.
+  also says to stop and ask when two rules conflict: ST1. **Owner, 2026-10-27: amend §4** (done in this step: the Store is
+  in scope as the separate optional package `grassfield-store`, built on Omarchy's commands, published after M5).
 - `docs/specs/updates.md` (PR #11, ADR-0033) repeats "no App Center (master-prompt §4)" among Software Update's non-goals.
   It stays true for Software Update itself (it installs nothing); the Store is a separate app.
 
@@ -142,20 +143,30 @@ grassfieldhq/grassfield-packages                         grassfieldhq/grassfield
 Updates: ADR-0033's checker (shell) → software-update.json → the Store's Updates page; "Update All…" = ADR-0033's "Update Now"
 ```
 
-### a. Sources (open: ST2)
+### a. Sources (ST2, answered by the owner on 2026-10-27)
 Every app in the Store comes from one source, shown on its button row, its product page and its confirmation sheet:
 
-| Source | What | Installed by | Proposed default |
+| Source | What | Installed by | Default |
 |---|---|---|---|
 | Arch repositories | `[core]`, `[extra]`, `[multilib]` through Omarchy's mirror | pacman | on |
 | `[omarchy]` | Omarchy's own repository (prebuilt Chrome, Spotify, VS Code, 1Password, …) | pacman | on |
 | Omarchy setups | Omarchy's `omarchy-install-*` recipes our catalog lists, each with what it changes, written after reading it | the recipe | on, except the recipes that download and run code outside pacman (GeForce NOW, Battle.net, dev environments) |
 | Omarchy web apps | sites our catalog lists, with the icon from our catalog | `omarchy-webapp-install` | on |
 | AUR | user packages, not reviewed by anyone | `yay` through Omarchy's `omarchy-pkg-aur-add` | off; a Store setting turns it on, and every AUR install shows the warning |
-| Flathub | Flatpak apps, sandboxed, per-user installs without root | `flatpak --user` | not in steps 1 to 4 (a new dependency, a second update path; see ST2) |
+| Flathub | Flatpak apps, sandboxed, per-user installs without root | `flatpak --user` | optional: offered only when the user has installed `flatpak` (no dependency added, an `optdepends`); off until turned on in the Store's settings, which then adds the Flathub remote to the user's installation (`flatpak remote-add --user --if-not-exists`, S8) |
 
 An app that exists in several sources shows the first of: Omarchy setup (it configures what Omarchy configures), Arch or
 `[omarchy]` package, Flathub, AUR. The catalog can pin a source per app.
+
+**Flathub, as chosen (ST2).** Everything happens in the user's own installation (`--user`), as the user, with no root and no
+terminal: `flatpak install --user --noninteractive flathub <app-id>`, `flatpak uninstall --user --noninteractive <app-id>`
+(the app's data in `~/.var/app/<app-id>` is kept, as macOS keeps an app's data; the sheet says where), `flatpak update --user
+--noninteractive <app-id>`. These are the Store's own children (user processes, not pacman). The sheet adds what a Flatpak
+can reach (its `[Context]` from `flatpak remote-info --show-metadata`, in plain words: files, devices, network) and the size
+of the runtimes it pulls. Its metadata is Flathub's AppStream in the user's installation, refreshed by `flatpak update --user
+--appstream` on the catalog's schedule (c). "Open" uses the app's exported desktop entry through ADR-0011; when the session
+does not see the export folder, `flatpak run <app-id>` in its own scope (to be checked in step 3). Cancelling a Flatpak
+operation and its effect are NOT VERIFIED (no app was installed in S8): step 3 probes them before any cancel is offered.
 
 ### b. The install path (open until ADR-0033's PASS: ST4)
 The Store installs and uninstalls through **the same path ADR-0033 keeps for installing**. Until ADR-0033 passes, this section
@@ -188,6 +199,7 @@ and nothing signals pacman.
   | Grassfield's host (ADR-0033 g) | `grassfield-catalog.v1.json` and `.sig` (ETag), catalog icons by hash | at Store start when the cached catalog is older than 6 h; Ctrl+R; never while the Store is closed |
   | Screenshot hosts named by AppStream | the images of one product page | ST6 |
   | aur.archlinux.org | `info` for the AUR page opened; `search` after Return; the PKGBUILD text on click | only while the AUR is turned on (ST7) |
+  | dl.flathub.org (through `flatpak`) | Flathub's AppStream; the checks for Flatpak updates (`flatpak remote-ls --user --updates`); the apps and runtimes installed | only while Flathub is turned on: AppStream on the catalog's schedule, update checks when the Store opens and on "Check Now", downloads during an operation |
   | the user's browser | homepage, bug tracker | on click |
   | Arch and Omarchy mirrors | one HEAD request for the first package of a plan (e.4) | before an install |
   | Arch and Omarchy mirrors | packages | by pacman, during an install, not by the Store |
@@ -202,7 +214,7 @@ and nothing signals pacman.
   flight (f), the last fetch time. The Store's preferences (sources, screenshots) are keys of `grassfield.json` written through
   the settings contract (ADR-0020 item 4). The rows land in `docs/specs/persisted-files.md` with the code (step 1).
 
-### d. Updates and the one badge (open: ST8)
+### d. Updates and the one badge (ST8, answered by the owner on 2026-10-27)
 - **No partial upgrade, ever.** The Store never runs `pacman -Sy`, `-Syu` or `yay -Sua` itself, and never offers "Update"
   for one repository or AUR app: under Arch, those update only with the whole system (S4).
 - **One checker.** The Store reads ADR-0033's result (`$XDG_STATE_HOME/grassfield/software-update.json`, written by the
@@ -212,17 +224,23 @@ and nothing signals pacman.
 - **Updates page.** The apps (entries with a desktop id) that the next system update upgrades, each marked "Updates with the
   system" (no per-app button), then "N other system packages", then **"Update All…"**, which starts ADR-0033's "Update Now"
   (the same command and the same lock checks). While Omarchy's update runs, the page says "Update in progress".
-- **Badge.** Recommended (ST8): the Dock badge of the system update stays where ADR-0033 puts it (Settings, U18: Grassfield
-  and Omarchy releases); the Store's tile shows no badge for repository or AUR apps, since they belong to that same update;
-  the Store's sidebar shows the number of apps with an update. One pending transaction never shows as two badges.
+- **Flatpak updates (Flathub on).** A Flatpak updates on its own, outside pacman's transaction, so there is no partial
+  upgrade: the Updates page lists them in their own group with "Update" per app and "Update All" for that group
+  (`flatpak update --user`). The Store checks them itself when it opens and on "Check Now" (`flatpak remote-ls --user
+  --updates`); `omarchy update` does not update Flatpaks.
+- **Badge (owner, ST8 = A).** The only Dock badge for updates stays where ADR-0033 puts it: on Settings (U18, Grassfield and
+  Omarchy releases). The Store's tile has no badge, neither for repository and AUR apps (they belong to that same system
+  update) nor for Flatpaks (the owner's "Settings only"); the Store's sidebar shows the number of apps with an update, Flatpaks
+  included. One pending update never shows as two badges.
 
 ### e. Security
 1. **Explicit click, then a sheet, then an authentication.** "Get" opens a confirmation sheet; nothing starts without its
    default button. The sheet shows the source, the licence, the download and installed sizes, every package the plan adds
    (`pacman -S --print`, as the user, S10), and: for a setup, what it changes (our catalog's text, written after reading the
    recipe, plus the recipe's name); for a removal recipe, the user data it deletes; for the AUR, the warning (spec). The
-   authentication is the path's (sudo in Omarchy's terminal, or the polkit dialog). Per-user installs (web apps, Flathub if
-   chosen) have no system authentication: ST3.
+   authentication is the path's (sudo in Omarchy's terminal, or the polkit dialog). Per-user installs (web apps, Flatpaks):
+   **the confirmation sheet alone** (owner, ST3 = A, 2026-10-27): its default button is the user's consent, and no password
+   is asked, since anything running as the user can already write those files.
 2. **Source and licence always shown**, on results, cards, the product page and the sheet. Without a licence the Store says
    "Licence not stated"; it never hides the row.
 3. **No root code of the Store's own** under P1: the Store runs as the user and starts only Omarchy's commands, which run
@@ -238,7 +256,9 @@ and nothing signals pacman.
 5. **Validated input, argument vectors only.** Package names `^[a-z0-9@_+][a-z0-9@._+-]{0,127}$`; Omarchy commands
    `^omarchy-(install|remove)-[a-z0-9-]+$` and run only when `${OMARCHY_PATH:-/usr/share/omarchy}/bin/<name>` exists; recipe
    arguments `^[a-z0-9][a-z0-9.-]{0,63}$` (at most 4); web app names `^[^/\x00-\x1f]{1,64}$` not starting with `.`, URLs
-   `https://` without whitespace, at most 2048 bytes; desktop ids `^[A-Za-z0-9._-]{1,250}\.desktop$`. The one place a command
+   `https://` without whitespace, at most 2048 bytes; desktop ids `^[A-Za-z0-9._-]{1,250}\.desktop$`; Flatpak app ids
+   `^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$` (at most 255 bytes; no leading `-`, so an id never reads as an option),
+   passed as one argument. The one place a command
    string exists is P1's terminal (`bash -c`); it is built only from those validated tokens, and Omarchy's
    `omarchy-install-app` / `-and-launch` quote their own arguments.
 6. **Untrusted data stays data.** The catalog is verified before it is parsed (g); AppStream comes from a signed Arch package;
@@ -260,14 +280,16 @@ and nothing signals pacman.
   remove it. No new language (C++ and QML), no new service or daemon (the Store runs only while open; background checks are
   ADR-0033's), no new design components before the shared ones (`ui/Grassfield/Ui`). New runtime dependencies of
   `grassfield-store` only: `archlinux-appstream-data` and `appstream-qt` (if ST5 = A) and `kimageformats` (the JPEG XL icons,
-  S3), `gnupg` (`gpgv`, already pulled by pacman, declared). PackageKit, GNOME Software and KDE Discover are not used: they
+  S3), `gnupg` (`gpgv`, already pulled by pacman, declared); `flatpak` only as an `optdepends` (ST2). PackageKit, GNOME Software and KDE Discover are not used: they
   need PackageKit's root daemon (§5.8, not installed) and bypass Omarchy's commands (D1).
 - **Build.** A CMake target in `apps/store/CMakeLists.txt` with the same wrapper as the other apps (ADR-0023), and
   `package_grassfield-store()` in `packaging/arch/PKGBUILD`, depending on `grassfield-desktop=$pkgver-$pkgrel` (design system,
   translations, menu bridge).
-- **Child processes the Store owns** (pacman queries, `gpgv`, `appstreamcli` if used): an argument vector, `LC_ALL=C`, stdin
-  from `/dev/null`, output capped (8 MiB), each in its own process group, stopped after 20 s with SIGTERM then SIGKILL 5 s
-  later, and all stopped the same way when the Store quits. None of them writes.
+- **Child processes the Store owns** (pacman queries, `gpgv`, `appstreamcli` if used, `flatpak` queries): an argument
+  vector, `LC_ALL=C`, stdin from `/dev/null`, output capped (8 MiB), each in its own process group, stopped after 20 s with
+  SIGTERM then SIGKILL 5 s later, and all stopped the same way when the Store quits. None of them writes. Flatpak operations
+  (install, update, uninstall) are children too, but without the 20 s limit, and the Store does not stop them on quit until
+  step 3 has measured what an interrupted one leaves.
 - **The operation itself is not a child the Store may stop.** Under P1 it runs in its own `uwsm-app` scope (ADR-0011) and
   goes on if the Store quits; under P2 it is a root process the user cannot signal. The Store never sends a signal to pacman,
   yay, makepkg, a recipe or their terminal (S6).
@@ -357,8 +379,10 @@ rest, and refuses the whole file only when its top level is invalid):
 - `apps`: at most 2000; `id` `^[A-Za-z0-9._-]{1,255}$`, unique (an AppStream id when one exists, so our texts overlay its
   metadata); `source.kind` is `repo` (`repo` among `core`, `extra`, `multilib`, `omarchy`; the Store hides the entry when
   pacman's database has no such package), `aur`, `omarchy-setup` (names and arguments as in e.5; `packages` say when it is
-  installed; optional `removes`, the user data its removal deletes), or `webapp` (an https URL; `icon` required). `flatpak`
-  is reserved for ST2. `license` is SPDX or `LicenseRef-…`; the package's or AppStream's licence wins when present.
+  installed; optional `removes`, the user data its removal deletes), `webapp` (an https URL; `icon` required), or `flatpak`
+  (`{"kind": "flatpak", "remote": "flathub", "app": "<app id>"}`, shown only while Flathub is on; CI checks the id against
+  Flathub's AppStream in the build container). `license` is SPDX or `LicenseRef-…`; the package's or AppStream's licence wins
+  when present.
 - `icon` assets: PNG only, at most 256 KiB and 512 x 512, named by the SHA-256 of their bytes, which the signed file lists:
   the Store checks the hash, no signature per icon. Each records its licence and where it came from (`origin`, never fetched
   by the Store). App icons are the app's own, under their owner's terms; they are listed for the legal review (§14).
@@ -377,18 +401,18 @@ categories, the icons), by a standard-library Python tool, in CI: schema and len
 package present in the build container's Omarchy stable package set (ADR-0033 f), every recipe name present in the pinned
 Omarchy release, every URL https. CI produces the catalog as an artifact; publication stays disabled with ADR-0033's.
 
-## Owner decisions (open; options, with the integrator's recommendation first)
-| Id | Question | Options | Recommended |
+## Owner decisions (2026-10-27: ST1, ST2, ST3, ST8 answered; the others open, with the integrator's recommendation)
+| Id | Question | Options | Answer, or recommendation |
 |---|---|---|---|
-| ST1 | master-prompt §4 lists a pacman-based store as a non-goal | **A** amend §4: the Store is in scope now, as the separate optional package `grassfield-store`, built on Omarchy's commands, published after M5 like everything else; **B** keep §4: a Flatpak-only App Center after 1.0; **C** the Store now but browsing only, installs after 1.0 | A |
-| ST2 | Sources (a) | per source: Arch repositories and `[omarchy]` on; Omarchy setups on, without those that run downloaded code (GeForce NOW, Battle.net, dev environments) or with them; web apps on; AUR off by default and opt-in, or on, or never; Flathub **F1** not in steps 1-4, **F2** optional when the user installed flatpak (no dependency, `--user`), **F3** a dependency | the table in a, AUR opt-in, Flathub F1 (F2 as a later step if wanted) |
-| ST3 | Authentication of per-user installs (web apps; Flathub if chosen) that need no root | **A** the confirmation sheet only (anything running as the user can already write those files, so a password protects nothing there); **B** also the user's own password through a Grassfield polkit action with `auth_self` checked by `pkcheck` (a new policy file, no root code), as the brief's "always an authentication" reads | B, to follow the brief to the letter; A if the owner prefers fewer prompts |
-| ST4 | The install path (b) | P1 Omarchy's commands in its terminal; P2 a root helper behind a Grassfield polkit action for repository packages (AUR and setups stay P1) | **none until ADR-0033's PASS**; then the path ADR-0033 keeps for installing |
-| ST5 | AppStream for Arch apps | **A** `grassfield-store` depends on `archlinux-appstream-data` (21 MiB, updated with the system, signed by Arch, no extra host) and reads it with `appstream-qt`; **B** the Store downloads Arch's AppStream itself; **C** none (pacman's one-line descriptions, no icons for most apps) | A |
-| ST6 | Screenshots (third-party hosts, 280 of them) | **A** loaded when a product page opens, https only, no cookie or referer, cached, with a setting to turn it off; **B** only after a click "Show Screenshots"; **C** none | A |
-| ST7 | AUR metadata, when the AUR is on | **A** the RPC: `info` for the page opened, `search` after Return (the query goes to the AUR); **B** the 10.6 MB dump once a day, searched locally (no query leaves, more traffic) | A |
-| ST8 | Updates and the badge (d) | **A** the badge stays on Settings (ADR-0033 U18), none on the Store's tile for system packages, the count in the Store's sidebar, "Update All…" = ADR-0033's "Update Now"; **B** a badge on both tiles (one update, two badges); **C** move the badge to the Store (changes ADR-0033 O3/U18) | A |
-| ST9 | Order of the steps | 1. catalog read-only (search, product data) with fake catalogs, and in grassfield-packages the catalog build and signature (throwaway key); 2. the app's UI; 3. install, open, uninstall (after ADR-0033's PASS and this one's); 4. updates and the badge with Software Update | as listed |
+| ST1 | master-prompt §4 lists a pacman-based store as a non-goal | **A** amend §4: the Store is in scope now, as the separate optional package `grassfield-store`, built on Omarchy's commands, published after M5 like everything else; **B** keep §4: a Flatpak-only App Center after 1.0; **C** the Store now but browsing only, installs after 1.0 | **Owner: A** (amend §4) |
+| ST2 | Sources (a) | per source: Arch repositories and `[omarchy]` on; Omarchy setups on, without those that run downloaded code (GeForce NOW, Battle.net, dev environments) or with them; web apps on; AUR off by default and opt-in, or on, or never; Flathub **F1** not in steps 1-4, **F2** optional when the user installed flatpak (no dependency, `--user`), **F3** a dependency | **Owner: AUR opt-in, Flathub F2** (optional when the user installed flatpak, `--user`, no dependency); the other sources as in a's table (recommended: F1) |
+| ST3 | Authentication of per-user installs (web apps; Flathub if chosen) that need no root | **A** the confirmation sheet only (anything running as the user can already write those files, so a password protects nothing there); **B** also the user's own password through a Grassfield polkit action with `auth_self` checked by `pkcheck` (a new policy file, no root code), as the brief's "always an authentication" reads | **Owner: A** (the sheet alone; recommended was B) |
+| ST4 | The install path (b; open) | P1 Omarchy's commands in its terminal; P2 a root helper behind a Grassfield polkit action for repository packages (AUR and setups stay P1) | **none until ADR-0033's PASS**; then the path ADR-0033 keeps for installing |
+| ST5 | AppStream for Arch apps (open) | **A** `grassfield-store` depends on `archlinux-appstream-data` (21 MiB, updated with the system, signed by Arch, no extra host) and reads it with `appstream-qt`; **B** the Store downloads Arch's AppStream itself; **C** none (pacman's one-line descriptions, no icons for most apps) | A |
+| ST6 | Screenshots (third-party hosts, 280 of them; open) | **A** loaded when a product page opens, https only, no cookie or referer, cached, with a setting to turn it off; **B** only after a click "Show Screenshots"; **C** none | A |
+| ST7 | AUR metadata, when the AUR is on (open) | **A** the RPC: `info` for the page opened, `search` after Return (the query goes to the AUR); **B** the 10.6 MB dump once a day, searched locally (no query leaves, more traffic) | A |
+| ST8 | Updates and the badge (d) | **A** the badge stays on Settings (ADR-0033 U18), none on the Store's tile for system packages, the count in the Store's sidebar, "Update All…" = ADR-0033's "Update Now"; **B** a badge on both tiles (one update, two badges); **C** move the badge to the Store (changes ADR-0033 O3/U18) | **Owner: A** (Settings only; Flatpak updates get no Dock badge either) |
+| ST9 | Order of the steps (open) | 1. catalog read-only (search, product data) with fake catalogs, and in grassfield-packages the catalog build and signature (throwaway key); 2. the app's UI; 3. install, open, uninstall (after ADR-0033's PASS and this one's); 4. updates and the badge with Software Update | as listed |
 
 ## Evidence
 - `docs/audits/store-2026-10-27/store-probes.sh` (S0 to S11) and its output `probes-output.txt` (docker exit 0). It ran in this
@@ -410,13 +434,16 @@ Omarchy release, every URL https. CI produces the catalog as an artifact; public
 - **Step 2:** the UI (Discover, sections, Categories, product page, search, Installed, the Updates list read-only), measured
   F1 against the captures, en and fr, light and dark, keyboard; offscreen captures with the fake backend; the nested shot by
   the integrator. The sidebar's copy of Apple's structure goes to `docs/legal/visual-review.md`.
-- **Step 3:** install, open, uninstall through the path of ST4; container tests with real pacman installs (throwaway
+- **Step 3:** install, open, uninstall through the path of ST4, and the Flatpak operations (ST2); container tests with real
+  pacman installs and a real `flatpak install --user` of a small app, with a cancel measured before one is offered (throwaway
   container), the fake installer everywhere else; opus security review; the owner checks the real sudo or polkit prompt in a
   real session.
-- **Step 4:** the Updates page and the badge, with ADR-0033's checker and its added list of other updates.
+- **Step 4:** the Updates page (system updates through ADR-0033's checker and its added list of other updates; Flatpak
+  updates checked by the Store) and the sidebar count; no Dock badge of the Store's own (ST8).
 - **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
   if ADR-0033's own call does not fit) is added to `docs/specs/security.md`'s table in the same PR (`ipc_inventory`).
-- **Known limits** (spec): no per-app update for repository and AUR apps; no ratings or reviews; no pause or resume; cancel
+- **Known limits** (spec): no per-app update for repository and AUR apps (Flatpaks have one); Flatpak updates are not part
+  of `omarchy update` and have no Dock badge; no ratings or reviews; no pause or resume; cancel
   only in the terminal (P1); apps outside AppStream and our catalog show pacman's text only; Omarchy's recipes are Omarchy's,
   their effects as they are in the installed release; a replayed old catalog is refused only once a newer one was seen.
 
