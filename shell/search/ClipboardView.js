@@ -40,7 +40,7 @@ function visible(items, matchIds) {
 }
 
 // What a row says its item is: "formatted" (text with HTML or RTF), "text", "image", "files" (one) or "items" (several
-// files, "%n Items").
+// files, "%1 Items").
 function kindKey(item) {
     if (!item)
         return "text";
