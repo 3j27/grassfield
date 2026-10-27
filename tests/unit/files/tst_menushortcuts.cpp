@@ -2,14 +2,18 @@
 // global menus build them, when it is the first key the process registers. Without the reservation that item gets the
 // id Qt.labs.platform takes for "no key" (-1): disabled, it still acts on its key; once it is gone, the next press of
 // its key crashes the app. Each scenario runs in a child process (this binary again), so a crash fails the test instead
-// of ending the run. The child runs offscreen, without the desktop's platform theme and away from any session bus.
+// of ending the run. The child runs offscreen in an environment of its own: no session bus, display, platform theme or
+// input method of the owner's session, and its HOME and XDG directories in a scratch directory.
 #include "globalmenu.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 #include <QWindow>
@@ -71,6 +75,7 @@ enum Outcome : int {
     DisabledActed, // Ctrl+N triggered the disabled item
     MenuKept,      // the menu bar was not destroyed: the scenario would prove nothing
     StaleActed,    // Ctrl+N acted while no menu item was there
+    NotIsolated,   // the child was started outside the environment runInChild builds (it ran nothing)
 };
 
 std::string outcomeName(int code)
@@ -88,6 +93,8 @@ std::string outcomeName(int code)
         return "the menu bar was not destroyed";
     case StaleActed:
         return "Ctrl+N acted with no menu item there";
+    case NotIsolated:
+        return "the child refused an environment that reaches the session";
     }
     return "exit code " + std::to_string(code);
 }
@@ -165,14 +172,30 @@ Outcome runScenario(Scenario scenario)
 
 // Set in the child's environment: which application and scenario it runs ("gui:1", "widgets:2").
 constexpr char kChildVariable[] = "GF_MENU_SHORTCUTS_CHILD";
+// Set in the child's environment: its scratch directory, which holds its HOME and every XDG directory.
+constexpr char kScratchVariable[] = "GF_MENU_SHORTCUTS_SCRATCH";
+// What would reach the owner's live session: its bus, its displays, its input method daemon (QT_IM_MODULE=fcitx made a
+// child under a scratch HOME look for fcitx's address files). The child never sees them.
+constexpr const char *kSessionVariables[] = {"DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "QT_IM_MODULE",
+                                             "QT_IM_MODULES", "XMODIFIERS", "GTK_IM_MODULE"};
+
+bool underScratch(const char *variable, const QByteArray &scratch)
+{
+    const QByteArray value = qgetenv(variable);
+    return value.startsWith(scratch + '/');
+}
 
 // The child: an application as the app has (Files: QApplication; Settings and Preview: QGuiApplication), the reservation
-// right after it, then the scenario.
+// right after it, then the scenario. It refuses to start outside the environment runInChild gives it.
 [[noreturn]] void runChild(bool widgets, Scenario scenario)
 {
-    qputenv("QT_QPA_PLATFORM", "offscreen");
-    qunsetenv("QT_QPA_PLATFORMTHEME");
-    qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null/no-bus");
+    const QByteArray scratch = qgetenv(kScratchVariable);
+    bool isolated = !scratch.isEmpty() && underScratch("HOME", scratch) && underScratch("XDG_RUNTIME_DIR", scratch)
+        && underScratch("XDG_CONFIG_HOME", scratch) && qgetenv("QT_QPA_PLATFORM") == "offscreen";
+    for (const char *variable : kSessionVariables)
+        isolated = isolated && !qEnvironmentVariableIsSet(variable);
+    if (!isolated)
+        std::exit(NotIsolated);
     int argc = 1;
     char name[] = "tst_menushortcuts";
     char *argv[] = {name, nullptr};
@@ -194,10 +217,39 @@ std::string runInChild(bool widgets, Scenario scenario)
     std::string self = "/proc/self/exe";
     std::string filter = std::string("--gtest_filter=") + test->test_suite_name() + "." + test->name();
     char *argv[] = {self.data(), filter.data(), nullptr};
-    std::vector<std::string> environment{std::string(kChildVariable) + "=" + (widgets ? "widgets:" : "gui:")
-                                         + std::to_string(static_cast<int>(scenario))};
+
+    // A scratch directory (under the run's GRASSFIELD_TEST_TMP when scripts/dev/test.sh sets it), removed afterwards.
+    const QString base = qEnvironmentVariableIsEmpty("GRASSFIELD_TEST_TMP") ? QDir::tempPath()
+                                                                            : qEnvironmentVariable("GRASSFIELD_TEST_TMP");
+    const QTemporaryDir scratch(base + QStringLiteral("/menushortcuts-XXXXXX"));
+    if (!scratch.isValid())
+        return "no scratch directory under " + base.toStdString();
+    const auto dir = [&scratch](const char *name) {
+        const QString path = scratch.filePath(QString::fromLatin1(name));
+        QDir().mkpath(path);
+        QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        return path.toStdString();
+    };
+    // Only what the child needs from this environment; everything else, the session's variables included, stays here.
+    std::vector<std::string> environment{
+        std::string(kChildVariable) + "=" + (widgets ? "widgets:" : "gui:") + std::to_string(static_cast<int>(scenario)),
+        std::string(kScratchVariable) + "=" + scratch.path().toStdString(),
+        "QT_QPA_PLATFORM=offscreen",
+        "HOME=" + dir("home"),
+        "XDG_CONFIG_HOME=" + dir("config"),
+        "XDG_DATA_HOME=" + dir("data"),
+        "XDG_CACHE_HOME=" + dir("cache"),
+        "XDG_STATE_HOME=" + dir("state"),
+        "XDG_RUNTIME_DIR=" + dir("runtime"),
+        "XDG_CONFIG_DIRS=" + dir("config-dirs"),
+        "XDG_DATA_DIRS=" + dir("data-dirs"),
+    };
+    for (const char *kept : {"PATH", "LANG", "LANGUAGE", "TZ", "LD_LIBRARY_PATH", "ASAN_OPTIONS", "UBSAN_OPTIONS"}) {
+        if (const char *value = std::getenv(kept))
+            environment.push_back(std::string(kept) + "=" + value);
+    }
     for (char **entry = environ; *entry; ++entry) {
-        if (std::strncmp(*entry, kChildVariable, std::strlen(kChildVariable)) != 0)
+        if (std::strncmp(*entry, "LC_", 3) == 0)
             environment.emplace_back(*entry);
     }
     std::vector<char *> envp;
