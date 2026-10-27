@@ -20,6 +20,8 @@ struct Channel {
 // The primary (first) Server of grassfield.conf when it has the channel's shape; nothing otherwise (a `custom` Server, a
 // missing or unreadable file: the build's own base is used then).
 std::optional<Channel> channelFromConf(const QByteArray &grassfieldConf);
+// GRASSFIELD_REPO_BASE of the installed repository.conf (/usr/share/grassfield/pacman/repository.conf); "" when absent.
+QString buildBase(const QByteArray &repositoryConf);
 // The build's base and `stable`.
 Channel defaultChannel(const QString &buildBase);
 // False while the base is a placeholder (a host under .invalid, ADR-0033 g) or not https.

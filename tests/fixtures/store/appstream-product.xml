@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<components version="1.0" origin="archlinux-arch-extra">
+  <component type="desktop-application">
+    <id>org.example.Sketch</id>
+    <pkgname>sketch</pkgname>
+    <name>Sketch Pad</name>
+    <summary>Draw on a blank page</summary>
+    <description><p>The app's own text.</p></description>
+    <provides><id>sketch.desktop</id><binary>sketch</binary></provides>
+    <suggests type="upstream"><id>org.example.Other</id></suggests>
+    <extends><id>org.example.Host</id></extends>
+    <agreement type="privacy" version_id="1">
+      <agreement_section type="intro">
+        <name>Privacy</name>
+        <description><p>An agreement's text, never the app's.</p></description>
+      </agreement_section>
+    </agreement>
+    <url type="homepage">https://sketch.example.org/</url>
+    <url type="bugtracker">https://sketch.example.org/issues</url>
+    <url type="help">https://sketch.example.org/help</url>
+    <screenshots>
+      <screenshot>
+        <caption>The second one</caption>
+        <image type="source">https://sketch.example.org/2.png</image>
+      </screenshot>
+      <screenshot type="default">
+        <caption xml:lang="fr">La première</caption>
+        <caption>The first one</caption>
+        <image type="source">https://sketch.example.org/1.png</image>
+      </screenshot>
+      <screenshot>
+        <image type="source">https://sketch.example.org/3.png</image>
+      </screenshot>
+    </screenshots>
+    <releases>
+      <release version="2.1" date="2026-09-30T10:00:00Z">
+        <description><p>Faster brushes.</p><ul><li>New eraser</li></ul></description>
+        <description xml:lang="fr"><p>Pinceaux plus rapides.</p></description>
+        <url type="details">https://sketch.example.org/2.1</url>
+      </release>
+      <release version="2.0" timestamp="1767225600"/>
+      <release version="1.9" date="not a date"/>
+      <release version="1.8" date="2025-01-01"/>
+    </releases>
+    <content_rating type="oars-1.1">
+      <content_attribute id="violence-cartoon">mild</content_attribute>
+      <content_attribute id="violence-fantasy">moderate</content_attribute>
+      <content_attribute id="social-chat">intense</content_attribute>
+      <content_attribute id="money-purchasing">none</content_attribute>
+      <content_attribute id="unknown-thing">intense</content_attribute>
+    </content_rating>
+    <languages>
+      <lang percentage="100">fr</lang>
+      <lang percentage="96">de_DE</lang>
+      <lang percentage="12">ja</lang>
+      <lang>pt_BR</lang>
+      <lang>not a code</lang>
+    </languages>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Plain</id>
+    <pkgname>plain</pkgname>
+    <name>Plain</name>
+    <content_rating type="oars-1.1"/>
+  </component>
+</components>
