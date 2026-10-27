@@ -180,16 +180,32 @@ Item {
             compare(ag.sinkingKeys, false);
         }
 
-        // Each key keeps the linger, which ends anyway at sinkLingerMaxMs.
+        // Each key keeps the linger, which ends anyway sinkLingerMaxMs after the request ended, while keys still come (check of
+        // c1ca44f, L1: typing stopped at 2.4 s let the idle timer end it within the same bound).
         function test_06b_lingerCapped() {
             const [a, b] = sinkB();
+            const start = Date.now();
             endAll();
-            for (let i = 0; i < 8; i++) {
-                wait(300);
-                keyClick("x");
-                compare(ag.lingering, true, "a key keeps it (" + i + ")");
+            let endedAt = -1;
+            for (let i = 0; i < 20 && endedAt < 0; i++) {
+                wait(250);
+                if (!ag.lingering)
+                    endedAt = Date.now() - start;
+                else
+                    keyClick("x");
             }
-            tryCompare(ag, "lingering", false, 1500, "at most sinkLingerMaxMs");
+            verify(endedAt >= 0, "the linger ended while a key came every 250 ms");
+            verify(endedAt >= ag.model.sinkLingerMaxMs - 250 && endedAt <= ag.model.sinkLingerMaxMs + 600,
+                   "at sinkLingerMaxMs, not before: " + endedAt + " ms");
+        }
+
+        // With no key after the request ended, the linger ends after heldAfterUnlockMs (its timers start with it).
+        function test_06f_lingerEndsWithoutKeys() {
+            const [a, b] = sinkB();
+            endAll();
+            compare(ag.lingering, true);
+            tryCompare(ag, "lingering", false, ag.model.heldAfterUnlockMs + 500, "no key: the linger ends a second later");
+            compare(ag.sheet.visible, false);
         }
 
         // A click, the lock or the screen saver ends the linger.
@@ -366,8 +382,8 @@ Item {
             compare(ag.sheet.takesKeys, true);
             tryVerify(() => field() !== null);
             expectNothingReaches(c, "C arrived during the linger");
-            wait(1300);
-            compare(ag.sinkingKeys, true, "the linger's end does not touch a request's sink");
+            wait(ag.model.sinkLingerMaxMs + 300);
+            compare(ag.sinkingKeys, true, "neither of the linger's timers touches a request's sink");
         }
 
         // C arrives during the linger more than a second after B ended (the hold after a request is over): still held, with
@@ -413,6 +429,67 @@ Item {
             keyClick(Qt.Key_Escape);
             compare(b.cancels, 1);
             compare(a.cancels, 0);
+        }
+
+        // M1: whatever order the request's end arrives in, the window is never unmapped nor lets the keyboard go for a moment
+        // (a hidden PanelWindow is destroyed and made again; check of c1ca44f).
+        function transitionsDuring(change) {
+            const log = [];
+            const onVisible = () => log.push("visible=" + ag.sheet.visible);
+            const onKeys = () => log.push("takesKeys=" + ag.sheet.takesKeys);
+            ag.sheet.visibleChanged.connect(onVisible);
+            ag.sheet.takesKeysChanged.connect(onKeys);
+            change();
+            ag.sheet.visibleChanged.disconnect(onVisible);
+            ag.sheet.takesKeysChanged.disconnect(onKeys);
+            return log;
+        }
+        function test_22_endNeverUnmaps_data() {
+            return [{tag: "isActive first", first: true}, {tag: "flow first", first: false}];
+        }
+        function test_22_endNeverUnmaps(d) {
+            sinkB();
+            const log = transitionsDuring(() => {
+                if (d.first) {
+                    ag.agentMock.isActive = false;
+                    ag.agentMock.flow = null;
+                } else {
+                    ag.agentMock.flow = null;
+                    ag.agentMock.isActive = false;
+                }
+            });
+            compare(ag.lingering, true);
+            compare(log, [], "neither visible nor takesKeys changed");
+        }
+        function test_23_arrivalInLingerNeverUnmaps_data() {
+            return [{tag: "isActive first", first: true}, {tag: "flow first", first: false}];
+        }
+        function test_23_arrivalInLingerNeverUnmaps(d) {
+            sinkB();
+            endAll();
+            const c = mkflow("C");
+            const log = transitionsDuring(() => {
+                if (d.first) {
+                    ag.agentMock.isActive = true;
+                    ag.agentMock.flow = c;
+                } else {
+                    ag.agentMock.flow = c;
+                    ag.agentMock.isActive = true;
+                }
+            });
+            compare(log, [], "neither visible nor takesKeys changed");
+        }
+
+        // M2: the sheet's field and identity rows take no focus while the sink has the keys, and get it back after the click.
+        function test_24_inputDisabledWhileSinking() {
+            const i1 = {displayName: "alice"}, i2 = {displayName: "root"};
+            const [a, b] = sinkB({identities: [i1, i2], selectedIdentity: i1});
+            compare(dialog().inputEnabled, false);
+            compare(field().enabled, false);
+            wait(600);
+            mouseClick(ag.sheet, 5, 5);
+            compare(dialog().inputEnabled, true);
+            tryVerify(() => field().activeFocus);
         }
 
         // A request answered as usual (not sinking) leaves no linger.

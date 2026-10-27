@@ -71,7 +71,12 @@ black; and the waking key or click consumed, as on macOS.
   behavioural test caught, a wrong upstream note. Two fixes of the same hazard having failed review, the owner decided
   (2026-10-26, "Corriger A et B"): the sink takes back any focus and Esc cancels, and a request ending while keys are sunk
   leaves the sink lingering, clear, for up to 1 s after the last key (3 s at most); the reviewers' harness is in the
-  repository (tests/security/authagent_flows.sh), fixed in the commit after (docs/specs/security.md).
+  repository (tests/security/authagent_flows.sh), fixed in c1ca44f. Its check: PASS, but both fixes held only in the
+  harness: in Quickshell's PanelWindow the window was made again when a request ended (an intermediate binding went false
+  for a moment) and a focus given while the window had no keyboard went to the field; and the stronger tests showed that
+  the linger's timers never started. Fixed in the commit after: `visible`, `takesKeys` and the linger's start from the base
+  state, the sheet's input disabled while the sink has the keys and its focus handed back, a harness window that behaves
+  like PanelWindow (docs/specs/security.md).
   `SessionState.saverShown` (shell/services, a Binding in shell.qml) carries the saver's state to `shell/security/polkit`,
   the one change there (docs/specs/security.md § Nothing opens over the lock); it can only hold a request, never release
   one. An opus review covers this input handling before merge.

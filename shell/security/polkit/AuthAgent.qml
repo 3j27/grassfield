@@ -76,7 +76,9 @@ Scope {
         root.requestStartedAt = dialogModel.active ? new Date() : null;
         if (!dialogModel.active)
             dialogModel.noteEnded();
-        if (root.lingering) {
+        // The linger starts: from the base state, never `lingering`, whose binding may not have seen this change of `active`
+        // yet (check of c1ca44f: its timers then never started, and with no key after the end the linger never ended).
+        if (typing && !dialogModel.active && !SessionState.locked) {
             sinkIdle.restart();
             sinkCap.restart();
         }
@@ -180,12 +182,15 @@ Scope {
         // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
         // itself stays pending; nothing is answered or approved meanwhile.
         readonly property bool shown: dialogModel.active && !SessionState.locked
-        // The window holds the keyboard: the sheet is shown and not a held request the user has not clicked yet (unless it
-        // keeps the keys on the sink), or the sink lingers after the request ended.
-        readonly property bool takesKeys: (shown && (!root.heldByLock || root.userFocused || root.sinkingKeys)) || root.lingering
+        // The window holds the keyboard: the sheet is shown and not a held request the user has not clicked yet, or the keys
+        // are on the sink (a held request's, or lingering after the request ended). Both this and `visible` read the base
+        // state only, never `shown` or `lingering`: when a request ends while the sink has the keys, an intermediate binding
+        // updated before the other went false for a moment, and a hidden PanelWindow is destroyed and made again, handing
+        // the keyboard to the window underneath meanwhile (check of c1ca44f, M1).
+        readonly property bool takesKeys: !SessionState.locked && ((dialogModel.active && (!root.heldByLock || root.userFocused)) || root.sinkingKeys)
 
         // Mapped with the sheet, and while the sink lingers (clear then: no sheet, no dimming, no blur).
-        visible: shown || root.lingering
+        visible: !SessionState.locked && (dialogModel.active || root.sinkingKeys)
         // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: a request that was not
         // held takes the keys at once; a held one waits for a click (takesKeys) with an empty field.
         onShownChanged: {
@@ -222,9 +227,9 @@ Scope {
 
         // The keys the window keeps (sinkingKeys) stop here: no field, nothing underneath, until a click past the guard gives
         // the sheet its field, or the linger ends. Esc cancels a held request (it fails closed; check of 38dbfe8, LOW-1); a
-        // key while the sink lingers keeps it a while longer. Whatever takes the focus while the sink has the keys (a press
-        // on the sheet within the guard, the field's own press, the dialog focusing its field when it loads or after a
-        // failure), the sink takes it back (check of 38dbfe8, MEDIUM-A).
+        // key while the sink lingers keeps it a while longer. The sheet's items are the only others in this window that take
+        // the focus: while the sink has the keys its field and identity rows are disabled, and the sheet hands any focus it
+        // gets back to the sink (the Loader below; check of 38dbfe8, MEDIUM-A, and of c1ca44f, M2).
         Item {
             id: keySink
             Keys.onPressed: event => {
@@ -235,8 +240,6 @@ Scope {
                     dialogModel.cancel();
             }
             Keys.onReleased: event => event.accepted = true
-            onActiveFocusChanged: if (!activeFocus && root.sinkingKeys && win.takesKeys)
-                forceActiveFocus()
         }
 
         // Clicks outside the sheet do nothing (no click-outside cancel for authentication) but give the field the focus when
@@ -264,6 +267,12 @@ Scope {
                 // file Qt could read for it is a regular file of bounded size (ThemeIcons, review of 2dfd992).
                 appIconSource: ThemeIcons.source(dialogModel.iconName)
                 heldNotice: root.heldByLock ? dialogModel.heldNotice(root.requestStartedAt, root.heldWhy) : ""
+                inputEnabled: !root.sinkingKeys
+                // The sheet got the focus while the sink has the keys (a press on one of its controls within the guard, its
+                // own focusField, or its window activated with the sheet's scope focused): the sink takes it back. A focus
+                // given while the window has no keyboard arrives here when the window gets it.
+                onActiveFocusChanged: if (activeFocus && root.sinkingKeys)
+                    keySink.forceActiveFocus()
             }
         }
 

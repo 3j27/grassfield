@@ -401,13 +401,20 @@ shell no longer relies on that alone:
   one with its field emptied and its guard started over, and, if the user was typing into the sheet, with the keyboard
   kept on a key sink, so the rest of a password and its Return reach neither field nor the window underneath; the next
   one within 1 s (`AuthDialogModel.afterRequest`) like one after an unlock. A replacement behind the lock or the saver keeps
-  saying why it waited. The sink (check of 38dbfe8): while it has the keys it takes back any focus (a press on the sheet or
-  its field within the guard, the sheet focusing its field when it loads or after a failure, which a same-user process can
-  cause by killing the helper), so no key reaches the held request's field until a click past the guard; Esc on it cancels
-  the held request (fails closed). A request that ends while the sink has the keys (its requester gave up, or the request
-  it replaced completed and Quickshell ended the current one) leaves the window mapped, clear, with the keyboard on the
-  sink, until no key came for 1 s, at most 3 s (`sinkLingerMaxMs`), or a click, the lock or the saver; one that arrives
-  meanwhile is held and keeps the sink. A request that ends while the user types into its own field (not a replacement)
+  saying why it waited. The sink (checks of 38dbfe8 and c1ca44f): while it has the keys the sheet's field and identity
+  rows are disabled (`AuthDialog.inputEnabled`; its `focusField` does nothing then) and any focus the sheet gets goes back
+  to the sink (a press on one of its controls within the guard, the sheet focusing its field when it loads or after a
+  failure, which a same-user process can cause by killing the helper, or the window activated with the sheet's scope
+  focused, which is how a focus given while the window has no keyboard arrives), so no key reaches the held request's
+  field until a click past the guard; Esc on it cancels the held request (fails closed). A request that ends while the
+  sink has the keys (its requester gave up, or the request it replaced completed and Quickshell ended the current one)
+  leaves the window mapped, clear, with the keyboard on the sink, until no key came for 1 s, at most 3 s
+  (`sinkLingerMaxMs`), or a click, the lock or the saver; one that arrives meanwhile is held and keeps the sink. The
+  window's `visible` and `takesKeys` read the base state only (`active`, `locked`, the hold, `sinkingKeys`), and `arrive`
+  starts the linger from it too: through an intermediate binding (`shown`, `lingering`) a change could be read before that
+  binding saw it, so the window went unmapped for a moment (a hidden PanelWindow is destroyed and made again, the
+  compositor giving the keyboard to the window underneath until the new surface maps) or the linger's timers never
+  started. A request that ends while the user types into its own field (not a replacement)
   still hands the keyboard back at once, as on macOS: its requester giving up mid-password sends the rest to the window
   underneath (accepted, not this hold's case). Upstream (for the upstream researcher; read in the 0.3.1 sources, not run):
   the replaced request's flow and `AuthRequest` are overwritten without being deleted or answered (agentimpl.cpp
@@ -418,11 +425,14 @@ shell no longer relies on that alone:
   `test_heldJustAfterUnlock` (real timers), `tst_authdialog` `test_11_heldNotice`, `test_heldJustAfterAnotherRequest`;
   `tests/security/authagent_flows.sh` (the real AuthAgent.qml with its Quickshell types replaced, `make_harness.py`: every
   flow order Quickshell produces, every way the focus can move while the sink holds, the linger and what ends it, with real
-  key and mouse events; `--mutants` brings back each defect the reviews found and checks it is caught);
+  key and mouse events; with `--panel`, in `FakePanel.qml`, a window made again each time it is shown and given the keyboard
+  only once mapped, beside a window underneath; `--mutants` brings back each defect the reviews found and checks it is
+  caught);
   `tests/security/lock_surfaces.sh` (wiring, the saver's Binding, one place that gives the keyboard and three that take it
   back, three that set the hold, the stacking of the sheet and its two guards, each hold Timer used only in its own
-  functions, the key sink, `typing` read first, the six places that release the sink, the places that focus the field, the
-  linger's timers, no `Date` in the hold functions, forty polkit mutations). Seen on screen: NOT VERIFIED (L5).
+  functions, the key sink, `typing` read first, the six places that release the sink, the places that focus the field and
+  the sheet's disabled input, the linger's timers and its start, `visible` and `takesKeys` from the base state, no `Date` in
+  the hold functions, forty-six polkit mutations). Seen on screen: NOT VERIFIED (L5).
 - Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
   volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
   previews follow "Show previews").

@@ -1,10 +1,11 @@
 """The polkit agent as an offscreen test component (tests/security/authagent_flows.sh): the real
 shell/security/polkit/AuthAgent.qml with its Quickshell types replaced by plain QML, its logic untouched.
 
-    make_harness.py <AuthAgent.qml> <out.qml>
+    make_harness.py [--panel] <AuthAgent.qml> <out.qml>
 
-PolkitAgent becomes a plain object the tests drive (isActive, flow), PanelWindow an Item of the window's size, Scope an Item;
-the layer-shell, blur and IPC parts go. Each replacement must find exactly what it expects: when AuthAgent.qml changes shape,
+PolkitAgent becomes a plain object the tests drive (isActive, flow), Scope an Item, and PanelWindow an Item of the window's
+size, or with --panel the FakePanel beside the output (a window made again each time it is shown, which gets the keyboard
+only once mapped, as Quickshell's PanelWindow and a compositor do); the layer-shell, blur and IPC parts go. Each replacement must find exactly what it expects: when AuthAgent.qml changes shape,
 the script fails (exit 1) rather than test something else.
 """
 import re
@@ -33,7 +34,13 @@ def replace_block(text, head, replacement):
 
 
 def main():
-    src, out = sys.argv[1], sys.argv[2]
+    args = sys.argv[1:]
+    panel = args[:1] == ["--panel"]
+    if panel:
+        args = args[1:]
+    if len(args) != 2:
+        raise ValueError("usage: make_harness.py [--panel] <AuthAgent.qml> <out.qml>")
+    src, out = args
     s = open(src).read()
     for imp in ("import Quickshell\n", "import Quickshell.Io\n", "import Quickshell.Services.Polkit\n", "import Quickshell.Wayland\n",
                 'import "../../lib/RunMode.js" as RunMode\n'):
@@ -45,16 +52,22 @@ def main():
     s = replace_block(s, r"\n    IpcHandler \{", "\n")
     s = replace_block(s, r"\n        anchors \{\n            top: true", "\n        width: 800\n        height: 600")
     s = replace_block(s, r"\n        Region \{", "\n")
-    for old, new in (("\n    PanelWindow {\n", "\n    Item {\n"), ("\nScope {\n", "\nItem {\n")):
+    for old, new in (("\n    PanelWindow {\n", "\n    FakePanel {\n" if panel else "\n    Item {\n"), ("\nScope {\n", "\nItem {\n")):
         if s.count(old) != 1:
             raise ValueError("not found once: " + old.strip())
         s = s.replace(old, new, 1)
-    # The window's layer-shell, blur and colour properties (an Item has none of them).
+    # The panel asks the compositor for the keyboard where the agent sets keyboardFocus (FakePanel.wantsKeyboard).
+    focus = "        WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None\n"
+    if s.count(focus) != 1:
+        raise ValueError("keyboardFocus line not found once")
+    if panel:
+        s = s.replace(focus, "        wantsKeyboard: win.takesKeys\n", 1)
+    # The window's other layer-shell, blur and colour properties (an Item has none of them).
     dropped = r"\s*(WlrLayershell\.|BackgroundEffect\.|exclusionMode:|color: win\.shown \? Appearance\.withAlpha)"
     lines = s.split("\n")
     kept = [line for line in lines if not re.match(dropped, line)]
-    if len(lines) - len(kept) != 6:
-        raise ValueError("expected 6 window property lines, found %d" % (len(lines) - len(kept)))
+    if len(lines) - len(kept) != (5 if panel else 6):
+        raise ValueError("expected %d window property lines, found %d" % (5 if panel else 6, len(lines) - len(kept)))
     s = "\n".join(kept)
     aliases = ("    property alias agentMock: agent\n    property alias model: dialogModel\n    property alias sheet: win\n"
                "    property alias holderItem: holder\n    property alias sink: keySink\n")
