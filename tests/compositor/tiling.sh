@@ -82,6 +82,19 @@ pointer() { timeout 30 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log
 fail=0
 hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$DEV_NESTED_SIG/hyprland.log
 log_lines() { grep -ac "" "$hyprlog" 2>/dev/null || echo 0; }
+# The plugin logged a line matching PATTERN: Hyprland's in-memory log (`hyprctl rollinglog`) or its log file, polled for up to
+# 3 s (the file is buffered: a line can reach it seconds late; integrator nested pass of 6355acb). Use a pattern that names the
+# window (its address) so that an earlier case's line never matches. No pipe into grep -q (pipefail: SIGPIPE).
+plugin_logged() { # pattern
+  local _ log
+  for _ in $(seq 1 15); do
+    log=$(nestctl rollinglog 2>/dev/null)
+    grep -aq -- "$1" <<<"$log" && return 0
+    grep -aq -- "$1" "$hyprlog" 2>/dev/null && return 0
+    sleep 0.2
+  done
+  return 1
+}
 log_mark=$(log_lines)
 plugin_warnings() {
   local l
@@ -181,13 +194,12 @@ grip_of() { # address: the middle of its titlebar relative to GF-REF, "px py"
 }
 c1_other=""
 run_c1() { # name focused|unfocused moving|still
-  local name=$1 focus=$2 motion=$3 px py p mark
+  local name=$1 focus=$2 motion=$3 px py p
   open_xdg "gf-c1-$name"
   if [[ -z $xdg_addr ]] || ! read -r px py < <(grip_of "$xdg_addr"); then
     check "C1 $name: the victim window opened" false
     return
   fi
-  mark=$(log_lines)
   if [[ $motion == moving ]]; then
     pointer abs "$px" "$py" down sleep 150 drag $((px + 40)) "$py" sleep 2200 drag $((px + 120)) $((py + 30)) sleep 150 drag $((px + 160)) $((py + 40)) sleep 300 up &
   else
@@ -203,8 +215,7 @@ run_c1() { # name focused|unfocused moving|still
   wait "$p"
   sleep 0.8
   check "C1 $name: the dragged window unmapped (alive) during the drag ($focus, $motion): Hyprland alive" alive
-  c1_guarded() { tail -n +"$((mark + 1))" "$hyprlog" 2>/dev/null | grep -aq 'closed or unmapped'; }
-  check "C1 $name: the plugin reached its guarded path (a \"closed or unmapped\" line) and moved nothing" c1_guarded
+  check "C1 $name: the plugin reached its guarded path (\"${xdg_addr#0x} closed or unmapped\") and moved nothing" plugin_logged "${xdg_addr#0x} closed or unmapped"
   kill "$xdg_pid" 2>/dev/null
   sleep 0.3
 }

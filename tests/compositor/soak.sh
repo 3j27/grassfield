@@ -122,11 +122,14 @@ if true; then
 fi
 follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
 # Centre "<x> <y>" (relative to $out) of the Dock tile the shell computed for window <hex> after line <since> of the follow
-# log; waits up to 1.5 s; nothing when the line never came (the request log budget may hold it back) or lies off $out.
+# log, or in Hyprland's in-memory log (`hyprctl rollinglog`: the follow pipe can deliver a line late, integrator nested pass
+# of 6355acb); waits up to 3 s; nothing when the line never came (the request log budget may hold it back) or lies off $out.
 dock_tile() { # <hex> <since>
-  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 1500))
+  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 3000))
   while :; do
     line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    [[ -n $line ]] && break
+    line=$(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl rollinglog 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
     [[ -n $line ]] && break
     (($(date +%s%3N) > deadline)) && return 1
     sleep 0.05
