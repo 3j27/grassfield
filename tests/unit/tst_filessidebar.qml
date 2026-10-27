@@ -62,6 +62,20 @@ TestCase {
             tagColor: -1
         }
 
+        // Last here so the rows above keep their numbers (first in the real sidebar).
+        ListElement {
+            section: "recents"
+            name: "Recents"
+            url: "grassfield-recents:/"
+            iconName: "document-open-recent"
+            kind: "recents"
+            mounted: true
+            ejectable: false
+            busy: false
+            tag: ""
+            tagColor: -1
+        }
+
         function rowForUrl(url): int {
             for (let i = 0; i < places.count; i++) {
                 if (String(places.get(i).url) === String(url))
@@ -96,6 +110,25 @@ TestCase {
         }
         function navigate(url, record): void {
         }
+        property var hovered: []
+        function springHover(url): void {
+            fakeTab.hovered = fakeTab.hovered.concat([String(url)]);
+        }
+        function springLeave(url): void {
+        }
+    }
+
+    // A drag from elsewhere (Drag.Internal: delivered within this window, like the system drag reaches the DropAreas).
+    Item {
+        id: incoming
+        width: 4
+        height: 4
+        z: 10
+        Drag.keys: ["text/uri-list"]
+        Drag.dragType: Drag.Internal
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+        Drag.hotSpot.x: 2
+        Drag.hotSpot.y: 2
     }
 
     Sidebar {
@@ -159,6 +192,31 @@ TestCase {
         mouseClick(listView.itemAtIndex(0), 20, 8, Qt.RightButton);
         mouseClick(listView.itemAtIndex(2), 20, 8, Qt.RightButton);
         compare(tc.menus.length, 1);
+    }
+
+    // Recents takes no drop and does not spring open (Finder); a folder place takes the drag and springs.
+    function test_recentsTakesNoDrop() {
+        const listView = findList(sidebar);
+        verify(listView !== null);
+        fakeTab.hovered = [];
+        for (const row of [{index: 3, accepted: false}, {index: 0, accepted: true}]) {
+            const item = listView.itemAtIndex(row.index);
+            verify(item !== null);
+            const p = item.mapToItem(tc, item.width / 2, item.height / 2);
+            incoming.x = p.x - 2;
+            incoming.y = p.y - 2;
+            incoming.Drag.active = true;
+            incoming.y += 1;
+            wait(20);
+            if (row.accepted)
+                verify(incoming.Drag.target !== null, "Home takes the drag");
+            else
+                compare(incoming.Drag.target, null, "Recents takes no drag");
+            if (!row.accepted)
+                compare(incoming.Drag.drop(), Qt.IgnoreAction);
+            incoming.Drag.active = false;
+        }
+        compare(fakeTab.hovered, ["file:///home/u"], "only Home sprang");
     }
 
     function findList(item: Item): var {

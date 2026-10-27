@@ -1,5 +1,7 @@
 #include "folderviews.h"
 
+#include "filelogic.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -18,6 +20,12 @@
 namespace
 {
 const QStringList kModes = {QStringLiteral("icons"), QStringLiteral("list"), QStringLiteral("columns"), QStringLiteral("gallery")};
+
+// A whole number in [0, count).
+bool isIndex(const QJsonValue &value, int count)
+{
+    return value.isDouble() && value.toDouble() == double(value.toInt()) && value.toInt() >= 0 && value.toInt() < count;
+}
 
 FolderViews::Signature signatureFrom(const struct stat &st)
 {
@@ -78,11 +86,14 @@ FolderViews::Entry FolderViews::parse(const QJsonObject &object)
     if (kModes.contains(mode))
         e.mode = mode;
     const QJsonValue key = object.value(QStringLiteral("sortKey"));
-    if (key.isDouble() && key.toDouble() == double(key.toInt()) && key.toInt() >= 0 && key.toInt() <= 3)
+    if (isIndex(key, FileLogic::kSortKeyCount))
         e.sortKey = key.toInt();
     const QJsonValue descending = object.value(QStringLiteral("descending"));
     if (descending.isBool())
         e.descending = descending.toBool() ? 1 : 0;
+    const QJsonValue group = object.value(QStringLiteral("groupBy"));
+    if (isIndex(group, FileLogic::kGroupByCount))
+        e.groupBy = group.toInt();
     return e;
 }
 
@@ -96,6 +107,8 @@ QJsonObject FolderViews::serialize(const QString &key, const Entry &entry)
         o.insert(QStringLiteral("sortKey"), entry.sortKey);
     if (entry.descending >= 0)
         o.insert(QStringLiteral("descending"), entry.descending == 1);
+    if (entry.groupBy >= 0)
+        o.insert(QStringLiteral("groupBy"), entry.groupBy);
     return o;
 }
 
@@ -104,10 +117,12 @@ FolderViews::Entry FolderViews::merged(const Entry &base, const Entry &fields)
     Entry e = base;
     if (kModes.contains(fields.mode))
         e.mode = fields.mode;
-    if (fields.sortKey >= 0 && fields.sortKey <= 3)
+    if (fields.sortKey >= 0 && fields.sortKey < FileLogic::kSortKeyCount)
         e.sortKey = fields.sortKey;
     if (fields.descending == 0 || fields.descending == 1)
         e.descending = fields.descending;
+    if (fields.groupBy >= 0 && fields.groupBy < FileLogic::kGroupByCount)
+        e.groupBy = fields.groupBy;
     return e;
 }
 
@@ -256,7 +271,17 @@ FolderViews::WriteResult FolderViews::flush(QString *error, int waitMs)
     if (!hasPending())
         return WriteResult::Written;
     QDir().mkpath(QFileInfo(m_file).absolutePath());
-    QLockFile lock(m_file + QStringLiteral(".lock"));
+    const QString lockPath = m_file + QStringLiteral(".lock");
+    // QLockFile only ever makes a regular file there. Anything else (a directory, a FIFO, a socket, a link) is not a lock
+    // another Files holds: QLockFile would report it as taken for good (Busy: a retry every 5 s for the session), or, to
+    // check a FIFO for staleness, open it and wait for a writer on the UI thread. Refused, without touching it.
+    struct stat lockStat {};
+    if (::lstat(QFile::encodeName(lockPath).constData(), &lockStat) == 0 && !S_ISREG(lockStat.st_mode)) {
+        if (error)
+            *error = QCoreApplication::translate("FolderViews", "the view settings lock file is not a regular file");
+        return WriteResult::Refused;
+    }
+    QLockFile lock(lockPath);
     // A lock left by a process that died is taken over by QLockFile (its process is gone); a live holder only writes for
     // a moment, so the pending changes wait for the next flush instead of blocking the UI thread.
     if (!lock.tryLock(waitMs)) {

@@ -120,6 +120,13 @@ function effectiveView(mode, isSearch) {
     return isSearch && m === "columns" ? "list" : m;
 }
 
+// The view a tab shows: `held` while a drag started from that view runs (BrowserTab.dragView: the view that started a
+// system drag must outlive it, so a spring-loaded folder with a view of its own, or the end of a search, waits for the
+// drag to end), else effectiveView.
+function shownView(held, mode, isSearch) {
+    return held ? normalizeViewMode(held) : effectiveView(mode, isSearch);
+}
+
 // The gallery shows one item: when nothing is current yet (folder just listed), the first item is selected.
 function galleryInitialRow(currentRow, count) {
     if (count <= 0)
@@ -167,6 +174,125 @@ function cellsInRect(x1, y1, x2, y2, cellWidth, cellHeight, columns, count) {
             if (i < count)
                 out.push(i);
         }
+    }
+    return out;
+}
+
+// Keyboard move in the grouped icon view. `groups`: [{first, count, columns}] in row order, `columns` the items per line
+// of the group (its count when the group is one row). Left/Right walk the rows across groups; Up/Down move a line, from a
+// group's first or last line to the next group's nearest line at the same place; PageUp/PageDown move a group.
+function groupedIconMove(current, key, groups) {
+    if (groups.length === 0)
+        return -1;
+    const last = groups[groups.length - 1];
+    const count = last.first + last.count;
+    if (current < 0 || current >= count)
+        return key === "end" ? count - 1 : 0;
+    let g = 0;
+    while (g < groups.length - 1 && current >= groups[g].first + groups[g].count)
+        g++;
+    const group = groups[g];
+    const cols = Math.max(1, group.columns);
+    const i = current - group.first;
+    const col = i % cols;
+    // Row `line` of group `h` at column `c`, clamped to that line's last item.
+    function at(h, line, c) {
+        const target = groups[h];
+        const tc = Math.max(1, target.columns);
+        return target.first + Math.min(target.count - 1, line * tc + Math.min(c, tc - 1));
+    }
+    switch (key) {
+    case "left":
+        return Math.max(0, current - 1);
+    case "right":
+        return Math.min(count - 1, current + 1);
+    case "up":
+        if (i - cols >= 0)
+            return current - cols;
+        return g > 0 ? at(g - 1, Math.floor((groups[g - 1].count - 1) / Math.max(1, groups[g - 1].columns)), col) : current;
+    case "down":
+        if (i + cols < group.count)
+            return current + cols;
+        if (Math.floor(i / cols) < Math.floor((group.count - 1) / cols))
+            return group.first + group.count - 1;
+        return g < groups.length - 1 ? at(g + 1, 0, col) : current;
+    case "home":
+        return 0;
+    case "end":
+        return count - 1;
+    case "pageup":
+        return g > 0 ? at(g - 1, 0, col) : group.first;
+    case "pagedown":
+        return g < groups.length - 1 ? at(g + 1, 0, col) : group.first + group.count - 1;
+    }
+    return current;
+}
+
+// The grouped icon view's layout: each group of `groups` ([{first, count, columns}], as groupedIconMove takes them) is a
+// header `headerHeight` high over its lines of cells `cellHeight` high. Returns the top of each group, then the whole height.
+function groupedIconTops(groups, headerHeight, cellHeight) {
+    const tops = [];
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        tops.push(y);
+        y += headerHeight + Math.ceil(groups[g].count / Math.max(1, groups[g].columns)) * cellHeight;
+    }
+    tops.push(y);
+    return tops;
+}
+
+// Where `row` sits in the grouped icon view: {group, index (in the group), line, column, x (in the group's own, unscrolled
+// lines), y (the top of its cell in the content)}; null for a row in no group.
+function groupedIconCell(row, cellWidth, cellHeight, headerHeight, groups) {
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        const cols = Math.max(1, groups[g].columns);
+        if (row >= groups[g].first && row < groups[g].first + groups[g].count) {
+            const i = row - groups[g].first;
+            const line = Math.floor(i / cols);
+            return {group: g, index: i, line: line, column: i % cols, x: (i % cols) * cellWidth, y: y + headerHeight + line * cellHeight};
+        }
+        y += headerHeight + Math.ceil(groups[g].count / cols) * cellHeight;
+    }
+    return null;
+}
+
+// Rows of the grouped icon view under a rubber band (content coordinates). `groups`: [{first, count, columns, scrollX}],
+// scrollX how far a one-line group is scrolled sideways.
+function groupedIconCells(x1, y1, x2, y2, cellWidth, cellHeight, headerHeight, groups) {
+    const out = [];
+    const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+    let y = 0;
+    for (let g = 0; g < groups.length && y <= bottom; g++) {
+        const cols = Math.max(1, groups[g].columns);
+        const rowsTop = y + headerHeight;
+        y = rowsTop + Math.ceil(groups[g].count / cols) * cellHeight;
+        if (bottom < rowsTop || top >= y)
+            continue;
+        const dx = groups[g].scrollX || 0;
+        const cells = cellsInRect(x1 + dx, top - rowsTop, x2 + dx, bottom - rowsTop, cellWidth, cellHeight, cols, groups[g].count);
+        for (let i = 0; i < cells.length; i++)
+            out.push(groups[g].first + cells[i]);
+    }
+    return out;
+}
+
+// Rows of a grouped list (FolderModel.groups: [{first, count}] in row order, each group under a header `headerHeight` high)
+// that the vertical span [y1, y2] of the list's content covers.
+function groupedRowsInSpan(y1, y2, rowHeight, headerHeight, groups) {
+    const out = [];
+    const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+    let y = 0;
+    for (let g = 0; g < groups.length; g++) {
+        y += headerHeight;
+        const first = groups[g].first, count = groups[g].count;
+        const r0 = Math.max(0, Math.floor((top - y) / rowHeight));
+        const r1 = Math.min(count - 1, Math.floor((bottom - y) / rowHeight));
+        for (let r = r0; r <= r1; r++)
+            out.push(first + r);
+        y += count * rowHeight;
+        if (y > bottom)
+            break;
     }
     return out;
 }
