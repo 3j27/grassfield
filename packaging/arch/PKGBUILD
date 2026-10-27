@@ -152,7 +152,10 @@ package_grassfield-desktop() {
   # as omarchy declares them. grassfield-keyring (O12) is held back until grassfieldhq/grassfield-packages builds it (owner
   # decision O21, 2026-10-27): a follow-up adds it here, so that a local `makepkg -si` never asks for a package that does
   # not exist yet.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot)
+  # gnome-keyring is the session's only Secret Service (ADR-0035 D-12, Q17-b: packaging/xdg-config/kwalletrc keeps KWallet's
+  # ksecretd off org.freedesktop.secrets), so libsecret clients such as Chromium keep a keychain instead of plain-text storage:
+  # declared, not assumed to come with Omarchy.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot gnome-keyring)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
