@@ -62,7 +62,7 @@ TestCase {
         return {backend: backend, service: service};
     }
 
-    readonly property string uuidA: "00000000-1111-2222-3333-444444444444"
+    readonly property string uuidA: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 
     // ---- guard ----
 

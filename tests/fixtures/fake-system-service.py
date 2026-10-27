@@ -239,7 +239,7 @@ def nm_world(svc):
                  props={"AddressData": V("aa{sv}", [{"address": V("s", "fd00:20::34"), "prefix": V("u", 64)}]), "Gateway": V("s", "fe80::1")})
     active_xml = ('<interface name="org.freedesktop.NetworkManager.Connection.Active"><property name="Id" type="s" access="read"/>'
                   '<property name="Uuid" type="s" access="read"/><property name="State" type="u" access="read"/></interface>')
-    svc.register(NM + "/ActiveConnection/1", active_xml, props={"Id": V("s", "Maison"), "Uuid": V("s", "00000000-1111-2222-3333-444444444444"), "State": V("u", 2)})
+    svc.register(NM + "/ActiveConnection/1", active_xml, props={"Id": V("s", "Maison"), "Uuid": V("s", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), "State": V("u", 2)})
     svc.register(NM + "/ActiveConnection/2", active_xml, props={"Id": V("s", "Home"), "Uuid": V("s", "99999999-0000-4000-8000-000000000009"), "State": V("u", 1)})
     svc.register(NM + "/ActiveConnection/3", active_xml, props={"Id": V("s", "Office VPN"), "Uuid": V("s", vpn_uuid), "State": V("u", 2)})
     svc.register(NM + "/Settings", '<interface name="org.freedesktop.NetworkManager.Settings"><method name="ListConnections"><arg direction="out" type="ao"/></method></interface>',
@@ -254,7 +254,7 @@ def nm_world(svc):
     def connection(path, settings):
         svc.register(path, conn_xml, methods={"GetSettings": lambda p: V("(a{sa{sv}})", (settings,)), "Delete": lambda p: delete(path)})
 
-    connection(NM + "/Settings/1", {"connection": {"type": V("s", "802-11-wireless"), "uuid": V("s", "00000000-1111-2222-3333-444444444444"), "id": V("s", "Maison")},
+    connection(NM + "/Settings/1", {"connection": {"type": V("s", "802-11-wireless"), "uuid": V("s", "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"), "id": V("s", "Maison")},
                                     "802-11-wireless": {"ssid": V("ay", b"Home")}})
     connection(NM + "/Settings/2", {"connection": {"type": V("s", "802-3-ethernet"), "uuid": V("s", "11111111-2222-3333-4444-555555555555"), "id": V("s", "Wired")}})
     connection(NM + "/Settings/3", {"connection": {"type": V("s", "vpn"), "uuid": V("s", vpn_uuid), "id": V("s", "Office VPN")}})

@@ -56,7 +56,7 @@ QtObject {
     property var pendingOps: []
     property var busReturns: [] // what busAct returned for the real-session ops, kept in order, listed before the other returns
 
-    readonly property string uuid: "00000000-1111-2222-3333-444444444444"
+    readonly property string uuid: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
     // Wi-Fi and Bluetooth actions are D-Bus maps (busAct), Sound's are wpctl argument vectors (act).
     readonly property var busOps: [
         System.wifiRadio(false), System.wifiConnectKnown(root.uuid), System.wifiConnectOpen("Cafe"), System.wifiDisconnect("wlo1"),
