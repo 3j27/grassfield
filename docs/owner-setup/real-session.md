@@ -69,12 +69,15 @@ sudo snapper -c root list | tail -3
 **Once, before this build (new on 2026-10-27):** `grassfield-desktop` depends on `grassfield-keyring`, the package that
 will carry the keys pacman trusts for Grassfield's own updates (ADR-0033 b.2). It is built by the private
 `grassfieldhq/grassfield-packages` repository and no repository serves it yet, so without it `makepkg -si` builds and then
-stops at the install ("unable to satisfy dependency 'grassfield-keyring'"). Build it once from that repository:
+stops at the install (`cannot resolve "grassfield-keyring", a dependency of "grassfield-desktop"`). Build it once from
+that repository, at b0e8494 or later. You already have it at `~/workspace/grassfield-packages`: update it there (if you
+do not have it, clone it instead with `git clone git@github.com:grassfieldhq/grassfield-packages.git
+~/workspace/grassfield-packages`):
 
 ```bash
-git clone git@github.com:grassfieldhq/grassfield-packages.git ~/workspace/grassfield-packages
+git -C ~/workspace/grassfield-packages pull
 cd ~/workspace/grassfield-packages/keyring && makepkg -si
-pacman -Q grassfield-keyring                                    # grassfield-keyring 20261027-1
+pacman -Q grassfield-keyring                                    # grassfield-keyring 20261027-1 or later
 ```
 
 It holds no key until the project's signing key exists (O11): it installs three empty files under

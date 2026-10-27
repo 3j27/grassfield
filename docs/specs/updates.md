@@ -243,7 +243,7 @@ On Omarchy 4.0.4 (its `install/omarchy-base.packages`): `pacman-contrib` (`check
 itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `fakeroot` are in
 `grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joined them once
 grassfield-packages built it (owner decision O21; until the repository is published, a source build installs it first,
-ADR-0033 UD1). Omarchy's commands used:
+owner decision O22). Omarchy's commands used:
 `omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
 
 ## Degraded behavior
