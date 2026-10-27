@@ -103,6 +103,9 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
 | Q21 | The time on a row copied before today (step 2) | the time alone; the date and the time; a relative day ("Yesterday") | the date and time in the locale's short formats ("Copied on …", « Copié le … »); today the time alone ("Copied 11:23", « Copié à 11:23 ») | macOS first: macOS 26 shows the clock time (M-4); a date only where the time alone would mislead |
 | Q22 | How the keyboard reaches the More button (step 2) | the mouse only; Tab from the field; a key of its own | Tab from the field puts the focus ring on More; Return, Space or Down opens its menu; Tab or Esc goes back to the field | macOS first: full keyboard access reaches every control with Tab (the spec's table: "Tab reaches it"); every action has a key (CB-12) |
 | Q23 | The helper refuses or does not answer a copy or a paste (another program's lock, the item gone, no helper): what does the person see? (review of 28d2651) | Search closes as after any choice; Search stays open with a notice; an alert | Search stays open, the selection where it was, and the view says "The item could not be copied" (« L’élément n’a pas pu être copié ») for 3 s; nothing is pasted | macOS first: a choice that did nothing must not look like one that worked; the person can try again or press Esc, with nothing to repair |
+| Q24 | Where Settings > Search puts the clipboard history's settings (step 3) | first, above Search History; between Search History and Search Results; last, after Search Results | last, in a group of its own after Search Results | macOS first: macOS 26.0 shows its Clipboard Search group last in the pane (W-39); macOS 27's layout of it is not captured |
+| Q25 | The duration pop-up and Keep clipboard history after logging out while the history is off (step 3) | always active; inactive (dimmed) while off; hidden while off | inactive while off; Clear Clipboard History… stays active (pinned items stay while the history is off and can be cleared) | macOS first: a setting that does nothing is dimmed, not hidden, as macOS dims dependent controls; nothing to set by hand |
+| Q26 | Clear Clipboard History…'s "Also delete pinned items" (step 3) | checked by default; unchecked each time the sheet opens; remembered | unchecked each time; Clear keeps pins unless the person checks it then | macOS first: Clear deletes what macOS's history holds (no pins there); deleting pins, Windows' "Clear all" never does, only on an explicit choice; nothing irreversible by default |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -285,6 +288,19 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    also for a copy only; a copy or paste the helper refuses or leaves unanswered for 1 s keeps Search open with "The item
    could not be copied" (Q23), and Copy's "Copied" shows on the helper's `A`. ⌘4 is matched by the 4 key's place (xkb
    keycode 13, what `forwarding.lua` sends) as well as its symbol, so it works on AZERTY, where that key types an apostrophe.
+   The step 2 counter-review's nits (fixed in step 3): a paste also needs the helper to still own the item chosen (`ownedId`,
+   from each `A`): a Copy chosen before the `A` drops the waiting paste ("another item copied"), and a check that finds the
+   clipboard taken by another app or holding another item drops it ("the clipboard changed"), so Ctrl+V never pastes what
+   was not chosen; one function (`pasteState`) builds what each check sees from the paste's own target, and the tests make
+   the live `pasteTarget` differ from it.
+   Step 3 builds Settings > Search's clipboard group (`apps/settings/qml/SearchPage.qml`, after Search Results, Q24): Results
+   from Clipboard (`search.clipboard.enabled`, its explanation says that turning it off deletes the items not pinned),
+   "Clipboard history is available in Search for" (a pop-up: 30 minutes, 8 hours, 7 days; `.retention`), Keep clipboard history
+   after logging out (`.keepOnDisk`), both inactive while the history is off (Q25), and Clipboard History with Clear Clipboard
+   History…, which asks first in a sheet (Main.qml): "Clear your clipboard history?", the check box "Also delete pinned items"
+   (unchecked each time, Q26) and Clear; `SearchPage.clearClipboard` then writes `.clearedAt`, and `.pinnedClearedAt` too
+   when the box is checked, in one write. The shell follows the keys live (step 1). The Settings sidebar's search finds the
+   pane with "clipboard", "copy" and "paste".
 
 8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` and never calls
    `wl_display_connect`: libwayland takes `WAYLAND_SOCKET` first even when a display name is given (the counter-review
