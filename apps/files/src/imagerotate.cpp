@@ -185,6 +185,26 @@ Method methodFor(const QByteArray &mimeType)
     return Method::None;
 }
 
+Method methodForContent(const QByteArray &head, QByteArray *format)
+{
+    if (head.startsWith("\xFF\xD8\xFF"))
+        return Method::Orientation;
+    QByteArray found;
+    if (head.startsWith(QByteArray("\x89PNG\r\n\x1A\n", 8))) {
+        found = "png";
+    } else if (head.size() >= 18 && head.startsWith("BM")) {
+        // "BM" then the sizes; the DIB header that follows the 14-byte file header has one of these lengths.
+        static const QList<quint32> dibSizes = {12, 40, 52, 56, 64, 108, 124};
+        if (dibSizes.contains(read32(head, 14, false)))
+            found = "bmp";
+    }
+    if (found.isEmpty())
+        return Method::None;
+    if (format)
+        *format = found;
+    return Method::Reencode;
+}
+
 int turned(int orientation, bool clockwise)
 {
     const Pose p = kPoses[orientation >= 1 && orientation <= 8 ? orientation : 1];
@@ -267,8 +287,8 @@ QByteArray exifSegment(int orientation)
 
 QString rotate(const QString &path, const QByteArray &mimeType, bool clockwise)
 {
-    const Method method = methodFor(mimeType);
-    if (method == Method::None)
+    // The name's type only says whether the action is offered; the content decides what is done (below).
+    if (methodFor(mimeType) == Method::None)
         return tr("this kind of picture can’t be turned without losing quality");
     // Everything below works on this descriptor: O_NOFOLLOW refuses a link, even one swapped in after any check.
     Fd file;
@@ -285,12 +305,19 @@ QString rotate(const QString &path, const QByteArray &mimeType, bool clockwise)
         return errnoText();
     if (!S_ISREG(st.st_mode))
         return tr("only pictures themselves can be turned, not links to them");
+    if (st.st_size > kMaxFileSize)
+        return tr("it is larger than %1 MB, so it was left as it is").arg(kMaxFileSize / (1024 * 1024));
+    // The start of the file says what it is; for a JPEG, the metadata sits in the first segments and 256 KiB holds them
+    // (an EXIF segment is at most 64 KiB).
+    QByteArray head;
+    if (!readWhole(file.fd, qMin<qint64>(st.st_size, 256 * 1024), &head))
+        return tr("it could not be read whole, so it was left as it is");
+    QByteArray format;
+    const Method method = methodForContent(head, &format);
+    if (method == Method::None)
+        return tr("it is not a JPEG, PNG or BMP picture inside, whatever its name says, so it was left as it is");
     QByteArray bytes;
     if (method == Method::Orientation) {
-        // The metadata sits in the first segments; 256 KiB holds them (an EXIF segment is at most 64 KiB).
-        QByteArray head;
-        if (!readWhole(file.fd, qMin<qint64>(st.st_size, 256 * 1024), &head))
-            return tr("it could not be read whole, so it was left as it is");
         const JpegOrientation where = findOrientation(head);
         if (!where.valid)
             return tr("it is not a JPEG picture that can be read");
@@ -312,13 +339,15 @@ QString rotate(const QString &path, const QByteArray &mimeType, bool clockwise)
     } else {
         if (!readWhole(file.fd, st.st_size, &bytes))
             return tr("it could not be read whole, so it was left as it is");
-        if (mimeType == "image/png" && isAnimatedPng(bytes))
+        if (format == "png" && isAnimatedPng(bytes))
             return tr("animated pictures are not turned");
         QBuffer source(&bytes);
         source.open(QIODevice::ReadOnly);
         QImageReader reader(&source);
         reader.setAutoTransform(false);
-        const QByteArray format = reader.format();
+        // Qt's own reading of the content must agree, and the picture is written again in that same format only.
+        if (reader.format() != format)
+            return tr("it is not a JPEG, PNG or BMP picture inside, whatever its name says, so it was left as it is");
         if (reader.imageCount() > 1)
             return tr("animated pictures are not turned");
         // A picture shown turned by its own orientation tag would come out turned twice.

@@ -3792,8 +3792,16 @@
         <translation>elle a changé pendant la rotation, elle a été laissée telle quelle</translation>
     </message>
     <message>
+        <source>it is larger than %1 MB, so it was left as it is</source>
+        <translation>elle dépasse %1 Mo, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
         <source>it could not be read whole, so it was left as it is</source>
         <translation>elle n’a pas pu être lue en entier, elle a été laissée telle quelle</translation>
+    </message>
+    <message>
+        <source>it is not a JPEG, PNG or BMP picture inside, whatever its name says, so it was left as it is</source>
+        <translation>son contenu n’est pas une image JPEG, PNG ou BMP, quel que soit son nom, elle a été laissée telle quelle</translation>
     </message>
     <message>
         <source>it is not a JPEG picture that can be read</source>
