@@ -159,7 +159,9 @@ FocusScope {
             id: header
             required property string section
             width: ListView.view.width
-            height: Tokens.filesSidebarHeaderHeight
+            // Recents has no heading.
+            height: header.section === "recents" ? 0 : Tokens.filesSidebarHeaderHeight
+            visible: header.section !== "recents"
             // The Tags header has a menu (Show Hidden Tag) that a right click opens: the same menu through an accessible
             // action (A11Y-09). The other headers are plain headings.
             Accessible.role: header.section === "tags" ? Accessible.Button : Accessible.Heading
@@ -296,8 +298,18 @@ FocusScope {
         DropArea {
             id: drop
             anchors.fill: parent
-            enabled: entry.mounted && entry.kind !== "network"
+            // Network and Recents take no drop (Recents is a list, not a place: Finder; it does not spring open either).
+            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents"
             keys: ["text/uri-list"]
+            // A place rested on during a drag opens in the tab (spring-loaded); a tag does not.
+            onEntered: {
+                if (root.tab && !entry.isTag)
+                    root.tab.springHover(entry.url);
+            }
+            onExited: {
+                if (root.tab)
+                    root.tab.springLeave(entry.url);
+            }
             onDropped: event => {
                 if (!event.hasUrls || !root.tab)
                     return;

@@ -143,6 +143,17 @@ QString displayName(const QString &tag)
     return i >= 0 ? QCoreApplication::translate("Tags", kColorKeys[i]) : tag;
 }
 
+QString typedTag(const QString &typed)
+{
+    const QString text = typed.trimmed();
+    for (int i = 0; i < kColorCount; i++) {
+        const QString key = colorKey(i);
+        if (text.compare(key, Qt::CaseInsensitive) == 0 || text.compare(displayName(key), Qt::CaseInsensitive) == 0)
+            return key;
+    }
+    return text;
+}
+
 bool sameTag(const QString &a, const QString &b)
 {
     const int ca = colorIndex(a);
