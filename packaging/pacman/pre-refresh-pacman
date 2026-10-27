@@ -1,0 +1,20 @@
+#!/bin/bash
+# Omarchy pre-refresh-pacman hook of Grassfield (ADR-0033 a.4, owner decision O4; docs/specs/updates.md U17).
+# Installed as /usr/share/grassfield/omarchy-hooks/pre-refresh-pacman; grassfield-channel-set links it as
+# ~/.config/omarchy/hooks/pre-refresh-pacman.d/50-grassfield (a link, so a package update updates it; once Grassfield is
+# removed the dangling link is skipped by omarchy-hook, which runs only regular files).
+#
+# Omarchy's omarchy-refresh-pacman (Omarchy 4.0.4 and 4.0.6) copies its channel template over /etc/pacman.conf, runs
+# `omarchy-hook pre-refresh-pacman` as the user with a warm sudo cache, then `pacman -Syyuu`. The template has no
+# [grassfield] section, so this hook appends the two lines grassfield-channel-helper writes, last, when Grassfield
+# updates are on (/etc/pacman.d/grassfield.conf exists) and the section is missing. It never writes the included file and
+# does nothing else; when sudo cannot run (a cold cache without a terminal) Software Update shows "Repair…".
+set -u
+
+conf=/etc/pacman.conf
+include=/etc/pacman.d/grassfield.conf
+
+[[ -f $include && -f $conf ]] || exit 0
+# The section is there when a line, comments and blanks removed, is [grassfield] (pacman's own reading).
+awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") f = 1 } END { exit !f }' "$conf" && exit 0
+printf '\n[grassfield]\nInclude = %s\n' "$include" | sudo tee -a "$conf" >/dev/null
