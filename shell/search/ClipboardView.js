@@ -110,10 +110,15 @@ function keyAction(key, modifiers, fieldEmpty, fieldHasSelection) {
     return "";
 }
 
-// Whether a key opens the Clipboard view from Search's results view: ⌘4 (Super+4, forwarded as Ctrl+4) in the field.
-function opensView(key, modifiers) {
+// The 4 key's place on the keyboard (its xkb keycode, evdev KEY_4 + 8, what forwarding.lua names `code:13`).
+var FOUR_SCAN_CODE = 13;
+
+// Whether a key opens the Clipboard view from Search's results view: ⌘4 (Super+4, forwarded as Ctrl+4) in the field. The key
+// is matched by its place as well as by its symbol, as macOS matches ⌘4 on every layout: forwarding.lua sends the physical
+// key, which types an apostrophe on a French AZERTY layout (Qt then reports Key_Apostrophe with scan code 13).
+function opensView(key, modifiers, scanCode) {
     const mods = Number(modifiers) & (SHIFT | CTRL | ALT | META);
-    return key === KEY.four && (mods === CTRL || mods === META);
+    return (key === KEY.four || Number(scanCode) === FOUR_SCAN_CODE) && (mods === CTRL || mods === META);
 }
 
 // The selection after the row at `index` was deleted from a list of `count` rows (before the delete): the next row, or the

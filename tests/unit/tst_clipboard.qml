@@ -263,6 +263,12 @@ TestCase {
         verify(View.opensView(Qt.Key_4, Qt.ControlModifier), "⌘4 (Super+4 forwarded as Ctrl+4)");
         verify(View.opensView(Qt.Key_4, Qt.MetaModifier));
         verify(!View.opensView(Qt.Key_4, 0), "a typed 4");
+        // French AZERTY: the forwarded 4 key types an apostrophe; its place (scan code 13) still opens the view.
+        verify(View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier, 13), "⌘4 on AZERTY");
+        verify(View.opensView(Qt.Key_4, Qt.ControlModifier, 13));
+        verify(!View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier, 48), "Ctrl+apostrophe elsewhere on the keyboard");
+        verify(!View.opensView(Qt.Key_Apostrophe, 0, 13), "a typed apostrophe");
+        verify(!View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier | Qt.ShiftModifier, 13));
     }
 
     function test_selectionAfterDelete() {

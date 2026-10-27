@@ -473,7 +473,7 @@ Variants {
                         return;
                     }
                     // ⌘4 (Super+4, forwarded as Ctrl+4): the Clipboard view (M-1).
-                    if (ClipView.opensView(event.key, event.modifiers)) {
+                    if (ClipView.opensView(event.key, event.modifiers, event.nativeScanCode)) {
                         c.enterClipboard();
                         event.accepted = true;
                         return;
