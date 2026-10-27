@@ -8,13 +8,16 @@
 #include <QSet>
 #include <QString>
 
+#include <optional>
+
 namespace grassfield::store {
 
 inline const QString kKeyringDir = QStringLiteral("/usr/share/grassfield/pacman-keyring");
 
 enum class SignatureVerdict {
     Good,
-    NoTrustedKey, // grassfield-keyring holds no key yet (until the owner's key exists, ADR-0033 O20), or is missing
+    NoTrustedKey, // grassfield-keyring holds no key yet (until the owner's key exists, ADR-0033 O20), is missing, or
+                  // one of its lists cannot be read whole
     Bad,          // gpgv refused it, or gave no VALIDSIG: a changed file, another key, no signature
     Untrusted,    // a good signature by a key grassfield-trusted does not list
     Revoked,      // a good signature by a key grassfield-revoked lists
@@ -25,8 +28,11 @@ struct SignatureCheck {
     QString signer; // the primary key's fingerprint, when gpgv gave one
 };
 
-// "<40 hex>:4:" lines of grassfield-trusted (pacman's format), or bare fingerprints (grassfield-revoked).
-QSet<QString> readFingerprints(const QByteArray &content);
+// "<40 hex>:4:" lines of grassfield-trusted (pacman's format), or bare fingerprints (grassfield-revoked), in upper case
+// with the spaces around them ignored; blank lines and lines starting with '#' are skipped. Empty when any other line is
+// there (a grouped fingerprint, a 0x prefix, a trailing comment): a list that cannot be read whole is not used, so a
+// revoked entry written another way never leaves its key trusted (the same rule as tools/catalog.py).
+std::optional<QSet<QString>> readFingerprints(const QByteArray &content);
 // VALIDSIG's argument 10 in gpgv's --status-fd output ("" when there is none, or more than one signer).
 QString validSigner(const QByteArray &status);
 // The verdict from gpgv's exit code, its status lines and the two lists (pure: the tests feed it recorded outputs).

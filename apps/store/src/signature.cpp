@@ -26,17 +26,20 @@ QByteArray readSmall(const QString &path, bool *ok)
 
 } // namespace
 
-QSet<QString> readFingerprints(const QByteArray &content)
+std::optional<QSet<QString>> readFingerprints(const QByteArray &content)
 {
+    static const QRegularExpression tail(QStringLiteral(R"(\A(\d+:)?\s*\z)"));
     QSet<QString> out;
     for (const QByteArray &raw : content.split('\n')) {
-        const QString line = QString::fromLatin1(raw).trimmed();
-        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+        const QString line = QString::fromLatin1(raw);
+        if (line.trimmed().isEmpty() || line.startsWith(QLatin1Char('#')))
             continue;
-        // Hand-written lists: a lower-case or space-padded entry still counts (a revoked key must never slip through).
-        const QString fpr = line.section(QLatin1Char(':'), 0, 0).trimmed().toUpper();
-        if (fingerprintRe().match(fpr).hasMatch())
-            out.insert(fpr);
+        // Hand-written lists: a lower-case or space-padded entry still counts; anything else refuses the whole list.
+        const qsizetype colon = line.indexOf(QLatin1Char(':'));
+        const QString fpr = (colon < 0 ? line : line.left(colon)).trimmed().toUpper();
+        if (!fingerprintRe().match(fpr).hasMatch() || !tail.match(colon < 0 ? QString() : line.mid(colon + 1)).hasMatch())
+            return std::nullopt;
+        out.insert(fpr);
     }
     return out;
 }
@@ -78,10 +81,13 @@ SignatureCheck judge(int gpgvExit, const QByteArray &status, const QSet<QString>
 SignatureCheck verifySignature(const QString &gpgv, const QString &keyringDir, const QString &file, const QString &sig)
 {
     bool okTrusted = false, okRevoked = false;
-    const QSet<QString> trusted = readFingerprints(readSmall(keyringDir + QStringLiteral("/grassfield-trusted"), &okTrusted));
-    const QSet<QString> revoked = readFingerprints(readSmall(keyringDir + QStringLiteral("/grassfield-revoked"), &okRevoked));
+    const QString revokedPath = keyringDir + QStringLiteral("/grassfield-revoked");
+    const auto trusted = readFingerprints(readSmall(keyringDir + QStringLiteral("/grassfield-trusted"), &okTrusted));
+    const auto revoked = readFingerprints(readSmall(revokedPath, &okRevoked));
     const QString keyring = keyringDir + QStringLiteral("/grassfield.gpg");
-    if (!okTrusted || trusted.isEmpty() || QFileInfo(keyring).size() == 0) {
+    // No revoked list is an empty one; a revoked list that is there but cannot be read whole refuses everything.
+    if (!okTrusted || !trusted || trusted->isEmpty() || !revoked || (!okRevoked && QFileInfo::exists(revokedPath))
+        || QFileInfo(keyring).size() == 0) {
         SignatureCheck none;
         none.verdict = SignatureVerdict::NoTrustedKey;
         return none;
@@ -98,7 +104,7 @@ SignatureCheck verifySignature(const QString &gpgv, const QString &keyringDir, c
                                    options);
     if (!r.started || r.timedOut || r.overflow)
         return {};
-    return judge(r.exitCode, r.out, trusted, okRevoked ? revoked : QSet<QString>{});
+    return judge(r.exitCode, r.out, *trusted, *revoked);
 }
 
 } // namespace grassfield::store

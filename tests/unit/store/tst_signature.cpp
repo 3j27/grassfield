@@ -41,14 +41,23 @@ struct Keyring {
 
 TEST(Signature, Fingerprints)
 {
-    const QSet<QString> f = readFingerprints(("# comment\n" + kGood + ":4:\n" + kOld + ":4:\n\nnot-a-key:4:\n" + kSub.left(39) + ":4:\n").toLatin1());
-    EXPECT_EQ(f, (QSet<QString>{kGood, kOld}));
-    EXPECT_EQ(readFingerprints((kOld + "\n").toLatin1()), QSet<QString>{kOld});
+    EXPECT_EQ(readFingerprints(("# comment\n" + kGood + ":4:\n" + kOld + ":4: \n\n").toLatin1()), (QSet<QString>{kGood, kOld}));
+    EXPECT_EQ(readFingerprints((kOld + "\r\n").toLatin1()), QSet<QString>{kOld});
+    EXPECT_EQ(readFingerprints(QByteArray()), QSet<QString>{});
     // Hand-written lists: a lower-case or space-padded entry still counts, so a revoked key never slips through.
     EXPECT_EQ(readFingerprints(("  " + kRogue.toLower() + "  :4:\n" + kOld.toLower() + " \n").toLatin1()), (QSet<QString>{kRogue, kOld}));
     const QSet<QString> trusted{kGood, kOld};
-    EXPECT_EQ(judge(0, validsig(kOld), trusted, readFingerprints((kOld.toLower() + "  \n").toLatin1())).verdict, SignatureVerdict::Revoked);
+    EXPECT_EQ(judge(0, validsig(kOld), trusted, *readFingerprints((kOld.toLower() + "  \n").toLatin1())).verdict, SignatureVerdict::Revoked);
     EXPECT_EQ(validSigner(validsig(kGood.toLower())), kGood);
+    // Any other line refuses the whole list (the same rule as tools/catalog.py): a grouped fingerprint, a 0x prefix, a
+    // trailing comment, 39 digits, a word, a field after pacman's, an indented comment.
+    QString grouped;
+    for (int i = 0; i < 40; i += 4)
+        grouped += kOld.mid(i, 4) + (i < 36 ? QStringLiteral(" ") : QString());
+    for (const QString &line : {grouped, QString(QStringLiteral("0x") + kOld), QString(kOld + QStringLiteral(" # the old key")),
+                                kOld.left(39), QStringLiteral("not-a-key:4:"), QString(kOld + QStringLiteral(":4:x")),
+                                QStringLiteral("  # indented")})
+        EXPECT_FALSE(readFingerprints((kGood + "\n" + line + "\n").toLatin1())) << line.toStdString();
 }
 
 TEST(Signature, ValidSignerIsArgumentTen)
@@ -111,6 +120,11 @@ TEST(Signature, NoKeyMeansNoCatalog)
     Keyring keysButNoTrust("", "", "keys");
     EXPECT_EQ(verifySignature(gpgv, keysButNoTrust.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
     EXPECT_EQ(verifySignature(gpgv, QStringLiteral("/nonexistent"), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
+    // A revoked list written another way: nothing is trusted, so the revoked key it meant never slips through.
+    Keyring badRevoked((kGood + ":4:\n").toLatin1(), ("0x" + kGood + "\n").toLatin1());
+    EXPECT_EQ(verifySignature(gpgv, badRevoked.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
+    Keyring badTrusted((kGood + ":4: # ours\n").toLatin1(), "");
+    EXPECT_EQ(verifySignature(gpgv, badTrusted.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
     // gpgv missing or hanging: Bad, never Good.
     Keyring keyring((kGood + ":4:\n").toLatin1(), "");
     EXPECT_EQ(verifySignature(QStringLiteral("/nonexistent/gpgv"), keyring.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::Bad);

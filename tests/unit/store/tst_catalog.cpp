@@ -97,6 +97,8 @@ TEST(Catalog, TopLevelBreaksRefuseTheFile)
     EXPECT_FALSE(parseCatalog(storetest::readFixture(QStringLiteral("catalog-good.json")), QStringLiteral("beta")).catalog);
     EXPECT_FALSE(parseCatalog(QByteArray("[1, 2]"), QStringLiteral("stable")).catalog);
     EXPECT_FALSE(parseCatalog(QByteArray(kCatalogMaxBytes + 1, ' '), QStringLiteral("stable")).catalog);
+    // Nested 200,000 deep: Qt's parser stops at its nesting limit, a refusal and never a crash.
+    EXPECT_FALSE(parseCatalog(QByteArray(200000, '[') + QByteArray(200000, ']'), QStringLiteral("stable")).catalog);
 }
 
 TEST(Catalog, ABrokenEntryIsDroppedAndTheRestKept)
