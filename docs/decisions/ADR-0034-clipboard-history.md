@@ -86,6 +86,14 @@ Each question was asked in French with these options (the first one marked "Reco
 | Q10 | Libellé du bouton de l'invite au premier usage | « Autoriser (Recommandé) » (macOS 27's "Allow"); « Activer » (macOS 26 "Enable", Windows "Turn on") | « Autoriser (Recommandé) » |
 | Q11 | Une invite polkit en écho peut être copiée depuis son champ : que fait l'historique ? | « Ne rien enregistrer (Recommandé) » (no copy recorded while an authorization dialog is shown and 2 s after it closes; described as needing no change in `shell/security`, which proved wrong: the binding needs one read-only property in `AuthAgent`, §2); « Bloquer aussi la copie » (also change `PasswordField.qml`, opus PASS); « Enregistrer normalement » | « Ne rien enregistrer (Recommandé) » |
 
+## Decisions delegated by the owner (2026-10-27)
+Asked of no one: « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour
+l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that rule and is checked in the integrator's review.
+| # | Question | Options | Choice | Rule applied |
+|---|---|---|---|---|
+| Q12 | New copies' images wait for the one image worker (each up to 16 MiB in memory): what when they come faster than it decodes? (review of 963e173, minor 6) | no bound (every image kept, memory unbounded); at most 4 waiting, a newer one not recorded; the newest replaces the oldest waiting | at most 4 waiting, a newer one not recorded (logged by reason) | macOS first: every copy made at a person's pace is recorded (a worker ends within 2 s, so only images copied faster than one every half second for seconds on end reach the bound); nothing for the user to do; memory stays bounded like the history (64 MiB) |
+| Q13 | A stored image (pinned, or in the opt-in history) whose thumbnail fails (a worker late under load, one that cannot start): what happens to it? (review of 963e173, MAJOR 2) | delete it (step 1's first code); keep it without a thumbnail and try again by itself; keep it and ask the user to act | keep it, shown without a thumbnail, tried again up to 3 times a minute apart, then at each start | macOS first: macOS never drops a clipboard item because its preview failed; no technical intervention: nothing to click, run or repair |
+
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
    Gui, libwayland-client; precedent ADR-0025), installed to `/usr/lib/grassfield/`, started by the shell service
@@ -116,7 +124,11 @@ Each question was asked in French with these options (the first one marked "Reco
       size before decoding (at most 8,192 px a side and 64 megapixels, allocation limit 256 MiB) and runs under
       `RLIMIT_AS` 1 GiB, `RLIMIT_CPU` 2 s, `RLIMIT_FSIZE` 0, `PR_SET_PDEATHSIG`, and a 2 s wall deadline after which it is
       killed; it writes a PNG of at most 256 px on its long side (1 MiB at most) to stdout. A worker that fails, is killed or
-      answers anything else: the copy is not recorded. The original bytes are kept as they came, for pasting;
+      answers anything else: the copy is not recorded. The original bytes are kept as they came, for pasting. One worker runs
+      at a time for every image, new copies and stored thumbnails in turn; at most 4 new images wait for it (a newer one is not
+      recorded), and Clear History and Clear Pinned cancel the new images waiting or running (one whose worker ends after a
+      clear is never added). A stored image (pinned, or in the opt-in history) whose worker fails is never deleted: it is shown
+      without a thumbnail, which is tried again up to 3 times a minute apart, then at the next start (review of 963e173);
    g. an item with the same kind and data (SHA-256 of the plain part, the file list or the image) as an unpinned one moves to
       the top with the new time instead of being added twice; one equal to a pinned item leaves the pinned item where it is
       and adds nothing.
@@ -148,8 +160,8 @@ Each question was asked in French with these options (the first one marked "Reco
    (`win.shown` is internal; `requestStartedAt` is for display only and never compared). Step 1 adds one read-only property
    to `shell/security/polkit/AuthAgent.qml`, `requestActive: dialogModel.active` (a request is open: its sheet shown, or held
    behind the lock), which nothing in the agent reads; `shell.qml` gives the agent an id and binds it to a new
-   `SessionState.authorizing`, as it binds `Lock.locked` to `SessionState.locked`. The service keeps the time `authorizing`
-   last became false and answers `N` within 2 s of it. That line under `shell/security` needs an opus PASS (R12) and is
+   `SessionState.authorizing`, as it binds `Lock.locked` to `SessionState.locked`. When `authorizing` becomes false the
+   service starts a 2 s Timer (monotonic: a clock set back never lengthens it) and answers `N` until it fires. That line under `shell/security` needs an opus PASS (R12) and is
    named in the step 1 pull request.
 
 3. **Source app.** Data control does not say which client set the selection. The shell's `Y` carries the app of the window
@@ -162,18 +174,21 @@ Each question was asked in French with these options (the first one marked "Reco
    cut: a cut item from the history is pasted as a copy); plus the marker type `application/x-grassfield-clipboard-item` (the
    item id), by which the helper knows its own selection (the item moves to the top, step 1g). "Paste as Plain Text" (the
    menu, Shift+Return) offers the plain types and the marker only. The helper serves until another client takes the selection
-   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits).
+   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits); each answer is written within 2 s,
+   after which that reader's pipe is closed (a reader that stops reading never holds the helper).
    To paste (Q9: Return, Enter, a click, the menu's Paste; Shift+Return or the menu's Paste as Plain Text): the helper copies
    the item; when it reports owning the selection, Search closes and `FocusReturn` gives the keyboard back to the window active
    when Search opened; once that window is active again (at most 1 s), and only while neither `SessionState.locked` nor the
    helper's `L 1` says the session is locked, the shell sends Hyprland one Lua function (`Hyprland.dispatch`, the `Zoom.js`
    pattern) that checks that the active window is still that address and only then sends it Ctrl+V, or Ctrl+Shift+V when the
-   window is a terminal, key down, with `window = "address:<addr>"`. The key up follows 50 ms later from a Hyprland timer that
-   the same function arms, to the same address, and does **not** check the active window again: a V that went down is always
+   window is a terminal, with `window = "address:<addr>"`: the same function first arms a Hyprland timer for the key up 50 ms
+   later, to the same address, then sends the key down. The key up does **not** check the active window again: a V that went
+   down is always
    released in the window that got it, whatever became active meanwhile (counter-review, minor b); if that window has closed,
    the up is a no-op (`window not found`). Window addresses can be reused by a new window (counter-review, minor c): the
    shell drops the paste when Hyprland reports `closewindow` for the remembered address at any time between Search's opening
-   and the dispatch, so a new window that took the address never gets the keys. Ctrl+Shift+V is the clipboard
+   and the dispatch, so a new window that took the address never gets the keys (step 1 has the decision, `mayPaste`'s
+   `closedSinceOpen`; step 2 tracks `closewindow` with the paste it guards). Ctrl+Shift+V is the clipboard
    paste of alacritty, kitty, ghostty, foot and wezterm by default and is kept by Omarchy 4.0.4's terminal configs
    (`foot.ini:20` lists it beside Shift+Insert); Shift+Insert is not used, as kitty pastes the primary selection with it. The
    terminal test is the one of `config/hypr/grassfield/forwarding.lua:26-37` as a whole (its class list and its
@@ -203,7 +218,9 @@ Each question was asked in French with these options (the first one marked "Reco
    Windows loses them at a restart). Thumbnails and previews are 0600 files in `$XDG_RUNTIME_DIR/grassfield/clipboard/`
    (0700, tmpfs: RAM), removed with their item and when the helper starts or exits. Only the helper reads the stores, with
    bounds: regular files of the user, opened with `O_NOFOLLOW`, mode 0600, `index.json` at most 1 MiB, each item at most
-   its kind's caps; a store that breaks a rule is deleted, not read. Known limit: a deleted file's blocks can stay on the disk
+   its kind's caps; a store that breaks a rule is deleted, not read. The files of a store that its index does not name (an
+   item removed or expired whose file a crash left, the index being written first; the temporary of an interrupted write) are
+   deleted when it is loaded. Known limit: a deleted file's blocks can stay on the disk
    until reused (btrfs copy-on-write, SSD); Omarchy's full-disk encryption covers them at rest. In a dev session the stores
    are under `Mode.stateDir`.
 
@@ -218,7 +235,8 @@ Each question was asked in French with these options (the first one marked "Reco
    request and Hyprland's confirmation of its lock, a copy can still be recorded (no event exists for that phase).
    Clearing follows Windows (Q8): Clear History (the view's More menu) and Clear Clipboard History (Settings > Search, asks
    first, then writes `search.clipboard.clearedAt`, the pattern of `search.historyResetAt` in PR #9) delete every unpinned
-   item, memory and `history/`; Settings' confirmation also offers "Also delete pinned items" (writes
+   item, memory and `history/` (with no helper running, as while it waits to restart after a crash, the shell runs it once
+   with `--clear-history`, and no helper starts before that ends); Settings' confirmation also offers "Also delete pinned items" (writes
    `search.clipboard.pinnedClearedAt` as well), which empties `pinned/`: that is the "clear all". Turning the history off
    (`search.clipboard.enabled`, off by default) stops the helper and deletes the unpinned items (a running helper deletes its
    `history/` before it ends; otherwise the shell runs it once with `--clear-history`, also at each shell start while the
