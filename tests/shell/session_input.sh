@@ -337,7 +337,7 @@ desc="the fallback keeps Omarchy's guard: a non-Latin layout gets U.S. first, re
 check grep -q "^fallback-layout us,ru \[,phonetic\] compose:caps,shift:both_capslock_cancel,grp:alts_toggle$" <<<"$out"
 
 # One list of non-Latin layouts: Omarchy's (when installed), input.lua's, omarchy.lua's fallback and Settings' Keyboard.js.
-words() { tr -c 'a-z\n' ' ' | tr -s ' ' '\n' | grep . | sort | tr '\n' ' '; }
+words() { tr -c 'a-z\n' ' ' | tr -s ' ' '\n' | { grep . || true; } | sort | tr '\n' ' '; }
 in_input=$(sed -n 's/^M\.non_latin = "\(.*\)"$/\1/p' "$root/config/hypr/grassfield/input.lua" | words)
 in_fallback=$(sed -n 's/^ *local non_latin = "\(.*\)"$/\1/p' "$root/config/hypr/grassfield/omarchy.lua" | words)
 in_settings=$(sed -n '/^var NON_LATIN = \[/,/\];/p' "$root/apps/settings/qml/Keyboard.js" | sed 's/^var NON_LATIN = //' | words)
