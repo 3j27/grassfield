@@ -256,8 +256,18 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    `history/` before it ends; otherwise the shell runs it once with `--clear-history`, also at each shell start while the
    history is off; a helper started with the history store off deletes any `history/` left); pinned items stay in
    `pinned/`, unread and not shown, until the history is turned on again (or deleted from Settings: with the history off,
-   the shell runs the helper once with `--clear-pinned`). The current clipboard is left as it is (both systems clear the
+   the shell runs the helper once with `--apply-clears`). The current clipboard is left as it is (both systems clear the
    history, not the clipboard).
+   Clears asked while no helper runs (review of f7cd664): Settings writes `clearedAt` and `pinnedClearedAt` whether the shell
+   runs or not, so the helper keeps the values it carried out in `<state>/clears` (0600, read with the stores' rules, a broken
+   record deleted and read as missing) and is given the settings' values: `--cleared-at` and `--pinned-cleared-at` at start,
+   `CH <ms>` and `CP <ms>` while it runs (Search's own Clear History sends `CH` alone, which records nothing). At start, before
+   anything is loaded, shown or recorded, a value other than the one carried out deletes that store (also after a clock set
+   back: never fewer deletions); with no record (a store from before it existed) only the items from before the clear go (the
+   copy's time for the history, the pin's for the pinned store). With the history off the shell runs the helper once with
+   `--apply-clears`, at its first decision and at each change. The shell decides nothing before grassfield.json's first read:
+   before it every key reads its default (the history off, no clear asked), and acting on them deleted a kept history at
+   each shell start; a missing file is taken as the defaults after 10 s.
 
 7. **Presentation and settings** (`docs/specs/clipboard.md`): the Clipboard view of Search, reached by ⌘4 (Super+4, which
    `forwarding.lua` sends to Search as Ctrl+4; physical Ctrl+4 switches to Space 4), the Clipboard button to the right of the
