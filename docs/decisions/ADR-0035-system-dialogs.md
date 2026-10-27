@@ -172,18 +172,17 @@ patching any upstream package (D1).
   (`--title T --text X --buttons B`, nothing else), tries every " - " split of "{title} - {class}" against
   `hyprctl -j clients` (read with `python3 -I`), and with exactly one (split, client pid above 1) match asks
   `qs ipc -p /usr/share/grassfield/shell call anr report <its pid> <pid> c:<class> t:<title> i:<instance>` under
-  `timeout -k 0.2 1` (decision 3-11). On `ok` it waits as itself (same pid, silent, Hyprland's pipe held by no child) until
-  Hyprland kills it or it was given another parent (decision 3-12); in every other case it `exec`s
-  `/usr/bin/hyprland-dialog` with the same arguments.
+  `timeout -k 0.2 1` (decision 3-11). On `ok` it `exec`s `sleep infinity` (same pid, silent, nothing forked) until
+  Hyprland kills it (decision 3-12); in every other case it `exec`s `/usr/bin/hyprland-dialog` with the same arguments.
 - `shell/services/NotResponding.qml` (singleton, IPC target `anr`: `report` action, `status` dev) and its pure decisions
   `NotResponding.js`: a report is refused for a pid of 1 or below, an empty class, another compositor's instance, and a
   window with that class and (live) title that the shell knows under another pid; the caller gets "refused", the reason
   goes to the journal (decision 3-14). One mark per stand-in, a process marked while any of its stand-ins lives (Hyprland
   runs one dialog per XWayland surface); while there is one, the stand-ins' pids are checked every 250 ms (`kill -0`) and
   the marks of those that ended go.
-- Force Quit (`ForceQuitPanel.qml`): "(Not Responding)" after the app's name, in `colors.danger`; the panel selects the
-  first such row, and moves the selection only onto an app that does not respond, until the user moves it (decision
-  3-13). The Dock menu (`DockMenu.qml`): a disabled "Application Not Responding" first, then Force Quit in place of Quit,
+- Force Quit (`ForceQuitPanel.qml`): "(Not Responding)" after the app's name, in `colors.danger`; the selection follows a
+  window, not a row; before the user moves it, it goes onto the first app that does not respond and never away from the
+  app shown (decision 3-13). The Dock menu (`DockMenu.qml`): a disabled "Application Not Responding" first, then Force Quit in place of Quit,
   for the processes that do not respond only (Option + Force Quit: all of the app's). At the confirmation (`Power.qml`) a
   pid that no longer owns a window of the chosen class (the Force Quit panel: the selected window's; the Dock: the app's
   windows') is not killed, and a notice says "The application had already quit."; the others are.
@@ -195,11 +194,11 @@ patching any upstream package (D1).
   set, and withdraws it when a reload leaves none.
 - Tests: `tests/shell/hyprland_dialog.sh` (46 checks: en and fr calls; titles with " - ", a leading "-", a newline or
   none; a class with " - "; an app named to match another split; every fallback with the same pid and arguments, including
-  two processes, a refusal, no shell and a shell that hangs past 1 s; Hyprland's pipe ends at once when the waiting
-  stand-in is killed; the stand-in ends when its parent is gone; the dev hook; the texts pinned against the installed
-  Hyprland, with a control), `tests/shell/anr_ipc.sh` (the stand-in through the real `qs ipc` to the real `NotResponding`
-  in an offscreen Quickshell against a fake Hyprland: mark, clear, the shell's own ambiguity and instance refusals, direct
-  calls), `tests/shell/config_errors.sh` (`ConfigErrors.qml` under the real Quickshell with reload events: one notice per
+  two processes, a refusal, no shell and a shell that hangs past 1 s; spawned by a double fork as Hyprland spawns it, the
+  pipe stays open after "ok" and ends at once when the stand-in is killed; the dev hook; the texts pinned against the
+  installed Hyprland, with a control), `tests/shell/anr_ipc.sh` (the stand-in through the real `qs ipc` to the real
+  `NotResponding` in an offscreen Quickshell against a fake Hyprland: mark, clear, the shell's own ambiguity and instance
+  refusals, a rename that lifts the ambiguity, direct calls), `tests/shell/config_errors.sh` (`ConfigErrors.qml` under the real Quickshell with reload events: one notice per
   new set, clear, the read after a read), `tests/unit/tst_notresponding.qml`, `tests/unit/tst_configerrors.qml` (with the
   notification sanitizer), `tests/shell/session_input.sh` (the PATH order, `suppress_errors` with the bindings in and out
   under Hyprland's own `require`), `tests/shell/shell_unit.sh` (the stand-in's shell selector),
@@ -254,17 +253,27 @@ patching any upstream package (D1).
   "Victim - z", which was then marked and offered to Force Quit. Options: (a) the last split (that flaw); (b) every split,
   exactly one (split, pid) match, else the stock alert. **Choice: (b)**: the hung app's own window always matches its true
   split, so any other match means two candidates and nothing is guessed.
-- **3-12. How the stand-in waits** (internal review, NIT 7). `exec sleep infinity` outlived a compositor that crashed (a
-  nested one's waiters stayed in the owner's session). Options: (a) that; (b) wait as itself, polling every 2 s whether its
-  parent changed (a dead parent can stay a zombie, which `kill -0` still finds), with each `sleep` writing nowhere so that
-  Hyprland's pipe ends the moment Hyprland kills the stand-in. **Choice: (b)**.
-- **3-13. Which row Force Quit selects** (internal review, MINOR 2). A binding moved the selection back to the first row when
-  a mark cleared, under a user who had moved it: Return would then have targeted another app. Options: (a) select once;
-  (b) select the first app that does not respond, and move only onto such an app, until the user moves the selection.
-  **Choice: (b)**: as macOS, a hang that starts while the panel is open is shown selected, and a mark that clears never
-  moves the selection away from the app the user was shown.
-- **3-14. What a refused report says** (internal review, NIT 10). "refused: ambiguous" told any local process whether
-  another process has a window of that class and title. **Choice:** "refused" only; the reason goes to the journal.
+- **3-12. How the stand-in waits** (internal review, NIT 7: `exec sleep infinity` outlives a compositor that crashed;
+  counter-review, MINOR 1). Options: (a) `exec sleep infinity`; (b) poll whether its parent changed (tried, then dropped:
+  Hyprland starts its dialogs through a double fork, hyprutils `CProcess::runAsync` `src/os/Process.cpp:183-263`, so the
+  parent is init or the user manager from the start; a crash is never seen, and a poll that ended early, or a fork that
+  failed, would hand Hyprland an empty answer, "unrecognized result", with no dialog for the rest of that hang); (c) watch
+  Hyprland's own pid (the first line of `hyprland.lock`) from a waiter that forks nothing, more moving parts for a rare
+  case. **Choice: (a)**: nothing is forked after the report, so it never ends early. In the real session Hyprland runs in
+  uwsm's `wayland-wm@.service` (uwsm 0.27.1: no `KillMode`, so systemd's `control-group`), and its stop takes the waiters
+  in that cgroup with it. Known limitation: a nested Hyprland that crashes while an app hangs leaves its waiter, which
+  holds nothing, until logout.
+- **3-13. Which row Force Quit selects** (internal review, MINOR 2; counter-review, MINOR 2). A binding moved the selection
+  back to the first row when a mark cleared, under a user who had moved it; and the window list is a new array each time a
+  window opens or closes, which resets the view's row: Return would then have targeted another app. Options: (a) select
+  once, by row; (b) follow a window, not a row: the user's choice is kept (nothing selected, Force Quit off, when its window
+  closes); before the user moves, the selection goes onto the first app that does not respond and never away from the app
+  shown (`NotResponding.selectionAfterChange`). **Choice: (b)**: as macOS, a hang that starts while the panel is open is
+  shown selected, and nothing ever moves the selection onto an app the user was not shown.
+- **3-14. What a refused report says** (internal review, NIT 10). **Choice:** "refused" only; the reason goes to the
+  journal, where it helps; the stand-in only needs to know it must run the stock dialog. This hides nothing: a caller with
+  valid arguments can still tell "ok" from "refused", and any local process reads `hyprctl -j clients` anyway
+  (counter-review, NIT 3).
 
 ### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
 - **Two processes, two bus names** (review of PR #13, MAJOR 4): the frontend chooses a backend from its `.portal` files when

@@ -231,15 +231,15 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 - NR1 the `hyprland-dialog` stand-in (`packaging/session-bin/hyprland-dialog`) takes only Hyprland's exact ANR call in en_US
   or fr_FR (`--title T --text X --buttons B`), tries every " - " split of "{title} - {class}" against Hyprland's client
   list, and with exactly one (split, client pid above 1) match reports (its own pid, that pid, "c:" class, "t:" title, "i:"
-  Hyprland instance) to `anr report` and waits silently with the same pid, Hyprland's pipe held by no child, until Hyprland
-  kills it or its parent is gone; every other call, and every case below, `exec`s the stock dialog with the same arguments.
+  Hyprland instance) to `anr report` and then `exec`s `sleep infinity` (same pid, silent, nothing forked) until Hyprland
+  kills it; every other call, and every case below, `exec`s the stock dialog with the same arguments.
 - NR1b the shell accepts a report only for a pid above 1, a class, its own Hyprland instance, and a window that no other pid
   it knows shares class and live title with (ADR-0035 decision 3-1); otherwise it answers `refused` (the reason goes to the
   journal) and the stand-in runs the stock dialog. An untitled window ("(unknown)" / "(inconnu)" in Hyprland's text) is
   matched by its empty title and reported with it.
 - NR2 the shell marks that pid as not responding while one of its stand-ins lives: Force Quit lists the app with "(Not
-  Responding)" (destructive colour); the panel selects the first such row and moves the selection only onto such a row,
-  until the user moves it; the app's Dock menu starts with a disabled "Application Not Responding" item and offers "Force
+  Responding)" (destructive colour); the selection follows a window, not a row: the user's choice is kept, and before the
+  user moves it the panel selects the first such app and never moves away from the app shown; the app's Dock menu starts with a disabled "Application Not Responding" item and offers "Force
   Quit" in place of "Quit", for the marked processes only (Option + Force Quit: all of the app's); the app menu keeps "Quit"
   (owner decision Q16). At the confirmation a pid that no longer owns a window of the chosen class (pid reuse) is not
   killed, and a notice says "The application had already quit."; the others are.
@@ -251,9 +251,10 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
   parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
   match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
-  same pid and arguments; Hyprland's pipe ends when the waiting stand-in is killed; the stand-in ends when its parent is
-  gone; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
-  the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals.
+  same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
+  stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
+  the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an
+  ambiguity.
 - A-NR3 (L0, `tests/unit/tst_notresponding.qml`) two processes of one app with the same class and title: refused; a pid
   reused between mark and confirmation: Force Quit refuses.
 - A-NR2 (L1, `tests/shell/anr_nested.sh`) a foot window stopped with SIGSTOP in a nested session is marked within 12 s and no
@@ -263,7 +264,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 No wait cursor (Hyprland only tints the window); the ANR state is known only through Hyprland's dialog call. A shell restarted
 while an app hangs loses the mark until the app answers or closes (Hyprland runs its dialog once per hang); Force Quit still
 lists the app. A Hyprland release that changes the texts makes the stand-in fall back to the stock dialog, and so does an app
-without an app id (class "(unknown)") or a window that cannot be told apart.
+without an app id (class "(unknown)") or a window that cannot be told apart. A nested Hyprland that crashes while an app hangs
+leaves the stand-in waiting (it holds nothing) until logout; the real session's unit takes it down with Hyprland.
 
 ## 4b. Hyprland's config errors (H8, H9; ADR-0035 D-2; built in step 3)
 
