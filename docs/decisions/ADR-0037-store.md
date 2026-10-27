@@ -617,10 +617,17 @@ and refuses the whole file when its top level is invalid):
   `--refresh` or `--sysupgrade` on pacman, yay or paru, and a `yay` or `paru` with no operation, which is `-Syu`; e.4),
   downloads code (`curl`, `wget`, `makepkg`, `git clone`, `pull` or `fetch`, `yay -G` or `-B`, and the language installers:
   mise except its read-only commands, npm, npx, pipx, pip, cargo, uv, go, gem; a) or builds from the AUR (a name no
-  repository serves, or one known only at run time). The text is read as shell, failing closed: line continuations
-  joined, quotes removed, each command found after the wrappers that run it (`sudo -u`, `env`, `command`, `exec`,
-  `timeout`...), quoted text and a shell's `-c` argument read as commands too. Also refused: a `flatpak` id absent from
-  Flathub's AppStream in the build container; a URL that is not https.
+  repository serves, or one known only at run time). **The control is the pin** (after grassfield-packages PR #4's review):
+  `catalog/omarchy.lock` records the SHA-256 of every Omarchy file the catalog's setups run or read, transitively (43 for
+  the three setups of v4.0.4), and CI refuses any such file that differs from its pin, is missing or is not pinned, until
+  a person has read it and `catalog.py pin` writes the new pins. A shell cannot be judged by patterns alone, so the scan is
+  the second line, run at pin time (no pin is written over a finding) and in CI: it reads the text as shell, comments and
+  heredoc bodies set apart, each command found after its wrappers (`sudo -u`, `env`, `command`, `exec`, `timeout`...),
+  `$(...)`, backquotes, process substitutions, a shell's `-c` argument and a terminal launcher's command read as commands;
+  it refuses text it cannot read, `eval`, a script read from a pipe or a heredoc, a command made by a substitution, an
+  Omarchy command named at run time, pacman's options known only at run time, pacman `-U` and the starts of `--refresh` and
+  `--sysupgrade`, and lists a command named by a variable it cannot resolve for the person reading the files. Also refused:
+  a `flatpak` id absent from Flathub's AppStream in the build container; a URL that is not https.
 
 **Signature and verification.** `grassfield-catalog.v1.json.sig` is a detached binary OpenPGP signature by the repository's
 key (ADR-0033 b, O6: the same key, in CI; tests use throwaway keys). The Store verifies it before parsing, exactly as
@@ -779,6 +786,8 @@ where it is answered, in both halves (tools/catalog.py and the Store's `catalog.
   signer absent from the keyring and an oversize file; the category names made neutral ("Graphics", "Photos and Video",
   "Music and Audio", "Development"), whether the Mac App Store's own list may be followed being the owner's legal question
   (e.10, not settled here).
+- **grassfield-packages PR #4's review** (FAIL, the recipe check did not fail closed): the integrator's decision, pinning
+  first and the scan second (g "CI also refuses"); the publisher reads a release's database only after its signature.
 - **Merged with PASS** (grassfield-packages b76bebe), with items before publishing is ever enabled, taken in
   grassfield-packages PR #4 and, for the Store's half, here: keyring lists fail closed on a line that does not parse (both
   sides); two signers refused (both sides); recipes read as shell, catching wrapped, quoted and continued commands, `git -C
