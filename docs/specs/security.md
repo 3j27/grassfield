@@ -370,6 +370,9 @@ shell no longer relies on that alone:
   layer with the keyboard, `DesktopWidgets` `onMenuRequested`; review of 1d2c856), and the window commands of IPC target
   `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
   (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
+  Planned, not built (window tiling, ADR-0036, `docs/specs/tiling.md` TL34): the tiling popover (popup kind `tiling`,
+  through `Popups.open`), the suggestions overlay, the shared-edge handle and the `windows` functions `arrange`,
+  `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

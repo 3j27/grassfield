@@ -1,5 +1,6 @@
 #include "placesmodel.h"
 
+#include "recents.h"
 #include "runmode.h"
 #include "taglogic.h"
 
@@ -83,6 +84,14 @@ void PlacesModel::rebuild()
 {
     QList<Place> places;
     const QString home = QDir::homePath();
+    // Recents first, under no heading (macOS 27 Finder; decision F-5).
+    Place recents;
+    recents.section = QStringLiteral("recents");
+    recents.name = tr("Recents");
+    recents.url = Recents::locationUrl();
+    recents.iconName = symbolic(QStringLiteral("document-open-recent"), QStringLiteral("folder-symbolic"));
+    recents.kind = QStringLiteral("recents");
+    places.append(recents);
     struct Standard {
         QStandardPaths::StandardLocation location;
         QString name;

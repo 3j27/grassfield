@@ -277,3 +277,21 @@ System Settings > General > About > Name and Date & Time change machine-wide set
   wording) → 55d87be → counter-review FAIL (a textual `link/..` path normalised past the folder check) → e0db168 →
   counter-review #2 PASS on the whole scope. Not verified by it: the real polkit dialog, real hostname1/timedate1/systemd,
   the installed omarchy-language, a nested session (owner checks above).
+
+## Amendment (ADR-0033, Software Update, 2026-10-27, Proposed)
+Software Update in Settings (General > Software Update, step 2 of ADR-0033) is an exception to "No Grassfield code runs as
+root: no helper, no `pkexec`, no new polkit policy". No system service owns pacman's configuration, so there is no service
+polkit action to call. By the owner's decision O1 (2026-10-27), changing the `[grassfield]` channel goes through a Grassfield
+root helper:
+- `/usr/lib/grassfield/grassfield-channel-helper`, run by `pkexec`;
+- its own polkit action `org.grassfield.packages.set-channel` (`auth_admin_keep` for the active session, `no` otherwise).
+Settings starts it through the user command `grassfield-channel-set` as a child process, in this ADR's pattern: a worker,
+the argument checked in QML and in C++, "Waiting for permission…", one action at a time, up to 120 s, a refusal or a cancel
+shown on one line, nothing in a dev session. The helper:
+- takes only fixed verbs (`set stable|beta`, `restore`, `off`);
+- reads no environment variable;
+- writes only `/etc/pacman.d/grassfield.conf`, two lines of `/etc/pacman.conf`, pacman's synced `[grassfield]` files and
+  pacman's keyring entries for Grassfield's keys;
+- installs no package.
+It and its policy need the security reviewer's (opus) PASS before they merge. Everything else in this ADR stands. Details:
+ADR-0033 c.

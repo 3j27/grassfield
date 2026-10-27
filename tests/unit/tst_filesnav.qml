@@ -135,6 +135,17 @@ TestCase {
         compare(Nav.effectiveView("bogus", true), "icons");
     }
 
+    // While a drag started from a view runs, that view stays whatever the folder sprung into wants (BrowserTab.dragView):
+    // destroying the item that started a system drag before it ends is a use-after-free in Qt Quick.
+    function test_aDragKeepsItsView() {
+        compare(Nav.shownView("", "list", false), "list", "no drag: the folder's view");
+        compare(Nav.shownView("icons", "list", false), "icons", "a folder whose own view is List sprung open: still icons");
+        compare(Nav.shownView("gallery", "columns", false), "gallery");
+        compare(Nav.shownView("list", "columns", true), "list");
+        compare(Nav.shownView("icons", "gallery", true), "icons", "the search ending under the drag changes nothing");
+        compare(Nav.shownView("", "columns", true), "list", "after the drag: the effective view again");
+    }
+
     // The gallery always shows an item: the current one, else the first.
     function test_galleryInitialRow() {
         compare(Nav.galleryInitialRow(-1, 5), 0);
@@ -152,6 +163,61 @@ TestCase {
         compare(Nav.viewFor("list", undefined, "icons"), "list", "browsing into a folder without one keeps the tab's view");
         compare(Nav.viewFor("columns", "list", "icons"), "columns", "column view sticks while browsing");
         compare(Nav.viewFor("gallery", "columns", "icons"), "columns", "a folder kept in columns opens in columns");
+    }
+
+    function test_groupedIconMove() {
+        // Three groups: rows 0-4 in one row, 5-6 in one row, 7-12 shown in full four to a line.
+        const groups = [{first: 0, count: 5, columns: 5}, {first: 5, count: 2, columns: 2}, {first: 7, count: 6, columns: 4}];
+        compare(Nav.groupedIconMove(4, "right", groups), 5, "Right walks into the next group");
+        compare(Nav.groupedIconMove(5, "left", groups), 4);
+        compare(Nav.groupedIconMove(3, "down", groups), 6, "down to the next group, its last item for a far column");
+        compare(Nav.groupedIconMove(1, "down", groups), 6);
+        compare(Nav.groupedIconMove(0, "down", groups), 5);
+        compare(Nav.groupedIconMove(6, "down", groups), 8, "column 1 of the full group's first line");
+        compare(Nav.groupedIconMove(8, "down", groups), 12, "the item below in the full group");
+        compare(Nav.groupedIconMove(9, "down", groups), 12, "into the shorter last line: its last item");
+        compare(Nav.groupedIconMove(11, "up", groups), 7);
+        compare(Nav.groupedIconMove(7, "up", groups), 5, "from the full group's first line to the group above");
+        compare(Nav.groupedIconMove(12, "up", groups), 8);
+        compare(Nav.groupedIconMove(2, "up", groups), 2, "the first group's line stays");
+        compare(Nav.groupedIconMove(2, "pagedown", groups), 6);
+        compare(Nav.groupedIconMove(10, "pageup", groups), 6);
+        compare(Nav.groupedIconMove(6, "end", groups), 12);
+        compare(Nav.groupedIconMove(-1, "down", groups), 0);
+        compare(Nav.groupedIconMove(0, "down", []), -1);
+    }
+
+    function test_groupedIconLayout() {
+        // Rows 0-4 in one line, 5-6 in one line, 7-12 in full four to a line; headers 32, cells 100 x 90.
+        const groups = [{first: 0, count: 5, columns: 5}, {first: 5, count: 2, columns: 2}, {first: 7, count: 6, columns: 4}];
+        compare(Nav.groupedIconTops(groups, 32, 90), [0, 122, 244, 456], "each header over its lines, the height last");
+        compare(Nav.groupedIconTops([], 32, 90), [0]);
+        compare(Nav.groupedIconCell(3, 100, 90, 32, groups), {group: 0, index: 3, line: 0, column: 3, x: 300, y: 32});
+        compare(Nav.groupedIconCell(12, 100, 90, 32, groups), {group: 2, index: 5, line: 1, column: 1, x: 100, y: 366}, "second line of the full group");
+        compare(Nav.groupedIconCell(13, 100, 90, 32, groups), null);
+    }
+
+    function test_groupedIconCells() {
+        const groups = [{first: 0, count: 5, columns: 5, scrollX: 0}, {first: 5, count: 2, columns: 2, scrollX: 0},
+                        {first: 7, count: 6, columns: 4, scrollX: 0}];
+        compare(Nav.groupedIconCells(0, 0, 400, 20, 100, 90, 32, groups), [], "a header alone selects nothing");
+        compare(Nav.groupedIconCells(150, 40, 250, 60, 100, 90, 32, groups), [1, 2]);
+        compare(Nav.groupedIconCells(50, 100, 150, 160, 100, 90, 32, groups), [0, 1, 5, 6], "across a header");
+        compare(Nav.groupedIconCells(150, 400, 50, 300, 100, 90, 32, groups), [7, 8, 11, 12], "upwards, both lines of the full group");
+        groups[0].scrollX = 200;
+        compare(Nav.groupedIconCells(0, 40, 50, 60, 100, 90, 32, groups), [2], "a line scrolled sideways");
+        compare(Nav.groupedIconCells(0, 500, 400, 600, 100, 90, 32, groups), [], "below the last group");
+    }
+
+    function test_groupedRowsInSpan() {
+        // Two groups: rows 0-2 under a 28-high header, rows 3-4 under the next; rows 20 high.
+        const groups = [{first: 0, count: 3}, {first: 3, count: 2}];
+        // Layout: header 0-28, rows 28-88, header 88-116, rows 116-156.
+        compare(Nav.groupedRowsInSpan(0, 10, 20, 28, groups), [], "a header alone selects nothing");
+        compare(Nav.groupedRowsInSpan(30, 50, 20, 28, groups), [0, 1]);
+        compare(Nav.groupedRowsInSpan(80, 120, 20, 28, groups), [2, 3], "across a header");
+        compare(Nav.groupedRowsInSpan(150, 30, 20, 28, groups), [0, 1, 2, 3, 4], "upwards too");
+        compare(Nav.groupedRowsInSpan(200, 300, 20, 28, groups), [], "below the last row");
     }
 
     function test_sortForAFolder() {

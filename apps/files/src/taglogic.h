@@ -48,6 +48,10 @@ QString colorKey(int index);
 // The name shown for a tag: a colour tag's translated name, any other tag as stored.
 QString displayName(const QString &tag);
 
+// The stored name of a tag the user typed (the preview pane's Tags field): a colour tag's key when the text is its key or
+// its shown name in any case ("rouge" in French is Red), else the text with surrounding white space trimmed.
+QString typedTag(const QString &typed);
+
 // Same tag: colour tags compare case-insensitively ("red" is Red), other tags exactly.
 bool sameTag(const QString &a, const QString &b);
 bool hasTag(const QStringList &tags, const QString &tag);

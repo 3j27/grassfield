@@ -60,8 +60,19 @@ Platform.MenuBar {
         return f.selectedRows().every(r => f.isDirAt(r)) && bar.app.folderStyleUnavailable(f.selectedUrls()) === "";
     }
 
-    // View > Sort By (its check marks follow the shown folder's arrangement; tst_filesglobalmenu reads it).
+    // View > Sort By and Group By (their check marks follow the shown folder's arrangement; tst_filesglobalmenu reads them).
     readonly property var sortMenu: sortByMenu
+    readonly property var groupMenu: groupByMenu
+    readonly property var sortKeys: [
+        {key: 0, text: qsTr("Name")}, {key: 1, text: qsTr("Kind")}, {key: 7, text: qsTr("Application")},
+        {key: 5, text: qsTr("Date Last Opened")}, {key: 2, text: qsTr("Date Modified")}, {key: 4, text: qsTr("Date Created")},
+        {key: 3, text: qsTr("Size")}, {key: 6, text: qsTr("Tags")}
+    ]
+    readonly property var groupKeys: [
+        {key: 0, text: qsTr("None")}, {key: 1, text: qsTr("Name")}, {key: 2, text: qsTr("Kind")}, {key: 3, text: qsTr("Application")},
+        {key: 4, text: qsTr("Date Last Opened")}, {key: 5, text: qsTr("Date Modified")}, {key: 6, text: qsTr("Date Created")},
+        {key: 7, text: qsTr("Size")}, {key: 8, text: qsTr("Tags")}
+    ]
 
     // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
     // mnemonic in Qt menus).
@@ -97,7 +108,7 @@ Platform.MenuBar {
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Open")
-            shortcut: "Super+Down"
+            shortcut: "Ctrl+O"
             enabled: bar.count > 0
             onTriggered: bar.tab.openSelection()
         }
@@ -170,6 +181,8 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
+            // Finder's File > Quick Look (Cmd+Y); Space in the views too.
+            shortcut: "Ctrl+Y"
             enabled: bar.count > 0 && !bar.inTrash
             onTriggered: bar.tab.glance()
         }
@@ -293,37 +306,56 @@ Platform.MenuBar {
             onChosen: bar.tab.setViewMode("gallery")
         }
         Platform.MenuSeparator {}
-        MenuCheckItem {
-            text: qsTr("Show Info Panel")
+        Platform.MenuItem {
+            text: bar.app.sidebarShown ? qsTr("Hide Sidebar") : qsTr("Show Sidebar")
+            shortcut: "Ctrl+Super+S"
+            onTriggered: bar.app.sidebarShown = !bar.app.sidebarShown
+        }
+        Platform.MenuItem {
+            text: bar.tab !== null && bar.tab.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview")
             shortcut: "Ctrl+Shift+P"
-            enabled: bar.tab !== null && bar.tab.viewMode === "gallery"
-            on: bar.app.galleryInfo
-            onChosen: bar.tab.toggleGalleryInfo()
+            enabled: bar.tab !== null
+            onTriggered: bar.tab.togglePreview()
         }
         Platform.MenuSeparator {}
+        MenuCheckItem {
+            text: qsTr("Use Groups")
+            shortcut: "Ctrl+Super+0"
+            enabled: bar.tab !== null
+            on: bar.tab !== null && bar.tab.groupBy > 0
+            onChosen: bar.tab.toggleGroups()
+        }
+        // View > Group By and Sort By in the Finder's order (Date Added has no source on Linux files).
+        Platform.Menu {
+            id: groupByMenu
+            title: qsTr("Group By")
+
+            Instantiator {
+                model: bar.groupKeys
+                delegate: MenuCheckItem {
+                    required property var modelData
+                    text: modelData.text
+                    on: bar.tab !== null && bar.tab.groupBy === modelData.key
+                    onChosen: bar.tab.setGroupBy(modelData.key)
+                }
+                onObjectAdded: (index, object) => groupByMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => groupByMenu.removeItem(object)
+            }
+        }
         Platform.Menu {
             id: sortByMenu
             title: qsTr("Sort By")
 
-            MenuCheckItem {
-                text: qsTr("Name")
-                on: bar.tab !== null && bar.tab.sortKey === 0
-                onChosen: bar.tab.sortBy(0, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Kind")
-                on: bar.tab !== null && bar.tab.sortKey === 1
-                onChosen: bar.tab.sortBy(1, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Date Modified")
-                on: bar.tab !== null && bar.tab.sortKey === 2
-                onChosen: bar.tab.sortBy(2, false)
-            }
-            MenuCheckItem {
-                text: qsTr("Size")
-                on: bar.tab !== null && bar.tab.sortKey === 3
-                onChosen: bar.tab.sortBy(3, false)
+            Instantiator {
+                model: bar.sortKeys
+                delegate: MenuCheckItem {
+                    required property var modelData
+                    text: modelData.text
+                    on: bar.tab !== null && bar.tab.sortKey === modelData.key
+                    onChosen: bar.tab.sortBy(modelData.key, false)
+                }
+                onObjectAdded: (index, object) => sortByMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => sortByMenu.removeItem(object)
             }
             Platform.MenuSeparator {}
             MenuCheckItem {
@@ -350,6 +382,16 @@ Platform.MenuBar {
             shortcut: "Ctrl+Shift+T"
             enabled: bar.win.tabs.length <= 1
             onTriggered: bar.app.tabBarShown = !bar.app.tabBarShown
+        }
+        Platform.MenuItem {
+            text: bar.app.pathBarShown ? qsTr("Hide Path Bar") : qsTr("Show Path Bar")
+            shortcut: "Ctrl+Alt+P"
+            onTriggered: bar.app.pathBarShown = !bar.app.pathBarShown
+        }
+        Platform.MenuItem {
+            text: bar.app.statusBarShown ? qsTr("Hide Status Bar") : qsTr("Show Status Bar")
+            shortcut: "Ctrl+/"
+            onTriggered: bar.app.statusBarShown = !bar.app.statusBarShown
         }
         Platform.MenuItem {
             text: qsTr("Show Previous Tab")
@@ -420,7 +462,7 @@ Platform.MenuBar {
 
                 visible: kind !== "tag"
                 text: bar.label(name)
-                shortcut: bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                shortcut: kind === "recents" ? "Ctrl+Shift+F" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
 

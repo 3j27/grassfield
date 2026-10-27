@@ -31,7 +31,8 @@ showing them live in a strip, and delivers a plugin prototype with a precise she
 
 Non-goals of the prototype (C-STG-1: the shell strip is NOT a non-goal of 1.0, it is in scope and specified in "Shell side" below): persistence of stages across a
 plugin or shell restart, the "one window at a time" app mode, showing desktop icons while Stages is on (a shell choice),
-tiled windows (ADR-0002: floating-first; tiled and pinned windows stay out of Stages), transforming popups, a perspective
+tiled windows (ADR-0002: floating-first; windows tiled by Hyprland's layout and pinned windows stay out of Stages; windows
+placed in tiles by Grassfield's window tiling stay floating and take part, `docs/specs/tiling.md` TL13), transforming popups, a perspective
 tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 
 ## Functional requirements

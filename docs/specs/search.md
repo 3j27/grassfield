@@ -11,6 +11,7 @@
 Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit conversion, commands
 (lock, sleep, restart… as real actions), files (localsearch/TinySPARQL via `localsearch` CLI or D-Bus;
 `plocate` fallback), recent documents (`~/.local/share/recently-used.xbel`). Non-goals: own indexer, web search.
+The clipboard history (⌘4, the Clipboard view) has its own spec: `docs/specs/clipboard.md` (ADR-0034).
 
 ## Functional requirements
 1. S1 Open/close via IPC `search toggle` (bound to SUPER+SPACE) within 100 ms warm (P4).

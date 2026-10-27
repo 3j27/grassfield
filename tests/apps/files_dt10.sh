@@ -85,7 +85,8 @@ run_pass() {
     sleep 1.2 # the type-to-select buffer expires
     "$keys" "$name"
     sleep 0.4
-    "$keys" -k Return
+    # Open (Ctrl+O): Return renames, as in the Finder.
+    "$keys" -M ctrl -k o -m ctrl
     sleep 1
   done
   "$keys" -M ctrl -k w -m ctrl
