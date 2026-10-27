@@ -642,10 +642,13 @@ TestCase {
         compare(System.wifiForget("nope"), null);
         compare(System.vpnConnect(uuidA, true), {op: "vpn.connect", uuid: uuidA, on: true});
         compare(System.vpnConnect("nope", true), null);
-        compare(System.wifiBand(2437), "2.4 GHz");
-        compare(System.wifiBand(5180), "5 GHz");
-        compare(System.wifiBand(5955), "6 GHz");
-        compare(System.wifiBand(0), "");
+        const en = Qt.locale("en_US");
+        compare(System.wifiBand(2437, en), "2.4 GHz");
+        compare(System.wifiBand(5180, en), "5 GHz");
+        compare(System.wifiBand(5955, en), "6 GHz");
+        compare(System.wifiBand(0, en), "");
+        compare(System.wifiBand(2437, Qt.locale("fr_FR")), "2,4 GHz", "the language's decimal separator");
+        compare(System.wifiBand(2437), System.wifiBand(2437, Qt.locale()));
         compare(System.subnetMask(24), "255.255.255.0");
         compare(System.subnetMask(20), "255.255.240.0");
         compare(System.subnetMask(0), "0.0.0.0");
@@ -717,9 +720,13 @@ TestCase {
         compare(t.backend.busQueries[0], {what: "net.state", tag: "vpn.state"});
         t.backend.finished("vpn.state", true, netJson([], [{uuid: uuidA, name: "Office", kind: "vpn", state: "disconnected"}]));
         verify(page.available);
+        // The kind and the state in one translatable sentence.
+        const row = findChild(page, "", i => i.title === "Office" && i.subtitle !== undefined);
+        compare(row.subtitle, "VPN · Not connected");
         page.toggle(uuidA, true);
         compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "vpn.connect", uuid: uuidA, on: true});
         compare(page.pending, uuidA);
+        compare(row.subtitle, "VPN · Changing…");
         t.backend.finished("vpn.act", true, "");
         compare(page.pending, "");
         // NetworkManager not answering: the empty group says so.

@@ -191,6 +191,29 @@ TestCase {
         compare(t.backend.busActions[2], {op: "printer.resume", name: "GF_Office"});
     }
 
+    // A printer's sheet: the state and CUPS's message in one translatable sentence.
+    function test_sheetStatus() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/PrinterSheet.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const sheet = createTemporaryObject(comp, testCase);
+        const status = p => {
+            sheet.openFor(p);
+            const kids = [];
+            const walk = item => {
+                for (const c of item.children) {
+                    kids.push(c);
+                    walk(c);
+                }
+            };
+            walk(sheet);
+            return kids.find(i => i.title === "Status" && i.valueText !== undefined).valueText;
+        };
+        const printer = {name: "Old", title: "Old Inkjet", status: "Stopped", message: "Unplugged or turned off", location: "", kind: "USB",
+            isDefault: false, needsResume: true};
+        compare(status(printer), "Stopped — Unplugged or turned off");
+        compare(status(Object.assign({}, printer, {status: "Idle", message: ""})), "Idle");
+    }
+
     function test_failedPaperStopsTheRest() {
         const t = makePage(false);
         t.backend.finished("printers.list", true, testCase.listing);

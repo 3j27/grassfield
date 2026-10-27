@@ -24,7 +24,8 @@ Sheet {
     SettingsGroup {
         SettingsRow {
             title: qsTr("Status")
-            valueText: root.printer ? (root.printer.message !== "" ? root.printer.status + " — " + root.printer.message : root.printer.status) : ""
+            valueText: root.printer ? (root.printer.message !== "" ? qsTr("%1 — %2", "a printer's state — CUPS's message").arg(root.printer.status).arg(root.printer.message)
+                : root.printer.status) : ""
         }
         SettingsRow {
             visible: root.printer !== null && root.printer.location !== ""

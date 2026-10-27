@@ -381,9 +381,13 @@ TestCase {
     function test_refreshRates() {
         // The modes of the current resolution only, one per rate to the hundredth (120 and 120.001 are one), highest first.
         compare(Displays.refreshRates(panel), [120, 60, 59.94]);
-        compare(Displays.hzLabel(120), "120 Hz");
-        compare(Displays.hzLabel(59.94), "59.94 Hz");
-        compare(Displays.hzLabel(60.001), "60 Hz");
+        // The number in the language's format (the UI's locale by default), in one translatable sentence.
+        const en = Qt.locale("en_US");
+        compare(Displays.hzLabel(120, en), "120 Hz");
+        compare(Displays.hzLabel(59.94, en), "59.94 Hz");
+        compare(Displays.hzLabel(60.001, en), "60 Hz");
+        compare(Displays.hzLabel(59.94, Qt.locale("fr_FR")), "59,94 Hz");
+        compare(Displays.hzLabel(59.94), Displays.hzLabel(59.94, Qt.locale()));
     }
 
     function test_lines() {

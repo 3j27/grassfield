@@ -2922,6 +2922,13 @@
     </message>
 </context>
 <context>
+    <name>Displays</name>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1&#xa0;Hz</translation>
+    </message>
+</context>
+<context>
     <name>DisplaysPage</name>
     <message>
         <source>Displays</source>
@@ -5916,6 +5923,11 @@
         <translation>État</translation>
     </message>
     <message>
+        <source>%1 — %2</source>
+        <comment>a printer&apos;s state — CUPS&apos;s message</comment>
+        <translation>%1 — %2</translation>
+    </message>
+    <message>
         <source>Location</source>
         <translation>Emplacement</translation>
     </message>
@@ -7393,6 +7405,10 @@
         <source>%1 of %2 GB</source>
         <translation>%1 sur %2 Go</translation>
     </message>
+    <message>
+        <source>%1 GHz</source>
+        <translation>%1&#xa0;GHz</translation>
+    </message>
 </context>
 <context>
     <name>SystemBus</name>
@@ -7924,12 +7940,18 @@
         <translation>Non connecté</translation>
     </message>
     <message>
-        <source>WireGuard</source>
-        <translation>WireGuard</translation>
-    </message>
-    <message>
         <source>Changing…</source>
         <translation>Modification…</translation>
+    </message>
+    <message>
+        <source>WireGuard · %1</source>
+        <comment>the kind of VPN · its state</comment>
+        <translation>WireGuard · %1</translation>
+    </message>
+    <message>
+        <source>VPN · %1</source>
+        <comment>the kind of VPN · its state</comment>
+        <translation>VPN · %1</translation>
     </message>
     <message>
         <source>VPN is not available: NetworkManager did not answer.</source>

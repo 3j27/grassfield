@@ -122,10 +122,11 @@ function refreshRates(m) {
     return out.sort((a, b) => b - a);
 }
 
-// "120 Hz", "59.94 Hz".
-function hzLabel(hz) {
+// "120 Hz", "59.94 Hz": the number in the language's format ("59,94 Hz" in French); `locale` defaults to the UI's.
+function hzLabel(hz, locale) {
     const r = Math.round(hz);
-    return (Math.abs(hz - r) < 0.05 ? String(r) : hz.toFixed(2)) + " Hz";
+    const whole = Math.abs(hz - r) < 0.05;
+    return qsTr("%1 Hz").arg((locale || Qt.locale()).toString(whole ? r : hz, "f", whole ? 0 : 2));
 }
 
 function scaleText(s) {

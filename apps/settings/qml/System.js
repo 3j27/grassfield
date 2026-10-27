@@ -239,10 +239,12 @@ function validPassphrase(psk) {
     return typeof psk === "string" && (/^[\x20-\x7E]{8,63}$/.test(psk) || /^[0-9A-Fa-f]{64}$/.test(psk));
 }
 
-// Wi-Fi band of a frequency in MHz ("2.4 GHz", "5 GHz", "6 GHz"); "" when unknown.
-function wifiBand(mhz) {
+// Wi-Fi band of a frequency in MHz ("2.4 GHz", "5 GHz", "6 GHz", the number in the language's format: "2,4 GHz" in French);
+// "" when unknown. `locale` defaults to the UI's.
+function wifiBand(mhz, locale) {
     const f = Number(mhz);
-    return f >= 5925 ? "6 GHz" : f >= 4900 ? "5 GHz" : f >= 2400 ? "2.4 GHz" : "";
+    const ghz = f >= 5925 ? 6 : f >= 4900 ? 5 : f >= 2400 ? 2.4 : 0;
+    return ghz === 0 ? "" : qsTr("%1 GHz").arg((locale || Qt.locale()).toString(ghz, "f", Number.isInteger(ghz) ? 0 : 1));
 }
 
 // IPv4 subnet mask of a prefix length (24 -> "255.255.255.0"); "" when out of range.
