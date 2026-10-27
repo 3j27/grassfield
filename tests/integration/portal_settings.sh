@@ -90,12 +90,16 @@ check test "$(envof /usr/share:/opt/share twice)" = "$tmp/gf:/usr/share:/opt/sha
 desc="env-grassfield: GDK_DEBUG keeps the flags it has, and gets portals once"
 check test "$(envof "" twice "events" | cut -d'|' -f3)" = "events,portals"
 # The shell's unit clears GTK_USE_PORTAL for the shell (gate P5); the apps it starts get it back (review of step 2b).
-desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell's launch environment gives GTK_USE_PORTAL back"
+desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell gives GTK_USE_PORTAL back to every app it starts (Settings and Glance included)"
 check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; echo \"\${GRASSFIELD_APPS_GTK_USE_PORTAL-unset}\"" _ "$1") == 1 ]] &&
   ! grep -q GRASSFIELD_APPS_GTK_USE_PORTAL "$2" &&
   grep -qF "AppLaunch.portalEnvironment(Quickshell.env(\"GRASSFIELD_APPS_GTK_USE_PORTAL\"))" "$3" &&
-  grep -qF "AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), portalEnvironment)" "$3"' _ \
-  "$tmp/env" "$pk/systemd/grassfield-shell.service" "$root/shell/services/Apps.qml"
+  grep -qF "AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), portalEnvironment)" "$3" &&
+  grep -qF "AppLaunch.mergeEnvironment(portalEnvironment, Pointer.launchEnvironment())" "$3" &&
+  grep -qF "launcher.environment = Apps.ownAppEnvironment();" "$4/SettingsApp.qml" &&
+  grep -qF "launcher.environment = Apps.ownAppEnvironment();" "$4/GlanceApp.qml" &&
+  ! grep -rn "environment = Pointer.launchEnvironment()" "$4/.."' _ \
+  "$tmp/env" "$pk/systemd/grassfield-shell.service" "$root/shell/services/Apps.qml" "$root/shell/services"
 
 # --- runtime -----------------------------------------------------------------------------------------------------------
 frontend=/usr/lib/xdg-desktop-portal
@@ -237,6 +241,25 @@ for j in map(json.loads, open(sys.argv[1])):
 print(json.dumps([last.get("gtk-theme"), last.get("appearance-color-scheme"), last.get("font-name")]))' "$d/signals")
 desc="2 after x-d-p-gtk signals gtk-theme, color-scheme and font-name, the client ends with Grassfield's two and gtk's font [$got]"
 check test "$got" = '["Grassfield-orange", 2, "Cantarell 11"]'
+# ... x-d-p-gtk signalling the value Grassfield already has gets no answer (no theme reload for nothing).
+: >"$d/signals"
+kill -USR2 "$(cat "$d/gtk.pid")"
+wait_until 5 grep -q '"gtk-theme"' "$d/signals"
+sleep 0.5
+desc="2 x-d-p-gtk signalling Grassfield's own value gets no answer: one gtk-theme signal [$(grep -c '"gtk-theme"' "$d/signals")]"
+check test "$(grep -c '"gtk-theme"' "$d/signals")" = 1
+# ... and a client that is not x-d-p-gtk, signalling on the backends' interface, gets none either (no relay, no loop).
+: >"$d/signals"
+DBUS_SESSION_BUS_ADDRESS=$bus python3 -I -c '
+from gi.repository import Gio, GLib
+c = Gio.bus_get_sync(Gio.BusType.SESSION)
+for i in range(50):
+    c.emit_signal(None, "/org/freedesktop/portal/desktop", "org.freedesktop.impl.portal.Settings", "SettingChanged",
+                  GLib.Variant("(ssv)", ("org.gnome.desktop.interface", "gtk-theme", GLib.Variant("s", "Adwaita"))))
+c.flush_sync(None)'
+sleep 1
+desc="2 50 signals from a client that is not x-d-p-gtk: nothing reaches the apps [$(wc -l <"$d/signals") signals]"
+check test "$(wc -l <"$d/signals")" = 0
 
 # 3 --------------------------------------------------------------------------------------------------------------------
 kill_backend
