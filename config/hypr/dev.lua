@@ -41,7 +41,8 @@ end)
 hl.config({
   -- Nested sessions don't need the watchdog warning (no start-hyprland in dev).
   misc = { disable_watchdog_warning = true },
-  ecosystem = { no_update_news = true, no_donation_nag = true },
+  -- No `ecosystem` keys here: looknfeel.lua (through core.lua) sets them for both sessions, so a nested run shows what the
+  -- real session gets (ADR-0035 D-1).
   debug = { disable_logs = false },
   -- Never write the cursor theme/size into gsettings: the owner's dconf database is shared with the nested session.
   cursor = { sync_gsettings_theme = false },

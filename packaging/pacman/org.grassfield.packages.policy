@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Grassfield Software Update (ADR-0033 c.2, owner decision O1): the one action that lets grassfield-channel-set run
+     grassfield-channel-helper as root through pkexec. The helper accepts only `set stable|beta`, `restore` and `off`
+     and writes only pacman's [grassfield] configuration and trust. An administrator's password, kept for a few
+     minutes; never for an inactive or remote session. -->
+<policyconfig>
+  <vendor>Grassfield</vendor>
+  <action id="org.grassfield.packages.set-channel">
+    <description>Change where Grassfield gets its updates</description>
+    <description xml:lang="fr">Changer la source des mises à jour de Grassfield</description>
+    <message>Authentication is required to change where Grassfield gets its updates</message>
+    <message xml:lang="fr">Une authentification est nécessaire pour changer la source des mises à jour de Grassfield</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/grassfield/grassfield-channel-helper</annotate>
+  </action>
+</policyconfig>

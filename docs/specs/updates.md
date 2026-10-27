@@ -1,8 +1,9 @@
 # Software Update spec · platform-engineer (client, channel), shell-engineer (pane, badge, menu, banner) · owner brief 2026-10-27
 Status: step 0 (this spec and ADR-0033), revised after the first opus review (FAIL, 5 MAJOR); every owner decision of
-2026-10-27 (ADR-0033 O1-O20) is included; revised again after the second review. Nothing is built yet. Step 1 builds the checker, the channel command, the
-persistence and the container test. Step 2 builds the pane, the badge, the menu count and the notification,
-after the Settings PRs (#6, #8, #9, #10) merge.
+2026-10-27 (ADR-0033 O1-O20) is included; revised again after the second review. Step 1 (built; ADR-0033 "Step 1 as
+built") has the checker, the channel command and its root helper, the persistence and the container test. Step 2 builds
+the shell service (schedule, waiter, `software-update.json`, `updates.automaticCheck`, the shim's forward), the pane, the
+badge, the menu count and the notification, after the Settings PRs (#8, #9, #10) merge.
 Decisions and evidence: `docs/decisions/ADR-0033-software-update.md` (the contract with grassfieldhq/grassfield-packages,
 probes P0–P13, Q0–Q8 and R0–R5). UI names: "Software Update" (fr « Mise à jour de logiciels »), "Beta Updates" (fr « Mises à jour bêta »),
 "Update Now" (fr « Mettre à jour maintenant »).
@@ -28,9 +29,10 @@ start Omarchy's own update; let them choose the stable or beta channel; keep the
 Omarchy's own changes.
 
 Non-goals:
-- no installation code (the install is `omarchy update`). The only Grassfield code that runs as root writes pacman's
-  configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1) and
-  `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c;
+- no installation code (the install is `omarchy update`). The only Grassfield code of Software Update that runs as root
+  writes pacman's configuration for `[grassfield]` and its trust: `grassfield-channel-helper` (pkexec, owner decision O1)
+  and `grassfield-channel-scriptlet` (pacman's scriptlets), ADR-0033 c. (Grassfield Store's own root helper installs apps
+  the user picks there: ADR-0037 b.1, which amends ADR-0033);
 - no automatic download or install;
 - no per-package choice, no rollback button (Omarchy's snapshots are the rollback);
 - no App Center (master-prompt §4);
@@ -48,7 +50,8 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   - Every child runs with stdin from `/dev/null`.
 - U2. States:
   - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf`;
-  - `repair`: the file is there, the `[grassfield]` lines are not;
+  - `repair`: the file is there, the `[grassfield]` lines are not; or the lines are there twice, or without their file
+    (every pacman command fails then);
   - `blocking`: two `[grassfield]`-only syncs in a row (15 minutes apart) failed while the network works, so every
     `omarchy update` fails (U22);
   - `up-to-date`, `available`;
@@ -229,6 +232,7 @@ Pane (step 2)
 - ADR-0033 § g (the repository contract; `grassfield-notes.json` version 1).
 - `grassfield-update-check` output, version 1: `{"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,
   "error":…,"grassfield":{"installed":…,"available":…,"notes":[…]},"omarchy":{"installed":…,"available":…},"others":N}`.
+  Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
 - `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
 - Shell IPC: `update check` (Settings → shell). The `omarchy-shell` shim forwards `omarchy.system-update refresh|clear` to it.
@@ -236,8 +240,9 @@ Pane (step 2)
 ## Dependencies (verified versions)
 On Omarchy 4.0.4 (its `install/omarchy-base.packages`): `pacman-contrib` (`checkupdates`; P0: 1.13.1-1), `fakeroot`, `jq`,
 `gum`, `uwsm`, `xdg-terminal-exec`; pacman 7.1 (P0); gnupg 2.4 (`gpgv`); curl; python; polkit (`pkexec`). `omarchy` 4.0.6
-itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `grassfield-keyring` are added to
-`grassfield-desktop`'s `depends` in step 1, with `fakeroot` (declared, not assumed). Omarchy's commands used:
+itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-contrib` and `fakeroot` are in
+`grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joins once grassfield-packages
+builds it (owner decision O21). Omarchy's commands used:
 `omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
 
 ## Degraded behavior
@@ -247,9 +252,11 @@ itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-co
 - Offline: automatic checks skipped; a manual check fails cleanly (U2, A4).
 
 ## Automated tests · Manual verification steps
-- Step 1 container test (`tests/integration/software_update.sh`, run only inside a throwaway Arch container, as the ADR's
-  probes): the A1–A7 cases with fake packages signed by a throwaway key made in the container, Omarchy's v4.0.4
-  `omarchy-refresh-pacman` and migrations, the real `grassfield-channel-set`, hook and checker. Never on the owner's machine.
+- Step 1 container test (`tests/integration/software_update.sh [--omarchy DIR] [--omarchy-next DIR]`, which starts a
+  throwaway Arch container itself and refuses to run outside one, as the ADR's probes): the A1–A7 cases with fake
+  packages signed by throwaway keys made in the container, Omarchy's v4.0.4 `omarchy-refresh-pacman` and migrations (and
+  4.0.6's 1791403252), the real `grassfield-channel-set`, helper, scriptlet program, policy (real polkitd and pkexec), hook
+  and checker. Never on the owner's machine. The checker's own cases: `tests/shell/update_check.sh` (logic layer, stubs).
 - Checker unit tests (A8), QML tests (A9), grassfield-packages end-to-end (A10).
 - Owner, real session (L2): Set Up… (Grassfield's polkit sheet), Update Now with a published test channel, Beta
   Updates on and off, an Omarchy channel change with the hook, Log Out… after an update.

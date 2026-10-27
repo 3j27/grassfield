@@ -28,6 +28,29 @@ local function problem(text)
   print("grassfield: Omarchy include: " .. text)
 end
 
+-- GF-032: Omarchy's maintenance tools (the update ends with omarchy-update-restart, which restarts the Omarchy shell;
+-- theme, font and voxtype changes do too) start Omarchy's own shell in whatever Hyprland instance asks. Inside a
+-- Grassfield session that would add a second bar, notification server, polkit agent, idle timer and locker. The two
+-- commands that start it are shadowed by no-op scripts placed first in PATH (packaging/shims/). Omarchy's envs.lua puts
+-- its own bin directory first, so this has to run after the include; packaging/uwsm/env-grassfield does the same for the
+-- systemd user manager (applications started by the Dock or by D-Bus). No Omarchy file is touched.
+-- Defined before the include's early returns: session.lua calls it whatever the include did, and a failed include must
+-- leave a working session (ADR-0001); before, a missing Omarchy made `omarchy.guard_path` nil and Hyprland rejected the
+-- whole session config (found by tests/shell/hyprland_screens.sh). An error inside Omarchy's envs.lua does not reach the
+-- early return below: Hyprland's own `require` turns it into a config error and returns an empty table (Hyprland 0.56.2
+-- src/config/lua/ConfigManager.cpp:312-377); only a module that cannot be found is raised to `pcall`.
+function M.guard_path(shim_dir)
+  if not exists(shim_dir .. "/omarchy-restart-shell") then return false end
+  local bin = omarchy_path .. "/bin"
+  local parts = { shim_dir }
+  if M.ok then parts[#parts + 1] = bin end
+  for entry in (os.getenv("PATH") or "/usr/local/bin:/usr/bin"):gmatch("[^:]+") do
+    if entry ~= shim_dir and entry ~= bin then parts[#parts + 1] = entry end
+  end
+  hl.env("PATH", table.concat(parts, ":"))
+  return true
+end
+
 if not exists(omarchy_path .. "/default/hypr/helpers.lua") or not exists(omarchy_path .. "/default/hypr/envs.lua") then
   M.reason = "Omarchy's Hyprland modules not found at " .. omarchy_path
   return M
@@ -100,24 +123,6 @@ end
 if exists(home .. "/.config/hypr/input.lua") then
   local uok, uerr = pcall(require, "hypr.input")
   if not uok then problem("input.lua: " .. tostring(uerr)) end
-end
-
--- GF-032: Omarchy's maintenance tools (the update ends with omarchy-update-restart, which restarts the Omarchy shell;
--- theme, font and voxtype changes do too) start Omarchy's own shell in whatever Hyprland instance asks. Inside a
--- Grassfield session that would add a second bar, notification server, polkit agent, idle timer and locker. The two
--- commands that start it are shadowed by no-op scripts placed first in PATH (packaging/shims/). Omarchy's envs.lua puts
--- its own bin directory first, so this has to run after the include; packaging/uwsm/env-grassfield does the same for the
--- systemd user manager (applications started by the Dock or by D-Bus). No Omarchy file is touched.
-function M.guard_path(shim_dir)
-  if not exists(shim_dir .. "/omarchy-restart-shell") then return false end
-  local bin = omarchy_path .. "/bin"
-  local parts = { shim_dir }
-  if M.ok then parts[#parts + 1] = bin end
-  for entry in (os.getenv("PATH") or "/usr/local/bin:/usr/bin"):gmatch("[^:]+") do
-    if entry ~= shim_dir and entry ~= bin then parts[#parts + 1] = entry end
-  end
-  hl.env("PATH", table.concat(parts, ":"))
-  return true
 end
 
 return M
