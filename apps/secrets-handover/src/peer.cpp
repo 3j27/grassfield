@@ -44,6 +44,18 @@ QString exeOf(pid_t pid)
     return QString::fromLocal8Bit(buffer, int(length));
 }
 
+// The file /proc/<pid>/exe leads to, wherever it is mounted for that process.
+bool exeFile(pid_t pid, struct stat &st)
+{
+    const QByteArray link = QByteArrayLiteral("/proc/") + QByteArray::number(pid) + QByteArrayLiteral("/exe");
+    const int fd = ::open(link.constData(), O_PATH | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    const bool ok = ::fstat(fd, &st) == 0;
+    ::close(fd);
+    return ok;
+}
+
 bool rootOwnedNotWritable(const QByteArray &path, bool directory)
 {
     struct stat st {};
@@ -110,9 +122,18 @@ Peer identify(const QDBusConnection &bus, const QString &name)
     if (peer.pid <= 0)
         return peer;
     const QString exe = exeOf(peer.pid);
+    struct stat st {};
+    const bool hasFile = exeFile(peer.pid, st);
     // Read the executable, then check that the pidfd's process still runs: the PID was not reused in between.
-    if (!exe.isEmpty() && alive(peer.pidfd))
-        peer.exe = exe;
+    if (exe.isEmpty() || !hasFile || !alive(peer.pidfd))
+        return peer;
+    peer.exe = exe;
+    peer.hasFile = true;
+    peer.fileDev = st.st_dev;
+    peer.fileIno = st.st_ino;
+    peer.fileUid = st.st_uid;
+    peer.fileMode = st.st_mode;
+    peer.fileLinks = st.st_nlink;
     return peer;
 }
 
@@ -125,7 +146,20 @@ void close(Peer &peer)
 
 bool is(const Peer &peer, const QString &expected)
 {
-    return !peer.exe.isEmpty() && peer.exe == expected && peer.uid == ::getuid() && trustedExecutable(expected) && alive(peer.pidfd);
+    struct stat st {};
+    if (!peer.hasFile || peer.uid != ::getuid() || !trustedExecutable(expected) || ::stat(QFile::encodeName(expected).constData(), &st) != 0)
+        return false;
+    return st.st_dev == peer.fileDev && st.st_ino == peer.fileIno && alive(peer.pidfd);
+}
+
+bool ranFrom(const Peer &peer, const QString &expected)
+{
+    if (is(peer, expected))
+        return true;
+    // Replaced since it started: the old file has no name left, was root's, and its path is a trusted one today.
+    return peer.hasFile && peer.uid == ::getuid() && peer.exe == expected + QStringLiteral(" (deleted)") && peer.fileLinks == 0
+        && S_ISREG(peer.fileMode) && peer.fileUid == 0 && !(peer.fileMode & (S_IWGRP | S_IWOTH)) && trustedExecutable(expected)
+        && alive(peer.pidfd);
 }
 
 } // namespace grassfield::handover

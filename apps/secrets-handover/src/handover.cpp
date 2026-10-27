@@ -18,6 +18,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include <algorithm>
 #include <csignal>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -124,19 +125,22 @@ Handover::Handover(QDBusConnection bus, Config config)
 bool Handover::releaseLeftover()
 {
     Peer peer = identify(m_bus, kSecrets);
-    if (peer.owner.isEmpty() || !is(peer, m_config.ksecretd)) {
-        close(peer); // nobody, gnome-keyring, or a process that is not known for sure: left alone
+    // ksecretd, also one whose file a KWallet upgrade replaced since it started. Nobody, gnome-keyring, or a process that is
+    // not known for sure: left alone.
+    if (peer.owner.isEmpty() || !ranFrom(peer, m_config.ksecretd)) {
+        close(peer);
         return false;
     }
     qInfo("grassfield-secrets-handover: a ksecretd from an earlier session holds the Secret Service; asking it to quit");
-    // KDBusService exports the application at /MainApplication; quit() is its own, orderly exit.
+    // KDBusService exports the application at /MainApplication; quit() is its own, orderly exit. At most 1 + 3 + 2 s, so
+    // readiness comes well within the unit's TimeoutStartSec=10 even for a ksecretd that ignores quit.
     call(m_bus, peer.owner, QStringLiteral("/MainApplication"), QStringLiteral("org.qtproject.Qt.QCoreApplication"),
-         QStringLiteral("quit"), {}, 2000);
-    bool released = releasedBy(m_bus, kSecrets, peer.owner, 5000);
+         QStringLiteral("quit"), {}, 1000);
+    bool released = releasedBy(m_bus, kSecrets, peer.owner, 3000);
     if (!released && alive(peer.pidfd)) {
         // Through the pidfd: the signal can only reach that process, never one that reused its PID.
         ::syscall(SYS_pidfd_send_signal, peer.pidfd, SIGTERM, nullptr, 0);
-        released = releasedBy(m_bus, kSecrets, peer.owner, 3000);
+        released = releasedBy(m_bus, kSecrets, peer.owner, 2000);
     }
     close(peer);
     qInfo(released ? "grassfield-secrets-handover: the Secret Service is free" : "grassfield-secrets-handover: ksecretd did not quit");
@@ -157,7 +161,7 @@ QString Handover::verifiedOwner(const QString &name, const QString &expected)
 
 Outcome Handover::move()
 {
-    if (QFileInfo::exists(markerPath(m_config.stateHome)))
+    if (QFileInfo::exists(markerPath(m_config.stateDir)))
         return Outcome::Done;
     if (!hasWallet(m_config.dataHome))
         return writeMarker(QStringLiteral("nothing")) ? Outcome::Done : Outcome::Deferred;
@@ -178,6 +182,7 @@ Outcome Handover::move()
         QDBusObjectPath collection;
         Attributes attributes;
         QString label;
+        qulonglong modified = 0;
     };
     QList<Candidate> candidates;
     for (const QDBusObjectPath &collection : paths(dbusProperty(m_bus, source, kServicePath, kService, QStringLiteral("Collections")))) {
@@ -185,8 +190,20 @@ Outcome Handover::move()
             const auto attributes = unwrap<Attributes>(dbusProperty(m_bus, source, item.path(), kItem, QStringLiteral("Attributes")));
             if (!isLibsecretItem(attributes))
                 continue;
-            candidates.append(Candidate{item, collection, attributes,
-                                        dbusProperty(m_bus, source, item.path(), kItem, QStringLiteral("Label")).toString()});
+            const Candidate candidate{item, collection, attributes,
+                                      dbusProperty(m_bus, source, item.path(), kItem, QStringLiteral("Label")).toString(),
+                                      dbusProperty(m_bus, source, item.path(), kItem, QStringLiteral("Modified")).toULongLong()};
+            // Items with the same attributes (two wallets, or a client that saved twice) are one entry for every lookup: only
+            // the most recently changed one moves; the others stay in KWallet and count as kept.
+            const auto same = std::find_if(candidates.begin(), candidates.end(),
+                                           [&](const Candidate &other) { return other.attributes == attributes; });
+            if (same == candidates.end()) {
+                candidates.append(candidate);
+                continue;
+            }
+            ++m_kept;
+            if (candidate.modified > same->modified)
+                *same = candidate;
         }
     }
     if (candidates.isEmpty())
@@ -374,7 +391,7 @@ void Handover::notice()
 
 bool Handover::writeMarker(const QString &outcome)
 {
-    const QString path = markerPath(m_config.stateHome);
+    const QString path = markerPath(m_config.stateDir);
     if (!QDir().mkpath(QFileInfo(path).absolutePath()))
         return false;
     QSaveFile file(path);

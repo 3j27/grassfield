@@ -3,6 +3,7 @@
 // Type=notify: it reports ready after phase 1, so the shell, and any app the user opens from it, starts after a leftover
 // ksecretd has let go of the Secret Service; phase 2 goes on while the session starts.
 #include "handover.h"
+#include "logic.h"
 #include "translationloader.h"
 
 #include <QCoreApplication>
@@ -46,6 +47,9 @@ QString home(const char *variable, const QString &fallback)
 
 int main(int argc, char **argv)
 {
+    // QDBUS_DEBUG makes Qt print every D-Bus message with its arguments, secrets included, to the journal: never here (the
+    // unit unsets it too).
+    qunsetenv("QDBUS_DEBUG");
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("grassfield-secrets-handover"));
     const bool dev = grassfield::i18n::devSession();
@@ -54,11 +58,25 @@ int main(int argc, char **argv)
         notifyReady();
         return 2;
     }
+    // A dev session runs it only against the tests' fakes: never on the owner's bus, whose ksecretd and secrets are real.
+    if (dev && (qgetenv("GF_TEST_BUS") != "1"
+                || !grassfield::handover::isPrivateTestBus(qEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS"), qEnvironmentVariable("GF_TEST_BUS_DIR")))) {
+        std::fputs("grassfield-secrets-handover: refused: a dev session runs it only on a private test bus (GF_TEST_BUS=1, GF_TEST_BUS_DIR)\n", stderr);
+        notifyReady();
+        return 2;
+    }
+    // The user's own kwalletrc keeps KWallet as the Secret Service: that choice wins (ADR-0035 Q17-b), nothing is done.
+    if (grassfield::handover::userKeepsKWalletService(home("XDG_CONFIG_HOME", QStringLiteral("/.config")))) {
+        std::puts("grassfield-secrets-handover: left alone: the user's kwalletrc keeps KWallet as the Secret Service");
+        notifyReady();
+        return 0;
+    }
     grassfield::i18n::install(grassfield::i18n::systemLanguage());
 
     grassfield::handover::Config config;
     config.dataHome = home("XDG_DATA_HOME", QStringLiteral("/.local/share"));
-    config.stateHome = home("XDG_STATE_HOME", QStringLiteral("/.local/state"));
+    config.stateDir = grassfield::handover::stateDirectory(qEnvironmentVariable("STATE_DIRECTORY"),
+                                                           home("XDG_STATE_HOME", QStringLiteral("/.local/state")));
     if (dev) {
         // Dev plumbing (ADR-0019), honoured only in a dev session: the tests' fake services run another executable.
         if (const QString path = qEnvironmentVariable("GRASSFIELD_HANDOVER_KSECRETD"); !path.isEmpty())

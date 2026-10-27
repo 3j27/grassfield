@@ -14,8 +14,12 @@
 #  6 no default keychain yet: it is created (its own question), then filled
 #  7 a leftover ksecretd holding org.freedesktop.secrets is asked to quit before readiness; 8 one that ignores quit gets SIGTERM
 #    through its pidfd; 9 a holder that is not ksecretd is left alone and nothing moves (the destination is not the keychain)
-# 10 refused outside a Grassfield session; 11 the notice in a French session (SKIP without lrelease); 12 no item, label or
-#    value in the marker or the helper's output
+# 10 refused outside a Grassfield session; 11 the notice in a French session (SKIP without lrelease); 12 two KWallet items
+#    with the same attributes: only the newest moves; 13 the user's own kwalletrc keeps KWallet: nothing is done; 14 a dev
+#    run on a bus that is not a private test bus is refused; 15 the marker goes to $STATE_DIRECTORY; 16 in a user namespace
+#    that maps only the user (what systemd gives a user unit with ProtectSystem= and the like, PrivateUsers=self) the peers
+#    cannot be identified and nothing is read, stopped or written: why the unit has no such option (SKIP where unprivileged
+#    user namespaces are not allowed); 17 no item, label or value in the marker or the helper's output
 # Needs g++ with the Qt 6 Core and D-Bus headers (or GRASSFIELD_SECRETS_HANDOVER: a built helper), dbus-daemon, dbus-send,
 # python3 with PyGObject; SKIPs without them, and when libdbus cannot reach the bus or the bus gives no ProcessFD.
 set -uo pipefail
@@ -99,7 +103,8 @@ running() { # running <dir> <bus name> <role> [fake options]: started now, befor
 run() { # run <name> [env assignments...]
   local d=$tmp/$1
   shift
-  mkdir -p "$d/services" "$d/home" "$d/data" "$d/state"
+  mkdir -p "$d/services" "$d/home/.config" "$d/data" "$d/state"
+  [[ -n ${KWALLETRC:-} ]] && printf '%s\n' "$KWALLETRC" >"$d/home/.config/kwalletrc"
   : >"$d/calls.log"; : >"$d/store.log"
   [[ $WALLET == yes ]] && mkdir -p "$d/data/kwalletd" && : >"$d/data/kwalletd/kdewallet.kwl"
   # The fakes' options are split into words on purpose.
@@ -123,10 +128,11 @@ except socket.timeout:
     pass' "$d/notify.sock" "$d/ready" &
   local listener=$!
   wait_until 3 test -S "$d/notify.sock"
-  env -i PATH="$PATH" HOME="$d/home" XDG_DATA_HOME="$d/data" XDG_STATE_HOME="$d/state" XDG_RUNTIME_DIR="$d" \
-    DBUS_SESSION_BUS_ADDRESS="$bus" QT_FORCE_STDERR_LOGGING=1 GRASSFIELD_DEV=1 GRASSFIELD_LANG=en GRASSFIELD_HANDOVER_KSECRETD="${KSECRETD:-$py}" \
-    GRASSFIELD_HANDOVER_KEYRING="${KEYRING:-$py}" GRASSFIELD_HANDOVER_PROMPT_MS=8000 GRASSFIELD_HANDOVER_NOTIFY_MS=3000 \
-    NOTIFY_SOCKET="$d/notify.sock" "$@" timeout 60 "$helper" >"$d/out" 2>"$d/err"
+  env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_DATA_HOME="$d/data" XDG_STATE_HOME="$d/state" XDG_RUNTIME_DIR="$d" \
+    DBUS_SESSION_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$d" QT_FORCE_STDERR_LOGGING=1 GRASSFIELD_DEV=1 GRASSFIELD_LANG=en \
+    GRASSFIELD_HANDOVER_KSECRETD="${KSECRETD:-$py}" GRASSFIELD_HANDOVER_KEYRING="${KEYRING:-$py}" GRASSFIELD_HANDOVER_PROMPT_MS=8000 \
+    GRASSFIELD_HANDOVER_NOTIFY_MS=3000 NOTIFY_SOCKET="$d/notify.sock" "$@" timeout 60 ${NS:+unshare --user --map-current-user} "$helper" \
+    >"$d/out" 2>"$d/err"
   echo $? >"$d/rc"
   date +%s.%N >"$d/ended"
   sleep 0.3
@@ -231,7 +237,37 @@ else
 fi
 
 # 12 -------------------------------------------------------------------------------------------------------------------
-desc="12 no item, label or value in any marker or in the helper's output"
+WALLET=yes KWALLET="--duplicate" KEYCHAIN="" LEFTOVER=none run duplicate
+desc="12 two KWallet items with the same attributes (an older wallet listed first): only the newest moves [$(created duplicate); $(cat "$tmp/duplicate/out")]"
+check bash -c '[[ $2 == kwallet-chromium-key ]] && grep -qx "grassfield-secrets-handover: done moved=1 kept=2" "$1/out"' _ "$tmp/duplicate" "$(created duplicate)"
+
+# 13 -------------------------------------------------------------------------------------------------------------------
+KWALLETRC=$'[org.freedesktop.secrets]\napiEnabled[$i]=true' WALLET=yes KWALLET="" KEYCHAIN="" LEFTOVER="" run userchoice
+desc="13 the user's own kwalletrc keeps KWallet as the Secret Service: no quit, nothing asked, no marker, ready at once"
+check bash -c '[[ ! -s $1/calls.log && ! -s $1/marker && -s $1/ready ]] && grep -q "left alone" "$1/out"' _ "$tmp/userchoice"
+unset KWALLETRC
+
+# 14 -------------------------------------------------------------------------------------------------------------------
+WALLET=yes KWALLET="" KEYCHAIN="" LEFTOVER="" run devbus GF_TEST_BUS=0
+desc="14 a dev run on a bus that is not a private test bus is refused (exit 2) before anything is asked [$(cat "$tmp/devbus/rc")]"
+check bash -c '[[ $(cat "$1/rc") == 2 && ! -s $1/calls.log ]] && grep -q "refused: a dev session runs it only on a private test bus" "$1/err"' _ "$tmp/devbus"
+
+# 15 -------------------------------------------------------------------------------------------------------------------
+WALLET=no KWALLET="" KEYCHAIN="" LEFTOVER=none run statedir STATE_DIRECTORY="$tmp/statedir/unit-state"
+desc="15 the marker goes to the unit's \$STATE_DIRECTORY (the directory systemd made for it, mode 0700)"
+check bash -c 'grep -qx "nothing moved=0 kept=0" "$1/unit-state/secrets-handover" && [[ ! -e $1/state/grassfield/secrets-handover ]]' _ "$tmp/statedir"
+
+# 16 -------------------------------------------------------------------------------------------------------------------
+if unshare --user --map-current-user true 2>/dev/null; then
+  NS=1 WALLET=yes KWALLET="" KEYCHAIN="" LEFTOVER="" run userns
+  desc="16 in a user namespace like PrivateUsers=self no peer is identified: no quit, nothing read or written, deferred"
+  check bash -c '[[ $(grep -c "\"method\": \"quit\"" "$1/calls.log") == 0 && $(grep -c "\"method\": \"GetSecret\"" "$1/calls.log") == 0 && ! -s $1/store.log && ! -s $1/marker ]] && grep -q "^grassfield-secrets-handover: deferred" "$1/out"' _ "$tmp/userns"
+else
+  echo "SKIP: secrets_handover: no unprivileged user namespace here (scenario 16, the unit's reason to have no namespace option)"
+fi
+
+# 17 -------------------------------------------------------------------------------------------------------------------
+desc="17 no item, label or value in any marker or in the helper's output"
 check bash -c '! grep -rlE "kwallet-|keychain-example|Chromium|chromium|Example App|smb-share|xdg:schema" "$1"/*/marker "$1"/*/out "$1"/*/err' _ "$tmp"
 
 exit "$fail"

@@ -24,7 +24,7 @@ struct Config {
     QString ksecretd = QStringLiteral("/usr/bin/ksecretd");                 // KWallet's Secret Service daemon
     QString keyring = QStringLiteral("/usr/bin/gnome-keyring-daemon");      // the keychain
     QString dataHome;   // $XDG_DATA_HOME
-    QString stateHome;  // $XDG_STATE_HOME
+    QString stateDir;   // where the marker goes (logic.h stateDirectory)
     int promptTimeoutMs = 5 * 60 * 1000;
     int notifyWaitMs = 30 * 1000;
 };

@@ -6,6 +6,7 @@
 kwallet        owns org.kde.secretservicecompat, as KWallet's ksecretd does: one collection (kdewallet) holding two items a
                libsecret client saved (Chromium's key, an example app) and one entry of KWallet's own API (server, user, type).
                --locked: the collection starts locked; Unlock answers with a prompt. --only-legacy: the legacy entry only.
+               --duplicate: an older wallet, listed first, holds an older copy of Chromium's item (same attributes).
 keychain       owns org.freedesktop.secrets, as gnome-keyring does: a "login" collection with the alias "default", already
                holding the example app's item (same attributes, another value, so an overwrite shows). --locked as above.
                --no-default: no collection yet; CreateCollection answers with a prompt. CreateItem appends what it stored to
@@ -86,6 +87,7 @@ XML = """<node>
   <property name="Attributes" type="a{ss}" access="read"/>
   <property name="Label" type="s" access="read"/>
   <property name="Locked" type="b" access="read"/>
+  <property name="Modified" type="t" access="read"/>
 </interface>
 <interface name="org.freedesktop.Secret.Prompt">
   <method name="Prompt"><arg type="s" direction="in"/></method>
@@ -139,9 +141,10 @@ class World:
             self.aliases[alias] = path
         self.export(path, "org.freedesktop.Secret.Collection")
 
-    def add_item(self, collection, label, attributes, value):
+    def add_item(self, collection, label, attributes, value, modified=1000):
         path = "%s/%d" % (collection, len(self.collections[collection]["items"]) + 1)
-        self.items[path] = {"collection": collection, "label": label, "attributes": dict(attributes), "value": value, "type": "text/plain"}
+        self.items[path] = {"collection": collection, "label": label, "attributes": dict(attributes), "value": value, "type": "text/plain",
+                            "modified": modified}
         self.collections[collection]["items"].append(path)
         self.export(path, "org.freedesktop.Secret.Item")
         return path
@@ -169,7 +172,8 @@ class World:
         if interface == "org.freedesktop.Secret.Item":
             i = self.items[path]
             locked = self.collections[i["collection"]]["locked"]
-            return {"Attributes": V("a{ss}", i["attributes"]), "Label": V("s", i["label"]), "Locked": V("b", locked)}[prop]
+            return {"Attributes": V("a{ss}", i["attributes"]), "Label": V("s", i["label"]), "Locked": V("b", locked),
+                    "Modified": V("t", i["modified"])}[prop]
         return None
 
     def call(self, conn, sender, path, interface, method, params, invocation):
@@ -263,6 +267,7 @@ def main():
     ap.add_argument("--only-legacy", action="store_true")
     ap.add_argument("--no-default", action="store_true")
     ap.add_argument("--ignore-quit", action="store_true")
+    ap.add_argument("--duplicate", action="store_true")
     ap.add_argument("--answer", choices=["accept", "dismiss"], default="accept")
     ap.add_argument("--delay", type=float, default=0.2)
     args = ap.parse_args()
@@ -279,6 +284,12 @@ def main():
     if args.role in ("kwallet", "keychain"):
         world.export(ROOT, "org.freedesktop.Secret.Service")
     if args.role == "kwallet":
+        if args.duplicate:
+            # An older wallet listed first, with an older copy of Chromium's key under the same attributes.
+            old = ROOT + "/collection/old"
+            world.add_collection(old, "old", args.locked)
+            world.add_item(old, "Chromium Safe Storage", {"xdg:schema": "chrome_libsecret_os_crypt_password_v2", "application": "chromium"},
+                           "kwallet-chromium-key-old", modified=100)
         c = ROOT + "/collection/kdewallet"
         world.add_collection(c, "kdewallet", args.locked, alias="default")
         if not args.only_legacy:
