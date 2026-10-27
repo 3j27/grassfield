@@ -387,7 +387,7 @@ Options:
     directory 0700, socket 0600), one JSON object per line, versioned (`prompter/1`); it accepts only a peer whose `SO_PEERCRED`
     uid is the user's and whose cgroup is `grassfield-shell.service`.
   - **One queue, no focus theft** (review of PR #13, MAJOR 5: the polkit sheet holds the keyboard exclusively,
-    `shell/security/polkit/AuthAgent.qml:122`, and a second sheet must never take it while a password is being typed). The
+    `shell/security/polkit/AuthAgent.qml:125`, and a second sheet must never take it while a password is being typed). The
     shell keeps one queue for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
     request never takes the keyboard from a sheet on screen and is shown only when that sheet is answered or cancelled; a
     queued request whose caller gives up (gcr `StopPrompting`, NM `CancelGetSecrets`, BlueZ `Cancel`) leaves the queue without
