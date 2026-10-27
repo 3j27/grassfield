@@ -545,6 +545,15 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 The owner gave every answer in this Claude Code session on 2026-10-27, through its question tool. The answers to O1-O16
 were recorded in `fd49abc` and confirmed again after the first review.
 
+## Amendments
+- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the checker's result also lists the other updates
+  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`. g: the Store catalog's files join
+  the contract, and publication is the serialized publisher of h.2. h.2: one serialized publisher per channel, building from
+  the current snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
+  to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
+  action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
+  still installs nothing.
+
 ## Evidence
 - `adr0033-probes.sh` (P0-P13), `adr0033-probes-2.sh` (Q0-Q8) and `adr0033-probes-3.sh` (R0-R5), in
   `docs/audits/software-update-2026-10-27/`. Their outputs are `probes-output.txt`, `probes-2-output.txt` and
@@ -597,15 +606,6 @@ were recorded in `fd49abc` and confirmed again after the first review.
   - an old but validly signed database can be replayed;
   - a pointer switch can fail one run; a rollback is a new snapshot (h.2);
   - a Hyprland update can come before the matching plugin.
-
-## Amendments
-- **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the checker's result also lists the other updates
-  (name, installed, available; at most 2000) so the Store reuses this one `checkupdates`. g: the Store catalog's files join
-  the contract, and publication is the serialized publisher of h.2. h.2: one serialized publisher per channel, building from
-  the current snapshot, never backwards, writing the pointer only if it has not moved. Context: "Grassfield has no root code
-  to install anything" no longer holds for the Store's `grassfield-store-helper` (owner decision ST4: pkexec, its own polkit
-  action, `pacman -S --needed` / `pacman -Rns` of validated repository names only, ADR-0037 b.1); Software Update itself
-  still installs nothing.
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:
