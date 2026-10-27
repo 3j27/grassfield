@@ -20,9 +20,8 @@ hl.on("hyprland.start", function()
   -- over from an earlier session has let go of org.freedesktop.secrets (at most 10 s), so no app the user opens from the
   -- Dock can reach KWallet there; the rest of the handover goes on in the background.
   --
-  -- The Settings portal backend (ADR-0035 D-8) comes before the shell and the apps opened from it: GTK 3 apps read their
-  -- theme from it when they start (GTK_USE_PORTAL=1). It is Type=dbus: `systemctl --user start` returns once its name is on
-  -- the bus.
+  -- The Settings portal backend (ADR-0035 D-8) is started next, without waiting for it (--no-block): the shell never waits
+  -- on it, and an app that reads the portal before it is up starts it by D-Bus activation and gets its values.
   --
   -- grassfield-shell runs as a systemd user service so it restarts on crash (gate R1). It starts even when the
   -- import, the bridge, the handover or the portal backend failed (";"): the bar then shows T0.
@@ -31,7 +30,7 @@ hl.on("hyprland.start", function()
   -- low-battery notifications, the pending-migrations notice, removable media (udiskie). Each unit has the same
   -- ConditionEnvironment and skips itself where it does not apply (no battery, no udiskie).
   local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service"
-  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start grassfield-portal-settings.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
+  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
 
   -- What Omarchy's autostart does besides starting its shell: the power profile for the current power source, the
   -- post-boot hooks of ~/.config/omarchy/hooks, and the lid state (clamshell with an external display at start).
