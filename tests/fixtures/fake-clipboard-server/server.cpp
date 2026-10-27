@@ -7,12 +7,15 @@
 //
 // stdin (one command a line):
 //   SELECT <mime>|<data> ...   a new selection made by "another app"; <data>: hex:<bytes in hex> | file:<path> | big:<n> (n bytes)
-//                              | hang (the pipe is never written nor closed)
+//                              | hang (the pipe is never written nor closed) | slow:<ms>:<data> (all of <data>, <ms> after the request)
 //   CLEAR                      no selection
 //   LOCK | UNLOCK              the session lock (sent to every lock notification)
 //   PASTE <mime> <out path>    asks the client that owns the selection for <mime>, writes what it sends to <out path>
+//   STALL <mime>               asks the client that owns the selection for <mime> and never reads it; reports when the client
+//                              closes its end
 //   QUIT
-// stdout: READY, CLIENT <n>, BIND <global>, DEVICE, DEVICE_GONE, NOTIFIER, RECEIVE <mime>, SELECTION <mime>..., CLEARED, PASTED <mime> <bytes>.
+// stdout: READY, CLIENT <n>, BIND <global>, DEVICE, DEVICE_GONE, NOTIFIER, RECEIVE <mime>, SELECTION <mime>..., CLEARED, PASTED <mime> <bytes>,
+//         STALL_CLOSED <ms>.
 #include "ext-data-control-v1-server-protocol.h"
 #include "hyprland-lock-notify-v1-server-protocol.h"
 
@@ -20,6 +23,7 @@
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -43,6 +47,7 @@ struct Part {
     std::string mime;
     std::string data;
     bool hang = false;
+    int delayMs = 0;
 };
 
 struct Source {
@@ -76,9 +81,11 @@ struct OfferData {
     unsigned generation;
 };
 
-void writeAll(int fd, std::string data)
+void writeAll(int fd, std::string data, int delayMs)
 {
-    std::thread([fd, data = std::move(data)] {
+    std::thread([fd, data = std::move(data), delayMs] {
+        if (delayMs > 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
         size_t done = 0;
         while (done < data.size()) {
             const ssize_t n = ::write(fd, data.data() + done, data.size() - done);
@@ -112,7 +119,7 @@ void offerReceive(wl_client *, wl_resource *resource, const char *mime, int32_t 
             g.hung.push_back(fd);
             return;
         }
-        writeAll(fd, p.data);
+        writeAll(fd, p.data, p.delayMs);
         return;
     }
     ::close(fd);
@@ -355,6 +362,13 @@ bool parseData(const std::string &spec, Part *part)
         part->hang = true;
         return true;
     }
+    if (spec.rfind("slow:", 0) == 0) {
+        const size_t colon = spec.find(':', 5);
+        if (colon == std::string::npos)
+            return false;
+        part->delayMs = std::atoi(spec.substr(5, colon - 5).c_str());
+        return parseData(spec.substr(colon + 1), part);
+    }
     if (spec.rfind("hex:", 0) == 0) {
         const std::string hex = spec.substr(4);
         if (hex.size() % 2)
@@ -409,6 +423,28 @@ void paste(const std::string &mime, const std::string &out)
     }).detach();
 }
 
+void stall(const std::string &mime)
+{
+    if (!g.clientSource)
+        return;
+    int fds[2];
+    if (::pipe2(fds, O_CLOEXEC) != 0)
+        return;
+    ext_data_control_source_v1_send_send(g.clientSource->resource, mime.c_str(), fds[1]);
+    wl_display_flush_clients(g.display);
+    ::close(fds[1]);
+    // Never reads: the pipe fills and the client's writer waits; the read end reports POLLHUP once the client closes its end.
+    const int rfd = fds[0];
+    std::thread([rfd] {
+        const auto start = std::chrono::steady_clock::now();
+        pollfd p{rfd, 0, 0};
+        const int r = ::poll(&p, 1, 10000);
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+        ::close(rfd);
+        say(r > 0 && (p.revents & POLLHUP) ? "STALL_CLOSED " + std::to_string(ms) : std::string("STALL_OPEN"));
+    }).detach();
+}
+
 void command(const std::string &line)
 {
     std::istringstream in(line);
@@ -454,6 +490,10 @@ void command(const std::string &line)
         std::string mime, out;
         in >> mime >> out;
         paste(mime, out);
+    } else if (verb == "STALL") {
+        std::string mime;
+        in >> mime;
+        stall(mime);
     } else if (verb == "QUIT") {
         wl_display_terminate(g.display);
     }

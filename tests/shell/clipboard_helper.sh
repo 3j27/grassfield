@@ -69,12 +69,14 @@ hlp() { # <name> <field>...: one line, fields joined by US
   local IFS=$US
   printf '%s\n' "$*" >&"${!v}"
 }
-stop_helper() {
-  local v="hlp_$1" p="pid_$1"
+stop_helper() { # QUIT, then the helper must end by itself with exit 0 (never a crash, whatever is running)
+  local v="hlp_$1" p="pid_$1" rc
   hlp "$1" QUIT
   local f=${!v}
   exec {f}>&-
   wait "${!p}" 2>/dev/null
+  rc=$?
+  check "helper $1 ends on QUIT with exit 0" 0 "$rc"
 }
 # waitline <file> <regex> <seconds>: prints the first matching line (US shown as |), returns 1 when none came
 waitline() {
@@ -225,15 +227,35 @@ srv main "SELECT image/png|file:$tmp/fake.png"
 approve a 6 x >/dev/null
 sleep 2.5
 check "a PDF offered as PNG is not recorded" 1 "$(count "$tmp/a.out" '^I\|[0-9a-f]+\|image\|')"
+# SVG and TIFF bytes behind a PNG offer: the worker reads PNG only (no other image plugin is reached), nothing is recorded.
+printf '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64"/></svg>' >"$tmp/fake.svg"
+printf 'II*\000\010\000\000\000\000\000' >"$tmp/fake.tiff"
+for f in svg tiff; do
+  offers=$(count "$tmp/a.out" '^O\|')
+  srv main "SELECT image/png|file:$tmp/fake.$f"
+  approve a "$offers" x >/dev/null
+  sleep 1
+done
+check "SVG and TIFF offered as PNG are not recorded" 1 "$(count "$tmp/a.out" '^I\|[0-9a-f]+\|image\|')"
 offers=$(count "$tmp/a.out" '^O\|')
 srv main "SELECT image/gif|hex:47494638"
 sleep 0.3
 check "GIF is not offered" "$offers" "$(count "$tmp/a.out" '^O\|')"
 
 # --- 8. Locks: the compositor's lock (any locker), the shell's pause --------------------------------------------------------
+# A lock while an approved copy is being read: the read is dropped at once, and the copy is not recorded although its source
+# answers in full 0.8 s after the request (a read that ran on would end well within its 2 s deadline).
+items=$(count "$tmp/a.out" '^I\|')
+offers=$(count "$tmp/a.out" '^O\|')
+receives=$(count "$tmp/main.out" '^RECEIVE')
+srv main "SELECT text/plain;charset=utf-8|slow:800:hex:$(hex 'read across a lock')"
+approve a "$offers" x >/dev/null
+waitline_nth "$tmp/main.out" '^RECEIVE' $((receives + 1)) 3 >/dev/null || bad "the slow copy was not read"
 srv main LOCK
 check "the compositor's lock is reported" "L|1" "$(waitline "$tmp/a.out" '^L\|1' 3)"
 waitline "$tmp/main.out" '^DEVICE_GONE$' 3 >/dev/null && pass "no device while locked" || bad "device kept while locked"
+sleep 1.2
+check "a lock during a read: the copy is not recorded" "$items" "$(count "$tmp/a.out" '^I\|')"
 before_o=$(count "$tmp/a.out" '^O\|')
 before_r=$(count "$tmp/main.out" '^RECEIVE')
 srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'copied under the lock')"
@@ -276,6 +298,22 @@ hlp a C "$text_id" 1
 sleep 0.4
 last=$(grep -a '^SELECTION' "$tmp/main.out" | tail -1)
 [[ $last != *text/html* ]] && pass "Paste as Plain Text offers no HTML" || bad "plain only still offers HTML: $last"
+# A reader that stops reading never holds a writer: 200,000 bytes fill the pipe, and the helper closes its end after 2 s.
+offers=$(count "$tmp/a.out" '^O\|')
+srv main "SELECT text/plain;charset=utf-8|big:200000"
+approve a "$offers" x >/dev/null
+big=$(waitline "$tmp/a.out" '^I\|[0-9a-f]+\|text\|.*\|a{200}\|' 5) || bad "no 200,000-byte item"
+big_id=$(field "$big" 2)
+hlp a C "$big_id" 1
+waitline "$tmp/a.out" "^A\\|$big_id" 3 >/dev/null || bad "the large item is not on the clipboard"
+srv main "STALL text/plain;charset=utf-8"
+closed=$(waitline "$tmp/main.out" '^STALL_' 8)
+ms=${closed#STALL_CLOSED }
+if [[ $closed == STALL_CLOSED* ]] && ((ms >= 1500 && ms <= 4000)); then
+  pass "a writer whose reader stops reading is closed after 2 s ($ms ms)"
+else
+  bad "stalled writer: [$closed]"
+fi
 
 # --- 10. Search, pins, stores, clearing ------------------------------------------------------------------------------------
 hlp a Q 7 "hello"
@@ -293,8 +331,31 @@ grep -a -q "^X${US}$img_id" "$tmp/a.out" && pass "Clear History removes the rest
 [[ ! -e $thumb ]] && pass "the cleared image's thumbnail is gone" || bad "thumbnail left"
 stop_helper a
 [[ ! -e $tmp/run/clipboard ]] && pass "the runtime directory is removed at exit" || bad "runtime directory left"
+# A pinned image that the worker cannot turn into a thumbnail (here: bytes that are no PNG) is kept, shown without a thumbnail:
+# a worker's failure (late under load, failed to start) never deletes what the user kept.
+bad_id=00000000000badd0
+python3 -I - "$tmp/state/pinned" "$bad_id" <<'PY'
+import json, os, sys
+d, iid = sys.argv[1], sys.argv[2]
+data = b"\x89PNG\r\n\x1a\n" + b"no image here" * 8
+fd = os.open(os.path.join(d, iid + ".item"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+os.write(fd, b"GFCLIP1\n1\nimage/png\n" + str(len(data)).encode() + b"\n" + data)
+os.close(fd)
+path = os.path.join(d, "index.json")
+index = json.load(open(path))
+index["items"].append({"id": iid, "kind": "image", "mimes": ["image/png"], "size": len(data), "copiedAt": 1, "bootId": "",
+                       "bootAt": 0, "pinnedAt": 2, "title": "", "app": ""})
+fd = os.open(path, os.O_WRONLY | os.O_TRUNC)
+os.write(fd, json.dumps(index).encode())
+os.close(fd)
+PY
 start_helper c "$tmp/main.sock" --history-store 1
 waitline "$tmp/c.out" "^I\\|$text_id\\|" 5 >/dev/null && pass "the pin survives a restart" || bad "pin lost at restart"
+kept=$(waitline "$tmp/c.out" "^I\\|$bad_id\\|image\\|" 5) || bad "the pinned image whose worker failed is not shown"
+check "a pinned image whose worker fails is kept, without a thumbnail" "" "$(field "$kept" 12)"
+sleep 0.5
+check "...and never removed" "0 yes" "$(count "$tmp/c.out" "^X\\|$bad_id") $([[ -f $tmp/state/pinned/$bad_id.item ]] && echo yes || echo no)"
+grep -a -q "thumbnail failed: the item is kept" "$tmp/c.err" && pass "the failed thumbnail is logged by reason" || bad "no log for the failed thumbnail"
 hlp c R
 sleep 0.3
 srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'kept on disk')"
@@ -302,6 +363,37 @@ approve c 0 x >/dev/null
 waitline "$tmp/c.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|' 3 >/dev/null
 check "the opt-in history store is 0600" 600 "$(mode "$tmp/state/history/index.json")"
 stop_helper c
+# The one-shot clears the shell runs while the history is off: each deletes its own store only.
+cp -a "$tmp/state" "$tmp/state2"
+env -i PATH=/usr/bin:/bin "$helper" --clear-pinned --state "$tmp/state2" </dev/null >/dev/null 2>&1
+check "--clear-pinned: exit 0, the pinned store gone, the history store kept" "0 no yes" \
+  "$? $([[ -e $tmp/state2/pinned ]] && echo yes || echo no) $([[ -e $tmp/state2/history/index.json ]] && echo yes || echo no)"
+env -i PATH=/usr/bin:/bin "$helper" --clear-history --state "$tmp/state2" </dev/null >/dev/null 2>&1
+check "--clear-history: exit 0, the history store gone" "0 no" "$? $([[ -e $tmp/state2/history ]] && echo yes || echo no)"
+# Expiry at load: an item older than the retention, and one from another boot dated in the future, are deleted before anything
+# is shown (memory and disk).
+cp -a "$tmp/state" "$tmp/state3"
+cp -a "$tmp/state" "$tmp/state4"
+python3 -I - "$tmp/state4/history/index.json" <<'PY'
+import json, os, sys, time
+path = sys.argv[1]
+index = json.load(open(path))
+for it in index["items"]:
+    it["copiedAt"] = time.time() * 1000 + 86400000
+    it["bootId"] = "another-boot"
+fd = os.open(path, os.O_WRONLY | os.O_TRUNC)
+os.write(fd, json.dumps(index).encode())
+os.close(fd)
+PY
+sleep 1.1
+env -i PATH=/usr/bin:/bin "$helper" --display "$tmp/main.sock" --state "$tmp/state3" --runtime "$tmp/run/clipboard" \
+  --retention 1000 --history-store 1 </dev/null >"$tmp/expired.out" 2>/dev/null
+check "expiry at load: an item past the retention is never shown and its store is deleted (exit 0 at once)" "0 0 no" \
+  "$? $(count "$tmp/expired.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|') $([[ -e $tmp/state3/history ]] && echo yes || echo no)"
+env -i PATH=/usr/bin:/bin "$helper" --display "$tmp/main.sock" --state "$tmp/state4" --runtime "$tmp/run/clipboard" \
+  --history-store 1 </dev/null >"$tmp/future.out" 2>/dev/null
+check "expiry at load: an item of another boot dated in the future is deleted (exit 0 at once)" "0 0 no" \
+  "$? $(count "$tmp/future.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|') $([[ -e $tmp/state4/history ]] && echo yes || echo no)"
 start_helper d "$tmp/main.sock" --history-store 1
 waitline "$tmp/d.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|' 5 >/dev/null && pass "the history store is read back" || bad "history store not read"
 hlp d D 0

@@ -4,6 +4,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 
 #include <gtest/gtest.h>
@@ -217,5 +218,36 @@ TEST(DiskStore, DeleteAllTouchesOnlyItsFiles)
     }
     DiskStore(dir).deleteAll();
     EXPECT_FALSE(QFile::exists(dir + QStringLiteral("/index.json")));
+    EXPECT_TRUE(QFile::exists(dir + QStringLiteral("/notes.txt"))) << "a file that is not the store's is left";
+}
+
+TEST(DiskStore, FilesTheIndexDoesNotNameGoAtLoad)
+{
+    QTemporaryDir tmp;
+    QTemporaryDir outside;
+    const QString dir = tmp.path() + QStringLiteral("/history");
+    QList<Item> items{text("00000000000000a7", QStringLiteral("kept"), 1)};
+    ASSERT_TRUE(DiskStore(dir).save(items.first(), items));
+    auto leave = [](const QString &path) {
+        QFile f(path);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("left behind");
+        f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    };
+    leave(dir + QStringLiteral("/00000000000000a8.item")); // an expired item whose unlink a crash skipped (the index goes first)
+    leave(dir + QStringLiteral("/index.json.Xk3vQe"));     // the temporary of an interrupted write
+    leave(dir + QStringLiteral("/notes.txt"));             // not the store's
+    const QString target = outside.path() + QStringLiteral("/elsewhere");
+    leave(target);
+    ASSERT_TRUE(QFile::link(target, dir + QStringLiteral("/00000000000000a9.item")));
+    const DiskStore::Loaded loaded = DiskStore(dir).load();
+    ASSERT_EQ(loaded.status, DiskStore::Status::Loaded);
+    ASSERT_EQ(loaded.items.size(), 1);
+    EXPECT_EQ(loaded.orphans, 3);
+    EXPECT_FALSE(QFile::exists(dir + QStringLiteral("/00000000000000a8.item")));
+    EXPECT_FALSE(QFile::exists(dir + QStringLiteral("/index.json.Xk3vQe")));
+    EXPECT_FALSE(QFileInfo(dir + QStringLiteral("/00000000000000a9.item")).isSymLink());
+    EXPECT_TRUE(QFile::exists(target)) << "the link goes, never what it points to";
+    EXPECT_TRUE(QFile::exists(dir + QStringLiteral("/00000000000000a7.item")));
     EXPECT_TRUE(QFile::exists(dir + QStringLiteral("/notes.txt"))) << "a file that is not the store's is left";
 }

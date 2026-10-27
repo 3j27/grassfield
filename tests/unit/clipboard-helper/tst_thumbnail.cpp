@@ -4,8 +4,14 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QFile>
 #include <QImage>
 #include <QImageWriter>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QTimer>
 
 #include <gtest/gtest.h>
 
@@ -29,6 +35,44 @@ QByteArray encoded(int w, int h, const char *format)
     QImageWriter writer(&buffer, format);
     writer.write(image);
     return out;
+}
+
+// A stand-in worker: a bash script given to ThumbnailJob in place of the helper's binary.
+QString script(const QTemporaryDir &dir, const char *name, const QByteArray &body)
+{
+    const QString path = dir.path() + QLatin1Char('/') + QLatin1String(name);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly))
+        return {};
+    f.write("#!/usr/bin/bash\n" + body);
+    f.close();
+    f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    return path;
+}
+
+struct JobResult {
+    bool called = false;
+    QByteArray png;
+    qint64 ms = 0;
+};
+
+JobResult runJob(const QString &program, const QByteArray &image)
+{
+    JobResult r;
+    QEventLoop loop;
+    QElapsedTimer clock;
+    clock.start();
+    ThumbnailJob job(program, "png", 256, image, [&](const QByteArray &png) {
+        r.called = true;
+        r.png = png;
+        r.ms = clock.elapsed();
+        loop.quit();
+    });
+    QTimer::singleShot(10000, &loop, &QEventLoop::quit);
+    job.start();
+    if (!r.called)
+        loop.exec();
+    return r;
 }
 } // namespace
 
@@ -68,4 +112,62 @@ TEST(Thumbnail, SizeLimits)
     EXPECT_TRUE(Thumbnail::decode(encoded(ClipLogic::kMaxImageSide + 1, 2, "png"), "png", 256, &error).isNull());
     EXPECT_EQ(error, QByteArray("too large"));
     EXPECT_TRUE(Thumbnail::decode(QByteArray(), "png", 256, &error).isNull());
+}
+
+TEST(ThumbnailJob, AWorkerStillRunningAfterTwoSecondsIsKilled)
+{
+    app();
+    QTemporaryDir dir;
+    const QString sleep = QStandardPaths::findExecutable(QStringLiteral("sleep"));
+    ASSERT_FALSE(sleep.isEmpty());
+    const JobResult r = runJob(script(dir, "slow-worker", "exec " + QFile::encodeName(sleep) + " 30\n"), "x");
+    ASSERT_TRUE(r.called);
+    EXPECT_TRUE(r.png.isEmpty()) << "a late worker gives nothing";
+    EXPECT_GE(r.ms, Thumbnail::kDeadlineMs - 100);
+    EXPECT_LT(r.ms, Thumbnail::kDeadlineMs + 3000);
+}
+
+TEST(ThumbnailJob, TheWorkerGetsItsLimitsTheImageAndOnlyLcAll)
+{
+    app();
+    QTemporaryDir dir;
+    // Answers "ok" only when its arguments, rlimits, environment and stdin are the worker's; anything else is a failure.
+    const QString program = script(dir, "probe-worker",
+                                   QByteArray("[ \"$1 $2 $3\" = \"--thumbnail png 256\" ] || exit 2\n")
+                                       + "[ \"$(ulimit -v)\" = " + QByteArray::number(Thumbnail::kAddressSpace / 1024) + " ] || exit 3\n"
+                                       + "[ \"$(ulimit -t)\" = " + QByteArray::number(Thumbnail::kCpuSeconds) + " ] || exit 4\n"
+                                       + "[ \"$(ulimit -f)\" = 0 ] || exit 5\n"
+                                   "[ \"$LC_ALL\" = C ] || exit 6\n"
+                                   "for n in $(compgen -e); do case $n in LC_ALL|PWD|OLDPWD|SHLVL|_) ;; *) exit 7 ;; esac; done\n"
+                                   "IFS= read -r -d '' input\n"
+                                   "[ \"$input\" = image-bytes ] || exit 8\n"
+                                   "printf ok\n");
+    const JobResult r = runJob(program, "image-bytes");
+    ASSERT_TRUE(r.called);
+    EXPECT_EQ(r.png, QByteArray("ok"));
+}
+
+TEST(ThumbnailJob, AWorkerThatCannotStartGivesNothing)
+{
+    app();
+    const JobResult r = runJob(QStringLiteral("/nonexistent/grassfield-clipboard-helper"), "x");
+    ASSERT_TRUE(r.called);
+    EXPECT_TRUE(r.png.isEmpty());
+}
+
+TEST(ThumbnailJob, ADeletedJobReportsNothing)
+{
+    app();
+    QTemporaryDir dir;
+    const QString sleep = QStandardPaths::findExecutable(QStringLiteral("sleep"));
+    ASSERT_FALSE(sleep.isEmpty());
+    bool called = false;
+    auto *job = new ThumbnailJob(script(dir, "slow-worker", "exec " + QFile::encodeName(sleep) + " 30\n"), "png", 256, "x",
+                                 [&called](const QByteArray &) { called = true; });
+    job->start();
+    QElapsedTimer clock;
+    clock.start();
+    delete job; // the helper ending with a worker running (QUIT, stdin closed)
+    EXPECT_FALSE(called);
+    EXPECT_LT(clock.elapsed(), 2000) << "the worker is killed, not waited for";
 }
