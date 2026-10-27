@@ -13,7 +13,7 @@ fail=0
 bus_users=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 # Compiled bus clients (no script to read): named here.
-BINARY_BUS_UNITS="grassfield-menu-bridge.service grassfield-shell.service grassfield-secrets-handover.service"
+BINARY_BUS_UNITS="grassfield-menu-bridge.service grassfield-shell.service grassfield-secrets-handover.service grassfield-portal-settings.service"
 
 # hides_bus FILE: true when the unit hides /run/user (and so the session bus socket).
 hides_bus() {

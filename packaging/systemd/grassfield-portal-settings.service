@@ -1,0 +1,45 @@
+# The Settings portal backend of the Grassfield session (ADR-0035 D-4, D-8, step 2b): the appearance, the accent, Increase
+# Contrast and Reduce Motion of grassfield.json for GTK 3/4, libadwaita, Chromium, Electron, Firefox and Qt apps, and the
+# GTK theme GTK 3 reads with GTK_USE_PORTAL=1. Started by config/hypr/grassfield/autostart.lua before the shell, and by D-Bus
+# activation (org.freedesktop.impl.portal.desktop.grassfield_settings) when the frontend calls it while it is not running.
+[Unit]
+Description=Grassfield: the appearance for other toolkits (Settings portal backend)
+Documentation=file:///usr/share/doc/grassfield/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+# A backend that keeps failing stops after 5 starts in a minute; the frontend then answers from x-d-p-gtk alone, and a read
+# after that minute (D-Bus activation) or the next login starts it again.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.grassfield_settings
+ExecStart=/usr/lib/grassfield/grassfield-portal-settings
+Slice=session.slice
+# Live appearance changes stop with the process: back after 1 s (and at the frontend's next read, by D-Bus activation).
+Restart=on-failure
+RestartSec=1
+# D-4's start-up loop: a process with these could wait on the portal that waits on it. This one has no GUI at all.
+UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME
+# It only reads grassfield.json and answers on the session bus.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+UMask=0077
+# Its budget (ADR-0035 decision 2b-11): 4 MB private, 20 MB resident with the shared libraries, no idle CPU; the limit is far
+# above it.
+MemoryMax=64M
+TasksMax=8

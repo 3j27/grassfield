@@ -437,6 +437,7 @@
  {"path": "tests/integration/settings_dbus.sh", "layer": "headless", "runner": "test.sh"},
  {"path": "tests/integration/menu_bridge_memory.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/secrets_handover.sh", "layer": "headless", "runner": "test.sh"},
+ {"path": "tests/integration/portal_settings.sh", "layer": "headless", "runner": "test.sh"},
  {"path": "tests/integration/gtk_themes.sh", "layer": "headless", "runner": "test.sh"},
  {"path": "tests/integration/tray_host.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/software_update.sh", "layer": "logic", "runner": "bare"},
