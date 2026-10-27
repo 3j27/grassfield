@@ -1,6 +1,6 @@
 # ADR-0033: Software Update: a signed [grassfield] pacman repository in two channels, installed through Omarchy
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; no code in either repository before the opus PASS; owner
-answers to O1-O4 recorded 2026-10-27) · Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator
+answers to O1-O16 recorded 2026-10-27) · Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator
 (merge after the opus PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
@@ -158,12 +158,17 @@ Rejected: an alpm hook re-adding the line (Grassfield code as root in every tran
 5. **Revocation** (P13): a keyring listing a key in `grassfield-revoked` disables it ("Disabled 1 key"), after which a
    database signed by it is refused ("key … is disabled", "database 'grassfield' is not valid"). The channel stops, fail
    closed, until a database signed by a trusted key is served. If the only signing key is compromised, its revocation cannot
-   be signed by a key users trust: they must act by hand. Hence owner decision O6: a second, offline key in
-   `grassfield-trusted` from the first release.
+   be signed by a key users trust: they must act by hand (`sudo pacman-key --edit-key <fingerprint>` → `disable`, or
+   `pacman-key --delete`, published by the owner with the incident). **Accepted by the owner (O6: one key)**, rather than a
+   second offline key trusted from the first release.
 6. **What the key can do.** Packages run install scripts as root and `omarchy update` runs `pacman --noconfirm`, which
    accepts package replacements. The key is therefore root on every machine. The channel holds only packages named
-   `grassfield-*` and none with `replaces=`; grassfield-packages' CI refuses anything else. The master key stays offline;
-   only a signing subkey reaches CI, in a protected environment (O6).
+   `grassfield-*` and none with `replaces=`; grassfield-packages' CI refuses anything else.
+7. **Where the key lives (O6, owner 2026-10-27: one key in CI).** The owner's one signing key is a secret
+   (`GRASSFIELD_SIGNING_KEY`, plus `GRASSFIELD_SIGNING_PASSPHRASE` if it has one) of a GitHub environment of
+   grassfield-packages. That environment is protected: only the signing and publishing jobs use it, never on a
+   `pull_request`, and the owner approves its runs. Builds and tests never see it; they sign with throwaway keys. The
+   environment and the secret are created by the owner, after M5.
 
 ### c. Changing the channel: a helper behind Grassfield's own polkit action (owner decision O1, 2026-10-27)
 Writing `/etc/pacman.d/*` and `/etc/pacman.conf` needs root, and no system service owns those files, so there is no service
@@ -270,13 +275,13 @@ generic programs would authorise any argument.
   `1.1.0beta9 < 1.1.0beta10`; `1.0.0rc1-3 < 1.0.0-1`; `1.1.0beta1-1 > 1.0.1-1`; `1.1.0-1 > 1.1.0beta1-5`. A dot before the
   suffix is refused: `1.1.0.beta1` sorts after `1.1.0` (P1: `vercmp 1.1.0.beta1 1.1.0` = 1), so such a beta would never be
   replaced by its stable release. `alpha` sorts before `beta` and is not used.
-- A version with a suffix goes to **beta** only (1.0.0-rc1 today is a beta-channel build). A plain version goes to
+- A version with a suffix goes to **beta** only (owner decision O15; 1.0.0-rc1 today is a beta-channel build). A plain version goes to
   **stable**, and to beta when vercmp says it is newer than beta's: `repo-add --prevent-downgrade` (P4: "A newer version for
   'grassfield-desktop' is already present in database", "No changes made").
 - **pkgrel (owner decision O7).** A rebuild of the same VERSION (a new Hyprland, below) takes pkgrel + 1; a new VERSION starts
-  at 1. Recommended: the PKGBUILD reads `GRASSFIELD_PKGREL` (digits only, `^[1-9][0-9]*$`) when it is set and keeps its
-  committed pkgrel otherwise. That is a one-line change in step 1, still one build definition; grassfield-packages computes
-  the value from the channel. Alternative: a Grassfield commit and tag for every rebuild.
+  at 1. The PKGBUILD reads `GRASSFIELD_PKGREL` (digits only, `^[1-9][0-9]*$`) when it is set and keeps its committed pkgrel
+  otherwise. That is a one-line change in step 1, still one build definition; grassfield-packages computes the value from
+  the channel. Not chosen: a Grassfield commit and tag for every rebuild.
 
 ### f. The compositor plugin and Omarchy's Hyprland
 - The build container has **an Omarchy stable machine's package set**: Omarchy's stable template shape (`core`, `extra`,
@@ -304,23 +309,28 @@ generic programs would authorise any argument.
 | Notes source | user-facing text in this repository at the tag: `packaging/release-notes/<VERSION>.en.txt` and `.fr.txt` (CHANGELOG.md is the technical history). A pkgrel rebuild gets a fixed "Rebuilt for Hyprland X.Y.Z" / « Reconstruit pour Hyprland X.Y.Z » from grassfield-packages. |
 | Trust anchor | the fingerprint and public key pinned in `repository.conf` (b.3) are in `grassfield-keyring`'s trusted list; CI checks it |
 | Build input | a tag (or, for tests, a commit) of grassfield; `VERSION` decides the channel (e); `makepkg` of `packaging/arch/PKGBUILD` unchanged except `GRASSFIELD_PKGREL` (O7) |
-| Source access | the repositories are private: grassfield-packages' CI reads grassfield with a read-only deploy key or a fine-grained token (contents: read, grassfield only), both provided later by the owner. Until then the build is tested in a container with both checkouts present. |
-| Triggers | `workflow_dispatch` with a `ref` input now. Later, a tag of grassfield via `repository_dispatch` (needs a token in grassfield, owner) or a scheduled tag poll. Publishing is written and disabled. |
+| Source access | the repositories are private. grassfield-packages' CI reads grassfield with a read-only **deploy key** on grassfield (owner decision; secret `GRASSFIELD_DEPLOY_KEY`, provided later by the owner). Until then the build is tested in a container with both checkouts present. |
+| Triggers | (owner decision) a **scheduled poll of grassfield's tags every 15 minutes** (`cron: '*/15 * * * *'`; GitHub may start scheduled runs late), using the deploy key and running only when it exists. A tag is built once: the poll skips a tag whose channel artifact (named after the tag) already exists. `workflow_dispatch` with a `ref` (tag or commit) stays for manual runs and tests. No token is needed in grassfield. Publishing is written and disabled. |
+| Secrets and variables the owner provides later | `GRASSFIELD_DEPLOY_KEY` (read grassfield); `GRASSFIELD_SIGNING_KEY` and its passphrase (b.7, protected environment); `GRASSFIELD_S3_ACCESS_KEY_ID` and `GRASSFIELD_S3_SECRET_ACCESS_KEY` (write access to the bucket only, h). Variables, not secrets: the bucket name and the S3 endpoint. In grassfield: the signing key's public part and fingerprint (b.3) and `GRASSFIELD_REPO_BASE`. None is created by the agent. |
 
-### h. Hosting later (after the legal review; owner decision O8)
-Every option serves the same tree; enabling one changes `GRASSFIELD_REPO_BASE` and nothing else in code. The owner also
-creates the host and provides its credential, and the publishing job runs only when the built tag's base is not the
-`.invalid` placeholder.
-1. **GitHub Pages** of a public repository (recommended): a static tree exactly as above, deployed atomically from a CI
-   artifact (no moment with a new database and missing packages), no tag or release object, and no stored secret in the same
-   repository (the job's own token with `pages: write`). Limits: 1 GB per site (one current version per channel fits), about
-   100 GB a month of bandwidth (soft).
-2. **GitHub Releases** of a public repository (`Server = https://github.com/<org>/<repo>/releases/download/<channel>-$arch`,
-   the `[arch-mact2]` pattern Omarchy itself installs): needs a moving tag per channel, flat file names, and replacing assets
-   one by one (not atomic: upload packages before the database).
-3. **GitLab Pages** or GitLab's generic package registry: the same as 1 or 2 on another account.
-4. **Own domain** (static host or object storage plus CDN, as `pkgs.omarchy.org`): most control, a cost and an account.
-All of them need either a public repository or a public bucket, so all wait for the legal review.
+### h. Hosting later: own domain on S3-compatible storage behind a CDN (owner decision O8; activated after the legal review)
+- The tree of g is served from a bucket of S3-compatible object storage (Cloudflare R2, AWS S3 or an equivalent), behind a CDN
+  and a host name of the owner's (as `pkgs.omarchy.org` is Omarchy's). The host name is decided later. Until then
+  `GRASSFIELD_REPO_BASE` stays `https://packages.grassfield.invalid`.
+- Enabling it changes `GRASSFIELD_REPO_BASE` and nothing else in code. The owner also creates the bucket, the CDN and the
+  host name, and provides the bucket's credentials (g). The publishing job runs only when the built tag's base is not the
+  `.invalid` placeholder and the credentials exist.
+- Order of an upload, so a client never sees a database that names missing files:
+  1. packages and their signatures;
+  2. the notes and their signature;
+  3. `grassfield.files` and its signature;
+  4. `grassfield.db` and its signature, last.
+  Files that the new database no longer names are deleted one cycle later, so a client that just synced can still download
+  them.
+- The CDN must not cache the databases and notes longer than the poll interval, or must be purged after an upload. The
+  package files never change under the same name, so they can be cached for good.
+- Considered and not chosen: GitHub Pages (atomic deploys, but a public repository and a 1 GB site); GitHub Releases (a
+  moving tag per channel, uploads not atomic); GitLab (the same on another account).
 
 ### i. After an update
 - Logging out is needed and enough for a Grassfield update: Hyprland keeps the loaded plugin for the session, and the shell
@@ -342,19 +352,25 @@ tests and captures), `GRASSFIELD_UPDATE_CHECK_CMD` (the repository's checker), `
 stand-in for the terminal launcher), `GRASSFIELD_UPDATE_PKEXEC` (a recording stand-in for `pkexec`, as ADR-0028's
 `FILES_PKEXEC`).
 
-## Owner decisions
-| Id | Question | Options | Answer |
-|---|---|---|---|
-| O1 | Channel change (c) | A: `grassfield-channel-set` in Omarchy's terminal with sudo · B: a pkexec helper and a polkit policy | **B** (owner, 2026-10-27) |
-| O2 | After switching to beta | switch only, the pane offers the beta · switch then `omarchy-update -y` (Omarchy) | **switch only** (owner, 2026-10-27) |
-| O3 | What raises the badge, menu count and banner | Grassfield and Omarchy releases · Grassfield only · every package | **Grassfield and Omarchy** (owner, 2026-10-27) |
-| O4 | Grassfield writes a link in `~/.config/omarchy/hooks/pre-refresh-pacman.d/` | yes (a.4) · no, detection and "Repair…" only | **yes**, by `grassfield-channel-set` (owner, 2026-10-27) |
-| O5 | Sign the database and the notes | both · packages only (Omarchy's level) | open; recommended: both |
-| O6 | Keys | offline master plus a CI signing subkey in a protected environment, and a second offline key trusted from day one · the owner signs every channel by hand | open; recommended: the first |
-| O7 | pkgrel of a rebuild | `GRASSFIELD_PKGREL` read by the PKGBUILD · a commit and tag per rebuild | open; recommended: `GRASSFIELD_PKGREL` |
-| O8 | Hosting, after the legal review | Pages · Releases · GitLab · own domain | open; recommended: Pages |
-| O9 | Release notes source | `packaging/release-notes/<VERSION>.{en,fr}.txt` · CHANGELOG.md sections | open; recommended: the text files |
-| O10 | master-prompt §4/M6 | the repository's build and contract now, publication after M5 (this ADR) · wait for M6 | open; recommended: now, unpublished |
+## Owner decisions (all answered 2026-10-27)
+| Id | Question | Answer |
+|---|---|---|
+| O1 | Channel change (c) | **B**: a pkexec helper behind Grassfield's own polkit action (A, sudo in Omarchy's terminal, was recommended) |
+| O2 | After switching to beta | **switch only**; the pane offers the beta |
+| O3 | What raises the badge, menu count and banner | **Grassfield and Omarchy releases** |
+| O4 | A link in `~/.config/omarchy/hooks/pre-refresh-pacman.d/` | **yes**, made by `grassfield-channel-set` |
+| O5 | What is signed besides the packages | **the database and the notes** |
+| O6 | Keys | **one key, in CI** (b.7). A second offline key was recommended; a compromise then needs users to act by hand (b.5) |
+| O7 | pkgrel of a rebuild | **`GRASSFIELD_PKGREL`** read by the PKGBUILD |
+| O8 | Hosting, after the legal review | **own domain, S3-compatible storage behind a CDN** (h); host name decided later |
+| O9 | Release notes source | **`packaging/release-notes/<VERSION>.{en,fr}.txt`** |
+| O10 | master-prompt §4/M6 | **build and contract now, publication after M5**: this ADR amends §4's "repository before M6" for the build only |
+| O11 | Public key and fingerprint | **later**; empty until then, tests use throwaway keys, "Set Up…" hidden |
+| O12 | `grassfield-desktop` depends on `grassfield-keyring` | **always** (Omarchy's model); a local `makepkg -si` installs the keyring first |
+| O13 | CI access to grassfield's sources | **read-only deploy key** |
+| O14 | Build trigger | **scheduled poll of grassfield's tags every 15 minutes**, plus manual runs |
+| O15 | rc versions | **beta channel** (every suffixed VERSION) |
+| O16 | After the opus PASS | the agent watches this PR and opens step 1's two PRs without waiting |
 
 ## Evidence
 `docs/audits/software-update-2026-10-27/adr0033-probes.sh` (P0–P13), output in `probes-output.txt` (docker exit 0). The
@@ -380,7 +396,8 @@ the v4.0.4 tree; server facts were taken with curl on 2026-10-27.
   - the writes are atomic, and the Include line is never present without its file;
   - Settings' calls are tested on the recording pkexec stand-in.
   The real polkit dialog is an owner check in the real session (L2): cancel once, a wrong password once, then accept.
-- The keys, hosting, source access and the publishing switch remain the owner's; nothing in this ADR publishes anything.
+- The key, the bucket and host name, the deploy key and the publishing switch remain the owner's (g, "Secrets and
+  variables"). Nothing in this ADR publishes anything.
 - Known limits are listed in `docs/specs/updates.md`. Among them: Omarchy's own channel change (`-Syyuu`) and
   `omarchy-reinstall-pkgs` (`-Suu`) move a Grassfield beta back to the stable version (P11: "downgrading from version
   1.2.0beta1-1 to version 1.1.0-1"); an old but validly signed database can be replayed (pacman has no expiry); a

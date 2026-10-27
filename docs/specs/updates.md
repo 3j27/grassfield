@@ -1,6 +1,6 @@
 # Software Update spec · platform-engineer (client, channel), shell-engineer (pane, badge, menu, banner) · owner brief 2026-10-27
-Status: step 0 (this spec and ADR-0033), awaiting the opus review; owner answers O1-O4 of 2026-10-27 included (channel
-change through polkit, switch only, badge for Grassfield and Omarchy, the hook link). Nothing is built yet. Step 1 builds the checker, the channel
+Status: step 0 (this spec and ADR-0033), awaiting the opus review; every owner decision of 2026-10-27 (ADR-0033 O1-O16)
+is included. Nothing is built yet. Step 1 builds the checker, the channel
 command, the persistence and the container test. Step 2 builds the pane, the badge, the menu count and the notification,
 after the Settings PRs (#6, #8, #9, #10) merge.
 Decisions and evidence: `docs/decisions/ADR-0033-software-update.md` (the contract with grassfieldhq/grassfield-packages,
@@ -201,6 +201,8 @@ itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-co
 - "Update Now" updates the whole system (Omarchy's update), not Grassfield alone.
 - The update runs in Omarchy's terminal; the pane shows no progress.
 - A host can replay an old, validly signed database and hold back updates; pacman has no database expiry.
+- One signing key (owner decision O6): if it is ever compromised, a signed revocation cannot reach users; each machine must
+  disable the key by hand, with the command the owner publishes (ADR-0033 b.5).
 - Omarchy can ship a new Hyprland before the matching plugin is published: the session runs degraded (ADR-0009) until then.
 - The channel is per machine. Another user's Omarchy channel change, without their own hook, puts this machine in `repair`
   until someone runs "Repair…".
