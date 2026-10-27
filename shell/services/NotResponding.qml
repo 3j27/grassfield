@@ -14,7 +14,7 @@ import "NotResponding.js" as Logic
 Singleton {
     id: root
 
-    // {standin, pid, cls, title}: one per stand-in that waits.
+    // {standin, pid, cls, title}: one per stand-in that waits (a process may have several).
     property var marks: []
     // The compositor this shell belongs to: a report from another (a nested session's stand-in) is refused.
     readonly property string ownInstance: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? ""
@@ -64,15 +64,18 @@ Singleton {
         target: "anr"
 
         // The stand-in's report (security.md "IPC surface": an action of packaging/session-bin/hyprland-dialog). It only
-        // marks an app in the UI; nothing is killed without the user's Force Quit and its confirmation. "ok" or
-        // "refused: <reason>" (the stand-in then runs the stock dialog).
+        // marks an app in the UI; nothing is killed without the user's Force Quit and its confirmation. "ok" or "refused"
+        // (the stand-in then runs the stock dialog); the reason goes to the journal only, never to the caller (it would
+        // tell whether another process has a window of that class and title).
         function report(standin: int, pid: int, cls: string, title: string, instance: string): string {
             const c = Logic.unprefix(cls, "c:");
             const t = Logic.unprefix(title, "t:");
             const i = Logic.unprefix(instance, "i:");
             const d = Logic.decide(standin, pid, c, t, i, root.ownInstance, Compositor.knownWindows());
-            if (!d.ok)
-                return "refused: " + d.reason;
+            if (!d.ok) {
+                console.info("grassfield: not-responding report refused: " + d.reason);
+                return "refused";
+            }
             root.marks = Logic.withMark(root.marks, {
                 standin: standin,
                 pid: pid,

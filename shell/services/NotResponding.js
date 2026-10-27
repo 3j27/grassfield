@@ -33,10 +33,10 @@ function decide(standin, pid, cls, title, instance, ownInstance, windows) {
     return {ok: true, reason: ""};
 }
 
-// The marks with this one added: one per stand-in, and one per process (Hyprland runs one dialog per client: a new
-// report for a pid replaces the old one).
+// The marks with this one added: one per stand-in. A process can have several (Hyprland runs one dialog per XWayland
+// surface, ANRManager.cpp:155-158); it is marked while any of them lives.
 function withMark(marks, mark) {
-    return (marks || []).filter(m => m.standin !== mark.standin && m.pid !== mark.pid).concat([mark]);
+    return (marks || []).filter(m => m.standin !== mark.standin).concat([mark]);
 }
 
 function withoutStandin(marks, standin) {

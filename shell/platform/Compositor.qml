@@ -107,7 +107,8 @@ Singleton {
         return data && data.pid ? data.pid : 0;
     }
 
-    // The windows Hyprland reported, as {pid (0 until its list was read for that window), cls, title} (NotResponding).
+    // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
+    // from its events)} (NotResponding).
     function knownWindows(): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         return all.map(t => {
@@ -115,7 +116,7 @@ Singleton {
             return {
                 pid: d && d.pid ? d.pid : 0,
                 cls: d && d.class ? d.class : "",
-                title: d && d.title !== undefined ? d.title : t.title
+                title: t.title ?? ""
             };
         });
     }

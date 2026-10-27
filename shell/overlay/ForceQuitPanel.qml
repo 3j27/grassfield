@@ -20,6 +20,22 @@ Dialog {
         return top && top.lastIpcObject && top.lastIpcObject.class ? top.lastIpcObject.class : "";
     }
 
+    // The row the panel selects: the first app that does not respond, else the first (NotResponding.initialIndex). It is
+    // applied until the user moves the selection, and only ever moves it onto an app that does not respond: a mark that
+    // clears never moves the selection away from the app the user was shown (Return would then target another app).
+    readonly property int preferred: NotResponding.initialIndex(windows.map(t => Compositor.pidOf(t)))
+    property bool userMoved: false
+
+    function applyPreferred(): void {
+        if (userMoved || preferred < 0 || preferred >= windows.length)
+            return;
+        if (list.currentIndex < 0 || list.currentIndex >= windows.length || NotResponding.isMarked(Compositor.pidOf(windows[preferred])))
+            list.currentIndex = preferred;
+    }
+
+    onPreferredChanged: applyPreferred()
+    onWindowsChanged: applyPreferred()
+
     title: qsTr("Force Quit Applications")
     message: qsTr("If an app is not responding, select it and choose Force Quit.")
     sheet: true
@@ -35,7 +51,10 @@ Dialog {
     onRejected: Popups.close()
 
     // Windows opened after the shell started have no pid until Hyprland's list is refreshed.
-    Component.onCompleted: Compositor.refreshToplevels()
+    Component.onCompleted: {
+        Compositor.refreshToplevels();
+        applyPreferred();
+    }
 
     content: [
         Rectangle {
@@ -54,10 +73,15 @@ Dialog {
                 focus: true
                 activeFocusOnTab: true
                 model: root.windows
-                currentIndex: NotResponding.initialIndex(root.windows.map(t => Compositor.pidOf(t)))
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Open applications")
                 Keys.onReturnPressed: root.ask()
+                // Before ListView's own navigation: the user moved the selection.
+                Keys.onPressed: event => {
+                    if ([Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown].indexOf(event.key) >= 0)
+                        root.userMoved = true;
+                    event.accepted = false;
+                }
 
                 delegate: Item {
                     id: row
@@ -111,6 +135,7 @@ Dialog {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
+                            root.userMoved = true;
                             list.currentIndex = row.index;
                             list.forceActiveFocus();
                         }

@@ -64,22 +64,23 @@ TestCase {
         compare(Logic.decide(77, 4242, "foot", "~", "", "", windows).reason, "instance");
     }
 
-    function test_oneMarkPerStandinAndPerProcess() {
+    function test_oneMarkPerStandin() {
         let marks = Logic.withMark([], {standin: 77, pid: 4242, cls: "foot", title: "~"});
         marks = Logic.withMark(marks, {standin: 78, pid: 5000, cls: "firefox", title: "Mozilla Firefox"});
         compare(marks.length, 2);
-        // Hyprland runs one dialog per client: a new report for that pid replaces the old one.
-        marks = Logic.withMark(marks, {standin: 90, pid: 4242, cls: "foot", title: "~"});
-        compare(marks.length, 2);
-        compare(marks.filter(m => m.pid === 4242)[0].standin, 90);
-        // A stand-in that reports again (a reused pid) carries one mark only.
-        marks = Logic.withMark(marks, {standin: 78, pid: 6000, cls: "gimp", title: "GIMP"});
-        compare(marks.length, 2);
-        verify(!Logic.isMarked(marks, 5000));
-        verify(Logic.isMarked(marks, 6000));
+        // Hyprland runs one dialog per XWayland surface: a second stand-in for the same process adds a mark.
+        marks = Logic.withMark(marks, {standin: 90, pid: 4242, cls: "foot", title: "other"});
+        compare(marks.length, 3);
+        // The process stays marked while any of its stand-ins lives.
+        marks = Logic.withoutStandin(marks, 77);
+        verify(Logic.isMarked(marks, 4242));
         marks = Logic.withoutStandin(marks, 90);
         verify(!Logic.isMarked(marks, 4242));
+        // A stand-in that reports again carries one mark only.
+        marks = Logic.withMark(marks, {standin: 78, pid: 6000, cls: "gimp", title: "GIMP"});
         compare(marks.length, 1);
+        verify(!Logic.isMarked(marks, 5000));
+        verify(Logic.isMarked(marks, 6000));
     }
 
     function test_marksDriveForceQuitAndTheDockMenu() {
