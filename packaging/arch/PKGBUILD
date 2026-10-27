@@ -152,7 +152,10 @@ package_grassfield-desktop() {
   # as omarchy declares them. grassfield-keyring (O12) is held back until grassfieldhq/grassfield-packages builds it (owner
   # decision O21, 2026-10-27): a follow-up adds it here, so that a local `makepkg -si` never asks for a package that does
   # not exist yet.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot)
+  # gnome-keyring is the session's only Secret Service (ADR-0035 D-12, Q17-b: packaging/xdg-config/kwalletrc keeps KWallet's
+  # ksecretd off org.freedesktop.secrets), so libsecret clients such as Chromium keep a keychain instead of plain-text storage:
+  # declared, not assumed to come with Omarchy.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard pacman-contrib fakeroot gnome-keyring)
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
   license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
@@ -271,11 +274,13 @@ package_grassfield-desktop() {
 
   # The session icon theme grassfield-icons (ADR-0017) is its own package (a dependency): it also carries Grassfield's own
   # generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
-  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
+  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile, the fontconfig file and
+  # the session's kwalletrc (read through XDG_CONFIG_DIRS; ADR-0035 Q17-b).
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
   install -Dm644 "$root/packaging/dconf/profile-local" "$pkgdir/usr/share/grassfield/dconf/profile-local"
   install -Dm644 "$root/packaging/fontconfig/fonts.conf" "$pkgdir/usr/share/grassfield/fontconfig/fonts.conf"
+  install -Dm644 "$root/packaging/xdg-config/kwalletrc" "$pkgdir/usr/share/grassfield/xdg-config/kwalletrc"
   dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
   install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
 
