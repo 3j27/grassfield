@@ -1,0 +1,330 @@
+#!/bin/bash
+# grassfield-clipboard-helper (ADR-0034) as a process, against tests/fixtures/fake-clipboard-server: never the owner's clipboard or
+# session. Every helper runs under `env -i` with a mktemp -d runtime directory, and is given the fake server's socket as --display
+# (a path inside that directory, checked here). Prints PASS or FAIL lines; exits 1 on any FAIL; SKIPs where Unix sockets cannot be
+# created (a sandbox). Builds the helper and the fake server with apps/clipboard-helper/build-direct.sh.
+set -uo pipefail
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+build=$root/.dev/build
+helper=${GRASSFIELD_CLIPBOARD_HELPER_TEST_BIN:-$build/grassfield-clipboard-helper}
+server=$build/fake-clipboard-server
+"$root/apps/clipboard-helper/build-direct.sh" >/dev/null 2>&1 || { echo "FAIL clipboard_helper: the helper does not build"; exit 1; }
+"$root/apps/clipboard-helper/build-direct.sh" --fake-server >/dev/null 2>&1 || { echo "FAIL clipboard_helper: the fake server does not build"; exit 1; }
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/gf-clip.XXXXXX")
+if ! python3 -I -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$tmp/probe" 2>/dev/null; then
+  echo "SKIP clipboard_helper: Unix sockets cannot be created here"
+  rm -rf "$tmp"
+  exit 0
+fi
+rm -f "$tmp/probe"
+umask 022 # the helper must make its files 0600 whatever umask it inherits
+fail=0
+pids=()
+cleanup() {
+  local p
+  for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
+  wait 2>/dev/null
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+pass() { echo "PASS clipboard_helper: $1"; }
+bad() { echo "FAIL clipboard_helper: $1"; fail=1; }
+check() { # <what> <want> <got>
+  if [[ $2 == "$3" ]]; then pass "$1"; else bad "$1: wanted [$2], got [$3]"; fi
+}
+US=$'\037'
+
+# start_server <name> [args...]: fd for commands in srv_<name>, output in $tmp/<name>.out
+start_server() {
+  local name=$1
+  shift
+  mkfifo "$tmp/$name.in"
+  env -i PATH=/usr/bin:/bin "$server" --socket "$tmp/$name.sock" "$@" <"$tmp/$name.in" >"$tmp/$name.out" 2>"$tmp/$name.err" &
+  pids+=($!)
+  exec {fd}>"$tmp/$name.in"
+  printf -v "srv_$name" '%s' "$fd"
+  waitline "$tmp/$name.out" '^READY$' 5 >/dev/null
+}
+srv() { # <name> <command line>
+  local v="srv_$1"
+  printf '%s\n' "$2" >&"${!v}"
+}
+# start_helper <name> <display socket> [args...]: commands through hlp_<name>, output $tmp/<name>.out, log $tmp/<name>.err
+start_helper() {
+  local name=$1 display=$2
+  shift 2
+  mkfifo "$tmp/$name.in"
+  env -i PATH=/usr/bin:/bin "$helper" --display "$display" --state "$tmp/state" --runtime "$tmp/run/clipboard" "$@" \
+    <"$tmp/$name.in" >"$tmp/$name.out" 2>"$tmp/$name.err" &
+  pids+=($!)
+  printf -v "pid_$name" '%s' "$!"
+  exec {fd}>"$tmp/$name.in"
+  printf -v "hlp_$name" '%s' "$fd"
+}
+hlp() { # <name> <field>...: one line, fields joined by US
+  local v="hlp_$1"
+  shift
+  local IFS=$US
+  printf '%s\n' "$*" >&"${!v}"
+}
+stop_helper() {
+  local v="hlp_$1" p="pid_$1"
+  hlp "$1" QUIT
+  local f=${!v}
+  exec {f}>&-
+  wait "${!p}" 2>/dev/null
+}
+# waitline <file> <regex> <seconds>: prints the first matching line (US shown as |), returns 1 when none came
+waitline() {
+  local file=$1 re=$2 limit=$3 i line
+  for ((i = 0; i < limit * 50; i++)); do
+    line=$(tr "$US" '|' <"$file" 2>/dev/null | grep -a -m1 -E -- "$re") && { echo "$line"; return 0; }
+    sleep 0.02
+  done
+  return 1
+}
+count() { tr "$US" '|' <"$1" 2>/dev/null | grep -a -c -E -- "$2"; }
+field() { # <line with |> <n>
+  awk -F'|' -v n="$2" '{ print $n }' <<<"$1"
+}
+hex() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n'; }
+
+# answers the next offer of helper <name> with Y; prints the item line
+approve() { # <helper> <offers seen before> <app>
+  local name=$1 before=$2 o seq
+  o=$(waitline_nth "$tmp/$name.out" '^O\|' $((before + 1)) 5) || return 1
+  seq=$(field "$o" 2)
+  hlp "$name" Y "$seq" "$3"
+}
+waitline_nth() { # <file> <regex> <n> <seconds>: the n-th matching line
+  local file=$1 re=$2 n=$3 limit=$4 i line
+  for ((i = 0; i < limit * 50; i++)); do
+    line=$(tr "$US" '|' <"$file" 2>/dev/null | grep -a -E -- "$re" | sed -n "${n}p")
+    [[ -n $line ]] && { echo "$line"; return 0; }
+    sleep 0.02
+  done
+  return 1
+}
+mode() { stat -c '%a' "$1" 2>/dev/null; }
+
+# --- 1. The display: only --display, an absolute path to this user's socket ---------------------------------------------------
+start_server main
+start_server decoy
+env -i PATH=/usr/bin "$helper" --state "$tmp/state" --runtime "$tmp/run/clipboard" </dev/null >/dev/null 2>&1
+check "refused without --display (no default display)" 2 $?
+env -i PATH=/usr/bin "$helper" --display main.sock --state "$tmp/state" --runtime "$tmp/run/clipboard" </dev/null >/dev/null 2>&1
+check "refused with a relative display" 2 $?
+: >"$tmp/not-a-socket"
+out=$(env -i PATH=/usr/bin "$helper" --display "$tmp/not-a-socket" --state "$tmp/state" --runtime "$tmp/run/clipboard" </dev/null 2>/dev/null)
+rc=$?
+check "refused with a path that is not a socket" "1 S|error" "$rc $(tr "$US" '|' <<<"$out" | cut -d'|' -f1-2)"
+# A decoy WAYLAND_SOCKET (a descriptor connected to a second server) and a decoy WAYLAND_DISPLAY: the helper must use neither.
+mkfifo "$tmp/decoyhelper.in"
+python3 -I -c '
+import os, socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sys.argv[1])
+fd = s.detach()
+os.set_inheritable(fd, True)
+env = {"PATH": "/usr/bin:/bin", "WAYLAND_SOCKET": str(fd), "WAYLAND_DISPLAY": sys.argv[1]}
+os.execve(sys.argv[2], [sys.argv[2]] + sys.argv[3:], env)' "$tmp/decoy.sock" "$helper" --display "$tmp/main.sock" --state "$tmp/state" \
+  --runtime "$tmp/run/clipboard" <"$tmp/decoyhelper.in" >"$tmp/decoyhelper.out" 2>"$tmp/decoyhelper.err" &
+decoy_pid=$!
+pids+=("$decoy_pid")
+exec {decoy_fd}>"$tmp/decoyhelper.in"
+waitline "$tmp/decoyhelper.out" '^S\|ok' 5 >/dev/null
+check "the helper talked to the --display server" 1 "$(count "$tmp/main.out" '^BIND data-control$')"
+sleep 0.3
+check "the decoy WAYLAND_SOCKET server was never used (no global bound)" 0 "$(count "$tmp/decoy.out" '^BIND')"
+case "$tmp/main.sock" in "$tmp"/*) pass "the --display socket lies in the test's own directory" ;; *) bad "socket outside the test directory" ;; esac
+printf 'QUIT\n' >&"$decoy_fd"
+exec {decoy_fd}>&-
+wait "$decoy_pid" 2>/dev/null
+
+# --- 2. Paused until the shell resumes; the first selection after a (re)start is never recorded --------------------------------
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'before the start')"
+start_helper a "$tmp/main.sock" --retention 600000
+waitline "$tmp/a.out" '^S\|ok' 5 >/dev/null || bad "the helper did not start"
+check "lock state reported at start" "L|0" "$(waitline "$tmp/a.out" '^L\|' 2)"
+sleep 0.3
+check "no data-control device before the shell resumes" 0 "$(count "$tmp/main.out" '^DEVICE$')"
+hlp a R
+waitline_nth "$tmp/main.out" '^DEVICE$' 1 5 >/dev/null || bad "no device after resume"
+sleep 0.3
+check "the selection present at the start is not offered" 0 "$(count "$tmp/a.out" '^O\|')"
+check "...and its data never requested" 0 "$(count "$tmp/main.out" '^RECEIVE')"
+
+# --- 3. A copy: offered, read only after Y, recorded with its formatted part ----------------------------------------------------
+canary="canary-$RANDOM-$RANDOM-text"
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex "Hello $canary") text/html|hex:$(hex "<b>Hello $canary</b>")"
+o=$(waitline "$tmp/a.out" '^O\|' 5) || bad "no offer"
+check "the offer says its kind" text "$(field "$o" 3)"
+sleep 0.3
+check "nothing read before the shell's answer" 0 "$(count "$tmp/main.out" '^RECEIVE')"
+hlp a Y "$(field "$o" 2)" org.example.Editor
+item=$(waitline "$tmp/a.out" '^I\|' 5) || bad "no item"
+text_id=$(field "$item" 2)
+check "the item's title" "Hello $canary" "$(field "$item" 10)"
+check "the item keeps its HTML (formatted)" "1 text/plain,text/html" "$(field "$item" 8) $(field "$item" 4)"
+check "the item's source app" org.example.Editor "$(field "$item" 13)"
+
+# --- 4. N: the copy is never read -------------------------------------------------------------------------------------------
+before=$(count "$tmp/main.out" '^RECEIVE')
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'refused by the shell')"
+o=$(waitline_nth "$tmp/a.out" '^O\|' 2 5) || bad "no second offer"
+hlp a N "$(field "$o" 2)"
+sleep 0.4
+check "N: no data requested" "$before" "$(count "$tmp/main.out" '^RECEIVE')"
+check "N: no item" 1 "$(count "$tmp/a.out" '^I\|')"
+
+# --- 5. Password-manager hints: no offer, no data requested -------------------------------------------------------------------
+for hint in x-kde-passwordManagerHint org.nspasteboard.ConcealedType org.nspasteboard.TransientType; do
+  srv main "SELECT text/plain;charset=utf-8|hex:$(hex hunter2) $hint|hex:$(hex secret)"
+  sleep 0.3
+done
+check "hinted copies: no offer to the shell" 2 "$(count "$tmp/a.out" '^O\|')"
+check "hinted copies: their data never requested" "$before" "$(count "$tmp/main.out" '^RECEIVE')"
+grep -a -q 'password-manager hint' "$tmp/a.err" && pass "hinted copies logged by reason" || bad "no log line for the hint"
+
+# --- 6. Never truncated: a copy over its cap, or one whose source never answers, is not recorded --------------------------------
+srv main "SELECT text/plain;charset=utf-8|big:300000"
+approve a 2 x >/dev/null
+sleep 0.6 # the read ends (over its cap) before the next copy replaces it
+srv main "SELECT text/plain;charset=utf-8|hang"
+sleep 0.4
+approve a 3 x >/dev/null
+sleep 2.6
+check "over the cap and late copies: no item" 1 "$(count "$tmp/a.out" '^I\|')"
+grep -a -q 'over its limit' "$tmp/a.err" && pass "over the cap logged" || bad "no over-cap log"
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'after the hang')"
+approve a 4 x >/dev/null
+waitline "$tmp/a.out" '^I\|[0-9a-f]+\|text\|.*\|after the hang\|' 5 >/dev/null && pass "capture goes on after a source that hangs" || bad "capture stuck after a hang"
+
+# --- 7. Images: the worker decodes only the format given ------------------------------------------------------------------------
+python3 -I -c '
+import struct, sys, zlib
+w, h = 600, 300
+raw = b"".join(b"\x00" + bytes([200, 30, 30]) * w for _ in range(h))
+def chunk(t, d):
+    return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+open(sys.argv[1], "wb").write(png)' "$tmp/red.png"
+srv main "SELECT image/png|file:$tmp/red.png text/html|hex:$(hex '<img src=x>')"
+approve a 5 org.example.Viewer >/dev/null
+img=$(waitline "$tmp/a.out" '^I\|[0-9a-f]+\|image\|' 5) || bad "no image item"
+thumb=$(field "$img" 12)
+img_id=$(field "$img" 2)
+[[ -f $thumb ]] && pass "the image has a thumbnail" || bad "no thumbnail file"
+check "the thumbnail is 0600" 600 "$(mode "$thumb")"
+python3 -I -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); print(*struct.unpack(">II", d[16:24]))' "$thumb" >"$tmp/dims" 2>/dev/null
+check "the thumbnail is at most 256 px" "256 128" "$(cat "$tmp/dims")"
+printf '%%PDF-1.7\n1 0 obj\n<< >>\nendobj\n' >"$tmp/fake.png"
+srv main "SELECT image/png|file:$tmp/fake.png"
+approve a 6 x >/dev/null
+sleep 2.5
+check "a PDF offered as PNG is not recorded" 1 "$(count "$tmp/a.out" '^I\|[0-9a-f]+\|image\|')"
+offers=$(count "$tmp/a.out" '^O\|')
+srv main "SELECT image/gif|hex:47494638"
+sleep 0.3
+check "GIF is not offered" "$offers" "$(count "$tmp/a.out" '^O\|')"
+
+# --- 8. Locks: the compositor's lock (any locker), the shell's pause --------------------------------------------------------
+srv main LOCK
+check "the compositor's lock is reported" "L|1" "$(waitline "$tmp/a.out" '^L\|1' 3)"
+waitline "$tmp/main.out" '^DEVICE_GONE$' 3 >/dev/null && pass "no device while locked" || bad "device kept while locked"
+before_o=$(count "$tmp/a.out" '^O\|')
+before_r=$(count "$tmp/main.out" '^RECEIVE')
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'copied under the lock')"
+sleep 0.4
+check "a copy under the lock: no offer" "$before_o" "$(count "$tmp/a.out" '^O\|')"
+check "a copy under the lock: no data requested" "$before_r" "$(count "$tmp/main.out" '^RECEIVE')"
+# A second helper started while the session is locked: paused from its first event.
+start_helper b "$tmp/main.sock"
+waitline "$tmp/b.out" '^S\|ok' 5 >/dev/null
+check "a helper started under a lock knows it at once" "L|1" "$(waitline "$tmp/b.out" '^L\|' 2)"
+hlp b R
+sleep 0.4
+devices=$(count "$tmp/main.out" '^DEVICE$')
+stop_helper b
+srv main UNLOCK
+waitline "$tmp/a.out" '^L\|0' 3 >/dev/null || bad "no unlock reported"
+waitline_nth "$tmp/main.out" '^DEVICE$' $((devices + 1)) 3 >/dev/null && pass "a device again after the unlock" || bad "no device after unlock"
+sleep 0.4
+check "the selection copied under the lock is skipped after the unlock" "$before_o" "$(count "$tmp/a.out" '^O\|')"
+gone=$(count "$tmp/main.out" '^DEVICE_GONE$')
+hlp a P
+waitline_nth "$tmp/main.out" '^DEVICE_GONE$' $((gone + 1)) 3 >/dev/null && pass "the shell's pause removes the device" || bad "pause kept the device"
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'copied while paused')"
+sleep 0.3
+check "paused: no offer" "$before_o" "$(count "$tmp/a.out" '^O\|')"
+hlp a R
+sleep 0.3
+
+# --- 9. Serving an item back: every type, the marker, plain only -------------------------------------------------------------
+hlp a C "$text_id" 0
+waitline "$tmp/a.out" "^A\|$text_id" 3 >/dev/null && pass "the clipboard holds the item (A)" || bad "no A after C"
+sel=$(waitline "$tmp/main.out" '^SELECTION .*application/x-grassfield-clipboard-item' 3)
+[[ $sel == *text/html* && $sel == *UTF8_STRING* ]] && pass "served with its plain types, its HTML and the marker" || bad "served types: $sel"
+srv main "PASTE text/plain;charset=utf-8 $tmp/pasted.txt"
+waitline "$tmp/main.out" '^PASTED text/plain;charset=utf-8' 5 >/dev/null
+check "pasted text" "Hello $canary" "$(cat "$tmp/pasted.txt")"
+# Its own selection comes back as an update of the same item (moved to the top), never as a new one.
+check "its own selection is not recorded again" 1 "$(tr "$US" '|' <"$tmp/a.out" | awk -F'|' -v t="Hello $canary" '$1 == "I" && $10 == t { print $2 }' | sort -u | wc -l)"
+hlp a C "$text_id" 1
+sleep 0.4
+last=$(grep -a '^SELECTION' "$tmp/main.out" | tail -1)
+[[ $last != *text/html* ]] && pass "Paste as Plain Text offers no HTML" || bad "plain only still offers HTML: $last"
+
+# --- 10. Search, pins, stores, clearing ------------------------------------------------------------------------------------
+hlp a Q 7 "hello"
+check "search finds the text" "R|7|$text_id" "$(waitline "$tmp/a.out" '^R\|7' 3)"
+hlp a PIN "$text_id"
+waitline "$tmp/a.out" "^I\\|$text_id\\|text\\|[^|]*\\|[0-9]+\\|[0-9]+\\|[1-9]" 3 >/dev/null && pass "pinned" || bad "pin not reported"
+check "the pinned store directory is 0700" 700 "$(mode "$tmp/state/pinned")"
+check "the pinned index is 0600" 600 "$(mode "$tmp/state/pinned/index.json")"
+check "the pinned item file is 0600" 600 "$(mode "$tmp/state/pinned/$text_id.item")"
+[[ ! -e $tmp/state/history ]] && pass "no history store without the opt-in" || bad "history written without the opt-in"
+hlp a CH
+sleep 0.3
+check "Clear History spares the pin" 0 "$(count "$tmp/a.out" "^X\\|$text_id")"
+grep -a -q "^X${US}$img_id" "$tmp/a.out" && pass "Clear History removes the rest" || bad "image not cleared"
+[[ ! -e $thumb ]] && pass "the cleared image's thumbnail is gone" || bad "thumbnail left"
+stop_helper a
+[[ ! -e $tmp/run/clipboard ]] && pass "the runtime directory is removed at exit" || bad "runtime directory left"
+start_helper c "$tmp/main.sock" --history-store 1
+waitline "$tmp/c.out" "^I\\|$text_id\\|" 5 >/dev/null && pass "the pin survives a restart" || bad "pin lost at restart"
+hlp c R
+sleep 0.3
+srv main "SELECT text/plain;charset=utf-8|hex:$(hex 'kept on disk')"
+approve c 0 x >/dev/null
+waitline "$tmp/c.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|' 3 >/dev/null
+check "the opt-in history store is 0600" 600 "$(mode "$tmp/state/history/index.json")"
+stop_helper c
+start_helper d "$tmp/main.sock" --history-store 1
+waitline "$tmp/d.out" '^I\|[0-9a-f]+\|text\|.*\|kept on disk\|' 5 >/dev/null && pass "the history store is read back" || bad "history store not read"
+hlp d D 0
+sleep 0.3
+[[ ! -e $tmp/state/history ]] && pass "switching the store off deletes it" || bad "history store left after D 0"
+hlp d T 1000
+sleep 1.3
+hlp d E
+waitline "$tmp/d.out" '^X\|' 3 >/dev/null && pass "retention removes old items" || bad "nothing expired"
+check "retention spares the pin" 0 "$(count "$tmp/d.out" "^X\\|$text_id")"
+hlp d CP
+waitline "$tmp/d.out" "^X\\|$text_id" 3 >/dev/null && pass "clearing the pins removes them" || bad "pins not cleared"
+sleep 0.2
+[[ ! -e $tmp/state/pinned ]] && pass "the pinned store is deleted with them" || bad "pinned store left"
+stop_helper d
+
+# --- 11. No content in the logs, unsupported compositors -----------------------------------------------------------------
+if grep -a -q -- "$canary" "$tmp"/*.err; then bad "a copied text reached a log"; else pass "no copied text in any log"; fi
+start_server nolock --no-lock-notifier
+start_helper e "$tmp/nolock.sock"
+# shellcheck disable=SC2154 # set by start_helper (printf -v)
+wait "$pid_e" 2>/dev/null
+check "a compositor without the lock notifier: unsupported, exit 3" "3 S|unsupported" "$? $(waitline "$tmp/e.out" '^S\|' 1)"
+
+if ((fail)); then exit 1; fi
+echo "PASS clipboard_helper: all"
