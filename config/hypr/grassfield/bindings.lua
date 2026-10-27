@@ -119,6 +119,8 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 
 -- Shell surfaces (handled by grassfield-shell IPC targets)
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
+-- The clipboard history in Search (ADR-0034, docs/specs/clipboard.md CB-5): opens Search in its Clipboard view; again closes it.
+bind("SUPER + CTRL + V", "Clipboard history", shell("search", "clipboard"))
 -- Apps (the dedicated Apps / Launchpad media key; plain F4 stays with the applications, docs/specs/apps.md A11).
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))

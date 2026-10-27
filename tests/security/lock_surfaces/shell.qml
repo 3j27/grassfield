@@ -119,6 +119,8 @@ ShellRoot {
         check("locked: search.show stays closed", !search.open);
         search.toggle();
         check("locked: search.toggle stays closed", !search.open);
+        search.toggleClipboard();
+        check("locked: search.toggleClipboard stays closed", !search.open && search.view === "");
         apps.show();
         check("locked: apps.show stays closed", !apps.open);
         apps.toggle();

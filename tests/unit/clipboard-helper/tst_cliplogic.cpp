@@ -357,3 +357,13 @@ TEST(Serve, PlainAndFiles)
     EXPECT_EQ(gnomeCopiedFiles({QStringLiteral("/a b")}), QByteArray("copy\nfile:///a%20b")) << "never a cut";
     EXPECT_EQ(uriList({QStringLiteral("/a")}), QByteArray("file:///a\r\n"));
 }
+
+TEST(ClipLogic, WriterWaitIsTheIdleLimitUntilTheOverallLimit)
+{
+    EXPECT_EQ(writerWaitMs(0), kWriterIdleMs);
+    EXPECT_EQ(writerWaitMs(30 * 1000), kWriterIdleMs);
+    EXPECT_EQ(writerWaitMs(kWriterMaxMs - 500), 500) << "never past the overall limit";
+    EXPECT_EQ(writerWaitMs(kWriterMaxMs), 0) << "60 s in all: closed now";
+    EXPECT_EQ(writerWaitMs(kWriterMaxMs + 10000), 0);
+    EXPECT_EQ(writerWaitMs(-5), kWriterIdleMs) << "a clock that went back counts as 0";
+}

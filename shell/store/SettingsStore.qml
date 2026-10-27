@@ -412,6 +412,11 @@ Scope {
         change("windows.stages", value);
     }
 
+    // The Clipboard view's first-use prompt: "Allow" (ADR-0034 CB-6).
+    function setClipboardEnabled(value: bool): void {
+        change("search.clipboard.enabled", value);
+    }
+
     function setDesktopShowIcons(value: bool): void {
         change("desktop.showIcons", value);
     }
