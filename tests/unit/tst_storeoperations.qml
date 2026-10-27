@@ -103,7 +103,7 @@ TestCase {
         t.backend.planReady("org.example.Paint", "install", {refusal: "", packages: [{name: "paint", version: "1-1", repo: "extra", size: "1.2 MB"},
             {name: "libbrush", version: "2-1", repo: "extra", size: "300 kB"}], download: "1.5 MB", installed: "6 MB", detail: ""});
         verify(s.confirmEnabled);
-        compare(s.message, "These packages are installed:");
+        compare(s.message, "These packages will be installed:");
         compare(s.confirmText, "Install");
         verify(!s.destructive);
         const list = find(s, i => i.Accessible.role === Accessible.List);
@@ -305,11 +305,20 @@ TestCase {
         details.confirm();
     }
 
-    // The product page says how its last operation ended, with Try Again and Details….
+    // The product page says how its last operation ended, with Try Again and Details…; the line at the bottom is for the
+    // other pages (not twice on the app's own).
     function test_resultOnTheProductPage() {
         const t = make({startPage: "app:org.example.Paint"});
+        const notice = find(t.win.contentItem, i => i.objectName === "operationNotice");
         t.backend.results = {"org.example.Paint": {kind: "install", name: "Paint", outcome: "failed", present: 0, total: 1, details: "error"}};
         tryVerify(() => find(t.win.page, i => i.text === "The installation failed." && i.visible) !== null);
+        verify(!notice.visible, "the app's own page has the line under its button");
+        t.win.openPage("categories");
+        tryVerify(() => notice.visible);
+        compare(notice.text, "“Paint”: The installation failed.");
+        t.win.openPage("app:org.example.Paint");
+        tryVerify(() => find(t.win.page, i => i.text === "Try Again" && i.activated !== undefined) !== null);
+        verify(!notice.visible);
         const again = find(t.win.page, i => i.text === "Try Again" && i.activated !== undefined);
         again.activated();
         verify(sheet(t).visible);

@@ -6223,12 +6223,12 @@
         <translation>Un lanceur qui ouvre %1 dans votre navigateur est ajouté à Apps, avec son icône.</translation>
     </message>
     <message>
-        <source>These packages are removed. Your files and settings stay.</source>
-        <translation>Ces paquets sont supprimés. Vos fichiers et vos réglages restent.</translation>
+        <source>These packages will be removed. Your files and settings stay.</source>
+        <translation>Ces paquets seront supprimés. Vos fichiers et vos réglages restent.</translation>
     </message>
     <message>
-        <source>These packages are installed:</source>
-        <translation>Ces paquets sont installés&#xa0;:</translation>
+        <source>These packages will be installed:</source>
+        <translation>Ces paquets seront installés&#xa0;:</translation>
     </message>
     <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
@@ -6299,12 +6299,12 @@
         <translation>Taille installée</translation>
     </message>
     <message>
-        <source>Packages removed</source>
-        <translation>Paquets supprimés</translation>
+        <source>Packages to remove</source>
+        <translation>Paquets à supprimer</translation>
     </message>
     <message>
-        <source>Packages installed</source>
-        <translation>Paquets installés</translation>
+        <source>Packages to install</source>
+        <translation>Paquets à installer</translation>
     </message>
 </context>
 <context>

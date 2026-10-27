@@ -67,7 +67,7 @@ Sheet {
             if (root.webApp)
                 return root.removing ? qsTr("The launcher and its icon are removed from Apps.")
                                      : qsTr("A launcher that opens %1 in your browser is added to Apps, with its icon.").arg(Store.hostOf(root.app.webUrl || ""));
-            return root.removing ? qsTr("These packages are removed. Your files and settings stay.") : qsTr("These packages are installed:");
+            return root.removing ? qsTr("These packages will be removed. Your files and settings stay.") : qsTr("These packages will be installed:");
         case "unfinished":
             return qsTr("The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.");
         case "outdated":
@@ -165,7 +165,7 @@ Sheet {
         boundsBehavior: Flickable.StopAtBounds
         model: root.packages
         Accessible.role: Accessible.List
-        Accessible.name: root.removing ? qsTr("Packages removed") : qsTr("Packages installed")
+        Accessible.name: root.removing ? qsTr("Packages to remove") : qsTr("Packages to install")
 
         ScrollBar.vertical: ScrollBar {}
 

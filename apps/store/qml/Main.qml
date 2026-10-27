@@ -423,7 +423,9 @@ Window {
         NoticeBar {
             id: operationNotice
             objectName: "operationNotice"
-            readonly property string resultId: root.resultIds.length > 0 ? root.resultIds[root.resultIds.length - 1] : ""
+            // The app whose page is shown has the line under its button (ProductPage.qml): not twice.
+            readonly property var others: root.resultIds.filter(id => !(pageLoader.page === "app" && pageLoader.entry.id === id))
+            readonly property string resultId: others.length > 0 ? others[others.length - 1] : ""
             readonly property var result: resultId !== "" ? root.backend.results[resultId] : null
             width: Math.min(implicitWidth, parent.width - 2 * Tokens.storeContentMargin)
             x: Math.round((parent.width - width) / 2)
