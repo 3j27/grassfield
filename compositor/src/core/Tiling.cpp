@@ -583,7 +583,7 @@ namespace gf::tiling {
         const TileRecord* r = find(id);
         if (!r)
             return false;
-        if (r->state != TileState::Tiled)
+        if (r->state != TileState::Tiled || r->relayout)
             return true;
         if (sameBox(r->box, current))
             return true;
@@ -632,9 +632,19 @@ namespace gf::tiling {
             r->relayout = on;
     }
 
-    bool CTileBook::zoneFree(const Rect& frame, std::string_view output, int64_t workspace, uint64_t except) const {
+    void CTileBook::setWorkspace(uint64_t id, int64_t workspace) {
+        TileRecord* r = get(id);
+        if (!r || r->workspace == workspace)
+            return;
+        r->workspace = workspace;
+        changed();
+    }
+
+    bool CTileBook::zoneFree(const Rect& frame, std::string_view output, int64_t workspace, uint64_t except, std::span<const uint64_t> ignore) const {
         for (const auto& r : m_records) {
             if (r.id == except || (r.state != TileState::Tiled && r.state != TileState::Resizing) || r.output != output || r.workspace != workspace)
+                continue;
+            if (std::ranges::find(ignore, r.id) != ignore.end())
                 continue;
             const Rect   other = frameOf(r.box, r.band);
             const double ox    = std::min(frame.x + frame.w, other.x + other.w) - std::max(frame.x, other.x);
@@ -809,6 +819,7 @@ namespace gf::tiling {
             case Reason::Forgotten: return "forgotten";
             case Reason::Relaid: return "relaid";
             case Reason::Invalid: return "invalid";
+            case Reason::Locked: return "locked";
             case Reason::Unavailable: return "unavailable";
         }
         return "";

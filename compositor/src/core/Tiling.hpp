@@ -235,7 +235,8 @@ namespace gf::tiling {
         // Suspended -> Tiled (the glue checks zoneFree first and calls forget() otherwise). nullptr when not Suspended.
         const TileRecord* resume(uint64_t id);
         // Tiled: its box differs from the record by more than 1 px (something the plugin does not observe moved or
-        // resized it) -> Free; false then, and for a window without a record. Moving, Resizing and Suspended: true.
+        // resized it) -> Free; false then, and for a window without a record. Moving, Resizing, Suspended and a record
+        // waiting to be placed again (markRelayout: its output went away and Hyprland moved it): true.
         bool check(uint64_t id, const Rect& current);
         // Return to Previous Size: the box from before, the window Free.
         std::optional<Rect> takeBefore(uint64_t id);
@@ -246,6 +247,8 @@ namespace gf::tiling {
         void setBox(uint64_t id, const Rect& box, std::string output);
         // Marks a record to be placed again from its zone when it comes back (Suspended) or now (Tiled).
         void markRelayout(uint64_t id, bool on);
+        // Move to Desktop: the record keeps its state and box on the window's new Desktop.
+        void setWorkspace(uint64_t id, int64_t workspace);
 
         const TileRecord*           find(uint64_t id) const;
         std::span<const TileRecord> records() const;
@@ -253,8 +256,8 @@ namespace gf::tiling {
         uint64_t                    generation() const;
 
         // TL10: no other window that is Tiled or Resizing on `output` and `workspace` has a frame overlapping `frame` by
-        // more than 1 px on both axes.
-        bool zoneFree(const Rect& frame, std::string_view output, int64_t workspace, uint64_t except) const;
+        // more than 1 px on both axes. `ignore`: windows that do not count either (an inactive stage's, drawn in the strip).
+        bool zoneFree(const Rect& frame, std::string_view output, int64_t workspace, uint64_t except, std::span<const uint64_t> ignore = {}) const;
 
       private:
         TileRecord* get(uint64_t id);
@@ -307,6 +310,7 @@ namespace gf::tiling {
         Forgotten,   // a record ended (Free, closed, Return to Previous Size)
         Relaid,      // windows placed again (margins changed, an output went away)
         Invalid,     // a refused request (nothing changed)
+        Locked,      // a request refused while the session is locked (tiling.md TL34; nothing changed)
         Unavailable, // the plugin unloads
     };
     std::string_view reasonName(Reason reason);

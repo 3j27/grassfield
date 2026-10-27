@@ -101,7 +101,8 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid step, tiled windows with state, place or
   layout and zone, group, box). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
   and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
-  step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing.
+  step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
+  refused while the session is locked (`reason:"locked"`, TL34).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -139,7 +140,7 @@ enum overview-focus.outcome: pending focused fallback timeout refused superseded
 enum overview-focus.target: window workspace remembered none press
 enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
-enum tiling.reason: placed moved resized suspended restored forgotten relaid invalid unavailable
+enum tiling.reason: placed moved resized suspended restored forgotten relaid invalid locked unavailable
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
 feature keyboard-focus tiling-arrange

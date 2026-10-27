@@ -16,6 +16,16 @@
 #   menu-bar       released on the menu bar: the free area is filled
 #   ipc            hl.plugin.grassfield.tile(address, "left"), then "previous": the left half, then the size from before
 #   options        with tilingEdges false a drag to the right edge does not tile
+# Step 1 (docs/specs/tiling.md TL1-TL15; only when the plugin advertises tiling-arrange; a second foot window):
+#   state          `hyprctl grassfield-tiling` lists GF-REF with its work area and grid
+#   arrange        arrange({layout:"left-right", windows:[first]}): the first window takes the left half, the next window
+#                  in stacking order the right half; both are one tile group in the state reply
+#   invalid        an arrange with an unknown layout changes nothing (generation and boxes kept)
+#   margins        tilingMargins false places the arrangement again without margins, true with them
+#   full-screen    full screen suspends the tile; leaving it puts the window back in its tile (TL12)
+#   minimize       a move to special:minimized suspends it; back on its Desktop it returns to its free zone (TL14)
+#   zone-taken     minimized again, its zone taken by the other window: back on its Desktop it is Free at its size
+#                  from before (TL10)
 # Usage (bare command, nested session of this tree running with the plugin loaded): tests/compositor/tiling.sh
 # Logs and captures: .dev/tiling/run-<timestamp>/.
 set -uo pipefail
@@ -227,6 +237,94 @@ nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingEdges\", \"fal
 drag "$edge_x" $((my + mh / 2))
 check "options: with tilingEdges false the $side edge does not tile" size_is "$w0" "$h0"
 nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingEdges\", \"true\") end)()" >>"$log" 2>&1
+
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange")' >/dev/null 2>&1; then
+  tiling_state() { nestctl grassfield-tiling 2>>"$log"; }
+  state_has_output() {
+    tiling_state | jq -e --arg o "$out" '.type == "tiling" and ([.outputs[] | select(.name == $o and .grid >= 1 and .area.w > 0)] | length == 1)' >/dev/null
+  }
+  check "state: hyprctl grassfield-tiling lists $out with its work area and grid" state_has_output
+
+  env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+    foot -T tiling-foot2 -w 700x450 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
+  pids+=("$!")
+  geometry_of() { nestctl clients -j | jq -r --arg t "$1" '[.[] | select(.title == $t)][0] | select(. != null) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.address)"'; }
+  for _ in $(seq 1 100); do [[ -n $(geometry_of tiling-foot2) ]] && break; sleep 0.2; done
+  sleep 1
+  read -r _ _ _ _ addr2 < <(geometry_of tiling-foot2)
+  if [[ -z ${addr2:-} ]]; then
+    check "step 1: the second foot window opened" false
+  else
+    nestctl dispatch "hl.dsp.window.move({ x = $((mx + 500)), y = $((my + 300)), window = 'address:$addr2' })" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1 # on top: the next in stacking order is foot2
+    sleep 0.8
+    read -r _ _ w2 h2 _ < <(geometry_of tiling-foot2)
+    box_of() { # title x y w h (surface), 1 px slack
+      local x y w h _a
+      read -r x y w h _a < <(geometry_of "$1")
+      say "  $1 ${w}x${h} at $x,$y (want ${4}x${5} at $2,$3)"
+      (( x - $2 <= 1 && $2 - x <= 1 && y - $3 <= 1 && $3 - y <= 1 && w - $4 <= 1 && $4 - w <= 1 && h - $5 <= 1 && $5 - h <= 1 ))
+    }
+    record_is() { # address state ("none": no record)
+      local got
+      got=$(tiling_state | jq -r --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0].state // "none"')
+      say "  record of $1: $got (want $2)"
+      [[ $got == "$2" ]]
+    }
+    arrange() { nestctl dispatch "(function() hl.plugin.grassfield.arrange('$1') end)()" >>"$log" 2>&1; sleep 0.8; }
+    tile_ipc() { nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$1\", \"$2\") end)()" >>"$log" 2>&1; sleep 0.8; }
+    to_ws() { nestctl dispatch "hl.dsp.window.move({ workspace = \"$2\", follow = false, window = \"address:$1\" })" >>"$log" 2>&1; sleep 0.8; }
+    rx=$((ax + 2 * m + halfw))
+
+    arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr\"]}"
+    check "arrange: left-right from the first window, which takes the left half" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
+    check "arrange: the next window in stacking order fills the right half" box_of tiling-foot2 "$rx" "$ry" "$halfw" "$fullh"
+    one_group() {
+      tiling_state | jq -e --arg a "${addr#0x}" --arg b "${addr2#0x}" \
+        '[.outputs[].windows[] | select(.address == $a or .address == $b)] | length == 2 and (map(.group) | unique | length == 1) and .[0].group > 0 and all(.layout == "left-right")' >/dev/null
+    }
+    check "arrange: both windows are one tile group in the state reply" one_group
+
+    gen0=$(tiling_state | jq -r '.gen')
+    arrange "{\"layout\":\"no-such-layout\",\"windows\":[\"$addr\"]}"
+    gen1=$(tiling_state | jq -r '.gen')
+    check "invalid: an unknown layout changes nothing (generation $gen0 -> $gen1)" test "$gen0" = "$gen1"
+    check "invalid: the window keeps its tile" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
+
+    nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingMargins\", \"false\") end)()" >>"$log" 2>&1
+    sleep 0.8
+    check "margins off: the arrangement is placed again without margins" box_of tiling-foot "$ax" $((ay + tb)) $((aw / 2)) $((ah - tb))
+    nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingMargins\", \"true\") end)()" >>"$log" 2>&1
+    sleep 0.8
+    check "margins on: placed again with margins" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
+
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
+    sleep 0.8
+    check "full-screen: the tile is suspended" record_is "$addr" suspended
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
+    sleep 1
+    check "full-screen: leaving it puts the window back in its tile" box_of tiling-foot $((ax + m)) "$ry" "$halfw" "$fullh"
+    check "full-screen: tiled again" record_is "$addr" tiled
+
+    ws2=$(nestctl clients -j | jq -r --arg a "$addr2" '.[] | select(.address == $a) | .workspace.name')
+    to_ws "$addr2" special:minimized
+    check "minimize: the tile is suspended" record_is "$addr2" suspended
+    to_ws "$addr2" "$ws2"
+    check "minimize: back on its Desktop, in its free zone" box_of tiling-foot2 "$rx" "$ry" "$halfw" "$fullh"
+    check "minimize: tiled again" record_is "$addr2" tiled
+
+    to_ws "$addr2" special:minimized
+    tile_ipc "$addr" right
+    to_ws "$addr2" "$ws2"
+    size2() { local _x _y w h _a; read -r _x _y w h _a < <(geometry_of tiling-foot2); say "  tiling-foot2 ${w}x${h} (want ${w2}x${h2})"; (( w == w2 && h == h2 )); }
+    check "zone-taken: its zone taken meanwhile, it comes back at its size from before" size2
+    check "zone-taken: it is Free" record_is "$addr2" none
+    tile_ipc "$addr" previous
+  fi
+else
+  say "SKIP: step 1 cases (the plugin does not advertise tiling-arrange)"
+fi
 
 alive() { nestctl version -j >/dev/null 2>&1; }
 check "Hyprland alive" alive

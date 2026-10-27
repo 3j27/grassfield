@@ -1,6 +1,7 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
-Status: step 0, documentation only (ADR-0036, Proposed). Nothing below is built except what "Today" names. A requirement
+Status: step 1 on its branch (engine and placement, TL1-TL15: plugin and tokens; no shell, Settings or config/hypr
+change). Steps 2-6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -74,8 +75,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 ### Engine and placement (step 1: `compositor/` and `ui/tokens/` only)
 - **TL1** Work area, per output, read at the moment a placement is computed and never followed afterwards: the output's
   box minus Hyprland's reserved area at that moment (`logicalBoxMinusReserved`), minus, whenever Stages is on for that
-  output's Desktop, the strip column (from the output's left edge to the right edge of the strip's tiles plus the strip
-  margin, as last sent with `op:on`), whether the strip is shown or hidden. The strip hides when a window overlaps it
+  output's Desktop, the strip column (from the output's left edge to the right edge of the strip's tiles plus the strip's
+  drop margin `kStripDropMargin`, 16 logical px, core/Stages.hpp, as last sent with `op:on`), whether the strip is shown or
+  hidden. The strip hides when a window overlaps it
   (stages.md ST12-ST13): following its visibility would let tiles grow over it, which hides it again, and so on. Tiled
   windows are re-placed only when the margins setting changes (TL2) and when their output goes away (TL11). Nothing else
   moves them: a later change of the Dock (size, position, auto-hide, shrink to fit, the Dock moving to another output), of
@@ -121,12 +123,16 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   its protocol minimum and a `min_size` window rule (a rule replaces the client's minimum in `CWindow::minSize()`,
   Window.cpp:2885-2889, while Hyprland's commit clamp still applies the protocol minimum, Window.cpp:2741-2747); for an
   X11 window, the rule or its size hints. The engine applies that minimum itself, so the commit clamp never recentres a
-  tile.
+  tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
+  the protocol maximum too).
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
   (XWaylandManager.cpp:110-131), X11 override-redirect, Glance (`org.grassfield.Preview.Glance`, the quick look panel),
-  pinned, full screen or zoomed, on a special workspace, minimized.
+  pinned, full screen or zoomed, on a special workspace, minimized, in an inactive stage (drawn in the Stages strip).
+  The X11 test reads what `shouldBeFloated` reads (the window's type atoms against Hyprland's atom table `HYPRATOMS`,
+  looked up by name and never written; modal, transient, parent, role, override-redirect) without calling it: that
+  function also sets focus flags on the window.
 - **TL10** Tile record: per window, `{zone or place, box, before, group, output}`, where `box` is the frame the plugin
   last gave or saw it take through a user resize and `before` the floating box before its first tiling. It follows the
   state machine below (it replaces FR49's rule "a window moved or resized since its tiling is no longer tiled": a user's
@@ -150,7 +156,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 | any | the window closes or unmaps; the plugin unloads | — | forgotten |
 
   Move to Desktop keeps the state (the box does not change). A group lives while it has two members that are Tiled,
-  Resizing or Suspended.
+  Resizing or Suspended. Step 1 builds every row but one: Hyprland's move of a tiled window ends the record at its first
+  motion (Free, the tiled size kept); restarting that drag at the size from before, and tiling at its release, is TL16
+  (step 2). The plugin reads the records (and applies the last row) when it places a window, answers
+  `hyprctl grassfield-tiling` or the titlebar drag starts.
 
   A zone is **free** on an output and Desktop when no other window that is Tiled or Resizing there has a frame that
   overlaps the zone's frame by more than 1 logical pixel on both axes (windows that are Free, Moving or Suspended do not
@@ -274,7 +283,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   `SessionState.refuses(...)` first; when the lock engages, an open popover or suggestions overlay closes. The plugin's
   hover event changes nothing by itself (the shell refuses the popover). `docs/specs/security.md` "Nothing opens over the
   lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
-  `tests/security/lock_surfaces.sh` when it is a surface.
+  `tests/security/lock_surfaces.sh` when it is a surface. Plugin side (step 1, defence in depth): the verbs `tile` and
+  `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves).
 
 ## Appearance (F1 strict, ADR-0024)
 - Targets: geometry within ±1 pt of the owner's captures, tints within ±0.1, contrast A2, motion by tokens. Tokens only;

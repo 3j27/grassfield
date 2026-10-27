@@ -417,10 +417,33 @@ TEST(TilingRecord, GroupsAndFreeZones) {
     EXPECT_TRUE(book.zoneFree(rightFrame, "B", 1, 0));
     EXPECT_TRUE(book.zoneFree(rightFrame, "A", 2, 0));
     EXPECT_TRUE(book.zoneFree(Rect{rightFrame.x + rightFrame.w - 1, rightFrame.y, 100, 100}, "A", 1, 0)) << "1 px is not an overlap";
+    const std::array<uint64_t, 1> inStrip{2};
+    EXPECT_TRUE(book.zoneFree(rightFrame, "A", 1, 0, inStrip)) << "an inactive stage's window does not hold its zone";
     book.suspend(2);
     EXPECT_TRUE(book.zoneFree(rightFrame, "A", 1, 0)) << "a suspended window does not hold its zone";
     book.clear();
     EXPECT_TRUE(book.records().empty());
+}
+
+TEST(TilingRecord, MoveToDesktopAndALostOutput) {
+    CTileBook book;
+    const Rect before{100, 100, 800, 500}, half{8, 64, 948, 926};
+    book.placed(1, before, half, 32, at(Place::Left), "A", 1, 0);
+    // Move to Desktop: the state and the box stay, the zone now counts on the new Desktop.
+    const auto g = book.generation();
+    book.setWorkspace(1, 4);
+    EXPECT_GT(book.generation(), g);
+    EXPECT_EQ(book.find(1)->workspace, 4);
+    EXPECT_EQ(book.find(1)->state, TileState::Tiled);
+    EXPECT_FALSE(book.zoneFree(frameOf(half, 32), "A", 4, 0));
+    EXPECT_TRUE(book.zoneFree(frameOf(half, 32), "A", 1, 0));
+    // Its output went away and Hyprland moved it: not checked until it is placed again.
+    book.markRelayout(1, true);
+    EXPECT_TRUE(book.check(1, Rect{2000, 64, 948, 926}));
+    book.setBox(1, Rect{1928, 64, 948, 926}, "B");
+    EXPECT_FALSE(book.find(1)->relayout);
+    EXPECT_EQ(book.find(1)->output, "B");
+    EXPECT_FALSE(book.check(1, Rect{2000, 64, 948, 926})) << "checked again once placed";
 }
 
 TEST(TilingArrange, RequestsAreStrict) {
@@ -463,6 +486,8 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"group":0,"x":8,"y":64,"w":948,"h":926},)"
               R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
-    for (Reason r : {Reason::Placed, Reason::Moved, Reason::Resized, Reason::Suspended, Reason::Restored, Reason::Forgotten, Reason::Relaid, Reason::Invalid, Reason::Unavailable})
+    for (Reason r : {Reason::Placed, Reason::Moved, Reason::Resized, Reason::Suspended, Reason::Restored, Reason::Forgotten, Reason::Relaid, Reason::Invalid,
+                     Reason::Locked, Reason::Unavailable})
         EXPECT_FALSE(reasonName(r).empty());
+    EXPECT_EQ(noticeJson(9, Reason::Locked), R"({"v":"gfc/1","type":"tiling","gen":9,"reason":"locked"})");
 }
