@@ -5,7 +5,7 @@ License of Grassfield-made assets: CC-BY-SA-4.0 (owner decision D-9, 2026-10-23;
 
 | Path | Author | Provenance | License |
 |---|---|---|---|
-| `icons/symbolic/*.svg` (42 files) | Grassfield project (drawn by Claude, 2026-10-17) | Original line icons on a 24 px grid, 1.75 px stroke, round caps; hand-written SVG paths, no tracing | CC-BY-SA-4.0 |
+| `icons/symbolic/*.svg` (57 files) | Grassfield project (drawn by Claude, 2026-10-17) | Original line icons on a 24 px grid, 1.75 px stroke, round caps; hand-written SVG paths, no tracing | CC-BY-SA-4.0 |
 | `icons/symbolic/grassfield-logo.svg` | Grassfield project (2026-10-17) | Original grass-blade mark | CC-BY-SA-4.0 (trademark use pending legal review) |
 | `cursors/src/*.svg.in` (25 templates), `cursors/cursors.tsv` | Grassfield project (drawn by Claude, 2026-10-19) | Original cursor drawings on a 32 px grid (arrow, hand, I-beam, resize arrows, spinner, badges); hand-written SVG paths and primitives with `{{FILL}}`/`{{OUTLINE}}`/`{{ANGLE}}` template variables, no tracing, nothing derived from macOS, WhiteSur, capitaine or Adwaita files; only the cursor NAMES were taken from installed themes (ADR-0014) | CC-BY-SA-4.0 |
 | `cursors/build.sh`, `cursors/xcursor-pack.py` | Grassfield project (2026-10-19) | Build scripts: render the templates, hyprcursor theme through `hyprcursor-util --create`, XCursor files written by a stdlib packer (xcursorgen is not installed) | MIT (source code, like the repository) |
