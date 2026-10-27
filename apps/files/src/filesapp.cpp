@@ -1499,7 +1499,8 @@ void FilesApp::refreshDrag(QObject *window)
     const auto it = m_drags.constFind(window);
     if (!window || it == m_drags.cend() || !it->mime)
         return;
-    QDragMoveEvent move(it->position, it->actions, it->mime, it->buttons, it->modifiers);
+    // Qt 6.11's QDragMoveEvent takes a whole-pixel position.
+    QDragMoveEvent move(it->position.toPoint(), it->actions, it->mime, it->buttons, it->modifiers);
     QCoreApplication::sendEvent(window, &move);
 }
 
