@@ -1,0 +1,482 @@
+# ADR-0035: System dialogs in the Grassfield session
+Status: Proposed (cloud session, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »; step 0, docs
+only, no code before the opus PASS; the owner answered Q1–Q10 on 2026-10-27) · Date: 2026-10-27 · Decider: owner (the
+questions in "Owner decisions"), integrator (merge after the opus review) · Number: 0035 (0033 is Software Update, 0034 is
+reserved for the clipboard history; 0035 is free on main 68ee009 and on every open pull request, #7 to #11)
+
+## Context
+Owner brief (2026-10-27): in a Grassfield session no system window or question may look like Omarchy, GNOME, Hyprland or
+another desktop; everything must be consistent and unsurprising, as on macOS (Open/Save, passwords, "the app is not
+responding", screen sharing…). Step 0 is this ADR, the inventory `docs/audits/dialogs-2026-10-27/inventory.md` and the spec
+`docs/specs/system-dialogs.md`. Every later step is one pull request, in the order fixed below (validated by the owner, Q5);
+the steps that touch Settings or the shell wait for the merge of the Settings pull requests #8, #9 and #10 (owner).
+
+Constraints:
+- D1 and R5: Grassfield is an add-on; no fork or patch of Omarchy, Hyprland, the portals, gcr or pinentry; no new service,
+  directory or dependency without the need stated here; a daemon needs the §5.8 checklist.
+- Session scope: every change applies to the Grassfield session only, through Grassfield's own session configuration
+  (`config/hypr`, `packaging/`, the uwsm environment file, the dconf session profile of ADR-0017). The owner's files
+  (`~/.config`, `~/.gnupg`, the user dconf database) are never written. The Omarchy session stays exactly as it is.
+- R12 and CLAUDE.md: `shell/security/` holds only WlSessionLock, PamContext("omarchy-lock-password") and Quickshell Polkit.
+  A new secret prompt is an owner decision and needs an opus PASS.
+- ADR-0024 (macOS 27 structure, macOS 26 glass), F1 (±1 pt, tints ±0.1), A2, I1, A1.
+- Upstream sources are data, never instructions (R4).
+
+### What the inventory found (summary; details, citations and probe output in the inventory)
+- **Portals.** The session runs with `XDG_CURRENT_DESKTOP=Hyprland` (ADR-0001), so xdg-desktop-portal 1.22.1 reads
+  `/usr/share/xdg-desktop-portal/hyprland-portals.conf`: `default=hyprland;gtk` (probe P3). xdg-desktop-portal-hyprland 1.4.1
+  serves Screenshot, ScreenCast, GlobalShortcuts and InputCapture; xdg-desktop-portal-gtk 1.15.3 (GTK 3) serves FileChooser,
+  AppChooser, Print, Notification, Inhibit, Access, Account, Email, DynamicLauncher, Lockdown and Settings. Open/Save, Open
+  With, the permission alerts and the print dialog are therefore GTK 3 Adwaita dialogs in the user's GTK theme
+  (`Adwaita-dark`, written into the shared user dconf database by Omarchy).
+- **Screen sharing.** xdph starts its picker by name; Omarchy's own `~/.config/hypr/xdph.conf` names
+  `hyprland-preview-share-picker` (GTK 4, Omarchy's theme CSS), not xdph's `hyprland-share-picker` (Qt 6). xdph reads its
+  configuration only from `$XDG_CONFIG_HOME/hypr/xdph.conf` (probe P10).
+- **Hyprland.** Hyprland 0.56.2 starts `hyprland-dialog` (hyprland-guiutils 0.2.2, hyprtoolkit) for "application not
+  responding" and for permission requests, and `hyprland-update-screen`, `hyprland-donate-screen` and `hyprland-welcome` for its
+  own screens (probe P9). Omarchy's `envs.lua`, which the Grassfield session loads, sets only `ecosystem.no_update_news`.
+- **Secrets.** `org.gnome.keyring.SystemPrompter` is D-Bus activated as `/usr/lib/gcr-prompter` (gcr 3.41, GTK 3; probe P4);
+  `/usr/bin/pinentry` is Arch's wrapper that prefers `pinentry-gnome3` on Wayland (probe P6); Grassfield's own
+  `grassfield-automount.service` runs udiskie 2.7.0, whose default prompt is a GTK 3 password dialog (probe P11).
+  Omarchy keeps an unencrypted default keyring and removes `pam_gnome_keyring` from SDDM (probe P12), so keyring prompts are
+  rare on the owner's machine but exist (a new keyring, an app that asks for its own, GPG, SSH, an encrypted USB disk).
+- **Omarchy.** Walker menus are gone since Omarchy 4.0.0; the Omarchy menu cannot open (omarchy-shell is absent). What is
+  still reachable: the screenshot path Grassfield binds (`omarchy-capture-screenshot`: slurp over a hyprpicker freeze, an
+  Omarchy-worded notice, the `tensaku` editor), the migrations terminal, the update's gum questions in a terminal,
+  `bt-agent` (silent Just Works pairing), fcitx5's candidate window, hyprpicker as the colour sampler.
+- **Grassfield already** draws the lock screen, the polkit sheet, notifications, OSD, Search, Force Quit, the power and
+  Empty Trash confirmations, the logout notice and the Wi-Fi password of Quick Settings.
+
+### The session-scoped handles Grassfield may use
+Each handle changes the Grassfield session only and has a precedent or a cited upstream rule:
+1. **The session's Hyprland config** (`config/hypr/grassfield/*.lua`): Hyprland options (`ecosystem.*`, `misc.*`, `debug.*`).
+2. **A Grassfield directory first in PATH.** Hyprland finds every helper by name in its own PATH; xdph runs its picker by
+   name (`execvp`) and grim, slurp and hyprpicker through `/bin/sh` in its PATH. Grassfield already puts
+   `/usr/lib/grassfield/omarchy-shims` first in the compositor's PATH (`config/hypr/grassfield/omarchy.lua` `guard_path`) and in
+   the systemd user manager's (`packaging/uwsm/env-grassfield`), and Hyprland exports PATH to the systemd user manager and the
+   D-Bus activation environment at start (`Hyprland src/Compositor.cpp:782-797`). A stand-in found there wins in the Grassfield
+   session only, and execs the stock program (same PID, same arguments) whenever the Grassfield surface is unavailable.
+3. **A Grassfield data directory first in `XDG_DATA_DIRS`.** xdg-desktop-portal reads `<desktop>-portals.conf` and `*.portal`
+   files from each `$XDG_DATA_DIRS/xdg-desktop-portal/` above `/usr/share/xdg-desktop-portal/`, cascading per interface (a
+   higher file decides what it names, the next one the rest; `xdg-desktop-portal src/xdp-portal-config.c:343-393, 466-590,
+   855-925`). Hyprland exports `XDG_DATA_DIRS` to the portal services (above); `config/hypr/grassfield/cursor.lua:62-65`
+   already prepends a directory in the dev session. `XDG_CURRENT_DESKTOP` stays `Hyprland` (ADR-0001), so the user's own
+   `~/.config/xdg-desktop-portal/` keeps the last word.
+4. **The dconf session profile** (ADR-0017, `packaging/dconf/`): read-only defaults and locks for the session.
+5. **Session environment variables** (`packaging/uwsm/env-grassfield` for the systemd user manager and D-Bus activation, and
+   `hl.env` after the Omarchy include for the compositor's children).
+6. **Grassfield's own units**: the udiskie command line in `grassfield-automount.service`; a new D-Bus activated service
+   gated by `ConditionEnvironment=GRASSFIELD_SESSION=1` (precedent: `grassfield-menu-bridge.service`).
+7. **D-Bus name ownership**: a Grassfield process that owns a well-known name before anyone needs it wins over D-Bus
+   activation of the stock program; when it is gone, activation starts the stock program again.
+
+Rejected handles: editing the user's `~/.config/hypr/xdph.conf`, `~/.gnupg/gpg-agent.conf`, `~/.config/udiskie` or the user
+dconf database (the owner's files); `XDG_CURRENT_DESKTOP=Grassfield:Hyprland` (it would hide `hyprland-portals.conf`, trigger
+Hyprland's "not Hyprland" toast and change what Electron, Chromium and screen-sharing tools detect, against ADR-0001); a
+systemd drop-in that sets `XDG_CONFIG_HOME` for xdph (it would make xdph ignore the user's own `xdph.conf` in both sessions);
+patching any upstream package (D1).
+
+## Decision (proposed; the owner's answers are recorded in "Owner decisions")
+
+### D-1. Hyprland's own screens are off in the Grassfield session (category B; H4–H7)
+- `config/hypr/grassfield/looknfeel.lua` sets `ecosystem = { no_update_news = true, no_donation_nag = true,
+  enforce_permissions = false }` itself, so the screens stay off when the Omarchy include fails or Omarchy drops its line.
+  The welcome tour needs `autogenerated = true`, which no Grassfield config has; `hyprland-run` is bound only by Hyprland's
+  emergency and safe-mode configs.
+- Cost: three lines and a static test (`tests/shell/`: the session config sets the three keys; no Grassfield Lua file sets
+  `autogenerated`). Risk: none known; the nested session already runs with the first two (`config/hypr/dev.lua:44`).
+- Verification: `hyprctl getoption ecosystem:no_donation_nag` in a nested session (integrator), `just check`.
+
+### D-2. Hyprland's permission prompts stay off; its error overlays become Grassfield notices (H2, H8, H9; owner decision Q8)
+- `ecosystem.enforce_permissions` stays false (D-1): Hyprland asks nothing. Screen capture privacy is the portal's job
+  (P7, P10) and the Settings privacy pane's (PR #10).
+- Config errors: `debug.suppress_errors = true`; the shell reads `hyprctl -j configerrors` once at start and after Hyprland's
+  `configreloaded` event (`src/config/lua/ConfigManager.cpp:854`) and shows one Grassfield notice per new error set ("Some
+  settings could not be applied", with "Show Details" opening the journal lines), as it does for the Omarchy include (`config/hypr/session.lua:23-29`). Hyprland's
+  emergency mode (no binding left) is unaffected: Hyprland still shows it, by design.
+- Toasts without a switch (plugin load failure, monitor mode fallback, overlapping layout, xdph's Qt error) stay Hyprland's;
+  they are rare and listed as a known limitation. `misc.disable_scale_notification` is already set.
+- Cost: small (one option, one shell service function, one test with a fake `hyprctl`). Risk: an error is hidden when the
+  shell is not running; mitigated because Grassfield's degraded notice already covers a shell that does not start.
+
+### D-3. "Not responding": the macOS model through a `hyprland-dialog` stand-in (category A; H1, H3)
+- `/usr/lib/grassfield/session-bin/hyprland-dialog` (handle 2) receives every call Hyprland makes.
+  - ANR call (`--buttons` = the localised "Terminate;Wait"): the stand-in reports the hung window to the shell over IPC
+    and then stays alive, printing nothing. Hyprland keeps it running as "the dialog" and SIGKILLs it when the app answers a
+    ping or closes (`AsyncDialogBox.cpp:144-149`); the shell watches the stand-in's process and clears the state when it ends.
+  - The shell shows the macOS cues: "(Not Responding)" next to the app in Force Quit (pre-selected, in the destructive
+    colour), "Application Not Responding" at the top of the app's Dock menu with Force Quit in place of Quit, and the app
+    menu's Quit item as "Force Quit <App>". No alert (**owner decision Q2, 2026-10-27: the macOS model**). Force Quit kills
+    the app as today (`ForceQuitPanel.qml`); Hyprland then kills the stand-in.
+  - Identification: Hyprland passes only localised text, built from the first mapped window of the hung client
+    (`ANRManager.cpp:89`, `runDialog(m_title, m_class, pid)`). The stand-in knows the templates of Grassfield's two languages
+    as Hyprland 0.56.2 ships them (`src/i18n/Engine.cpp:213-217` en_US "An application {title} - {class} is not
+    responding.", buttons "Terminate;Wait"; `:577-581` fr_FR "L'application {title} - {class} ne répond plus.", buttons
+    "Forcer l'arrêt;Attendre"), takes the class after the last " - ", and the shell matches class and title against its
+    toplevels. A call in another locale, or one that matches no window or several apps, goes to the stock dialog. A test pins
+    the templates; a Hyprland update that changes them makes the stand-in fall back, never guess. When the compositor plugin is
+    present, a later step may replace the parsing by a `gfc/1` event (ADR-0007) from `CANRManager`; not required.
+  - Every other call (Safe Mode, permission prompts if ever enabled, an unknown button set) and every case where the shell does
+    not answer within 1 s execs `/usr/bin/hyprland-dialog` with the same arguments, keeping Hyprland's PID-based special
+    treatment (uncloseable, priority focus).
+  - `misc.anr_missed_pings = 3` (about 4.5 s, Omarchy's value in its own looknfeel; macOS shows the wait cursor after a few
+    seconds).
+- macOS's spinning cursor over the hung window: Hyprland already tints the hung window (`m_notRespondingTint = 0.2`); a wait
+  cursor needs the compositor plugin and is left to a later step (known limitation).
+- Fallback: shell absent (safe mode, crash, restart): the stock dialog, which still works. Never blocks: Hyprland does not wait
+  on the dialog (async), and the stand-in's IPC call has a 1-s deadline.
+- Cost: one stand-in script, one IPC target `anr` (`report`, dev `status`), Force Quit and Dock changes, tests with a fake
+  Hyprland caller. Risk: a Hyprland release that changes the text or the buttons → the stand-in falls back to the stock dialog
+  (a test pins the strings of the installed Hyprland).
+
+### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
+- **`grassfield-portal`**, the service step 2 introduces for D-8 (C++/Qt 6, QML on `Grassfield.Ui` for its panels), serves
+  `org.freedesktop.impl.portal.FileChooser` (`OpenFile`, `SaveFile`, `SaveFiles`) under the bus name
+  `org.freedesktop.impl.portal.desktop.grassfield`.
+  - Routing (handle 3): `/usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf` with
+    `[preferred]`, `org.freedesktop.impl.portal.FileChooser=grassfield;gtk` (and the interfaces of D-5 and D-8), nothing
+    else: every other interface falls through to the stock `hyprland-portals.conf` by the per-interface cascade. The
+    `grassfield.portal` file lives in the same directory tree (`…/xdg-desktop-portal/portals/`), so the backend does not even
+    exist for the frontend of an Omarchy session. `env-grassfield` prepends `/usr/share/grassfield/xdg` to `XDG_DATA_DIRS`.
+  - The panel is the Files browser (D6, KIO): the same sidebar, views (icons, list, columns, gallery), path pop-up, search and
+    Quick Look as Grassfield Files, built from the same sources (`apps/files/src/foldermodel.cpp`, `placesmodel.cpp`,
+    `filelogic.cpp`, the QML views). One code base: the portal binary links a library carved out of `apps/files` (one build
+    definition, ADR-0023), not a copy.
+  - Attached to the app's window: the frontend passes `parent_window` (`wayland:<handle>`); the panel imports it with
+    xdg-foreign v2 and marks itself modal with xdg-dialog v1, both served by Hyprland 0.56.2
+    (`src/protocols/XDGForeignV2.cpp:118-130`, `src/protocols/XDGDialog.cpp`); Hyprland then dims the parent
+    (`decoration:dim_modal`, default true) and keeps it from taking focus (`general:modal_parent_blocking`, default true;
+    `src/desktop/state/FocusState.cpp:86-90`), the closest Wayland equivalent of a sheet. Without a usable handle (X11 parent,
+    no handle) the panel is a centred floating window.
+  - Options mapped: `accept_label`, `modal`, `multiple`, `directory`, `filters`/`current_filter` (the Format pop-up),
+    `choices` (pop-ups and check boxes in the Options area), `current_name`/`current_folder`/`current_file`; results `uris`,
+    `choices`, `current_filter`. Only `file://` results; KIO remote locations appear in the sidebar but a remote pick is
+    refused with a message until the document portal path is designed (known limitation).
+  - Saving over an existing file asks with the macOS replace alert.
+- **Fallback, never blocking:** if the Grassfield UI cannot start (QML error, Qt platform failure) within 3 s, the backend
+  forwards the same call to x-d-p-gtk's backend (`org.freedesktop.impl.portal.desktop.gtk`, the same impl interface) and relays
+  its answer; if the backend itself is missing or crashes, the frontend uses the next name of the line, `gtk`, at its next
+  start. The app always gets an answer (a path or "cancelled").
+- **Coverage** (who reaches the portal; details in the inventory, T-rows): see D-8.
+- **§5.8 checklist** (a new service): why existing services cannot do it (x-d-p-gtk draws GTK 3, its look is not
+  configurable beyond the GTK theme); versioned interface: the freedesktop impl interfaces are versioned upstream, Grassfield
+  adds no interface of its own; a hardened user unit `grassfield-portal.service` (`ConditionEnvironment=GRASSFIELD_SESSION=1`,
+  `Type=dbus`, `NoNewPrivileges`, `ProtectSystem=strict`, `RestrictSUIDSGID`, `LockPersonality`, the rest measured in its step:
+  the home stays writable because the Save panel's New Folder and KIO's caches write there, and the network stays open for
+  KIO's network places); started with the session for the Settings interface (D-8) and D-Bus activatable; the panels' QML
+  engine is created for the first panel and released 60 s after the last one closes; resource budget: ≤ 25 MB RSS with no
+  panel, ≤ 80 MB while a panel is open; security model: it runs as the user, returns only what the user picked, never opens or runs a
+  file (the calling app reads or writes the returned path), and logs no file name.
+- Cost: large (the biggest step): a new binary, a library split of Files, the panel QML, tests with a fake frontend on a
+  private bus. Risk: medium (Qt Quick + KIO startup time: the first panel must open in ≤ 300 ms warm; Wayland parent import).
+
+### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
+- `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.
+  - Open With: the macOS "Choose Application" sheet: the recommended apps for the type first (the candidates the frontend
+    passes), "All Applications" behind a pop-up, a search field, "Always Open With" (the frontend's own `always ask`/count
+    rules keep their meaning), Cancel / Open.
+  - Access: one alert shape for Camera, Location and Screenshot (P5–P7): the app's icon and name, the frontend's title and body
+    as given (they are already translated by xdg-desktop-portal; Grassfield's own strings for the buttons), "Don't Allow" /
+    "Allow" of equal width, neither pre-selected for camera and screen capture (macOS 15+). The answer goes back to the
+    frontend, which stores it in the permission store that Settings > Privacy & Security reads (PR #10, ADR-0030 amendment).
+- Fallback: as D-4 (forward to gtk).
+- Cost: medium (two QML surfaces on the D-4 process). Risk: low.
+
+### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10)
+- `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
+  xdph runs on this machine, Omarchy's `xdph.conf` choice and xdph's default) ask the shell to show the Grassfield picker and
+  print xdph's answer:
+  - in: `--allow-token`, `XDPH_WINDOW_SHARING_LIST` (`<handleLo>[HC>]<class>[HT>]<title>[HE>]<address>[HA>]`…,
+    `src/shared/ScreencopyShared.cpp:28-62`);
+  - out: `[SELECTION]<flags>/screen:<output>\n`, `…/window:<handleLo>\n` or `…/region:<output>@x,y,w,h\n`, flag `r` when the
+    user ticked "Remember this choice" (the restore token); nothing when cancelled (xdph then answers "cancelled",
+    `Screencopy.cpp:251`). stdout and stderr stay open until the line is written (xdph's `runSync` stops reading at the first
+    hang-up of either pipe).
+- The shell's picker: a panel on the active display with "Entire Screen" (one live thumbnail per display, from the
+  ScreencopyView already used by the Overview), "Window" (live thumbnails of the listed windows, by app, with their titles)
+  and "Selection" (a crosshair, D-10), "Remember this choice" (unticked unless xdph passes `--allow-token`, which Omarchy's
+  `xdph.conf` asks for with `allow_token_by_default = true`), Cancel / Share. Windows
+  that hide themselves from capture (`no_screen_share`, `config/hypr/grassfield/privacy.lua`) are listed but greyed with
+  "This window can't be shared".
+- While a share runs, the menu bar shows the screen-recording indicator (Hyprland's `screencast` event,
+  `src/managers/screenshare/ScreenshareSession.cpp:140-147`), which names the app and stops nothing by itself (stopping
+  belongs to the app; macOS 15 shows the same indicator).
+- Fallback: shell absent, locked, or no answer to the IPC call within 1 s → exec the stock binary named (absolute path, same
+  arguments and environment). A user `xdph.conf` that names another picker (another name, an absolute path) is not intercepted
+  (known limitation; the user's choice wins).
+- Cost: medium (stand-in, IPC target `picker`, a shell panel). Risk: xdph blocks its main loop while the picker runs (upstream
+  behaviour, also with the stock picker); a wrong output line cancels the share, never shares something else (tests feed the
+  stand-in's output to a copy of xdph's parser).
+
+### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
+- `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.
+  - `PreparePrint(parent_window, title, settings, page_setup, options)`: the macOS print sheet on the app's window: Printer
+    pop-up (CUPS destinations, the default first, "Add Printer…" opening Settings > Printers), Presets (Default Settings, Last
+    Used Settings), Copies, Pages (All, range), then Paper Size, Orientation, Scale, Two-Sided and Colour as the printer
+    supports them (CUPS `cupsCopyDestInfo` options), "PDF" pop-up (Save as PDF… through the D-4 save panel), Cancel / Print;
+    returns `settings`, `page-setup` and a token, as GTK's names them (the frontend passes them back to the app).
+  - `Print(parent_window, title, fd, options{token})`: with a valid token, sends the document to CUPS without a sheet
+    (`cupsCreateDestJob`/`cupsStartDestDocument`); without one (an app that sends the document first), the same sheet with a
+    live preview of the document on the left, as macOS shows it.
+  - Dependency: libcups, already installed with qt6-base and gtk3 on Arch (probe P14); printer discovery and job submission
+    only, no PPD editing (Settings > Printers, PR #8, adds printers).
+- Coverage: GTK 4 apps, GTK 3 apps' `GtkPrintOperation` with `GTK_USE_PORTAL=1` (D-8), Flatpaks. Not covered (their own or an
+  in-process dialog, inventory § T): Chromium's and Firefox's preview and "system dialog", LibreOffice's VCL dialog, Electron,
+  Qt apps' `QPrintDialog`. Known limitation, listed in the spec.
+- Account and Create Application (P12, P13: sandboxed apps only, rare) stay x-d-p-gtk's and follow D-8.
+- Fallback: as D-4 (forward to x-d-p-gtk's Print).
+- Cost: medium-high (CUPS options model, sheet, preview of PDF/PostScript with Qt PDF already used by Preview). Risk: printer
+  options vary widely; the sheet shows only the options CUPS reports and the job goes to CUPS unchanged otherwise.
+
+### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
+Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland **only** from the portal
+(`gdk/wayland/gdksettings-wayland.c:443-540`); libadwaita 1.10 reads `color-scheme`, `accent-color` (snapped to its nine
+accents), `contrast` and `reduced-motion` from the portal (`src/adw-settings-impl-portal.c:252-370`); Qt 6.11's `gtk3` theme
+reads the portal's `color-scheme` and `contrast` but takes its palette from the in-process GTK 3 theme
+(`qgtk3storage.cpp:362-380, 595-640`); Chromium 155/156, Electron 43 and Firefox 158 read `color-scheme` and the RGB
+`accent-color` from the portal; LibreOffice and Flutter read `color-scheme`. GTK 3 reads `gtk-theme` from dconf, or from the
+portal's `org.gnome.*` keys when `GTK_USE_PORTAL=1` (`gtk 3.24.52 gdk/gdk.c:479-496`,
+`gdk/wayland/gdkscreen-wayland.c:714-804`, live through `SettingChanged`). x-d-p-gtk 1.15.3 publishes `color-scheme` and
+`contrast` only, from the user's dconf (Omarchy's `prefer-dark`/`Adwaita-dark`), and no `accent-color`. The portal merges
+Settings backends and the first listed wins per key (`xdg-desktop-portal src/settings.c:129-160`).
+
+Decision:
+- **A Grassfield Settings backend** (`org.freedesktop.impl.portal.Settings` in `grassfield-portal`, listed before `gtk` by
+  the session's `hyprland-portals.conf` of D-4) serves, live from the shell's settings file:
+  - `org.freedesktop.appearance`: `color-scheme` (1 dark, 2 light; `auto` resolved with `AutoAppearance`'s schedule),
+    `accent-color` (the Grassfield accent as sRGB; `multicolor`, the default, is Grassfield's own green, as
+    `config/schema/grassfield.schema.json` defines it), `contrast` (Increase Contrast),
+    `reduced-motion` (Reduce Motion);
+  - `org.gnome.desktop.interface`: `gtk-theme` (the Grassfield GTK theme for the appearance and the accent, owner decision
+    Q7: `Grassfield-<accent>` or `Grassfield-<accent>-dark`, CSS-only themes generated at build time from `ui/tokens/tokens.json`
+    that import GTK's built-in Adwaita/Default stylesheet and override only the accent, the selection colours and the radii;
+    MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key falls through to
+    x-d-p-gtk (fonts and icons already come from the session dconf profile, ADR-0003 and ADR-0017).
+  The backend has no window: it stays running for the session (the frontend listens to its `SettingChanged`), so this part
+  of `grassfield-portal` is a long-running service started with the session, its panels (D-4, D-5) are loaded on demand
+  and unloaded after use.
+- **`GTK_USE_PORTAL=1`** in the Grassfield session (`env-grassfield`): GTK 3 apps then read their theme from the portal and
+  change with the appearance live, and their `GtkFileChooserNative`, `GtkPrintOperation` and colour picker go through the
+  portal (Grassfield's panels for files). This covers evince, LocalSend, the GTK 3 parts of Qt's `gtk3` theme (Qt apps'
+  palettes follow), LibreOffice's colours, udiskie and gcr-prompter while they remain. x-d-p-gtk unsets the variable for
+  itself (`src/xdg-desktop-portal-gtk.c:231`), so it keeps reading dconf: its remaining dialogs (print, account) follow the
+  user's GTK theme, not the Grassfield appearance (known limitation).
+- **Not done:** `GTK_THEME` session-wide (it disables libadwaita's stylesheet, `adw-style-manager.c:454-470`, and freezes the
+  theme); `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (Qt apps would lose the GTK palette, fonts and icons for Fusion, "Sans Serif
+  9" and hicolor on Hyprland, `qgenericunixtheme.cpp:69-72, 117-121`); writing the user's dconf.
+- **Coverage of the Grassfield file panel that follows:** Chromium, Electron (Obsidian), Firefox, GTK 4 apps and Flatpaks
+  already use the portal; with `GTK_USE_PORTAL=1` also GTK 3 apps that use the native chooser and LocalSend. Still in-process
+  (GTK 3 `GtkFileChooserDialog`, themed by the above): Qt apps under the `gtk3` theme (Kdenlive, Grassfield's own Qt apps if
+  they use QtQuick.Dialogs; they can call the portal directly), LibreOffice. **Owner decision Q3 (2026-10-27): portal apps +
+  GTK 3 through `GTK_USE_PORTAL=1`; Qt keeps `gtk3`.**
+- Cost: medium (a no-window D-Bus service, its unit, settings-file watching, tests on a private bus with the real frontend
+  1.22.1 and fake backends; the 18 generated GTK themes and their contrast test; then the environment lines). Risk: GTK 3
+  apps call the portal's `ReadAll` synchronously at start, so a hung Settings backend would delay their start (up to the
+  frontend's D-Bus timeout): the backend answers from memory only, never blocks, and is covered by a start-time test; with the
+  backend absent the frontend answers from x-d-p-gtk alone.
+
+### D-9. Password and passphrase prompts (category S; S1–S9) — owner decision Q1, opus PASS required
+Upstream facts (inventory § S, read in source): gnome-keyring 51.1, pinentry-gnome3 (Arch's `/usr/bin/pinentry` picks it first
+on Wayland, probe P6) and gcr-ssh-agent all ask through gcr's system prompter: the session-bus name
+`org.gnome.keyring.SystemPrompter`, object `/org/gnome/keyring/Prompter`, interface `org.gnome.keyring.internal.Prompter`
+(`BeginPrompting`, `PerformPrompt(type "password"|"confirm", properties, exchange)`, `StopPrompting`), the client's callback
+`PromptReady`/`PromptDone`, the password returned through the `sx-aes-1` exchange (unauthenticated DH, "does not protect
+against active attacks like MITM", `gcr/gcr-secret-exchange.c:41`). Only gcr 3.41.2 ships the prompter
+(`/usr/lib/gcr-prompter`, GTK 3, D-Bus activated, exits after 10 s idle); gcr-4 speaks the same protocol. **Name ownership is
+the whole authorization**: any same-user process that holds the name receives every password typed into these prompts, and
+any same-user process can make the stock prompter show caller-chosen text (clients ignore the sender,
+`gcr/gcr-system-prompt.c:684-706`; the prompter accepts any client, `gcr/gcr-system-prompter.c:756-790, 868-950`; the
+session bus lets anyone own any name). udiskie draws its own GTK 3 dialog unless its command line gives `--password-prompt`
+(`udiskie/cli.py:303-362`, `prompt.py:232-243`). On the owner's machine prompts are rare: Omarchy keeps a plaintext default
+keyring and removes `pam_gnome_keyring` from SDDM (probe P12); they appear for GPG (git signing, pass), a keyring the user
+protected, an encrypted USB disk, a new keyring (libsecret creates "Default keyring" when the alias is missing).
+
+Options:
+- **S0. Keep the stock prompts, themed (D-8).** No new secret code. gcr-prompter and udiskie's dialog are GTK 3 and follow the
+  Grassfield appearance through D-8 (light/dark live), but stay GNOME-shaped (GTK 3 Adwaita, its own layout). Cost: none
+  beyond D-8. Risk: none added.
+- **S1. A Grassfield prompter process that draws its own window.** `grassfield-prompter` (C++, Qt Quick, libgcr's
+  `GcrSystemPrompter` for the protocol and the exchange, a `GcrPrompt` implementation for the UI) owns the name from the
+  session's start. Cost: medium-high. Risk: a regular toplevel window can be covered or captured unless window rules pin it,
+  keep its focus and hide it from screen sharing; a second security surface outside `shell/security/`.
+- **S2 (recommended). The shell draws the prompt; a small bridge holds the name.** `grassfield-prompter` (C, libgcr, no
+  toolkit) owns `org.gnome.keyring.SystemPrompter` for the whole Grassfield session (requested without `ALLOW_REPLACEMENT`,
+  so no process can take it over; queued behind a stock gcr-prompter that still holds it),
+  lets libgcr run the protocol and the exchange, and hands each prompt to the shell over a private Unix socket
+  (`$XDG_RUNTIME_DIR/grassfield/prompter.sock`, directory 0700, socket 0600; the bridge accepts only a peer whose
+  `SO_PEERCRED` uid is the user's and whose cgroup is `grassfield-shell.service`). The shell shows it with the polkit sheet's
+  rules (`shell/security/polkit`: plain-text strings, bounded lines, nothing over the lock, held after an unlock without the
+  keyboard, cleared field after each attempt, `no_screen_share` for its surface), plus the requester's identity resolved by
+  the bridge from `GetConnectionCredentials` (process, app name, PID; upstream shows none). The password goes back to the
+  bridge, which gives it to libgcr and wipes its buffer.
+  - udiskie: `grassfield-automount.service` passes `--password-prompt "/usr/lib/grassfield/grassfield-askpass udiskie
+    {device_presentation}"`; the helper is a gcr client (libgcr `gcr_system_prompt_open`) that prints the password on stdout,
+    so the same prompt draws it (or gcr-prompter when the bridge is down).
+  - Fallback, never blocking: when the shell is not connected, the bridge releases the name, so the next prompt activates the
+    stock gcr-prompter (as today); it takes the name again when the shell reconnects. While it holds the name, the risk is no
+    worse than today's (gcr-prompter frees the name 10 s after each prompt, so a queued process can already take it).
+  - Wi-Fi secrets (owner decision Q10): the bridge also registers a NetworkManager secret agent on the system bus
+    (`org.freedesktop.NetworkManager.AgentManager.Register("org.grassfield.prompter")`, interface
+    `org.freedesktop.NetworkManager.SecretAgent`: `GetSecrets`, `CancelGetSecrets`, `SaveSecrets`, `DeleteSecrets`; NM 1.58.1
+    introspection). Quickshell 0.3.x has none and no other agent runs in the session, so today NM fails with NoSecrets when a
+    known network's password changed. `GetSecrets` for `802-11-wireless-security` (PSK, WEP) and `802-1x` (identity and
+    password) becomes the macOS alert "The Wi-Fi network “Name” requires a WPA2 password." with Show password, Cancel / Join;
+    the secret goes back to NM, which stores it as the connection says (system-owned by default, as Quick Settings' inline
+    join does). VPN secrets stay with each VPN plugin's own dialog (known limitation). When the shell is not connected the agent
+    unregisters (NM then fails with NoSecrets, as today).
+  - Out of scope here: SSH askpass (no agent and no askpass are set up by Omarchy; terminal ssh asks on its tty), KWallet's own
+    Qt dialogs (only if the user chooses KWallet); the BlueZ pairing agent is D-11, a later step.
+  - Requires: an owner amendment of the CLAUDE.md security rule, proposed text: "Security modules (shell/security/):
+    WlSessionLock + PamContext("omarchy-lock-password") + Quickshell Polkit + the secret sheet fed by grassfield-prompter
+    (gcr system prompts, NetworkManager secrets, BlueZ pairing; ADR-0035) only"; an opus PASS on the bridge, the socket
+    protocol and the shell surface; security tests on a private bus with a fake gcr client, a fake NM and a fake attacker queued
+    on the name (never the real buses or real secrets).
+  - Cost: high (a C bridge with libgcr, a socket protocol, a shell security surface, tests). Risk: medium (new code on a secret
+    path); mitigated by libgcr doing the protocol and the cryptography, and by reusing the reviewed polkit patterns.
+- **S3. Redirect only gnome-keyring** through its `GNOME_KEYRING_TEST_PROMPTER` variable
+  (`daemon/dbus/gkd-secret-create.c:396-405`, `pkcs11/wrap-layer/gkm-wrap-prompt.c:1561-1572`). Rejected: a test hook, not
+  an interface, and it misses pinentry and gcr-ssh-agent.
+
+Recommendation: S2, delivered after D-8 has made the stock prompts follow the appearance (S0 is the state until then).
+**Owner decision Q1 (2026-10-27): S2.** Q10: the NetworkManager secret agent is part of the same step.
+
+### D-10. What Omarchy still shows (category D; O1–O11)
+- **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
+  - step "screenshots": Grassfield's bindings call a Grassfield capture script instead of `omarchy-capture-screenshot`. It keeps
+    grim and slurp (the selection stays a crosshair over the live screen, with Grassfield's colours passed to slurp: veil,
+    border and selection from the tokens), names the file as macOS does (`Screenshot <date> at <time>.png`, translated),
+    copies to the clipboard and posts a Grassfield notice with the image and "Open in Preview"; no Omarchy shortcut is named,
+    no `tensaku`. A click without a drag picks the window under the pointer (slurp's rectangle list, as Omarchy's "smart"
+    mode does); Esc cancels. Saved to the Desktop as on macOS (**owner decision Q4**; Omarchy saves to Pictures).
+  - later chantier (own ADR): the macOS capture toolbar (Shift-Cmd-5: screen, window, selection, recording, Options) and the
+    floating thumbnail, drawn by the shell; recording then replaces Omarchy's `gpu-screen-recorder` path.
+- **Migrations and updates in a terminal (O3, O4):** accepted. They are Omarchy's maintenance tools running in a terminal, as
+  a command-line update is on macOS; the Grassfield path is Software Update (ADR-0033), whose own sheet asks the questions.
+- **Omarchy menus (O5):** nothing opens (verified by code: the stand-in `omarchy-shell` fails as Omarchy's wrapper does);
+  accepted.
+- **Omarchy notifications (O6):** accepted: they arrive as Grassfield banners; the only frequent one, the screenshot notice,
+  goes away with the re-wiring above.
+- **fcitx5 (O8), hyprpicker (O9, P9):** accepted for 1.0, listed as known limitations (fcitx5's theme is chosen in the user's
+  own fcitx5 config; hyprpicker shows only a loupe).
+- **Omarchy's theme inside Chromium and Obsidian (O10):** documented; Grassfield never writes those apps' files.
+
+### D-11. Bluetooth pairing sheet (inventory O7; category A + S; owner decision Q9: in this chantier, after the eight other steps)
+- Today Omarchy's `bt-agent -c NoInputNoOutput` accepts Just Works pairing silently in both sessions, and a device that needs a
+  code or a PIN fails (Settings registers no `Agent1`, PR #8).
+- `grassfield-prompter` (D-9) registers a BlueZ agent on the system bus (`org.bluez.AgentManager1.RegisterAgent(path,
+  "KeyboardDisplay")`, then `RequestDefaultAgent`) and implements `org.bluez.Agent1`: `RequestPinCode` and `RequestPasskey`
+  (a field), `DisplayPinCode` and `DisplayPasskey` (the code to type on the device), `RequestConfirmation` (the macOS
+  "Connection Request from “Name”": the code, Cancel / Connect), `RequestAuthorization` and `AuthorizeService` (an incoming
+  pairing or service: Decline / Connect, never automatic), `Cancel`, `Release`. The shell's secret sheet (D-9) draws them.
+- Omarchy's agent is kept out of the Grassfield session with a packaged drop-in
+  `/usr/lib/systemd/user/bt-agent.service.d/10-grassfield.conf` (`ConditionEnvironment=!GRASSFIELD_SESSION=1`), the pattern of
+  `omarchy-sleep-lock.service.d`; the Omarchy session keeps it.
+- Fallback: shell not connected → the agent unregisters; BlueZ then has no agent and refuses pairings that need one (UNVERIFIED:
+  BlueZ's behaviour for Just Works without any agent, checked in the step; if it refuses, the step keeps bt-agent as the
+  fallback agent instead of the drop-in).
+- Requires the same CLAUDE.md amendment and an opus PASS (a PIN is a secret; an incoming authorization is a security
+  decision). Tests on a private system-bus fake of BlueZ.
+- Cost: medium. Risk: agent precedence between two agents (UNVERIFIED, inventory O7), adapter pairable/discoverable state
+  (Settings' Bluetooth pane, PR #8, owns discovery).
+
+### Plumbing shared by D-3 and D-6
+- One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
+  name. It is put first in PATH exactly where `omarchy-shims` is today (`omarchy.lua` `guard_path` for the compositor,
+  `env-grassfield` for the systemd user manager); `omarchy-shims` keeps only Omarchy stand-ins. Every stand-in:
+  - is a POSIX shell script (like the existing shims) that clears Quickshell's option variables before `qs ipc`
+    (security.md, `lock_request_env.sh`);
+  - asks the shell with `qs ipc -p /usr/share/grassfield/shell call <target> <function> …` under a 1-s `timeout`;
+  - on any failure, or in a dev session where the target refuses, `exec`s the stock binary by absolute path with the same
+    arguments, so the caller sees the stock program with the same PID;
+  - never logs window titles or file names.
+- Every new IPC function is added to `docs/specs/security.md` § IPC surface in the step that adds it.
+
+## Delivery order (owner decision Q5, 2026-10-27: the proposed order; Q6 and Q9 add two steps)
+Each step: its spec section, `just check`, its tests (fakes on a private bus, never the owner's bus or secrets), a nested
+scenario with screenshots where it draws, an opus review when it touches security, IPC, a new service or the compositor
+config; `docs/STATE.md` updated. Steps marked "after #8–#10" touch the shell or Settings and start only once the Settings pull
+requests #8, #9 and #10 are merged (owner).
+1. **Hyprland's screens off** (D-1): `config/hypr` only, a static test, nested check by the integrator (`hyprctl getoption`).
+   Can start right after the opus PASS of this step.
+2. **Appearance follows Grassfield** (D-8): `grassfield-portal` with the Settings interface only (no window), the session's
+   `hyprland-portals.conf` under `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, the
+   18 generated GTK themes (Q7). Packaging and a new service, no shell change.
+3. **Not responding and Hyprland's notices** (D-3, D-2): `session-bin/hyprland-dialog`, IPC `anr`, Force Quit, Dock and app
+   menu marks, `debug.suppress_errors` with the shell's notice. After #8–#10.
+4. **Open and Save panels** (D-4): the Files library split, the panel, the FileChooser interface in `grassfield-portal`.
+   Coordinated with the open Files pull request #7 (views).
+5. **Open With and permission alerts** (D-5).
+6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Placed here by the integrator because it
+   reuses the process, the sheet frame and the save panel (Save as PDF) of steps 4 and 5; the owner may move it.
+7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker`, the shell panel, the recording indicator. After #8–#10.
+8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).
+9. **Password prompts** (D-9, Q1 = S2, Q10): the owner's amendment of the CLAUDE.md security rule first, then the bridge, the
+   socket protocol, the shell's secret sheet, the udiskie helper, the NetworkManager secret agent; opus PASS. After #8–#10.
+10. **Bluetooth pairing sheet** (D-11, Q9: "en plus des 8 étapes"): the BlueZ agent in the bridge, the drop-in for Omarchy's
+    `bt-agent`, the sheet's pairing forms; opus PASS. After step 9.
+
+Rationale: cheap and broad first (1, 2: every remaining GTK dialog already looks right in light and dark), then the most seen
+dialogs (3, 4), the security-sensitive ones last, after the patterns they reuse have landed.
+
+## Owner decisions
+Asked on 2026-10-27 in the cloud session with the options above (recommended option first, in French); every question is
+answered. Q1 also accepts that a new secret prompt enters `shell/security/` (the CLAUDE.md amendment is applied in step 9).
+
+| | Question | Options (recommended first) | Answer |
+|---|---|---|---|
+| Q1 | Password prompts (keyring, GPG, encrypted disk) | S2 bridge + shell sheet / S1 own window / S0 stock, themed | **S2** (bridge + shell sheet) |
+| Q2 | "Not responding" | macOS model, no alert / a Grassfield alert Wait-Force Quit / marks, then an alert after 30 s | **macOS model, no alert** |
+| Q3 | Which apps reach the Grassfield file panel | portal apps + GTK 3 through `GTK_USE_PORTAL=1` / also Qt apps through `QT_QPA_PLATFORMTHEME=xdgdesktopportal` / portal apps only | **portal apps + GTK 3 through `GTK_USE_PORTAL=1`** |
+| Q4 | Screenshots | re-wire now, saved to the Desktop, full capture toolbar later / re-wire, saved to Pictures / full toolbar in this chantier / keep Omarchy's | **re-wire now, saved to the Desktop; toolbar later** |
+| Q5 | Delivery order | as above / Open and Save panels first | **the proposed order** |
+| Q6 | Print dialog | GTK, themed, for 1.0 / a Grassfield print sheet in this chantier | **a Grassfield print sheet in this chantier** (not the recommended option) |
+| Q7 | GTK 3/4 theme | Grassfield CSS themes on Adwaita (accent, radii) per appearance and accent / Adwaita light and dark only | **Grassfield CSS themes** |
+| Q8 | Hyprland's config errors | suppressed, reported as a Grassfield notice / Hyprland's red bar kept | **Grassfield notice** |
+| Q9 | Bluetooth pairing codes | Omarchy's bt-agent kept for 1.0 / a Grassfield pairing sheet in this chantier | **a Grassfield pairing sheet in this chantier, after the eight steps** (not the recommended option) |
+| Q10 | Wi-Fi password asked by NetworkManager | later, with its own decision / in this chantier, in the password step | **in this chantier, in the password step** (not the recommended option) |
+
+## macOS reference
+One system draws every system question: open and save panels and the print sheet are AppKit's, shown as sheets of the app's
+window; privacy and password questions are system alerts (TCC, SecurityAgent) with the app's name; the system never shows an
+"app not responding" alert, only the wait cursor and Force Quit's "(Not Responding)"; screen sharing goes through the system
+picker and the menu-bar indicator; there are no update, donation or welcome screens outside Setup Assistant and Software Update.
+
+## Alternatives rejected
+- Patching or forking xdg-desktop-portal-gtk, xdph, hyprland-guiutils or gcr (D1).
+- A compositor plugin as the ANR source (internal `CANRManager` API with no stability promise; kept as an optional later
+  improvement).
+- `XDG_CURRENT_DESKTOP=Grassfield:Hyprland` (handles § above).
+- A hyprtoolkit theme for hyprland-guiutils (`/etc/xdg/hypr/hyprtoolkit.conf`): it would also restyle the Omarchy session's
+  dialogs (a system file read by both sessions), and with D-1 and D-3 the guiutils windows only remain as fallbacks.
+- Writing the user's dconf, `xdph.conf`, `gpg-agent.conf` or udiskie config (the owner's files).
+
+## Evidence
+- `docs/audits/dialogs-2026-10-27/probes.sh` and `probes-output.txt`: `docker run … archlinux:base@sha256:52dfbd5a…` →
+  exit 0 (Omarchy 4.0.4 stable mirror, 2026-10-27): package versions, the portal and D-Bus service files, Arch's pinentry
+  wrapper, the helper names in Hyprland's and xdph's binaries, udiskie's default prompt, Omarchy's inherited settings, the
+  packages that already pull libcups, BlueZ and NetworkManager (P14).
+- Source reading, every citation in the inventory: Hyprland v0.56.2 (efb5099), xdph v1.4.1 (cc8e5ef), hyprland-guiutils v0.2.2
+  (a16ad89), hyprtoolkit v0.6.0, hyprutils v0.14.3, xdg-desktop-portal 1.22.1 (1d20fad), xdg-desktop-portal-gtk 1.15.3
+  (337202d), gtk 3.24.52 (6a0b360) and 4.24.1, libadwaita 1.10.0, qtbase v6.11.2 and v6.12.0, gcr 3.41.2 and 4.4.1,
+  gnome-keyring 51.1, pinentry 1.3.3, udiskie v2.7.0, Chromium 156 and Electron 43 sources, Firefox 158, LibreOffice 26.8.1,
+  Omarchy v4.0.4 (c668141) and v4.0.6 (237f1b4).
+- Not verified (no display in the cloud container; nested runs are the integrator's): every "Today" look, every runtime claim
+  marked UNVERIFIED in the inventory, and the live update of GTK 3 apps through `SettingChanged` (code-read only).
+
+## Consequences
+- One new service, `grassfield-portal` (Settings always on; panels on demand), and in step 9 a second one,
+  `grassfield-prompter` (gcr prompts, NetworkManager secrets, and in step 10 the BlueZ agent); both started with the session or
+  D-Bus activated, gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
+- One new library dependency of a Grassfield binary, libcups (step 6), already installed with qt6-base and gtk3.
+- A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
+- The CLAUDE.md security rule is amended by the owner in step 9 (text in D-9).
+- One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins) and `/usr/share/grassfield/xdg` (the
+  session's portal configuration).
+- The Grassfield session exports `GTK_USE_PORTAL=1` and prepends `XDG_DATA_DIRS`; the Omarchy session is unchanged
+  (`env-grassfield` is read only for the Grassfield desktop name, ADR-0017).
+- New IPC targets `anr` and `picker` (and later the prompter socket) are listed in `docs/specs/security.md` in their steps.
+- The inventory is the checklist of the chantier: a row is closed when its step merges, with its evidence.
+- Known limitations recorded in `docs/specs/system-dialogs.md`: no true sheets (modal child windows), no wait cursor, apps
+  that print or pick files in-process (Chromium's and Firefox's previews, LibreOffice, Electron's print, Qt apps) keep their own
+  dialogs (themed), remote file picks refused, Hyprland's safe-mode dialog and a few toasts stay Hyprland's, VPN secrets stay
+  with each VPN plugin, a user's own picker or portal configuration wins.
