@@ -1,11 +1,13 @@
 // The catalog's signature (ADR-0037 g, as ADR-0033 d.8): VALIDSIG's argument 10 in grassfield-trusted and not in
-// grassfield-revoked. Here gpgv is a fake that prints recorded status lines; tests/integration/store_catalog.sh runs the real
-// gpgv against throwaway keys in a throwaway container (RealGpgv below, given STORE_TEST_REAL_GPGV).
+// grassfield-revoked; and pacman's rule for Arch's AppStream package (c, SD4, S19). Here gpgv and gpg are fakes or recorded
+// status lines; tests/integration/store_catalog.sh runs the real ones against throwaway keys in a throwaway container
+// (RealGpgv and RealPacmanKeyring below, given STORE_TEST_REAL_GPGV and STORE_TEST_PACMAN_KEYRINGS).
 #include "signature.h"
 #include "storetest.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 
 #include <gtest/gtest.h>
@@ -79,6 +81,35 @@ TEST(Signature, Judge)
     EXPECT_EQ(judge(1, validsig(kGood), trusted, revoked).verdict, SignatureVerdict::Bad); // gpgv's exit wins
     EXPECT_EQ(judge(0, "", trusted, revoked).verdict, SignatureVerdict::Bad);
     EXPECT_EQ(judge(0, validsig(kGood), {}, revoked).verdict, SignatureVerdict::NoTrustedKey);
+    // A signed message given as the .sig (not a detached signature): refused whatever else gpgv says.
+    EXPECT_EQ(judge(0, "[GNUPG:] PLAINTEXT 62 0 \n" + validsig(kGood), trusted, revoked).verdict, SignatureVerdict::Bad);
+}
+
+TEST(Signature, PacmansRule)
+{
+    // A good signature by a key pacman's keyring trusts fully or ultimately, and nothing else (S19).
+    const QByteArray good = validsig(kGood) + "[GNUPG:] TRUST_FULLY 0 pgp\n";
+    EXPECT_EQ(pacmanTrustedSigner(0, good), kGood);
+    EXPECT_EQ(pacmanTrustedSigner(0, validsig(kGood) + "[GNUPG:] TRUST_ULTIMATE 0 pgp\n"), kGood);
+    for (const char *trust : {"TRUST_UNDEFINED", "TRUST_NEVER", "TRUST_MARGINAL"})
+        EXPECT_EQ(pacmanTrustedSigner(0, validsig(kGood) + "[GNUPG:] " + trust + " 0 pgp\n"), QString()) << trust;
+    EXPECT_EQ(pacmanTrustedSigner(0, validsig(kGood)), QString());                    // no trust line at all
+    EXPECT_EQ(pacmanTrustedSigner(1, good), QString());                               // gpg's exit wins
+    EXPECT_EQ(pacmanTrustedSigner(0, good + validsig(kOld) + "[GNUPG:] TRUST_FULLY 0 pgp\n"), QString()); // two signatures
+    for (const char *bad : {"PLAINTEXT 62 0", "BADSIG 1 X", "ERRSIG 1 22 10 00 1 9", "EXPSIG 1 X", "EXPKEYSIG 1 X", "REVKEYSIG 1 X",
+                            "NO_PUBKEY 1"})
+        EXPECT_EQ(pacmanTrustedSigner(0, QByteArray("[GNUPG:] ") + bad + "\n" + good), QString()) << bad;
+    EXPECT_EQ(pacmanTrustedSigner(0, "[GNUPG:] VALIDSIG " + kGood.toLatin1() + " 2026-10-27\n[GNUPG:] TRUST_FULLY 0 pgp\n"), QString());
+
+    // The key listing: that one key, valid, not disabled (gpg still says TRUST_FULLY for a disabled key, S19).
+    const QByteArray fpr = "fpr:::::::::" + kGood.toLatin1() + ":\n";
+    EXPECT_TRUE(pacmanKeyUsable("pub:f:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr, kGood));
+    EXPECT_TRUE(pacmanKeyUsable("pub:u:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr, kGood));
+    EXPECT_FALSE(pacmanKeyUsable("pub:f:255:22:1:1:::-:::scSCD::::::23::0:\n" + fpr, kGood)); // disabled
+    EXPECT_FALSE(pacmanKeyUsable("pub:-:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr, kGood));  // not valid
+    EXPECT_FALSE(pacmanKeyUsable("pub:f:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr, kOld));   // another key
+    EXPECT_FALSE(pacmanKeyUsable("pub:f:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr + "pub:f:255:22:1:1:::-:::scSC::::::23::0:\n" + fpr, kGood));
+    EXPECT_FALSE(pacmanKeyUsable("", kGood));
 }
 
 TEST(Signature, RunsGpgvWithItsOwnEmptyHomeAndTheKeyringFolder)
@@ -125,6 +156,17 @@ TEST(Signature, NoKeyMeansNoCatalog)
     EXPECT_EQ(verifySignature(gpgv, badRevoked.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
     Keyring badTrusted((kGood + ":4: # ours\n").toLatin1(), "");
     EXPECT_EQ(verifySignature(gpgv, badTrusted.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
+    // A revoked list that is there but cannot be read (over 1 MiB, or not a file): refused, never taken as empty.
+    Keyring bigRevoked((kGood + ":4:\n").toLatin1(), QByteArray(1024 * 1024 + 1, '#'));
+    EXPECT_EQ(verifySignature(gpgv, bigRevoked.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
+    Keyring dirRevoked((kGood + ":4:\n").toLatin1(), "");
+    QFile::remove(dirRevoked.dir.filePath(QStringLiteral("grassfield-revoked")));
+    QDir().mkdir(dirRevoked.dir.filePath(QStringLiteral("grassfield-revoked")));
+    EXPECT_EQ(verifySignature(gpgv, dirRevoked.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::NoTrustedKey);
+    // No revoked list at all is an empty one.
+    Keyring noRevoked((kGood + ":4:\n").toLatin1(), "");
+    QFile::remove(noRevoked.dir.filePath(QStringLiteral("grassfield-revoked")));
+    EXPECT_EQ(verifySignature(gpgv, noRevoked.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::Good);
     // gpgv missing or hanging: Bad, never Good.
     Keyring keyring((kGood + ":4:\n").toLatin1(), "");
     EXPECT_EQ(verifySignature(QStringLiteral("/nonexistent/gpgv"), keyring.dir.path(), QStringLiteral("/dev/null"), QStringLiteral("/dev/null")).verdict, SignatureVerdict::Bad);
@@ -146,4 +188,33 @@ TEST(Signature, RealGpgv)
     EXPECT_EQ(verify("catalog.json", "rogue.sig"), SignatureVerdict::Untrusted);
     EXPECT_EQ(verify("changed.json", "good.sig"), SignatureVerdict::Bad);
     EXPECT_EQ(verify("catalog.json", "catalog.json"), SignatureVerdict::Bad);
+    // The catalog signed as a message of its own (gpg --sign, not --detach-sign) given as its .sig: refused.
+    EXPECT_EQ(verify("catalog.json", "inline.sig"), SignatureVerdict::Bad);
+}
+
+// The real gpg against pacman's keyring as pacman-key leaves it (tests/integration/store_catalog.sh): a throwaway packager
+// key added but not locally signed (untrusted/), locally signed (trusted/), then disabled (disabled/); pkg signed by it,
+// changed (pkg with one byte more), inline.sig (pkg signed as a message of its own). pacman-key --verify exits 0 for the
+// untrusted case (S19): only this check refuses it.
+TEST(Signature, RealPacmanKeyring)
+{
+    const QString dir = qEnvironmentVariable("STORE_TEST_PACMAN_KEYRINGS");
+    if (dir.isEmpty())
+        GTEST_SKIP() << "tests/integration/store_catalog.sh runs it in a throwaway container";
+    auto verify = [&](const char *keyring, const char *file, const char *sig) {
+        QString why;
+        return verifyPacmanSignature(QStringLiteral("/usr/bin/gpg"), dir + QLatin1Char('/') + QLatin1String(keyring),
+                                     dir + QLatin1Char('/') + QLatin1String(file), dir + QLatin1Char('/') + QLatin1String(sig), &why);
+    };
+    const auto listing = [&] {
+        return QDir(dir + QStringLiteral("/trusted")).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot);
+    };
+    const QStringList before = listing();
+    EXPECT_TRUE(verify("trusted", "pkg", "pkg.sig"));
+    EXPECT_FALSE(verify("untrusted", "pkg", "pkg.sig"));
+    EXPECT_FALSE(verify("disabled", "pkg", "pkg.sig"));
+    EXPECT_FALSE(verify("trusted", "changed", "pkg.sig"));
+    EXPECT_FALSE(verify("trusted", "pkg", "inline.sig"));
+    EXPECT_FALSE(verify("missing", "pkg", "pkg.sig"));
+    EXPECT_EQ(listing(), before); // the keyring folder is never written: gpg works on a private copy
 }

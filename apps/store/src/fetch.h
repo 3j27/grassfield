@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QNetworkRequest>
 #include <QString>
 #include <QUrl>
 
@@ -22,6 +23,10 @@ struct FetchResult {
     QByteArray etag;
     QString error;
 };
+
+// The request every fetch sends: no cookie loaded or saved, no Referer, the User-Agent Grassfield-Store/1, no HTTP cache,
+// redirects only as fetch verifies them (requestAllowed, at most 5), the transfer timeout, If-None-Match when given.
+QNetworkRequest storeRequest(const QUrl &url, const FetchLimits &limits, const QByteArray &etag = {});
 
 // devPlumbing: the URL came from GRASSFIELD_STORE_CATALOG_URL in a dev session (file:// allowed then).
 FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &etag = {}, bool devPlumbing = false);

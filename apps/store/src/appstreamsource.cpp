@@ -86,6 +86,9 @@ bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QStrin
     if (readSmall(base + QStringLiteral("/current")) == file.version && QDir(base + QLatin1Char('/') + file.version).exists())
         return true; // already the version pacman's database names
     QDir().mkpath(base);
+    // What an interrupted refresh left (a crash, a power cut) goes first; one refresh runs at a time.
+    for (const QString &left : QDir(base).entryList({QStringLiteral(".work-*")}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot))
+        QDir(base + QLatin1Char('/') + left).removeRecursively();
     QTemporaryDir work(base + QStringLiteral("/.work-XXXXXX"));
     if (!work.isValid() || !tools.download) {
         *error = QStringLiteral("no work folder");
@@ -96,13 +99,11 @@ bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QStrin
         *error = QStringLiteral("the package file or its signature could not be downloaded");
         return false;
     }
-    // pacman's own rule: the signer must be fully trusted in pacman's keyring (S17). Nothing is unpacked before it passes.
-    ChildOptions verifyOptions;
-    verifyOptions.timeoutMs = 60000;
-    verifyOptions.maxOut = 64 * 1024;
-    const ChildResult verified = runChild(tools.pacmanKey, {QStringLiteral("--verify"), sig, pkg}, verifyOptions);
-    if (!verified.ok()) {
-        *error = QStringLiteral("the package file's signature does not pass pacman-key --verify");
+    // pacman's own rule: one good signature by a key pacman's keyring trusts fully and has not disabled (S17, S19).
+    // Nothing is unpacked before it passes.
+    QString why;
+    if (!verifyPacmanSignature(tools.gpg, tools.pacmanGnupg, pkg, sig, &why)) {
+        *error = QStringLiteral("the package file's signature does not pass pacman's rule: ") + why;
         return false;
     }
     const QString unpacked = work.filePath(QStringLiteral("tree"));

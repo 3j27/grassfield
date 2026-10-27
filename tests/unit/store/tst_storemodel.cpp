@@ -119,6 +119,33 @@ TEST(StoreModel, AppStreamAppsOurCatalogDoesNotList)
         EXPECT_LE(m.apps.at(i - 1).name.en.toCaseFolded().compare(m.apps.at(i).name.en.toCaseFolded()), 0);
 }
 
+TEST(StoreModel, AppStreamOverlaysOnlyTheEntrysOwnPackage)
+{
+    // A catalog entry with GIMP's AppStream id but another package: it gets none of GIMP's texts, icon or desktop id
+    // (step 3 would open the wrong app), and GIMP itself is not offered a second time.
+    Catalog catalog = *parseCatalog(storetest::readFixture(QStringLiteral("catalog-good.json")), QStringLiteral("stable")).catalog;
+    for (CatalogApp &e : catalog.apps) {
+        if (e.id == QStringLiteral("org.gimp.GIMP"))
+            e.source.package = QStringLiteral("paint");
+    }
+    ModelInputs in;
+    in.catalog = &catalog;
+    in.appstream = parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml")));
+    in.sync = {{QStringLiteral("extra"), QStringLiteral("gimp"), QStringLiteral("3-1"), false},
+               {QStringLiteral("extra"), QStringLiteral("paint"), QStringLiteral("1-1"), false}};
+    const QList<StoreApp> apps = buildModel(in);
+    const StoreApp *entry = nullptr;
+    for (const StoreApp &a : apps) {
+        if (a.id == QStringLiteral("org.gimp.GIMP"))
+            entry = &a;
+    }
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->packages, QStringList{QStringLiteral("paint")});
+    EXPECT_FALSE(entry->hasAppStream);
+    EXPECT_TRUE(entry->desktopId.isEmpty());
+    EXPECT_NE(entry->name.en, QStringLiteral("GNU Image Manipulation Program"));
+}
+
 TEST(StoreModel, NoCatalogYet)
 {
     ModelInputs in;

@@ -1,12 +1,14 @@
 // Where Arch's AppStream comes from (ADR-0037 c, owner ST5, SD4): the installed archlinux-appstream-data
 // (/usr/share/swcatalog) when there is one; otherwise the same package file fetched from pacman's own mirror
-// (`pacman -Sp archlinux-appstream-data`, as the user), checked by its own signature with `pacman-key --verify` (pacman's
-// keyring and rule: a fully trusted Arch signer, S17) and only then unpacked into the cache (at most 64 MiB). The copy is
-// replaced when pacman's database names another version; one version is kept.
+// (`pacman -Sp archlinux-appstream-data`, as the user), checked by its own signature as pacman checks it (pacman's keyring
+// and rule, one fully trusted and enabled signer: verifyPacmanSignature, S17, S19) and only then unpacked into the cache
+// (a package of at most 64 MiB). The copy is replaced when pacman's database names another version; one version is kept.
+// One refresh runs at a time (the Store's own): a .work-* folder left by an interrupted one is removed at the start.
 //   <cacheDir>/appstream/<version>/usr/share/swcatalog/{xml,icons}/…, <cacheDir>/appstream/current (the version in use)
 #pragma once
 
 #include "appstream.h"
+#include "signature.h"
 
 #include <QList>
 #include <QString>
@@ -35,7 +37,8 @@ PackageFile packageFileFromPrint(const QByteArray &pacmanSp);
 
 struct AppStreamTools {
     QString pacman = QStringLiteral("/usr/bin/pacman");
-    QString pacmanKey = QStringLiteral("/usr/bin/pacman-key");
+    QString gpg = QStringLiteral("/usr/bin/gpg");
+    QString pacmanGnupg = kPacmanGnupg;
     QString bsdtar = QStringLiteral("/usr/bin/bsdtar");
     // Downloads url to a file (fetch.h's rules, the caps given); false on any failure.
     std::function<bool(const QString &url, const QString &file, qint64 maxBytes, int timeoutMs)> download;

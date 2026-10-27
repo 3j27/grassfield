@@ -35,11 +35,27 @@ struct SignatureCheck {
 std::optional<QSet<QString>> readFingerprints(const QByteArray &content);
 // VALIDSIG's argument 10 in gpgv's --status-fd output ("" when there is none, or more than one signer).
 QString validSigner(const QByteArray &status);
-// The verdict from gpgv's exit code, its status lines and the two lists (pure: the tests feed it recorded outputs).
+// The verdict from gpgv's exit code, its status lines and the two lists (pure: the tests feed it recorded outputs). A
+// PLAINTEXT line refuses it: the .sig must be a detached signature, never a signed message of its own.
 SignatureCheck judge(int gpgvExit, const QByteArray &status, const QSet<QString> &trusted, const QSet<QString> &revoked);
 
 // Runs `gpgv --homedir <empty temporary folder> --keyring <dir>/grassfield.gpg --status-fd 1 <sig> <file>`.
 // gpgv: the program (an absolute path; "/usr/bin/gpgv" in a real session, a fake one in tests).
 SignatureCheck verifySignature(const QString &gpgv, const QString &keyringDir, const QString &file, const QString &sig);
+
+// A package of Arch's mirror checked as pacman checks it (ADR-0037 c, SD4; S19): gpg --verify against a private copy of
+// pacman's public keyring and trust database (pubring.gpg or pubring.kbx, trustdb.gpg; never written in place). It passes
+// only with exactly one good detached signature (one VALIDSIG), its key fully or ultimately valid (TRUST_FULLY or
+// TRUST_ULTIMATE, pacman's rule), the key not disabled in that keyring (pacman-key --populate disables revoked packagers:
+// gpg still says TRUST_FULLY for them, only the key listing's flags say D), and none of PLAINTEXT, BADSIG, ERRSIG, EXPSIG,
+// EXPKEYSIG, REVKEYSIG. pacman-key --verify's exit code is not used: in pacman 7.1.0 it is 0 for a good signature by any
+// key of the keyring, trusted or not (S19).
+inline const QString kPacmanGnupg = QStringLiteral("/etc/pacman.d/gnupg");
+// Pure: gpg's exit code and --status-fd lines; the primary key's fingerprint when they pass, else "".
+QString pacmanTrustedSigner(int gpgExit, const QByteArray &status);
+// Pure: `gpg --with-colons --list-keys <fpr>`; true when it lists that one key, valid (f or u) and not disabled.
+bool pacmanKeyUsable(const QByteArray &colons, const QString &fingerprint);
+bool verifyPacmanSignature(const QString &gpg, const QString &pacmanGnupg, const QString &file, const QString &sig,
+                           QString *why);
 
 } // namespace grassfield::store

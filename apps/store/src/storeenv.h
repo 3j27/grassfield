@@ -3,8 +3,9 @@
 // inert.
 //   GRASSFIELD_STORE_CATALOG_URL  the catalog's URL (file:// allowed), instead of the channel's
 //   GRASSFIELD_STORE_KEYRING      a test keyring folder (grassfield.gpg, grassfield-trusted, grassfield-revoked)
-//   GRASSFIELD_STORE_FIXTURE      a folder with bin/pacman (a fake), bin/pacman-key, swcatalog/ (fake AppStream data) and
-//                                 grassfield.conf; the Store reads nothing of the system's package manager then
+//   GRASSFIELD_STORE_FIXTURE      a folder with bin/pacman and bin/gpg (fakes), gnupg/ (a pacman keyring to copy),
+//                                 swcatalog/ (fake AppStream data) and grassfield.conf; the Store reads nothing of the
+//                                 system's package manager then
 // GRASSFIELD_STORE_INSTALLER and GRASSFIELD_STORE_PKEXEC (the fake programs of the queue) come with step 3.
 #pragma once
 
@@ -58,10 +59,17 @@ inline QString pacman()
     return f.isEmpty() ? QStringLiteral("/usr/bin/pacman") : f + QStringLiteral("/bin/pacman");
 }
 
-inline QString pacmanKey()
+// gpg and the pacman keyring it reads a copy of, for Arch's AppStream package (verifyPacmanSignature).
+inline QString gpg()
 {
     const QString f = fixture();
-    return f.isEmpty() ? QStringLiteral("/usr/bin/pacman-key") : f + QStringLiteral("/bin/pacman-key");
+    return f.isEmpty() ? QStringLiteral("/usr/bin/gpg") : f + QStringLiteral("/bin/gpg");
+}
+
+inline QString pacmanGnupg()
+{
+    const QString f = fixture();
+    return f.isEmpty() ? kPacmanGnupg : f + QStringLiteral("/gnupg");
 }
 
 inline QString swcatalogRoot()

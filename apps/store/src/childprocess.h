@@ -1,4 +1,5 @@
-// The child processes the Store owns for reading (ADR-0037 f): pacman queries, gpgv, pacman-key --verify, bsdtar. An
+// The child processes the Store owns for reading (ADR-0037 f): pacman queries, gpgv, gpg on a copy of pacman's keyring,
+// bsdtar. An
 // argument vector, never a shell; LC_ALL=C and a fixed PATH; stdin from /dev/null; its own process group; output capped
 // (8 MiB by default: more, and the group is stopped); stopped after the deadline (20 s by default) with SIGTERM, then SIGKILL
 // 5 s later; and it dies with the Store (PDEATHSIG). None of them writes outside the paths it is given.

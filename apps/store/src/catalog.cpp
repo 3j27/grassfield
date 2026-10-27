@@ -304,25 +304,26 @@ QString cleanPlainText(const QString &text, int limit, bool lineFeeds)
     QString out;
     out.reserve(text.size());
     bool space = false;
-    for (const QChar c : text) {
-        const char16_t u = c.unicode();
-        if (u == '\n' && lineFeeds) {
+    // By code point, not UTF-16 unit: a format character beyond U+FFFF (the tag characters, U+E0001 and on) goes too.
+    for (const uint u : text.toUcs4()) {
+        const char32_t c = char32_t(u);
+        if (c == '\n' && lineFeeds) {
             while (out.endsWith(QLatin1Char(' ')))
                 out.chop(1);
             out += QLatin1Char('\n');
             space = false;
             continue;
         }
-        if (c.isSpace()) {
+        if (QChar::isSpace(c)) {
             space = !out.isEmpty() && !out.endsWith(QLatin1Char('\n'));
             continue;
         }
-        if (c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+        if (QChar::category(c) == QChar::Other_Control || QChar::category(c) == QChar::Other_Format)
             continue;
         if (space)
             out += QLatin1Char(' ');
         space = false;
-        out += c;
+        out += QString::fromUcs4(&c, 1);
     }
     out = out.trimmed();
     const QList<uint> cps = out.toUcs4();
@@ -355,8 +356,9 @@ bool isHttpsUrl(const QString &url)
 {
     if (url.toUtf8().size() > 2048 || !url.startsWith(QLatin1String("https://")))
         return false;
-    for (const QChar c : url) {
-        if (c.isSpace() || c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+    for (const uint u : url.toUcs4()) { // by code point: U+E0041 and its kin are format characters too
+        const char32_t c = char32_t(u);
+        if (QChar::isSpace(c) || QChar::category(c) == QChar::Other_Control || QChar::category(c) == QChar::Other_Format)
             return false;
     }
     // The authority: no user information, a host name (any case, compared in lower case), an optional port.

@@ -12,6 +12,22 @@
 
 namespace grassfield::store {
 
+QNetworkRequest storeRequest(const QUrl &url, const FetchLimits &limits, const QByteArray &etag)
+{
+    QNetworkRequest request(url);
+    request.setRawHeader("User-Agent", "Grassfield-Store/1");
+    request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+    request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::UserVerifiedRedirectPolicy);
+    request.setMaximumRedirectsAllowed(5);
+    request.setTransferTimeout(limits.timeoutMs);
+    if (!etag.isEmpty())
+        request.setRawHeader("If-None-Match", etag);
+    return request;
+}
+
 FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &etag, bool devPlumbing)
 {
     FetchResult result;
@@ -23,18 +39,7 @@ FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &
     QNetworkAccessManager manager;
     manager.setCookieJar(nullptr); // QNetworkAccessManager then keeps no cookie at all
     manager.setRedirectPolicy(QNetworkRequest::UserVerifiedRedirectPolicy);
-    QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "Grassfield-Store/1");
-    request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
-    request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
-    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
-    request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
-    request.setMaximumRedirectsAllowed(5);
-    request.setTransferTimeout(limits.timeoutMs);
-    if (!etag.isEmpty())
-        request.setRawHeader("If-None-Match", etag);
-
-    QNetworkReply *reply = manager.get(request);
+    QNetworkReply *reply = manager.get(storeRequest(url, limits, etag));
     QEventLoop loop;
     QByteArray body;
     bool tooLarge = false, refused = false;

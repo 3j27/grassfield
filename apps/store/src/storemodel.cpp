@@ -117,7 +117,11 @@ QList<StoreApp> buildModel(const ModelInputs &in)
             case CatalogSource::Kind::WebApp:
                 break;
             }
+            // AppStream's data only for the package this entry installs: an id alone could lend an entry another package's
+            // texts and desktop id, and step 3 would open the wrong app (web apps and Flatpaks have no Arch package).
             const AppStreamComponent *c = byId.value(e.id);
+            if (c && !a.packages.contains(c->pkgname))
+                c = nullptr;
             a.hasAppStream = c != nullptr;
             a.name = prefer(e.name, c ? c->name : LocalizedText{});
             a.summary = prefer(e.summary, c ? c->summary : LocalizedText{});

@@ -241,6 +241,10 @@ TEST(Catalog, CleanPlainText)
     EXPECT_EQ(cleanPlainText(QStringLiteral("  Masks   and\n filters") + QChar(0x202E) + QStringLiteral(" "), 200, false), QStringLiteral("Masks and filters"));
     EXPECT_EQ(cleanPlainText(QStringLiteral("one \n two"), 200, true), QStringLiteral("one\ntwo"));
     EXPECT_EQ(cleanPlainText(QStringLiteral("abcdef"), 4, false), QStringLiteral("abc…"));
+    // By code point: a format character beyond U+FFFF (a tag character, U+E0041) goes too; an emoji stays whole.
+    const char32_t tag = 0xE0041, emoji = 0x1F3A8;
+    EXPECT_EQ(cleanPlainText(QStringLiteral("a") + QString::fromUcs4(&tag, 1) + QStringLiteral("b") + QString::fromUcs4(&emoji, 1), 200, false),
+              QStringLiteral("ab") + QString::fromUcs4(&emoji, 1));
 }
 
 TEST(Catalog, Patterns)
@@ -265,6 +269,8 @@ TEST(Catalog, Patterns)
                             "HTTPS://example.com/", "https://[::1]/", "https://exa_mple.com/"})
         EXPECT_FALSE(isHttpsUrl(QString::fromLatin1(url))) << url;
     EXPECT_FALSE(isHttpsUrl(QStringLiteral("https://example.com/") + QChar(0x200B)));
+    const char32_t tag = 0xE0041; // a format character beyond U+FFFF: two UTF-16 units, one code point
+    EXPECT_FALSE(isHttpsUrl(QStringLiteral("https://example.com/") + QString::fromUcs4(&tag, 1)));
     for (const char *url : {"https://example.com", "https://www.example.com/path?q=1#top", "https://example.com:8443/",
                             "https://WWW.GIMP.org/", "https://example.com?q=a@b"})
         EXPECT_TRUE(isHttpsUrl(QString::fromLatin1(url))) << url;
