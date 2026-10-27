@@ -105,7 +105,7 @@ WebP, link previews or any network access, the primary selection, Share (no Linu
 ### Keyboard and mouse
 | Action | Keyboard | Mouse |
 |---|---|---|
-| Open the view | Super+Ctrl+V; or ⌘Space then ⌘4 | the Clipboard button right of the field |
+| Open the view | Super+Ctrl+V; or ⌘Space then ⌘4 (the 4 key by its place: AZERTY too) | the Clipboard button right of the field |
 | Move | ↑ ↓ | hover |
 | Paste | Return, Enter | click, double-click |
 | Paste as plain text | Shift+Return | the menu's Paste as Plain Text |
@@ -151,6 +151,7 @@ WebP, link previews or any network access, the primary selection, Share (no Linu
 | Paste · Paste as Plain Text · Copy · Pin · Unpin · Delete Item | Coller · Coller en texte brut · Copier · Épingler · Désépingler · Supprimer l'élément |
 | Pinned | Épinglé |
 | Pinned items are full | Le nombre maximal d'éléments épinglés est atteint |
+| The item could not be copied (a refused or unanswered copy or paste; ADR-0034 Q23) | L’élément n’a pas pu être copié |
 | Clear History · Settings… | Effacer l'historique · Réglages… |
 | No Items | Aucun élément |
 | Type to search the clipboard history · More · Preview · Clipboard item (accessible description and names) | Saisissez pour rechercher dans l’historique du presse-papiers · Plus · Aperçu · Élément du presse-papiers |
@@ -172,7 +173,7 @@ WebP, link previews or any network access, the primary selection, Share (no Linu
 | PV-6 | log canary: a copy of a unique string through the fake server, pinned then unpinned, then the helper's and the shell's logs do not contain it | L0 |
 | PV-8 | `scripts/dev/check-textformat.py` | L0 |
 | CB-5 to CB-12, CB-15 | `tests/unit/tst_clipboard.qml` (`ClipboardView.js`): the rows a query shows, the kinds a row names, the keyboard map (the keys of the table below, with and without modifiers, empty field or not, a selection in the field), ⌘4 from the results, the row menu (Paste as Plain Text only for formatted text, Pin or Unpin), the selection after a delete | L0 |
-| CB-5 to CB-11, CB-15, PV-9 | `tests/shell/search_clipboard` (step 2): the real Search controller and Clipboard service in a dev session with no helper (`dev-off`); the helper's lines are handed to `Clipboard.handle()` as it prints them. ⌘4 and Super+Ctrl+V in and out of the view, the prompt, Not Now, Allow (the setting applied), rows pinned first, the helper's search (a stale answer ignored), Copy (Search stays, "Copied"), Delete (the next row, then the new last row), "Pinned items are full", the preview (another item's answer ignored, it follows the selection, Space closes it), Backspace leaves; the paste: copied only with no target, Search closes on the helper's `A`, dropped once the target closed, an empty `A` keeps Search open; the helper's lock closes Search and Super+Ctrl+V then opens nothing. The helper's side of pin, delete and clear is `tests/shell/clipboard_helper.sh` | L1 |
+| CB-5 to CB-11, CB-15, PV-9 | `tests/shell/search_clipboard` (step 2): the real Search controller and Clipboard service in a dev session with no helper (`dev-off`); the helper's lines are handed to `Clipboard.handle()` as it prints them. ⌘4 and Super+Ctrl+V in and out of the view, the prompt, Not Now, Allow (the setting applied), rows pinned first, the helper's search (a stale answer ignored), Copy (Search stays, "Copied"), Delete (the next row, then the new last row), "Pinned items are full", the preview (another item's answer ignored, it follows the selection, Space closes it), Backspace leaves; the paste: Search closes only on the helper's `A` (copied only with no target, or with a target closed before the choice); Search closed before the `A` drops it and a late `A` pastes nothing; once copied it is dropped by this shell's lock, another program's lock, a surface opening, the target closing, Search opening again and the 1 s deadline; a refused or unanswered copy or paste keeps Search open with its notice; the helper's lock closes Search and Super+Ctrl+V then opens nothing. Each of those checks fails when its line in `Clipboard.qml` or `Search.qml` is removed or forced (review of 28d2651). The helper's side of pin, delete and clear is `tests/shell/clipboard_helper.sh` | L1 |
 | CB-5 | `search clipboard` in the IPC inventory (action, caller SUPER+CTRL+V), refused while locked: `lock_surfaces.sh` checks that it routes to `toggleClipboard()`, which opens only through `show()`, and that `enterClipboard()` refuses first; `tests/security/lock_surfaces` runs Super+Ctrl+V's function while locked | L0 (`tests/security/ipc_inventory.sh`, `lock_surfaces`) |
 | CB-8 | nested: a real copy in a test window, Return pastes into it, Shift+Return pastes plain text into a rich-text app, Ctrl+Shift+V reaches alacritty, kitty, foot and ghostty; Search opened over window A, A closed meanwhile: nothing is pasted | L1 (integrator) |
 | PV-2, PV-9 | nested: copy while locked by the shell and while locked by another locker started mid-session (a program running `wl-copy` under the lock): absent after the unlock | L1 (integrator) |

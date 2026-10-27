@@ -102,6 +102,7 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
 | Q20 | How long a row says "Copied" after a copy (step 2) | while selected; 1.5 s; until Search closes | 1.5 s (token `search.clipCopiedMs`), then its time again | macOS first: a short confirmation in place, as Spotlight's copy button gives; nothing to dismiss |
 | Q21 | The time on a row copied before today (step 2) | the time alone; the date and the time; a relative day ("Yesterday") | the date and time in the locale's short formats ("Copied on …", « Copié le … »); today the time alone ("Copied 11:23", « Copié à 11:23 ») | macOS first: macOS 26 shows the clock time (M-4); a date only where the time alone would mislead |
 | Q22 | How the keyboard reaches the More button (step 2) | the mouse only; Tab from the field; a key of its own | Tab from the field puts the focus ring on More; Return, Space or Down opens its menu; Tab or Esc goes back to the field | macOS first: full keyboard access reaches every control with Tab (the spec's table: "Tab reaches it"); every action has a key (CB-12) |
+| Q23 | The helper refuses or does not answer a copy or a paste (another program's lock, the item gone, no helper): what does the person see? (review of 28d2651) | Search closes as after any choice; Search stays open with a notice; an alert | Search stays open, the selection where it was, and the view says "The item could not be copied" (« L’élément n’a pas pu être copié ») for 3 s; nothing is pasted | macOS first: a choice that did nothing must not look like one that worked; the person can try again or press Esc, with nothing to repair |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -274,8 +275,16 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    in a scrollable area, an image by its path in the runtime directory) and drops it (`VD`) when it closes or moves on. The paste
    of §4 lives in the service (`Clipboard.paste`): Search remembers the window active at its opening
    (`Compositor.activeWindow()`, never the desktop) with `watchTarget`, `Compositor.windowClosed` (from Hyprland's
-   `closewindow`) marks it closed, the helper's `A` closes Search, and a 50 ms timer checks `mayPaste` for at most 1 s before it
-   dispatches `pasteRequest`.
+   `closewindow`) marks it closed, the helper's `A` closes Search, and a 50 ms timer checks `pasteStep` until it dispatches
+   `pasteRequest` or drops the paste. Review of 28d2651 (paste safety): the paste keeps its own target and whether that window
+   closed, so a later `watchTarget` never redirects it; closing Search before the helper's `A` (Esc, a click outside, a lock,
+   another surface) drops the paste, so a late `A` pastes nothing; Search opening again drops a paste still waiting; after the
+   `A`, each check drops the paste at once when either lock source says locked, the target closed, or a full-attention
+   surface is open (Search has released FocusReturn by then, so one open at a check opened after the choice), and the 1 s is
+   one Qt timer started at the `A` (monotonic), never a count of checks. Search closes only once the helper owns the item,
+   also for a copy only; a copy or paste the helper refuses or leaves unanswered for 1 s keeps Search open with "The item
+   could not be copied" (Q23), and Copy's "Copied" shows on the helper's `A`. ⌘4 is matched by the 4 key's place (xkb
+   keycode 13, what `forwarding.lua` sends) as well as its symbol, so it works on AZERTY, where that key types an apostrophe.
 
 8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` and never calls
    `wl_display_connect`: libwayland takes `WAYLAND_SOCKET` first even when a display name is given (the counter-review
