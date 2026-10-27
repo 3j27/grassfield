@@ -383,7 +383,8 @@ FocusScope {
                     if (!cell.selected || mods !== 0)
                         root.model.select(cell.index, mods);
                 }
-                onReleased: {
+                // A formal parameter: an injected `mouse` (the event) would hide the MouseArea's id.
+                onReleased: () => {
                     if (mouse.collapseOnRelease && !mouse.drag.active)
                         root.model.select(cell.index, 0);
                     mouse.collapseOnRelease = false;
@@ -397,6 +398,7 @@ FocusScope {
                         mouse.collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
                         dragProxy.Drag.imageSource = cell.thumbnail !== "" ? cell.thumbnail : "image://icon/" + cell.iconName;
+                        root.tab.dragStarted();
                         dragProxy.Drag.active = true;
                     }
                 }

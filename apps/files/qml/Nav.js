@@ -114,6 +114,13 @@ function effectiveView(mode, isSearch) {
     return isSearch && m === "columns" ? "list" : m;
 }
 
+// The view a tab shows: `held` while a drag started from that view runs (BrowserTab.dragView: the view that started a
+// system drag must outlive it, so a spring-loaded folder with a view of its own, or the end of a search, waits for the
+// drag to end), else effectiveView.
+function shownView(held, mode, isSearch) {
+    return held ? normalizeViewMode(held) : effectiveView(mode, isSearch);
+}
+
 // The gallery shows one item: when nothing is current yet (folder just listed), the first item is selected.
 function galleryInitialRow(currentRow, count) {
     if (count <= 0)

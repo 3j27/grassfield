@@ -122,6 +122,15 @@ TestCase {
             }
         }
 
+        // BrowserTab's drag bracket: dragStarted before the system drag, dragFinished from its end.
+        property var dragEvents: []
+        function dragStarted(): void {
+            tab.dragEvents = tab.dragEvents.concat(["started"]);
+        }
+        function dragFinished(dropAction: int): void {
+            tab.dragEvents = tab.dragEvents.concat(["finished"]);
+        }
+
         function focusView(): void {
             gallery.focusView();
         }
@@ -279,6 +288,22 @@ TestCase {
             incoming.Drag.active = false;
         }
         listing.url = "file:///sandbox";
+    }
+
+    // A drag from the strip brackets the system drag with the tab's dragStarted and dragFinished (BrowserTab keeps the
+    // view that started it alive until then: Nav.shownView).
+    function test_aDragFromTheStripIsBracketed() {
+        tab.dragEvents = [];
+        const cell = gallery.rowPosition(listing, 1);
+        const local = test.mapFromItem(null, cell.x, cell.y);
+        mousePress(test, local.x, local.y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(test, local.x + i * 8, local.y);
+        mouseRelease(test, local.x + 48, local.y);
+        tryVerify(() => tab.dragEvents.length >= 1, 2000, "the drag started");
+        compare(tab.dragEvents[0], "started");
+        // Offscreen, the platform drag ends at once (no drop).
+        tryVerify(() => tab.dragEvents.indexOf("finished") > 0, 2000, "and ended after it started");
     }
 
     function test_infoPanelFollowsItsPreference() {

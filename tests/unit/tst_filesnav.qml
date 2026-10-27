@@ -135,6 +135,17 @@ TestCase {
         compare(Nav.effectiveView("bogus", true), "icons");
     }
 
+    // While a drag started from a view runs, that view stays whatever the folder sprung into wants (BrowserTab.dragView):
+    // destroying the item that started a system drag before it ends is a use-after-free in Qt Quick.
+    function test_aDragKeepsItsView() {
+        compare(Nav.shownView("", "list", false), "list", "no drag: the folder's view");
+        compare(Nav.shownView("icons", "list", false), "icons", "a folder whose own view is List sprung open: still icons");
+        compare(Nav.shownView("gallery", "columns", false), "gallery");
+        compare(Nav.shownView("list", "columns", true), "list");
+        compare(Nav.shownView("icons", "gallery", true), "icons", "the search ending under the drag changes nothing");
+        compare(Nav.shownView("", "columns", true), "list", "after the drag: the effective view again");
+    }
+
     // The gallery always shows an item: the current one, else the first.
     function test_galleryInitialRow() {
         compare(Nav.galleryInitialRow(-1, 5), 0);

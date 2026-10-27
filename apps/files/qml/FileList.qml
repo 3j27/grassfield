@@ -494,6 +494,7 @@ FocusScope {
                         collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
                         dragProxy.Drag.imageSource = "image://icon/" + row.iconName;
+                        root.tab.dragStarted();
                         dragProxy.Drag.active = true;
                     }
                 }

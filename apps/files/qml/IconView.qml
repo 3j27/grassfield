@@ -164,6 +164,7 @@ FocusScope {
     function startDrag(iconName: string, thumbnail: string): void {
         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
         dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : "image://icon/" + iconName;
+        root.tab.dragStarted();
         dragProxy.Drag.active = true;
     }
 

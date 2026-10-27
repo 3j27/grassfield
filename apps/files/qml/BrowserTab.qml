@@ -496,10 +496,27 @@ FocusScope {
             springTimer.stop();
     }
 
+    // The view a system drag started from, while it runs (else ""). Drag.Automatic runs QDrag::exec in a nested event loop,
+    // and Qt Quick's drag uses the item that started it after exec returns: destroying that view meanwhile (a spring-loaded
+    // folder whose own view is another, a search ending) would free it under the drag. So the tab keeps showing this view
+    // until the drag has ended (Nav.shownView); the folder's own view follows then.
+    property string dragView: ""
+
+    // A view starts a system drag (just before its Drag.active turns true).
+    function dragStarted(): void {
+        root.dragView = viewLoader.kind;
+    }
+
+    function releaseDragView(): void {
+        root.dragView = "";
+    }
+
     // A drag Files started (from any view) ended; `dropAction` is what the target did with it.
     function dragFinished(dropAction: int): void {
         if (root.win)
             root.win.manager.dragEnded(dropAction !== Qt.IgnoreAction);
+        // Called from the drag's own dragFinished signal: the view may only change once that call has returned.
+        Qt.callLater(root.releaseDragView);
     }
 
     function springEnd(dropped: bool): void {
@@ -858,7 +875,7 @@ FocusScope {
         anchors.bottom: parent.bottom
         anchors.right: previewPane.active ? previewPane.left : parent.right
         focus: true
-        readonly property string kind: Nav.effectiveView(root.viewMode, root.folder !== null && root.folder.isSearch)
+        readonly property string kind: Nav.shownView(root.dragView, root.viewMode, root.folder !== null && root.folder.isSearch)
         sourceComponent: viewLoader.kind === "list" ? listComponent : viewLoader.kind === "columns" ? columnComponent : viewLoader.kind === "gallery" ? galleryComponent : iconComponent
         onLoaded: Qt.callLater(root.focusView)
     }
