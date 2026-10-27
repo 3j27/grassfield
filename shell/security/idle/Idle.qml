@@ -35,10 +35,9 @@ Scope {
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
     // This module switched the displays off (and must switch them on again).
     property bool displayOff: false
-    // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Off in the
-    // nested dev session unless a test sets it (`idle devInactiveOff <seconds>`), as the lock screen's.
-    property int devInactiveOffSeconds: 0
-    readonly property int inactiveOffSeconds: devHooks ? devInactiveOffSeconds : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)
+    // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Always off in
+    // the nested dev session (a dark nested output would spoil every capture; no test needs it there).
+    readonly property int inactiveOffSeconds: devHooks ? 0 : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)
     // The unlocked monitor turned the displays off and no input came since.
     property bool offForInactivity: false
     property bool rearmingInactive: false
@@ -276,14 +275,6 @@ Scope {
             if (!root.devHooks || seconds < 0 || seconds > 600)
                 return RunMode.REFUSED;
             root.displayOffSeconds = seconds;
-            return "ok";
-        }
-
-        // Dev hook (dev only, else "refused"): display power-off delay while unlocked, 0..600 s (0 = never).
-        function devInactiveOff(seconds: int): string {
-            if (!root.devHooks || seconds < 0 || seconds > 600)
-                return RunMode.REFUSED;
-            root.devInactiveOffSeconds = seconds;
             return "ok";
         }
     }

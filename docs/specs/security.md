@@ -188,7 +188,7 @@ does not check its gate.
 | lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
 | lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
-| idle | status, devSleep, devDisplayOff, devInactiveOff | dev | `reload_locked.sh`, `lock_privacy.sh`; `devInactiveOff` sets the display-off delay while unlocked, off in a dev session otherwise (ADR-0010) |
+| idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | search | toggle | action | SUPER+SPACE |
@@ -560,7 +560,7 @@ VERIFIED until run).
   lights the displays until it holds (the compositor confirms a lock only once it has drawn it; "on" is sent while a lock is
   being acquired even if this instance believes them on, as after a shell restart: at start, then every 2 s until it holds, at most 5 times), then they go dark again
   until input (the monitor stays armed while it is idle, `offForInactivity`); any input, an unlock without input (fingerprint)
-  or a change of power source switches them on. Off in the nested dev session unless `idle devInactiveOff <s>` sets it. NOT VERIFIED on hardware or in nested here
+  or a change of power source switches them on. Always off in the nested dev session (no dev hook: nothing needed one). NOT VERIFIED on hardware or in nested here
   (no compositor in the cloud container; L2†).
 - The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
   `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.
