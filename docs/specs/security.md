@@ -394,14 +394,19 @@ shell no longer relies on that alone:
   field does nothing). The saver keeps the keyboard meanwhile (the held sheet takes none). Fail mode: a wrong
   `saverShown` never releases a hold; a wrong false (the Binding lost) brings back a sheet that takes the keyboard over the
   saver, a wrong true holds every request and swallows every press on the sheet until the requester gives up (only the
-  shell.qml Binding writes it; `lock_surfaces.sh` checks it). Two requests close together (reviews of f513b3b and
+  shell.qml Binding writes it; `lock_surfaces.sh` checks that it is the only writer in shell/, apps/ and ui/: no
+  assignment, no other Binding or object property, no other quoted name). Two requests close together (reviews of f513b3b and
   b5d7657): Quickshell 0.3.1 never queues; a request that arrives while one is open replaces it at once (the flow
   switches without `active` changing; the replaced one is abandoned, never answered, which fails closed), and one that
   arrives after the previous ended passes through no request. Both are held, "…right after another one": the replacing
   one with its field emptied and its guard started over, and, if the user was typing into the sheet, with the keyboard
   kept on a key sink, so the rest of a password and its Return reach neither field nor the window underneath; the next
-  one within 1 s (`AuthDialogModel.afterRequest`) like one after an unlock. A replacement behind the lock or the saver keeps
-  saying why it waited. The sink (checks of 38dbfe8 and c1ca44f): while it has the keys the sheet's field and identity
+  one within 1 s (`AuthDialogModel.afterRequest`) like one after an unlock. Whether a request is in the sheet is a flag
+  (`flowShown`), never the previous flow read back (a reference to a destroyed flow reads null; review of
+  9ad4307..b38618f); should Quickshell destroy the abandoned flow before it hands over the next one, the model's flow
+  goes through null, the open request ends there and the next one is held as one right after another (without the
+  sink: as for any request that ends while its own field is typed into; `authagent_flows.sh` test_01b). A replacement
+  behind the lock or the saver keeps saying why it waited. The sink (checks of 38dbfe8 and c1ca44f): while it has the keys the sheet's field and identity
   rows are disabled (`AuthDialog.inputEnabled`; its `focusField` does nothing then) and any focus the sheet gets goes back
   to the sink (a press on one of its controls within the guard, the sheet focusing its field when it loads or after a
   failure, which a same-user process can cause by killing the helper, or the window activated with the sheet's scope
@@ -428,7 +433,8 @@ shell no longer relies on that alone:
   key and mouse events; with `--panel`, in `FakePanel.qml`, a window made again each time it is shown and given the keyboard
   only once mapped, beside a window underneath; `--mutants` brings back each defect the reviews found and checks it is
   caught);
-  `tests/security/lock_surfaces.sh` (wiring, the saver's Binding, one place that gives the keyboard and three that take it
+  `tests/security/lock_surfaces.sh` (wiring, the saver's Binding and that it is the only writer of `saverShown`, one place
+  that gives the keyboard and three that take it
   back, three that set the hold, the stacking of the sheet and its two guards, each hold Timer used only in its own
   functions, the key sink, `typing` read first, the six places that release the sink, the places that focus the field and
   the sheet's disabled input, the linger's timers and its start, `visible` and `takesKeys` from the base state, no `Date` in

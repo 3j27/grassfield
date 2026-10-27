@@ -11,7 +11,8 @@
 #   routes    every IPC action that opens a surface goes through that entry point (search toggle, apps toggle/open,
 #             overview toggle/open, notifications toggleCenter, menubar open/panel, dock keyboard), and the screen corners
 #             call those IPC actions;
-#   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock.
+#   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock;
+#   saver     SessionState.saverShown has one writer, the shell.qml Binding (ADR-0032).
 # Self-test: the checker fails on a copy of the tree with one refusal removed (mutation). Plain shell test: PASS/FAIL lines.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -196,6 +197,31 @@ expect("polkit sheet: the screen saver takes the sink's keys, then a request ope
 expect("shell.qml binds SessionState.saverShown to the screen saver's shown",
        re.search(r"Binding\s*\{\s*target:\s*SessionState\s*property:\s*\"saverShown\"\s*value:\s*saver\.shown\s*\}", shell) is not None
        and re.search(r"\bSaver\s*\{\s*id:\s*saver\b", shell) is not None)
+# ADR-0032: that Binding is the only writer of SessionState.saverShown in the shell, the apps and Grassfield.Ui: no
+# assignment, no other Binding, PropertyChanges or object property, no other quoted name (setProperty and the like). A
+# wrong saverShown holds every polkit request (true) or lets the sheet take the keyboard over the saver (false).
+def saver_writes():
+    import os
+    found = []
+    for top in ("shell", "apps", "ui"):
+        for dirpath, dirnames, filenames in os.walk(f"{root}/{top}"):
+            dirnames[:] = [d for d in dirnames if d not in (".dev", "build")]
+            for name in filenames:
+                if not name.endswith((".qml", ".js")):
+                    continue
+                path = os.path.join(dirpath, name)
+                rel = os.path.relpath(path, root)
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    text = code(f.read())
+                for m in re.finditer(r"\bsaverShown\s*=(?!=)|[\"']saverShown[\"']|\bsaverShown\s*:", text):
+                    line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.start()) if text.find("\n", m.start()) >= 0 else len(text)].strip()
+                    if rel == "shell/services/SessionState.qml" and re.fullmatch(r"property bool saverShown:\s*false", line):
+                        continue
+                    found.append(f"{rel}: {line}")
+    return found
+writes = saver_writes()
+expect("SessionState.saverShown has one writer, the shell.qml Binding (" + "; ".join(writes) + ")",
+       writes == ['shell/shell.qml: property: "saverShown"'])
 expect("polkit sheet: only a click past the guard gives the keyboard (one userFocused = true), and an arrival, a lock and the saver take it back (three userFocused = false)",
        len(re.findall(r"userFocused\s*=\s*true", agent)) == 1 and len(re.findall(r"userFocused\s*=\s*false", agent)) == 3)
 # Re-check of b5d7657 (MEDIUM-3): the sheet, then the held click's guard over it, then the saver's swallowing area on top.
@@ -240,10 +266,12 @@ expect("polkit sheet: a request that comes right after another one ended is held
        re.search(r"if\s*\(!dialogModel\.active\)\s*dialogModel\.noteEnded\(\);", arrive) is not None)
 expect("polkit sheet: the hold is set only on an arrival, a lock and the screen saver",
        len(re.findall(r"\bheldByLock\s*=(?!=)", agent)) == 3)
-# Review of f513b3b (MEDIUM-2): a queued request that follows another in the same sheet is a new arrival, held.
+# Review of f513b3b (MEDIUM-2): a queued request that follows another in the same sheet is a new arrival, held; whether a
+# request is in the sheet is a flag, never a flow read back (it reads null once destroyed; review of 9ad4307..b38618f).
 flow_changed = code(block_after(agent, re.search(r"onFlowChanged:", agent).end()) if re.search(r"onFlowChanged:", agent) else "")
 expect("polkit sheet: a queued request that follows another is held, emptied, its guard started over",
-       re.search(r"const follows\s*=\s*root\.shownFlow\s*!==\s*null\s*&&\s*flow\s*!==\s*null\s*&&\s*flow\s*!==\s*root\.shownFlow;\s*root\.shownFlow\s*=\s*flow;\s*if\s*\(follows\)\s*root\.arrive\(true\);", flow_changed) is not None
+       re.search(r"const follows\s*=\s*root\.flowShown\s*&&\s*flow\s*!==\s*null\s*&&\s*flow\s*!==\s*root\.shownFlow;\s*root\.flowShown\s*=\s*flow\s*!==\s*null;\s*root\.shownFlow\s*=\s*flow;\s*if\s*\(follows\)\s*root\.arrive\(true\);", flow_changed) is not None
+       and re.search(r"^\s*property bool flowShown:\s*false\s*$", agent, re.M) is not None
        and re.search(r"onActiveChanged:\s*root\.arrive\(false\)", agent) is not None
        and re.search(r"if\s*\(follows\)\s*\{\s*dialogModel\.clearRequested\(\);\s*dialogModel\.noteShown\(\);\s*\}", arrive) is not None)
 expect("polkit sheet: the click guard starts over when the screen saver ends",
@@ -372,9 +400,11 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#enabled: SessionState.saverShown#enabled: false' \
   'shell/security/polkit/AuthAgent.qml#acceptedButtons: Qt.AllButtons#acceptedButtons: Qt.LeftButton' \
   'shell/shell.qml#        property: "saverShown"\n        value: saver.shown#        property: "saverShown"\n        value: false' \
+  'shell/services/SessionState.qml#    property bool saverShown: false#    property bool saverShown: false\n    function hideSaver(): void {\n        saverShown = false;\n    }' \
+  'shell/shell.qml#        property: "saverShown"\n        value: saver.shown\n    }#        property: "saverShown"\n        value: saver.shown\n    }\n    Binding {\n        target: SessionState\n        property: "saverShown"\n        value: false\n        when: false\n    }' \
   'shell/security/polkit/AuthAgent.qml#if (!dialogModel.active || SessionState.locked)#if (!dialogModel.active || SessionState.locked || !SessionState.saverShown)' \
   'shell/security/polkit/AuthAgent.qml#        root.userFocused = false;\n        root.sinkingKeys = typing;#        root.userFocused = true;\n        root.sinkingKeys = typing;' \
-  'shell/security/polkit/AuthAgent.qml#const follows = root.shownFlow !== null#const follows = false && root.shownFlow !== null' \
+  'shell/security/polkit/AuthAgent.qml#const follows = root.flowShown#const follows = false && root.flowShown' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && (follows || #dialogModel.active && (' \
   'shell/security/polkit/AuthAgent.qml#            dialogModel.clearRequested();\n            dialogModel.noteShown();#            dialogModel.clearRequested();' \
   'shell/security/polkit/AuthDialogModel.qml#        clickGuard.restart();\n    }\n\n    // The request in the sheet ended#    }\n\n    // The request in the sheet ended' \

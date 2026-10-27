@@ -150,6 +150,32 @@ Item {
             compare(ag.sheet.takesKeys, true);
         }
 
+        // Should Quickshell destroy the flow it abandons before it hands over the next one (0.3.1 overwrites it without deleting
+        // it), the model's reference to it reads null and notifies: the open request ends there, and B, handed over next, is
+        // held as one right after another (afterRequest), its field empty, without the keyboard, as in test_03 (review of
+        // 9ad4307..b38618f). The agent's own state for a request in the sheet is a flag, never the destroyed flow read back.
+        function test_01b_oldFlowDestroyedBeforeTheNext() {
+            const a = flowC.createObject(top, {message: "A"}), b = mkflow("B");
+            arriveFlow(a, true);
+            compare(ag.flowShown, true);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("secr");
+            a.destroy();
+            wait(0);
+            compare(ag.model.active, false, "the destroyed flow ends the open request");
+            compare(ag.flowShown, false);
+            compare(ag.shownFlow, null);
+            switchTo(b);
+            compare(ag.model.message, "B");
+            compare(ag.flowShown, true);
+            compare(ag.heldByLock, true, "B held");
+            compare(ag.heldWhy, "queued");
+            compare(ag.sheet.takesKeys, false, "B does not take the keyboard (the window does not ask for it)");
+            compare(field().empty, true, "B's field starts empty");
+            compare(b.submits.length, 0);
+            compare(b.cancels, 0);
+        }
+
         // A was held by the lock, the user clicked it; B replaces it: held again, on the sink, the guard started over.
         function test_02_replacedAfterClickThroughLockHold() {
             const a = mkflow("A"), b = mkflow("B");

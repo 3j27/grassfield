@@ -46,16 +46,20 @@ Scope {
         // Another request replaces the one in the sheet: Quickshell 0.3.1 activates a new request at once, abandoning the open
         // one (agentimpl.cpp initiateAuthentication; re-check of b5d7657), so `active` does not change. It is a new arrival,
         // held (review of f513b3b, MEDIUM-2): keys typed for the first must not land in its field. One that arrives after the
-        // first ended passes through no request and is held by AuthDialogModel.afterRequest.
+        // first ended passes through no request and is held by AuthDialogModel.afterRequest. Whether a request was in the sheet
+        // is a plain flag: Quickshell may destroy the flow it abandons before it hands over the next one, and a reference to a
+        // destroyed flow reads null (the next one then passed for a first request, not held; review of 9ad4307..b38618f).
         onFlowChanged: {
-            const follows = root.shownFlow !== null && flow !== null && flow !== root.shownFlow;
+            const follows = root.flowShown && flow !== null && flow !== root.shownFlow;
+            root.flowShown = flow !== null;
             root.shownFlow = flow;
             if (follows)
                 root.arrive(true);
         }
     }
 
-    // The request now in the sheet (the last flow seen), to tell the next queued one from it.
+    // A request is in the sheet; the last flow seen (null once destroyed), to tell the same one handed over again from the next.
+    property bool flowShown: false
     property var shownFlow: null
 
     // A request arrives (`follows`: it replaced the one in the sheet) or none is left: whether it is held and why, the
