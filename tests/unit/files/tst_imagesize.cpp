@@ -1,8 +1,9 @@
 // Unit tests for apps/files/src/imagesize.{h,cpp} (gtest): the preview pane's Dimensions never block the GUI thread
 // (docs/specs/files.md "Preview pane"): a FIFO or a link to /dev/zero named like a picture is never opened, a huge file is
-// read up to the budget only, a path on a network or FUSE mount is never looked at, and the Reader answers later on the
-// caller's thread. Built and run by scripts/dev/test.sh. The files are made only under GRASSFIELD_TEST_TMP, a directory
-// inside the repository's .dev/ (set by scripts/dev/test.sh); the tests skip without it.
+// read up to the budget only (a header that never ends included), a path on a network or FUSE mount is never looked at, a
+// link swapped in after the check is never followed, and the Reader answers later on the caller's thread. Built and run by
+// scripts/dev/test.sh. The files are made only under GRASSFIELD_TEST_TMP, a directory inside the repository's .dev/ (set by
+// scripts/dev/test.sh); the tests skip without it.
 #include "imagerotate.h"
 #include "imagesize.h"
 
@@ -12,18 +13,23 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QImage>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
 
+#include <cerrno>
 #include <cstdio>
 #include <future>
 #include <memory>
 #include <thread>
 
+#include <fcntl.h>
+#include <linux/openat2.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <gtest/gtest.h>
@@ -181,6 +187,166 @@ TEST(ImageSize, AHugeFileIsReadUpToTheBudget)
     EXPECT_TRUE(returnsWithin(5000, [&] { size = ImageSize::read(big, mounts); }));
     EXPECT_EQ(size, QSize(30, 20));
     std::printf("huge files: %lld ms for both reads\n", static_cast<long long>(clock.elapsed()));
+}
+
+// The budget is what ends a header that never ends: a PBM whose comment line runs on through 4 GiB of NUL bytes (sparse:
+// nothing is written to disk) has the PBM reader ask for one byte after another; at kReadBudget it gets no more and gives
+// up. Without the budget the read takes the whole file (over 30 s here). Everything the reading thread uses is its own: a
+// read that outlives the test (a failure) touches nothing of it.
+TEST(ImageSize, TheBudgetEndsAHeaderThatNeverEnds)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    const QString pbm = dir->path() + QStringLiteral("/endless.pbm");
+    {
+        QFile f(pbm);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        ASSERT_EQ(f.write("P1\n#", 4), 4);
+        ASSERT_TRUE(f.resize(qint64(4) * 1024 * 1024 * 1024));
+    }
+    ASSERT_EQ(ImageSize::check(pbm, mounts), ImageSize::Refusal::None);
+    const auto size = std::make_shared<QSize>(1, 1);
+    QElapsedTimer clock;
+    clock.start();
+    const bool returned = returnsWithin(5000, [size, pbm, mounts] { *size = ImageSize::read(pbm, mounts); });
+    std::printf("endless PBM header: %s after %lld ms\n", returned ? "refused" : "still reading", static_cast<long long>(clock.elapsed()));
+    ASSERT_TRUE(returned) << "the header was read past the budget";
+    EXPECT_FALSE(size->isValid());
+}
+
+// A link swapped in at the checked path after the check is never followed by the open, wherever it leads (a network share
+// would block the open itself): here even to the checked file (a hard link elsewhere keeps its inode), which the device and
+// inode comparison after the open would accept. A picture reached through a link is still read: check() follows the link
+// and the file is opened by the path it reached.
+TEST(ImageSize, ALinkSwappedInAfterTheCheckIsNeverFollowed)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(16, 9, QImage::Format_RGB32);
+    image.fill(Qt::yellow);
+    const QString pictures = dir->path() + QStringLiteral("/pictures");
+    const QString elsewhere = dir->path() + QStringLiteral("/elsewhere");
+    ASSERT_TRUE(QDir().mkpath(pictures));
+    ASSERT_TRUE(QDir().mkpath(elsewhere));
+    const QString png = pictures + QStringLiteral("/swap.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    struct stat checked {};
+    QString resolved;
+    ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+    EXPECT_EQ(QFileInfo(resolved).canonicalFilePath(), QFileInfo(png).canonicalFilePath());
+    int fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_GE(fd, 0) << "the checked file, unchanged";
+    if (fd >= 0)
+        ::close(fd);
+    // After the check: the checked name becomes a link to the same inode.
+    const QString same = elsewhere + QStringLiteral("/same.png");
+    ASSERT_EQ(::link(QFile::encodeName(png).constData(), QFile::encodeName(same).constData()), 0);
+    ASSERT_EQ(::unlink(QFile::encodeName(png).constData()), 0);
+    ASSERT_TRUE(QFile::link(same, png));
+    fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_EQ(fd, -1) << "the link swapped in after the check was followed";
+    if (fd >= 0)
+        ::close(fd);
+    // A fresh read through that link: checked again, opened by its target's path.
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(16, 9));
+}
+
+// A folder above the checked file swapped for a link after the check is never followed either (O_NOFOLLOW alone covers
+// the last component only): the link leads to the checked file itself, which the inode comparison would accept. Needs
+// openat2 (Linux 5.6); a kernel or sandbox without it skips (the open then falls back to O_NOFOLLOW).
+TEST(ImageSize, AFolderSwappedForALinkAfterTheCheckIsNeverFollowed)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    struct open_how probe {};
+    probe.flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+    const long probeFd = ::syscall(SYS_openat2, AT_FDCWD, "/", &probe, sizeof probe);
+    if (probeFd < 0 && errno == ENOSYS)
+        GTEST_SKIP() << "no openat2 here";
+    if (probeFd >= 0)
+        ::close(static_cast<int>(probeFd));
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(7, 5, QImage::Format_RGB32);
+    image.fill(Qt::cyan);
+    const QString album = dir->path() + QStringLiteral("/album");
+    ASSERT_TRUE(QDir().mkpath(album));
+    const QString png = album + QStringLiteral("/photo.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    struct stat checked {};
+    QString resolved;
+    ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+    // After the check: the folder moves away and a link to it takes its name (the same file at the end of the path).
+    const QString moved = dir->path() + QStringLiteral("/album-moved");
+    ASSERT_EQ(::rename(QFile::encodeName(album).constData(), QFile::encodeName(moved).constData()), 0);
+    ASSERT_TRUE(QFile::link(moved, album));
+    const int fd = ImageSize::openChecked(resolved, checked);
+    EXPECT_EQ(fd, -1) << "the folder link swapped in after the check was followed";
+    if (fd >= 0)
+        ::close(fd);
+    // A fresh read through that path: checked again, opened by the path it reaches now.
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(7, 5));
+}
+
+namespace
+{
+// The errno the openat2 stand-in answers with (ENOSYS: a kernel without it; EPERM: a sandbox's seccomp filter).
+int openat2Errno = 0;
+int openat2Calls = 0;
+int refusingOpenat2(const char *, int, quint64)
+{
+    openat2Calls++;
+    errno = openat2Errno;
+    return -1;
+}
+} // namespace
+
+// Where openat2 answers ENOSYS or EPERM, the open falls back to open() with O_NOFOLLOW: the picture is read (no
+// Dimensions read would succeed otherwise), a link swapped in at the end of the path after the check is still refused,
+// and the inode check still holds. Any other answer of openat2 is a refusal, without a fallback.
+TEST(ImageSize, WithoutOpenat2TheOpenFallsBackToNoFollow)
+{
+    const auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (inside .dev/) is not set";
+    const FolderStyleStore::Mounts mounts = FolderStyleStore::Mounts::system();
+    QImage image(9, 4, QImage::Format_RGB32);
+    image.fill(Qt::magenta);
+    const QString elsewhere = dir->path() + QStringLiteral("/elsewhere");
+    ASSERT_TRUE(QDir().mkpath(elsewhere));
+    ImageSize::setOpenat2ForTests(refusingOpenat2);
+    for (const int code : {ENOSYS, EPERM}) {
+        SCOPED_TRACE(code == ENOSYS ? "ENOSYS" : "EPERM");
+        openat2Errno = code;
+        const QString png = dir->path() + QStringLiteral("/fallback-%1.png").arg(code);
+        ASSERT_TRUE(write(png, encoded(image, "PNG")));
+        openat2Calls = 0;
+        EXPECT_EQ(ImageSize::read(png, mounts), QSize(9, 4)) << "the fallback opens the checked file";
+        EXPECT_EQ(openat2Calls, 1) << "openat2 was asked first";
+        struct stat checked {};
+        QString resolved;
+        ASSERT_EQ(ImageSize::check(png, mounts, &checked, &resolved), ImageSize::Refusal::None);
+        // A link to the same inode swapped in after the check: O_NOFOLLOW refuses it.
+        const QString same = elsewhere + QStringLiteral("/same-%1.png").arg(code);
+        ASSERT_EQ(::link(QFile::encodeName(png).constData(), QFile::encodeName(same).constData()), 0);
+        ASSERT_EQ(::unlink(QFile::encodeName(png).constData()), 0);
+        ASSERT_TRUE(QFile::link(same, png));
+        const int fd = ImageSize::openChecked(resolved, checked);
+        EXPECT_EQ(fd, -1) << "the fallback followed a link swapped in at the end of the path";
+        if (fd >= 0)
+            ::close(fd);
+    }
+    // Another answer (EACCES): no fallback, the file is not read.
+    openat2Errno = EACCES;
+    const QString png = dir->path() + QStringLiteral("/refused.png");
+    ASSERT_TRUE(write(png, encoded(image, "PNG")));
+    EXPECT_FALSE(ImageSize::read(png, mounts).isValid());
+    ImageSize::setOpenat2ForTests(nullptr);
+    EXPECT_EQ(ImageSize::read(png, mounts), QSize(9, 4)) << "the system call is back";
 }
 
 TEST(ImageSize, NetworkAndFuseMountsAreNeverLookedAt)

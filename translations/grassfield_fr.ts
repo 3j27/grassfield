@@ -7367,6 +7367,25 @@
     </message>
 </context>
 <context>
+    <name>SecretsHandover</name>
+    <message>
+        <source>Saved passwords moved</source>
+        <translation>Mots de passe enregistrés déplacés</translation>
+    </message>
+    <message>
+        <source>Passwords that apps had saved elsewhere on this computer are now kept with your other saved passwords.</source>
+        <translation>Les mots de passe que des apps avaient enregistrés ailleurs sur cet ordinateur sont désormais rangés avec vos autres mots de passe enregistrés.</translation>
+    </message>
+    <message>
+        <source>Saved passwords not moved</source>
+        <translation>Mots de passe enregistrés non déplacés</translation>
+    </message>
+    <message>
+        <source>Passwords that apps had saved elsewhere on this computer stay where they were. Apps that used them may ask you to sign in again.</source>
+        <translation>Les mots de passe que des apps avaient enregistrés ailleurs sur cet ordinateur restent où ils étaient. Les apps qui les utilisaient peuvent vous demander de vous reconnecter.</translation>
+    </message>
+</context>
+<context>
     <name>SetDateTimeSheet</name>
     <message>
         <source>Set the date and time</source>

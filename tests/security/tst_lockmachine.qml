@@ -242,6 +242,26 @@ TestCase {
         compare(Machine.compositorLockStateLazy(0, i => locked[i]), "unknown");
     }
 
+    // Review of the lock's monitor queries (Quickshell 0.3.1, read in its source): a query from QML never creates a monitor
+    // object and, sent before Hyprland answered Quickshell's own first query, leaves Hyprland.monitors empty until a monitor
+    // event. The lock sends none while the model is empty (Lock.qml requestMonitors); an empty model is an unknown lock
+    // state, never "unlocked": no relock, no "nothing stranded", WlSessionLock keeps the session locked (fail closed).
+    function test_monitorQueryAllowed() {
+        compare(Machine.monitorQueryAllowed(0), false);
+        compare(Machine.monitorQueryAllowed(1), true);
+        compare(Machine.monitorQueryAllowed(2), true);
+        // Anything that is not a positive count is an empty model: no query.
+        const empty = [undefined, null, NaN, -1, 0.5, "2", true, [1], {}];
+        for (let i = 0; i < empty.length; i++)
+            compare(Machine.monitorQueryAllowed(empty[i]), false, String(empty[i]));
+        // The state an empty model gives, whatever its (absent) monitors would say.
+        const unlocked = () => ({solitaryBlockedBy: ["WINDOWED"]});
+        compare(Machine.compositorLockStateLazy(0, unlocked), "unknown");
+        compare(Machine.compositorLockState([]), "unknown");
+        compare(Machine.ownershipAction(Machine.compositorLockStateLazy(0, unlocked), 0), "unknown");
+        compare(Machine.ownershipAction(Machine.compositorLockStateLazy(0, unlocked), 1), "unknown");
+    }
+
     function test_displayNameAndInitials() {
         const passwd = "root:x:0:0::/root:/bin/bash\nada:x:1000:1000:Ada Lovelace,,,:/home/ada:/bin/bash\nbob:x:1001:1001::/home/bob:/bin/sh\n";
         compare(Machine.displayName(passwd, "ada"), "Ada Lovelace");

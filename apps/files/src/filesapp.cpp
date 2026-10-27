@@ -30,6 +30,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QWindow>
 
 #include <memory>
 
@@ -160,6 +161,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(undo, &KIO::FileUndoManager::undoTextChanged, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoTextChanged, this, &FilesApp::undoChanged);
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
+    connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &FilesApp::focusWindowChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
     qApp->installEventFilter(this);
 
@@ -298,6 +300,11 @@ void FilesApp::readAppearance()
         m_iconTint = tint;
         emit appearanceChanged();
     }
+}
+
+QObject *FilesApp::focusWindow() const
+{
+    return QGuiApplication::focusWindow();
 }
 
 QObject *FilesApp::places() const
