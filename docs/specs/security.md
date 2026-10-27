@@ -192,6 +192,7 @@ does not check its gate.
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | search | toggle | action | SUPER+SPACE |
+| search | clipboard | action | SUPER+CTRL+V (Search in its Clipboard view, ADR-0034; again closes it; refused while locked through `show()`) |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
 | search | filter | fixtures | visual tests |
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |

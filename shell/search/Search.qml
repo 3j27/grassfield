@@ -8,6 +8,7 @@ import qs.platform
 import qs.services
 import "../platform/ScreenChoice.js" as ScreenChoice
 import "Calc.js" as Calc
+import "ClipboardView.js" as ClipView
 import "Files.js" as Files
 import "Filters.js" as Filters
 import "Ranking.js" as Ranking
@@ -22,7 +23,9 @@ import "../launchpad/Model.js" as Model // layering-exception: GF-087
 // Providers: apps (DesktopEntries + Ranking.js), calculator (Calc.js), conversion (Units.js),
 // commands (Power service), files (`localsearch search`, falling back to `plocate`, argv only,
 // asynchronous, stale queries ignored) and recent documents (recently-used.xbel, read only).
-// Untrusted strings (desktop entries, file names) are only ever rendered as plain text.
+// The Clipboard view (ADR-0034, docs/specs/clipboard.md CB-5 to CB-12, CB-15) shows the clipboard history instead: the items
+// of the Clipboard service, filtered by the helper's search, pasted, copied, pinned, deleted or previewed (ClipboardView.js).
+// Untrusted strings (desktop entries, file names, copied text) are only ever rendered as plain text.
 Scope {
     id: root
 
@@ -54,6 +57,28 @@ Scope {
     // Keyboard reach of the chips: the field keeps the text focus; in the "chips" zone the ring is on chip `chipIndex`.
     property string zone: "field"
     property int chipIndex: -1
+
+    // The view: "" for the results, "clipboard" for the clipboard history (⌘4, the Clipboard button, Super+Ctrl+V).
+    property string view: ""
+    readonly property bool clipboardView: view === "clipboard"
+    // The history is off: the view asks first (CB-6, macOS 27's prompt) instead of showing rows.
+    readonly property bool clipPrompt: clipboardView && !Clipboard.enabled
+    // The ids the helper's search returned for the query (null: every item, as for an empty query) and the request they answer.
+    property var clipMatch: null
+    property int clipSeq: 0
+    // After a delete, the row that takes the selection (ClipView.selectionAfterRemove), -1 when none is pending.
+    property int clipSelectAfter: -1
+    // The row that says "Copied" for a moment (CB-8), and a short notice under the rows ("Pinned items are full").
+    property string clipCopiedKey: ""
+    property string clipNotice: ""
+    // The preview panel (CB-11): the item it shows and what the helper made for it (a picture path or the plain text).
+    property var clipPreview: null
+    property string clipPreviewPath: ""
+    property string clipPreviewText: ""
+    property bool clipPreviewReady: false
+
+    // The panel's field shows `query` again (the view changed it).
+    signal queryReset
     readonly property var chipLabels: ({
             "apps": qsTr("Applications"),
             "commands": qsTr("Commands"),
@@ -160,6 +185,9 @@ Scope {
         openStartMs = Date.now();
         if (Popups.active)
             Popups.close();
+        // The window a paste may go to: the one active now, never the desktop (FocusReturn remembers the same one).
+        const target = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
+        Clipboard.watchTarget(target ? target.address : "");
         screenName = focusedScreenName();
         recentFile.reload();
         setQuery(text);
@@ -168,6 +196,11 @@ Scope {
 
     function hide(): void {
         open = false;
+        // A paste the helper has not confirmed yet ends with Search: a late confirmation pastes nothing (ADR-0034 §4).
+        Clipboard.searchClosed();
+        closePreview();
+        view = "";
+        clipNotice = "";
         leaveChips();
         fileTimer.stop();
         cancelFiles();
@@ -182,6 +215,10 @@ Scope {
     }
 
     function setQuery(text: string): void {
+        if (clipboardView) {
+            setClipQuery(text);
+            return;
+        }
         if (text === query && groups.length > 0)
             return;
         query = text;
@@ -249,6 +286,10 @@ Scope {
     }
 
     function compute(): void {
+        if (clipboardView) {
+            computeClip();
+            return;
+        }
         const q = query.trim();
         // Each kind of result only when Settings > Search shows it.
         const calc = showCalculator && q !== "" ? Calc.answer(q) : null;
@@ -462,6 +503,9 @@ Scope {
             else
                 Apps.openDetached(["xdg-open", item.path]);
             return;
+        case "clip":
+            clipPaste(item, false);
+            return;
         }
     }
 
@@ -531,6 +575,263 @@ Scope {
         gi = (gi + delta + groups.length) % groups.length;
         const target = groups[gi].id;
         selected = items.findIndex(it => it.groupId === target);
+    }
+
+    // ---- the Clipboard view (ADR-0034) ----------------------------------------------------
+
+    // Super+Ctrl+V: Search opens in the Clipboard view, or closes when that view is shown (CB-5). Opening goes through show()
+    // (refused while locked, GF-116); while another program holds the session locked (the helper's notifier), nothing opens.
+    function toggleClipboard(): void {
+        if (open && clipboardView) {
+            hide();
+            return;
+        }
+        if (Clipboard.locked)
+            return;
+        if (!open)
+            show("");
+        if (open)
+            enterClipboard();
+    }
+
+    // ⌘4, the Clipboard button and Super+Ctrl+V. Never while either lock source says locked (PV-9).
+    function enterClipboard(): void {
+        if (!open || SessionState.refuses("search") || Clipboard.locked)
+            return;
+        fileTimer.stop();
+        cancelFiles();
+        fileHits = [];
+        leaveChips();
+        filter = "";
+        view = "clipboard";
+        query = "";
+        clipMatch = null;
+        clipSelectAfter = -1;
+        selected = -1;
+        compute();
+        queryReset();
+    }
+
+    // Backspace in the empty field, and "Not Now": back to the results.
+    function leaveClipboard(): void {
+        closePreview();
+        clipNotice = "";
+        view = "";
+        zone = "field";
+        query = "";
+        compute();
+        queryReset();
+    }
+
+    function setClipQuery(text: string): void {
+        query = text;
+        const q = text.trim();
+        if (q === "") {
+            clipMatch = null;
+            compute();
+            return;
+        }
+        // The helper searches the full text (it never leaves it); the rows follow its answer, stale answers are ignored.
+        clipSeq++;
+        Clipboard.search(clipSeq, q);
+    }
+
+    function computeClip(): void {
+        const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
+        const list = ClipView.visible(Clipboard.items, query.trim() === "" ? null : clipMatch);
+        const flat = list.map(it => ({
+                    kind: "clip",
+                    key: "clip:" + it.id,
+                    groupId: "clip",
+                    title: it.title,
+                    subtitle: "",
+                    clip: it
+                }));
+        let sel = flat.findIndex(it => it.key === prevKey);
+        if (sel < 0 && clipSelectAfter >= 0 && flat.length > 0)
+            sel = Math.min(clipSelectAfter, flat.length - 1);
+        clipSelectAfter = -1;
+        chips = [];
+        groups = flat.length > 0 ? [{id: "clip", title: qsTr("Clipboard"), items: flat}] : [];
+        items = flat;
+        rows = flat.map((it, i) => ({item: it, itemIndex: i, groupId: "clip"}));
+        selected = flat.length === 0 ? -1 : (sel >= 0 ? sel : 0);
+    }
+
+    function selectedClip(): var {
+        return clipboardView && selected >= 0 && selected < items.length ? items[selected] : null;
+    }
+
+    // Return, Enter, a click, the menu's Paste: copies the item and pastes it into the window Search opened over (Q9, CB-8);
+    // `plain` (Shift+Return, Paste as Plain Text) offers its plain text only.
+    function clipPaste(item: var, plain: bool): void {
+        if (!item || !item.clip)
+            return;
+        Clipboard.paste(item.clip.id, plain && ClipView.hasPlainVariant(item.clip));
+    }
+
+    // The copy button, Ctrl+C, the menu's Copy: copies only; Search stays open and the row says "Copied" once the helper owns
+    // the item (Apple's flow, CB-8), or the view says it could not be copied.
+    function clipCopy(item: var): void {
+        if (!item || !item.clip)
+            return;
+        Clipboard.copyItem(item.clip.id);
+    }
+
+    function clipTogglePin(item: var): void {
+        if (!item || !item.clip)
+            return;
+        if (item.clip.pinned)
+            Clipboard.unpin(item.clip.id);
+        else
+            Clipboard.pin(item.clip.id);
+    }
+
+    // The menu's Delete Item, Ctrl+Backspace: the next row takes the selection (CB-9).
+    function clipDelete(item: var): void {
+        if (!item || !item.clip)
+            return;
+        const index = items.findIndex(it => it.key === item.key);
+        clipSelectAfter = ClipView.selectionAfterRemove(items.length, index);
+        if (clipPreview && clipPreview.id === item.clip.id)
+            closePreview();
+        Clipboard.remove(item.clip.id);
+    }
+
+    // Space (empty field), Ctrl+Y: the preview panel shows the selected item, and follows the selection (CB-11).
+    function clipTogglePreview(): void {
+        if (clipPreview) {
+            closePreview();
+            return;
+        }
+        previewItem(selectedClip());
+    }
+
+    function previewItem(item: var): void {
+        if (clipPreview)
+            Clipboard.dropPreview(clipPreview.id);
+        if (!item || !item.clip) {
+            clipPreview = null;
+            return;
+        }
+        clipPreview = item.clip;
+        clipPreviewPath = "";
+        clipPreviewText = "";
+        clipPreviewReady = false;
+        Clipboard.preview(item.clip.id);
+    }
+
+    function closePreview(): void {
+        if (!clipPreview)
+            return;
+        Clipboard.dropPreview(clipPreview.id);
+        clipPreview = null;
+        clipPreviewPath = "";
+        clipPreviewText = "";
+        clipPreviewReady = false;
+    }
+
+    onSelectedChanged: {
+        if (clipPreview) {
+            const item = selectedClip();
+            if (!item)
+                closePreview();
+            else if (item.clip.id !== clipPreview.id)
+                previewItem(item);
+        }
+    }
+
+    // The More menu's Clear History: every unpinned item, at once (CB-10, the 26.0 menu has no confirmation).
+    function clipClearHistory(): void {
+        closePreview();
+        Clipboard.clearHistory();
+    }
+
+    // The More menu's Settings…: Settings > Search.
+    function clipOpenSettings(): void {
+        hide();
+        SettingsApp.openSection("search");
+    }
+
+    // The first-use prompt (CB-6): "Allow" turns the history on (recording starts with the next copy), "Not Now" leaves it off.
+    function clipAllow(): void {
+        Settings.setClipboardEnabled(true);
+    }
+
+    function clipNotNow(): void {
+        leaveClipboard();
+    }
+
+    Timer {
+        id: copiedTimer
+        interval: Tokens.searchClipCopiedMs
+        onTriggered: root.clipCopiedKey = ""
+    }
+
+    Timer {
+        id: noticeTimer
+        interval: 2 * Tokens.searchClipCopiedMs
+        onTriggered: root.clipNotice = ""
+    }
+
+    Connections {
+        target: Clipboard
+
+        function onItemsChanged(): void {
+            if (root.open && root.clipboardView)
+                root.compute();
+        }
+
+        function onSearched(seq: int, ids: var): void {
+            if (seq !== root.clipSeq || !root.clipboardView)
+                return;
+            root.clipMatch = ids;
+            root.compute();
+        }
+
+        function onCopyConfirmed(id: string): void {
+            if (!root.open || !root.clipboardView)
+                return;
+            root.clipCopiedKey = "clip:" + id;
+            copiedTimer.restart();
+        }
+
+        // The helper could not take the clipboard (locked by another program, the item gone, no answer): nothing was copied or
+        // pasted, and Search stays open to say so (ADR-0034 Q23).
+        function onCopyRefused(): void {
+            if (!root.open || !root.clipboardView)
+                return;
+            root.clipNotice = qsTr("The item could not be copied");
+            noticeTimer.restart();
+        }
+
+        function onPinFull(id: string): void {
+            root.clipNotice = qsTr("Pinned items are full");
+            noticeTimer.restart();
+        }
+
+        function onPreviewReady(id: string, path: string, text: string): void {
+            if (!root.clipPreview || root.clipPreview.id !== id)
+                return;
+            root.clipPreviewPath = path;
+            root.clipPreviewText = text;
+            root.clipPreviewReady = true;
+        }
+
+        // The helper owns the chosen item: Search closes and the keyboard goes back to the window the paste goes to.
+        function onPasteCopied(): void {
+            if (root.open)
+                root.hide();
+        }
+
+        // Either lock source (this shell's lock or another program's, the helper's notifier): Search closes and drops what was
+        // typed, as below (PV-9). This handler may run before SessionState's, which then finds Search closed.
+        function onLockedChanged(): void {
+            if (Clipboard.locked && root.open) {
+                root.hide();
+                root.setQuery("");
+            }
+        }
     }
 
     // ---- usage boost persistence (0600, like the notification history) -------------------
@@ -604,6 +905,11 @@ Scope {
             root.toggle();
         }
 
+        // Super+Ctrl+V (bindings.lua): Search in the Clipboard view, or closed when that view is shown (CB-5).
+        function clipboard(): void {
+            root.toggleClipboard();
+        }
+
         function open(text: string): void {
             if (VisualFixtures.dev)
                 root.show(text);
@@ -642,6 +948,11 @@ Scope {
                 chips: root.chips,
                 filter: root.filter,
                 zone: root.zone,
+                view: root.view,
+                prompt: root.clipPrompt,
+                notice: root.clipNotice,
+                copied: root.clipCopiedKey,
+                preview: root.clipPreview ? root.clipPreview.id : "",
                 groups: root.groups.map(g => ({id: g.id, title: g.title, items: g.items.map(i => ({kind: i.kind, title: i.title, subtitle: i.subtitle}))}))
             });
         }
