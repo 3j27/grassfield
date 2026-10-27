@@ -51,6 +51,7 @@ const DESCRIPTIONS = [
     "Previous Space",
     QT_TRANSLATE_NOOP("Bindings", "Overview"),
     QT_TRANSLATE_NOOP("Bindings", "Search"),
+    QT_TRANSLATE_NOOP("Bindings", "Clipboard history"),
     QT_TRANSLATE_NOOP("Bindings", "Apps"),
     "Notification Center",
     QT_TRANSLATE_NOOP("Bindings", "Lock screen"),

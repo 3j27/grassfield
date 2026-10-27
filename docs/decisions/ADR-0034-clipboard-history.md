@@ -93,6 +93,16 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
 |---|---|---|---|---|
 | Q12 | New copies' images wait for the one image worker (each up to 16 MiB in memory): what when they come faster than it decodes? (review of 963e173, minor 6) | no bound (every image kept, memory unbounded); at most 4 waiting, a newer one not recorded; the newest replaces the oldest waiting | at most 4 waiting, a newer one not recorded (logged by reason) | macOS first: every copy made at a person's pace is recorded (a worker ends within 2 s, so only images copied faster than one every half second for seconds on end reach the bound); nothing for the user to do; memory stays bounded like the history (64 MiB) |
 | Q13 | A stored image (pinned, or in the opt-in history) whose thumbnail fails (a worker late under load, one that cannot start): what happens to it? (review of 963e173, MAJOR 2) | delete it (step 1's first code); keep it without a thumbnail and try again by itself; keep it and ask the user to act | keep it, shown without a thumbnail, tried again up to 3 times a minute apart, then at each start | macOS first: macOS never drops a clipboard item because its preview failed; no technical intervention: nothing to click, run or repair |
+| Q14 | "Not Now" on the first-use prompt: where does the person land? (step 2) | close Search; back to Search's results with the field emptied; stay in the empty view | back to Search's results, Search stays open (the history stays off) | macOS first: the prompt belongs to Search and declining it leaves Search as it was, as Backspace leaves the view; nothing else to do |
+| Q15 | A paste chosen when Search opened over no window (the desktop) or over a window that closed since (step 2) | keep Search open and do nothing; copy only and close Search; refuse with a notice | the item is copied and Search closes, ready for Ctrl+V | macOS first: Apple's own flow is copy then ⌘V (M-6) and a choice closes Search; no key is ever sent to a window the person did not leave Search from |
+| Q16 | How a pinned row is marked (step 2) | a pin glyph after the title; a "Pinned" header; the row's pin button kept visible, filled | the filled pin button stays visible on a pinned row (its accessible name adds "Pinned") | macOS has no pins (M-14) and no group headers in Search (macOS 27); Windows marks a pinned item by its filled pin; one control shows and undoes it |
+| Q17 | Where the item preview opens and what it follows (step 2) | a sheet over the results; a panel beside the results; a separate window | a glass panel beside the results (right, or left without room), as tall as the results, following the selection until Space, Ctrl+Y or Esc | macOS first: Quick Look sits beside Spotlight's results and follows the selection; no window to manage |
+| Q18 | A copy arriving while the view is open: where does the selection go? (step 2) | to the new top row; it stays on the selected item | it stays on the selected item (the first row when the view opens) | macOS first: a list never moves the selection under the person's keys; a Return never pastes an item that was not picked |
+| Q19 | Super+Ctrl+V while another program holds the session locked (the helper's `L 1`) (step 2) | open Search on its results; open nothing | open nothing; either lock closes Search and drops its query | PV-9, as for this shell's lock; nothing for the person to do |
+| Q20 | How long a row says "Copied" after a copy (step 2) | while selected; 1.5 s; until Search closes | 1.5 s (token `search.clipCopiedMs`), then its time again | macOS first: a short confirmation in place, as Spotlight's copy button gives; nothing to dismiss |
+| Q21 | The time on a row copied before today (step 2) | the time alone; the date and the time; a relative day ("Yesterday") | the date and time in the locale's short formats ("Copied on …", « Copié le … »); today the time alone ("Copied 11:23", « Copié à 11:23 ») | macOS first: macOS 26 shows the clock time (M-4); a date only where the time alone would mislead |
+| Q22 | How the keyboard reaches the More button (step 2) | the mouse only; Tab from the field; a key of its own | Tab from the field puts the focus ring on More; Return, Space or Down opens its menu; Tab or Esc goes back to the field | macOS first: full keyboard access reaches every control with Tab (the spec's table: "Tab reaches it"); every action has a key (CB-12) |
+| Q23 | The helper refuses or does not answer a copy or a paste (another program's lock, the item gone, no helper): what does the person see? (review of 28d2651) | Search closes as after any choice; Search stays open with a notice; an alert | Search stays open, the selection where it was, and the view says "The item could not be copied" (« L’élément n’a pas pu être copié ») for 3 s; nothing is pasted | macOS first: a choice that did nothing must not look like one that worked; the person can try again or press Esc, with nothing to repair |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -257,6 +267,24 @@ l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that
    history after logging out" (step 3, after the Settings PRs #8, #9 and #10). The keys (`search.clipboard.enabled`,
    `.retention`, `.keepOnDisk`, `.clearedAt`, `.pinnedClearedAt`) come from the schema (ADR-0020) in step 1, as the shell
    reads them.
+   Step 2 builds the view in `shell/search/` (`Search.qml` the controller, `SearchPanel.qml` the window, `ClipboardView.js`
+   the pure parts: rows, kinds, the key map, the row menu, the selection after a delete), with four glyphs (`clipboard`, `copy`,
+   `pin`, `pin-fill`) and the `search.clip*` tokens. The rows come from the service's items in the helper's order, filtered by
+   the helper's answer to `Q` (stale answers ignored); the row menu and the More menu are `PopupMenu`s inside Search's window,
+   which already covers the screen and holds the keyboard; the preview panel shows the helper's `V` answer (text as plain text
+   in a scrollable area, an image by its path in the runtime directory) and drops it (`VD`) when it closes or moves on. The paste
+   of §4 lives in the service (`Clipboard.paste`): Search remembers the window active at its opening
+   (`Compositor.activeWindow()`, never the desktop) with `watchTarget`, `Compositor.windowClosed` (from Hyprland's
+   `closewindow`) marks it closed, the helper's `A` closes Search, and a 50 ms timer checks `pasteStep` until it dispatches
+   `pasteRequest` or drops the paste. Review of 28d2651 (paste safety): the paste keeps its own target and whether that window
+   closed, so a later `watchTarget` never redirects it; closing Search before the helper's `A` (Esc, a click outside, a lock,
+   another surface) drops the paste, so a late `A` pastes nothing; Search opening again drops a paste still waiting; after the
+   `A`, each check drops the paste at once when either lock source says locked, the target closed, or a full-attention
+   surface is open (Search has released FocusReturn by then, so one open at a check opened after the choice), and the 1 s is
+   one Qt timer started at the `A` (monotonic), never a count of checks. Search closes only once the helper owns the item,
+   also for a copy only; a copy or paste the helper refuses or leaves unanswered for 1 s keeps Search open with "The item
+   could not be copied" (Q23), and Copy's "Copied" shows on the helper's `A`. ⌘4 is matched by the 4 key's place (xkb
+   keycode 13, what `forwarding.lua` sends) as well as its symbol, so it works on AZERTY, where that key types an apostrophe.
 
 8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` and never calls
    `wl_display_connect`: libwayland takes `WAYLAND_SOCKET` first even when a display name is given (the counter-review
@@ -328,8 +356,9 @@ larger limits; it keeps everything on the machine.
   `apps/settings/qml/Bindings.js` and the French catalog), one read-only `AuthAgent.requestActive` (the only change under
   `shell/security`, opus PASS required) bound in `shell.qml` to a new `SessionState.authorizing`.
 - IPC, documented in `docs/specs/security.md` with its code: one action-class function, `search clipboard` (Super+Ctrl+V;
-  opens or closes the view, returns nothing, refused while locked), and dev-class functions (`clipboard status`,
-  `search view`, the paste and offer test hooks). The Settings app clears through `search.clipboard.clearedAt` and
+  opens or closes the view, returns nothing, refused while locked: it opens only through `Search.show()`), and the dev-class
+  `clipboard status` (step 2 adds the paste's target and outcome) and `search status` (step 2 adds the view, the prompt, the
+  notice and the preview). No other hook was needed: the headless scenario drives the real controller and service. The Settings app clears through `search.clipboard.clearedAt` and
   `.pinnedClearedAt`.
 - Tests never touch a real clipboard: the helper's logic under gtest (ASan too); the process under `env -i` against
   `tests/fixtures/fake-clipboard-server` (a test-only libwayland-server program offering `wl_seat`,
@@ -347,3 +376,6 @@ larger limits; it keeps everything on the machine.
   inside Win+V; which hints password managers really set; the Lua `address` format, the `address:` selector and loading a
   Grassfield Lua module from a dispatched function in Hyprland 0.56.2 (nested, step 1); the terminals' default Ctrl+Shift+V
   (documented defaults, checked in nested in step 2).
+- Not verified in step 2 (no Hyprland and no display in the cloud container where it was built): the view's look (`just shot`
+  light and dark, en and fr), the real paste into a window and a terminal, ⌘4 forwarded as Ctrl+4 in the field, and the
+  `address:` selector of the dispatched function; the integrator checks them in the nested session.

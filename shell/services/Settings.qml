@@ -143,6 +143,10 @@ Singleton {
         store.setStagesEnabled(value);
     }
 
+    function setClipboardEnabled(value: bool): void {
+        store.setClipboardEnabled(value);
+    }
+
     function setDesktopShowIcons(value: bool): void {
         store.setDesktopShowIcons(value);
     }

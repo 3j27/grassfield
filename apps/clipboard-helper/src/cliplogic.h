@@ -34,6 +34,10 @@ constexpr qint64 kThumbnailBytes = 1024 * 1024;
 // The retention the helper accepts (the shell sends 30 minutes, 8 hours or 7 days; tests a few seconds).
 constexpr qint64 kMinRetentionMs = 1000;
 constexpr qint64 kMaxRetentionMs = 7LL * 24 * 3600 * 1000;
+// A paste answer: closed after this long without progress (the reader stopped), and after this long in all (a reader that
+// trickles forever never holds one of the helper's writers).
+constexpr qint64 kWriterIdleMs = 2000;
+constexpr qint64 kWriterMaxMs = 60 * 1000;
 constexpr qint64 kDefaultRetentionMs = 8LL * 3600 * 1000;
 
 // The type the helper adds to what it serves, holding the item id: its own selection is known by it.
@@ -133,6 +137,9 @@ QByteArray uriList(const QStringList &paths);
 // Negative (dated in the future) counts as expired.
 qint64 ageMs(const Item &item, qint64 nowWallMs, qint64 nowBootMs, const QByteArray &bootId);
 qint64 clampRetention(qint64 ms);
+// How long a paste answer that has run `elapsedMs` may wait for its next progress: the idle limit, never past the overall
+// limit; 0 means close it now.
+qint64 writerWaitMs(qint64 elapsedMs);
 
 // The history (unpinned, newest copy first) and the pinned items (newest pin first).
 class Store

@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/services/ClipboardLogic.js" as Logic
+import "../../shell/search/ClipboardView.js" as View
 
 // The clipboard history on the shell side (ADR-0034): when a copy may be recorded, which display the helper is given, the
 // helper's lines and items, when the paste may be sent and the Lua function sent for it. Pure logic of
@@ -136,7 +137,7 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
-            elapsedMs: 200
+            expired: false
         };
         verify(Logic.mayPaste(ok));
         const refuse = {
@@ -145,7 +146,7 @@ TestCase {
             activeAddress: "0x1",
             closedSinceOpen: true,
             otherSurfaceOpen: true,
-            elapsedMs: 1001
+            expired: true
         };
         for (const k in refuse) {
             const s = Object.assign({}, ok);
@@ -153,14 +154,44 @@ TestCase {
             verify(!Logic.mayPaste(s), k);
         }
         verify(!Logic.mayPaste(Object.assign({}, ok, {rememberedAddress: "", activeAddress: ""})), "no window was active at open");
+        verify(Logic.mayPaste(Object.assign({}, ok, {rememberedAddress: "55d0c0ffee", activeAddress: "0x55D0C0FFEE"})),
+            "the same window whichever form its address takes");
+        verify(!Logic.mayPaste(Object.assign({}, ok, {expired: undefined})), "no deadline state: no paste");
+    }
+
+    // Each check of a waiting paste: send only into the remembered window; a lock, the target closing or another surface
+    // opening drops it at once, whatever window is active; otherwise it waits until the deadline.
+    function test_pasteStep() {
+        const ok = {
+            locked: false,
+            helperLocked: false,
+            rememberedAddress: "55d0c0ffee",
+            activeAddress: "0x55d0c0ffee",
+            closedSinceOpen: false,
+            otherSurfaceOpen: false,
+            expired: false
+        };
+        compare(Logic.pasteStep(ok), "send");
+        const at = changes => Logic.pasteStep(Object.assign({}, ok, changes));
+        compare(at({locked: true}), "locked", "this shell's lock, the target active");
+        compare(at({helperLocked: true}), "locked", "another program's lock, the target active");
+        compare(at({closedSinceOpen: true}), "the window closed");
+        compare(at({otherSurfaceOpen: true}), "another surface opened", "the target active behind a surface");
+        compare(at({expired: true}), "the window did not come back", "the target came back too late");
+        compare(at({activeAddress: "0x1"}), "wait", "another window active: wait for the target");
+        compare(at({activeAddress: ""}), "wait");
+        compare(at({activeAddress: "0x1", expired: true}), "the window did not come back");
+        compare(at({locked: true, closedSinceOpen: true, otherSurfaceOpen: true}), "locked", "a lock is named first");
+        compare(Logic.pasteStep(null), "locked");
     }
 
     function test_pasteRequest() {
         compare(Logic.pasteRequest("0x1; os.exit()"), "");
         compare(Logic.pasteRequest(""), "");
+        compare(Logic.pasteRequest("55d0c0ffee"), Logic.pasteRequest("0x55D0C0FFEE"), "one request whichever form the address takes");
         const r = Logic.pasteRequest("0x55d0c0ffee");
-        verify(r.startsWith("function() local w = hl.get_active_window(); if not w or w.address ~= \"0x55d0c0ffee\" then return end;"),
-            "the window is checked first, in the same call");
+        verify(r.startsWith("function() local w = hl.get_active_window(); if not w or (string.lower(tostring(w.address or \"\")):gsub(\"^0x\", \"\")) ~= \"55d0c0ffee\" then return end;"),
+            "the window is checked first, in the same call, on its address without 0x");
         // The key down and the key up both go to the address; the up's timer is armed first, in the same function, and checks
         // nothing.
         const check = r.indexOf("get_active_window");
@@ -171,5 +202,84 @@ TestCase {
         compare(r.slice(timer).indexOf("get_active_window"), -1, "the key up never checks the active window again");
         verify(r.indexOf("mods = terminal and \"CTRL SHIFT\" or \"CTRL\"") > 0);
         verify(r.indexOf("\"org%.omarchy%.\"") > 0, "the Lua pattern escapes the prefixes' dots");
+    }
+
+    // ---- The Clipboard view (Search) ----
+
+    function test_viewShowsTheHelpersOrderAndItsMatches() {
+        const items = [{id: "p1", pinned: true}, {id: "h1"}, {id: "h2"}, {id: "h3"}];
+        compare(View.visible(items, null).map(i => i.id).join(" "), "p1 h1 h2 h3", "an empty query shows every item, pins first");
+        compare(View.visible(items, ["h3", "p1"]).map(i => i.id).join(" "), "p1 h3", "a query keeps the helper's order");
+        compare(View.visible(items, []).length, 0);
+        compare(View.visible(undefined, null).length, 0);
+    }
+
+    function test_rowKinds() {
+        compare(View.kindKey({kind: "text", formatted: false}), "text");
+        compare(View.kindKey({kind: "text", formatted: true}), "formatted");
+        compare(View.kindKey({kind: "image"}), "image");
+        compare(View.kindKey({kind: "files", files: 1}), "files");
+        compare(View.kindKey({kind: "files", files: 3}), "items");
+        compare(View.imageFormat({mimes: ["image/png"]}), "PNG");
+        compare(View.imageFormat({mimes: ["image/jpeg"]}), "JPEG");
+        compare(View.imageFormat({mimes: ["image/webp"]}), "WebP");
+        compare(View.imageFormat({mimes: []}), "");
+        verify(View.hasPlainVariant({kind: "text", formatted: true}));
+        verify(!View.hasPlainVariant({kind: "text", formatted: false}));
+        verify(!View.hasPlainVariant({kind: "image", formatted: true}));
+    }
+
+    function test_keysOfTheView() {
+        const K = View.KEY;
+        compare(View.keyAction(K.ret, 0, false, false), "paste");
+        compare(View.keyAction(K.enter, 0, true, false), "paste");
+        compare(View.keyAction(K.ret, Qt.ShiftModifier, false, false), "pastePlain");
+        compare(View.keyAction(K.ret, Qt.ControlModifier, false, false), "");
+        compare(View.keyAction(K.c, Qt.ControlModifier, false, false), "copy");
+        compare(View.keyAction(K.c, Qt.ControlModifier, false, true), "", "a selected query text is the field's to copy");
+        compare(View.keyAction(K.p, Qt.ControlModifier, false, false), "pin");
+        compare(View.keyAction(K.menu, 0, false, false), "menu");
+        compare(View.keyAction(K.f10, Qt.ShiftModifier, false, false), "menu");
+        compare(View.keyAction(K.f10, 0, false, false), "");
+        compare(View.keyAction(K.backspace, Qt.ControlModifier, true, false), "delete");
+        compare(View.keyAction(K.backspace, Qt.ControlModifier, false, false), "", "Ctrl+Backspace edits a query");
+        compare(View.keyAction(K.backspace, 0, true, false), "leave", "Backspace in the empty field leaves the view");
+        compare(View.keyAction(K.backspace, 0, false, false), "");
+        compare(View.keyAction(K.space, 0, true, false), "preview");
+        compare(View.keyAction(K.space, 0, false, false), "", "Space types into a query");
+        compare(View.keyAction(K.y, Qt.ControlModifier, false, false), "preview");
+        compare(View.keyAction(K.up, 0, false, false), "up");
+        compare(View.keyAction(K.down, 0, false, false), "down");
+        compare(View.keyAction(K.escape, 0, false, false), "escape");
+        compare(View.keyAction(K.tab, 0, true, false), "more");
+        compare(View.keyAction(0x41, 0, true, false), "", "a letter types");
+        // The constants are Qt's.
+        compare(K.ret, Qt.Key_Return);
+        compare(K.backspace, Qt.Key_Backspace);
+        compare(K.menu, Qt.Key_Menu);
+        compare(K.f10, Qt.Key_F10);
+        compare(View.CTRL, Qt.ControlModifier);
+        compare(View.META, Qt.MetaModifier);
+        verify(View.opensView(Qt.Key_4, Qt.ControlModifier), "⌘4 (Super+4 forwarded as Ctrl+4)");
+        verify(View.opensView(Qt.Key_4, Qt.MetaModifier));
+        verify(!View.opensView(Qt.Key_4, 0), "a typed 4");
+        // French AZERTY: the forwarded 4 key types an apostrophe; its place (scan code 13) still opens the view.
+        verify(View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier, 13), "⌘4 on AZERTY");
+        verify(View.opensView(Qt.Key_4, Qt.ControlModifier, 13));
+        verify(!View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier, 48), "Ctrl+apostrophe elsewhere on the keyboard");
+        verify(!View.opensView(Qt.Key_Apostrophe, 0, 13), "a typed apostrophe");
+        verify(!View.opensView(Qt.Key_Apostrophe, Qt.ControlModifier | Qt.ShiftModifier, 13));
+    }
+
+    function test_selectionAfterDelete() {
+        compare(View.selectionAfterRemove(3, 0), 0, "the next row takes the place");
+        compare(View.selectionAfterRemove(3, 2), 1, "the last row: the new last one");
+        compare(View.selectionAfterRemove(1, 0), -1, "nothing left");
+    }
+
+    function test_rowMenu() {
+        compare(View.menuIds({kind: "text", formatted: true, pinned: false}).join(" "), "paste pastePlain copy - pin - delete");
+        compare(View.menuIds({kind: "image", pinned: true}).join(" "), "paste copy - unpin - delete");
+        compare(View.menuIds(null).length, 0);
     }
 }

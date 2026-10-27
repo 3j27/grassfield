@@ -1,4 +1,5 @@
 .pragma library
+.import "../platform/Minimized.js" as Minimized
 
 // The clipboard history's decisions on the shell side (ADR-0034): whether a copy may be recorded, where the helper looks, the
 // helper's lines, the item list, and the paste request sent to Hyprland. Pure functions, unit-tested (tests/unit/tst_clipboard.qml);
@@ -9,6 +10,8 @@ const US = "\x1f";
 const AUTH_GRACE_MS = 2000;
 // The paste is sent only this long after Search's close asked for the keyboard back (ADR-0034 §4).
 const PASTE_WAIT_MS = 1000;
+// How often the service looks whether the target window is active again.
+const PASTE_POLL_MS = 50;
 // macOS 27's three durations (Settings > Search), in milliseconds.
 const RETENTION = {"30m": 30 * 60 * 1000, "8h": 8 * 3600 * 1000, "7d": 7 * 24 * 3600 * 1000};
 
@@ -140,37 +143,61 @@ function removeId(items, id) {
 }
 
 // Whether the paste may be sent now (ADR-0034 §4). s: {locked, helperLocked, rememberedAddress, activeAddress, closedSinceOpen,
-// otherSurfaceOpen, elapsedMs}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search opened
-// (an address can be reused by a new window).
+// otherSurfaceOpen, expired}. closedSinceOpen: Hyprland reported `closewindow` for the remembered address since Search opened
+// (an address can be reused by a new window); expired: the PASTE_WAIT_MS since the helper owned the item have passed (the
+// service measures them with one Qt timer, monotonic, never by counting checks).
 function mayPaste(s) {
-    if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false)
+    if (!s || s.locked !== false || s.helperLocked !== false || s.closedSinceOpen !== false || s.otherSurfaceOpen !== false
+            || s.expired !== false)
         return false;
-    const want = String(s.rememberedAddress || "");
-    if (!isAddress(want) || String(s.activeAddress || "") !== want)
-        return false;
-    const elapsed = Number(s.elapsedMs);
-    return isFinite(elapsed) && elapsed >= 0 && elapsed <= PASTE_WAIT_MS;
+    const want = Minimized.normalizeAddress(s.rememberedAddress || "");
+    return want !== "" && Minimized.normalizeAddress(s.activeAddress || "") === want;
 }
 
+// One check of a paste waiting for its window (every PASTE_POLL_MS once the helper owns the item, and at the deadline): "send",
+// "wait", or why the paste is dropped. Search has closed by then and released the keyboard, so a full-attention surface open
+// at a check opened after the choice: the paste is dropped, as for a lock or the target closing.
+function pasteStep(s) {
+    if (mayPaste(s))
+        return "send";
+    if (!s || s.locked !== false || s.helperLocked !== false)
+        return "locked";
+    if (s.closedSinceOpen !== false)
+        return "the window closed";
+    if (s.otherSurfaceOpen !== false)
+        return "another surface opened";
+    if (s.expired !== false)
+        return "the window did not come back";
+    return "wait";
+}
+
+// A window address as Hyprland names it, with or without "0x" (Minimized.normalizeAddress, the platform's one validator).
 function isAddress(address) {
-    return /^0x[0-9a-f]{1,16}$/.test(String(address));
+    return Minimized.normalizeAddress(address) !== "";
+}
+
+// The address as the service keeps it: lower-case hex without 0x, "" when invalid.
+function addressHex(address) {
+    return Minimized.normalizeAddress(address || "");
 }
 
 // The Lua function Hyprland runs for a paste (Quickshell sends it as `return hl.dispatch(<request>)`, the Zoom.js pattern). It
-// checks, in the same compositor call, that the active window is still the remembered address, then sends that window Ctrl+V
-// (Ctrl+Shift+V when its class passes forwarding.lua's terminal test) by address. The key up's timer is armed before the key
-// down is sent, in the same call, and is unconditional: a V that went down is always released in the window that got it. ""
-// for an invalid address.
+// checks, in the same compositor call, that the active window is still the remembered address (compared without "0x" and in
+// lower case, whichever form Hyprland's Lua gives), then sends that window Ctrl+V (Ctrl+Shift+V when its class passes
+// forwarding.lua's terminal test) by `address:0x<hex>`, the selector Minimized.js uses. The key up's timer is armed before the
+// key down is sent, in the same call, and is unconditional: a V that went down is always released in the window that got it.
+// "" for an invalid address.
 function pasteRequest(address) {
-    if (!isAddress(address))
+    const hex = Minimized.normalizeAddress(address);
+    if (hex === "")
         return "";
     const quote = s => "\"" + s + "\"";
     const classes = "{ " + TERMINAL_CLASSES.map(quote).join(", ") + " }";
     const prefixes = "{ " + TERMINAL_PREFIXES.map(p => quote(p.replace(/\./g, "%."))).join(", ") + " }";
-    const target = quote("address:" + address);
+    const target = quote("address:0x" + hex);
     return "function() "
         + "local w = hl.get_active_window(); "
-        + "if not w or w.address ~= " + quote(address) + " then return end; "
+        + "if not w or (string.lower(tostring(w.address or \"\")):gsub(\"^0x\", \"\")) ~= " + quote(hex) + " then return end; "
         + "local c = (w.class or \"\"):lower(); local terminal = false; "
         + "for _, n in ipairs(" + classes + ") do if c == n then terminal = true end end; "
         + "for _, p in ipairs(" + prefixes + ") do if c:find(\"^\" .. p) then terminal = true end end; "
