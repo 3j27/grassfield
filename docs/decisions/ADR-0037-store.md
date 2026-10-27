@@ -1,6 +1,6 @@
 # ADR-0037: Grassfield Store: an app that installs, opens and uninstalls apps through pacman and Omarchy, with a signed catalog
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
-PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in his words. The first opus review (FAIL, 3 MAJOR) is
+PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. The first opus review (FAIL, 3 MAJOR) is
 answered in "Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), integrator (merge after the opus PASS) ·
 Number: 0037 (0033 Software Update, 0034 clipboard and 0036 tiling are merged; 0035 dialogs is open)
 

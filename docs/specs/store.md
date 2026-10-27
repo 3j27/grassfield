@@ -1,6 +1,6 @@
 # Store spec · apps-engineer (app), platform-engineer (sources, install path) · owner brief 2026-10-27
 Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Nothing is
-built. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in his words in the ADR): §4 amended; AUR and Flathub both
+built. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
