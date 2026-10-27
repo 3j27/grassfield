@@ -23,8 +23,7 @@ TestCase {
             locked: false,
             helperLocked: false,
             authorizing: false,
-            authorizingEndedAt: 0,
-            now: 100000,
+            authorizingGrace: false,
             activeClass: "org.gnome.TextEditor"
         };
         for (const k in over)
@@ -38,14 +37,15 @@ TestCase {
         verify(!Logic.mayRecord(open({locked: true})), "the shell's lock (or its locking phase)");
         verify(!Logic.mayRecord(open({helperLocked: true})), "a lock by another program (the compositor's notifier)");
         verify(!Logic.mayRecord(open({authorizing: true})), "an authorization request open");
-        verify(!Logic.mayRecord(open({authorizingEndedAt: 99000})), "an authorization request ended less than 2 s ago");
-        verify(Logic.mayRecord(open({authorizingEndedAt: 97000})));
+        verify(!Logic.mayRecord(open({authorizingGrace: true})), "an authorization request ended less than 2 s ago");
+        compare(Logic.AUTH_GRACE_MS, 2000);
         verify(!Logic.mayRecord(open({activeClass: "1Password"})), "a protected password manager in front");
         verify(!Logic.mayRecord(open({activeClass: "Bitwarden"})));
         verify(!Logic.mayRecord(open({activeClass: "chrome-nngceckbapebfimnlniiiahkandclblb-Default"})));
         verify(Logic.mayRecord(open({activeClass: ""})), "no window in front");
         // Anything that is not exactly the open value is a refusal (fail closed).
         verify(!Logic.mayRecord(open({locked: undefined})));
+        verify(!Logic.mayRecord(open({authorizingGrace: undefined})));
         verify(!Logic.mayRecord(open({enabled: "true"})));
         verify(!Logic.mayRecord(null));
     }
@@ -161,11 +161,13 @@ TestCase {
         const r = Logic.pasteRequest("0x55d0c0ffee");
         verify(r.startsWith("function() local w = hl.get_active_window(); if not w or w.address ~= \"0x55d0c0ffee\" then return end;"),
             "the window is checked first, in the same call");
-        // The key down and the key up both go to the address; the up is armed in the same function and checks nothing.
-        const down = r.indexOf("state = \"down\", window = \"address:0x55d0c0ffee\"");
+        // The key down and the key up both go to the address; the up's timer is armed first, in the same function, and checks
+        // nothing.
+        const check = r.indexOf("get_active_window");
         const timer = r.indexOf("hl.timer(function()");
         const up = r.indexOf("state = \"up\", window = \"address:0x55d0c0ffee\"");
-        verify(down > 0 && timer > down && up > timer);
+        const down = r.indexOf("state = \"down\", window = \"address:0x55d0c0ffee\"");
+        verify(check > 0 && timer > check && up > timer && down > up, "check, then the key up's timer, then the key down");
         compare(r.slice(timer).indexOf("get_active_window"), -1, "the key up never checks the active window again");
         verify(r.indexOf("mods = terminal and \"CTRL SHIFT\" or \"CTRL\"") > 0);
         verify(r.indexOf("\"org%.omarchy%.\"") > 0, "the Lua pattern escapes the prefixes' dots");

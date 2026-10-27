@@ -40,11 +40,21 @@ Singleton {
     readonly property string storeDir: Mode.stateDir + "/clipboard"
     readonly property bool runnable: display !== "" && runtimeDir !== ""
 
-    // When the last authorization request ended (ms since the epoch): no copy is recorded for 2 s after it.
-    property real authorizingEndedAt: 0
+    // No copy is recorded while an authorization request is open and for 2 s after it ended (Q11), timed by a Timer (monotonic: a
+    // clock set back never lengthens it).
     readonly property bool authorizing: SessionState.authorizing
-    onAuthorizingChanged: if (!root.authorizing)
-        root.authorizingEndedAt = Date.now()
+    property bool authorizingGrace: false
+    onAuthorizingChanged: {
+        if (root.authorizing)
+            return;
+        root.authorizingGrace = true;
+        root.authGrace.restart();
+    }
+    readonly property Timer authGrace: Timer {
+        interval: Logic.AUTH_GRACE_MS
+        repeat: false
+        onTriggered: root.authorizingGrace = false
+    }
 
     // Whether the helper should run; `stopping`: turned off, it deletes its history store, then ends by itself (onEnabledChanged).
     property bool wanted: false
@@ -71,8 +81,13 @@ Singleton {
     function remove(id: string): void {
         root.send(["X", id]);
     }
+    // Clear History: the running helper clears memory and its store; otherwise (off, or waiting to restart after a crash) the
+    // store is deleted here, before any helper can load it again.
     function clearHistory(): void {
-        root.send(["CH"]);
+        if (root.helper.running)
+            root.send(["CH"]);
+        else
+            root.historyClear.running = true;
     }
     function search(seq: int, query: string): void {
         root.send(["Q", String(seq), query]);
@@ -93,11 +108,10 @@ Singleton {
             locked: SessionState.locked,
             helperLocked: root.helperLocked,
             authorizing: root.authorizing,
-            authorizingEndedAt: root.authorizingEndedAt,
-            now: Date.now(),
+            authorizingGrace: root.authorizingGrace,
             activeClass: Compositor.focusedAppId
         });
-        send(yes ? ["Y", seq, Compositor.focusedAppId] : ["N", seq]);
+        root.send(yes ? ["Y", seq, Compositor.focusedAppId] : ["N", seq]);
     }
 
     function handle(text: string): void {
@@ -183,7 +197,7 @@ Singleton {
     readonly property real clearedAt: Settings.clipboardClearedAt
     onClearedAtChanged: {
         if (root.lastClearedAt >= 0 && root.clearedAt !== root.lastClearedAt)
-            root.send(["CH"]);
+            root.clearHistory();
         root.lastClearedAt = root.clearedAt;
     }
     readonly property real pinnedClearedAt: Settings.clipboardPinnedClearedAt
@@ -202,7 +216,8 @@ Singleton {
     onSessionLockedChanged: root.send([root.sessionLocked ? "P" : "R"])
 
     readonly property Process helper: Process {
-        running: (root.wanted || root.stopping) && !root.waiting
+        // Never while a store is being cleared without it (it would load what is being deleted).
+        running: (root.wanted || root.stopping) && !root.waiting && !root.historyClear.running && !root.pinnedClear.running
         command: [root.tool, "--display", root.display, "--state", root.storeDir, "--runtime", root.runtimeDir,
             "--retention", String(root.retention), "--history-store", root.keepOnDisk ? "1" : "0"]
         stdinEnabled: true
@@ -210,7 +225,7 @@ Singleton {
             onRead: line => root.handle(line)
         }
         onStarted: root.send([SessionState.locked ? "P" : "R"])
-        onExited: (code, status) => {
+        onExited: code => {
             root.stopping = false;
             root.helperLocked = false;
             root.ownedId = "";

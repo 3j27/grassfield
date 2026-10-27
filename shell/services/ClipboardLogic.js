@@ -35,14 +35,11 @@ function isTerminalClass(cls) {
 }
 
 // The helper's answer to an offer: true only while the history is on, neither lock source says locked, no authorization request
-// is open or ended less than AUTH_GRACE_MS ago, and the active window is not a protected password manager (ADR-0034 §2).
-// s: {enabled, locked, helperLocked, authorizing, authorizingEndedAt, now, activeClass}
+// is open or ended less than AUTH_GRACE_MS ago (authorizingGrace: the service's Timer), and the active window is not a protected
+// password manager (ADR-0034 §2). s: {enabled, locked, helperLocked, authorizing, authorizingGrace, activeClass}
 function mayRecord(s) {
-    if (!s || s.enabled !== true || s.locked !== false || s.helperLocked !== false || s.authorizing !== false)
-        return false;
-    const ended = Number(s.authorizingEndedAt) || 0;
-    const now = Number(s.now);
-    if (!isFinite(now) || (ended > 0 && now - ended < AUTH_GRACE_MS))
+    if (!s || s.enabled !== true || s.locked !== false || s.helperLocked !== false || s.authorizing !== false
+            || s.authorizingGrace !== false)
         return false;
     return !isProtectedClass(s.activeClass);
 }
@@ -161,8 +158,9 @@ function isAddress(address) {
 
 // The Lua function Hyprland runs for a paste (Quickshell sends it as `return hl.dispatch(<request>)`, the Zoom.js pattern). It
 // checks, in the same compositor call, that the active window is still the remembered address, then sends that window Ctrl+V
-// (Ctrl+Shift+V when its class passes forwarding.lua's terminal test) by address. The key up is armed in the same call and is
-// unconditional: a V that went down is always released in the window that got it. "" for an invalid address.
+// (Ctrl+Shift+V when its class passes forwarding.lua's terminal test) by address. The key up's timer is armed before the key
+// down is sent, in the same call, and is unconditional: a V that went down is always released in the window that got it. ""
+// for an invalid address.
 function pasteRequest(address) {
     if (!isAddress(address))
         return "";
@@ -177,8 +175,8 @@ function pasteRequest(address) {
         + "for _, n in ipairs(" + classes + ") do if c == n then terminal = true end end; "
         + "for _, p in ipairs(" + prefixes + ") do if c:find(\"^\" .. p) then terminal = true end end; "
         + "local mods = terminal and \"CTRL SHIFT\" or \"CTRL\"; "
-        + "hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = \"V\", state = \"down\", window = " + target + " })); "
         + "hl.timer(function() hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = \"V\", state = \"up\", window = " + target + " })) end, "
-        + "{ timeout = 50, type = \"oneshot\" }) "
+        + "{ timeout = 50, type = \"oneshot\" }); "
+        + "hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = \"V\", state = \"down\", window = " + target + " })) "
         + "end";
 }
