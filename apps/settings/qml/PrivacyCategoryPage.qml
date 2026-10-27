@@ -64,7 +64,7 @@ SettingsPage {
                 // The host's apps: not limited at all, or (the camera) limited only on the portal's way; likewise a Flatpak
                 // given every device (its metadata), which can open the camera without the portal.
                 readonly property string accessNote: modelData.host ? (unlimited ? qsTr("Not sandboxed: not limited") : qsTr("Not sandboxed: may use the camera directly"))
-                    : root.key === "camera" && modelData.devices === true ? qsTr("Has access to all devices: may use the camera directly") : ""
+                    : root.key === "camera" && modelData.devices === true ? qsTr("All devices: may use the camera directly") : ""
                 icon: modelData.icon
                 title: modelData.name
                 // An id that differs from the name says which app it is (a Flatpak id).

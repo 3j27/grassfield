@@ -6094,8 +6094,8 @@
         <translation>Non isolée&#xa0;: peut utiliser l’appareil photo directement</translation>
     </message>
     <message>
-        <source>Has access to all devices: may use the camera directly</source>
-        <translation>Accès à tous les périphériques&#xa0;: peut utiliser l’appareil photo directement</translation>
+        <source>All devices: may use the camera directly</source>
+        <translation>Tous les périphériques&#xa0;: peut utiliser l’appareil photo directement</translation>
     </message>
     <message>
         <source>No apps have asked</source>

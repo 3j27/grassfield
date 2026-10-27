@@ -245,7 +245,7 @@ TestCase {
         answer(c);
         const meet = find(c.page, i => i.title === "org.example.Meet" && i.showToggle !== undefined);
         verify(meet.showToggle);
-        compare(meet.subtitle, "Has access to all devices: may use the camera directly");
+        compare(meet.subtitle, "All devices: may use the camera directly");
         verify(find(c.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("its switch does not limit it") >= 0));
         const l = make(categoryComp, {key: "location"});
         l.backend.files = Object.assign({}, l.backend.files, {"/var/lib/flatpak/app/org.example.Maps/current/active/metadata": meta});
