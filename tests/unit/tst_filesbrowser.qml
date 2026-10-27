@@ -8,6 +8,8 @@ import "../../apps/files/qml"
 // - The window the browser opens for itself (Get Info, Customize Folder) is the key window once it opens: Ctrl+W closes it
 //   alone and the browser window stays with its tab (macOS: Cmd+W closes the key window only), with and without the
 //   global menu, whose items carry the same keys. Meanwhile none of the browser's keys is live (BrowserWindow.childIsKey).
+// - A tab keeps the view a drag started from until the drag has ended (BrowserTab.dragView): the view chosen meanwhile
+//   applies once the drag's own handlers have returned.
 TestCase {
     id: test
     name: "FilesBrowser"
@@ -368,5 +370,28 @@ TestCase {
         compare(files.windows.length, 1, "the browser window is still open");
         compare(browser.tabs.length, 1, "with its tab");
         test.verifyBrowserKeys(browser, false, true, "Customize Folder closed");
+    }
+
+    // BrowserTab.dragView: while a system drag started from the tab's view runs, that view stays (Qt Quick uses the item
+    // that started the drag after QDrag::exec returns); a view chosen meanwhile applies once the drag has ended and its
+    // own handlers have returned (Qt.callLater from dragFinished).
+    function test_dragKeepsItsView() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        compare(tab.viewMode, "icons");
+        tryVerify(() => tab.view !== null && String(tab.view).startsWith("IconView"), 2000, "the icon view");
+        const started = tab.view;
+        tab.dragStarted();
+        tab.setViewMode("list");
+        compare(tab.viewMode, "list", "the tab's mode follows the choice");
+        verify(tab.view === started, "the icon view stays while the drag runs");
+        wait(50);
+        verify(tab.view === started, "and after the event loop ran");
+        tab.dragFinished(Qt.CopyAction);
+        verify(tab.view === started, "the drag's own handler returns before the view goes");
+        tryVerify(() => tab.view !== started && String(tab.view).startsWith("FileList"), 2000, "then the list view applies");
+        // Without a drag, a choice applies at once.
+        tab.setViewMode("icons");
+        verify(String(tab.view).startsWith("IconView"), "no drag: the view follows at once");
     }
 }
