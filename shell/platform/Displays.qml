@@ -39,7 +39,7 @@ Singleton {
     property int applying: 0
     // The monitors (IPC objects) last published with a name.
     property var described: []
-    // The last text written (and the path it went to).
+    // The last text written: an identical payload is not written again.
     property string written: ""
 
     function publish(): void {
@@ -170,6 +170,8 @@ Singleton {
         id: stateFile
         printErrors: false
         atomicWrites: true
+        // A failed write is tried again with the next publish, even when the text is the same.
+        onSaveFailed: root.written = ""
     }
 
     FileView {
