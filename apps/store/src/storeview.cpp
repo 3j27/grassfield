@@ -20,11 +20,6 @@ QString fileUrl(const QString &path)
     return path.isEmpty() ? QString() : QUrl::fromLocalFile(path).toString();
 }
 
-QString sizeText(qint64 bytes, const QLocale &locale)
-{
-    return bytes < 0 ? QString() : locale.formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);
-}
-
 CatalogCategory category(const char *id, const char *en, const char *fr, const char *symbol, QStringList freedesktop)
 {
     CatalogCategory c;
@@ -101,6 +96,11 @@ QString dayText(const QDate &date, const QLocale &locale, bool year)
     if (!year) // the day and the month in the locale's order: "October 27", « 27 octobre »
         format = format.indexOf(QLatin1Char('d')) < format.indexOf(QLatin1Char('M')) ? QStringLiteral("d MMMM") : QStringLiteral("MMMM d");
     return locale.toString(date, format.trimmed());
+}
+
+QString sizeText(qint64 bytes, const QLocale &locale)
+{
+    return bytes < 0 ? QString() : locale.formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);
 }
 
 QString sourceKind(CatalogSource::Kind kind)
@@ -405,7 +405,7 @@ std::optional<WebAppEntry> parseWebAppEntry(const QByteArray &desktopFile)
     const QString clean = cleanPlainText(name, 64, false);
     if (clean.isEmpty())
         return std::nullopt;
-    return WebAppEntry{clean, url, icon};
+    return WebAppEntry{clean, url, icon, QString()};
 }
 
 QString initials(const QString &fullName)
