@@ -38,8 +38,9 @@ measurements.
 7. **Never block, never lose.** Each surface says what happens when the Grassfield surface cannot be shown: the stock
    provider where that is possible and safe (the stock dialog, the stock picker when unlocked, x-d-p-gtk's backend from a
    running portal process), otherwise a defined answer ("cancelled" or an error). A crashed portal backend is restarted by D-Bus
-   activation at the next call; the frontend never falls back to `gtk` at runtime (ADR-0035 D-4). Every wait for the shell's
-   acknowledgement is bounded; the user's own choice is not (an open picker or panel waits for the user, as the stock ones do).
+   activation at the next call; the frontend never falls back to `gtk` at runtime (ADR-0035 D-4). Every wait on the shell is
+   bounded (its acknowledgement, its connection, its heartbeat); the user's own choice is not (an open picker or panel waits for
+   the user, as the stock ones do).
 8. **Dev guard.** In a dev session (ADR-0019) nothing reaches the owner's real buses or files: tests run on a private session
    bus with fake peers (fake portal frontend, fake prompter caller, fake xdph caller), never the real bus or the real
    secrets. Every new IPC function is listed in `docs/specs/security.md` § IPC surface (`tests/security/ipc_inventory.sh`).
@@ -95,8 +96,9 @@ LibreOffice (ADR-0035 D-8); remote (KIO network) results; Tags editing in the Sa
 - A-FC1 (L0) option mapping table tested on a fake frontend (private bus): every option of FC1–FC3 in, the exact `a{sv}` out.
 - A-FC2 (L1) Chromium "Open File…" and "Save Page As…" in a nested session show the Grassfield panel attached to the window
   (screenshot), Return opens, Esc cancels and the app receives the answer.
-- A-FC3 (L1) the panel's first show ≤ 300 ms warm (P4-like log line), ≤ 80 MB RSS while open, back to ≤ 25 MB 60 s after
-  the last panel closed (the service stays for the Settings interface).
+- A-FC3 (L1) the panel's first show ≤ 300 ms warm (P4-like log line), ≤ 80 MB RSS while open, and the `grassfield-portal`
+  process gone 60 s after the last panel closed (Settings lives in the other process, `grassfield-portal-settings`, ≤ 15 MB
+  RSS, AP1).
 - A-FC4 (L0) fallback: a backend whose QML fails to load forwards to a fake gtk backend and relays its answer.
 - A-FC6 (L0) crash: the backend killed during `OpenFile` gives the fake frontend an error within the D-Bus timeout, and the next
   `OpenFile` is answered by a newly activated process.
@@ -169,17 +171,22 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 ### Functional requirements
 - SP1 the stand-ins print exactly the grammar of ADR-0035 D-6 and nothing else on stdout; a cancel prints nothing.
 - SP2 one-time channel: the stand-in creates a Unix socket with a random 128-bit name under
-  `$XDG_RUNTIME_DIR/grassfield/picker/` (directory 0700, socket 0600) and a random request id, and calls `picker request <id>
-  <path>`; the shell answers `accepted`, `busy` or `locked` within 1 s; after `accepted` it connects within 1 s, keeps the
-  connection while the picker is open, writes `<id> <selection>` or `<id> cancel` once and closes; end of file without that
-  line is "cancelled". After `accepted` the stock picker never starts.
+  `$XDG_RUNTIME_DIR/grassfield/picker/` (directory 0700, socket 0600) and a random request id, calls `picker request <id>
+  <path>`, and removes the socket file on every exit. The shell answers `accepted`, `busy` or `locked` within 1 s.
+- SP2b every wait on the shell is bounded (counter-review of PR #13): after `accepted` the stand-in waits at most 2 s for the
+  connection, then removes the socket file and prints nothing (cancelled); after `accepted` the stock picker never starts.
+  The shell shows its panel only once connected; a failed connection shows nothing; the panel closes when the stand-in's end
+  closes. Connected, the shell writes `<id> wait` every 5 s while the panel is open, then `<id> <selection>` or `<id> cancel`
+  once and closes; end of file without an answer, or 15 s without a line, is "cancelled". The user's own choice has no
+  deadline.
 - SP3 the stand-in validates before printing: the id; the grammar; a `window:` handle present in `XDPH_WINDOW_SHARING_LIST`; a
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
 - SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, as `packaging/shims/omarchy-shell:62-74`) and the shell answers `locked`; either way the
-  request is cancelled and no picker shows, Grassfield's or stock.
+  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+  way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
+  silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
   windows in `XDPH_WINDOW_SHARING_LIST`, grouped by app, title under each, protected windows greyed with "This window can't be
   shared"), "Selection" (crosshair, region relative to its display); the heading "An app wants to share your screen." (the
@@ -188,14 +195,19 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
 - SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
   display or a window), not which app shares it (Hyprland's events carry only the source).
-- SP9 no acknowledgement within 1 s and the session not locked: the stand-in execs the stock picker.
+- SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
+  picker (a late `accepted` finds no socket and shows nothing).
 
 ### Acceptance criteria
 - A-SP1 (L0) the stand-in's output for each choice parsed by a copy of xdph 1.4.1's parser (`ScreencopyShared.cpp:70-125`)
   gives the intended selection; malformed, foreign-handle, unknown-output and out-of-bounds answers print nothing.
 - A-SP2 (L0) channel: a second request while one is open gets `busy`; a shell that closes the socket without an answer gives
   "cancelled"; after `accepted`, killing the shell never starts the stock picker; a wrong id is ignored.
-- A-SP3 (L0) locked: with a fake `hyprctl` reporting LOCK, the stand-in prints nothing and starts nothing.
+- A-SP2b (L0) bounds: `accepted` and no connection → nothing printed within 2.5 s, socket file gone, no stock picker; a late
+  `accepted` after the stand-in fell back → the fake shell's connection fails and no panel is shown; a connected fake shell
+  that stops writing → nothing printed within 15.5 s; the fake shell's panel closes when the stand-in exits.
+- A-SP3 (L0) locked: with a fake `hyprctl` reporting LOCK, failing, hanging, printing garbage or listing no monitor, and with an
+  unreadable marker, the stand-in prints nothing and starts nothing.
 - A-SP4 (L1) Chromium "Share screen" in a nested session: the panel shows, a window share streams that window (screenshot of
   the receiving tab), the indicator appears and goes away when the share stops.
 - A-SP5 (L1) two displays: a `region:` selection on the second display streams the selected area (coordinates relative to
@@ -203,8 +215,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
 ### Known limitations
-A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream); the picker
-and the indicator cannot name the requesting app.
+A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
+3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+requesting app.
 
 ## 4. Not responding (H1; ADR-0035 D-3)
 
@@ -258,11 +271,13 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   request never takes the keyboard from the sheet on screen (the polkit sheet's `WlrKeyboardFocus.Exclusive` stays where it is,
   `shell/security/polkit/AuthAgent.qml:122`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
   its caller (`StopPrompting`, `CancelGetSecrets`, BlueZ `Cancel`, the KIO client gone) leaves the queue unseen; at most 8
-  waiting, the 9th is answered "cancelled".
+  secret requests wait, the 9th secret request is answered "cancelled"; a polkit request always queues, whatever the count.
 - SC3 look and identity: a secret sheet is not the authorization sheet: no lock-and-shield glyph, never the title
-  "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from
-  `GetConnectionCredentials` (PID → `/proc/<pid>/exe` → the desktop entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent,
-  "Network" for KIO's workers; else the executable's file name and the PID); then the caller's `title`, `message`, `description`
+  "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from the pidfd of
+  `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
+  the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
+  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "Network" for KIO's workers; anything else, or no `ProcessFD`,
+  "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style; `warning` in red under the field; a secure field (`password-new`:
   New and Verify fields and a strength bar); `choice-label` as a check box; `continue-label` / `cancel-label` (else "OK" /
   "Cancel"); a `confirm` prompt has no field.
@@ -293,9 +308,19 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   (interface `org.kde.KPasswdServer`: `checkAuthInfoAsync`, `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the result
   signals), shows the server form ("Enter your name and password for the server “%1”.", name, password, Remember this
   password, Cancel / Connect), keeps answers for the session as kpasswdserver does, and stores remembered ones with libsecret
-  in the Secret Service (never through KWallet's API; which daemon holds the Secret Service is ADR-0035 Q17, open); the sheet
-  says when the keyring that receives them is not protected by a password (Omarchy's default keyring is not); bridge down →
-  D-Bus activation starts kiod6 (KDE's dialog, as today).
+  in the Secret Service (never through KWallet's API; in the Grassfield session the Secret Service stays gnome-keyring's,
+  ADR-0035 Q17-b); the sheet says when the keyring that receives them is not protected by a password (Omarchy's default keyring
+  is not); bridge down → D-Bus activation starts kiod6 (KDE's dialog, as today).
+- SC9b results go to the caller only (counter-review of PR #13, minor): kpasswdserver broadcasts `checkAuthInfoAsyncResult` and
+  `queryAuthInfoAsyncResult`, credentials included, to every listener on the session bus (KIO
+  `src/core/org.kde.KPasswdServer.xml:4-15`, `src/kpasswdserver/kpasswdserver.cpp:330, 852, 883`); the bridge sends each
+  result as a signal addressed to the caller's unique name (`QDBusMessage::createTargetedSignal`), which KIO's client receives
+  unchanged (`src/core/kpasswdserverclient.cpp:52, 90`). A cached credential goes only to the connection that asks; any
+  same-user process can still ask for one by its URL, as with kpasswdserver today (upstream protocol, known limitation).
+- SC9c never blocks on itself (counter-review of PR #13, minor): storing into a locked keyring makes gnome-keyring ask through
+  gcr's prompter, which is the bridge. The bridge therefore stores with libsecret's asynchronous calls (`secret_password_store`
+  with a callback on its GLib main context), answers `addAuthInfo` at once, and makes no synchronous call that can cause a
+  prompt; the unlock prompt then takes its turn in the queue.
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -304,10 +329,16 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   the gcr sheet shows only after the polkit answer; a withdrawn request never shows.
 - A-SC3 (L0) identity: a caller whose text says "Authentication required" still gets the secret sheet's header with its resolved
   executable; the sheet never shows the polkit glyph.
+- A-SC3b (L0) identity sources: a fake caller that exits and whose PID is reused before the read, a caller run from the home
+  directory, and a bus that gives no `ProcessFD` all show "Unidentified program"; a polkit request arriving with 8 secret
+  requests waiting is queued, not refused.
 - A-SC4 (L0) a fake NetworkManager on a private system-style bus asks for a PSK and receives the typed secret; a VPN request
   gets "no secrets"; a call from another sender gets an error and no sheet.
 - A-SC5 (L0) a fake KIO client asks `queryAuthInfoAsync` and receives the typed credentials; "Remember" writes to a fake Secret
   Service, never to a KWallet name.
+- A-SC5b (L0) a second fake client listening to the bridge's signals never receives another client's result; with the fake
+  Secret Service's collection locked, "Remember" raises an unlock prompt in the queue after the server sheet and nothing
+  hangs (the bridge answers other calls meanwhile).
 - A-SC6 (L0) mutants: removing the uid/cgroup check, the lock refusal, the queue's focus rule, the caller checks or the buffer
   zeroing fails a test.
 - A-SC7 (L1) nested: pinentry-gnome3 with a throwaway GNUPGHOME and key asks through the Grassfield sheet (screenshot, "visual
@@ -318,9 +349,11 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 Name ownership is the only authorization (upstream design): a same-user process can still show a fake stock prompt through
 gcr-prompter while the bridge is down; the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
-remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); VPN
-secrets are not asked (SC8); until Q17 is answered, KWallet's `ksecretd` can hold the Secret Service for a session when a
-KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's dialogs (inventory S12).
+remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
+same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
+secrets are not asked (SC8); until step 2 ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
+the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
+dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins.
 
 ## 6. Toolkit appearance (category C; ADR-0035 D-8)
 
@@ -334,6 +367,10 @@ apply to every app.
   Contrast; `reduced-motion` u: 1 when Reduce Motion) and `org.gnome.desktop.interface` (`gtk-theme`, `color-scheme`,
   `enable-animations`), from the Grassfield settings file (watched, ADR-0020 contract); `auto` follows `AutoAppearance`'s
   schedule with a timer at the next switch time.
+- AP1b its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13): a crashed backend is back within about a
+  second, so live changes resume without waiting for a read. The frontend's proxy is bound to the bus name, not to the process,
+  and follows its new owner (xdg-desktop-portal 1.22.1 `src/settings.c:333-339`, `G_DBUS_PROXY_FLAGS_NONE`; GLib 2.90.1
+  `gio/gdbusproxy.c:1704-1734`: signals subscribed by name, `NameOwnerChanged` tracked).
 - AP2 the session's `hyprland-portals.conf` lists `org.freedesktop.impl.portal.Settings=grassfield-settings;gtk`
   (`grassfield-settings.portal`, bus name `org.freedesktop.impl.portal.desktop.grassfield_settings`).
 - AP2b the backend's unit clears `GTK_USE_PORTAL` and `QT_QPA_PLATFORMTHEME`, and `grassfield-shell.service` clears
@@ -355,10 +392,12 @@ apply to every app.
 - A-AP3 A2 contrast of the GTK themes (selection text on the accent) for the nine accents, both appearances.
 - A-AP4 (L0) crash: the backend killed, the next `ReadAll` through the real frontend activates it again and returns Grassfield's
   values; with a frontend that never answers, the backend still starts (no GUI, no wait).
+- A-AP5 (L0) crash without a read: the backend killed under a test unit with `Restart=on-failure`, a settings-file change 3 s
+  later reaches a client as the real frontend's `SettingChanged`.
 
 ### Degraded behavior
-Backend absent or crashed: x-d-p-gtk's values (the user's dconf, Omarchy's theme) until D-Bus activation starts it again at
-the next read. GTK theme missing: GTK falls back to its default theme.
+Backend absent or crashed: x-d-p-gtk's values (the user's dconf, Omarchy's theme) until systemd restarts it (about 1 s) or
+D-Bus activation starts it at the next read. GTK theme missing: GTK falls back to its default theme.
 
 ### Known limitations
 x-d-p-gtk's own remaining dialogs (print, account) and apps that read dconf directly follow the user's GTK theme, not the
@@ -434,12 +473,15 @@ permission…" with Skip / Stop; the certificate sheet ("… can't verify the id
 Cancel / Continue); Open With > Other… opens the Choose Application panel.
 
 ### Functional requirements
-- KD1 Files and `grassfield-portal` install Grassfield's own KIO delegate extensions for every job they start (one factory,
-  `KIO::setDefaultJobUiDelegateFactory`), in place of `KIO::createDefaultJobUiDelegate`'s widgets
-  (`apps/files/src/filesapp.cpp:59-63`):
+- KD1 Files and `grassfield-portal` set Grassfield's UI delegate, with Grassfield's KIO delegate extensions as its children, on
+  every job they start, in place of `KIO::createDefaultJobUiDelegate`'s widgets (`apps/files/src/filesapp.cpp:62-67`); sub-jobs
+  find it through their parent or composite job (`KIO::delegateExtension`, KIO `src/core/jobuidelegatefactory.h:102-126`).
+  Never `KIO::setDefaultJobUiDelegateFactory` (Internal, set by KIOWidgets itself, `:85-92`):
   - `AskUserActionInterface`: rename/overwrite (Keep Both / Stop / Replace, Apply to All, the two items' sizes and dates),
     skip (Skip / Skip All / Stop), delete and trash confirmations KIO asks for, `requestUserMessageBox` as Grassfield alerts,
-    `askIgnoreSslErrors` as the certificate sheet (Show Certificate lists the chain as text);
+    `askIgnoreSslErrors` as the certificate sheet (Show Certificate lists the chain as text): Cancel is the default button
+    (Return and Esc cancel); Continue accepts for 30 minutes, as KIO's "Current Session only" (`src/widgets/sslui.cpp:96-106`);
+    a permanent rule is stored only when the user ticks "Always trust “host”", unticked at every opening;
   - `OpenWithHandlerInterface`: the Choose Application sheet of section 2 (the same component);
   - `UntrustedProgramHandlerInterface`, `OpenOrExecuteFileInterface`: answer "do not run" (Files' `LaunchGuard` decides first and
     never hands an executable to KIO, `docs/specs/security.md` § Files never runs what it opens; this is the second guard).
@@ -450,8 +492,11 @@ Cancel / Continue); Open With > Other… opens the Choose Application panel.
 ### Acceptance criteria
 - A-KD1 (L0) a copy onto an existing name, a skip, a certificate error and an Open With request from a fake KIO worker each
   show the Grassfield sheet and return the KIO result codes the widget handler returns for the same choices (table test).
-- A-KD2 (L0) no `KIO::RenameDialog`, `SkipDialog`, `KOpenWithDialog` or `KSslInfoDialog` is created in Files or the panel
-  (a test that fails if KIOWidgets' default factory is used).
+- A-KD2 (L0) no `KIO::RenameDialog`, `SkipDialog`, `KOpenWithDialog` or `KSslInfoDialog` is created in Files or the panel:
+  every job they start, and its sub-jobs, resolves the extensions to Grassfield's (a test that fails on a job left with
+  KIOWidgets' delegate).
+- A-KD4 (L0) certificate: Return and Esc cancel; Continue stores a rule that expires within 30 minutes; only the ticked
+  "Always trust" stores a permanent one.
 - A-KD3 F1 against Finder's conflict alert and certificate sheet captures.
 
 ### Known limitations
