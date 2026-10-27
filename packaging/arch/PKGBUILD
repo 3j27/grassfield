@@ -112,6 +112,10 @@ build() {
   cmake -S "$(_root)/apps/clipboard-helper" -B "$srcdir/clipboard-helper-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/clipboard-helper-build"
+  # grassfield-secrets-handover (ADR-0035 D-12): the session's one-time Secret Service handover from KWallet to the keychain.
+  cmake -S "$(_root)/apps/secrets-handover" -B "$srcdir/secrets-handover-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/secrets-handover-build"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -245,7 +249,7 @@ package_grassfield-desktop() {
   find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
@@ -264,6 +268,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/stack-helper-build"
   # grassfield-clipboard-helper: /usr/lib/grassfield/grassfield-clipboard-helper (run by the shell while the history is on).
   DESTDIR="$pkgdir" cmake --install "$srcdir/clipboard-helper-build"
+  # grassfield-secrets-handover: /usr/lib/grassfield/grassfield-secrets-handover (run by its user unit, above).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/secrets-handover-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).

@@ -87,11 +87,18 @@ desc="screenshots: Super+Shift+3/4/5 (by keycode) and Print run Omarchy's captur
 check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"fullscreen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"region\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"smart\")" "$1" && grep -q "bind(\"PRINT\"" "$1" || grep -q "hl.bind(\"PRINT\", capture(\"smart\")" "$1"' _ "$sys"
 
 auto=$root/config/hypr/grassfield/autostart.lua
-for unit in crash-watch battery-watch migrate-notify automount; do
+for unit in crash-watch battery-watch migrate-notify automount secrets-handover; do
   desc="grassfield-$unit.service: started by the session, skips itself outside it, hardened, installed by the PKGBUILD"
   u=$pk/systemd/grassfield-$unit.service
   check bash -c 'grep -q "grassfield-$3.service" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$2" && grep -qx "NoNewPrivileges=yes" "$2" && grep -qx "ProtectSystem=strict" "$2" && grep -qx "PrivateTmp=yes" "$2" && grep -q "grassfield-\$unit.service" "$4" && grep -q "for unit in .*$3" "$4"' _ "$auto" "$u" "$unit" "$pk/arch/PKGBUILD"
 done
+# The Secret Service handover (ADR-0035 D-12): its first phase (a leftover ksecretd lets go of org.freedesktop.secrets) ends
+# before the shell starts, so no app opened from the Dock reaches KWallet there; the shell never waits more than 10 s for it.
+u=$pk/systemd/grassfield-secrets-handover.service
+desc="grassfield-secrets-handover.service: started before the shell in the same chain, after the menu bridge"
+check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
+desc="grassfield-secrets-handover.service: Type=notify with a 10 s start limit, no [Install], runs the helper where CMake installs it"
+check bash -c 'grep -qx "Type=notify" "$1" && grep -qx "NotifyAccess=main" "$1" && grep -qx "TimeoutStartSec=10" "$1" && ! grep -q "^\[Install\]" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-secrets-handover" "$1" && grep -q "RUNTIME DESTINATION lib/grassfield" "$2" && grep -q "cmake --install \"\$srcdir/secrets-handover-build\"" "$3"' _ "$u" "$root/apps/secrets-handover/CMakeLists.txt" "$pk/arch/PKGBUILD"
 for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf
