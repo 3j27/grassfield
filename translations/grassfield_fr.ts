@@ -939,6 +939,17 @@
     </message>
 </context>
 <context>
+    <name>AuthAgent</name>
+    <message>
+        <source>Request cancelled</source>
+        <translation>Demande annulée</translation>
+    </message>
+    <message>
+        <source>What you type is ignored for a moment.</source>
+        <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
+    </message>
+</context>
+<context>
     <name>AuthDialog</name>
     <message>
         <source>Authentication required</source>

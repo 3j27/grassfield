@@ -91,6 +91,10 @@ Item {
         function button(label) {
             return find(dialog(), i => i.text === label && i.clicked !== undefined);
         }
+        // The card that says a request ended while the sink lingers (security counter-review of f9e24e1, LOW-3).
+        function notice() {
+            return find(ag.sheet, i => i.objectName === "polkitEndedNotice");
+        }
         function typeText(t) {
             for (const c of t)
                 keyClick(c);
@@ -318,12 +322,17 @@ Item {
             verify(field().empty);
         }
 
-        // afterRequest: held within a second after another ended, not after; no keyboard, its own notice.
+        // afterRequest: held within a second after another ended (answered), not after; no keyboard, its own notice.
         function test_14_afterRequestHold() {
             const a = mkflow("A"), b = mkflow("B"), c = mkflow("C");
             arriveFlow(a);
             compare(ag.heldByLock, false);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("pw");
+            keyClick(Qt.Key_Return);
+            compare(a.submits, ["pw"]);
             endAll();
+            compare(ag.lingering, false, "answered: no linger");
             arriveFlow(b);
             compare(ag.heldByLock, true);
             compare(ag.heldWhy, "queued");
@@ -492,18 +501,155 @@ Item {
             tryVerify(() => field().activeFocus);
         }
 
-        // A request answered as usual (not sinking) leaves no linger.
-        function test_21_noLingerAfterAnAnswer() {
+        // A request answered as usual (not sinking) leaves no linger: sent, cancelled with Esc, or with Cancel.
+        function test_21_noLingerAfterAnAnswer_data() {
+            return [{tag: "sent", how: "send"}, {tag: "Esc", how: "escape"}, {tag: "Cancel", how: "button"}];
+        }
+        function test_21_noLingerAfterAnAnswer(d) {
+            const a = mkflow("A");
+            arriveFlow(a);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("pw");
+            if (d.how === "send") {
+                keyClick(Qt.Key_Return);
+                compare(a.submits, ["pw"]);
+                // The usual end of a sent password: polkit says it succeeded, then the request ends (no linger either way).
+                a.authenticationSucceeded();
+            } else if (d.how === "escape") {
+                keyClick(Qt.Key_Escape);
+                compare(a.cancels, 0, "the first Esc empties the field (PasswordField)");
+                compare(ag.model.answered, false);
+                keyClick(Qt.Key_Escape);
+                compare(a.cancels, 1);
+            } else {
+                mouseClick(button("Cancel"));
+                compare(a.cancels, 1);
+            }
+            compare(ag.model.answered, true);
+            endAll();
+            compare(ag.lingering, false);
+            compare(ag.sheet.visible, false);
+            compare(ag.sheet.takesKeys, false);
+        }
+
+        // Security counter-review of f9e24e1 (LOW-1): A ends unanswered while the user types into its own field (its requester
+        // gave up): the window stays mapped and keeps the keyboard on the sink, A's field is gone, nothing typed reaches
+        // anything, and a notice says the request ended (LOW-3); the linger ends as any other: no key for a second, a click, the
+        // lock, the screen saver.
+        function test_25_endWhileTypingOwnField_data() {
+            return [{tag: "no key", how: "idle"}, {tag: "click", how: "click"}, {tag: "click on the notice", how: "noticeClick"},
+                    {tag: "lock", how: "lock"}, {tag: "saver", how: "saver"}];
+        }
+        function test_25_endWhileTypingOwnField(d) {
+            const a = mkflow("A");
+            arriveFlow(a);
+            tryVerify(() => field() && field().activeFocus);
+            compare(notice().visible, false, "no notice while the sheet shows");
+            typeText("sec");
+            endAll();
+            compare(ag.lingering, true, "the sink lingers");
+            compare(ag.sheet.visible, true, "still mapped");
+            compare(ag.sheet.takesKeys, true, "the keyboard kept");
+            verify(ag.sink.activeFocus, "the sink has the keys");
+            compare(dialog(), null, "A's sheet is gone");
+            compare(notice().visible, true, "the notice shows");
+            verify(find(notice(), i => i.text === "Request cancelled") !== null, "it says the request is gone");
+            verify(find(notice(), i => i.text === "What you type is ignored for a moment.") !== null, "and that typing goes nowhere");
+            verify(find(notice(), i => i.activeFocusOnTab === true || i.focus === true) === null, "it takes no focus");
+            typeText("ret");
+            keyClick(Qt.Key_Return);
+            keyClick(Qt.Key_Escape);
+            compare(a.submits.length, 0);
+            compare(a.cancels, 0, "Esc on the lingering sink answers nothing");
+            compare(ag.lingering, true);
+            if (d.how === "idle") {
+                tryCompare(ag, "lingering", false, ag.model.heldAfterUnlockMs + 500);
+            } else if (d.how === "click") {
+                mouseClick(ag.sheet, 5, 5);
+            } else if (d.how === "noticeClick") {
+                mouseClick(notice());
+            } else if (d.how === "lock") {
+                SessionState.locked = true;
+            } else {
+                SessionState.saverShown = true;
+            }
+            compare(ag.lingering, false, "the linger ended");
+            compare(ag.sheet.takesKeys, false);
+            compare(notice().visible, false, "the notice goes with it");
+            SessionState.locked = false;
+            SessionState.saverShown = false;
+            compare(ag.sheet.visible, false, "nothing mapped after it");
+        }
+
+        // The window never unmaps nor lets the keyboard go for a moment when A ends under the typing, whichever order its end
+        // arrives in (a hidden PanelWindow is destroyed and made again; check of c1ca44f, M1).
+        function test_25b_endWhileTypingNeverUnmaps_data() {
+            return [{tag: "isActive first", first: true}, {tag: "flow first", first: false}];
+        }
+        function test_25b_endWhileTypingNeverUnmaps(d) {
+            const a = mkflow("A");
+            arriveFlow(a);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("sec");
+            const log = transitionsDuring(() => {
+                if (d.first) {
+                    ag.agentMock.isActive = false;
+                    ag.agentMock.flow = null;
+                } else {
+                    ag.agentMock.flow = null;
+                    ag.agentMock.isActive = false;
+                }
+            });
+            compare(ag.lingering, true);
+            compare(log, [], "neither visible nor takesKeys changed");
+        }
+
+        // A wrong password, then the user types again and the requester gives up: the answer counted only until polkit asked
+        // again, so the sink lingers.
+        function test_26_failedThenEndedWhileTyping() {
             const a = mkflow("A");
             arriveFlow(a);
             tryVerify(() => field() && field().activeFocus);
             typeText("pw");
             keyClick(Qt.Key_Return);
+            compare(ag.model.answered, true);
+            a.authenticationFailed();
+            compare(ag.model.answered, false, "polkit asks again");
+            tryVerify(() => field().activeFocus);
+            typeText("pw2");
+            endAll();
+            compare(ag.lingering, true);
+            typeText("x");
             compare(a.submits, ["pw"]);
+        }
+
+        // A held request the user never clicked (it never had the keyboard) ends: no linger, nothing mapped.
+        function test_27_heldUnclickedEndsWithoutLinger() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("pw");
+            keyClick(Qt.Key_Return);
+            endAll();
+            arriveFlow(b);
+            compare(ag.heldByLock, true);
+            compare(ag.sheet.takesKeys, false);
             endAll();
             compare(ag.lingering, false);
             compare(ag.sheet.visible, false);
-            compare(ag.sheet.takesKeys, false);
+        }
+
+        // The notice shows only while the sink lingers: not with a held request's sink, not once the next request came.
+        function test_28_noticeOnlyWhileLingering() {
+            const [a, b] = sinkB();
+            compare(notice().visible, false, "a held request's sink shows the sheet, no notice");
+            endAll();
+            compare(notice().visible, true);
+            const c = mkflow("C");
+            arriveFlow(c);
+            compare(ag.sinkingKeys, true);
+            compare(notice().visible, false, "C's sheet replaces the notice");
+            tryVerify(() => field() !== null);
         }
     }
 }

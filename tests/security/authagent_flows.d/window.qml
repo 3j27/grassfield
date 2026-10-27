@@ -167,6 +167,47 @@ Item {
             verify(ag.sink.activeFocus, "the sink has the keys");
         }
 
+        // Security counter-review of f9e24e1 (LOW-1): A ends unanswered while the user types its password into A's own field
+        // (its requester gave up, in either order, or Quickshell destroyed the flow): the window is never made again and the
+        // rest of the password reaches nothing underneath; once the linger ends the keys reach the window underneath again.
+        // (A request answered first gives them back at once: test_00.)
+        function test_04_endWhileTypingOwnField_data() {
+            return [{tag: "isActive first", how: "isActive"}, {tag: "flow first", how: "flow"}, {tag: "flow destroyed", how: "destroy"}];
+        }
+        function test_04_endWhileTypingOwnField(d) {
+            const a = d.how === "destroy" ? flowC.createObject(top, {message: "A"}) : mkflow("A");
+            ag.agentMock.isActive = true;
+            ag.agentMock.flow = a;
+            tryVerify(() => ag.sheet.mapped && field() && field().activeFocus, 1000, "A mapped with its field focused");
+            wait(20);
+            typeText("sec");
+            const before = ag.sheet.recreations;
+            if (d.how === "destroy") {
+                a.destroy();
+                wait(0);
+            } else if (d.how === "isActive") {
+                ag.agentMock.isActive = false;
+                ag.agentMock.flow = null;
+            } else {
+                ag.agentMock.flow = null;
+                ag.agentMock.isActive = false;
+            }
+            compare(ag.model.active, false);
+            for (const c of "ret") {
+                wait(15);
+                keyClick(c);
+            }
+            keyClick(Qt.Key_Return);
+            compare(under.text, "", "nothing typed after the end reaches the window underneath");
+            compare(ag.sheet.recreations - before, 0, "the window was not made again: " + JSON.stringify(ag.sheet.events.slice(-6)));
+            verify(ag.sink.activeFocus, "the sink has the keys");
+            tryCompare(ag, "lingering", false, ag.model.sinkLingerMaxMs + 500);
+            tryVerify(() => !ag.sheet.mapped, 1000);
+            wait(20);
+            typeText("ls");
+            compare(under.text, "ls", "after the linger the keys reach the window underneath again");
+        }
+
         // M2: B fails on its own while another surface has the keyboard; the sheet focuses its field after a failure.
         function test_03_failedWhileUnfocused() {
             const [a, b] = sinkB();
