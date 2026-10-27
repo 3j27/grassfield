@@ -455,6 +455,11 @@ nothing ever signals pacman.
     application (Discover, Create, Work, Play, Develop, Categories, Updates); the name "Grassfield Store"; publishers' icons in
     our catalog (ST10); screenshots and AppStream texts shown as the apps' metadata gives them; the AUR's and Flathub's data
     shown in the Store.
+    **Owner decisions of 2026-10-27** (legal review with the integrator; the full list is in grassfield's legal dossier):
+    - the section names stay as they are (Discover, Create, Work, Play, Develop): a risk the owner accepts;
+    - the category names stay the neutral ones;
+    - publishers' icons, screenshots and AppStream texts are shown as provided, with their source;
+    - the app name "Grassfield Store" and "Get" / "Open" stay, with the macOS command labels (the owner: labels kept).
 
 ### f. The app and its processes
 - **A new app, `apps/store`, packaged as `grassfield-store`.** `apps/` is where Grassfield's apps live (master-prompt §5.2,
