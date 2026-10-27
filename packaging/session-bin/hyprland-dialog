@@ -107,14 +107,8 @@ answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:
   "i:${HYPRLAND_INSTANCE_SIGNATURE:-}" 2>/dev/null)
 [ "$answer" = ok ] || stock "$@"
 
-# Hyprland's dialog from now on: silent, same pid, its stdout (Hyprland's pipe) kept open and held by no child, until
-# Hyprland kills it. A compositor that is gone (a crash) kills nothing: the stand-in ends once it was given another parent
-# (a dead parent can stay a zombie, which `kill -0` still finds). Its name has no space, so /proc's field 4 is the parent.
-parent=$PPID
-parent_now() {
-  read -r _ _ _ p _ <"/proc/$$/stat" && echo "$p"
-}
-while [ "$(parent_now)" = "$parent" ]; do
-  sleep 2 >/dev/null 2>&1
-done
-exit 0
+# Hyprland's dialog from now on: silent, same pid, nothing forked (no way to end early: Hyprland would read an empty
+# answer, ANRManager.cpp:221), Hyprland's pipe held by the sleep alone, until Hyprland kills it. Hyprland starts its dialogs
+# through a double fork (hyprutils CProcess::runAsync), so it is not this process's parent; if it crashes, the session's
+# unit stops and its cgroup goes with it (ADR-0035 decision 3-12).
+exec sleep infinity

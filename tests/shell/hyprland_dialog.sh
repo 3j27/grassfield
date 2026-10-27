@@ -95,11 +95,10 @@ ran_stock() {
   for a in "$@"; do want+="$a|"; done
   [[ -f $tmp/stock.args && $(record stock.args) == "$want" ]]
 }
-# The stand-in still runs with the pid Hyprland would kill (the script itself, no exec), and printed nothing.
+# The stand-in still runs, as `sleep` (exec kept the pid), and printed nothing.
 waits_silently() {
   sleep 0.6
-  kill -0 "$run_pid" 2>/dev/null && [[ $(tr '\0' ' ' <"/proc/$run_pid/cmdline" 2>/dev/null) == *"$tmp/bin/hyprland-dialog "* &&
-    ! -s $tmp/out && ! -f $tmp/stock.args ]]
+  kill -0 "$run_pid" 2>/dev/null && [[ $(cat "/proc/$run_pid/comm" 2>/dev/null) == sleep && ! -s $tmp/out && ! -f $tmp/stock.args ]]
 }
 stop() { kill "$run_pid" 2>/dev/null || true; wait "$run_pid" 2>/dev/null || true; }
 
@@ -156,34 +155,46 @@ desc="a class holding \" - \" is reported whole"
 check bash -c '[[ $(tr "\0" "|" <"$1/qs.args") == *"|$2|4242|c:z - victim|t:Victim|"* ]]' _ "$tmp" "$run_pid"
 stop
 
-# The stand-in's stdout is Hyprland's pipe: nothing else may hold it, or Hyprland would read no end when it kills the
-# stand-in. And a compositor that is gone kills nothing: the stand-in ends once its parent did.
+# Spawned as Hyprland spawns its dialogs (hyprutils CProcess::runAsync: a double fork, so the stand-in's parent is not
+# Hyprland but init; stdout a pipe Hyprland reads to its end): after "ok" the pipe stays open (Hyprland would take an end
+# for an empty answer), and when Hyprland SIGKILLs the stand-in's pid the pipe ends at once (no child holds it).
 FAKE_CLIENTS=$(clients 4242 foot "~")
-rm -f "$tmp/qs.args" "$tmp/eof"
-( FAKE_DIR=$tmp PATH="$tmp/bin:$tmp/fake:/usr/bin:/bin" HYPRLAND_INSTANCE_SIGNATURE=sig_1_2 \
-    "$tmp/bin/hyprland-dialog" "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}" 2>/dev/null ) |
-  { cat >/dev/null; date +%s%N >"$tmp/eof"; } &
-pids+=($!)
-for ((i = 0; i < 40; i++)); do [[ -s $tmp/qs.args ]] && break; sleep 0.05; done
-sleep 2.5 # past the first poll of its parent, so a poll's child is running
-standin_pid=$(tr '\0' '\n' <"$tmp/qs.args" 2>/dev/null | sed -n 7p)
-desc="the waiting stand-in holds Hyprland's pipe alone: SIGKILL ends the pipe within 0.5 s"
-check bash -c 't0=$(date +%s%N); kill -KILL "$2"; for ((i = 0; i < 40; i++)); do [[ -s $1/eof ]] && break; sleep 0.05; done;
-  [[ -s $1/eof && $(( ($(cat "$1/eof") - t0) / 1000000 )) -lt 500 ]]' _ "$tmp" "$standin_pid"
-wait "${pids[-1]}" 2>/dev/null || true
 rm -f "$tmp/qs.args"
-FAKE_DIR=$tmp PATH="$tmp/bin:$tmp/fake:/usr/bin:/bin" HYPRLAND_INSTANCE_SIGNATURE=sig_1_2 \
-  bash -c '"$0" "$@" & wait' "$tmp/bin/hyprland-dialog" "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}" >/dev/null 2>&1 &
-parent=$!
-pids+=("$parent")
-for ((i = 0; i < 40; i++)); do [[ -s $tmp/qs.args ]] && break; sleep 0.05; done
-standin_pid=$(tr '\0' '\n' <"$tmp/qs.args" 2>/dev/null | sed -n 7p)
-desc="the stand-in ends within 3 s once its parent (the compositor) is gone"
-# (Ended: gone, or a zombie its new parent has not reaped yet; a container's init may never reap it.)
-check bash -c 'runs() { local st; st=$(cut -d" " -f3 "/proc/$1/stat" 2>/dev/null) && [[ $st != Z ]]; }
-  [[ -n $2 ]] && runs "$2" && kill -KILL "$1" || exit 1
-  for ((i = 0; i < 60; i++)); do runs "$2" || exit 0; sleep 0.05; done; exit 1' _ "$parent" "$standin_pid"
-wait "$parent" 2>/dev/null || true
+cat >"$tmp/spawn.py" <<'PY'
+import os, select, signal, sys, time
+r, w = os.pipe()
+child = os.fork()
+if child == 0:
+    if os.fork() == 0:
+        os.close(r)
+        os.dup2(w, 1)
+        os.close(w)
+        os.execvp(sys.argv[1], sys.argv[1:])
+    os._exit(0)
+os.waitpid(child, 0)
+os.close(w)
+qs_args = os.path.join(os.environ["FAKE_DIR"], "qs.args")
+deadline = time.time() + 2
+while time.time() < deadline and not (os.path.exists(qs_args) and os.path.getsize(qs_args) > 0):
+    time.sleep(0.05)
+fields = open(qs_args, "rb").read().split(b"\0") if os.path.exists(qs_args) else []
+standin = int(fields[6]) if len(fields) > 6 else 0
+ppid = int(open("/proc/%d/stat" % standin).read().split(") ")[1].split()[1]) if standin else -1
+early = select.select([r], [], [], 3.0)[0]
+if early:
+    print("ended early: %r" % os.read(r, 100))
+    sys.exit(1)
+t0 = time.time()
+os.kill(standin, signal.SIGKILL)
+done = select.select([r], [], [], 2.0)[0]
+data = os.read(r, 100) if done else None
+took = time.time() - t0
+print("standin %d parent %d (spawner %d) end after %.2fs data %r" % (standin, ppid, os.getpid(), took, data))
+sys.exit(0 if done and data == b"" and took < 0.5 and ppid != os.getpid() else 1)
+PY
+desc="spawned by a double fork, the stand-in keeps Hyprland's pipe open after \"ok\" and ends it within 0.5 s of a SIGKILL"
+check env FAKE_DIR="$tmp" PATH="$tmp/bin:$tmp/fake:/usr/bin:/bin" HYPRLAND_INSTANCE_SIGNATURE=sig_1_2 \
+  python3 -I "$tmp/spawn.py" "$tmp/bin/hyprland-dialog" "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 
 # 4. Text with a newline inside the title, and no Hyprland instance in the environment.
 FAKE_CLIENTS=$(clients 4242 foot "a${nl}b")
