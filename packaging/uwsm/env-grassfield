@@ -42,6 +42,18 @@ if [ -r /usr/share/grassfield/fontconfig/fonts.conf ]; then
     export FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf
 fi
 
+# Secret Service (ADR-0035 D-12, owner decision Q17-b): nobody holds org.freedesktop.secrets at login, and KWallet's ksecretd
+# takes it whenever a KWallet client starts before gnome-keyring (Files on an sftp: or smb: location is enough); Chromium's
+# saved passwords and every libsecret client then go to KWallet. The session's kwalletrc turns that off; it is read through
+# this directory, first in XDG_CONFIG_DIRS and below the user's own ~/.config (the user's kwalletrc wins). /etc/xdg stays in
+# the list. Only when the file is readable, and only once.
+if [ -r /usr/share/grassfield/xdg-config/kwalletrc ]; then
+    case ":${XDG_CONFIG_DIRS:-}:" in
+        *:/usr/share/grassfield/xdg-config:*) ;;
+        *) export XDG_CONFIG_DIRS="/usr/share/grassfield/xdg-config:${XDG_CONFIG_DIRS:-/etc/xdg}" ;;
+    esac
+fi
+
 # Text antialiasing of QtQuick (the shell and every Qt Quick app): distance-field text, the default renderer, picks its mode in
 # QSGDefaultContext (qtdeclarative 6.11, qsgdefaultcontext.cpp) as HighQualitySubPixelAntialiasing and never reads fontconfig
 # or the GTK setting, which gave orange/blue fringes (visual audit 2026-10-25, section 2). QSG_DISTANCEFIELD_ANTIALIASING=gray

@@ -84,7 +84,15 @@ Each question was asked in French with these options (the first one marked "Reco
 | Q8 | Effacement quand il y a des épinglés | « Modèle Windows (Recommandé) » (Clear History spares pins; Settings' confirmation can also delete them; turning off keeps pins); « Tout effacer toujours » | « Modèle Windows (Recommandé) » |
 | Q9 | Choisir un élément (asked with Apple's text: "Click [icon] … or select the item and press Command-C." then "To paste the item, click where you want it to appear, then press Command-V."): que fait Retour (ou un clic) ? | « Coller automatiquement (Recommandé) » (Windows' model and the brief; ⌘C and the copy button only copy, as Apple documents); « Copier puis ⌘V (Apple) »; « Les deux » | « Coller automatiquement (Recommandé) » |
 | Q10 | Libellé du bouton de l'invite au premier usage | « Autoriser (Recommandé) » (macOS 27's "Allow"); « Activer » (macOS 26 "Enable", Windows "Turn on") | « Autoriser (Recommandé) » |
-| Q11 | Une invite polkit en écho peut être copiée depuis son champ : que fait l'historique ? | « Ne rien enregistrer (Recommandé) » (no copy recorded while an authorization dialog is shown and 2 s after it closes; no change in `shell/security`); « Bloquer aussi la copie » (also change `PasswordField.qml`, opus PASS); « Enregistrer normalement » | « Ne rien enregistrer (Recommandé) » |
+| Q11 | Une invite polkit en écho peut être copiée depuis son champ : que fait l'historique ? | « Ne rien enregistrer (Recommandé) » (no copy recorded while an authorization dialog is shown and 2 s after it closes; described as needing no change in `shell/security`, which proved wrong: the binding needs one read-only property in `AuthAgent`, §2); « Bloquer aussi la copie » (also change `PasswordField.qml`, opus PASS); « Enregistrer normalement » | « Ne rien enregistrer (Recommandé) » |
+
+## Decisions delegated by the owner (2026-10-27)
+Asked of no one: « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour
+l'utilisateur » (the owner's work rule of 2026-10-27); each choice follows that rule and is checked in the integrator's review.
+| # | Question | Options | Choice | Rule applied |
+|---|---|---|---|---|
+| Q12 | New copies' images wait for the one image worker (each up to 16 MiB in memory): what when they come faster than it decodes? (review of 963e173, minor 6) | no bound (every image kept, memory unbounded); at most 4 waiting, a newer one not recorded; the newest replaces the oldest waiting | at most 4 waiting, a newer one not recorded (logged by reason) | macOS first: every copy made at a person's pace is recorded (a worker ends within 2 s, so only images copied faster than one every half second for seconds on end reach the bound); nothing for the user to do; memory stays bounded like the history (64 MiB) |
+| Q13 | A stored image (pinned, or in the opt-in history) whose thumbnail fails (a worker late under load, one that cannot start): what happens to it? (review of 963e173, MAJOR 2) | delete it (step 1's first code); keep it without a thumbnail and try again by itself; keep it and ask the user to act | keep it, shown without a thumbnail, tried again up to 3 times a minute apart, then at each start | macOS first: macOS never drops a clipboard item because its preview failed; no technical intervention: nothing to click, run or repair |
 
 ## Decision
 1. **Capture and serving: `grassfield-clipboard-helper`.** One native C++17 process (`apps/clipboard-helper/`, Qt 6 Core and
@@ -110,13 +118,17 @@ Each question was asked in French with these options (the first one marked "Reco
       the copy is not recorded, never truncated; a formatted part over its cap or late is dropped and the plain text kept.
       Text must decode (UTF-8; Latin-1 for `STRING` and `TEXT` only) and not be blank;
    f. an image is decoded only to make its thumbnail, and never in the helper: a worker process (the same binary,
-      `--thumbnail <png|jpeg|webp> <max px>`, started per image with an empty environment, the image's bytes on stdin and
-      nothing of the history) reads it with `QImageReader` given that one format, `setAutoDetectImageFormat(false)` and
+      `--thumbnail <png|jpeg|webp> <max px>`, started per image with an environment holding only `LC_ALL=C`, the image's bytes
+      on stdin and nothing of the history) reads it with `QImageReader` given that one format, `setAutoDetectImageFormat(false)` and
       `setDecideFormatFromContent(false)`, so no other image plugin (PDF, SVG, TIFF, JPEG 2000…) can be reached; it checks the
       size before decoding (at most 8,192 px a side and 64 megapixels, allocation limit 256 MiB) and runs under
       `RLIMIT_AS` 1 GiB, `RLIMIT_CPU` 2 s, `RLIMIT_FSIZE` 0, `PR_SET_PDEATHSIG`, and a 2 s wall deadline after which it is
       killed; it writes a PNG of at most 256 px on its long side (1 MiB at most) to stdout. A worker that fails, is killed or
-      answers anything else: the copy is not recorded. The original bytes are kept as they came, for pasting;
+      answers anything else: the copy is not recorded. The original bytes are kept as they came, for pasting. One worker runs
+      at a time for every image, new copies before stored thumbnails (up to 150 at start); at most 4 new images wait for it (a newer one is not
+      recorded), and Clear History and Clear Pinned cancel the new images waiting or running (one whose worker ends after a
+      clear is never added). A stored image (pinned, or in the opt-in history) whose worker fails is never deleted: it is shown
+      without a thumbnail, which is tried again up to 3 times a minute apart, then at the next start (review of 963e173);
    g. an item with the same kind and data (SHA-256 of the plain part, the file list or the image) as an unpinned one moves to
       the top with the new time instead of being added twice; one equal to a pinned item leaves the pinned item where it is
       and adds nothing.
@@ -136,14 +148,21 @@ Each question was asked in French with these options (the first one marked "Reco
    state the compositor reports (`L 1` / `L 0`), an offer to decide (`O <n> <kind>`), item metadata (id, kind, MIME types,
    size, time, pinned, formatted, title: the first line cut to 200 characters with control characters removed, an excerpt of
    at most 400 characters for the text thumbnail, the thumbnail path, the source app), removals, "the clipboard now holds
-   item n", search results (ids), notices (pin limit), and its state (`ok`, `unsupported`, `paused`). The full text stays in
+   item n", search results (ids), notices (pin limit), and its state (`ok`, `unsupported`, `error <why>`; a pause is the
+   shell's own command and is not echoed). The full text stays in
    the helper: the search runs there (case- and accent-insensitive substring of the plain text and file names).
    The shell answers `Y` only while the history is on, the session is not locked by either source (6), no authorization
-   dialog is shown and none closed in the last 2 s (Q11; `shell.qml` binds the polkit agent's dialog state into
-   `SessionState`, as it does for the lock: `shell/security` is not changed), and the active window is not a password manager
+   dialog is shown and none closed in the last 2 s (Q11), and the active window is not a password manager
    the session hides from screen sharing (`config/hypr/grassfield/privacy.lua`; for apps that set no hint, such as
    Bitwarden). Neither process logs content: counts, kinds, sizes and reasons only, never text, file names, URLs, titles or
    hashes.
+   The authorization state (counter-review of the step 0 PASS, minor d): `AuthAgent` exposes no "dialog shown" property
+   (`win.shown` is internal; `requestStartedAt` is for display only and never compared). Step 1 adds one read-only property
+   to `shell/security/polkit/AuthAgent.qml`, `requestActive: dialogModel.active` (a request is open: its sheet shown, or held
+   behind the lock), which nothing in the agent reads; `shell.qml` gives the agent an id and binds it to a new
+   `SessionState.authorizing`, as it binds `Lock.locked` to `SessionState.locked`. When `authorizing` becomes false the
+   service starts a 2 s Timer (monotonic: a clock set back never lengthens it) and answers `N` until it fires. That line under `shell/security` needs an opus PASS (R12) and is
+   named in the step 1 pull request.
 
 3. **Source app.** Data control does not say which client set the selection. The shell's `Y` carries the app of the window
    active when the offer was decided (Hyprland's active window), and the row shows its icon as macOS shows the source app;
@@ -155,13 +174,22 @@ Each question was asked in French with these options (the first one marked "Reco
    cut: a cut item from the history is pasted as a copy); plus the marker type `application/x-grassfield-clipboard-item` (the
    item id), by which the helper knows its own selection (the item moves to the top, step 1g). "Paste as Plain Text" (the
    menu, Shift+Return) offers the plain types and the marker only. The helper serves until another client takes the selection
-   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits).
+   or it exits (the clipboard is then empty, as when any Wayland app that owns it quits); a reader that takes nothing for 2 s
+   has its pipe closed (one that stops reading never holds the helper; a slow one that keeps reading, such as an X11 app
+   pasting a large image through XWayland, gets the whole answer).
    To paste (Q9: Return, Enter, a click, the menu's Paste; Shift+Return or the menu's Paste as Plain Text): the helper copies
    the item; when it reports owning the selection, Search closes and `FocusReturn` gives the keyboard back to the window active
    when Search opened; once that window is active again (at most 1 s), and only while neither `SessionState.locked` nor the
    helper's `L 1` says the session is locked, the shell sends Hyprland one Lua function (`Hyprland.dispatch`, the `Zoom.js`
    pattern) that checks that the active window is still that address and only then sends it Ctrl+V, or Ctrl+Shift+V when the
-   window is a terminal, key down then key up 50 ms later, with `window = "address:<addr>"`. Ctrl+Shift+V is the clipboard
+   window is a terminal, with `window = "address:<addr>"`: the same function first arms a Hyprland timer for the key up 50 ms
+   later, to the same address, then sends the key down. The key up does **not** check the active window again: a V that went
+   down is always
+   released in the window that got it, whatever became active meanwhile (counter-review, minor b); if that window has closed,
+   the up is a no-op (`window not found`). Window addresses can be reused by a new window (counter-review, minor c): the
+   shell drops the paste when Hyprland reports `closewindow` for the remembered address at any time between Search's opening
+   and the dispatch, so a new window that took the address never gets the keys (step 1 has the decision, `mayPaste`'s
+   `closedSinceOpen`; step 2 tracks `closewindow` with the paste it guards). Ctrl+Shift+V is the clipboard
    paste of alacritty, kitty, ghostty, foot and wezterm by default and is kept by Omarchy 4.0.4's terminal configs
    (`foot.ini:20` lists it beside Shift+Insert); Shift+Insert is not used, as kitty pastes the primary selection with it. The
    terminal test is the one of `config/hypr/grassfield/forwarding.lua:26-37` as a whole (its class list and its
@@ -191,7 +219,9 @@ Each question was asked in French with these options (the first one marked "Reco
    Windows loses them at a restart). Thumbnails and previews are 0600 files in `$XDG_RUNTIME_DIR/grassfield/clipboard/`
    (0700, tmpfs: RAM), removed with their item and when the helper starts or exits. Only the helper reads the stores, with
    bounds: regular files of the user, opened with `O_NOFOLLOW`, mode 0600, `index.json` at most 1 MiB, each item at most
-   its kind's caps; a store that breaks a rule is deleted, not read. Known limit: a deleted file's blocks can stay on the disk
+   its kind's caps; a store that breaks a rule is deleted, not read. The files of a store that its index does not name (an
+   item removed or expired whose file a crash left, the index being written first; the temporary of an interrupted write) are
+   deleted when it is loaded. Known limit: a deleted file's blocks can stay on the disk
    until reused (btrfs copy-on-write, SSD); Omarchy's full-disk encryption covers them at rest. In a dev session the stores
    are under `Mode.stateDir`.
 
@@ -206,9 +236,12 @@ Each question was asked in French with these options (the first one marked "Reco
    request and Hyprland's confirmation of its lock, a copy can still be recorded (no event exists for that phase).
    Clearing follows Windows (Q8): Clear History (the view's More menu) and Clear Clipboard History (Settings > Search, asks
    first, then writes `search.clipboard.clearedAt`, the pattern of `search.historyResetAt` in PR #9) delete every unpinned
-   item, memory and `history/`; Settings' confirmation also offers "Also delete pinned items" (writes
+   item, memory and `history/` (with no helper running, as while it waits to restart after a crash, the shell runs it once
+   with `--clear-history`, and no helper starts before that ends); Settings' confirmation also offers "Also delete pinned items" (writes
    `search.clipboard.pinnedClearedAt` as well), which empties `pinned/`: that is the "clear all". Turning the history off
-   (`search.clipboard.enabled`, off by default) stops the helper and deletes the unpinned items; pinned items stay in
+   (`search.clipboard.enabled`, off by default) stops the helper and deletes the unpinned items (a running helper deletes its
+   `history/` before it ends; otherwise the shell runs it once with `--clear-history`, also at each shell start while the
+   history is off; a helper started with the history store off deletes any `history/` left); pinned items stay in
    `pinned/`, unread and not shown, until the history is turned on again (or deleted from Settings: with the history off,
    the shell runs the helper once with `--clear-pinned`). The current clipboard is left as it is (both systems clear the
    history, not the clipboard).
@@ -225,10 +258,15 @@ Each question was asked in French with these options (the first one marked "Reco
    `.retention`, `.keepOnDisk`, `.clearedAt`, `.pinnedClearedAt`) come from the schema (ADR-0020) in step 1, as the shell
    reads them.
 
-8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET`: it connects only to the
-   socket named by `--display <absolute path>`, which has no default; a missing or relative path, or a path that is not a
-   socket owned by the user (`lstat`, `S_ISSOCK`, `st_uid`), stops it with an error. So no test, script or debugging run of the
-   helper can reach a display it was not explicitly given. The shell names the socket: in a real session
+8. **Display and dev mode (ADR-0019).** The helper never reads `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` and never calls
+   `wl_display_connect`: libwayland takes `WAYLAND_SOCKET` first even when a display name is given (the counter-review
+   connected through a decoy `WAYLAND_SOCKET` and the path was ignored, minor a). The helper unsets both variables first, then
+   checks the path named by `--display <absolute path>` (no default; `lstat`: a socket owned by the user), opens an `AF_UNIX`
+   socket itself, `connect()`s to that path, checks the peer (`SO_PEERCRED`: the same user) and hands the descriptor to
+   `wl_display_connect_to_fd`. A missing or relative path, a path that is not such a socket, a failed connect or another peer
+   user stops it with an error. So no test, script or debugging run of the helper can reach a display it was not explicitly
+   given; a test passes a decoy `WAYLAND_SOCKET` (a connected descriptor to a second fake server) and checks that this server
+   sees no client and that the helper talks to the `--display` server only. The shell names the socket: in a real session
    `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` (or `WAYLAND_DISPLAY` when absolute); in a dev session only the absolute path in
    `GRASSFIELD_CLIPBOARD_DISPLAY` (`scripts/dev/shell-run.sh` sets the nested socket), and without it no helper starts and the
    view says the history is off in development. `CLIPBOARD_HELPER` names another helper binary in dev. Tests run the helper
@@ -287,8 +325,8 @@ larger limits; it keeps everything on the machine.
   `THIRD_PARTY.md`.
 - New settings keys (5), a state directory with an always-on pinned store and an opt-in history store (ADR-0020 table), two
   dev plumbing variables (ADR-0019 table), one binding (Super+Ctrl+V, with its Settings > Keyboard description in
-  `apps/settings/qml/Bindings.js` and the French catalog), one `SessionState` property for the authorization dialog (bound in
-  `shell.qml`; `shell/security` unchanged).
+  `apps/settings/qml/Bindings.js` and the French catalog), one read-only `AuthAgent.requestActive` (the only change under
+  `shell/security`, opus PASS required) bound in `shell.qml` to a new `SessionState.authorizing`.
 - IPC, documented in `docs/specs/security.md` with its code: one action-class function, `search clipboard` (Super+Ctrl+V;
   opens or closes the view, returns nothing, refused while locked), and dev-class functions (`clipboard status`,
   `search view`, the paste and offer test hooks). The Settings app clears through `search.clipboard.clearedAt` and
