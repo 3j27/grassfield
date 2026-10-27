@@ -636,7 +636,7 @@ limitations until step 2c ships:
   dialogs, against Q17-b). **Choice: (a).** Design, for **step 2c**, delivered right after 2a and before 2b to keep short
   the time in which Chromium can create a new key:
   - `grassfield-secrets-handover`, a one-shot user unit of the Grassfield session (`ConditionEnvironment=GRASSFIELD_SESSION=1`),
-    ordered before the session's autostarted applications, so before Chromium can start;
+    started before the shell, so before any app the user opens from the Dock;
   - leftover: when the owner of `org.freedesktop.secrets` is ksecretd (identified from the bus's `ProcessFD` and its
     root-owned executable `/usr/bin/ksecretd`, as D-9 identifies callers), it asks ksecretd to quit; KWallet's own clients
     start it again through `org.kde.secretservicecompat`, now with the session's setting, and the next libsecret call
@@ -645,13 +645,82 @@ limitations until step 2c ships:
     collections through `org.kde.secretservicecompat` and copies into the login keychain each item the keychain does not
     already hold (same attributes), keeping KWallet's copy. It never overwrites an item the keychain holds: a Chromium that
     already created a new key keeps it, and the passwords saved under the old one stay unreadable (a known limitation).
-    When it moved something it posts one Grassfield notice, "Saved passwords were moved to your keychain."; when KWallet's
-    wallet is locked, KWallet asks for its own password once (its dialog; K2), and a refusal leaves everything as it was and
-    asks again at the next session;
+    When it moved something it posts one Grassfield notice (its words: decision 2c-2 below); when KWallet's wallet is
+    locked, KWallet asks for its own password once (its dialog; K2), and a refusal leaves everything as it was and asks
+    again at the next session;
   - security: it reads secrets, so it runs only as the user, logs no item and no value, holds secrets only for the copy, and
     needs an opus PASS; tests on a private bus with a fake KWallet compatibility service and a fake keychain (never the
     owner's buses or secrets): a leftover ksecretd made to quit, items copied once, an existing item never overwritten, a
     locked wallet left untouched.
+
+**Delivered in step 2c.** `apps/secrets-handover` (C++17, Qt Core and Qt D-Bus only; no window, no new dependency),
+installed as `/usr/lib/grassfield/grassfield-secrets-handover`; `packaging/systemd/grassfield-secrets-handover.service`;
+one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after the menu bridge and before the shell.
+- **Two phases, one unit.** The unit is `Type=notify`. Phase 1 runs before readiness: when ksecretd owns
+  `org.freedesktop.secrets` it is asked to quit (KDBusService's `org.qtproject.Qt.QCoreApplication.quit` on
+  `/MainApplication`), and after 5 s it gets SIGTERM through its pidfd (`pidfd_send_signal`: never another process that
+  reused the PID); readiness follows once the name has a new owner or none. `systemctl --user start` returns at readiness,
+  so the shell starts after phase 1, and never more than 10 s late (`TimeoutStartSec=10`; on a timeout the unit fails, the
+  `;` chain goes on and the shell starts). Phase 2, the move, goes on in the background (at most 15 min, `RuntimeMaxSec`).
+- **Peers are checked, not trusted by name.** Each peer is identified from the bus (`GetConnectionCredentials`:
+  `ProcessFD`, a pidfd; its PID read from `/proc/self/fdinfo`, then `/proc/<pid>/exe`, and the pidfd checked again after
+  that read): KWallet's name must be held by `/usr/bin/ksecretd`, the Secret Service by `/usr/bin/gnome-keyring-daemon`,
+  each running as the user, its executable a root-owned regular file in root-owned directories that neither group nor
+  others can write. Otherwise nothing is read, written or stopped, and the move waits for the next session. A bus without
+  `ProcessFD` (dbus-broker 37 and dbus-daemon 1.16 have it, P17) identifies nobody: nothing moves.
+- **What moves.** Only items that a libsecret client saved (an `xdg:schema` attribute); entries written through KWallet's
+  own API (attributes `server`, `user`, `type`) stay with KWallet, where KF6 apps read them. KWallet keeps its copies.
+  The keychain's default collection is used (alias `default`), created as libsecret creates it when there is none
+  (`CreateCollection`, gnome-keyring's own password question). Each value goes `GetSecret` → `CreateItem` (`replace`
+  false) with the same label and attributes, and the helper's copy of the value is zeroed right after.
+- **Marker and log.** `$XDG_STATE_HOME/grassfield/secrets-handover`, mode 0600 (`UMask=0077`), one line with the outcome
+  and counts only (`moved moved=1 kept=1`; `nothing`, `present`, `no-kwallet`); the helper's output and the journal say
+  only counts and which peer was refused. Without a wallet file (`~/.local/share/kwalletd/*.kwl`) nothing is asked of
+  KWallet at all.
+- **Hardening.** Runs as the user; `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=read-only` (the bus socket
+  under `/run/user` stays reachable; `tests/shell/unit_bus_access.sh` lists it as a bus client), `StateDirectory=grassfield`
+  for the marker, `PrivateNetwork`, `RestrictAddressFamilies=AF_UNIX`, `SystemCallFilter=@system-service`, an empty
+  capability set, `MemoryMax=96M`. Outside a Grassfield session it refuses (exit 2); the overrides of the executables and
+  timeouts that the tests use are honoured only in a dev session (ADR-0019).
+- **Tests.** `tests/unit/secrets-handover/tst_logic.cpp` (logic, GTest, also under ASan and UBSan): which items move, the
+  wallet test, the marker, which executables are trusted. `tests/integration/secrets_handover.sh` (headless, run by
+  `scripts/dev/test.sh`): the helper against fakes (`tests/fixtures/fake-secret-service.py`, which refuse any bus but a
+  private one) on a private bus of the test's own, started by D-Bus activation as in the session: no wallet; the move
+  (one item moved, one already in the keychain kept, KWallet's own entry left, one notice, the marker, readiness before
+  the end of the move); a second run; KWallet's question refused (nothing created, no marker); only KWallet's own
+  entries (KWallet never unlocked, the keychain never started); no default keychain (created, then filled); a leftover
+  that quits; one that ignores quit and gets SIGTERM; a holder that is another program (left alone, nothing read); the
+  refusal outside a session; the notice in French; no item, label or value in any output. `tests/shell/session_services.sh`
+  checks the unit, its place in `autostart.lua` and the PKGBUILD.
+- **Known limitations.** An app the user opens while the move waits for an answer to KWallet's password question, or an
+  app of Open at Login (started by uwsm's XDG autostart target alongside the shell), may find nothing in the keychain and,
+  for Chromium, create a new key; the move then keeps the keychain's item (never an overwrite). A move cut short (a
+  refused question, a peer that is not who it should be, an error) leaves what was copied in the keychain: the next
+  session finds those items there, keeps them and copies the rest. The values cross the user's own session bus in
+  `plain` Secret Service sessions (decision 2c-4).
+
+**Decisions of step 2c** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **2c-1. When are the password questions asked?** Options: (a) unlock KWallet and the keychain at every session until the
+  move is done; (b) only when there is something to move. **Choice: (b).** ksecretd lists items and their attributes while
+  the wallet is locked (it keeps them in `<wallet>_attributes.json`), so KWallet's question appears only when an item must
+  move, and the keychain's only when the keychain is locked or does not exist yet. A user with nothing to move sees nothing.
+- **2c-2. The notice's words.** Options: (a) "Saved passwords were moved to your keychain." (the design above); (b) name
+  KWallet; (c) say what changed without naming either store. **Choice: (c)**: title "Saved passwords moved", text
+  "Passwords that apps had saved elsewhere on this computer are now kept with your other saved passwords." (French in
+  `translations/grassfield_fr.ts`). Rule applied: "keychain" is the Apple product's word, which the UI does not use
+  (CLAUDE.md), and the user never chose KWallet (ksecretd took the name silently, S12), so its name explains nothing; the
+  notice says what the user can rely on, as macOS's notices do.
+- **2c-3. What does the shell wait for?** Options: (a) nothing (the helper runs beside the shell); (b) the whole move;
+  (c) phase 1 only, 10 s at most. **Choice: (c).** With (a) a Dock click in the first second can still reach a leftover
+  ksecretd; with (b) the desktop would wait for the user's answer to KWallet's question. Phase 1 takes well under a second
+  when ksecretd quits (8 s at worst before the SIGTERM path gives up).
+- **2c-4. How do the values travel?** Options: (a) `plain` Secret Service sessions; (b) `dh-ietf1024-sha256-aes128-cbc-pkcs7`
+  (libsecret's default), which needs a cryptography library in the helper. **Choice: (a).** Both peers and the helper are
+  the user's own processes on the user's own session bus; a process that could read that traffic runs as the user and could
+  read the keychain's files or the helper's memory anyway. No new dependency (CLAUDE.md).
+- **2c-5. A leftover ksecretd that does not quit.** Options: (a) leave it (the session behaves as before step 2a until it
+  ends); (b) SIGTERM after 5 s. **Choice: (b)**, through the pidfd that identified it. KWallet's own clients start it again
+  through `org.kde.secretservicecompat`, with the session's setting.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
