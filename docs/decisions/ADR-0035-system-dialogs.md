@@ -121,8 +121,10 @@ patching any upstream package (D1).
   the Omarchy session today (known limitation; integrator review of PR #17).
 - Config errors: `debug.suppress_errors = true`; the shell reads `hyprctl -j configerrors` once at start and after Hyprland's
   `configreloaded` event (`src/config/lua/ConfigManager.cpp:854`) and shows one Grassfield notice per new error set ("Some
-  settings could not be applied", with "Show Details" opening the journal lines), as it does for the Omarchy include (`config/hypr/session.lua:23-29`). Hyprland's
-  emergency mode (no binding left) is unaffected: Hyprland still shows it, by design.
+  settings could not be applied"), as it does for the Omarchy include (`config/hypr/session.lua:23-29`). Hyprland's
+  emergency mode (no binding left) stays Hyprland's: the same switch would hide its banner too
+  (`ConfigManager.cpp:773-801`), so it is set only once Grassfield's bindings are in (decision 3-7; the plan said, wrongly,
+  that the switch left the banner alone). The notice lists the error lines itself, with no "Show Details" (decision 3-6).
 - Toasts without a switch (plugin load failure, monitor mode fallback, overlapping layout, xdph's Qt error) stay Hyprland's;
   they are rare and listed as a known limitation. `misc.disable_scale_notification` is already set.
 - Cost: small (one option, one shell service function, one test with a fake `hyprctl`). Risk: an error is hidden when the
@@ -162,6 +164,77 @@ patching any upstream package (D1).
   Hyprland caller (one pid, two pids sharing class and title, pid reuse between mark and confirm). Risk: a Hyprland release
   that changes the text or the buttons → the stand-in falls back to the stock dialog (a test pins the strings of the installed
   Hyprland).
+
+**Delivered in step 3 (D-3 and D-2).**
+- `packaging/session-bin/hyprland-dialog` (POSIX sh), installed to `/usr/lib/grassfield/session-bin/` and put right after
+  `omarchy-shims` in Hyprland's PATH (`omarchy.lua` `guard_path`, called from `session.lua`; `dev.lua` puts the
+  repository's copy first in the nested compositor's PATH). It matches Hyprland 0.56.2's en_US and fr_FR texts exactly
+  (`--title T --text X --buttons B`, nothing else), takes the class after the last " - ", finds the client pids of the
+  windows with that class and title in `hyprctl -j clients` (read with `python3 -I`), and with exactly one pid above 1 asks
+  `qs ipc -p /usr/share/grassfield/shell call anr report <its pid> <pid> c:<class> t:<title> i:<instance>` under
+  `timeout 1`. On `ok` it `exec`s `sleep infinity` (same pid, silent); in every other case it `exec`s
+  `/usr/bin/hyprland-dialog` with the same arguments.
+- `shell/services/NotResponding.qml` (singleton, IPC target `anr`: `report` action, `status` dev) and its pure decisions
+  `NotResponding.js`: a report is refused for a pid of 1 or below, an empty class, another compositor's instance, and a
+  window with that class and title that the shell knows under another pid. Marks are kept per stand-in and per pid; while
+  there is one, the stand-ins' pids are checked every 250 ms (`kill -0`) and the marks of those that ended go.
+- Force Quit (`ForceQuitPanel.qml`): "(Not Responding)" after the app's name, in `colors.danger`, the first such row
+  selected when the panel opens. The Dock menu (`DockMenu.qml`): a disabled "Application Not Responding" first, then
+  Force Quit in place of Quit, for the processes that do not respond only. At the confirmation (`Power.qml`) each pid must
+  still own a window of the chosen class (the Force Quit panel: the selected window's; the Dock: the app's windows'),
+  else nothing is killed and a notice says "The application had already quit."
+- `looknfeel.lua`: `misc.anr_missed_pings = 3` (Hyprland's default is 5, 7.5 s).
+- D-2: `core.lua` sets `debug.suppress_errors = true` once `grassfield.bindings` loaded (decision 3-7);
+  `shell/platform/ConfigErrors.qml` and `ConfigErrors.js` read `hyprctl -j configerrors` at the shell's start and after each
+  `configreloaded` event; the shell root posts "Some settings could not be applied" with the first three lines (then "and
+  N more") for each new set, and withdraws it when a reload leaves none.
+- Tests: `tests/shell/hyprland_dialog.sh` (39 checks: en and fr calls, titles with " - ", a leading "-", a newline or none;
+  every fallback with the same pid and arguments, including two processes, a refusal, no shell and a shell that hangs past
+  1 s; the dev hook; the texts pinned against the installed Hyprland, with a control), `tests/unit/tst_notresponding.qml`,
+  `tests/unit/tst_configerrors.qml`, `tests/shell/session_input.sh` (the PATH order, `suppress_errors` with the bindings in
+  and out under Hyprland's own `require`), `tests/shell/shell_unit.sh` (the stand-in's shell selector),
+  `tests/security/ipc_inventory.sh` (target `anr`), and the nested scenario `tests/shell/anr_nested.sh` (A-NR2: a
+  SIGSTOP'd foot is marked, SIGCONT and a kill clear the mark).
+
+**Decisions of step 3** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **3-1. Who finds the hung app's pid.** Options: (a) the shell, from its window list (`Compositor.pidOf`); (b) the
+  stand-in, from Hyprland's live client list, the shell checking it against what it knows. The shell's list has a pid only
+  for the windows Hyprland's list was last read for, and an IPC function answers at once, so (a) would fall back to the stock
+  alert for a window opened since. **Choice: (b)**: every hung app gets the macOS cues, not only some. The shell still
+  refuses a pid that another process's window with the same class and title contradicts.
+- **3-2. Titles that start with "-".** `qs ipc` takes every argument that starts with "-" for an option, even after `--`, so a
+  window titled "-rw-r--r-- notes.txt" would have failed the call. Options: (a) let it fall back to the stock alert;
+  (b) encode the strings; (c) a fixed prefix the shell strips ("c:", "t:", "i:"). **Choice: (c)**: no alert for any title,
+  and the arguments stay readable.
+- **3-3. A report from another compositor.** `qs ipc -p` reaches every shell run from that path, so the nested session's
+  stand-in could reach the real session's shell. Options: (a) accept; (b) the stand-in passes `HYPRLAND_INSTANCE_SIGNATURE`
+  and the shell refuses another one. **Choice: (b)**: an app is never marked in a session where it does not run.
+- **3-4. When the mark goes.** Options: (a) the stand-in reports its own end (it is SIGKILLed: it cannot); (b) the shell
+  checks the stand-ins' pids every 250 ms while there is a mark. **Choice: (b)**; NR3's 1 s holds. Known limitation: a shell
+  restarted while an app hangs loses its mark until the app answers or closes (Hyprland does not run its dialog again); Force
+  Quit still lists the app.
+- **3-5. Force Quit from the Dock menu of an app with several processes.** Options: (a) all its processes; (b) only those
+  that do not respond. **Choice: (b)**: macOS force-quits the app that hangs; another process of the same app that answers
+  keeps its work (Option + Force Quit still quits them all). The confirmation checks every pid against the app's window
+  classes, so an app whose windows carry two classes is not refused.
+- **3-6. "Show Details" for config errors.** The plan opened the journal lines; that needs a terminal. Options: (a) a
+  terminal on `journalctl`; (b) the error lines in the notice's body (three, then "and N more"); (c) a details sheet (a new
+  surface, not in this step). **Choice: (b)**: the user reads what went wrong in the notice and Notification Center, with no
+  terminal. The shell logs the count only, never the lines (they can name the user's files).
+- **3-7. `debug.suppress_errors` and Hyprland's emergency mode.** Read in Hyprland 0.56.2 (`ConfigManager.cpp:773-801`): the
+  switch hides the emergency banner too, contrary to the plan. Options: (a) always set it (an error that leaves no binding
+  leaves the user without keys and without a word); (b) never (Hyprland's red bar for every error); (c) set it only once
+  `grassfield.bindings` loaded, read from Hyprland's `require`, which answers `true` for a module that ran and an empty table
+  for one that failed (measured on the installed 0.56.2). **Choice: (c)**: a broken binding file keeps Hyprland's bar and
+  banner; any other error gets the Grassfield notice. A parse that stops before `core.lua` ends keeps the bar too.
+- **3-8. Reading Hyprland's client list.** Options: (a) `jq` (not a dependency of grassfield-desktop); (b) `python3 -I`
+  (already one). **Choice: (b)**: no new dependency.
+- **3-9. Where `session-bin` goes in PATH.** Only Hyprland runs `hyprland-dialog`, so this step adds the directory to the
+  compositor's PATH only; `env-grassfield` (the systemd user manager) gets it with the picker stand-ins of step 7 (D-6),
+  which xdph runs. The nested session uses the repository's stand-in, which honours `GRASSFIELD_SHELL_DIR` in a dev session
+  only (ADR-0019; security.md lists the hook), so the integrator's nested run goes the same way as the real session.
+- **3-10. An untitled window.** Hyprland names it "(unknown)" ("(inconnu)") in its text. Options: (a) fall back to the
+  alert; (b) match a window with an empty title too. **Choice: (b)**, still with exactly one pid.
 
 ### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
 - **Two processes, two bus names** (review of PR #13, MAJOR 4): the frontend chooses a backend from its `.portal` files when
