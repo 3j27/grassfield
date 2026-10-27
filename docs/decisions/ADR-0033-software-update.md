@@ -1,6 +1,8 @@
 # ADR-0033: Software Update: a signed [grassfield] pacman repository in two channels, installed through Omarchy
-Status: Proposed (cloud session, owner brief 2026-10-27, step 0; no code in either repository before the opus PASS). The
-owner's answers O1-O20 are recorded below; the first two opus reviews (FAIL) are answered in "Review history". ·
+Status: Proposed, applied provisionally until the owner accepts it (cloud session, owner brief 2026-10-27). Step 0 (this
+ADR and the spec) passed the opus review on its third round and was merged in 609017f (PR #11); step 1 is grassfield PR
+#16 (the client) and the step 1b PR of grassfield-packages. The owner's answers O1-O21 are recorded below; the opus
+reviews are in "Review history". ·
 Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator (merge after the opus PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
@@ -545,9 +547,10 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O18 | A `[grassfield]` that blocks every update (review 1, MAJOR 1) | pane + notification offering "Turn Off…" (recommended) · pane only · automatic removal | **pane + notification**, never automatic |
 | O19 | Change of host (review 1, MAJOR 5) | `post_upgrade` migration + old host serving and redirecting ≥ 90 days (recommended) · redirect only · manual "Repair…" | **migration + redirect** |
 | O20 | Keyring before the owner's key exists (review 2, MAJOR) | a keyring with no key until O11 (recommended) · withhold the dependency until O11 | **no key until O11** (b.2) |
+| O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back** |
 
 The owner gave every answer in this Claude Code session on 2026-10-27, through its question tool. The answers to O1-O16
-were recorded in `fd49abc` and confirmed again after the first review.
+were recorded in `fd49abc` and confirmed again after the first review; O21 was asked after the step 1 review.
 
 ## Amendments
 - **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
@@ -610,6 +613,56 @@ were recorded in `fd49abc` and confirmed again after the first review.
   - an old but validly signed database can be replayed;
   - a pointer switch can fail one run; a rollback is a new snapshot (h.2);
   - a Hyprland update can come before the matching plugin.
+
+## Step 1 as built (2026-10-27, branch `claude/software-update-step1`)
+Landed in this repository:
+- `packaging/pacman/`: `repository.conf` (still the `.invalid` base and no key, O11), the empty
+  `grassfield-signing-key.asc`, `generate.py` (build time: checks the values and the key file, which must be exactly the
+  pinned public key, and writes `/usr/share/grassfield/pacman/{repository.conf,grassfield-stable.conf,grassfield-beta.conf,
+  grassfield-signing-key.asc}`), `grassfield-channel-helper`, `grassfield-channel-scriptlet`, `grassfield-channel.sh`,
+  `org.grassfield.packages.policy`, `pre-refresh-pacman` (the hook);
+- `packaging/bin/grassfield-channel-set` (also `/usr/bin`) and `packaging/bin/grassfield-update-check`;
+- `packaging/arch/PKGBUILD` (`GRASSFIELD_PKGREL`, the three dependencies, the files above) and
+  `grassfield-desktop.install` (`pre_remove`, `post_upgrade`);
+- the Omarchy pins of `docs/upstream/omarchy.lock`;
+- `tests/shell/update_check.sh` (the checker, logic layer) and `tests/integration/software_update.sh` (the container test).
+
+`grassfield-keyring` is not yet in grassfield-desktop's `depends` (owner decision O21): it joins in a follow-up once
+grassfield-packages' step 1b, which builds it, is merged, so that a local `makepkg -si` never asks for a package that does
+not exist. `makedepends` now holds everything the build compiles against (`makepkg -s` installs the global depends and
+makedepends only): `hyprwayland-scanner`, `kio`, `solid`, `kcoreaddons`, `kservice`, `qt6-webengine`, `qt6-multimedia`,
+found by the first builds in a clean container.
+
+Moved to step 2, with the shell code that uses them: the shim's `omarchy.system-update` forward (its target, the shell's
+`update check` IPC, belongs to the step 2 shell service), `updates.automaticCheck` (a key goes through
+`ui/Grassfield/Ui/SettingsContract.js`, the settings vectors and the store, which the open Settings stack #8-#10 changes;
+its only reader is the step 2 scheduler) and `software-update.json` (written by that service). The pins of
+`omarchy-update-status` and `omarchy-launch-floating-terminal-with-presentation` move with their derived files. The
+waiter of d.5 is the checker's `--after-update-lock` mode, which the step 2 service starts.
+
+Choices made within this ADR:
+- "Reads no environment variable" (c.1): both root programs start as `#!/bin/bash -p` (no `BASH_ENV`, no imported
+  function) and remove every exported variable before sourcing their library, which then sets `PATH=/usr/bin`, `LC_ALL=C`,
+  `umask 022` and `cd /`.
+- One change at a time: both root programs take `flock` on `/run/grassfield/channel.lock`, in a folder only root can
+  open (0700; the file 0600, made under umask 077 and checked before use: flock needs no write access, so a lock others
+  can read would let any user block "Turn Off…" and the removal, step 1 review MAJOR 1). The helper refuses when it is
+  held; the scriptlet program waits up to 120 s, since the helper can start just before a pacman transaction whose
+  scriptlet runs it, and two rewrites of `pacman.conf` could otherwise lose one another. Under the lock, temporary files
+  a killed run left in `/etc` are removed.
+- No environment at all: while their environment holds anything, both programs run themselves again under `env -i`
+  (entries such as `BASH_FUNC_x%%` are no variables, so no unset loop removes them, and `pacman-key` is a bash script).
+- Exactly one `[grassfield]` section: `set` and `restore` replace several by one (the hook can append between the
+  helper's read and its rename; pacman then refuses a database "already registered"). Several sections, or the lines
+  without their file, read `repair` in the checker and in `grassfield-channel-set`.
+- `[grassfield]` lines whose file is missing (pacman cannot run at all then) are removed first by `set`, `restore` and
+  `off`, so `pacman-key` and `pacman-conf` can run; `grassfield-channel-set` shows that state as `repair`, and its
+  `repair` runs `set stable` there.
+- The checker keeps its failure count, the Server lines it last synced and its last success in `health-db/` (ADR-0020's
+  row). Its `--offline` flag carries the shell's connectivity: a failure while offline is not counted.
+- A notes file whose `channel` is not the client's channel is refused, like any other invalid notes.
+- `grassfield-channel-set` honours `GRASSFIELD_UPDATE_PKEXEC` only in a dev session (ADR-0019's predicate) and never makes
+  or removes the hook link there; without the stand-in, a dev session refuses the change.
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:

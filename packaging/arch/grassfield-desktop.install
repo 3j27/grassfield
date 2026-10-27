@@ -1,5 +1,8 @@
-# pacman scriptlet of grassfield-desktop (runs as root, only prints): the login-path check of GF-015.
-# It reads files and never changes anything; its lines are the owner's feedback that the login screen reaches Grassfield.
+# pacman scriptlet of grassfield-desktop (runs as root): the login-path check of GF-015, which reads files and only
+# prints (its lines are the owner's feedback that the login screen reaches Grassfield), and Software Update's two steps
+# (ADR-0033 b.8, h.3), which run grassfield-channel-scriptlet, a root program over grassfield-channel.sh (opus security
+# review): pre_remove takes the [grassfield] section and the Grassfield keys away, post_upgrade migrates a configuration
+# that still names a previous host.
 
 post_install() {
   echo "grassfield: checking the login path (also: /usr/lib/grassfield/grassfield-login-check)"
@@ -20,4 +23,13 @@ post_upgrade() {
     echo "grassfield: after this upgrade restart the shell once: systemctl --user restart grassfield-shell (or log out and in)"
   fi
   /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
+  # A /etc/pacman.d/grassfield.conf whose primary Server is a previous host of this build is written again for its channel.
+  /usr/lib/grassfield/grassfield-channel-scriptlet upgrade || echo "grassfield: the [grassfield] configuration was not migrated (see above)"
+}
+
+pre_remove() {
+  # No [grassfield] line, no /etc/pacman.d/grassfield.conf and no trusted Grassfield key are left behind: an Include whose
+  # file is gone would stop every pacman command, and a locally signed key is trusted for every repository.
+  /usr/lib/grassfield/grassfield-channel-scriptlet remove ||
+    echo "grassfield: Software Update's [grassfield] configuration was not fully removed (see above): delete the [grassfield] lines at the end of /etc/pacman.conf, then /etc/pacman.d/grassfield.conf"
 }
