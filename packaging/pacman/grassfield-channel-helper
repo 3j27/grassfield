@@ -1,0 +1,38 @@
+#!/bin/bash -p
+# grassfield-channel-helper: the program of Grassfield's polkit action org.grassfield.packages.set-channel (ADR-0033 c,
+# owner decision O1; docs/specs/updates.md U16). OPUS SECURITY REVIEW REQUIRED: it runs as root.
+# Started only as `pkexec /usr/lib/grassfield/grassfield-channel-helper <verb>` by grassfield-channel-set:
+#   set stable|beta   trust the pinned key when it is not trusted, populate grassfield-keyring, write
+#                     /etc/pacman.d/grassfield.conf from the channel's template, add the two [grassfield] lines to
+#                     /etc/pacman.conf, drop pacman's synced [grassfield] files
+#   restore           ("Repair…") the two lines, only when /etc/pacman.d/grassfield.conf exists
+#   off               ("Turn Off…") the lines, the file, the synced files, then the Grassfield keys
+# Every verb is refused while pacman runs (its db.lck exists). Exit 0 done, 1 refused or failed (the message says which;
+# a failed step leaves pacman's configuration valid), 2 usage.
+# Its only input is its argument vector: -p keeps bash from reading BASH_ENV or importing functions, and every exported
+# variable is removed before anything else runs (pkexec gives a clean environment already).
+while read -r gf_var; do unset -v "$gf_var" 2>/dev/null; done < <(compgen -e)
+unset -v gf_var
+GF_PROG=grassfield-channel-helper
+. /usr/lib/grassfield/grassfield-channel.sh || exit 1
+gf_start
+gf_lock 0
+
+case "$#:${1-}:${2-}" in
+  2:set:stable | 2:set:beta)
+    gf_require_unlocked
+    gf_set "$2"
+    ;;
+  1:restore:)
+    gf_require_unlocked
+    gf_restore
+    ;;
+  1:off:)
+    gf_require_unlocked
+    gf_off
+    ;;
+  *)
+    echo "usage: grassfield-channel-helper set stable|set beta|restore|off (run by grassfield-channel-set through pkexec)" >&2
+    exit 2
+    ;;
+esac
