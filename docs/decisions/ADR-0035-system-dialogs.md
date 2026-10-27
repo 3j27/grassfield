@@ -609,6 +609,10 @@ session is unchanged. Tests (step 2): a static test of the file and the environm
 `false`; on a private bus (`dbus-run-session`, a temporary `HOME`, `QT_QPA_PLATFORM=offscreen`), the real ksecretd started
 with the session's `XDG_CONFIG_DIRS` owns `org.kde.secretservicecompat` and not `org.freedesktop.secrets`. No nested check:
 a nested session shares the owner's session bus, whose activation environment is not the Grassfield one.
+Delivered in step 2a: `packaging/xdg-config/kwalletrc`, the `env-grassfield` block (added once, `/etc/xdg` kept) and the
+PKGBUILD line; `tests/security/kwallet_secret_service.sh` (headless) runs the checks above and a control: on a private bus
+the real ksecretd 6.31.0 started without the session's directory owns `org.freedesktop.secrets`, which confirms the takeover
+of inventory S12 at runtime, and with it does not.
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
@@ -631,11 +635,21 @@ config; `docs/STATE.md` updated. Steps marked "after #8–#10" touch the shell o
 requests #8, #9 and #10 are merged (owner).
 1. **Hyprland's screens off** (D-1): `config/hypr` only, a static test, nested check by the integrator (`hyprctl getoption`).
    Can start right after the opus PASS of this step.
-2. **Appearance follows Grassfield** (D-8): `grassfield-portal-settings` (no window), the session's `hyprland-portals.conf`
-   under `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, `UnsetEnvironment` in the
-   backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7), and the session's `kwalletrc`
-   under `/usr/share/grassfield/xdg-config` with its `XDG_CONFIG_DIRS` line (D-12, Q17-b). Packaging, a new service and one
-   line of `grassfield-shell.service`; no shell code.
+2. **Appearance follows Grassfield** (D-8), in two pull requests (decision below):
+   - **2a**: the session's `kwalletrc` under `/usr/share/grassfield/xdg-config` with its `XDG_CONFIG_DIRS` line (D-12,
+     Q17-b). Packaging only.
+   - **2b**: `grassfield-portal-settings` (no window), the session's `hyprland-portals.conf` under
+     `/usr/share/grassfield/xdg`, `XDG_DATA_DIRS` and `GTK_USE_PORTAL=1` in `env-grassfield`, `UnsetEnvironment` in the
+     backend's and the shell's units (D-4's start-up loop), the 18 generated GTK themes (Q7). Packaging, a new service and
+     one line of `grassfield-shell.service`; no shell code. After #8–#10.
+
+   **Split of step 2** (decision delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+   Question: deliver step 2 as one pull request after the Settings stack (#8–#10), or Q17-b first? Options: (a) one pull
+   request after the stack; (b) 2a now, 2b after the stack. Choice: (b). Rule applied: Q17-b fixes something users already
+   meet today (Chromium's and every libsecret client's passwords ending in KWallet, with KDE dialogs), it touches no
+   Settings, shell or `config/hypr` file, and nothing in it waits for the stack; 2b does wait: `GTK_USE_PORTAL=1` needs the
+   shell unit's `UnsetEnvironment` line, and the GTK themes' selection colours follow the highlight colour that #10 adds to
+   the settings schema (`accent.highlight`).
 3. **Not responding and Hyprland's notices** (D-3, D-2): `session-bin/hyprland-dialog`, IPC `anr`, Force Quit and Dock
    marks (the app menu keeps Quit, Q16), `debug.suppress_errors` with the shell's notice. After #8–#10.
 4. **Open and Save panels** (D-4) and **KIO's dialogs in Files** (D-12 a): the Files library split, Grassfield's KIO delegate
