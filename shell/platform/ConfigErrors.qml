@@ -24,6 +24,11 @@ Item {
 
     visible: false
 
+    // The notice's body for these lines and the "and N more" text ("" for none).
+    function noticeBody(lines: var, rest: string): string {
+        return Logic.noticeBody(lines, rest);
+    }
+
     function read(): void {
         if (query.running) {
             root.readAgain = true;

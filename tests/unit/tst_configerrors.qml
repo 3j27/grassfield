@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/platform/ConfigErrors.js" as Logic
+import "../../shell/notifications/Sanitizer.js" as Sanitizer
 
 // ADR-0035 D-2: Hyprland's config errors become one Grassfield notice per new set, withdrawn when they are gone.
 TestCase {
@@ -38,6 +39,18 @@ TestCase {
         // No answer changes nothing.
         compare(Logic.action(null, Logic.key(first)), "keep");
         compare(Logic.action(null, ""), "keep");
+    }
+
+    function test_theBodyIsText() {
+        // Lua's own messages hold "<eof>" and "<name>": a notification body is markup, so they are escaped.
+        compare(Logic.noticeBody(["'end' expected near <eof>", "a & b"], ""), "'end' expected near &lt;eof>\na &amp; b");
+        compare(Logic.noticeBody(["a", "b", "c"], "and 2 more"), "a\nb\nc\nand 2 more");
+        compare(Logic.noticeBody([], ""), "");
+        // Through the notification's sanitizer the user reads the lines as Hyprland wrote them.
+        compare(Sanitizer.plain(Logic.noticeBody(["'end' expected near <eof>", "x <name> & y"], "and 1 more")),
+            "'end' expected near <eof>\nx <name> & y\nand 1 more");
+        // Control: unescaped, the sanitizer drops "<eof>".
+        verify(Sanitizer.plain("'end' expected near <eof>").indexOf("<eof>") < 0);
     }
 
     function test_theNoticeListsThreeLines() {

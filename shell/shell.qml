@@ -342,9 +342,8 @@ ShellRoot {
             if (noticeKey !== "")
                 Notifications.clear(noticeKey);
             // Singular/plural pair (the catalogs carry no numerus forms).
-            const rest = more === 1 ? qsTr("and 1 more") : qsTr("and %1 more").arg(more);
-            const body = more > 0 ? lines.concat([rest]) : lines;
-            noticeKey = Notifications.postInternal(qsTr("Some settings could not be applied"), body.join("\n"));
+            const rest = more === 0 ? "" : (more === 1 ? qsTr("and 1 more") : qsTr("and %1 more").arg(more));
+            noticeKey = Notifications.postInternal(qsTr("Some settings could not be applied"), noticeBody(lines, rest));
         }
         onCleared: {
             if (noticeKey !== "")

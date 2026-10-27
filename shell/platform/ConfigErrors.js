@@ -44,6 +44,13 @@ function action(errors, shownKey) {
     return k === shownKey ? "keep" : "post";
 }
 
+// The notice's body: the lines, then `rest` ("and 2 more") when given, as text. A notification body is markup, where Lua's
+// "'end' expected near <eof>" would lose "<eof>" as a tag: "&" and "<" are escaped.
+function noticeBody(lines, rest) {
+    const text = l => String(l).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    return (lines || []).concat(rest ? [rest] : []).map(text).join("\n");
+}
+
 // The lines the notice lists, and how many it leaves out.
 function summary(errors) {
     const all = errors || [];
