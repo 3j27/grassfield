@@ -82,8 +82,39 @@ capture() { # <name>
   echo "$m $g"
 }
 
+# foot's colour options. foot 1.28 (installed 2026-10-16) reads [colors-dark] and [colors-light] only: an override of
+# the older [colors] section is a config error that foot reports and then ignores, so the window opens in its default
+# colours (black). Both themes get the same colour (whichever foot starts in), alpha 1 (no wallpaper through). An older
+# foot that knows only [colors] gets that spelling. Each set is checked with `foot --check-config` (exit 230 on any
+# config error, no window) before a window opens.
+foot_style=""
+foot_check() { # <foot options...>: prints foot's config errors and fails when foot rejects them
+  env -u WAYLAND_DISPLAY "$root/scripts/dev/isolated.sh" foot --check-config "$@" 2>&1 >/dev/null
+}
+colour_opts() { # <rrggbb>: sets the array opts
+  case $foot_style in
+    dark-light) opts=(-o "colors-dark.background=$1" -o "colors-dark.foreground=$1" -o colors-dark.alpha=1
+      -o "colors-light.background=$1" -o "colors-light.foreground=$1" -o colors-light.alpha=1) ;;
+    legacy) opts=(-o "colors.background=$1" -o "colors.foreground=$1" -o colors.alpha=1) ;;
+    *) opts=() ;;
+  esac
+}
+detect_foot_style() {
+  if foot_check -o colors-dark.background=000000 -o colors-light.background=000000 >/dev/null; then
+    foot_style=dark-light
+  elif foot_check -o colors.background=000000 >/dev/null; then
+    foot_style=legacy
+  else
+    return 1
+  fi
+}
+
 foot_window() { # <app id> <rrggbb>
-  nested setsid "$root/scripts/dev/isolated.sh" foot --app-id="$1" -o "colors.background=$2" -o "colors.foreground=$2" \
+  local opts err
+  [[ -n $foot_style ]] || detect_foot_style || { echo "foot accepts neither [colors-dark] nor [colors] colour overrides" >&2; return 1; }
+  colour_opts "$2"
+  err=$(foot_check "${opts[@]}") || { echo "foot rejects the colour options ${opts[*]}: $err" >&2; return 1; }
+  nested setsid "$root/scripts/dev/isolated.sh" foot --app-id="$1" "${opts[@]}" \
     -- sh -c 'printf "\033[?25l"; exec sleep 3600' >/dev/null 2>&1 </dev/null &
   dev_record_pid "$dev/privacy-$1.pid" "$!"
   for _ in $(seq 1 40); do
