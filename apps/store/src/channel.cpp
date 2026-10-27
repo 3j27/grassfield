@@ -50,6 +50,18 @@ std::optional<Channel> channelFromConf(const QByteArray &grassfieldConf)
     return std::nullopt;
 }
 
+QString buildBase(const QByteArray &repositoryConf)
+{
+    // One KEY=value per line, no quotes, no expansion (packaging/pacman/repository.conf); the last assignment wins.
+    QString base;
+    for (const QByteArray &raw : repositoryConf.split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith("GRASSFIELD_REPO_BASE="))
+            base = QString::fromUtf8(line.mid(int(qstrlen("GRASSFIELD_REPO_BASE="))));
+    }
+    return base;
+}
+
 Channel defaultChannel(const QString &buildBase)
 {
     return Channel{QStringLiteral("stable"), cleanBase(buildBase)};

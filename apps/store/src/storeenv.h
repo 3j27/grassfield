@@ -6,6 +6,7 @@
 //   GRASSFIELD_STORE_FIXTURE      a folder with bin/pacman and bin/gpg (fakes), gnupg/ (a pacman keyring to copy),
 //                                 swcatalog/ (fake AppStream data) and grassfield.conf; the Store reads nothing of the
 //                                 system's package manager then
+//   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests)
 // GRASSFIELD_STORE_INSTALLER and GRASSFIELD_STORE_PKEXEC (the fake programs of the queue) come with step 3.
 #pragma once
 
@@ -21,6 +22,11 @@ namespace grassfield::store::env {
 inline QString fixture()
 {
     return apps::runmode::devValue("STORE_FIXTURE");
+}
+
+inline bool offlineForced()
+{
+    return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("1");
 }
 
 inline QString cacheDir()
