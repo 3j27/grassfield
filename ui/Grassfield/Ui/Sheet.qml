@@ -145,6 +145,8 @@ Item {
                     focus: root.withField
                     placeholderText: root.placeholder
                     echoMode: root.fieldPassword ? TextInput.Password : TextInput.Normal
+                    // A password (Wi-Fi's join): the input method neither learns, stores nor predicts it (GF-118).
+                    inputMethodHints: root.fieldPassword ? Qt.ImhSensitiveData | Qt.ImhNoPredictiveText : Qt.ImhNone
                     accessibleName: root.title
                     onTextChanged: root.errorText = ""
                 }
