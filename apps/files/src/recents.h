@@ -18,6 +18,13 @@ namespace Recents
 
 // At most this many files are shown, the most recently used.
 constexpr int kMaxItems = 500;
+// The list is a few hundred kilobytes; a file far larger is not a recently-used list and is not read.
+constexpr qint64 kMaxFileSize = 32 * 1024 * 1024;
+
+// The bytes of the list at `file` (shell/store/SettingsStore.qml's rule): only a regular file is opened (a FIFO, a device
+// or a link to one never is, decided by stat before the open, then checked again on the descriptor), at most `max` bytes
+// are read, and the read must reach the end of the file. False, with nothing in `out`, for anything else.
+bool readList(const QString &file, QByteArray *out, qint64 max = kMaxFileSize);
 
 struct Entry {
     QString path;

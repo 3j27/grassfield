@@ -8,7 +8,12 @@
 #include <QXmlStreamReader>
 
 #include <algorithm>
+#include <cerrno>
 #include <iterator>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace Recents
 {
@@ -117,6 +122,44 @@ QHash<QString, Rename> renamed()
     return renames();
 }
 
+bool readList(const QString &file, QByteArray *out, qint64 max)
+{
+    out->clear();
+    const QByteArray name = QFile::encodeName(file);
+    struct stat st {};
+    if (::stat(name.constData(), &st) != 0 || !S_ISREG(st.st_mode) || st.st_size > max)
+        return false;
+    // O_NONBLOCK: a FIFO swapped in after the stat opens at once (and is refused below) instead of waiting for a writer.
+    const int fd = ::open(name.constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    struct stat opened {};
+    bool ok = ::fstat(fd, &opened) == 0 && S_ISREG(opened.st_mode) && opened.st_dev == st.st_dev && opened.st_ino == st.st_ino;
+    // Room for the size seen and one byte more, grown up to one byte past the bound: a file that grew past the bound since
+    // the stat is refused, not cut.
+    QByteArray bytes(ok ? qMin(max, qint64(st.st_size)) + 1 : 0, Qt::Uninitialized);
+    qint64 done = 0;
+    while (ok) {
+        if (done == bytes.size())
+            bytes.resize(qMin(max + 1, 2 * done));
+        const ssize_t n = ::read(fd, bytes.data() + done, size_t(bytes.size() - done));
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0)
+            ok = false;
+        else if (n == 0)
+            break; // the end of the file: read whole
+        else if ((done += n) > max)
+            ok = false;
+    }
+    ::close(fd);
+    if (!ok)
+        return false;
+    bytes.truncate(done);
+    *out = bytes;
+    return true;
+}
+
 } // namespace Recents
 
 RecentsLoader::RecentsLoader(quint64 generation, const QString &file, const QHash<QString, Recents::Rename> &renames)
@@ -130,11 +173,9 @@ void RecentsLoader::run()
 {
     QStringList paths;
     QVariantList used;
-    QFile f(m_file);
-    // The file is a few hundred kilobytes; anything far larger is not a recently-used list.
-    constexpr qint64 kMaxFileSize = 32 * 1024 * 1024;
-    if (f.size() <= kMaxFileSize && f.open(QIODevice::ReadOnly)) {
-        const QList<Recents::Entry> entries = Recents::parse(f.readAll());
+    QByteArray xbel;
+    if (Recents::readList(m_file, &xbel)) {
+        const QList<Recents::Entry> entries = Recents::parse(xbel);
         QSet<QString> seen;
         for (const Recents::Entry &e : entries) {
             if (paths.size() >= Recents::kMaxItems)

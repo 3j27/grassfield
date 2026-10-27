@@ -11,7 +11,10 @@
 #include <QTemporaryDir>
 #include <QTimer>
 
+#include <cstdlib>
 #include <memory>
+
+#include <sys/stat.h>
 
 #include <gtest/gtest.h>
 
@@ -175,4 +178,73 @@ TEST(Recents, TheLoaderReadsRenamedFilesUnderTheirNewPath)
     EXPECT_EQ(paths, QStringList{renamed});
     ASSERT_EQ(used.size(), 1);
     EXPECT_EQ(used.at(0).toDateTime(), QDateTime::fromString(QStringLiteral("2026-10-26T10:00:00Z"), Qt::ISODate));
+}
+
+TEST(Recents, OnlyARegularFileIsReadAndWhole)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    QByteArray bytes("left over");
+    // A link to /dev/zero (the review's case: endless bytes, the old size check saw 0), a FIFO without a writer, a folder.
+    const QString zero = dir->filePath(QStringLiteral("zero.xbel"));
+    ASSERT_TRUE(QFile::link(QStringLiteral("/dev/zero"), zero));
+    EXPECT_FALSE(Recents::readList(zero, &bytes));
+    EXPECT_TRUE(bytes.isEmpty());
+    const QString fifo = dir->filePath(QStringLiteral("fifo.xbel"));
+    ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
+    EXPECT_FALSE(Recents::readList(fifo, &bytes));
+    EXPECT_FALSE(Recents::readList(dir->path(), &bytes));
+    EXPECT_FALSE(Recents::readList(dir->filePath(QStringLiteral("missing.xbel")), &bytes));
+    // Over the bound: refused unread (sparse, nothing written).
+    const QString huge = dir->filePath(QStringLiteral("huge.xbel"));
+    {
+        QFile f(huge);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        ASSERT_TRUE(f.resize(Recents::kMaxFileSize + 1));
+    }
+    EXPECT_FALSE(Recents::readList(huge, &bytes));
+    // Within it, read whole: at the bound exactly, an empty file, and through a link to a regular file.
+    const QString exact = dir->filePath(QStringLiteral("exact.xbel"));
+    ASSERT_TRUE(QFile(exact).open(QIODevice::WriteOnly) && QFile::resize(exact, 100000));
+    ASSERT_TRUE(Recents::readList(exact, &bytes, 100000));
+    EXPECT_EQ(bytes.size(), 100000);
+    EXPECT_FALSE(Recents::readList(exact, &bytes, 99999)) << "one byte over a smaller bound";
+    const QString empty = dir->filePath(QStringLiteral("empty.xbel"));
+    ASSERT_TRUE(QFile(empty).open(QIODevice::WriteOnly));
+    EXPECT_TRUE(Recents::readList(empty, &bytes));
+    EXPECT_TRUE(bytes.isEmpty());
+    const QString link = dir->filePath(QStringLiteral("link.xbel"));
+    ASSERT_TRUE(QFile::link(exact, link));
+    EXPECT_TRUE(Recents::readList(link, &bytes, 100000));
+    EXPECT_EQ(bytes.size(), 100000);
+}
+
+TEST(Recents, TheLoaderEndsOnAnEndlessOrBlockingList)
+{
+    auto dir = sandbox();
+    if (!dir)
+        GTEST_SKIP() << "GRASSFIELD_TEST_TMP (a directory under .dev/) is not set";
+    app();
+    const QString zero = dir->filePath(QStringLiteral("zero.xbel"));
+    ASSERT_TRUE(QFile::link(QStringLiteral("/dev/zero"), zero));
+    const QString fifo = dir->filePath(QStringLiteral("fifo.xbel"));
+    ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
+    for (const QString &file : {zero, fifo}) {
+        RecentsLoader loader(3, file);
+        bool loaded = false;
+        QStringList paths{QStringLiteral("x")};
+        QObject::connect(&loader, &RecentsLoader::loaded, &loader, [&](quint64, const QStringList &p, const QVariantList &) {
+            loaded = true;
+            paths = p;
+        }, Qt::DirectConnection);
+        loader.start();
+        // The old loader read /dev/zero without end and waited on the FIFO forever; leave the run rather than hang on it.
+        if (!loader.wait(5000)) {
+            ADD_FAILURE() << qPrintable(file) << " did not end";
+            std::_Exit(1);
+        }
+        EXPECT_TRUE(loaded) << qPrintable(file);
+        EXPECT_TRUE(paths.isEmpty()) << qPrintable(file);
+    }
 }
