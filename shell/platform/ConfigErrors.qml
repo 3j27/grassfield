@@ -74,7 +74,7 @@ Item {
             onStreamFinished: root.take(text)
         }
         // A reload while the last read ran: read once more.
-        onExited: {
+        onExited: exitCode => {
             if (root.readAgain) {
                 root.readAgain = false;
                 root.read();
