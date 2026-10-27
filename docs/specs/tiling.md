@@ -19,9 +19,11 @@ spec extends them and takes precedence where it is more precise.
   tiled window dragged away takes back its untiled size under the pointer. A window placed by hand is never "restored".
   Double-clicking a window edge extends that side to the screen edge; ⌥-double-click extends the opposite side too, and on
   a corner fills the screen.
-- **Green button.** Resting the pointer on it opens, after about a second, a glass popover with a tail toward the button:
-  "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange" (Fill, Left & Right, Left & Quarters, Quarters), then a
-  "Full Screen ›" row (Entire Screen, Left of Screen, Right of Screen; an icon in front of the row in macOS 27). Each
+- **Green button.** Resting the pointer on it opens, after about a second, a glass popover under the button, without a
+  tail in the owner's captures (gs-068-161, gs-069-175; the public 512 Pixels macOS 27 capture shows a small one, and the
+  owner's set is the F1 reference): "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange" (Fill, Left & Right,
+  Left & Quarters, Quarters), then a "Full Screen ›" row (Entire Screen, Left of Screen, Right of Screen; an icon in front
+  of the row in macOS 27), then the "Move to <display>" rows when there are several displays. Each
   layout is a small window glyph; in the arrangements the window's own area is dark and the other windows' areas light.
   Holding ⌥ changes Fill to Center, the halves to quarters and the arrangements to their right-first forms. In full screen
   the popover offers Exit Full Screen. Measured on the owner's captures (macOS 26): 230 × 251 pt, radius 12, 26-pt glyphs
@@ -58,7 +60,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 
 ## Terms
 - **Work area**: an output's box minus its reserved area (the menu bar's and the Dock's exclusive zones, none when they
-  auto-hide), minus the Stages strip while Stages shows it.
+  auto-hide), minus the Stages strip column whenever Stages is on, read when a placement is computed (TL1).
 - **Zone**: a rectangle of the work area given as fractions; **place**: a named zone (left, top-left, fill, left-third…).
 - **Layout**: an ordered set of zones covering the work area (catalogue in tokens); **arrangement**: a layout filled with
   the window that asks and the next windows in stacking order.
@@ -70,12 +72,25 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 ## Functional requirements (numbered, testable)
 
 ### Engine and placement (step 1: `compositor/` and `ui/tokens/` only)
-- **TL1** Work area as defined above, per output, recomputed when Hyprland's reserved area changes (`monitor.layoutChanged`)
-  and when the Stages strip shows, hides or moves. Tiles never extend outside it.
+- **TL1** Work area, per output, read at the moment a placement is computed and never followed afterwards: the output's
+  box minus Hyprland's reserved area at that moment (`logicalBoxMinusReserved`), minus, whenever Stages is on for that
+  output's Desktop, the strip column (from the output's left edge to the right edge of the strip's tiles plus the strip
+  margin, as last sent with `op:on`), whether the strip is shown or hidden. The strip hides when a window overlaps it
+  (stages.md ST12-ST13): following its visibility would let tiles grow over it, which hides it again, and so on. Tiled
+  windows are re-placed only when the margins setting changes (TL2) and when their output goes away (TL11). Nothing else
+  moves them: a later change of the Dock (size, position, auto-hide, shrink to fit, the Dock moving to another output), of
+  the menu bar or of the strip leaves tiles where they are, and the next placement uses the new area. (Hyprland emits no
+  event when the reserved area changes: `arrangeLayersForMonitor` calls `invalidateMonitorGeometries`, and
+  `monitor.layoutChanged` comes only from output arrangement, mode and rule changes, MonitorLayoutController.cpp:70,
+  Monitor.cpp:1399, MonitorRuleManager.cpp:204.) Tiles never extend outside the work area they were placed in.
 - **TL2** Margins: with "Tiled windows have margins" on, `tiling.margin` (8) between the work area's edge and each frame,
   and between frames; off, frames touch each other and the work area edges. Changing the setting re-places every tiled
   window on every output (M39).
-- **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Sizes are whole pixels.
+- **TL3** Frames, not surfaces, fill zones: the surface box is the zone minus the titlebar band. Rounding: zones are
+  computed in logical coordinates, then every edge (outer edges, margins, shared edges) is snapped to the output's device
+  pixels, `edge = round(v × scale) / scale` with the output's scale; sizes are the differences of snapped edges, never
+  rounded on their own, so two tiles that share an edge share the same device-pixel column (no seam, no overlap) at scale
+  1, 1.25, 1.5 and 2.
 - **TL4** Places: left, right, top, bottom, top-left, top-right, bottom-left, bottom-right, fill, center (today); left
   third, middle third, right third, left two thirds, right two thirds, and the quarter columns of the ultra-wide class
   (T1f). Center keeps the window's size (at most `tiling.centerMaxFraction` of the work area) in the middle.
@@ -91,24 +106,48 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **TL8** Size limits (M46-M48, W27): a window whose minimum is larger than its zone gets its minimum, aligned to the
   zone's edge on the work area's border so it stays on the output; in an arrangement the neighbours shrink to make room
   when their minimum allows, else the frames overlap. A maximum smaller than the zone: the window takes its maximum,
-  centred in the zone. X11 resize increments round the size down. The engine applies the minimum itself, so Hyprland's
-  commit clamp never recentres a tile.
+  centred in the zone. X11 resize increments round the size down. The minimum used is, for an xdg window, the larger of
+  its protocol minimum and a `min_size` window rule (a rule replaces the client's minimum in `CWindow::minSize()`,
+  Window.cpp:2885-2889, while Hyprland's commit clamp still applies the protocol minimum, Window.cpp:2741-2747); for an
+  X11 window, the rule or its size hints. The engine applies that minimum itself, so the commit clamp never recentres a
+  tile.
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
-  parent (dialogs), fixed-size windows (minimum equals maximum on an axis), pinned, full screen or zoomed, on a special
-  workspace, minimized, X11 override-redirect.
-- **TL10** Box from before (FR49, today): remembered at the first tiling and kept through later tilings; a tiled window
-  dragged away gets that size back under the pointer at the same relative place; Return to Previous Size puts it back
-  (centred on the window's output when the old box lies off every output); forgotten when the window is moved or resized
-  by anything else, closes, or the plugin unloads.
+  parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
+  (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
+  (XWaylandManager.cpp:110-131), X11 override-redirect, Glance (`org.grassfield.Preview.Glance`, the quick look panel),
+  pinned, full screen or zoomed, on a special workspace, minimized.
+- **TL10** Tile record: per window, `{zone or place, box, before, group, output}`, where `box` is the frame the plugin
+  last gave or saw it take through a user resize and `before` the floating box before its first tiling. It follows the
+  state machine below (it replaces FR49's rule "a window moved or resized since its tiling is no longer tiled": a user's
+  resize keeps the record, so groups and TL7 keep working). Return to Previous Size puts `before` back (centred on the
+  window's output when it lies off every output) and makes the window Free.
+
+| From | Event | To | Record |
+|---|---|---|---|
+| Free | tile, arrangement, layout, suggestion, a release in a drag zone, an edge double-click (TL20) | Tiled | `before` = the current box; `box` = the placed frame; group per TL6, TL27-TL29 |
+| Tiled | tiled again from any source | Tiled | `before` kept; `box` = the new frame; it leaves its group unless the new placement is the same arrangement |
+| Tiled | a move passes the drag threshold (the plugin's titlebar drag or Hyprland's move) | Moving | the window takes `before`'s size under the pointer at the same relative place: the plugin's drag moves it (`untileUnderPointer`, today); Hyprland's drag is ended, the box set and the drag begun again from it (`endDragTarget`, `setTargetGeom`, `beginDragTarget`, as ClientChrome.cpp:113-116 does after a zoom), because Hyprland keeps the drag's start position private; it leaves its group |
+| Moving | release in a drag zone | Tiled | `before` kept; `box` = the new frame |
+| Moving | release elsewhere, or the drag cancelled | Free | forgotten |
+| Tiled | Hyprland's resize starts on it (a border with `resize_on_border`, Super+right drag, an app's `xdg_toplevel.resize`, the shared-edge handle) | Resizing | — |
+| Resizing | the resize ends (seen after Hyprland ended it, the FR56 pattern) | Tiled | `box` = the new frame; `before` and the group kept; through the handle the neighbours' boxes too (TL30) |
+| Tiled | enters full screen or zoom; is minimized or hidden | Suspended | kept |
+| Suspended | leaves full screen or zoom | Tiled | `box` re-applied when Hyprland's restore differs |
+| Suspended | restored or shown again | Tiled if its zone is free on its output, else Free at `before` | — |
+| Tiled | the margins setting changes; its output goes away | Tiled | re-placed (TL2, TL11) |
+| Tiled | its box differs from `box` when the plugin next reads the record, outside a known drag or resize (an app's own configure of an X11 window, a keyboard move or resize dispatcher, a rule) | Free | forgotten |
+| any | the window closes or unmaps; the plugin unloads | — | forgotten |
+
+  Move to Desktop keeps the state (the box does not change). A group lives while it has two members that are Tiled,
+  Resizing or Suspended.
 - **TL11** Output removed: Hyprland moves the windows to another output (it translates them, H22); the plugin then places
   each tiled window into the same zone of the output it landed on and keeps its group. Output added: nothing moves.
-- **TL12** Full screen and zoom: a tiled window that enters full screen or zoom keeps its tile record and is placed back
-  in its zone when it leaves (by Hyprland's own restore of the floating box; the plugin checks the box and re-applies the
-  zone if the work area changed meanwhile).
+- **TL12** Full screen and zoom: Suspended in TL10; on leaving, Hyprland restores the floating box and the plugin
+  re-applies `box` if it differs.
 - **TL13** Stages (ADR-0013): tiled windows are floating and belong to stages; a stage swap changes no geometry; a drop
   that tiles wins over a drop on the strip (today).
-- **TL14** Minimize, hide, Move to Desktop: the tile record and the group survive; a restored window returns to its zone
-  if it is free, else to its box from before.
+- **TL14** Minimize, hide, Move to Desktop: as TL10 (Suspended, then back to its zone if it is free, else Free at
+  `before`; Move to Desktop keeps the state).
 - **TL15** State: the plugin keeps, per output, the tiled windows (address, place or layout zone, group id); a change posts
   the `tiling` notice; `hyprctl grassfield-tiling` returns the state (ADR-0007 rule: no event grows with the windows).
 
@@ -117,7 +156,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   move started by an app (`xdg_toplevel.move`, client chrome) or by Super+drag is observed on each motion
   (`input.mouse.move` with `dragController()->mode() == move`) and tiled after Hyprland ended the drag (the FR56
   pattern). The same preview is drawn, by the decoration every window carries (hidden for client chrome), under the
-  dragged window.
+  dragged window. A tiled window dragged away by Hyprland's move takes back its size as TL10 says (the drag is ended and
+  begun again; whether the restarted move must carry the exclusive device grab of an `xdg_toplevel.move` again,
+  Window.cpp:2825-2837, is checked in step 2). At the release a pending tile wins over the top clamp (FR56): the tile's
+  frame lies inside the work area, below the menu bar, and the clamp's deferred callback leaves a window the release has
+  just tiled alone; without a tile, the clamp applies as today.
 - **TL17** The preview appears after the pointer has rested in a zone for `tiling.previewDelay` (value measured in nested
   against the owner's captures; macOS shows a short delay, U); leaving the zone hides it at once; a release before the
   delay does not tile. With Alt held there is no delay.
@@ -136,15 +179,16 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 ### Popover and Window menu (step 3, waits for the merge of PRs #8-#10)
 - **TL22** Hover: the pointer resting on the zoom light for `tiling.hoverDelay` (about a second on macOS; measured in
   nested) makes the plugin post `tile-hover` (enter) with the window and the light's rectangle; leaving the light posts
-  leave. The shell opens the popover (popup kind `tiling` of `qs.overlay`) below the light, its tail centred on it,
-  flipped above or shifted sideways when the output has no room. It closes on Esc, a click outside, an action, the window
-  closing or losing its tile eligibility, a capabilities change without the feature, and when the pointer has been
-  outside both the light and the popover for `tiling.hoverDelay`.
-- **TL23** Popover content (M19-M21, M23): "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange" (Fill, Left &
-  Right, Left & Quarters, Quarters), "Layouts" (T1a, the output's class, T1f), one "Move to <output name>" row per other
-  output, then "Full Screen ›" (Entire Screen; Left of Screen and Right of Screen from step 6, T4). With Alt held: Center
-  instead of Fill, the quarters instead of the halves, Right & Left and Right & Quarters. In full screen: Exit Full Screen
-  only. Glyphs not available for the window (TL9) are greyed.
+  leave. The shell opens the popover (popup kind `tiling` of `qs.overlay`) below the light, without a tail (owner's
+  captures gs-068-161, gs-069-175), shifted sideways or placed above when the output has no room. It closes on Esc, a
+  click outside, an action, the window closing or losing its tile eligibility, a capabilities change without the
+  feature, and when the pointer has been outside both the light and the popover for `tiling.hoverDelay`.
+- **TL23** Popover content (M19-M21, M23), in this order: "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange"
+  (Fill, Left & Right, Left & Quarters, Quarters), "Layouts" (T1a, the output's class, T1f), "Full Screen ›" (Entire
+  Screen; Left of Screen and Right of Screen from step 6, T4), then one "Move to <output name>" row per other output
+  (after Full Screen, as in the owner's captures). With Alt held: Center instead of Fill, the quarters instead of the
+  halves, Right & Left and Right & Quarters. In full screen: Exit Full Screen only. Glyphs not available for the window
+  (TL9) are greyed.
 - **TL24** Client chrome (M25): on windows tagged `grassfield-client-chrome` whose app is a Grassfield app, the plugin
   hit-tests the zoom light at its token position (ADR-0015 `WindowControls`) to post the same hover; spike first in step 3
   (full-screen and zoomed windows, right-to-left layouts). Third-party client chrome gets no popover.
@@ -152,12 +196,14 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
   shows the "& Quarters" alternates in place. Shortcut texts come from the one table that mirrors `bindings.lua`.
-- **TL26** Keyboard (T2, option A): Super+Ctrl+arrows halves, again from a half: the quarter (Up/Down from a side half,
-  Left/Right from a top or bottom half), the same half again: the matching half of the next output in that direction;
+- **TL26** Keyboard (T2 option A as amended by T2a and T2b): Super+Ctrl+arrows always give the half, as on macOS (the same
+  key again does nothing); Super+Ctrl+U, I, J, K the top-left, top-right, bottom-left and bottom-right quarters, bound by
+  key position (`code:` bindings, as `bindings.lua` does for the key above Tab) so they sit in the same place on AZERTY;
   Super+Ctrl+Return Fill; Super+Ctrl+C Center; Super+Ctrl+R Return to Previous Size; Super+Ctrl+Shift+arrows the four
-  arrangements; Super+Ctrl+Alt+Shift+arrows the "& Quarters" layouts; Super+Ctrl+Alt+Left/Right the next output; Super+Z
-  opens the popover on the focused window with keyboard focus (arrows between glyphs and rows, Return, Esc; with Layouts,
-  a number picks a layout and a second number a zone).
+  arrangements; Super+Ctrl+Alt+Shift+arrows the "& Quarters" layouts; Super+Ctrl+Alt+Left/Right the next output;
+  Super+Ctrl+L opens the popover on the focused window with keyboard focus (arrows between glyphs and rows, Return, Esc;
+  with Layouts, a number picks a layout and a second number a zone). Super+Z is not used: Super plays Command, so it is
+  ⌘Z, Undo.
 
 ### Windows features (step 4; T1 takes TL27-TL30, refuses TL31)
 - **TL27** Layouts (T1a, T1f): the popover's Layouts section shows the catalogue of the window's output class as miniature
@@ -170,8 +216,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Nothing is shown when no window fits. Not after a plain edge drag.
 - **TL29** Tile groups (T1d, option 1): a window brought forward from the Dock, the app switcher or the Overview brings its
   group forward (back to front in the group's stacking order, the chosen window in front); the Dock's app menu lists the
-  app's groups ("Show Tile Group"); the Overview moves a group to another Desktop as one; a window leaves its group when
-  it is moved or resized out of its zone, minimized windows stay members; a group of one dissolves.
+  app's groups ("Show Tile Group"); the Overview moves a group to another Desktop as one; membership follows TL10: a
+  window leaves its group when it is dragged away (Moving), tiled elsewhere or becomes Free; a resize keeps it; minimized
+  windows stay members; a group of one dissolves.
 - **TL30** Shared edge (T1e, option 1, M43, W18): between two windows of a group whose frames share an edge (margin
   between them included), the pointer over the middle `tiling.handleLength` of that edge shows a handle (resize cursor);
   dragging it moves the edge for every window of the group along it, within their minimum and maximum; outside the handle
@@ -200,6 +247,15 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   resizes both (double-click resets); dragging a window by its title bar to the other side swaps them; the menu bar and
   the Dock show when the pointer reaches their edge; Exit Full Screen returns both windows to their Desktop and boxes.
 
+### Session lock (every step that adds an entry point)
+- **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
+  (popup kind `tiling`, through `Popups.open`), the suggestions overlay, the Layouts section, the shared-edge handle and
+  the new `windows` IPC functions (`arrange`, `tilePopover`, `nextOutput`, beside today's `tile`) ask
+  `SessionState.refuses(...)` first; when the lock engages, an open popover or suggestions overlay closes. The plugin's
+  hover event changes nothing by itself (the shell refuses the popover). `docs/specs/security.md` "Nothing opens over the
+  lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
+  `tests/security/lock_surfaces.sh` when it is a surface.
+
 ## Appearance (F1 strict, ADR-0024)
 - Targets: geometry within ±1 pt of the owner's captures, tints within ±0.1, contrast A2, motion by tokens. Tokens only;
   the geometry constants of today (`kEdge`, `kCorner`, `kMargin`, `kCenterMaxFraction`) move to the token group `tiling`
@@ -209,10 +265,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   titles in the menu header style, `tiling.hoverDelay` (estimate 1000 ms), `tiling.previewDelay` (estimate, U),
   `tiling.margin` 8, `tiling.edge` 4, `tiling.cornerBand` 96, `tiling.centerMaxFraction` 0.9, `tiling.handleLength`
   (estimate, U), `tiling.layouts` (TL5).
-- Popover: the glass of the "Menus, Search" class (it carries text: the A2 floor applies), rims per ADR-0024, tail toward
-  the light, shadow of menus. Glyphs: the outline and the window's own area in the label colour, the other windows' areas
-  in the secondary label colour; hover and keyboard focus: the accent fill with white glyphs (ADR-0024 "white on the
-  accent"); disabled: the tertiary label colour.
+- Popover: the glass of the "Menus, Search" class (it carries text: the A2 floor applies), rims per ADR-0024, no tail
+  (owner's captures), shadow of menus. Glyphs: the outline and the window's own area in the label colour, the other
+  windows' areas in the secondary label colour; hover and keyboard focus: the accent fill with white glyphs (ADR-0024
+  "white on the accent"); disabled: the tertiary label colour.
 - Light and dark appearances: popover, glyphs, suggestions overlay, handle and preview follow `Appearance.dark`; the
   preview keeps its tokens `titlebar.previewTint*` / `previewRim*` (FR48, FR53).
 - Preview: the frosted pane of owner decision D-8 (not macOS's outline), corners at the window radius, inset by the
@@ -260,21 +316,28 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 ## Automated tests · Manual verification steps
 - **Unit (L0, gtest, `compositor/tests/TilingTest.cpp` grown):** work area with menu bar, Dock, Stages strip and margins;
   every place and layout on the four output classes; arrangements with 1 to 4 windows; neighbour-aware halves; minimum,
-  maximum and increments; not-tileable classes; output removal; key composition (half → quarter → next output); drag zones
-  with and without Alt; the token copies equal (`gen-tokens.py --check`).
+  maximum (the larger of rule and protocol minimum) and increments; edges snapped to device pixels at scales 1, 1.25, 1.5
+  and 2 (shared edges equal, no seam); not-tileable classes; output removal; the tile record's state machine (TL10: every
+  transition, a user resize keeping the record and the group); the work area read at placement with Stages on and the
+  strip hidden; keys (halves, U I J K quarters, next output); drag zones with and without Alt; the token copies equal
+  (`gen-tokens.py --check`).
 - **Unit (L0, QML):** `tst_appmenumodel` (the full Window menu, alternates, greying); a pure popover model test (sections,
   Alt alternates, full screen, outputs); suggestion and group models.
 - **Nested (L1, `tests/compositor/tiling.sh` grown; the integrator runs them, never on the owner's session):**
   1. step 1: arrange with 2, 3, 4 windows on GF-REF; a test client with a large minimum; margins toggled re-place; output
      removal with tiled windows; Stages on (area beside the strip); minimize and restore to the zone;
-  2. step 2: client-chrome drag (Files, Chromium) tiles with the preview; Super+drag tiles; Alt-drag in the middle;
-     double-click on an edge, Alt-double-click on a corner; the preview delay; unload in the middle of a drag;
+  2. step 2: client-chrome drag (Files, Chromium) tiles with the preview; a tiled client-chrome window dragged away keeps
+     its grip under the pointer at its size from before (the restarted Hyprland drag); Super+drag tiles; Alt-drag in the
+     middle; double-click on an edge, Alt-double-click on a corner; the preview delay; a release under the menu bar that
+     tiles is not moved by the top clamp; unload in the middle of a drag;
   3. step 3: hover opens the popover (captures in both appearances, measured against the owner's gs-068-161, gs-069-175,
-     gs-068-149); keyboard Super+Z, arrows, Return, Esc; Alt alternates; Move to <output> on two outputs; the Window menu
-     capture against gs-020-039;
+     gs-068-149); keyboard Super+Ctrl+L, arrows, Return, Esc; Alt alternates; Move to <output> on two outputs; the Window
+     menu capture against gs-020-039; popover, suggestions and keys refused while locked (`lock_surfaces.sh`);
   4. step 4: layouts per class, suggestions with the keyboard, groups from the Dock, the switcher and the Overview, the
      shared-edge handle with live neighbours (frame times, P3);
-  5. every step: C2 (`nested-up.sh --no-plugin`), C1 soak with tiling actions in the churn, Reduce Motion, 0 QML errors.
+  5. every step: C2 (`nested-up.sh --no-plugin`), C1 soak with tiling actions in the churn, Reduce Motion, 0 QML errors;
+     C3: the plugin builds and passes C1/C2 against the Hyprland of the Omarchy rc channel (CI job of master-prompt §11)
+     before that Hyprland reaches stable, the new internals of ADR-0036 re-read on each Hyprland update.
 - **Owner (L2):** trackpad drags, a HiDPI or portrait output, the real Dock and switcher.
 
 ## Performance (gates affected)
@@ -307,6 +370,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - X11 windows: their minimum comes from size hints and Hyprland's commit clamp does not apply to them.
 - No per-move animation curve: every tile move uses the `windowsMove` animation.
 - Windows do not return to an output when it is connected again (macOS 27 does).
+- Tiles do not follow a later change of the work area (the Dock resized, moved or auto-hidden, the menu bar hidden, the
+  Stages strip): they keep the box they were given until the next tiling (TL1).
 - Windows tiled the Hyprland way (SUPER+T) are outside Grassfield's tiles, groups and popover.
 - Full Screen tile comes in step 6 (T4); until then Full Screen is one window per Desktop.
 - Without the plugin there is no tiling at all.
