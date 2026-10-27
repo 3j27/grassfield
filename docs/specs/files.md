@@ -1,6 +1,6 @@
 # Files spec · apps-engineer · M4
 
-## macOS reference behavior (described in words — no reference images in design/reference yet)
+## macOS reference behavior (described in words; macOS 27 captures and the parity matrix: "Finder parity matrix" below)
 - The file manager is one opaque window: a sidebar on the left (Favorites with the standard user folders,
   Locations with volumes and the network, Tags), a unified toolbar (back/forward, folder title, view switcher for
   icons/list/columns/gallery, action menu, search field), the folder contents, and optional path and status bars
@@ -292,6 +292,199 @@ installed (not built here).
 - The sidebar shows "Trash full" only if the icon theme has `user-trash-full-symbolic`.
 - Accessibility tree not verified with a screen reader (no AT-SPI bus in the nested session).
 - French catalog: `translations/grassfield_fr.ts` (gate I1, `just check-i18n`).
+
+## Finder parity matrix (step 0, 2026-10-26)
+
+Owner goal (2026-10-26): Grassfield Files is the macOS 27 Finder on Linux: same layout, behaviours, shortcuts and finish,
+with the power of Linux shown the macOS way, never as a "Linux-style" extra interface. This matrix lists every Finder
+function, what Files does today (main c687708), the reference capture, the Linux backend (KIO first) and what cannot be
+done. It starts from "Known limitations" above; each later PR updates its rows and the limitations. UI target: F1 strict
+(ADR-0024): no visible difference on a careful look, outside the accepted limits by name (Inter for SF Pro, own symbols,
+no lensing before phase 4, 1x displays, own colours). Geometry ±1 pt (±0.5 pt on a 2x source), tints ±0.1, hover,
+selection and keyboard focus measured, A2 in both appearances.
+
+**State**: **done** (behaves like the Finder), **partial** (exists, differs), **missing**, **n/a** (no meaning on this system).
+**PR**: 1 windows and tabs, 2 views and selection, 3 search, 4 Linux power, 5 finish and debts, "later" (not in the five
+PRs, kept here so the list is complete), "never" (impossible or excluded, with the reason).
+
+**References** (512 Pixels "Aqua Screenshot Library", macOS 27 Golden Gate release, 2 px per pt, listed in
+`docs/audits/ui-finesse-2026-10-25/tools/webref-urls.txt` and the library index; downloaded into the git-ignored
+`design/reference/macos27/`, never committed; only numbers measured on them enter the repository). Short names below are
+the file names without the `27-Golden-Gate-` prefix: Finder-Home, Finder-Menu, Go-Menu, Finder-Gallery, Finder-Search,
+Finder-Get-Info, Finder-Network (column view), Finder-Go-To-Folder, Finder-Connect-to-Server, Finder-Replace (conflict),
+Finder-Copy (progress), Finder-Customize, Finder-Empty-Trash, Finder-Eject-Warning, Finder-Quick-Look,
+Finder-Quick-Look-Markup, Applications, Applications-Utilities. "none": the library has no capture of it; the behaviour
+comes from the macOS 26/27 Finder, the geometry from the macOS 26 guides in `design/reference/macos/` when the owner's
+copy is present, otherwise the row says "visual NOT verified" in its PR.
+
+**Command key.** As today (BrowserWindow.qml, `config/hypr/grassfield/forwarding.lua`): ⌘ is Ctrl, ⌥ is Alt, ⇧ is Shift,
+⌃ is Super. A chord the compositor binds (`bindings.lua`) is reached through the forwarded form (⌘1…⌘4 and ⌘↑/⌘↓ are
+sent by Super). Menus show the device's style (`keyboard.shortcutStyle`: symbols on a Mac keyboard, key names on a PC).
+Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR.
+
+### Windows and tabs
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-1 | New Finder Window ⌘N | partial: opens the current folder, like ⌘T (Finder: the "New Finder windows show" location, Recents by default) | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0026) | 1 |
+| FP-2 | New Tab ⌘T; the tab bar appears with the second tab | partial: opens the current folder | none | — | — | 1 |
+| FP-3 | View > Show/Hide Tab Bar ⇧⌘T (bar shown with one tab) | missing (bar only from two tabs) | none | — | — | 1 |
+| FP-4 | Tab bar look (equal-width tabs, close × on hover, + at the end, selected tab) | partial: flat rectangles, × and + exist | none (visual NOT verified until a capture is supplied) | — | — | 1 |
+| FP-5 | Close Tab ⌘W, Close Window ⇧⌘W, Close All ⌥⌘W | partial: ⌘W only | Finder-Menu (File) | — | — | 1 |
+| FP-6 | Show Previous/Next Tab ⇧⌘[ ⇧⌘], ⌃⇥ ⌃⇧⇥ | done | none | — | — | 1 |
+| FP-7 | Window > Move Tab to New Window | missing | none | — | — | 1 |
+| FP-8 | Window > Merge All Windows | missing | none | — | — | 1 |
+| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | missing | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0026) | 1 |
+| FP-10 | Drop files on a tab: copy or move into its folder; hovering a tab during a drag switches to it (spring-loaded) | missing | none | KIO copy/move (`FilesApp.drop`) | — | 1 |
+| FP-11 | Reopen the last closed tab | missing | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
+| FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | partial: menu item only | none | — | — | 1 |
+| FP-13 | The window remembers its size and position; new windows cascade | missing | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0026) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
+| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | missing: one global setting | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (View Options) |
+| FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
+| FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
+
+### Toolbar, sidebar and chrome
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-17 | Back/forward capsule, title, ••• Action menu, search circle | done (lot 5, F1 match) | Finder-Home | — | — | — |
+| FP-18 | View switcher group (4 views; a single view popup ⌃ when the window is narrow) | partial: group 146 x 36 vs ~160 (F1 small), no narrow form | Finder-Home, Finder-Search | — | — | 2 |
+| FP-19 | Group By toolbar button (grid ⌃) | missing | Finder-Home | FolderModel sections | — | 2 |
+| FP-20 | Share button | missing | Finder-Home | — | no AirDrop or system share sheet on this system: not shown (non-goal "sharing") | never |
+| FP-21 | Tags toolbar button (tag the selection) | missing | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
+| FP-22 | Search field expands to the full width while searching | partial: expands to 200 | Finder-Gallery, Finder-Search | — | — | 3 |
+| FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | missing: the path and status bars are always shown, the sidebar always | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
+| FP-24 | View > Customize Toolbar… | missing | none | — | — | later |
+| FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | missing | none | `pathSegments` | — | 1 |
+| FP-26 | Sidebar macOS 27: Recents at the top without a header; Favorites (Applications, Desktop, Documents, Downloads); Locations (the home folder by user name, the system disk, volumes, Network, Trash); Tags | partial: Favorites lists Home, Desktop, Documents, Downloads, Pictures, Music, Videos; Locations has Computer, volumes, Network, Trash; no Recents; Applications is on the files-applications branch (in review) | Finder-Home, Finder-Gallery | KIO places, Solid | iCloud Drive, Shared and AirDrop: no equivalent (never) | 2 |
+| FP-27 | Sidebar editing: drag a folder in to add it, Remove from Sidebar, reorder, Add to Sidebar ⌃⌘T; collapse a section on hover; Settings > Sidebar choices | partial: tags only (Remove from Sidebar, Show Hidden Tag) | none | KFilePlacesModel bookmarks (`user-places.xbel`) | — | later |
+| FP-28 | Sidebar icons in the accent colour, neutral selection with a bold label | done (lot 2) | Finder-Home | — | — | — |
+| FP-29 | Eject button on volumes, Eject ⌘E | done, never exercised | Finder-Eject-Warning | Solid `StorageAccess::teardown` | — | 5 (tests) |
+| FP-30 | Folder banner ("Folder shared with File Sharing") | n/a | Finder-Home | — | no File Sharing state to show | never |
+| FP-31 | Finder Settings ⌘, (new windows show, open folders in tabs, sidebar items, show all extensions, warn before emptying the Trash, remove items from the Trash after 30 days, keep folders on top, default search scope) | missing (some exist as menu toggles) | Finder-Menu | QSettings; KIO trash `ktrashrc` limits | the app menu is the shell's T0 menu: Settings… needs a menubar change (decision F-10) | later |
+
+### Views and selection
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-32 | Icon view with thumbnails, selection backdrop and name pill | done | Finder-Home | KIO thumbnails | — | — |
+| FP-33 | List view: Name, Date Modified, Size, Kind; relative dates; sortable headers | done | none | — | — | — |
+| FP-34 | List view: disclosure triangles (expand folders in place, ⌘→ ⌘←), resizable and reorderable columns, more columns (Date Created, Last Opened, Date Added, Tags, Comments) | missing | none | KDirModel children; KFileItem times | Date Added: no such time on Linux files (never; shown for the Trash's deletion date only) | 2 (columns, disclosure) |
+| FP-35 | Column view with a preview column; resizable columns | partial: fixed widths | Finder-Network | — | — | 2 |
+| FP-36 | Gallery view with the strip and an info panel | done (F15) | Finder-Gallery | — | — | — |
+| FP-37 | Preview pane in every view, View > Show Preview ⇧⌘P (name, kind, size, Information with Show More, Tags) | partial: gallery only | Finder-Gallery | — | — | 2 |
+| FP-38 | Quick actions in the pane: Rotate Left, Markup, More… | missing | Finder-Gallery | rotate: Qt image I/O (re-encode, decision in PR 2); Markup: Preview's markup when it exists | lossless JPEG rotation needs a tool that is not installed (PR 2 decides) | 2 |
+| FP-39 | Group By (None, Name, Kind, Application, Date Last Opened, Date Added, Date Modified, Date Created, Size, Tags) and Use Groups ⌃⌘0 | missing | Finder-Home (button) | FolderModel sections | Date Added: see FP-34 | 2 |
+| FP-40 | Sort By (Name, Kind, Date Last Opened, Date Added, Date Modified, Date Created, Size, Tags) within groups | partial: Name, Kind, Date Modified, Size | none | KFileItem times, tags | — | 2 |
+| FP-41 | Rubber band (lasso) selection in every view | partial: icon view | none | — | — | 2 |
+| FP-42 | Spring-loaded folders during a drag (hover opens, Space opens at once) | missing | none | — | — | 2 |
+| FP-43 | Return renames, ⌘O and ⌘↓ open | partial: Return opens, F2 renames | none | — | — | 2 |
+| FP-44 | Type-to-select | done | — | — | — | — |
+| FP-45 | Quick Look: Space, ⌘Y, ⌥Space full screen, arrows walk the selection | partial: Space starts Glance (Preview) | Finder-Quick-Look, Finder-Quick-Look-Markup | `grassfield-preview --glance` | — | 2 (⌘Y), Preview spec (the rest) |
+| FP-46 | Recents (Go ⇧⌘F, sidebar) | missing | Finder-Home, Go-Menu | `$XDG_DATA_HOME/recently-used.xbel` (decision F-5) | KIO's `recentlyused:/` needs the activity manager daemon, absent on Omarchy | 2 |
+| FP-47 | View Options ⌘J (always open in, browse in, group/sort, icon size, grid spacing, text size, label position, show item info, show icon preview, calculate all sizes, list columns, Use as Defaults) | missing | none | per-folder store (F-3) | — | 2 |
+| FP-48 | Icon view free arrangement, Clean Up, Clean Up By, Snap to Grid | missing: always a sorted grid | none | — | free positions need a per-folder position store; not planned | later |
+
+### File operations
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-49 | Copy, Paste, Undo/Redo, Select All | done | — | KIO, FileUndoManager | — | — |
+| FP-50 | Move: Copy then ⌥⌘V (Move Item Here); no Cut for files | partial: Files has Cut ⌘X (KDE/GNOME cut flag) | none | `KIO::paste` | decision F-6 | 5 |
+| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | partial: Empty Trash only while the Trash is shown (Finder: Finder > Empty Trash and ⇧⌘⌫ anywhere); never run by tests | Finder-Empty-Trash | KIO trash | — | 5 |
+| FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | partial: in the Trash only | none | `KIO::del` | — | 5 |
+| FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
+| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | missing | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
+| FP-55 | Show Original ⌘R | missing | none | KFileItem link target | — | 4 |
+| FP-56 | Inline rename | done (F2; Return in PR 2) | — | `KIO::moveAs` | — | 2 |
+| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | missing | none | `KIO::batchRename` / moveAs per item | — | 4 |
+| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | partial: New Folder | none | `KIO::mkdir` + move | — | 4 |
+| FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
+| FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial: read-only General and permissions; tags; Customize Folder | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
+| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | missing | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |
+| FP-62 | Inspector ⌥⌘I (one Info window that follows the selection) | missing | none | — | — | later |
+| FP-63 | Tags… editor: named tags, Add Tags field in Info and the preview pane | partial: the seven colour tags | Finder-Gallery, Finder-Get-Info | `user.xdg.tags` | — | 5 |
+| FP-64 | Copy as Pathname ⌥⌘C | missing | none | clipboard | — | 4 |
+| FP-65 | Open With: the list, Other…, Change All… | partial: the list | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
+| FP-66 | Drag modifiers: ⌥ copies, ⌘ moves, ⌥⌘ makes an alias | partial: Ctrl or Alt copies | none | `FilesApp.drop` | ⌘ is Ctrl: Ctrl-drag moves, Alt-drag copies, Ctrl+Alt makes a link (PR 2) | 2 |
+| FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | missing: KIO's widget dialog | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
+| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | partial: status-bar text | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
+| FP-69 | Print ⌘P | missing | none | the default application's print | — | later |
+| FP-70 | Show Package Contents, Burn to Disc | n/a | — | — | no bundles or optical burning in scope | never |
+
+### Search
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | partial: filters the shown folder by name | Finder-Search | ADR-0027 | — | 3 |
+| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | missing | Finder-Search (+) | ADR-0027 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
+| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | missing | Finder-Search (Save) | JSON saved searches (ADR-0027) | — | 3 |
+| FP-74 | The path bar shows the selected result's path | missing (path bar shows the folder) | Finder-Search | — | — | 3 |
+
+### Go menu and Linux power, the macOS way
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | partial: places without shortcuts (Home has one), no Recent Folders | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
+| FP-76 | Go to Folder ⇧⌘G: inline completion and a "Go to:" list of matching paths | partial: a plain field | Finder-Go-To-Folder | `KUrlCompletion`-like listing (own, async) | — | 4 |
+| FP-77 | Connect to Server ⌘K: address field with history, Favorite Servers (+, −), Browse, Connect | missing | Finder-Connect-to-Server | KIO `smb`, `sftp` (kio-extras), `ftp`, `webdav(s)` (KIO) | the password prompt is kiod's own dialog (decision F-9); other applications see the share through kio-fuse when installed, otherwise KIO hands them a temporary copy | 4 |
+| FP-78 | Show hidden files ⇧⌘. | partial: Ctrl+H | none | KDirLister | — | 4 |
+| FP-79 | Services > New Terminal at Folder | missing | Finder-Menu (Services) | `xdg-terminal-exec` (decision F-7) | the app menu's Services submenu is the shell's (F-10): the item sits in the context menu's Services submenu | 4 |
+| FP-80 | Terminal applications open (Open With nvim) | missing: KIO looks for konsole | none | `xdg-terminal-exec` (F-7) | — | 5 |
+| FP-81 | KIO's widget dialogs replaced by Grassfield sheets: file exists, Open With chooser, undo confirmation | missing | Finder-Replace | `AskUserActionInterface`, `OpenWithHandlerInterface`, `FileUndoManager::UiInterface` | kiod's password dialog stays (F-9) | 5 |
+| FP-82 | Network browsing | partial: `remote:/` (smb, sftp) | Finder-Network | kio-extras, avahi | SMB discovery needs wsdd or avahi on the network | 4 |
+
+### Desktop, accessibility and look
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-83 | Desktop items, stacks | shell desktop module (desktop.md) | Finder-Desktop-Stacks | — | outside this matrix | — |
+| FP-84 | VoiceOver | Accessible roles and names set | — | AT-SPI | screen reader not verified (no AT-SPI bus in nested) | later |
+| FP-85 | Window corner, shadow, traffic lights | compositor (C-1, C-3) and grassfield-ui (ADR-0015) | Finder-Home | Hyprland, plugin | — | — |
+
+### Decisions (integrator, owner delegation D-5; macOS model first)
+- **F-1 Command key**: the mapping above; Finder's ⌃⌘ chords become Ctrl+Super chords when `bindings.lua` leaves them free
+  (⌃⌘A, ⌃⌘N, ⌃⌘S, ⌃⌘0 are free on main c687708).
+- **F-2 Tabs**: ⇧⌘T shows or hides the tab bar (Finder). Reopen Closed Tab (no Finder equivalent, asked by the owner) is
+  in the File menu with ⌥⇧⌘T; it reopens the location, history and view of the last tabs closed in this session (at most
+  10, newest first).
+- **F-3 Per-folder view settings**: a per-user store (`$XDG_STATE_HOME/grassfield/files-views.json`, 0600, at most 2000
+  folders, least recently used dropped), keyed by the cleaned URL, holding the view, sort key and order, grouping and
+  View Options; a folder without an entry uses the defaults (View Options "Use as Defaults"). Files never writes into the
+  folder (macOS's `.DS_Store`, KDE's `.directory`): it works on read-only, remote and Trash locations alike, and other
+  applications never see stray files. A tag search or saved search keeps its own entry. The file joins ADR-0020's table
+  of Grassfield's files with the code that writes it (PR 1, #5).
+- **F-4 Return renames** (macOS), ⌘O and ⌘↓ open; F2 keeps renaming (PC keyboards).
+- **F-5 Recents**: the files listed in `recently-used.xbel` (written by GTK and KDE applications and read by the shell's
+  Search and Recent Items), newest first, existing local files only, at most 500; Files adds the files it opens there
+  through KIO (KRecentDocument).
+- **F-6 Move**: Finder has no Cut for files. Edit shows Copy and, while ⌥ is held, Paste becomes Move Item Here ⌥⌘V.
+  ⌘X does nothing to files (as in the Finder; no hidden shortcut, opus review of ADR-0028). A cut made in another file
+  manager still pastes as a move (interop: the clipboard says so; Files shows the move in the paste's progress).
+- **F-7 Terminal**: the session's terminal is `xdg-terminal-exec` (Omarchy; the shell uses it for `Terminal=true` entries,
+  ADR-0011). Files starts terminal applications and "New Terminal at Folder" through it, never through KIO's konsole
+  lookup; the working directory is the folder. Launches keep `launchguard.cpp`'s rules (Files never runs a program from a
+  folder; the terminal itself is an application the user chose).
+- **F-8 Archives**: Compress makes a `.zip` (Finder's Archive Utility default) and Expand reads zip, tar, tar.gz, tar.bz2,
+  tar.xz, tar.zst and 7z with `bsdtar` in a child process (ADR-0029).
+- **F-9 Connect to Server**: Files asks for nothing itself; KIO's worker asks kiod's password server, whose dialog is KDE's
+  (a QWidget). Restyling it needs a replacement of the password server (a new service): not done; listed as a limit.
+  Recent and favourite servers are stored in Files' QSettings (no password ever).
+- **F-10 App menu and Window menu**: the app menu (About, Settings…, Empty Trash…, Services, Hide) and the Window menu are
+  the shell's T0 menus (menubar.md). Items only Files can run (Empty Trash, Merge All Windows, Move Tab to New Window,
+  Services) are exported in Files' own menus (File, View) and context menus until the menu bar can host app-provided app
+  and Window items (a menubar change, later).
+- **F-11 Bars**: the path and status bars are hidden by default, as in the Finder; View shows them. The status bar
+  carries job progress and notices (a search stopped early) until the progress window exists (FP-68, PR 5): from PR 2
+  to PR 5 it shows itself while a job runs or a notice is up, whatever the setting, so nothing is hidden; FP-68 then
+  takes the progress.
+- **F-12 Names**: no Apple trademark in the UI (master-prompt §14): "This Mac" is "This Computer" (« Cet ordinateur »), as
+  in the system menu's About This Computer; Quick Look is Glance; Archive Utility has no name of its own (Files expands).
+
+### ADRs opened by this step
+- ADR-0026 Files window frames: size by Files, position and cascade by the compositor (cross-module: Files and
+  `config/hypr`).
+- ADR-0027 Files search: backends and saved searches (cross-module: the shell's Search uses the same backends).
+- ADR-0028 Privileged ownership and permission changes in Files through polkit (privileged action; opus review before
+  any code).
+- ADR-0029 Archives through `bsdtar` in a child process (a runtime dependency of the package; untrusted input).
+
+### Not decided here
+- Toolbar customization (FP-24), sidebar editing (FP-27), Finder Settings (FP-31), the Inspector (FP-62) and window
+  restoration (FP-16) are outside the five PRs; they stay listed so the matrix is complete.
 
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.
