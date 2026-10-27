@@ -419,8 +419,9 @@ nothing ever signals pacman.
 5. **Validated input, argument vectors only.** Package names `^[a-z0-9@_+][a-z0-9@._+-]{0,127}$`; a setup's `install` field
    `^omarchy-install-[a-z0-9-]+$` and its `remove` field `^omarchy-remove-[a-z0-9-]+$` (one cannot name the other kind), run
    only when `${OMARCHY_PATH:-/usr/share/omarchy}/bin/<name>` exists; recipe arguments `^[a-z0-9][a-z0-9.-]{0,63}$` (at most
-   4); web app names any printable text of 1 to 64 characters without `/` or control characters, not starting with `.`
-   (Omarchy writes them as file names with their spaces, S9), URLs `https://` without whitespace, at most 2048 bytes; desktop
+   4); web app names, in every language, any plain text (g) of 1 to 64 characters without `/`, not starting with `.`
+   (Omarchy writes them as file names with their spaces, S9), URLs `https://` with a host name and no user information,
+   without whitespace, control or format characters, at most 2048 bytes; desktop
    ids of package entries `^[A-Za-z0-9._-]{1,250}\.desktop$` (web apps are not opened by id, f); Flatpak app ids
    `^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$` (at most 255 bytes; no leading `-`); operation ids
    `^[0-9a-f]{32}$`. The one command string is b.2's terminal command, built only from those tokens; Omarchy's
@@ -522,7 +523,12 @@ published after a release B would point the channel back to A's `grassfield.db`:
 2. **Built from the current snapshot.** The job reads the pointer (the snapshot id and its version tag), takes that snapshot's
    manifest (every file with its SHA-256), and builds the new snapshot from it: the newest built release's packages,
    databases and notes when that release is newer than the snapshot's, else the snapshot's own; the catalog of `main`'s head
-   when it differs from the snapshot's, else the snapshot's own.
+   when it differs from the snapshot's, else the snapshot's own. The catalog is used only once it passes the Store's own
+   checks for that channel (the signature by a trusted key, the rules, the icons); "differs" compares a hash of its content
+   with the serial and the build time left out (recorded in the manifest), and a changed catalog also needs a higher
+   serial; only the icons the signed file lists are uploaded. The job checks out `main` when it runs, never the commit that
+   started it, so a re-run of an old run publishes nothing old. It lives in a workflow of its own that no pull request
+   starts, with a protected environment per channel (ADR-0033 b.7).
 3. **Never backwards.** The job refuses a snapshot whose `grassfield.db` names an older version of any package than the
    current one, unless it is ADR-0033 h.2's deliberate rollback (a new snapshot with a pkgrel above the bad one).
 4. **A conditional pointer write.** The pointer is written only if it still names the snapshot step 2 read (a
@@ -569,9 +575,10 @@ Rules (grassfield-packages' CI refuses a catalog that breaks one; the Store drop
 and refuses the whole file when its top level is invalid):
 - `channel` must be the channel the file was fetched from (the Store's `Server` path, or `stable` for the fallback); another
   value refuses the whole file. `serial` is per channel.
-- Localized text: an object with `en` (required) and `fr` (optional); other languages are ignored by v1. Plain text, no
-  control characters except `\n` in `text`; lengths: section title 40, eyebrow 40, title 80, text and summary 200,
-  description 4000 code points.
+- Localized text: an object with `en` (required) and `fr` (optional); other languages are ignored by v1. Plain text: no
+  control, format (bidirectional, zero-width, BOM, soft hyphen) or line and paragraph separator characters, except `\n` in
+  texts; no markup (`<`, `>`, `&entity;`); Unicode NFC, no space at an end; lengths: section title 40, eyebrow 40, title 80,
+  text and summary 200, description 4000 code points.
 - `serial`: an integer that grows with every publication of the channel (CI uses the build's Unix time). The Store refuses a
   catalog whose serial is lower than the one it accepted for that channel (a replayed old catalog), and keeps its own.
 - `sections`: at most 8, `discover` first; ids `^[a-z][a-z0-9-]{0,31}$`; at most 12 blocks each; `hero` 1 to 8 items,
@@ -591,14 +598,17 @@ and refuses the whole file when its top level is invalid):
   trademarks: needs legal review before any publication.
 - CI also refuses: a `repo` package absent from the build container's Omarchy stable package set (ADR-0033 f), or one that
   owns no application entry (its file list, `pacman -Fl`; SD1); a recipe name
-  absent from the pinned Omarchy release, or whose text runs `pacman -Sy`, `-Syu` or `yay -Sy` (e.4); a `flatpak` id absent
-  from Flathub's AppStream in the build container; a URL that is not https.
+  absent from the pinned Omarchy release, or whose text, or anything it calls or sources, syncs (any `-y` cluster,
+  `--refresh` or `--sysupgrade` on pacman, yay or paru, and a `yay` with no operation, which is `-Syu`; e.4), downloads code
+  (`curl`, `wget`, `git clone`, `makepkg`, `yay -G` or `-B`; a) or builds from the AUR (a name no repository serves, or one
+  known only at run time); a `flatpak` id absent from Flathub's AppStream in the build container; a URL that is not https.
 
 **Signature and verification.** `grassfield-catalog.v1.json.sig` is a detached binary OpenPGP signature by the repository's
 key (ADR-0033 b, O6: the same key, in CI; tests use throwaway keys). The Store verifies it before parsing, exactly as
 ADR-0033 d.8 verifies the release notes: `gpgv --keyring /usr/share/grassfield/pacman-keyring/grassfield.gpg --status-fd 1`
 (the keyring's private folder, ADR-0033 b.2), the signer is VALIDSIG's argument 10 (the primary key's fingerprint), listed in
-`grassfield-trusted` and absent from `grassfield-revoked` of that folder. The check reads those files, not pacman's keyring,
+`grassfield-trusted` and absent from `grassfield-revoked` of that folder (their entries compared in upper case, spaces
+around them ignored, so a hand-written revoked entry always counts). The check reads those files, not pacman's keyring,
 so it works whether or not Grassfield updates are on. A catalog that fails is not used and not cached; the previous one
 stays. While `grassfield-keyring` holds no key (until the owner's key exists, ADR-0033 O20) or is not installed, no catalog is
 used and the Store says why.
@@ -732,3 +742,16 @@ The three earlier MAJORs confirmed closed. Each finding and where it is answered
   own signature with `pacman-key --verify` (c, SD4; S17); the publisher publishes the latest state, so a cancelled pending
   run loses nothing (g); `store-probes.sh:11` names S13 too; the AUR field list matches the output (no MakeDepends).
 - Delegated decisions SD1 to SD4 recorded under the owner's working rule of 2026-10-27.
+
+Opus review of step 1 in grassfield-packages PR #2 at 2dae23f (integrator, 2026-10-27): FAIL, 1 MAJOR. Each finding and
+where it is answered, in both halves (tools/catalog.py and the Store's `catalog.cpp` and `signature.cpp` apply the same rules):
+- **MAJOR**, the web-app name rule was never applied: every language of a web app's `name` follows e.5's rule, tested
+  through the whole catalog's validation on both sides.
+- **Minors:** plain text refuses format and separator characters and markup (g); URLs need a host name and no user
+  information (e.5); keyring lists are compared in upper case with spaces ignored (g "Signature and verification");
+  malformed input is a problem, never a crash; CI's recipe check covers every sync, download and AUR build (g); the
+  publisher checks the catalog as the Store does, decides on its content, uploads only the icons it lists, builds from
+  `main` and lives in its own workflow (g "Publication" 2); tests for a truncated catalog or `.sig`, a missing `.sig`, a
+  signer absent from the keyring and an oversize file; the category names made neutral ("Graphics", "Photos and Video",
+  "Music and Audio", "Development"), whether the Mac App Store's own list may be followed being the owner's legal question
+  (e.10, not settled here).
