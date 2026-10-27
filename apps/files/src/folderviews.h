@@ -17,7 +17,7 @@
 // The file is read like the shell's settings store (shell/store/SettingsStore.qml): never opened unless the path leads to
 // a regular file (a FIFO would block the UI thread in open(), a device such as /dev/zero would never end), at most
 // kMaxFileSize + 1 bytes read, and used only when the read returned exactly the size the file had. A change on disk is
-// noticed by the signature of what the path leads to: device, inode, size and modification time (to the nanosecond).
+// noticed by the signature of what the path leads to: device, inode, size, mode and modification time (to the nanosecond).
 //
 // Nothing here waits for another process: a write that finds the lock taken stays pending (entry() already reads it) and
 // flush() writes it later (FilesApp retries on a timer); only the final flush at exit waits, briefly.
