@@ -124,10 +124,14 @@ managed preferences. Preferences live in `~/Library/Preferences`, status and cac
   Stages merge; P2 to P4 need `Mode.stateDir` (M3, M4, M5*).
 
 ## Amendment (ADR-0033, Software Update, 2026-10-27, Proposed)
-Three rows were added to the table: `software-update.json` (state; the shell writes it, Settings reads it; `version` 1 from the
-start; the last checker answer and the versions already announced), the checker's caches (`checkup-db/`, `health-db/`,
-`checkup.lock`), and the link in
-Omarchy's user hook folder (`grassfield-channel-set` writes it as the user). `grassfield.json` gains one key,
-`updates.automaticCheck` (boolean, default true), generated from the schema like every other key (decision 1). Two files
-outside the user's home are not user files and are not in the table: `/etc/pacman.d/grassfield.conf` and the `Include` line
-at the end of `/etc/pacman.conf`. Only `grassfield-channel-set`, with sudo, writes them, and no package owns them (ADR-0033 a).
+Three rows were added to the table:
+- `software-update.json` (state; the shell writes it, Settings reads it; `version` 1 from the start; the last checker answer
+  and the versions already announced);
+- the checker's caches (`checkup-db/`, `health-db/`, `checkup.lock`);
+- the link in Omarchy's user hook folder (`grassfield-channel-set` writes it as the user).
+`grassfield.json` gains one key, `updates.automaticCheck` (boolean, default true), generated from the schema like every other
+key (decision 1).
+System files outside the user's home are not user files and are not in the table: `/etc/pacman.d/grassfield.conf` and the
+two `[grassfield]` lines at the end of `/etc/pacman.conf`. Only `grassfield-channel-helper` (through pkexec) and
+`grassfield-channel-scriptlet` (from pacman's scriptlets) write them, and no package owns them (ADR-0033 a, c). The keyring's
+files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package.
