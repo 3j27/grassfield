@@ -100,6 +100,8 @@ namespace {
         l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) {
             // The first motion of one of Hyprland's drags: the window's box before it moved (FR56).
             gf::guarded("top clamp motion", [] { gf::topClamp::beforePointerMotion(); });
+            // One of Hyprland's resizes of a tiled window keeps its record (Resizing); a move ends it (tiling.md TL10).
+            gf::guarded("tiling motion", [] { gf::tiler::beforePointerMotion(); });
             CGrassfieldTitlebar::onGlobalMouseMove();
         }));
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
@@ -122,6 +124,8 @@ namespace {
             // The release that ends one of Hyprland's own moves or resizes (an app's move request, a mouse binding): the
             // window's titlebar is held below the menu bar once Hyprland ended the drag (macOS).
             gf::guarded("top clamp release", [&] { gf::topClamp::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // After the top clamp's (its callback runs first): a resize of a tiled window ends with the box it left.
+            gf::guarded("tiling release", [&] { gf::tiler::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
             if (CGrassfieldTitlebar::onRevealedBarButton(e))
                 info.cancelled = true;
@@ -177,7 +181,6 @@ namespace {
 
     void removeAllTitlebars() {
         CGrassfieldTitlebar::cancelPointerGrab();
-        gf::tiler::forgetAll();
 
         // Visible windows: Hyprland's own removal path, which also lays the window out again without the
         // titlebar. It destroys the decoration synchronously for a mapped, visible window.
@@ -222,6 +225,7 @@ namespace {
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
         step("stages", [] { gf::stager::stop(); });          // strip windows shown normally, input unblocked, transformers detached
         step("overview focus", [] { gf::overviewFocus::stop(); }); // a waiting request ends "unavailable"; watches and timer removed
+        step("tiling", [] { gf::tiler::stop(); });                 // records forgotten, its callback removed, "unavailable" posted
         step("cursor refresh", [] { gf::cursorRefresh::stop(); }); // trailing-refresh timer removed (its callback is in this library)
         step("layer pointer", [] { gf::layerPointer::stop(); });   // layer listener and event-loop callback removed
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
@@ -342,6 +346,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         }
         // The titlebar never goes under the menu bar (macOS): the plugin's own titlebar drags and the end of Hyprland's drags.
         gf::guarded("top clamp start", [] { gf::topClamp::start(); });
+        // Optional feature: without its listeners the tile records only follow the windows' boxes and tiling-arrange is not
+        // advertised (tile and the titlebar drag still tile). Before registerAll: arrange registers only when this is ready.
+        bool tilingOk = false;
+        gf::guarded("tiling start", [&] { tilingOk = gf::tiler::start(); });
+        if (!tilingOk) {
+            gf::guarded("tiling rollback", [] { gf::tiler::stop(); });
+            gf::log(Log::WARN, "tiling listeners failed to register; tiling-arrange not advertised");
+        }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
 

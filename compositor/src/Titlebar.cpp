@@ -74,6 +74,7 @@ namespace {
         CBox                      startBox; // window layout box at press
         CBox                      pressBox; // the same, never changed by an un-zoom or un-tile (a drop on the Stages strip gives it back)
         bool                      plainPress = false; // pressed on a window that was neither zoomed nor tiled
+        bool                      unmovable  = false; // the window closed or unmapped during the drag (logged once, gate C1)
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -229,6 +230,7 @@ namespace {
     // Measured in 0.56.2: a floating window's layout box is its surface box, a maximized one's is the work
     // area (decorations included), hence the surface box recorded at the press as the reference.
     void unzoomUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
+        gf::tiler::leave(w); // a tile kept while zoomed (tiling.md TL12) ends: the window leaves under the pointer
         if (fullscreenMode(w) == Fullscreen::FSMODE_MAXIMIZED)
             toggleZoom(w);
         const CBox  restored = target->position();
@@ -241,10 +243,11 @@ namespace {
     }
 
     // A move that starts on a tiled window gives it back its size from before tiling, under the pointer at the same
-    // relative place on the titlebar (macOS), like the un-zoom above.
+    // relative place on the titlebar (macOS), like the un-zoom above. Its tile record is Moving until the release
+    // (docs/specs/tiling.md TL10): a release in a drag zone tiles it again with the same box from before, elsewhere it is Free.
     void untileUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
         grab.untile        = false;
-        const auto before = gf::tiler::takePrevious(w);
+        const auto before = gf::tiler::beginMove(w);
         if (!before)
             return;
         const CBox tiled = target->position();
@@ -282,8 +285,14 @@ namespace {
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
-        if (!target)
+        if (!target || !gf::tiler::movable(w)) {
+            // Closed or unmapped during the drag: no Desktop, no layout space (gate C1). The line is what tiling.sh's C1 cases
+            // look for: the risky state was reached and nothing was moved.
+            if (!std::exchange(grab.unmovable, true))
+                gf::logRequest(Log::INFO, "titlebar drag: window {:x} closed or unmapped during the drag: not moved (gate C1)",
+                               reinterpret_cast<uintptr_t>(w.get()));
             return;
+        }
         const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
         if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
             return;
@@ -852,8 +861,8 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     }
 
     // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
-    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, or nothing (the
-    // press is then a single press). Otherwise the press starts an interactive move.
+    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, Fill (tiling.md M40), or
+    // nothing (the press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         switch (gf::state().doubleClickAction) {
             case gf::gfc::DoubleClickAction::Zoom:
@@ -864,6 +873,11 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
             case gf::gfc::DoubleClickAction::Minimize:
                 gf::logRequest(Log::DEBUG, "titlebar double-click -> minimize");
                 requestMinimize(w);
+                input.presses.claim(e.button, false);
+                return true;
+            case gf::gfc::DoubleClickAction::Fill:
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> fill");
+                gf::tiler::tile(w, gf::tiling::Place::Fill);
                 input.presses.claim(e.button, false);
                 return true;
             case gf::gfc::DoubleClickAction::None: break;
@@ -921,6 +935,9 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             if (input.presses.onPress(e.button)) {
                 gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
                 damageSnap(input.grab.snap);
+                gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
+                if (input.grab.moved)
+                    gf::tiler::followOutput(input.grab.window.lock());
                 input.grab = {};
             }
             return;
@@ -941,12 +958,17 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
             updateMove(grab); // final position at the release point (none for a click)
-        // Released over a tiling place: the window takes it (FR47); the preview goes.
+        // Released over a tiling place: the window takes it (FR47); the preview goes. Released elsewhere, a tiled window
+        // dragged away is Free (tiling.md TL10).
         if (grab.dragging && grab.moved && grab.snap) {
             damageSnap(grab.snap);
             if (const auto w = grab.window.lock())
                 gf::tiler::tile(w, grab.snap->place, grab.snap->monitor.lock());
         }
+        gf::tiler::endMove(grab.window.lock()); // no-op unless the window is still Moving
+        // Dropped on another output: the window takes that output's Desktop, as after Hyprland's own move (R13).
+        if (grab.dragging && grab.moved)
+            gf::tiler::followOutput(grab.window.lock());
         // Released on the Stages strip (macOS: a window dragged onto the strip becomes a stage of its own): the plugin does
         // what the shell's op move "new" does; the shell cannot see a titlebar drag (stages.md, Shell side work item 1).
         if (grab.dragging && grab.moved && g_pInputManager) {
@@ -980,6 +1002,9 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         if (input.presses.onMotion(held, devicesIntact(input.grab.devices))) {
             gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
             damageSnap(input.grab.snap);
+            gf::tiler::endMove(input.grab.window.lock());
+            if (input.grab.moved)
+                gf::tiler::followOutput(input.grab.window.lock());
             input.grab = {};
             return;
         }
@@ -992,6 +1017,7 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
         auto& input        = pointerInput();
         damageSnap(input.grab.snap);
+        gf::tiler::endMove(input.grab.window.lock());
         input.grab         = {};
         input.hovered      = nullptr;
         input.activeWindow = {};

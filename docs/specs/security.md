@@ -375,6 +375,9 @@ shell no longer relies on that alone:
   Planned, not built (window tiling, ADR-0036, `docs/specs/tiling.md` TL34): the tiling popover (popup kind `tiling`,
   through `Popups.open`), the suggestions overlay, the shared-edge handle and the `windows` functions `arrange`,
   `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
+  Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
+  `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
+  moves).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
