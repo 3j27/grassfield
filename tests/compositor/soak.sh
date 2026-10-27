@@ -6,7 +6,8 @@
 # Two long-lived foot windows stay open for the whole run. Each round: opens a short-lived foot
 # (`foot -e true`), opens a new churn window (the oldest of 4 is killed first), and drives the titlebar
 # of the new window with the virtual pointer (scripts/dev/pointer.sh): drags (some abandoned mid-drag,
-# so the pointer device disappears while a button is held), double-click zoom, zoom button, close
+# so the pointer device disappears while a button is held; every 4th round released on the menu bar after the tiling
+# preview delay, so the window tiles to fill), double-click zoom, zoom button, close
 # button, press-move-away cancel, and (when the plugin advertises "minimize" and grassfield-shell runs)
 # minimize button + restore through a click on the Dock tile.
 # The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
@@ -137,14 +138,17 @@ if true; then
 fi
 follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
 # Centre "<x> <y>" (relative to $out) of the Dock tile the shell computed for window <hex> after line <since> of the follow
-# log, or in Hyprland's in-memory log (`hyprctl rollinglog`: the follow pipe can deliver a line late, integrator nested pass
-# of 6355acb); waits up to 3 s; nothing when the line never came (the request log budget may hold it back) or lies off $out.
+# log, or in Hyprland's in-memory log read through scripts/nestctl as tiling.sh does (`rollinglog`: the follow pipe can
+# deliver a line late or not at all, integrator nested passes of 6355acb and 9c4c568; the plugin logs the line when the
+# minimize starts, before the window reaches special:minimized, so the latest one for <hex> is this minimize's unless the
+# plugin's minimize log budget held it back); waits up to 3 s; nothing when the line never came or lies off $out.
 dock_tile() { # <hex> <since>
-  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 3000))
+  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 3000)) pattern="\[grassfield\] minimize $1: toward the Dock rectangle " snapshot
   while :; do
-    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "$pattern" | tail -n 1)
     [[ -n $line ]] && break
-    line=$(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl rollinglog 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    snapshot=$(nestctl rollinglog 2>/dev/null)
+    line=$(grep -a "$pattern" <<<"$snapshot" | tail -n 1)
     [[ -n $line ]] && break
     (($(date +%s%3N) > deadline)) && return 1
     sleep 0.05
@@ -346,11 +350,18 @@ while (( $(date +%s) < end_epoch )); do
   read -r bx by <<<"$(gf_bar_point "$nx" "$ny" "$nw" "$nh")"
 
   case $((round % (7 + minimize_rounds))) in
-    0 | 1) # drag the newest window somewhere and release
+    0 | 1) # drag the newest window somewhere and release; every 4th round onto the menu bar, held past the preview delay,
+      # so that it tiles to fill (a tiling action in the churn, docs/specs/tiling.md TL17)
       try_ drag
       gx=$((bx + RANDOM % 80 - 40))
-      read -r tx ty <<<"$(far_point "$gx" "$by")"
-      pointer abs "$gx" "$by" sleep 50 down drag "$tx" "$ty" sleep 30 up
+      if ((round % 4 == 0)); then
+        tx=$((out_w / 2)) ty=2 hold=$((350 + RANDOM % 300))
+        fills=$((${fills:-0} + 1))
+      else
+        read -r tx ty <<<"$(far_point "$gx" "$by")"
+        hold=30
+      fi
+      pointer abs "$gx" "$by" sleep 50 down drag "$tx" "$ty" sleep "$hold" up
       wait_changed "$npid" "$ng" 1500 >/dev/null && ok_ drag ;;
     2) # abandon a drag: the virtual pointer goes away with the button held; then click elsewhere
       try_ abandoned
@@ -458,6 +469,7 @@ sample_tick
 elapsed=$(( $(date +%s) - start_epoch ))
 say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned (no window found for $unmapped), effective/attempted: $(counters)"
 ((${cancel_missed:-0} > 0)) && say "soak: cancel: ${cancel_missed} press(es) did not land on the button (harness miss, not counted as attempts)"
+say "soak: drags released on the menu bar to fill (tiling): ${fills:-0} of ${att[drag]:-0}"
 say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0}; previous tile reused: ${dock_cached:-0}"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
 
