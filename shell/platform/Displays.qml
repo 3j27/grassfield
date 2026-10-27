@@ -37,14 +37,29 @@ Singleton {
     property int reloads: 0
     // The ticket of the reload that applies the trial being run (SessionConfig.answered; 0 for none).
     property int applying: 0
+    // The monitors (IPC objects) last published with a name.
+    property var described: []
+    // The last text written (and the path it went to).
+    property string written: ""
 
     function publish(): void {
         if (root.statePath === "")
             return;
         if (stateFile.path !== root.statePath)
             stateFile.path = root.statePath;
-        const monitors = (Hyprland.monitors ? Hyprland.monitors.values : []).map(m => m.lastIpcObject);
-        stateFile.setText(DisplaysFile.payload(monitors, root.backlight, root.trialState));
+        const objects = Hyprland.monitors ? Hyprland.monitors.values : [];
+        let monitors = objects.map(m => m.lastIpcObject).filter(o => o && o.name);
+        // A refresh in flight leaves the objects without their answer: never publish none over the monitors already described.
+        // None is published only when Hyprland has no monitor at all, or before any was ever described.
+        if (monitors.length === 0 && objects.length > 0 && root.described.length > 0)
+            monitors = root.described;
+        root.described = monitors;
+        const text = DisplaysFile.payload(monitors, root.backlight, root.trialState);
+        // Quickshell reports every `monitors` answer as a change, changed or not (the lock asks every second): write only news.
+        if (DisplaysFile.same(root.written, text))
+            return;
+        root.written = text;
+        stateFile.setText(text);
     }
 
     onBacklightChanged: publishDebounce.restart()
@@ -106,6 +121,25 @@ Singleton {
         onTriggered: root.publish()
     }
 
+    // Hyprland's answer to `monitors` arrives after the shell started (and after every refresh): each monitor object gets its
+    // lastIpcObject then, so a change of it, a monitor added or one removed publishes (debounced).
+    Instantiator {
+        model: Hyprland.monitors
+        onObjectAdded: publishDebounce.restart()
+        onObjectRemoved: publishDebounce.restart()
+
+        // The signal only: the value is a whole map converted for every answer, and publish() reads it once per settle.
+        delegate: Connections {
+            required property HyprlandMonitor modelData
+
+            target: modelData
+
+            function onLastIpcObjectChanged(): void {
+                publishDebounce.restart();
+            }
+        }
+    }
+
     Connections {
         target: Hyprland
 
@@ -152,8 +186,10 @@ Singleton {
         onLoadFailed: root.handle("")
     }
 
+    // No refreshMonitors() here: Quickshell already asks Hyprland for `monitors` when its IPC starts, and a second request
+    // while that one is in flight leaves the monitor model empty (Quickshell 0.3.1; found with tests/shell/displays_publish.sh).
+    // The Instantiator above publishes when the answer arrives.
     Component.onCompleted: {
-        Hyprland.refreshMonitors();
         publishDebounce.restart();
     }
 }
