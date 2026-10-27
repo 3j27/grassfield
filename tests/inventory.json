@@ -77,6 +77,7 @@
  {"path": "tests/unit/tst_filescustomize.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesgallery.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesgrouped.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_filescolumns.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesglobalmenu.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filessidebar.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesnav.qml", "layer": "headless"},
