@@ -224,7 +224,8 @@ gtest_suite tests/unit/wallpaper-tool "apps/wallpaper-tool/build-direct.sh --tes
 # here, then again with ASan and UBSan. The process itself is tests/shell/stack_helper.sh.
 gtest_suite tests/unit/stack-helper "apps/stack-helper/build-direct.sh --tests >/dev/null && apps/stack-helper/build-direct.sh --tests --asan" \
   ".dev/build/stack-helper-unit-tests --gtest_brief=1" ".dev/build/stack-helper-unit-tests-asan --gtest_brief=1"
-# grassfield-settings dev guard and the wallpaper helper door (exact tool path, exact argument vectors).
+# grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
+# (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
   ".dev/build/settings-unit-tests --gtest_brief=1" ".dev/build/settings-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus

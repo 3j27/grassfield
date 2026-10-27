@@ -78,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "notificationStyles" || r.type === "pathList" ? "array" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "localeName" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "notificationStyles" || r.type === "pathList" ? "array" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }
@@ -119,6 +119,14 @@ TestCase {
         for (const m of ["automatic", "mac", "pc"])
             compare(Store.validate("keyboard.shortcutStyle", m), "");
         verify(Store.validate("keyboard.shortcutStyle", "windows") !== "");
+        compare(Store.DEFAULTS["region.formats"], "auto");
+        for (const m of ["auto", "fr_CH", "en_GB", "es_419", "sr_Latn_RS"])
+            compare(Store.validate("region.formats", m), "");
+        for (const m of ["", "fr", "fr-CH", "fr_CH.UTF-8", "fr_CH\n", "../x", "FR_ch"])
+            verify(Store.validate("region.formats", m) !== "");
+        compare(Store.DEFAULTS["region.firstDayOfWeek"], "auto");
+        compare(Store.validate("region.firstDayOfWeek", "monday"), "");
+        verify(Store.validate("region.firstDayOfWeek", "lundi") !== "");
         for (const m of ["always", "desktop", "fullscreen", "never"])
             compare(Store.validate("menubar.autoHide", m), "");
         verify(Store.validate("menubar.autoHide", "sometimes") !== "");
@@ -414,8 +422,20 @@ TestCase {
         compare(Qt.locale("fr_FR").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31,0 Gio");
         compare(Qt.locale("en_US").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31.0 GiB");
         const pci = "00:02.0 VGA compatible controller: Intel Corporation Iris Xe (rev 0c)\n00:1f.3 Audio device: Intel Audio\n01:00.0 3D controller: NVIDIA Corp GA107\n";
-        compare(SysInfo.gpus(pci), "Intel Corporation Iris Xe; NVIDIA Corp GA107");
+        compare(SysInfo.gpus(pci), "Intel Iris Xe; NVIDIA Corp GA107");
         compare(SysInfo.gpus(""), "");
+        // The marketing name: the vendor's short name, then the last brackets.
+        compare(SysInfo.gpuName("Intel Corporation Raptor Lake-P [Iris Xe Graphics]"), "Intel Iris Xe Graphics");
+        compare(SysInfo.gpuName("NVIDIA Corporation AD107M [GeForce RTX 4060 Max-Q / Mobile]"), "NVIDIA GeForce RTX 4060 Max-Q / Mobile");
+        compare(SysInfo.gpuName("Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1"), "AMD Phoenix1");
+        compare(SysInfo.gpuName("Advanced Micro Devices, Inc. [AMD/ATI] Navi 33 [Radeon RX 7600]"), "AMD Radeon RX 7600");
+        compare(SysInfo.gpuName("Some Vendor Chip"), "Some Vendor Chip");
+        // The installed memory, as sold, from MemTotal.
+        compare(SysInfo.installedGiB(SysInfo.memoryBytes("MemTotal: 32555000 kB\n")), 32);
+        compare(SysInfo.installedGiB(15.4 * 1073741824), 16);
+        compare(SysInfo.installedGiB(11.6 * 1073741824), 12);
+        compare(SysInfo.installedGiB(7.6 * 1073741824), 8);
+        compare(SysInfo.installedGiB(0), 0);
         compare(SysInfo.pacmanVersion("hyprland 0.56.2-1\n"), "0.56.2-1");
         compare(SysInfo.pacmanVersion(""), "");
     }

@@ -6,10 +6,13 @@ import QtQuick.Templates as T
 // is a Grassfield PopupMenu in a Popup below the button (above it where the window has no room), the current row checked.
 // model: [{id, text}]; value is the selected id (the host owns it: the control reports `picked(id)` and shows `value`
 // again at once); Space, Return, Enter and the arrow keys open the list.
+// `inline`: the pop-up of a settings row (macOS 27 System Settings): the value as plain text, then a round disc with two
+// chevrons; no button behind the text.
 T.ComboBox {
     id: root
 
     property string value: ""
+    property bool inline: false
     property string accessibleName: ""
     readonly property bool open: root.popup.visible
     // The list (a PopupMenu) of the open pop-up.
@@ -30,7 +33,8 @@ T.ComboBox {
     currentIndex: root.valueIndex
     displayText: root.valueIndex >= 0 ? (root.model)[root.valueIndex].text : ""
     // Wide enough for the longest choice (a long translation is never cut to "Si la place le pe…").
-    implicitWidth: Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)
+    implicitWidth: root.inline ? Math.ceil(widest) + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
+        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)
     property real widest: 0
     function measureItems(): void {
         let w = 0;
@@ -58,7 +62,7 @@ T.ComboBox {
             onImplicitWidthChanged: root.measureItems()
         }
     }
-    implicitHeight: Tokens.menuItemHeight + Tokens.spacingSm
+    implicitHeight: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuItemHeight + Tokens.spacingSm
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.ComboBox
@@ -95,8 +99,8 @@ T.ComboBox {
     }
 
     background: Rectangle {
-        radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        radius: root.inline ? height / 2 : Tokens.radiusControl
+        color: root.inline ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
@@ -105,18 +109,20 @@ T.ComboBox {
             anchors.fill: parent
             radius: parent.radius
             color: Appearance.withAlpha(Appearance.colors.hover, root.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
-            visible: root.enabled && (root.hovered || root.down)
+            visible: !root.inline && root.enabled && (root.hovered || root.down)
         }
 
         FocusRing {
             visible: root.visualFocus
+            shapeRadius: root.inline ? root.height / 2 : Tokens.radiusControl
         }
     }
 
     contentItem: Text {
         textFormat: Text.PlainText
-        leftPadding: Tokens.spacingMd
-        rightPadding: Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs
+        leftPadding: root.inline ? 0 : Tokens.spacingMd
+        rightPadding: root.inline ? Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset : Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs
+        horizontalAlignment: root.inline ? Text.AlignRight : Text.AlignLeft
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         text: root.displayText
@@ -127,12 +133,27 @@ T.ComboBox {
         font.weight: Tokens.typographyMenuWeight
     }
 
-    indicator: Icon {
-        name: "chevron-down"
-        size: Tokens.menuIconSize
-        x: root.width - width - Tokens.spacingSm
+    indicator: Item {
+        x: root.inline ? root.width - width - Tokens.settingsPopupInset : root.width - width - Tokens.spacingSm
         y: (root.height - height) / 2
+        width: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuIconSize
+        height: width
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+
+        // The inline disc: the text colour at a low alpha, a step stronger under the pointer or while pressed.
+        Rectangle {
+            visible: root.inline
+            anchors.fill: parent
+            radius: width / 2
+            color: Appearance.withAlpha(Appearance.colors.text, root.down ? Tokens.settingsPopupIndicatorOpacity + Tokens.controlPressedOpacity / 2
+                : root.hovered && root.enabled ? Tokens.settingsPopupIndicatorOpacity + Tokens.materialHoverOpacity : Tokens.settingsPopupIndicatorOpacity)
+        }
+
+        Icon {
+            anchors.centerIn: parent
+            name: root.inline ? "chevron-up-down" : "chevron-down"
+            size: root.inline ? Tokens.settingsPopupGlyphSize : Tokens.menuIconSize
+        }
     }
 
     // How the last opening was started: a key (the focus returns to the button with a visible ring) or the pointer.

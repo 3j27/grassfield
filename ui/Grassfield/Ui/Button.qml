@@ -9,7 +9,7 @@ T.Button {
     property bool destructive: false
     // Alert style: a capsule, alertButtonHeight tall (a Dialog sets it on its buttons).
     property bool capsule: false
-    // macOS push button: buttonHeight (24) tall instead of the roomier default (a sheet sets it on its buttons).
+    // macOS 27 push button: a buttonHeight (24) tall capsule instead of the roomier default (a row's "Set…").
     property bool push: false
 
     // Whole pixels, so that a row of buttons keeps every edge sharp.
@@ -45,7 +45,7 @@ T.Button {
     }
 
     background: Rectangle {
-        radius: root.capsule ? height / 2 : Tokens.radiusControl
+        radius: root.capsule || root.push ? height / 2 : Tokens.radiusControl
         color: root.primary ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         // Increase Contrast: the border token carries a stronger value then.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -74,7 +74,7 @@ T.Button {
     }
 
     FocusRing {
-        shapeRadius: root.capsule ? root.height / 2 : Tokens.radiusControl
+        shapeRadius: root.capsule || root.push ? root.height / 2 : Tokens.radiusControl
         visible: root.visualFocus
     }
 }

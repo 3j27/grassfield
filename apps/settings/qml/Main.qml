@@ -24,10 +24,14 @@ Window {
     readonly property var tileColors: ({
             wifi: "blue", bluetooth: "blue", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", notifications: "red", lock: "graphite",
-            mouse: "graphite", keyboard: "graphite", about: "green"
+            mouse: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
+            datetime: "blue", language: "blue", login: "graphite"
         })
-    // The title of the shown section (the toolbar's title; the page itself repeats nothing).
+    // The title of the shown section (the toolbar's title; the page itself repeats nothing). A hub shows its own header card
+    // instead, so the toolbar has no title there (macOS 27 General).
     readonly property string sectionTitle: {
+        if (root.selectedId === "general")
+            return "";
         for (const e of root.sections) {
             if (e.id === root.selectedId)
                 return e.title;
@@ -35,29 +39,46 @@ Window {
         return qsTr("Appearance");
     }
 
+    // The sidebar in the macOS 27 order and groups (`group`: a gap before each new one), without the panes Grassfield has no
+    // counterpart for (docs/specs/settings.md § macOS 27 parity inventory). Sub-panes name their hub (`parent`): they are not in
+    // the sidebar, the hub's rows open them, and the search finds them.
     readonly property var sections: [
-        {id: "wifi", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
-        {id: "bluetooth", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
-        {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
-        {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
-        {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
-        {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
-        {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
-        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
-        {id: "menubar", title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
-        {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
-        {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
-        {id: "mouse", title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
-        {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
-        {id: "about", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
+        {id: "wifi", group: 1, title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
+        {id: "bluetooth", group: 1, title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
+        {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about storage date time language region login items startup")},
+        {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display")},
+        {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
+        {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
+        {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
+        {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
+        {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
+        {id: "notifications", group: 3, title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
+        {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
+        {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
+        {id: "mouse", group: 5, title: qsTr("Mouse & Trackpad"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural tap click secondary right click touchpad")},
+        {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
+        {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
+        {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
+        {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
+        {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")}
     ]
     property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
         if (q === "")
-            return root.sections;
+            return root.sections.filter(s => s.parent === undefined);
         return root.sections.filter(s => s.title.toLowerCase().indexOf(q) >= 0 || s.keywords.toLowerCase().indexOf(q) >= 0);
+    }
+
+    // The hub a sub-pane belongs to ("" for a sidebar section): the sidebar keeps the hub selected while one of its sub-panes is open.
+    function parentOf(id: string): string {
+        for (const e of root.sections) {
+            if (e.id === id)
+                return e.parent !== undefined ? e.parent : "";
+        }
+        return "";
     }
     // The reasons are sentence fragments; a trailing full stop (a JavaScript engine message) is dropped so that the
     // sentences around them never show two.
@@ -232,8 +253,9 @@ Window {
 
     function stepSection(direction: int): void {
         let index = -1;
+        const hub = root.parentOf(root.selectedId);
         for (let i = 0; i < root.filtered.length; i++) {
-            if (root.filtered[i].id === root.selectedId)
+            if (root.filtered[i].id === root.selectedId || (index < 0 && root.filtered[i].id === hub))
                 index = i;
         }
         const next = Math.max(0, Math.min(root.filtered.length - 1, index + direction));
@@ -262,17 +284,18 @@ Window {
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
-        // A capsule search field, as wide as the selection (macOS 27).
-        Rectangle {
+        // A capsule search field, as wide as the selection, with the glass rims of macOS 27 (RimmedCapsule).
+        RimmedCapsule {
             id: searchBox
             x: Tokens.settingsSidebarInset
             y: sidebarToolbar.height + Tokens.spacingSm
             width: parent.width - 2 * Tokens.settingsSidebarInset
             height: Tokens.settingsSearchHeight
-            radius: height / 2
-            color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-            border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
-            border.color: Appearance.focusRingColor
+
+            FocusRing {
+                visible: search.activeFocus
+                shapeRadius: searchBox.radius
+            }
 
             Icon {
                 id: searchIcon
@@ -386,76 +409,87 @@ Window {
                 id: entry
 
                 required property var modelData
-                readonly property bool selected: entry.modelData.id === root.selectedId
+                required property int index
+                readonly property bool selected: entry.modelData.id === root.selectedId || entry.modelData.id === root.parentOf(root.selectedId)
+                // The first row of a new sidebar group: a gap above it (macOS 27). Search results are one list, without gaps.
+                readonly property real gap: root.query.trim() === "" && entry.index > 0 && root.filtered[entry.index - 1].group !== entry.modelData.group
+                    ? Tokens.settingsSidebarGroupGap : 0
 
                 width: ListView.view.width
-                height: Tokens.settingsSidebarItemHeight
+                height: Tokens.settingsSidebarItemHeight + entry.gap
                 Accessible.role: Accessible.ListItem
                 Accessible.name: entry.modelData.title
                 Accessible.selectable: true
                 Accessible.selected: entry.selected
                 Accessible.onPressAction: root.select(entry.modelData.id)
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Tokens.settingsSidebarItemRadius
-                    color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
-                }
+                // The row itself, below the group gap.
+                Item {
+                    y: entry.gap
+                    width: parent.width
+                    height: Tokens.settingsSidebarItemHeight
 
-                // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -Tokens.controlFocusOutline
-                    radius: Tokens.settingsSidebarItemRadius + Tokens.controlFocusOutline
-                    visible: entry.selected && list.activeFocus && list.keyboardRing
-                    color: "transparent"
-                    border.width: Tokens.controlFocusOutline
-                    border.color: Appearance.focusRingColor
-                }
-
-                // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
-                Rectangle {
-                    id: glyph
-                    x: Tokens.spacingSm
-                    y: Math.round((parent.height - height) / 2)
-                    width: Tokens.settingsSidebarIconSize
-                    height: Tokens.settingsSidebarIconSize
-                    radius: Tokens.settingsSidebarTileRadius
-                    color: Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: entry.modelData.icon
-                        size: Tokens.settingsSidebarGlyphSize
-                        color: Tokens.settingsSidebarTileGlyph
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Tokens.settingsSidebarItemRadius
+                        color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                     }
-                }
 
-                Text {
-                    textFormat: Text.PlainText
-                    anchors {
-                        left: glyph.right
-                        leftMargin: Tokens.spacingSm
-                        right: parent.right
-                        rightMargin: Tokens.spacingSm
-                        verticalCenter: parent.verticalCenter
+                    // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -Tokens.controlFocusOutline
+                        radius: Tokens.settingsSidebarItemRadius + Tokens.controlFocusOutline
+                        visible: entry.selected && list.activeFocus && list.keyboardRing
+                        color: "transparent"
+                        border.width: Tokens.controlFocusOutline
+                        border.color: Appearance.focusRingColor
                     }
-                    text: entry.modelData.title
-                    elide: Text.ElideRight
-                    color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                    font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
-                }
 
-                MouseArea {
-                    id: hover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        list.keyboardRing = false;
-                        list.forceActiveFocus();
-                        root.select(entry.modelData.id);
+                    // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
+                    Rectangle {
+                        id: glyph
+                        x: Tokens.spacingSm
+                        y: Math.round((parent.height - height) / 2)
+                        width: Tokens.settingsSidebarIconSize
+                        height: Tokens.settingsSidebarIconSize
+                        radius: Tokens.settingsSidebarTileRadius
+                        color: Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
+
+                        Icon {
+                            anchors.centerIn: parent
+                            name: entry.modelData.icon
+                            size: Tokens.settingsSidebarGlyphSize
+                            color: Tokens.settingsSidebarTileGlyph
+                        }
+                    }
+
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors {
+                            left: glyph.right
+                            leftMargin: Tokens.spacingSm
+                            right: parent.right
+                            rightMargin: Tokens.spacingSm
+                            verticalCenter: parent.verticalCenter
+                        }
+                        text: entry.modelData.title
+                        elide: Text.ElideRight
+                        color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyBodySize
+                        font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+                    }
+
+                    MouseArea {
+                        id: hover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            list.keyboardRing = false;
+                            list.forceActiveFocus();
+                            root.select(entry.modelData.id);
+                        }
                     }
                 }
             }
@@ -477,14 +511,20 @@ Window {
             canMinimize: root.canMinimize
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
 
-            // Back and forward: one 72 x 36 capsule (macOS).
-            leading: Rectangle {
+            // Back and forward: one 72 x 36 glass capsule with a hairline between them (macOS 27).
+            leading: RimmedCapsule {
                 width: navRow.width + Tokens.spacingXs
                 height: Tokens.filesToolbarCapsule
-                radius: height / 2
-                color: Appearance.buttonFill
+                fillOpacity: Tokens.settingsToolbarFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Navigation")
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.hairline
+                    height: Tokens.settingsToolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                }
 
                 Row {
                     id: navRow
@@ -579,8 +619,18 @@ Window {
                     return mousePage;
                 case "keyboard":
                     return keyboardPage;
+                case "general":
+                    return generalPage;
                 case "about":
                     return aboutPage;
+                case "storage":
+                    return storagePage;
+                case "datetime":
+                    return dateTimePage;
+                case "language":
+                    return languagePage;
+                case "login":
+                    return loginItemsPage;
                 }
                 return appearancePage;
             }
@@ -686,10 +736,72 @@ Window {
     }
 
     Component {
+        id: generalPage
+        GeneralPage {
+            onOpen: id => root.select(id)
+        }
+    }
+
+    Component {
         id: aboutPage
         AboutPage {
             backend: root.backend
+            system: sys
         }
+    }
+
+    Component {
+        id: dateTimePage
+        DateTimePage {
+            backend: root.backend
+            system: sys
+            store: cfg
+            onSetRequested: wall => timeSheet.openAt(wall)
+        }
+    }
+
+    Component {
+        id: storagePage
+        StoragePage {
+            backend: root.backend
+            onAllVolumesRequested: volumesSheet.open()
+        }
+    }
+
+    // Storage > All Volumes…: a sheet over the whole window.
+    VolumesSheet {
+        id: volumesSheet
+        backend: root.backend
+    }
+
+    Component {
+        id: loginItemsPage
+        LoginItemsPage {
+            backend: root.backend
+            system: sys
+            onAddRequested: apps => appPicker.openWith(apps)
+        }
+    }
+
+    // Login Items > +: a sheet over the whole window; the page writes the choice.
+    AppPickerSheet {
+        id: appPicker
+        onChosen: app => (page.item as LoginItemsPage)?.add(app)
+    }
+
+    Component {
+        id: languagePage
+        LanguagePage {
+            backend: root.backend
+            system: sys
+            store: cfg
+        }
+    }
+
+    // Date & Time > Set…: a sheet over the whole window; the page sends the answer to timedate1.
+    SetDateTimeSheet {
+        id: timeSheet
+        onChosen: wall => (page.item as DateTimePage)?.setWallClock(wall)
     }
 
     // Menu Bar > Clock Options…: a sheet over the whole window.

@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "systemguard.h"
@@ -193,10 +194,65 @@ TEST(QueryGuard, NoNetworkOrBluetoothCommandIsAQuery)
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("bluetoothctl"), QStringLiteral("devices"), QStringLiteral("Paired")}));
 }
 
+TEST(QueryGuard, TheGeneralPanesReadsAreExact)
+{
+    const QString home = QDir::cleanPath(QDir::homePath());
+    auto du = [](const QStringList &paths) {
+        return QStringList{QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--")} + paths;
+    };
+    // Storage: the installed packages' sizes and the sizes of folders of the home, nothing else.
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Qi")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Qi"), QStringLiteral("hyprland")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("pacman"), QStringLiteral("-Syu")}));
+    EXPECT_TRUE(isReadOnlyQuery(du({home + QStringLiteral("/Documents"), home + QStringLiteral("/.local/share/Trash")})));
+    EXPECT_TRUE(isReadOnlyQuery(du({home})));
+    for (const QString &bad : {QStringLiteral("/etc"), QStringLiteral("/"), home + QStringLiteral("/../root"), home + QStringLiteral("/./x"),
+                               home + QStringLiteral("/a/"), QStringLiteral("Documents"), home + QStringLiteral("/a\nb"), home + QStringLiteral("x")})
+        EXPECT_FALSE(isReadOnlyQuery(du({bad}))) << bad.toStdString();
+    EXPECT_FALSE(isReadOnlyQuery(du({})));
+    QStringList many;
+    for (int i = 0; i < 17; ++i)
+        many << home + QStringLiteral("/f%1").arg(i);
+    EXPECT_FALSE(isReadOnlyQuery(du(many)));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("--"), home}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("du"), QStringLiteral("-s"), QStringLiteral("-x"), QStringLiteral("--block-size=1"), QStringLiteral("--exclude=x"), home}));
+    // Language & Region: omarchy-language is never a query, not even its reads (a dev session runs no script nobody here has
+    // read; Omarchy 4.0.4 does not ship it). Integrator review of PR #6.
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-language"), QStringLiteral("locale")}));
+}
+
+TEST(ActionGuard, OmarchyLanguageTakesOneCodeOnly)
+{
+    const QString lang = QStringLiteral("omarchy-language");
+    for (const char *ok : {"fr", "en", "pt-BR", "zh-CN", "fil"})
+        EXPECT_TRUE(isAllowedAction({lang, QString::fromLatin1(ok)})) << ok;
+    for (const char *no : {"", "FR", "fr\n", "fr; rm -rf ~", "--help", "list", "seed", "locale", "fr-", "f", "francais-de-france"})
+        EXPECT_FALSE(isAllowedAction({lang, QString::fromLatin1(no)})) << no;
+    EXPECT_FALSE(isAllowedAction({lang}));
+    EXPECT_FALSE(isAllowedAction({lang, QStringLiteral("seed"), QStringLiteral("fr")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-language"), QStringLiteral("fr")}));
+}
+
+TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
+{
+    // It may ask for a password: one at a time per tag (Backend::act, InFlight); wpctl and xdg-open never do.
+    EXPECT_TRUE(asksForPassword({QStringLiteral("omarchy-language"), QStringLiteral("fr")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("wpctl"), QStringLiteral("set-volume")}));
+    EXPECT_FALSE(asksForPassword({QStringLiteral("xdg-open"), QStringLiteral("https://example.org")}));
+    EXPECT_FALSE(asksForPassword({}));
+    EXPECT_EQ(actionTimeoutMs({QStringLiteral("omarchy-language"), QStringLiteral("fr")}, 15000), 130000);
+    EXPECT_EQ(actionTimeoutMs({QStringLiteral("wpctl"), QStringLiteral("set-mute")}, 15000), 15000);
+    EXPECT_EQ(actionTimeoutMs({}, 15000), 15000);
+}
+
 TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
-    // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell).
-    for (const char *ok : {"wpctl", "xdg-open"})
+    // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is
+    // Language & Region's (one code, ActionGuard.OmarchyLanguageTakesOneCodeOnly).
+    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
     // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})
@@ -238,4 +294,153 @@ TEST(DevSession, FollowsTheRunModeRule)
     EXPECT_TRUE(grassfield::settings::devSession());
     qunsetenv("GRASSFIELD_SESSION");
     qunsetenv("GRASSFIELD_DEV");
+}
+
+// Login Items (Backend::writeAutostart, removeAutostart): only a plain <name>.desktop of the autostart folder, never through a
+// symlink, and in a dev session only in a folder whose real location lies under <root>/.dev (review of ADR-0030: a symlink in
+// .dev led a QSaveFile write out of it).
+TEST(AutostartGuard, OnlyPlainEntriesOfTheFolder)
+{
+    QTemporaryDir tmp;
+    const QString dir = QFileInfo(tmp.path()).canonicalFilePath() + QStringLiteral("/autostart");
+    QDir().mkpath(dir);
+    QFile target(tmp.path() + QStringLiteral("/dotfiles-notes.desktop"));
+    ASSERT_TRUE(target.open(QIODevice::WriteOnly));
+    target.close();
+    ASSERT_EQ(::symlink(QFile::encodeName(target.fileName()).constData(), QFile::encodeName(dir + QStringLiteral("/linked.desktop")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(tmp.path() + QStringLiteral("/nowhere")).constData(), QFile::encodeName(dir + QStringLiteral("/dangling.desktop")).constData()), 0);
+
+    EXPECT_TRUE(isAutostartWrite(dir + QStringLiteral("/notes.desktop"), dir, QString(), false));
+    EXPECT_TRUE(isAutostartWrite(dir + QStringLiteral("/org.app_x+y-1.desktop"), dir, QString(), false));
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/linked.desktop"), dir, QString(), false)) << "a symlink to a dotfile";
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/dangling.desktop"), dir, QString(), false)) << "a symlink that leads nowhere yet";
+    for (const QString &bad : {QStringLiteral("/notes"), QStringLiteral("/notes.desktop\n"), QStringLiteral("/../notes.desktop"), QStringLiteral("/sub/notes.desktop"),
+                               QStringLiteral("/.desktop"), QStringLiteral("/a b.desktop")})
+        EXPECT_FALSE(isAutostartWrite(dir + bad, dir, QString(), false)) << qPrintable(bad);
+    EXPECT_FALSE(isAutostartWrite(tmp.path() + QStringLiteral("/notes.desktop"), dir, QString(), false)) << "another folder";
+    EXPECT_FALSE(isAutostartWrite(dir + QStringLiteral("/notes.desktop"), QString(), QString(), false));
+}
+
+TEST(AutostartGuard, ADevSessionWritesOnlyUnderDev)
+{
+    const QString root = tree().root;
+    const QString inside = root + QStringLiteral("/.dev/config/autostart");
+    QDir().mkpath(inside);
+    EXPECT_TRUE(isAutostartWrite(inside + QStringLiteral("/notes.desktop"), inside, root, true));
+    // A folder that does not exist yet under .dev (isolated.sh creates it on the first write).
+    EXPECT_TRUE(isAutostartWrite(root + QStringLiteral("/.dev/fresh/autostart/notes.desktop"), root + QStringLiteral("/.dev/fresh/autostart"), root, true));
+    // The owner's folder, a folder outside .dev, a folder reached through the .dev/link symlink to <root>/outside.
+    EXPECT_FALSE(isAutostartWrite(QDir::homePath() + QStringLiteral("/.config/autostart/notes.desktop"), QDir::homePath() + QStringLiteral("/.config/autostart"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/outside/notes.desktop"), root + QStringLiteral("/outside"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/notes.desktop"), root + QStringLiteral("/.dev/link"), root, true));
+    EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/sub/notes.desktop"), root + QStringLiteral("/.dev/link/sub"), root, true));
+    EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("/notes.desktop"), inside, QString(), true)) << "no worktree";
+}
+
+// A path that only reads as the folder once normalised: <root>/.dev/link is a symlink to <root>/outside, so the kernel resolves
+// .dev/link/../config/autostart to <root>/config/autostart, outside .dev (counter-review of 2026-10-26).
+TEST(AutostartGuard, ATextualDotDotThroughALinkIsRefused)
+{
+    const QString root = tree().root;
+    const QString inside = root + QStringLiteral("/.dev/config/autostart");
+    QDir().mkpath(inside);
+    for (const bool dev : {true, false}) {
+        EXPECT_FALSE(isAutostartWrite(root + QStringLiteral("/.dev/link/../config/autostart/x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("/./x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(inside + QStringLiteral("//x.desktop"), inside, root, dev)) << dev;
+        EXPECT_FALSE(isAutostartWrite(QStringLiteral("x.desktop"), QStringLiteral("."), root, dev)) << dev;
+    }
+    EXPECT_TRUE(isAutostartWrite(inside + QStringLiteral("/x.desktop"), inside, root, true));
+}
+
+// Login Items' image://icon with an absolute Icon= path: only a small regular raster file (a FIFO, a device, a link to one,
+// an SVG, a huge file or an unclean path shows the page's own tile).
+TEST(Volumes, OnlyLocalOnesAreRead)
+{
+    // Integrator review of PR #6: volumes() ran statfs on every mount on the GUI thread; a stuck network or FUSE mount froze the
+    // window. The table comes from /proc/self/mounts and only local volumes are stat'ed.
+    const QByteArray table = "/dev/nvme0n1p2 / btrfs rw,relatime 0 0\n"
+                             "proc /proc proc rw 0 0\n"
+                             "/dev/nvme0n1p2 /home btrfs rw,subvol=/@home 0 0\n"
+                             "/dev/nvme0n1p1 /boot vfat rw 0 0\n"
+                             "nas:/export/media /mnt/media nfs4 rw,hard 0 0\n"
+                             "//nas/share /mnt/share cifs rw 0 0\n"
+                             "me@host: /home/u/remote fuse.sshfs rw 0 0\n"
+                             "/dev/sdb1 /run/media/u/Win fuseblk rw 0 0\n"
+                             "/dev/sdc1 /run/media/u/My\\040Disk exfat rw 0 0\n"
+                             "tank/data /tank/data zfs rw 0 0\n"
+                             "tmpfs /tmp tmpfs rw 0 0\n"
+                             "/dev/loop0 /snap/x squashfs ro 0 0\n";
+    const QList<Mount> mounts = parseMounts(table);
+    ASSERT_EQ(mounts.size(), 12);
+    EXPECT_EQ(mounts.at(8).mountPoint, QStringLiteral("/run/media/u/My Disk"));
+    EXPECT_EQ(mounts.at(8).type, QStringLiteral("exfat"));
+    QStringList local;
+    for (const Mount &m : mounts) {
+        if (isLocalVolume(m.device, m.type))
+            local << m.mountPoint;
+    }
+    EXPECT_EQ(local, (QStringList{QStringLiteral("/"), QStringLiteral("/home"), QStringLiteral("/boot"), QStringLiteral("/run/media/u/My Disk"),
+                                  QStringLiteral("/tank/data")}));
+    // A network file system names a server, not a /dev device; FUSE is refused whatever its device (fuseblk names /dev/sdb1).
+    for (const char *net : {"nfs", "nfs4", "cifs", "smb3", "ceph", "9p", "virtiofs"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("server:/export"), QString::fromLatin1(net))) << net;
+    for (const char *fuse : {"fuse", "fuseblk", "fuse.sshfs", "fuse.rclone"})
+        EXPECT_FALSE(isLocalVolume(QStringLiteral("/dev/sdb1"), QString::fromLatin1(fuse))) << fuse;
+    // The home's volume without a statfs of the home: the longest mount point above it.
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u")), QStringLiteral("/home"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/home/u/remote/x")), QStringLiteral("/home/u/remote"));
+    EXPECT_EQ(mountPointOf(mounts, QStringLiteral("/homework")), QStringLiteral("/"));
+    EXPECT_EQ(mountPointOf({}, QStringLiteral("/home/u")), QString());
+    // A broken line is skipped; a backslash that is not an escape stays.
+    EXPECT_EQ(parseMounts("only-two fields\n\n/dev/sda1 /a\\b ext4 rw 0 0\n").size(), 1);
+    EXPECT_EQ(parseMounts("/dev/sda1 /a\\b ext4 rw 0 0\n").at(0).mountPoint, QStringLiteral("/a\\b"));
+}
+
+TEST(XdgDirs, EmptyOrRelativeMeansNotSet)
+{
+    // Integrator review of PR #6: an empty XDG_CONFIG_HOME made the autostart folder "/autostart" and the user's units
+    // "/systemd/user". Unset, empty or relative: the default (XDG Base Directory specification).
+    const QString config = QStringLiteral("/home/u/.config");
+    EXPECT_EQ(xdgHome(QString(), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral(""), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("relative/dir"), config), config);
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv/cfg/"), config), QStringLiteral("/srv/cfg"));
+    EXPECT_EQ(xdgHome(QStringLiteral("/srv//cfg/../x"), config), QStringLiteral("/srv/x"));
+    const QString data = QStringLiteral("/usr/local/share:/usr/share");
+    const QStringList defaults{QStringLiteral("/usr/local/share"), QStringLiteral("/usr/share")};
+    EXPECT_EQ(xdgDirs(QString(), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral(""), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("::"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("rel:also/rel"), data), defaults);
+    EXPECT_EQ(xdgDirs(QStringLiteral("/opt/share::rel:/usr/share/"), data), (QStringList{QStringLiteral("/opt/share"), QStringLiteral("/usr/share")}));
+    EXPECT_EQ(xdgDirs(QString(), QStringLiteral("/etc/xdg")), QStringList{QStringLiteral("/etc/xdg")});
+}
+
+TEST(IconFile, OnlySmallRegularRasterFiles)
+{
+    QTemporaryDir tmp;
+    const QString d = QFileInfo(tmp.path()).canonicalFilePath();
+    QFile png(d + QStringLiteral("/app.png"));
+    ASSERT_TRUE(png.open(QIODevice::WriteOnly));
+    png.write("x");
+    png.close();
+    QFile big(d + QStringLiteral("/big.png"));
+    ASSERT_TRUE(big.open(QIODevice::WriteOnly));
+    big.write(QByteArray(1024 * 1024 + 1, 'x'));
+    big.close();
+    QFile svg(d + QStringLiteral("/app.svg"));
+    ASSERT_TRUE(svg.open(QIODevice::WriteOnly));
+    svg.close();
+    ASSERT_EQ(::mkfifo(QFile::encodeName(d + QStringLiteral("/fifo.png")).constData(), 0600), 0);
+    ASSERT_EQ(::symlink("/dev/zero", QFile::encodeName(d + QStringLiteral("/zero.png")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(d + QStringLiteral("/fifo.png")).constData(), QFile::encodeName(d + QStringLiteral("/tofifo.png")).constData()), 0);
+    ASSERT_EQ(::symlink(QFile::encodeName(d + QStringLiteral("/app.png")).constData(), QFile::encodeName(d + QStringLiteral("/link.png")).constData()), 0);
+
+    EXPECT_TRUE(isIconFile(d + QStringLiteral("/app.png")));
+    EXPECT_TRUE(isIconFile(d + QStringLiteral("/link.png"))) << "a link to a small regular file";
+    for (const char *bad : {"/fifo.png", "/zero.png", "/tofifo.png", "/big.png", "/app.svg", "/missing.png", "/./app.png", "/sub/../app.png"})
+        EXPECT_FALSE(isIconFile(d + QString::fromLatin1(bad))) << bad;
+    EXPECT_FALSE(isIconFile(QStringLiteral("app.png")));
+    EXPECT_FALSE(isIconFile(d));
 }

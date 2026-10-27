@@ -87,6 +87,10 @@
   "keyboard": {
     "shortcutStyle": "automatic"
   },
+  "region": {
+    "formats": "auto",
+    "firstDayOfWeek": "auto"
+  },
   "icons": {
     "mode": "default",
     "tint": "accent",

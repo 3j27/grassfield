@@ -5,13 +5,15 @@ import qs.services
 import qs.widgets
 import "../../Calendar.js" as CalendarMath
 
-// Calendar widget: today's date (small); month grid with today highlighted, first weekday from the
-// locale (medium: beside the date, large: full width).
+// Calendar widget: today's date (small); month grid with today highlighted, first weekday from Settings > General >
+// Language & Region (region.firstDayOfWeek, else the formats') (medium: beside the date, large: full width).
 WidgetBase {
     id: root
 
     readonly property date now: FixedTime.date(clock.date)
-    readonly property int firstDay: Qt.locale().firstDayOfWeek
+    // The formats (region.formats) are Qt.locale() once the Translator applied them; reading the key here re-evaluates the
+    // binding when they change.
+    readonly property int firstDay: CalendarMath.firstDay(Settings.regionFirstDayOfWeek, Settings.regionFormats !== "auto" ? Qt.locale(Settings.regionFormats).firstDayOfWeek : Qt.locale().firstDayOfWeek)
     readonly property var weeks: CalendarMath.monthGrid(now.getFullYear(), now.getMonth(), firstDay)
     readonly property var order: CalendarMath.weekdayOrder(firstDay)
     readonly property string monthText: Qt.locale().toString(now, "MMMM yyyy")

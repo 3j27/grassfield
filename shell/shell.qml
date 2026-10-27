@@ -36,6 +36,14 @@ ShellRoot {
     // locale) before the surfaces below evaluate their qsTr() strings.
     readonly property string language: Translator.language
 
+    // The formats of dates, times and numbers (region.formats, Settings > General > Language & Region): the Translator makes
+    // them the default locale, so every Qt.locale() of the shell (menu bar clock, widgets, lock screen) follows.
+    Binding {
+        target: Translator
+        property: "formats"
+        value: Settings.regionFormats
+    }
+
     Binding {
         target: Appearance
         property: "dark"

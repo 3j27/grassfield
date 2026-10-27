@@ -38,6 +38,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `menubar.clockShowDayOfWeek` / `clockShowAmPm` / `clockFlashSeparators` | bool | true / true / false | Menu bar clock: day of the week, AM/PM, flashing colons |
 | `menubar.clockHours` | enum `auto` \| `12` \| `24` | auto | Menu bar clock hour format (auto follows the locale) |
 | `menubar.clockShowSeconds` | bool | false | Menu bar clock with seconds |
+| `region.formats` | `"auto"` or a locale name (`fr_CH`, `sr_Latn_RS`: `[a-z]{2,3}(_Script)?_Territory`) | `"auto"` | The formats of dates, times and numbers in the shell (Settings > General > Language & Region; `Translator.formats`); auto follows the language |
+| `region.firstDayOfWeek` | `"auto"` \| `"monday"` … `"sunday"` | `"auto"` | First day of the week in the calendars; auto follows the formats |
 | `menubar.showTrayItems` | bool | true | Status items of other applications (tray) |
 | `menubar.recentItems` | integer 0-50 | 10 | Entries per section of the Grassfield menu's Recent Items (0 hides it) |
 | `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` \| `"online"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7; `online` needs no path and is off by default: it contacts the network once a day, step 2) |
