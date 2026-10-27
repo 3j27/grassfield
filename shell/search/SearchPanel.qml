@@ -76,8 +76,9 @@ Variants {
                 radius: Tokens.radiusSearch
             }
 
+            // Only while a menu is open: a Loader keeps its last size once it unloads.
             Region {
-                item: menuLoader
+                item: win.menuKind !== "" ? menuLoader : null
                 radius: Tokens.radiusMenu
             }
         }
@@ -282,9 +283,9 @@ Variants {
             if (!win.clipView)
                 return;
             root.controller.zone = "field";
-            const at = capsuleButton.mapToItem(win.contentItem, 0, capsuleButton.height + Tokens.spacingSm);
+            // Under the capsule, its right edge under the More button's (a pull-down at the right end of a field).
             win.menuItem = null;
-            win.menuAt = Qt.point(at.x, at.y);
+            win.menuAt = Qt.point(capsule.x + capsuleButton.x + capsuleButton.width, capsule.y + capsule.height + Tokens.spacingSm);
             win.menuKind = "more";
         }
 
@@ -698,9 +699,10 @@ Variants {
                 height: Tokens.searchEmptyHeight
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideMiddle
-                maximumLineCount: 2
-                wrapMode: Text.WordWrap
+                elide: win.clipView ? Text.ElideRight : Text.ElideMiddle
+                // The Clipboard view's notices may take two lines; Search's own notice keeps one.
+                maximumLineCount: win.clipView ? 2 : 1
+                wrapMode: win.clipView ? Text.WordWrap : Text.NoWrap
                 textFormat: Text.PlainText
                 text: win.clipView ? panel.clipStatus : qsTr("No Results for “%1”").arg(root.controller.query.trim())
                 color: Appearance.colors.textSecondary
@@ -716,9 +718,9 @@ Variants {
                 id: promptBlock
                 visible: panel.prompt
                 x: Tokens.searchClipPromptPadding
-                y: Tokens.searchClipPromptPadding
                 width: panel.width - 2 * Tokens.searchClipPromptPadding
                 spacing: Tokens.spacingMd
+                topPadding: Tokens.searchClipPromptPadding
                 bottomPadding: Tokens.searchClipPromptPadding
                 Accessible.role: Accessible.AlertMessage
                 Accessible.name: promptTitle.text
@@ -950,7 +952,8 @@ Variants {
                         id: rowMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        // A secondary click opens a clipboard row's menu; Search's other rows take the primary button only.
+                        acceptedButtons: row.entry !== null ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
                         onPositionChanged: root.controller.selected = row.modelData.itemIndex
                         onClicked: mouse => {
                             if (mouse.button === Qt.RightButton) {
@@ -1119,7 +1122,9 @@ Variants {
         Loader {
             id: menuLoader
 
-            readonly property point placed: MenuPlace.place({x: win.menuAt.x, y: win.menuAt.y}, {w: (item as Item)?.width ?? 0, h: (item as Item)?.height ?? 0}, {w: win.width, h: win.height}, Tokens.panelPopupMargin)
+            readonly property real menuWidth: (item as Item)?.width ?? 0
+            // The More menu hangs from its right edge (menuAt), a row menu from its top left (the pointer).
+            readonly property point placed: MenuPlace.place({x: win.menuKind === "more" ? win.menuAt.x - menuWidth : win.menuAt.x, y: win.menuAt.y}, {w: menuWidth, h: (item as Item)?.height ?? 0}, {w: win.width, h: win.height}, Tokens.panelPopupMargin)
 
             z: 901
             x: placed.x
