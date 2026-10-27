@@ -6,14 +6,14 @@ import qs.services
 import "services/ClipboardLogic.js" as Logic
 
 // tests/shell/clipboard_settings.sh: what the REAL Clipboard and Settings services ask of the helper (ADR-0034 §6; reviews of
-// f7cd664 and c1fc254), read from the log of tests/shell/clipboard_settings.d/fake-helper. Prints "clipboard-settings: PASS" or
+// f7cd664, c1fc254 and 3f924d9), read from the log of tests/shell/clipboard_settings.d/fake-helper. Prints "clipboard-settings: PASS" or
 // the failures. grassfield.json does not exist at start.
-// - No usable file (missing, too large, malformed, unsafe): nothing runs and nothing is deleted.
+// - No usable file (missing, too large, malformed, unsafe, empty, whitespace only): nothing runs and nothing is deleted.
 // - The first usable read with the history off: --clear-history, then --apply-clears with the settings' times, one after the
 //   other; a clear asked while off runs --apply-clears with its time.
 // - The history on: the helper is given the settings (the clears' times included); Clear sends CH <ms>, Clear with the pins
 //   CH <ms> and CP <ms>; the duration sends T, Keep off D 0, the history off D 0 then QUIT.
-// - The file unusable while the history runs (unsafe, malformed, too large, missing): nothing is sent; usable again with the
+// - The file unusable while the history runs (unsafe, malformed, too large, missing, empty): nothing is sent; usable again with the
 //   same values: nothing is sent either.
 ShellRoot {
     id: root
@@ -128,6 +128,22 @@ ShellRoot {
                 settle: 800,
                 check: () => root.nothingRan("unsafe at start")
             }, {
+                name: "empty",
+                act: () => root.put(""),
+                until: () => Settings.validRead && Settings.emptyFile,
+                settle: 800,
+                check: () => root.nothingRan("empty at start")
+            }, {
+                name: "missing, then whitespace only",
+                act: () => root.shell('rm -f "$1"'),
+                until: () => !Settings.validRead && !Settings.writeBlocked
+            }, {
+                name: "whitespace only",
+                act: () => root.put(" \n\t\n"),
+                until: () => Settings.validRead && Settings.emptyFile,
+                settle: 800,
+                check: () => root.nothingRan("whitespace only at start")
+            }, {
                 name: "usable, history off",
                 act: () => root.put(root.doc({enabled: false, clearedAt: 1000, pinnedClearedAt: 2000})),
                 until: () => root.has("END --apply-clears"),
@@ -213,6 +229,18 @@ ShellRoot {
                 until: () => Settings.validRead,
                 settle: 600,
                 check: () => root.nothingSent("usable again after missing")
+            }, {
+                name: "empty while on",
+                act: () => root.put(""),
+                until: () => Settings.validRead && Settings.emptyFile,
+                settle: 1000,
+                check: () => root.nothingSent("empty while on")
+            }, {
+                name: "usable again",
+                act: () => root.put(root.doc(root.kept)),
+                until: () => Settings.validRead && !Settings.emptyFile,
+                settle: 600,
+                check: () => root.nothingSent("usable again after empty")
             }, {
                 name: "duration",
                 act: () => root.put(root.doc(Object.assign({}, root.kept, {retention: "30m"}))),

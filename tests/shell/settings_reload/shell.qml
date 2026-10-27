@@ -69,8 +69,8 @@ ShellRoot {
             file: {"lock.idleMinutes": 5, "dock.autohide": "$toggled"}, fresh: [["lockIdleMinutes", 5], ["dockAutohide", "$toggled"]]},
         // An empty file after 0: the same.
         {text: '{"version":1,"lock":{"idleMinutes":0}}', want: [["lockIdleMinutes", 0]]},
-        {text: "", want: [["lockIdleMinutes", 5]]},
-        {op: "toggle", want: [["lockIdleMinutes", 5], ["dockAutohide", "$toggled"]],
+        {text: "", want: [["lockIdleMinutes", 5], ["validRead", true], ["emptyFile", true]]},
+        {op: "toggle", want: [["lockIdleMinutes", 5], ["dockAutohide", "$toggled"], ["emptyFile", false]],
             file: {"lock.idleMinutes": 5, "dock.autohide": "$toggled"}, fresh: [["lockIdleMinutes", 5], ["dockAutohide", "$toggled"]]},
         // A malformed file after 0: the idle lock fails closed (a restart reads 5, so does the running shell), and a file
         // fixed afterwards is not overwritten with a stale value by the next change.
