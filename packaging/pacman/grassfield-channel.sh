@@ -43,19 +43,31 @@ gf_start() {
 }
 
 # One change at a time: the helper can start just before a pacman transaction whose scriptlet runs the other program, and
-# two rewrites of pacman.conf could lose one another (lines left without their file). Both take this lock (the kernel
-# drops it when the holder dies): the helper refuses when it is held, the scriptlet waits (pacman's transaction must not
-# fail for it). A root without /run (a chroot) has no other program to race with: the scriptlet then goes on unlocked.
+# two rewrites of pacman.conf could lose one another (lines left without their file). Both take a lock only root can
+# open: flock needs no write access, so a lock others can read could be held by any local user and would block
+# "Turn Off…" and the removal (review of 0338116, MAJOR 1). /run/grassfield (root, 0700) and its channel.lock (root,
+# 0600) are made under umask 077 and checked before use. The kernel drops the lock when its holder dies. The helper
+# refuses when it is held; the scriptlet waits (pacman's transaction must not fail for it). A root without /run (a
+# chroot) has no other program to race with: the scriptlet then goes on unlocked. Once the lock is held, temporary files
+# a killed run left in /etc are removed.
+GF_LOCK_DIR=/run/grassfield
+GF_LOCK=$GF_LOCK_DIR/channel.lock
 gf_lock() { # seconds to wait (0: refuse at once)
-  if ! exec 9>>/run/grassfield-channel.lock; then
-    (($1 > 0)) && return 0
-    gf_fail "cannot open /run/grassfield-channel.lock"
-  fi
-  if (($1 == 0)); then
-    flock -n 9 || gf_fail "another change of Grassfield's update channel is running: try again when it has finished"
+  if [[ ! -d /run ]]; then
+    (($1 > 0)) || gf_fail "no /run: cannot take $GF_LOCK"
   else
-    flock -w "$1" 9 || gf_fail "another change of Grassfield's update channel did not finish within $1 s"
+    (umask 077 && mkdir -p -- "$GF_LOCK_DIR" && : >>"$GF_LOCK") || gf_fail "cannot create $GF_LOCK"
+    [[ -d $GF_LOCK_DIR && ! -L $GF_LOCK_DIR && $(stat -c %u:%a -- "$GF_LOCK_DIR") == 0:700 && -f $GF_LOCK &&
+      ! -L $GF_LOCK && $(stat -c %u:%a -- "$GF_LOCK") == 0:600 ]] ||
+      gf_fail "$GF_LOCK_DIR (0700) or $GF_LOCK (0600) is not root's own: refused"
+    exec 9<"$GF_LOCK" || gf_fail "cannot open $GF_LOCK"
+    if (($1 == 0)); then
+      flock -n 9 || gf_fail "another change of Grassfield's update channel is running: try again when it has finished"
+    else
+      flock -w "$1" 9 || gf_fail "another change of Grassfield's update channel did not finish within $1 s"
+    fi
   fi
+  rm -f -- /etc/.pacman.conf.grassfield.* /etc/pacman.d/.grassfield.conf.*
 }
 
 # The packaged repository.conf: KEY=value lines checked by generate.py at build time, read here, never sourced.
@@ -103,10 +115,14 @@ gf_require_unlocked() {
   [[ ! -e $GF_DBPATH/db.lck ]] || gf_fail "pacman is running ($GF_DBPATH/db.lck exists): try again when it has finished"
 }
 
-# pacman.conf holds a [grassfield] section: a line that is [grassfield] once comments and blanks are removed.
-gf_has_section() {
-  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") f = 1 } END { exit !f }' \
+# The number of [grassfield] sections of pacman.conf: lines that are [grassfield] once comments and blanks are removed.
+gf_sections() {
+  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") n++ } END { print n + 0 }' \
     "$GF_PACMAN_CONF"
+}
+
+gf_has_section() {
+  (($(gf_sections) > 0))
 }
 
 # The first Server value of the included file ("" when none).
@@ -156,9 +172,18 @@ gf_without_lines() {
     END { flush(blank) }'
 }
 
+# Exactly one section: added when missing; when there are several (the hook appending between this program's read and
+# its rename, pacman then refuses "already registered"), they are replaced by one.
 gf_add_lines() {
-  gf_has_section && return 0
-  gf_rewrite_pacman_conf gf_with_lines
+  case $(gf_sections) in
+    1) return 0 ;;
+    0) gf_rewrite_pacman_conf gf_with_lines ;;
+    *) gf_rewrite_pacman_conf gf_one_section ;;
+  esac
+}
+
+gf_one_section() {
+  gf_without_lines | gf_with_lines
 }
 
 gf_remove_lines() {
