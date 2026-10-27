@@ -42,6 +42,13 @@ Item {
             return null;
         return m.info(root.row);
     }
+    // A picture's size in pixels (FolderModel.dimensionsAt): read off the GUI thread, "" until it arrives (the row's
+    // dataChanged then bumps the revision).
+    readonly property string dimensions: {
+        root.revision;
+        const m = root.model;
+        return m && m.dimensionsAt && root.info && root.row >= 0 ? m.dimensionsAt(root.row) : "";
+    }
     // The selection's quick actions (FilesApp.rotatableImages): local pictures Files can rotate.
     readonly property var rotatable: {
         root.revision;
@@ -324,7 +331,7 @@ Item {
                 model: !root.info ? [] : [
                     {label: qsTr("Created"), value: root.info.created, more: false},
                     {label: qsTr("Modified"), value: root.info.modified, more: false},
-                    {label: qsTr("Dimensions"), value: root.info.dimensions ? root.info.dimensions : "", more: false},
+                    {label: qsTr("Dimensions"), value: root.dimensions, more: false},
                     {label: qsTr("Last opened"), value: root.info.accessed, more: true},
                     {label: qsTr("Size"), value: root.info.isDir ? "" : root.byteCount(root.info.size, root.info.bytes), more: true},
                     {label: qsTr("Where"), value: root.info.where, more: true}

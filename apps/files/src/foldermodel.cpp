@@ -3,6 +3,7 @@
 #include "filelogic.h"
 #include "folderstylestore.h"
 #include "imageproviders.h"
+#include "imagesize.h"
 #include "recents.h"
 #include "taglogic.h"
 #include "tagsearch.h"
@@ -16,7 +17,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QIcon>
-#include <QImageReader>
+#include <QImage>
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QScopedValueRollback>
@@ -266,8 +267,9 @@ FolderModel::FolderModel(QObject *parent)
     connect(this, &QAbstractItemModel::modelReset, this, &FolderModel::groupsDirty);
     connect(this, &QAbstractItemModel::layoutChanged, this, &FolderModel::groupsDirty);
     connect(this, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &, const QModelIndex &, const QList<int> &roles) {
-        // Selection, thumbnails and folder looks do not move an item to another group.
-        if (m_groupBy != 0 && !roles.contains(SelectedRole) && !roles.contains(ThumbnailRole) && !roles.contains(LargeThumbnailRole))
+        // Selection, thumbnails, picture sizes and folder looks do not move an item to another group.
+        if (m_groupBy != 0 && !roles.contains(SelectedRole) && !roles.contains(ThumbnailRole) && !roles.contains(LargeThumbnailRole)
+            && !roles.contains(DimensionsRole))
             groupsDirty();
     });
 
@@ -397,6 +399,7 @@ void FolderModel::setUrl(const QUrl &url)
     clearAllPreviews();
     m_tags.clear();
     m_styles.clear();
+    m_dimensions.clear();
     clearGroupCache();
     setError(QString());
     m_freeSpace = -1;
@@ -1190,16 +1193,6 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("created")] = FileLogic::formatDate(item.time(KFileItem::CreationTime), now);
     m[QStringLiteral("modified")] = FileLogic::formatDate(item.time(KFileItem::ModificationTime), now);
     m[QStringLiteral("accessed")] = FileLogic::formatDate(item.time(KFileItem::AccessTime), now);
-    // A picture's size in pixels (the preview pane's Dimensions): read from the file's header only, local files only.
-    if (row >= 0 && item.isLocalFile() && !item.isDir() && item.currentMimeType().name().startsWith(QLatin1String("image/"))) {
-        QImageReader reader(item.localPath());
-        reader.setAutoTransform(true);
-        QSize pixels = reader.size();
-        if (pixels.isValid() && (reader.transformation() & QImageIOHandler::TransformationRotate90))
-            pixels.transpose();
-        if (pixels.isValid())
-            m[QStringLiteral("dimensions")] = tr("%1 × %2").arg(pixels.width()).arg(pixels.height());
-    }
     m[QStringLiteral("permissions")] = item.permissionsString();
     m[QStringLiteral("owner")] = item.user();
     m[QStringLiteral("group")] = item.group();
@@ -1222,6 +1215,44 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("folderColor")] = style.color;
     m[QStringLiteral("folderGlyph")] = style.glyph;
     return m;
+}
+
+QString FolderModel::dimensionsAt(int row)
+{
+    const KFileItem item = itemAt(row);
+    // What the listing already knows decides, nothing is looked at here: a local regular file (the listing's mode, links
+    // followed) whose type says picture. ImageSize::check() looks again on the worker before anything is opened.
+    if (item.isNull() || !item.isLocalFile() || item.isDir() || !item.isRegularFile() || !item.currentMimeType().name().startsWith(QLatin1String("image/")))
+        return QString();
+    const QString path = item.localPath();
+    if (path.isEmpty())
+        return QString();
+    const QDateTime modified = item.time(KFileItem::ModificationTime);
+    const qint64 size = qint64(item.size());
+    const auto it = m_dimensions.constFind(path);
+    if (it != m_dimensions.cend() && it->modified == modified && it->size == size)
+        return it->pending || !it->pixels.isValid() ? QString() : tr("%1 × %2").arg(it->pixels.width()).arg(it->pixels.height());
+    if (m_dimensions.size() >= kMaxDimensions)
+        m_dimensions.clear();
+    m_dimensions.insert(path, {item.url(), modified, size, true, QSize()});
+    if (!m_sizeReader)
+        m_sizeReader = std::make_unique<ImageSize::Reader>(this, [this](const QString &p, QSize pixels) { dimensionsReady(p, pixels); });
+    m_sizeReader->request(path);
+    return QString();
+}
+
+void FolderModel::dimensionsReady(const QString &path, QSize pixels)
+{
+    const auto it = m_dimensions.find(path);
+    // Dropped meanwhile (another folder, the cache full): a later dimensionsAt asks again.
+    if (it == m_dimensions.end() || !it->pending)
+        return;
+    it->pending = false;
+    it->pixels = pixels;
+    // A file changed while it was read is asked again by the next dimensionsAt (its time or size no longer match).
+    const int r = rowForUrl(it->url);
+    if (r >= 0)
+        emit dataChanged(index(r, 0), index(r, 0), {DimensionsRole});
 }
 
 void FolderModel::requestPreview(int row, bool large)

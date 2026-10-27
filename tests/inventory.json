@@ -165,6 +165,7 @@
  {"path": "tests/unit/files/tst_folderstyle.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_folderviews.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_imagerotate.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_imagesize.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_recents.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_previewqueue.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_tags.cpp", "layer": "logic"},

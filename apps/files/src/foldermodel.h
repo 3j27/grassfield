@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QSet>
+#include <QSize>
 #include <QSortFilterProxyModel>
 #include <QTimer>
 #include <QUrl>
@@ -18,6 +19,8 @@
 
 #include <KFileItem>
 
+#include <memory>
+
 class FolderStyleStore;
 class KDirLister;
 class KDirModel;
@@ -25,6 +28,11 @@ class KJob;
 class ItemListModel;
 class OrgKdeKDirNotifyInterface;
 class SearchRunner;
+
+namespace ImageSize
+{
+class Reader;
+}
 
 namespace KIO
 {
@@ -95,6 +103,8 @@ public:
         FolderGlyphRole,
         // The title of the item's group (Group By; "" without groups): the list view's sections.
         GroupRole,
+        // Not a QML role (not in roleNames): only signalled by dataChanged when a picture's size arrives (dimensionsAt).
+        DimensionsRole,
     };
     Q_ENUM(Roles)
 
@@ -164,6 +174,10 @@ public:
     Q_INVOKABLE int findPrefix(const QString &prefix, int from) const;
     // Get Info data of a row, or of the listed folder itself (row -1).
     Q_INVOKABLE QVariantMap info(int row) const;
+    // A picture's size in pixels as "W × H" (the preview pane's Dimensions), "" until known or when it can't be known. Never
+    // read here: the first call asks ImageSize::Reader (a worker thread; a local regular file only, never a FIFO, a device
+    // or a network share), and the row's dataChanged (DimensionsRole) tells when the answer is in.
+    Q_INVOKABLE QString dimensionsAt(int row);
     // Ask for a thumbnail (delegates call this when created); batched into one PreviewJob. `large`: the gallery
     // preview size (role largeThumbnail) instead of the icon size (role thumbnail).
     Q_INVOKABLE void requestPreview(int row, bool large = false);
@@ -259,6 +273,20 @@ private:
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
+
+    // Picture sizes by local path, for the file as it was listed (modification time and size): answers of the reader, or
+    // pending. At most kMaxDimensions kept (all dropped beyond, and with the folder).
+    struct Dimensions {
+        QUrl url;
+        QDateTime modified;
+        qint64 size = -1;
+        bool pending = true;
+        QSize pixels;
+    };
+    static constexpr int kMaxDimensions = 256;
+    QHash<QString, Dimensions> m_dimensions;
+    std::unique_ptr<ImageSize::Reader> m_sizeReader;
+    void dimensionsReady(const QString &path, QSize pixels);
 
     // Recents: read on a thread (RecentsLoader), again when the list changes on disk.
     void startRecents();
