@@ -74,6 +74,21 @@ session, with the owner's real trash in its sidebar. Any D-Bus activatable handl
 - The private D-Bus session bus is the default for dev sessions (`nested-up.sh`, `shell-run.sh`; `--session-bus` is
   the opt-out for the rare test that needs the owner's bus). Its dbus-daemon starts with the isolated `XDG_*` homes under
   `.dev/apps-home` and `GRASSFIELD_DEV=1`, so a service the bus activates is isolated too.
+- Amendment 2026-10-26 (re-check of 06da80f, MEDIUM-1; owner decision "Bloquer les portails"): the bus's activated
+  services also inherit the owner's `XDG_RUNTIME_DIR`, and Qt's gtk3 platform theme asks the desktop portal when the shell
+  or an app starts (auto-start on), so xdg-desktop-portal started there, and with it xdg-document-portal, which unmounts the
+  owner's `$XDG_RUNTIME_DIR/doc` to mount its own. `shell-run.sh` now writes `org.freedesktop.portal.Desktop` and
+  `org.freedesktop.portal.Documents` service files with `Exec=/bin/false` in the bus's data home (`.dev/apps-home/data/
+  dbus-1/services`, which wins over the system's), on every run, asks a bus kept from an earlier run to read its service
+  folders again (`ReloadConfig`: it watches only the folders that existed when it started), and warns when either portal
+  already runs on it. A file in `$XDG_RUNTIME_DIR/dbus-1/services` would win over the block: `shell-run.sh` refuses to
+  start the bus when that folder names either portal. Cost: no portal in a dev session (no portal file chooser or screen
+  sharing for the apps started there). Rejected: a runtime directory of the bus's own (activated services would lose the
+  nested Wayland socket, named relative to it, and PipeWire), and only clearing `QT_QPA_PLATFORMTHEME` (another client could
+  still start the portal). Checked on a dbus-daemon 1.14 bus started as `shell-run.sh` starts it, with portal services
+  planted in `XDG_DATA_DIRS`: neither starts, also on a bus started before the block and reloaded; without the block both
+  start. Not verified nested: after `just nested-up` and opening Settings, `busctl --address=$(cat .dev/bus.address) list
+  | grep portal` lists nothing.
 - `isolated.sh` exports `GRASSFIELD_DEV=1`, so Grassfield Files started through it hides its Trash place, and in a dev
   session also the "Empty Trash" action (no confirmation that does nothing).
 

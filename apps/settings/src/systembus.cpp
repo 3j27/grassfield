@@ -97,9 +97,9 @@ const QString kPortal = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
 // The bus itself: whether the portal already runs. privacyState never starts it: on a dev session's private bus that would
 // start xdg-desktop-portal and with it the document portal, which remounts $XDG_RUNTIME_DIR/doc, the owner's (review of
-// 4ca0246, M1); QtBusCaller does not auto-start it either. Qt's own platform theme (gtk3, gnome, xdgdesktopportal) still may,
-// when the app starts: that is the dev bus's configuration, not this read (re-check of 06da80f, MEDIUM-1, open). In a real
-// session it runs (the session's Qt apps register with it).
+// 4ca0246, M1); QtBusCaller does not auto-start it either. Qt's own platform theme (gtk3, gnome, xdgdesktopportal) asks it
+// when the app starts: the dev bus blocks both portals for that (scripts/dev/shell-run.sh, ADR-0011, re-check of 06da80f,
+// MEDIUM-1). In a real session it runs (the session's Qt apps register with it).
 const QString kDBusName = QStringLiteral("org.freedesktop.DBus");
 const QString kDBusPath = QStringLiteral("/org/freedesktop/DBus");
 // A portal that does not answer costs this much, once per read (review of 4ca0246, L4).

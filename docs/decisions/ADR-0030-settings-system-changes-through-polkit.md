@@ -231,11 +231,12 @@ service ask the session's agent itself.
     environment, so on Arch it started the real permission store with the owner's home and failed), LOW-1 (nothing tested
     that the caller never auto-starts the portal) and LOW-2 (nothing tested the export folders outside XDG_DATA_DIRS):
     fixed in the commit after (the test bus's own configuration and clean environment, an activation check with a control,
-    a QML case). Still open, for the owner: MEDIUM-1, the dev session's private bus (scripts/dev/shell-run.sh, ADR-0011)
-    uses the standard service folders and the owner's XDG_RUNTIME_DIR, so Qt's gtk3 platform theme (ReadAll on
-    org.freedesktop.portal.Settings, auto-start on) starts the desktop portal there and with it the document portal, which
-    unmounts the owner's `$XDG_RUNTIME_DIR/doc`; pre-existing, not Settings' read, and probably the same for the dev shell
-    (a Quickshell build with gtk3 started it on a test bus; not run nested).
+    a QML case). MEDIUM-1, pre-existing and not Settings' read: the dev session's private bus (scripts/dev/shell-run.sh,
+    ADR-0011) used the standard service folders and the owner's XDG_RUNTIME_DIR, so Qt's gtk3 platform theme (ReadAll on
+    org.freedesktop.portal.Settings, auto-start on) started the desktop portal there and with it the document portal, which
+    unmounts the owner's `$XDG_RUNTIME_DIR/doc` (probably the dev shell too: a Quickshell build with gtk3 started it on a
+    test bus; not run nested). By the owner's decision (2026-10-26, "Bloquer les portails"; ADR-0011 amendment) that bus
+    now blocks both portals.
 
 ## macOS reference
 System Settings > General > About > Name and Date & Time change machine-wide settings. They ask for an administrator's password
