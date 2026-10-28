@@ -89,8 +89,11 @@
 #                  third window grows, the first follows with the gap kept, both stay tiled in one group, the plugin posts
 #                  `resized`; dragged back, both are where they were
 #   locked         while the foreign locker holds the session lock the same drag moves nothing
-#   outside        near the top of the edge (outside the handle) the drag is Hyprland's resize of one window: only one of
-#                  the two boxes changes
+#   after unlock   0.5 s after the unlock, with no other motion first, the handle's drag moves the edge (the first press
+#                  after unlocking is the user's), then back
+#   outside        in the margin 20 px below the surface tops (outside the handle), the pointer settled on the wallpaper
+#                  first: the drag is Hyprland's resize of one window, only one of the two boxes changes (Hyprland's lock
+#                  state, the cursor, the active window and the layers are logged before the press)
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -1247,8 +1250,21 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     fi
     check "shared-edge locked: released, Hyprland reports the session unlocked" unlock_session
     sleep 0.5
-    # Outside the handle (near the top of the edge) the edge resizes one window as usual (Hyprland's resize_on_border).
-    pointer abs "$hx" $((ly - tb + 20 - my)) sleep 300 down drag $((hx + 40)) $((ly - tb + 20 - my)) sleep 200 up sleep 600
+    # The first press after the unlock is the user's (macOS: the first click after unlocking acts; integrator nested pass of
+    # 5d3dc49): the handle, pressed 0.5 s after the unlock with no other motion first, moves the edge, then back.
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+    check "shared-edge after the unlock: the first press on the handle moves the edge" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
+    check "shared-edge after the unlock: the right window followed" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
+    pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
+    check "shared-edge after the unlock: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    # Outside the handle the edge resizes one window as usual (Hyprland's resize_on_border). The point is in the margin 20 px
+    # below the windows' surface tops, well outside the handle (the middle 120 px of their common stretch) and below the
+    # titlebar row (the integrator's probe: Hyprland resizes one window there); the pointer settles on the wallpaper first.
+    oy=$((ly + 20 - my))
+    pointer abs 20 $((mh / 2)) sleep 300 abs "$hx" "$oy" sleep 400
+    say "  outside the handle at $hx,$oy: hyprctl locked $(hypr_locked), cursor $(nestctl cursorpos 2>/dev/null), active $(nestctl activewindow -j 2>/dev/null | jq -r '.title // "none"')"
+    surfaces_state
+    pointer down drag $((hx + 40)) "$oy" sleep 200 up sleep 600
     only_one() {
       local l r moved=0
       read -r l < <(geometry_of tiling-foot3 | cut -d' ' -f1-4)
