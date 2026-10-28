@@ -262,4 +262,16 @@ TestCase {
         verify(!Model.isHidden(set, "rvhide"));
         verify(!Model.isHidden(Model.parseHidden(""), "plain"));
     }
+
+    function test_localizedEntries() {
+        // entry-names.sh: id, Name, GenericName, Comment, Keywords; a malformed line or an empty name is skipped.
+        const map = Model.parseLocalized("org.grassfield.Files\tFichiers\tGestionnaire de fichiers\tParcourir\tdossier;disque;\r\n"
+            + "constructor\tConstructeur\t\t\t\n" + "short\tUn\tdeux\n" + "\tSans id\t\t\t\n" + "noname\t\tx\ty\tz\n\n");
+        compare(map["org.grassfield.Files"], {name: "Fichiers", genericName: "Gestionnaire de fichiers", comment: "Parcourir", keywords: ["dossier", "disque"]});
+        compare(map["constructor"].name, "Constructeur", "an id named like an object's own property");
+        verify(map["short"] === undefined);
+        verify(map[""] === undefined);
+        verify(map["noname"] === undefined);
+        compare(Object.keys(Model.parseLocalized("")).length, 0);
+    }
 }
