@@ -127,6 +127,11 @@ public:
     // GRASSFIELD_UPDATE_CHECK_CMD the checker, and its cache lies under the dev state (ADR-0033 "Dev sessions").
     Q_INVOKABLE void askShellToCheck(const QString &tag);
     Q_INVOKABLE void runUpdateChecker(const QString &tag);
+    // What runUpdateChecker runs: the installed checker, or in a dev session GRASSFIELD_UPDATE_CHECK_CMD when set; and the canned
+    // answer it reads instead in a dev session (GRASSFIELD_UPDATE_FIXTURE, "" otherwise). Outside a dev session neither variable
+    // counts (ADR-0019); tst_backend holds both without running anything.
+    static QString updateCheckerProgram();
+    static QString updateFixture();
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
     // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and

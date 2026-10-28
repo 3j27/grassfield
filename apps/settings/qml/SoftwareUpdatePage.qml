@@ -92,7 +92,8 @@ SettingsPage {
 
     // The one action of the status (U13, U22): "setup", "repair", "off" or "".
     readonly property string fix: {
-        if (root.view.kind === "not-set-up")
+        // Off: the checker's not-set-up, or a failed check while grassfield-channel-set says off.
+        if (root.view.kind === "not-set-up" || (root.view.kind === "failed" && root.updates.channel === "off"))
             return root.updates.buildReady ? "setup" : "";
         if (root.view.kind === "blocking")
             return "off";
@@ -252,7 +253,8 @@ SettingsPage {
             Button {
                 push: true
                 text: qsTr("Check Now")
-                enabled: !root.updates.checking && !root.updates.updateRunning
+                // Never held back by the stored state alone: a stale update-running is cleared by a check.
+                enabled: !root.updates.checking
                 onClicked: root.updates.check()
             }
         }

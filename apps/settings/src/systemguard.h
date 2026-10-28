@@ -18,7 +18,7 @@ bool devSession();
 //   wpctl      2 fixed (status, status -n), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
-//   grassfield-channel-set (no argument: it prints the channel)                                Software Update pane
+//   /usr/lib/grassfield/grassfield-channel-set (no argument: it prints the channel)            Software Update pane
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
@@ -48,7 +48,7 @@ bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
 // & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays, lpoptions for Printers: the user's own CUPS
-// defaults; grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
+// defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
 // changes and adding or removing a printer are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
@@ -74,9 +74,10 @@ bool isPrinterUri(const QString &uri);
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
 // exactly `-q -d <backlight> set <0-100>%`, for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
 // `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
-// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set
-// exactly one of `stable`, `beta`, `repair`, `off` (ADR-0033 c.3; docs/specs/updates.md U12, U13: it runs as the user and asks
-// for the administrator's password itself, through pkexec and the polkit action org.grassfield.packages.set-channel).
+// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set (the
+// installed /usr/lib/grassfield/grassfield-channel-set, never one found on PATH) exactly one of `stable`, `beta`, `repair`,
+// `off` (ADR-0033 c.3; docs/specs/updates.md U12, U13: it runs as the user and asks for the administrator's password itself,
+// through pkexec and the polkit action org.grassfield.packages.set-channel).
 bool isAllowedAction(const QStringList &argv);
 
 // An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt; grassfield-channel-set: the

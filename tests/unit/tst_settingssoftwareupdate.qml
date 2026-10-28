@@ -300,7 +300,7 @@ TestCase {
         compare(t.backend.launches, [["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]]);
         verify(t.updates.updateRunning);
         verify(!button(t.page, "Update Now").enabled, "while Omarchy's terminal runs the update");
-        verify(!button(t.page, "Check Now").enabled);
+        verify(button(t.page, "Check Now").enabled, "Check Now is never held back by the update's state");
         // The check after the launch finds the lock held: update-running, until the waiter's answer.
         t.updates.launchCheck.triggered();
         compare(t.backend.asks.length, 1, "the pane opened on a fresh check: this is the first ask");
@@ -312,6 +312,46 @@ TestCase {
         t.backend.write(testCase.stateFile, JSON.stringify(answer("up-to-date", {grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}}, Date.now() + 2000)));
         verify(!t.updates.updateRunning);
         verify(!button(t.page, "Update Now"), "nothing left to update");
+    }
+
+    // A stored update-running whose waiter ended with the session (a reboot or a log out during the update, a crash) is never
+    // kept: the pane checks when it opens, and Check Now stays available (integrator review of a9a5974, MAJOR 3).
+    function test_aStaleUpdateRunningIsCheckedAgain() {
+        const t = make(SoftwareUpdateLogic.combine(available(Date.now() - 7 * 3600 * 1000), answer("update-running", {}, Date.now() - 6 * 3600 * 1000)));
+        compare(t.backend.asks, ["update.ask"], "checked when the pane opens");
+        t.backend.finished("update.ask", true, "ok");
+        t.backend.write(testCase.stateFile, JSON.stringify(available(Date.now())));
+        verify(!t.updates.checking);
+        verify(button(t.page, "Check Now").enabled);
+        // Even while the stored state still says update-running, Check Now is there.
+        const held = make(SoftwareUpdateLogic.combine(available(Date.now() - 3600 * 1000), answer("update-running", {}, Date.now() - 10 * 1000)));
+        compare(held.backend.asks, [], "a fresh update-running is not checked again at once");
+        verify(!button(held.page, "Update Now").enabled, "Update Now waits while the stored state says the update runs");
+        verify(button(held.page, "Check Now").enabled, "Check Now is never held back by the stored state alone");
+        button(held.page, "Check Now").clicked();
+        compare(held.backend.asks, ["update.ask"]);
+    }
+
+    // Grassfield updates off still offers the system's updates (the integrator's decision of 2026-10-28): Omarchy's release,
+    // the other updates and Update Now under Set Up….
+    function test_turnedOffStillOffersTheSystemsUpdates() {
+        const t = make(answer("not-set-up", {channel: null, grassfield: {installed: "1.0.0-1", available: null, notes: [], notesError: null},
+            omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 2, otherPackages: [{name: "glibc", installed: "2.42-1", available: "2.42-2"},
+                {name: "linux", installed: "6.18.1-1", available: "6.18.2-1"}]}), {channel: "off"});
+        verify(row(t.page, "Grassfield updates are not set up"));
+        verify(button(t.page, "Set Up…"));
+        verify(row(t.page, "Omarchy 4.0.6"));
+        verify(row(t.page, "2 other updates"));
+        verify(!row(t.page, "Grassfield 1.0.1"));
+        verify(button(t.page, "Update Now").enabled);
+        button(t.page, "Update Now").clicked();
+        compare(t.backend.launches, [["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]]);
+        compare(t.updates.count, 1, "Omarchy's release on the badge");
+        // A failed check while off: what was found stays, Set Up… too.
+        const f = make(SoftwareUpdateLogic.combine(answer("not-set-up", {omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 0, otherPackages: []}),
+            answer("failed", {error: "offline"})), {channel: "off"});
+        verify(button(f.page, "Set Up…"));
+        verify(row(f.page, "Omarchy 4.0.6"));
     }
 
     // Degraded: not an Omarchy system (no launcher): Update Now is disabled and says why.
@@ -330,7 +370,7 @@ TestCase {
         const setUp = button(t.page, "Set Up…");
         verify(setUp);
         setUp.clicked();
-        compare(t.backend.actions, [{argv: ["grassfield-channel-set", "stable"], tag: "update.channel.act"}]);
+        compare(t.backend.actions, [{argv: ["/usr/lib/grassfield/grassfield-channel-set", "stable"], tag: "update.channel.act"}]);
         verify(t.updates.waitingForPermission);
         compare(row(t.page, "Grassfield updates are not set up").subtitle, "Waiting for permission…");
         verify(!button(t.page, "Set Up…").enabled, "no second dialog");
@@ -359,7 +399,7 @@ TestCase {
     function test_repairAndTurnOff() {
         const r = make(answer("repair"));
         button(r.page, "Repair…").clicked();
-        compare(r.backend.actions.map(a => a.argv), [["grassfield-channel-set", "repair"]]);
+        compare(r.backend.actions.map(a => a.argv), [["/usr/lib/grassfield/grassfield-channel-set", "repair"]]);
         const custom = make(answer("up-to-date", {channel: "custom", grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}}));
         verify(button(custom.page, "Repair…"), "a custom channel is repaired too");
         const b = make(SoftwareUpdateLogic.combine(available(), answer("blocking", {episode: "2026-10-28T09:00:00Z"})));
@@ -372,7 +412,7 @@ TestCase {
         const off = button(b.page, "Turn Off Grassfield Updates…");
         verify(off.destructive);
         off.clicked();
-        compare(b.backend.actions.map(a => a.argv), [["grassfield-channel-set", "off"]]);
+        compare(b.backend.actions.map(a => a.argv), [["/usr/lib/grassfield/grassfield-channel-set", "off"]]);
         b.backend.endAction("update.channel.act", false, "grassfield-channel-set: an Omarchy update is running: try again when it has finished");
         verify(shown(b.page, i => i.footnote === "Grassfield updates were not turned off: an Omarchy update is running: try again when it has finished"));
     }
@@ -380,7 +420,7 @@ TestCase {
     // U12: Beta Updates shows the channel grassfield-channel-set prints; the sheet's menu runs the switch.
     function test_betaUpdates() {
         const t = make(available(), {channel: "beta"});
-        compare(t.backend.queries[0], {argv: ["grassfield-channel-set"], tag: "update.channel"});
+        compare(t.backend.queries[0], {argv: ["/usr/lib/grassfield/grassfield-channel-set"], tag: "update.channel"});
         compare(row(t.page, "Beta Updates").valueText, "Grassfield Beta");
         const info = [];
         t.page.infoRequested.connect(topic => info.push(topic));
@@ -392,7 +432,7 @@ TestCase {
         verify(menu.enabled);
         compare(menu.value, "beta");
         menu.picked("stable");
-        compare(t.backend.actions, [{argv: ["grassfield-channel-set", "stable"], tag: "update.channel.act"}]);
+        compare(t.backend.actions, [{argv: ["/usr/lib/grassfield/grassfield-channel-set", "stable"], tag: "update.channel.act"}]);
         compare(menu.value, "beta", "the old value until the file changes");
         compare(row(t.page, "Beta Updates").valueText, "Waiting for permission…");
         verify(!menu.enabled);
@@ -407,7 +447,7 @@ TestCase {
         compare(menu.value, "stable");
         // Turn Off Grassfield Updates… in the sheet (U13).
         shown(sheet, i => i.text === "Turn Off Grassfield Updates…" && i.push === true).clicked();
-        compare(t.backend.actions[t.backend.actions.length - 1].argv, ["grassfield-channel-set", "off"]);
+        compare(t.backend.actions[t.backend.actions.length - 1].argv, ["/usr/lib/grassfield/grassfield-channel-set", "off"]);
         // Not set up: the menu waits for Set Up.
         const off = make(answer("not-set-up"), {channel: "off", noPage: true});
         const offSheet = createTemporaryObject(sheetComp, testCase, {updates: off.updates, store: off.store, topic: "beta"});

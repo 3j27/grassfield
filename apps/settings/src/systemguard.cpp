@@ -138,8 +138,8 @@ bool isReadOnlyQuery(const QStringList &argv)
     if (program == QLatin1String("lpoptions"))
         return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
     // Software Update (ADR-0033 c.3): the channel, which grassfield-channel-set prints with no argument (read-only: it reads
-    // pacman.conf, the included file and the build's repository.conf).
-    if (program == QLatin1String("grassfield-channel-set"))
+    // pacman.conf, the included file and the build's repository.conf). The installed file, never one found on PATH.
+    if (program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set"))
         return args.isEmpty();
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
@@ -320,7 +320,7 @@ bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
         || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions")
-        || program == QLatin1String("grassfield-channel-set");
+        || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
 }
 
 bool isBacklightName(const QString &name)
@@ -371,7 +371,7 @@ bool isDisplayLine(const QString &line)
 
 bool asksForPassword(const QStringList &argv)
 {
-    return !argv.isEmpty() && (argv.first() == QLatin1String("omarchy-language") || argv.first() == QLatin1String("grassfield-channel-set"));
+    return !argv.isEmpty() && (argv.first() == QLatin1String("omarchy-language") || argv.first() == QLatin1String("/usr/lib/grassfield/grassfield-channel-set"));
 }
 
 int actionTimeoutMs(const QStringList &argv, int requested)
@@ -418,7 +418,7 @@ bool isAllowedAction(const QStringList &argv)
         return false;
     }
     // Software Update: set up, switch, repair or turn off Grassfield's updates (the polkit dialog asks for the password).
-    if (argv.first() == QLatin1String("grassfield-channel-set"))
+    if (argv.first() == QLatin1String("/usr/lib/grassfield/grassfield-channel-set"))
         return argv.size() == 2
             && (argv.at(1) == QLatin1String("stable") || argv.at(1) == QLatin1String("beta") || argv.at(1) == QLatin1String("repair")
                 || argv.at(1) == QLatin1String("off"));

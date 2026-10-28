@@ -72,7 +72,7 @@ QtObject {
     }
 
     function readChannel(): void {
-        root.system.query(["grassfield-channel-set"], "update.channel");
+        root.system.query(["/usr/lib/grassfield/grassfield-channel-set"], "update.channel");
     }
 
     // U14: Omarchy's marker, or the running kernel's modules folder gone (a kernel update): the reboot rule of Omarchy's
@@ -84,9 +84,11 @@ QtObject {
     }
 
     // U8: the pane opening checks unless a check finished less than paneFreshMs ago or one runs.
+    // A stored `update-running` does not hold it back: its waiter may have ended with the session (a reboot or a log out
+    // during the update), and a check while Omarchy's lock is still held only joins the waiter (integrator review of a9a5974).
     function checkIfStale(now: double): void {
         const last = Math.max(SoftwareUpdateLogic.timeOf(root.file.checkedAt), root.askedAt);
-        if (!root.checking && !root.updateRunning && now - last >= Tokens.softwareUpdatePaneFreshMs)
+        if (!root.checking && now - last >= Tokens.softwareUpdatePaneFreshMs)
             root.check();
     }
 
@@ -103,7 +105,7 @@ QtObject {
     // `verb`: stable, beta, repair or off (grassfield-channel-set); `action`: what it is for (lastAction).
     function setChannel(verb: string, action: string): bool {
         root.lastAction = action;
-        return root.system.act("software update: " + action + " (grassfield-channel-set " + verb + ")", ["grassfield-channel-set", verb], root.channelTag);
+        return root.system.act("software update: " + action + " (grassfield-channel-set " + verb + ")", ["/usr/lib/grassfield/grassfield-channel-set", verb], root.channelTag);
     }
 
     function updateNow(): bool {

@@ -284,23 +284,23 @@ TEST_F(BackendTest, AnActionWithoutAPasswordIsNotHeldBack)
 
 // ---- Software Update (ADR-0033; docs/specs/updates.md U8, U10-U14) ----
 
-// Beta Updates, Set Up…, Repair…, Turn Off…: grassfield-channel-set waits for the polkit dialog, so a pane shown again while it
-// is up cannot start a second one.
-TEST_F(BackendTest, AChannelChangeRunsOneAtATime)
+// Beta Updates, Set Up…, Repair…, Turn Off…: only the installed grassfield-channel-set with one verb is an action. The allowed
+// form is never started here (it would ask the machine's polkit); its one-per-tag latch is the one omarchy-language's tests
+// above hold (systemguard asksForPassword names both).
+TEST_F(BackendTest, AChannelChangeIsOnlyTheInstalledCommand)
 {
     writeRecorder(QStringLiteral("grassfield-channel-set"), "");
     Answers seen;
     Backend backend;
     seen.listen(backend);
     const QString tag = QStringLiteral("update.channel.act");
-    ASSERT_TRUE(backend.act(QStringLiteral("beta updates"), {QStringLiteral("grassfield-channel-set"), QStringLiteral("beta")}, tag));
-    EXPECT_EQ(backend.pendingActions(), (QVariantMap{{tag, QStringLiteral("beta updates")}}));
-    EXPECT_FALSE(backend.act(QStringLiteral("turn off"), {QStringLiteral("grassfield-channel-set"), QStringLiteral("off")}, tag));
-    EXPECT_FALSE(backend.act(QStringLiteral("custom"), {QStringLiteral("grassfield-channel-set"), QStringLiteral("custom")}, QStringLiteral("other.act")));
-    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) >= 1; }));
+    EXPECT_FALSE(backend.act(QStringLiteral("beta updates"), {QStringLiteral("grassfield-channel-set"), QStringLiteral("beta")}, tag))
+        << "a grassfield-channel-set found on PATH";
+    EXPECT_FALSE(backend.act(QStringLiteral("custom"), {QStringLiteral("/usr/lib/grassfield/grassfield-channel-set"), QStringLiteral("custom")}, tag));
     EXPECT_TRUE(backend.pendingActions().isEmpty());
-    EXPECT_EQ(recorded(QStringLiteral("grassfield-channel-set")).size(), 1);
-    EXPECT_TRUE(recorded(QStringLiteral("grassfield-channel-set")).value(0).startsWith(QStringLiteral("beta|")));
+    spinUntil([] { return false; }, 200);
+    EXPECT_TRUE(recorded(QStringLiteral("grassfield-channel-set")).isEmpty());
+    EXPECT_TRUE(seen.finished.isEmpty());
 }
 
 // Update Now: Omarchy's launcher, started and left running (its terminal outlives Settings); only the exact vector.
@@ -390,18 +390,28 @@ TEST_F(BackendTest, WithoutAShellTheCheckerRunsHere)
     qunsetenv("GRASSFIELD_UPDATE_FIXTURE");
     qunsetenv("GRASSFIELD_SESSION");
 
-    // A real session: the installed checker only (GRASSFIELD_UPDATE_CHECK_CMD is dev plumbing). Only where none is installed:
-    // nothing real runs here, and an installed checker would sync and download.
-    if (!QFile::exists(QStringLiteral("/usr/lib/grassfield/grassfield-update-check"))) {
-        Answers seen;
-        Backend backend;
-        seen.listen(backend);
-        backend.runUpdateChecker(QStringLiteral("real"));
-        ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("real")) >= 1; }, 20000));
-        EXPECT_TRUE(recorded(QStringLiteral("fake-checker")).isEmpty());
+    // Outside a dev session neither variable counts: the installed checker, no canned answer (checked without running it).
+    // A GRASSFIELD_DEV=1 that leaked into a packaged session (GRASSFIELD_SESSION=1) is no dev session either.
+    QFile planted(scratch(QStringLiteral("planted.json")));
+    ASSERT_TRUE(planted.open(QIODevice::WriteOnly));
+    planted.write(R"({"version":1,"state":"up-to-date"})");
+    planted.close();
+    qputenv("GRASSFIELD_UPDATE_FIXTURE", QFile::encodeName(planted.fileName()));
+    for (const char *session : {"", "1"}) {
+        if (*session) {
+            qputenv("GRASSFIELD_DEV", "1");
+            qputenv("GRASSFIELD_SESSION", session);
+        } else {
+            qunsetenv("GRASSFIELD_DEV");
+        }
+        EXPECT_EQ(Backend::updateCheckerProgram(), QStringLiteral("/usr/lib/grassfield/grassfield-update-check")) << session;
+        EXPECT_EQ(Backend::updateFixture(), QString()) << session;
     }
-
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_UPDATE_FIXTURE");
     qputenv("GRASSFIELD_DEV", "1");
+    EXPECT_EQ(Backend::updateCheckerProgram(), scratch(QStringLiteral("fake-checker")));
+
     Answers seen;
     Backend backend;
     seen.listen(backend);

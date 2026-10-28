@@ -420,11 +420,11 @@ TEST(ActionGuard, OnlyTheNamedProgramsRun)
         EXPECT_FALSE(isActionProgram(QString::fromLatin1(no))) << no;
 }
 
-// Software Update (ADR-0033 c.3; docs/specs/updates.md U12, U13): grassfield-channel-set by its bare name with exactly one verb;
-// it asks for the administrator's password itself (pkexec), so one at a time per tag and up to 130 s.
+// Software Update (ADR-0033 c.3; docs/specs/updates.md U12, U13): the installed grassfield-channel-set (never one found on PATH)
+// with exactly one verb; it asks for the administrator's password itself (pkexec), so one at a time per tag and up to 130 s.
 TEST(ActionGuard, ChannelSetTakesOneVerbOnly)
 {
-    const QString set = QStringLiteral("grassfield-channel-set");
+    const QString set = QStringLiteral("/usr/lib/grassfield/grassfield-channel-set");
     EXPECT_TRUE(isActionProgram(set));
     for (const char *ok : {"stable", "beta", "repair", "off"})
         EXPECT_TRUE(isAllowedAction({set, QString::fromLatin1(ok)})) << ok;
@@ -433,6 +433,9 @@ TEST(ActionGuard, ChannelSetTakesOneVerbOnly)
     // Printing the channel is a query, not an action; two verbs are no form of the command.
     EXPECT_FALSE(isAllowedAction({set}));
     EXPECT_FALSE(isAllowedAction({set, QStringLiteral("beta"), QStringLiteral("stable")}));
+    // By name (PATH) or through /usr/bin's link: not the installed file.
+    EXPECT_FALSE(isActionProgram(QStringLiteral("grassfield-channel-set")));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("grassfield-channel-set"), QStringLiteral("beta")}));
     EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/grassfield-channel-set"), QStringLiteral("beta")}));
     // Its root helper is never Settings' to run: pkexec starts it, from grassfield-channel-set.
     EXPECT_FALSE(isAllowedAction({QStringLiteral("pkexec"), QStringLiteral("/usr/lib/grassfield/grassfield-channel-helper"), QStringLiteral("set"), QStringLiteral("beta")}));
@@ -443,10 +446,11 @@ TEST(ActionGuard, ChannelSetTakesOneVerbOnly)
 
 TEST(QueryGuard, TheChannelIsReadWithNoArgumentOnly)
 {
-    const QString set = QStringLiteral("grassfield-channel-set");
+    const QString set = QStringLiteral("/usr/lib/grassfield/grassfield-channel-set");
     EXPECT_TRUE(isReadOnlyQuery({set}));
     for (const char *no : {"stable", "beta", "repair", "off", ""})
         EXPECT_FALSE(isReadOnlyQuery({set, QString::fromLatin1(no)})) << no;
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("grassfield-channel-set")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("/usr/bin/grassfield-channel-set")}));
 }
 
@@ -470,7 +474,7 @@ TEST(LaunchGuard, OnlyUpdateNowAndTheSessionEnd)
     EXPECT_FALSE(isLaunch({}));
     // A launch is no action, an action no launch: each door has its own list.
     EXPECT_FALSE(isAllowedAction({launcher, QStringLiteral("omarchy-update")}));
-    EXPECT_FALSE(isLaunch({QStringLiteral("grassfield-channel-set"), QStringLiteral("beta")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("/usr/lib/grassfield/grassfield-channel-set"), QStringLiteral("beta")}));
 }
 
 TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)

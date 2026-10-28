@@ -41,7 +41,7 @@ constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
-constexpr int kShellIpcMs = 5000;        // `qs ipc call update check`: the shell answers at once (the check itself runs there)
+constexpr int kShellIpcMs = 5000;        // the shell's IPC answer to `update check`: at once (the check itself runs there)
 constexpr int kUpdateCheckMs = 200000;   // the checker stops itself after 180 s (SIGTERM, then SIGKILL 5 s later): U1
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
@@ -312,11 +312,22 @@ void Backend::askShellToCheck(const QString &tag)
           kShellIpcMs, Track::None, env);
 }
 
+QString Backend::updateCheckerProgram()
+{
+    const QString command = grassfield::apps::runmode::devValue("UPDATE_CHECK_CMD");
+    return command.isEmpty() ? QStringLiteral("/usr/lib/grassfield/grassfield-update-check") : command;
+}
+
+QString Backend::updateFixture()
+{
+    return grassfield::apps::runmode::devValue("UPDATE_FIXTURE");
+}
+
 void Backend::runUpdateChecker(const QString &tag)
 {
     using namespace grassfield::apps;
     // A dev session's canned answer (ADR-0019 dev plumbing): read here, answered on the next turn of the event loop like a run.
-    const QString fixture = runmode::devValue("UPDATE_FIXTURE");
+    const QString fixture = updateFixture();
     if (!fixture.isEmpty()) {
         const QVariantMap r = readText(fixture);
         const bool ok = r.value(QStringLiteral("ok")).toBool();
@@ -328,12 +339,11 @@ void Backend::runUpdateChecker(const QString &tag)
         });
         return;
     }
-    const QString command = runmode::devValue("UPDATE_CHECK_CMD");
     QProcessEnvironment env = cLocaleEnvironment();
     // A dev session's checker keeps its cache under the dev state (ADR-0033 "Dev sessions"), as the shell's does.
     if (m_dev)
         env.insert(QStringLiteral("XDG_CACHE_HOME"), runmode::stateDir() + QStringLiteral("/cache"));
-    start({command.isEmpty() ? QStringLiteral("/usr/lib/grassfield/grassfield-update-check") : command}, tag, kUpdateCheckMs, Track::None, env);
+    start({updateCheckerProgram()}, tag, kUpdateCheckMs, Track::None, env);
 }
 
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and

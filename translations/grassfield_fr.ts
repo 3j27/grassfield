@@ -8362,6 +8362,17 @@
     </message>
 </context>
 <context>
+    <name>SoftwareUpdate</name>
+    <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+</context>
+<context>
     <name>SoftwareUpdatePage</name>
     <message>
         <source>Software Update</source>
@@ -9529,14 +9540,6 @@
     <message>
         <source>Settings…</source>
         <translation>Réglages…</translation>
-    </message>
-    <message>
-        <source>1 update</source>
-        <translation>1 mise à jour</translation>
-    </message>
-    <message>
-        <source>%1 updates</source>
-        <translation>%1 mises à jour</translation>
     </message>
     <message>
         <source>Recent Items</source>
@@ -10819,6 +10822,10 @@
     <message>
         <source>Omarchy %1 is available</source>
         <translation>Omarchy %1 est disponible</translation>
+    </message>
+    <message>
+        <source>Update Now in Software Update installs it.</source>
+        <translation>Mettre à jour maintenant, dans Mise à jour de logiciels, l’installe.</translation>
     </message>
     <message>
         <source>and 1 more</source>
