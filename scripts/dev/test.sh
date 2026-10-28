@@ -247,7 +247,8 @@ gtest_suite tests/unit/portal-settings "apps/portal-settings/build-direct.sh --t
 # grassfield-portal's FileChooser (ADR-0035 D-4): the option mapping in and the results out, the panels' memory, and the
 # backend on a private dbus-daemon with a fake frontend and a fake x-d-p-gtk (the forward, Close, the bounds, idle). With the
 # real binary and the real frontend: tests/integration/portal_filechooser.sh.
-gtest_suite tests/unit/portal "apps/portal/build-direct.sh --tests" ".dev/build/portal-unit-tests --gtest_brief=1"
+gtest_suite tests/unit/portal "apps/portal/build-direct.sh --tests >/dev/null && apps/portal/build-direct.sh --tests --asan" \
+  ".dev/build/portal-unit-tests --gtest_brief=1" ".dev/build/portal-unit-tests-asan --gtest_brief=1"
 # grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
 # (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
