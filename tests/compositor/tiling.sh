@@ -51,9 +51,12 @@
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
 #   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
-#   covered        (integrator review of 4ead6fb) no "enter" while an Exclusive layer is mapped elsewhere on the output, while
-#                  a layer covers the light, or while the session is locked (the foreign locker); after each, the pointer
-#                  moved off and back gives "enter" again. The layer is a tiny Quickshell config written into the run directory.
+#   covered        (integrator review of 4ead6fb) no "enter" while an Exclusive layer is mapped elsewhere on the output or
+#                  while a layer covers the light; after each, the pointer moved off and back gives "enter" again. The layer
+#                  is a tiny Quickshell config written into the run directory. Locked (integrator nested rerun of 25e757c,
+#                  D24): a hover before the lock, its popover closed with Esc (the shell's own lock closes it; the foreign
+#                  locker does not), then no "enter" while the session is locked, the pointer moved off and back onto the
+#                  light meanwhile; once unlocked, "enter" comes by itself, the pointer resting on the light.
 # The locked case above also calls move_to when the plugin has it (TL34): nothing moves.
 # Both locked cases release the fixture through unlock_session, which checks that Hyprland itself reports the session
 # unlocked (`hyprctl locked`) before the next case (integrator nested pass of ab485fb: a locker killed before its unlock landed
@@ -924,6 +927,16 @@ QML
     close_popover
     return $ok
   }
+  enter_unmoved() { # the pointer rests on the light: an enter comes by itself (since mark_events) within the delay + 2 s
+    local _ ok=1
+    for _ in $(seq 1 $(((hover_delay + 2000) / 100))); do
+      events_since "$(hover_filter enter)" | grep -q . && { ok=0; break; }
+      sleep 0.1
+    done
+    ((ok)) && surfaces_state
+    close_popover
+    return $ok
+  }
   wait_s=$(awk -v d="$hover_delay" 'BEGIN { print (d + 700) / 1000 }')
   if [[ -n $open_event ]]; then
     pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
@@ -937,14 +950,20 @@ QML
     stop_layer
     check "covered: the layer gone, the hover works again" enter_again
     pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "covered: a hover before the lock" event_came "$(hover_filter enter)"
+    close_popover
     if lock_session; then
+      pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
       check "covered: no enter while the session is locked" no_enter_for "$wait_s"
     else
       check "covered: the foreign locker holds the session lock (${locked:-no answer})" false
     fi
+    mark_events # the pointer rests on the light from here on
     check "covered: released, Hyprland reports the session unlocked" unlock_session
-    sleep 0.5
-    check "covered: unlocked, the hover works again" enter_again
+    check "covered: unlocked, the hover works again with the pointer resting on the light" enter_unmoved
   fi
 
   other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // ""')
