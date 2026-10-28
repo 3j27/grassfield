@@ -613,8 +613,8 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   Files' prompts go):
   - `AskUserActionInterface`: rename/overwrite (Keep Both / Skip at the leading edge, Stop / Replace at the trailing edge,
     "Merge" for a folder onto a folder, Apply to All for several items; Keep Both names the new item as KIO does,
-    `KFileUtils::suggestName`), skip (Skip / Stop, Try Again, or Rename for characters the destination refuses, Apply to
-    All), the permanent deletions KIO asks about (a plain move to the Trash is not asked), `requestUserMessageBox` as a sheet
+    `KFileUtils::suggestName`), skip (Try Again, or Rename for characters the destination refuses, Stop, and for several
+    items Skip and Apply to All; one item that can't be retried: OK), the permanent deletions KIO asks about (a plain move to the Trash is not asked), `requestUserMessageBox` as a sheet
     with the worker's buttons (Show Details for its details), `askIgnoreSslErrors` as the certificate sheet (Show Certificate
     lists the chain as text: subject, issuer, validity, SHA-256, the problems found): Cancel is the default button (Return
     and Esc cancel); Continue accepts for 30 minutes, KIO's "Current Session only"; a permanent rule ("Forever") only when
@@ -627,27 +627,35 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - KD2 every answer is the KIO answer the widget dialog gives for the same choice (`RenameDialog_Result`, `SkipDialog_Result`,
   `KIO::WorkerBase::ButtonCode`), so jobs behave exactly as before.
 - KD3 the sheets show in the Files window the user last worked in when the question came, one at a time, and stay there
-  until answered (in another window if that one closes); a question whose job ends goes away unanswered; keyboard as common
-  rule 3 (4a-9).
+  until answered (in another window if that one closes); a question waits while another sheet of that window is open (Go
+  to Folder, a confirmation); a question whose job ends goes away unanswered; keyboard as common rule 3 (4a-9).
 - KD4 errors and warnings KIO shows by itself (where KIO turns its automatic handling on) are notice sheets; Undo reports its
-  errors on the window's error line, keeps a copy changed since it was made and says so (4a-11), and opens no progress window
-  (4a-12).
+  errors on the window's error line, keeps a copy changed since it was made and says so (4a-11); no job of Files opens
+  KIO's progress window (4a-12).
+- KD5 Paste is offered for items only: text or an image on the clipboard is not pasted (4a-14).
 
 ### Acceptance criteria
 - A-KD1 (L0) every choice of the conflict, skip and message sheets gives the KIO answer the widget dialog gives
   (`tests/unit/files/tst_kioprompts.cpp`, table test); real KIO copy and move jobs through KIO's file worker in a scratch home,
   answered as the sheets answer, do what that answer says (Replace, Keep Both, Stop, Skip with Apply to All asked once, a
-  folder merged, a sheet's reply, a withdrawn question; `tests/unit/files/tst_kiodialogs.cpp`); the sheets' texts, buttons and
-  replies (`tests/unit/tst_fileskiosheets.qml`); the window that shows a question (`tests/unit/tst_filesbrowser.qml`).
+  folder copied and a folder moved onto a folder merged, a file onto a folder never "Merge", a sheet's reply, a withdrawn
+  question; `tests/unit/files/tst_kiodialogs.cpp`); the sheets' texts, buttons and replies (`tests/unit/tst_fileskiosheets.qml`);
+  the window that shows a question, and a question that waits for Go to Folder (`tests/unit/tst_filesbrowser.qml`).
 - A-KD2 (L0) no widget is created by those jobs, KIO's own jobs resolve Grassfield's extensions, an error KIO reports itself
-  is a notice, Undo of a changed copy keeps it with no progress window, and Files' sources hold no KIO or Qt widget dialog,
-  set no other delegate and never enable "open or execute" (`tst_kiodialogs.cpp`).
+  is a notice, Undo of a changed copy keeps it and Undo of a link opens no progress window, only items are pastable, and
+  Files' sources hold no KIO or Qt widget dialog, set no other delegate, never use KIO's paste test and never enable "open
+  or execute" (`tst_kiodialogs.cpp`).
 - A-KD4 (L0) certificate: Return and Esc cancel; Continue answers KIO's follow-up with "Current Session only" (30 minutes),
-  and with "Forever" only when "Always trust" was ticked (`tst_kioprompts.cpp`, `tst_fileskiosheets.qml`).
+  and with "Forever" only when "Always trust" was ticked, also when the follow-up comes late; never after Cancel or after
+  another question (`tst_kioprompts.cpp`, `tst_kiodialogs.cpp`, `tst_fileskiosheets.qml`).
 - A-KD3 F1 against Finder's conflict alert and certificate sheet captures.
 
 ### Known limitations
 - KF6 apps other than Files keep KIO's own dialogs (inventory K8, themed by D-8); network passwords are section 5's (SC9).
 - While a sheet is open, the window's menu commands and keys stay live (as with Files' other sheets, Go to Folder and the
   deletion confirmations); macOS disables them under a sheet.
-- The certificate path is tested on KIO's answers (table and sheet), not against a live https server with a bad certificate.
+- The certificate path is tested on KIO's answers (table, extension and sheet), not against a live https server with a bad
+  certificate.
+- A worker's message box whose job's delegate is deleted before the user answers goes unanswered, and KIO's notification
+  queue then waits for it, holding the later message boxes of Files' workers (`usernotificationhandler.cpp:43-54`); KIO's
+  own widget handler behaves the same way.

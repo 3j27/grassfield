@@ -35,7 +35,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`). Recents and
 selection").
 
 ## Functional requirements
-1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's conflict/Open With/undo dialogs are widgets),
+1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's widgets library expects one; its dialogs are Grassfield sheets, ADR-0035 D-12 a),
    `setDesktopFileName("org.grassfield.Files")`, `grassfield-files [locations...]` opens one window per location
    (default: home). QML from `GRASSFIELD_FILES_QML` or the baked-in directory (installed
    `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`.
@@ -323,7 +323,8 @@ installed (not built here).
 - Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
 - KIO's questions are Grassfield sheets since ADR-0035 step 4a (docs/specs/system-dialogs.md section 9): file-exists
   conflicts, skips, certificates, a worker's messages; a document with no application gets a notice until the Choose
-  Application sheet of ADR-0035 D-5; Undo keeps a copy changed since it was made and says so.
+  Application sheet of ADR-0035 D-5; Undo keeps a copy changed since it was made and says so. Paste takes items only
+  (text or an image on the clipboard is not pasted, as the Finder).
 - Terminal applications (for example `nvim.desktop`, the default for text files here) fail to open: KIO starts them
   through `kdeglobals` `[General] TerminalApplication` (default konsole, not installed on Omarchy). Observed in a
   nested run as the banner "Terminal konsole not found…". Workaround: set `TerminalApplication` (owner config).
