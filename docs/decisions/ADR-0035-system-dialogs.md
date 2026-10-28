@@ -467,6 +467,24 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   Applications) stays out of the panels: nothing there can be chosen. The portal runs Files' icon decoder child and its
   `image://appicon` provider as Files does (an application's icon file is decoded in a child of the portal itself, which
   answers `--decode-icon` before anything else).
+- **4b-17. Write access to what was picked** (integrator review of bd78424, MINOR 4). Question: does a sandboxed application
+  get write access to a file opened through a panel? xdg-desktop-portal 1.22.1 (`src/file-chooser.c`,
+  `send_response_in_thread_func`) starts from `XDG_DOCUMENT_FLAG_WRITABLE` and drops it only for an explicit `writable`
+  false; it has no read-only option to pass on. A missing key is therefore already writable. **Choice:** the panels
+  answer `writable` true explicitly for Open, Save and SaveFiles: macOS gives an application read and write access to what
+  its panel returns, and the access no longer depends on that default.
+- **4b-18. The disk off the GUI thread** (integrator review of bd78424, MAJOR 1: a hung mount froze every application's
+  panel, and the 3-s forward with them). Question: how do the panels ask the disk (the folder a panel starts in, whether a
+  name exists, Go to Folder) when a mount may not answer? Options: (a) the D-Bus side on a thread of its own, the panels
+  still reading the disk on the GUI thread (the forward survives; every panel still freezes); (b) every question asked on
+  a thread of its own with a deadline (`FileChooser::probe`, 1 s), the GUI thread never waiting. **Choice: (b).** A folder
+  that has not answered in time is passed over when a panel opens (the next of the application's folder, the remembered
+  one, Documents, Home), and Save, SaveFiles and Go to Folder say "“name” isn't responding." with "Choose another folder,
+  or try again later.", as the Finder says of a server that went away; the panel stays open. A path still being read is not
+  read twice, and beyond 16 paths in flight a new one is not responding at once, so stuck reads cannot pile up threads. New
+  Folder asks KIO (its job runs off the GUI thread) and learns a taken name from KIO's error instead of a look first.
+  Left on the GUI thread: Files' own per-item reads once a listing has arrived (tags, folder looks), the panels' state
+  file in the state directory, and the application's desktop entry (KService's cache).
 
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.

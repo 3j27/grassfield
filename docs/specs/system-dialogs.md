@@ -95,7 +95,7 @@ LibreOffice (ADR-0035 D-8); remote (KIO network) results; Tags editing in the Sa
   portal that waits on it.
 - FC8 over the lock: no panel while locked (common rule 6); a request that arrives then waits for the unlock.
 
-Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decisions are ADR-0035 4b-1 to 4b-16):
+Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decisions are ADR-0035 4b-1 to 4b-18):
 - FC1–FC3 as written; an Open panel's default button chooses the selection, opens a selected folder in a file panel, and
   chooses the shown folder in a folder panel; SaveFiles asks about every name that exists in the chosen folder in one alert;
   a Save name that is a folder's is refused with a message (4b-6).
@@ -108,7 +108,9 @@ Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decis
 - FC6: one filter shows no pop-up; several show "Show:" (Open) or "Format:" (Save, where the extension follows); each choice is
   a pop-up or a check box.
 - FC7: the UI loads at the first request; no first frame in 3 s, a QML that does not load, or no display: the call goes to
-  x-d-p-gtk; the process quits 60 s after its last request (4b-11).
+  x-d-p-gtk; the process quits 60 s after its last request (4b-11). The panels never read the disk on the GUI thread: a
+  folder that does not answer within 1 s (a share gone, a sleeping disk) is passed over when a panel opens, and Save, Go to
+  Folder and SaveFiles say "“name” isn't responding." there; another application's panel is never held up (4b-18).
 - FC8: the compositor's session lock hides the panel and keeps the keyboard from it; a panel that first gets the keyboard
   1.5 s or more after it opened takes keys only after a click, and its footer says so (4b-8).
 - FC9: Files' KIO sheets, in the panel the user last worked in.
