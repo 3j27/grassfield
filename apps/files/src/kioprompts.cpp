@@ -92,6 +92,22 @@ QVariantList describeChain(const QVariantMap &sslErrorData)
 
 KioPrompts *s_prompts = nullptr;
 
+// Asks through Files' prompts; once they are gone (Files quitting while a job still runs), the safe answer ("stop": Stop,
+// Cancel, Don't Delete), after the call returns and only while the owner exists.
+void askOrStop(const QPointer<KioPrompts> &prompts, const QVariantMap &request, QObject *owner, const KioPrompts::Answer &answer)
+{
+    if (prompts) {
+        prompts->ask(request, owner, answer);
+        return;
+    }
+    const QPointer<QObject> guard(owner);
+    const bool owned = owner != nullptr;
+    QTimer::singleShot(0, owner ? owner : QCoreApplication::instance(), [answer, guard, owned] {
+        if (!owned || guard)
+            answer({{QStringLiteral("button"), QStringLiteral("stop")}});
+    });
+}
+
 class GrassfieldJobUiDelegateFactory : public KIO::JobUiDelegateFactory
 {
 public:
@@ -269,7 +285,7 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
         {QStringLiteral("destModified"), mtimeDest},
         {QStringLiteral("srcName"), itemName(src)},
     };
-    m_prompts->ask(request, job, [self = QPointer<GrassfieldAskUserAction>(this), job, options, dest](const QVariantMap &reply) {
+    askOrStop(m_prompts, request, job, [self = QPointer<GrassfieldAskUserAction>(this), job, options, dest](const QVariantMap &reply) {
         if (!self)
             return;
         const QString button = reply.value(kButton).toString();
@@ -302,7 +318,7 @@ void GrassfieldAskUserAction::askUserSkip(KJob *job, KIO::SkipDialog_Options opt
         {QStringLiteral("skip"), b.skip},
         {QStringLiteral("applyToAll"), b.applyToAll},
     };
-    m_prompts->ask(request, job, [self = QPointer<GrassfieldAskUserAction>(this), job, options](const QVariantMap &reply) {
+    askOrStop(m_prompts, request, job, [self = QPointer<GrassfieldAskUserAction>(this), job, options](const QVariantMap &reply) {
         if (!self)
             return;
         const QString button = reply.value(kButton).toString();
@@ -346,7 +362,7 @@ void GrassfieldAskUserAction::askUserDelete(const QList<QUrl> &urls, DeletionTyp
         {QStringLiteral("name"), urls.isEmpty() ? QString() : itemName(urls.first())},
     };
     const QPointer<QWidget> window(parent);
-    m_prompts->ask(request, this, [this, urls, deletionType, window](const QVariantMap &reply) {
+    askOrStop(m_prompts, request, this, [this, urls, deletionType, window](const QVariantMap &reply) {
         Q_EMIT askUserDeleteResult(reply.value(kButton).toString() == QLatin1String("delete"), urls, deletionType, window.data());
     });
 }
@@ -386,7 +402,7 @@ void GrassfieldAskUserAction::requestUserMessageBox(MessageDialogType type,
         {QStringLiteral("okOnly"), b.okOnly},
         {QStringLiteral("warning"), b.warning},
     };
-    m_prompts->ask(request, this, [this, type](const QVariantMap &reply) {
+    askOrStop(m_prompts, request, this, [this, type](const QVariantMap &reply) {
         const QString button = reply.value(kButton).toString();
         const MessageButton choice = button == QLatin1String("primary") ? MessageButton::Primary
             : button == QLatin1String("secondary")                      ? MessageButton::Secondary
@@ -413,7 +429,7 @@ void GrassfieldAskUserAction::askIgnoreSslErrors(const QVariantMap &sslErrorData
         {QStringLiteral("error"), plainText(sslErrorData.value(QStringLiteral("sslError")).toString())},
         {QStringLiteral("chain"), describeChain(sslErrorData)},
     };
-    m_prompts->ask(request, this, [this](const QVariantMap &reply) {
+    askOrStop(m_prompts, request, this, [this](const QVariantMap &reply) {
         if (reply.value(kButton).toString() == QLatin1String("continue")) {
             m_alwaysTrust = reply.value(QStringLiteral("alwaysTrust")).toBool();
             Q_EMIT askIgnoreSslErrorsResult(1);
@@ -432,7 +448,8 @@ GrassfieldOpenWithHandler::GrassfieldOpenWithHandler(KioPrompts *prompts, QObjec
 
 void GrassfieldOpenWithHandler::promptUserForApplication(KJob *, const QList<QUrl> &urls, const QString &)
 {
-    m_prompts->tell(tr("There is no application set to open the document “%1”.").arg(urls.isEmpty() ? QString() : itemName(urls.first())),
+    if (m_prompts)
+        m_prompts->tell(tr("There is no application set to open the document “%1”.").arg(urls.isEmpty() ? QString() : itemName(urls.first())),
                     tr("Choose one with Open With, in the File menu or the document’s menu."));
     QTimer::singleShot(0, this, [this] {
         Q_EMIT canceled();
@@ -447,7 +464,8 @@ GrassfieldUntrustedProgramHandler::GrassfieldUntrustedProgramHandler(KioPrompts 
 
 void GrassfieldUntrustedProgramHandler::showUntrustedProgramWarning(KJob *, const QString &programName)
 {
-    m_prompts->tell(tr("“%1” wasn’t opened.").arg(FileLogic::displayName(programName)), tr("Files doesn’t run programs. Open apps from the Dock or from Apps."));
+    if (m_prompts)
+        m_prompts->tell(tr("“%1” wasn’t opened.").arg(FileLogic::displayName(programName)), tr("Files doesn’t run programs. Open apps from the Dock or from Apps."));
     QTimer::singleShot(0, this, [this] {
         Q_EMIT result(false);
     });
@@ -461,13 +479,13 @@ GrassfieldJobUiDelegate::GrassfieldJobUiDelegate(KioPrompts *prompts, KJobUiDele
 
 void GrassfieldJobUiDelegate::showErrorMessage()
 {
-    if (job() && job()->error() && job()->error() != KIO::ERR_USER_CANCELED)
+    if (m_prompts && job() && job()->error() && job()->error() != KIO::ERR_USER_CANCELED)
         m_prompts->tell(tr("The operation can’t be completed."), plainText(job()->errorString()));
 }
 
 void GrassfieldJobUiDelegate::slotWarning(KJob *, const QString &message)
 {
-    if (isAutoWarningHandlingEnabled())
+    if (m_prompts && isAutoWarningHandlingEnabled())
         m_prompts->tell(tr("The operation can’t be completed."), plainText(message));
 }
 

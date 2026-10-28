@@ -104,7 +104,7 @@ public:
     void askIgnoreSslErrors(const QVariantMap &sslErrorData, QWidget *parent) override;
 
 private:
-    KioPrompts *m_prompts;
+    QPointer<KioPrompts> m_prompts; // gone when Files quits while a job still runs: the safe answer then
     // After "Continue" on the certificate sheet: KIO's http worker's next question on this job is whether to accept the
     // certificate forever or for 30 minutes (http.cpp:310-327, the only sslError caller in KIO 6.31); the sheet's "Always
     // trust" box answers it (KioPromptLogic::certificateFollowUpAnswer). Any other question first clears it.
@@ -121,7 +121,7 @@ public:
     void promptUserForApplication(KJob *job, const QList<QUrl> &urls, const QString &mimeType) override;
 
 private:
-    KioPrompts *m_prompts;
+    QPointer<KioPrompts> m_prompts; // gone when Files quits while a job still runs: the safe answer then
 };
 
 // KIO asks before running a program it does not trust: Files never runs one (its LaunchGuard decides first; this is the
@@ -135,7 +135,7 @@ public:
     void showUntrustedProgramWarning(KJob *job, const QString &programName) override;
 
 private:
-    KioPrompts *m_prompts;
+    QPointer<KioPrompts> m_prompts; // gone when Files quits while a job still runs: the safe answer then
 };
 
 // KIO's own delegate class (clipboard updates and the rest stay KIO's), with Grassfield's extensions. KIO's fourth,
@@ -155,7 +155,7 @@ protected Q_SLOTS:
     void slotWarning(KJob *job, const QString &message) override;
 
 private:
-    KioPrompts *m_prompts;
+    QPointer<KioPrompts> m_prompts; // gone when Files quits while a job still runs: the safe answer then
 };
 
 // Undo and redo (KIO's FileUndoManager) report through their own interface (KIO's shows KMessageBox): an error goes to the

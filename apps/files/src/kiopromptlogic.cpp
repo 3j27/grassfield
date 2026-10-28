@@ -131,9 +131,17 @@ bool deleteNeedsAsking(Ask::DeletionType deletionType, Ask::ConfirmationType con
 
 QString plainText(const QString &text)
 {
-    if (!Qt::mightBeRichText(text))
-        return text;
-    return QTextDocumentFragment::fromHtml(text).toPlainText();
+    const QString plain = Qt::mightBeRichText(text) ? QTextDocumentFragment::fromHtml(text).toPlainText() : text;
+    QString out;
+    out.reserve(plain.size());
+    for (const QChar c : plain) {
+        const char16_t u = c.unicode();
+        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069) || u == 0x2028 || u == 0x2029)
+            out += QStringLiteral("<U+%1>").arg(uint(u), 4, 16, QLatin1Char('0')).toUpper();
+        else if (u == u'\n' || u == u'\t' || !(u < 0x20 || u == 0x7F || (u >= 0x80 && u < 0xA0)))
+            out += c;
+    }
+    return out;
 }
 
 } // namespace KioPromptLogic

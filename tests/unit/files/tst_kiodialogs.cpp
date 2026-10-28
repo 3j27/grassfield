@@ -355,6 +355,13 @@ TEST_F(KioDialogsTest, TheCertificateSheetAnswersKiosFollowUp)
             return !boxAnswers.isEmpty();
         }));
         EXPECT_EQ(boxAnswers, QList<int>{trust ? KIO::WorkerBase::PrimaryAction : KIO::WorkerBase::SecondaryAction}) << trust;
+        // The box answers that one question only: the same question again is a sheet.
+        followUp();
+        ASSERT_EQ(s_prompts->current().value(QStringLiteral("kind")).toString(), QStringLiteral("message")) << trust;
+        s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("cancel")}});
+        ASSERT_TRUE(waitFor([&boxAnswers] {
+            return boxAnswers.size() == 2;
+        }));
     }
 
     // Cancel: no follow-up answer is kept; the same question afterwards is a sheet of its own.
@@ -457,6 +464,52 @@ TEST_F(KioDialogsTest, AQuestionGoesWithTheDelegateThatAsked)
     QEventLoop settle;
     QTimer::singleShot(50, &settle, &QEventLoop::quit);
     settle.exec(); // a delivery to the deleted extension would crash here
+}
+
+namespace
+{
+// A job that ends when told to (KJob::emitResult is protected).
+class EndingJob : public KJob
+{
+public:
+    void start() override
+    {
+    }
+    void end()
+    {
+        emitResult();
+    }
+};
+} // namespace
+
+// An answer is delivered on the next turn of the event loop (KioPrompts::reply): a job that ended meanwhile does not get it.
+TEST_F(KioDialogsTest, AnAnswerNeverReachesAJobThatEnded)
+{
+    auto *job = new EndingJob;
+    bool answered = false;
+    s_prompts->ask({{QStringLiteral("kind"), QStringLiteral("notice")}, {QStringLiteral("title"), QStringLiteral("t")}}, job,
+                   [&answered](const QVariantMap &) {
+                       answered = true;
+                   });
+    ASSERT_FALSE(s_prompts->current().isEmpty());
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("ok")}});
+    job->end(); // before the answer's turn comes
+    QEventLoop settle;
+    QTimer::singleShot(50, &settle, &QEventLoop::quit);
+    settle.exec();
+    EXPECT_FALSE(answered);
+
+    // The control: a job still running gets it.
+    auto *running = new EndingJob;
+    s_prompts->ask({{QStringLiteral("kind"), QStringLiteral("notice")}, {QStringLiteral("title"), QStringLiteral("t")}}, running,
+                   [&answered](const QVariantMap &) {
+                       answered = true;
+                   });
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("ok")}});
+    EXPECT_TRUE(waitFor([&answered] {
+        return answered;
+    }));
+    running->end();
 }
 
 TEST_F(KioDialogsTest, KiosOwnJobsGetGrassfieldsDelegate)

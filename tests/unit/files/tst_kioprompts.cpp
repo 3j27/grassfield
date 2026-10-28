@@ -140,4 +140,9 @@ TEST(KioPrompts, SheetsShowPlainText)
     EXPECT_EQ(plainText(QStringLiteral("<qt>The host <b>example.org</b> refused</qt>")), QStringLiteral("The host example.org refused"));
     // A worker's text with "<" that is not markup stays as is.
     EXPECT_EQ(plainText(QStringLiteral("size < 4 GB")), QStringLiteral("size < 4 GB"));
+    // A name someone else chose: a direction override shows as itself (it would turn "fdp.exe" into "exe.pdf"), a line
+    // break and a tab stay, other control characters go.
+    EXPECT_EQ(plainText(QStringLiteral("Access denied to “invoice\u202Efdp.exe”")), QStringLiteral("Access denied to “invoice<U+202E>fdp.exe”"));
+    EXPECT_EQ(plainText(QStringLiteral("a\u2066b\u2069c\u2028d")), QStringLiteral("a<U+2066>b<U+2069>c<U+2028>d"));
+    EXPECT_EQ(plainText(QStringLiteral("line one\nline\ttwo\x07\x1b[31m")), QStringLiteral("line one\nline\ttwo[31m"));
 }

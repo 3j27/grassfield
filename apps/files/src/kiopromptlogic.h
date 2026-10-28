@@ -63,7 +63,10 @@ int certificateFollowUpAnswer(bool alwaysTrust);
 // is not asked (macOS) unless KIO forces the question; every permanent deletion is.
 bool deleteNeedsAsking(KIO::AskUserActionInterface::DeletionType deletionType, KIO::AskUserActionInterface::ConfirmationType confirmationType);
 
-// The text a sheet shows for a KIO message, which may be Qt rich text: its plain text (sheets never render markup).
+// The text a sheet shows for a KIO message, which may be Qt rich text and names files and hosts others chose: its plain
+// text (sheets never render markup), with the direction overrides and isolates and the line and paragraph separators
+// shown as <U+XXXX> (as FileLogic::displayName shows them in names) and the other control characters dropped; line breaks
+// and tabs stay.
 QString plainText(const QString &text);
 
 } // namespace KioPromptLogic
