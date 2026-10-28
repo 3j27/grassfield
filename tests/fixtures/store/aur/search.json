@@ -29,10 +29,10 @@
    "URL": "http://insecure.example.org/",
    "NumVotes": 7,
    "Popularity": 0.25,
-   "OutOfDate": 1795000000,
+   "OutOfDate": 1791000000,
    "Maintainer": "bob",
    "FirstSubmitted": 1620000000,
-   "LastModified": 1795000000,
+   "LastModified": 1791000000,
    "URLPath": "/cgit/aur.git/snapshot/example-tool-git.tar.gz"
   },
   {

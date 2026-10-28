@@ -323,6 +323,128 @@ TEST(StoreBackend, SourcesFromGrassfieldJson)
     }
 }
 
+// The AUR (step 3b2) through the dev plumbing's folder of answers (GRASSFIELD_STORE_AUR_URL, tests/fixtures/store/aur), turned
+// on in grassfield.json: a search after Return (the repositories' names left out), an AUR page and its info, the build
+// script, Installed's "AUR" group; nothing of it while the switch is off.
+TEST(StoreBackend, TheAur)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
+    // pacman: example-app-bin installed explicitly from outside the repositories; example-lib only as its dependency; gimp a
+    // repository's package that is also an AUR result here.
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")), R"(case "$1" in
+  -Sl) printf '%s\n' 'extra gimp 3.0.4-1 [installed]' 'extra example-lib 1.3-2' ;;
+  -Qqe) printf '%s\n' gimp example-app-bin ;;
+  -Qqm) printf '%s\n' example-app-bin example-tool-git localapp ;;
+  -Ql) shift; [ "$1" = -- ] && shift; for p in "$@"; do [ "$p" = localapp ] && echo 'localapp /usr/share/applications/localapp.desktop'; done ;;
+  *) exit 1 ;;
+esac)");
+    const auto wait = [](auto done) {
+        QEventLoop loop;
+        for (int i = 0; i < 500 && !done(); ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+        return done();
+    };
+    {
+        StoreBackend backend; // the AUR off: nothing asked, no AUR page
+        backend.start();
+        ASSERT_TRUE(settle(backend));
+        QString problem;
+        QObject::connect(&backend, &StoreBackend::aurResults, &backend, [&problem](const QString &, const QVariantList &, const QString &p) { problem = p; });
+        backend.searchAur(QStringLiteral("example"));
+        EXPECT_EQ(problem, QStringLiteral("off"));
+        EXPECT_TRUE(backend.app(QStringLiteral("aur:example-app-bin")).isEmpty());
+        for (const QVariant &g : backend.installed())
+            EXPECT_NE(g.toMap().value(QStringLiteral("group")), QStringLiteral("aur"));
+    }
+    storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"aur":true}}})");
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/install")));
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "btop\n");
+    StoreBackend backend;
+    if (!backend.online())
+        GTEST_SKIP() << "no network reachability here: the AUR is asked only online";
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+
+    // Installed: example-app-bin (explicit, from outside the repositories, known to the AUR) under "AUR", with its page;
+    // localapp (unknown to the AUR, with an entry) stays "Not from a repository".
+    ASSERT_TRUE(wait([&backend] {
+        for (const QVariant &g : backend.installed()) {
+            if (g.toMap().value(QStringLiteral("group")) == QLatin1String("aur"))
+                return true;
+        }
+        return false;
+    }));
+    QHash<QString, QStringList> groups;
+    for (const QVariant &g : backend.installed())
+        groups.insert(g.toMap().value(QStringLiteral("group")).toString(), ids(g.toMap().value(QStringLiteral("apps")).toList()));
+    EXPECT_EQ(groups.value(QStringLiteral("aur")), QStringList{QStringLiteral("aur:example-app-bin")});
+    EXPECT_EQ(groups.value(QStringLiteral("foreign")), QStringList{QStringLiteral("package:localapp")});
+
+    // A search after Return: the AUR's results, a repository's name (example-lib) left out.
+    QString term, problem;
+    QVariantList results;
+    int answers = 0;
+    QObject::connect(&backend, &StoreBackend::aurResults, &backend, [&](const QString &t, const QVariantList &list, const QString &p) {
+        term = t;
+        results = list;
+        problem = p;
+        ++answers;
+    });
+    backend.searchAur(QStringLiteral("example"));
+    ASSERT_TRUE(wait([&answers] { return answers == 1; }));
+    EXPECT_EQ(term, QStringLiteral("example"));
+    EXPECT_EQ(problem, QString());
+    EXPECT_EQ(ids(results), (QStringList{QStringLiteral("aur:example-app-bin"), QStringLiteral("aur:example-tool-git")}));
+    EXPECT_EQ(results.at(0).toMap().value(QStringLiteral("votes")).toInt(), 120);
+    EXPECT_EQ(results.at(0).toMap().value(QStringLiteral("kind")), QStringLiteral("aur"));
+    EXPECT_TRUE(results.at(0).toMap().value(QStringLiteral("installed")).toBool());
+    EXPECT_TRUE(results.at(1).toMap().value(QStringLiteral("outOfDate")).toBool());
+    backend.searchAur(QStringLiteral("x"));
+    ASSERT_TRUE(wait([&answers] { return answers == 2; }));
+    EXPECT_EQ(problem, QStringLiteral("short"));
+
+    // The page: a search's facts first, then its info answer's (its dependencies).
+    QVariantMap tool = backend.app(QStringLiteral("aur:example-tool-git"));
+    EXPECT_EQ(tool.value(QStringLiteral("name")), QStringLiteral("example-tool-git"));
+    EXPECT_EQ(tool.value(QStringLiteral("summary")), QStringLiteral("A tool from the development branch"));
+    EXPECT_FALSE(tool.value(QStringLiteral("aurRead")).toBool());
+    EXPECT_EQ(tool.value(QStringLiteral("aur")).toMap().value(QStringLiteral("maintainer")), QStringLiteral("bob"));
+    QStringList infos;
+    QObject::connect(&backend, &StoreBackend::aurInfo, &backend, [&infos](const QString &id) { infos.append(id); });
+    backend.requestAur(QStringLiteral("aur:example-tool-git"));
+    ASSERT_TRUE(wait([&infos] { return infos.size() == 1; }));
+    tool = backend.app(QStringLiteral("aur:example-tool-git"));
+    EXPECT_TRUE(tool.value(QStringLiteral("aurRead")).toBool());
+    EXPECT_EQ(tool.value(QStringLiteral("aur")).toMap().value(QStringLiteral("depends")).toStringList(),
+              (QStringList{QStringLiteral("example-app-bin"), QStringLiteral("python")}));
+    EXPECT_TRUE(tool.value(QStringLiteral("installed")).toBool()); // pacman -Qm lists it
+
+    // Its build script, plain text.
+    QString script;
+    bool scriptOk = false;
+    QObject::connect(&backend, &StoreBackend::buildScript, &backend, [&](const QString &, const QString &text, bool ok) {
+        script = text;
+        scriptOk = ok;
+    });
+    backend.requestBuildScript(QStringLiteral("aur:example-app-bin"));
+    ASSERT_TRUE(wait([&scriptOk] { return scriptOk; }));
+    EXPECT_TRUE(script.startsWith(QLatin1String("# Maintainer: alice")));
+
+    // Get and Uninstall… go through Omarchy's terminal, which a dev session without its fake program never opens; an AUR name a
+    // repository has is not offered from the AUR.
+    const QVariantMap actions = backend.actions(QStringLiteral("aur:example-app-bin"));
+    EXPECT_TRUE(actions.value(QStringLiteral("installed")).toBool());
+    EXPECT_EQ(actions.value(QStringLiteral("get")), QStringLiteral("installed"));
+    EXPECT_EQ(actions.value(QStringLiteral("uninstall")), QStringLiteral("dev"));
+    backend.requestAur(QStringLiteral("aur:example-lib"));
+    ASSERT_TRUE(wait([&infos] { return infos.size() == 2; }));
+    EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("get")), QStringLiteral("repository"));
+    EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("uninstall")), QStringLiteral("notInstalled"));
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;

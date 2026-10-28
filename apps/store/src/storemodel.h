@@ -50,6 +50,7 @@ struct ModelInputs {
     QList<AppStreamComponent> appstream;
     QString appstreamRoot; // the swcatalog folder its cached icons are under
     QList<SyncPackage> sync;
+    QSet<QString> foreign; // the packages installed from outside the repositories (an AUR app is installed when there)
     bool aurOn = false;
     bool flathubOn = false;
     // The cached file of a catalog icon, "" when it is not cached (catalogstore.h).
