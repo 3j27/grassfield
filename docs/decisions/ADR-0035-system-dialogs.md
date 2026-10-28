@@ -1208,6 +1208,25 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
   Resume (Replace or Stop only: the part already copied is lost); (b) a sheet of its own: "Part of “X” is already in this
   location." with Resume (the default), Start Over and Stop. **Choice: (b)**, KIO's answers (`Result_Resume`,
   `Result_ResumeAll` with Apply to All, `Result_Overwrite`).
+- **4a-17. What Return does on a warning or a deletion** (integrator review of c0dd590, MAJOR 1). A worker's warning (an
+  sftp host key that changed: "Connect Anyway", kio-extras' `kio_sftp.cpp:855-886`; the certificate's "Forever" when it
+  shows as a sheet) took its action on Return, where KDE's own box defaults to Cancel (`kmessagedialog.cpp:357-386`), and
+  common rule 3 says a destructive button is never the default. **Choice:** on a warning, Return gives Cancel, or the
+  secondary action where there is no Cancel; on a permanent deletion KIO asks about, Return cancels. Questions that are
+  not warnings keep their primary action as the default. The conflict sheet's default (Replace, as the Finder) is the
+  owner's to decide (integrator review, point 3): unchanged until then.
+- **4a-18. One answer, one question** (integrator review of c0dd590, MAJOR 2). The next question shows in the same sheet the
+  moment one is answered, so the second click of a double click on Replace, or a Return held down, answered a second job's
+  question unseen. **Choice:** a question takes no click and no key for the double-click interval after it shows
+  (`Sheet.holdInput`, `Qt.styleHints.mouseDoubleClickInterval`). Found while testing it: a button the user clicked kept
+  the keyboard, so in the next question Return pressed that button (Delete, Keep Both) instead of the default. A sheet
+  without a field now opens with the keyboard on itself, and its buttons take the keyboard only by Tab.
+- **4a-19. A long message** (integrator review, MINOR 4). A 200-line worker message made the sheet taller than its window,
+  buttons out of sight. **Choice:** the message, the field and the body scroll inside the sheet when they would not fit
+  (`Sheet.qml`, laid out as before when they fit); the title and the buttons stay. Every Grassfield sheet gets it.
+- **4a-20. Names inside KIO's texts** (integrator review, MINOR 5). A skip text or a worker's message names files and hosts
+  others chose: their direction overrides and isolates show as <U+XXXX>, as in file names (`FileLogic::displayName`), and
+  other control characters go; line breaks stay (`KioPromptLogic::plainText`).
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by

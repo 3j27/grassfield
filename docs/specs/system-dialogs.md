@@ -634,6 +634,10 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   errors on the window's error line, keeps a copy changed since it was made and says so (4a-11); no job of Files opens
   KIO's progress window (4a-12).
 - KD5 Paste is offered for items only: text or an image on the clipboard is not pasted (4a-14).
+- KD6 Return never takes a warning's action or a deletion (Cancel, or the secondary action where there is no Cancel,
+  4a-17); a question takes no input for the double-click interval after it shows, and opens with the keyboard on the sheet,
+  not on a button clicked before (4a-18); a long text scrolls inside the sheet, the buttons stay on screen (4a-19); names
+  inside KIO's texts show their direction controls (4a-20).
 
 ### Acceptance criteria
 - A-KD1 (L0) every choice of the conflict, skip and message sheets gives the KIO answer the widget dialog gives
@@ -641,8 +645,12 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   answered as the sheets answer, do what that answer says (Replace, Keep Both, Stop, Skip with Apply to All asked once, a
   folder copied and a folder moved onto a folder merged, a file onto a folder never "Merge", a sheet's reply, a withdrawn
   question; `tests/unit/files/tst_kiodialogs.cpp`); the sheets' texts, buttons and replies (`tests/unit/tst_fileskiosheets.qml`);
-  the window that shows a question, a question that waits for Go to Folder and for a menu, and a sheet that takes the
-  keyboard back (`tests/unit/tst_filesbrowser.qml`).
+  the window that shows a question, a question that waits for Go to Folder and for a menu, a sheet that takes the
+  keyboard back, and the safe answer with no window (`tests/unit/tst_filesbrowser.qml`).
+- A-KD5 (L0) Return on a warning and on a deletion cancels (or gives the secondary action); a double click and a repeated
+  Return answer one question only; Return is the default button's after a Tab in the last question; a 200-line message
+  keeps the buttons inside the window; direction controls in KIO's texts show as <U+XXXX> (`tst_fileskiosheets.qml`,
+  `tst_kioprompts.cpp`).
 - A-KD2 (L0) no widget is created by those jobs, KIO's own jobs resolve Grassfield's extensions, an error KIO reports itself
   is a notice, Undo of a changed copy keeps it, a job KIO tracks makes no progress window, only items are pastable, and
   Files' sources hold no KIO or Qt widget dialog, set no other delegate, never use KIO's paste test and never enable "open
