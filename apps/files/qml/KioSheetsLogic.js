@@ -17,6 +17,8 @@ function age(request) {
 
 function conflict(request) {
     const name = request.name;
+    if (request.resume)
+        return resumable(request);
     const merge = request.merge === true;
     const older = age(request);
     let title;
@@ -64,6 +66,26 @@ function conflict(request) {
         message: message,
         confirmText: confirmText,
         confirmId: confirmId,
+        destructive: false,
+        showCancel: true,
+        cancelText: qsTr("Stop"),
+        cancelId: "stop",
+        returnCancels: false,
+        extras: extras,
+        applyToAll: request.applyToAll === true
+    };
+}
+
+// Part of the item is already there: a copy that stopped part way (KIO's FileCopyJob asks Resume / Overwrite / Cancel).
+function resumable(request) {
+    const extras = [];
+    if (request.replace)
+        extras.push({id: "replace", text: qsTr("Start Over")});
+    return {
+        title: qsTr("Part of “%1” is already in this location.").arg(request.name),
+        message: qsTr("An earlier copy of it stopped before the end. Do you want to resume it where it stopped?"),
+        confirmText: qsTr("Resume"),
+        confirmId: "resume",
         destructive: false,
         showCancel: true,
         cancelText: qsTr("Stop"),

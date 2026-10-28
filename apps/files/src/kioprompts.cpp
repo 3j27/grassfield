@@ -260,6 +260,7 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
         {QStringLiteral("replace"), b.replace},
         {QStringLiteral("keepBoth"), b.keepBoth},
         {QStringLiteral("skip"), b.skip},
+        {QStringLiteral("resume"), b.resume},
         {QStringLiteral("applyToAll"), b.applyToAll},
         {QStringLiteral("srcSize"), knownSize(sizeSrc)},
         {QStringLiteral("destSize"), knownSize(sizeDest)},
@@ -274,6 +275,7 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
         const ConflictChoice choice = button == QLatin1String("keepBoth") ? ConflictChoice::KeepBoth
             : button == QLatin1String("skip")                             ? ConflictChoice::Skip
             : button == QLatin1String("replace")                          ? ConflictChoice::Replace
+            : button == QLatin1String("resume")                           ? ConflictChoice::Resume
                                                                           : ConflictChoice::Stop;
         const KIO::RenameDialog_Result result = conflictResult(options, choice, reply.value(QStringLiteral("applyToAll")).toBool());
         QUrl newUrl;

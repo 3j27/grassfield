@@ -13,16 +13,18 @@
 namespace KioPromptLogic
 {
 
-// The conflict sheet ("An item named “X” already exists in this location."): Keep Both / Skip / Stop / Replace.
+// The conflict sheet ("An item named “X” already exists in this location."): Keep Both / Skip / Stop / Replace, and
+// Resume for a copy that stopped part way (KIO's FileCopyJob, filecopyjob.cpp:355-376).
 struct ConflictButtons {
     bool replace = false; // RenameDialog_Overwrite and not the item itself
     bool keepBoth = false; // not RenameDialog_NoRename
     bool skip = false; // RenameDialog_Skip
+    bool resume = false; // RenameDialog_Resume
     bool applyToAll = false; // RenameDialog_MultipleItems
 };
 ConflictButtons conflictButtons(KIO::RenameDialog_Options options);
 
-enum class ConflictChoice { KeepBoth, Skip, Stop, Replace };
+enum class ConflictChoice { KeepBoth, Skip, Stop, Replace, Resume };
 // KIO's answer; a choice the sheet did not offer is Stop (Result_Cancel).
 KIO::RenameDialog_Result conflictResult(KIO::RenameDialog_Options options, ConflictChoice choice, bool applyToAll);
 

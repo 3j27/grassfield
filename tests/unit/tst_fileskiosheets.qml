@@ -343,6 +343,47 @@ TestCase {
         compare(fakePrompts.replies.length, 4);
     }
 
+    function test_resume(): void {
+        const s = KioSheetsLogic.sheet(test.conflict({
+            resume: true,
+            keepBoth: false
+        }));
+        compare(s.title, "Part of “Report.pdf” is already in this location.");
+        compare([s.confirmText, s.confirmId, s.cancelId], ["Resume", "resume", "stop"]);
+        compare(s.extras, [{id: "replace", text: "Start Over"}]);
+
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 41,
+            resume: true,
+            keepBoth: false
+        });
+        tryVerify(() => sheet.visible, 1000);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].button, "resume");
+    }
+
+    // A question hidden a moment (another sheet or a menu of the window) comes back with the choices made on it.
+    function test_choicesKeptWhileHidden(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 51,
+            skip: true,
+            applyToAll: true
+        });
+        tryVerify(() => sheet.visible, 1000);
+        test.click(sheet, "Apply to All");
+        sheets.shown = false;
+        tryVerify(() => !sheet.visible, 1000);
+        sheets.shown = true;
+        tryVerify(() => sheet.visible, 1000);
+        verify(test.find(sheet, "Apply to All").checked, "Apply to All kept");
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].applyToAll, true);
+    }
+
     function test_withdrawnQuestion(): void {
         const sheets = test.make();
         const sheet = test.sheetOf(sheets);

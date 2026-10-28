@@ -13,6 +13,7 @@ ConflictButtons conflictButtons(KIO::RenameDialog_Options options)
     b.replace = options.testFlag(KIO::RenameDialog_Overwrite) && !options.testFlag(KIO::RenameDialog_OverwriteItself);
     b.keepBoth = !options.testFlag(KIO::RenameDialog_NoRename);
     b.skip = options.testFlag(KIO::RenameDialog_Skip);
+    b.resume = options.testFlag(KIO::RenameDialog_Resume);
     b.applyToAll = options.testFlag(KIO::RenameDialog_MultipleItems);
     return b;
 }
@@ -28,6 +29,8 @@ KIO::RenameDialog_Result conflictResult(KIO::RenameDialog_Options options, Confl
         return b.skip ? (all ? KIO::Result_AutoSkip : KIO::Result_Skip) : KIO::Result_Cancel;
     case ConflictChoice::Replace:
         return b.replace ? (all ? KIO::Result_OverwriteAll : KIO::Result_Overwrite) : KIO::Result_Cancel;
+    case ConflictChoice::Resume: // renamedialog.cpp:730-737
+        return b.resume ? (all ? KIO::Result_ResumeAll : KIO::Result_Resume) : KIO::Result_Cancel;
     case ConflictChoice::Stop:
         break;
     }

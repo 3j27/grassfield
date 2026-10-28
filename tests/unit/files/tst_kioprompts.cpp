@@ -48,6 +48,15 @@ TEST(KioPrompts, EachConflictChoiceGivesKiosAnswer)
     for (const Row &r : rows)
         EXPECT_EQ(conflictResult(all, r.choice, r.applyToAll), r.expected) << int(r.choice) << r.applyToAll;
 
+    // A copy that stopped part way (FileCopyJob: Overwrite | Resume | NoRename): Resume, Replace, Stop.
+    const KIO::RenameDialog_Options partial = KIO::RenameDialog_Overwrite | KIO::RenameDialog_Resume | KIO::RenameDialog_NoRename;
+    EXPECT_TRUE(conflictButtons(partial).resume);
+    EXPECT_FALSE(conflictButtons(partial).keepBoth);
+    EXPECT_EQ(conflictResult(partial, ConflictChoice::Resume, false), KIO::Result_Resume);
+    EXPECT_EQ(conflictResult(partial | KIO::RenameDialog_MultipleItems, ConflictChoice::Resume, true), KIO::Result_ResumeAll);
+    EXPECT_EQ(conflictResult(partial, ConflictChoice::Replace, false), KIO::Result_Overwrite);
+    EXPECT_EQ(conflictResult(all, ConflictChoice::Resume, false), KIO::Result_Cancel);
+
     // Apply to All exists only for several items; a choice the sheet did not offer stops.
     EXPECT_EQ(conflictResult(KIO::RenameDialog_Overwrite, ConflictChoice::Replace, true), KIO::Result_Overwrite);
     EXPECT_EQ(conflictResult(KIO::RenameDialog_Overwrite, ConflictChoice::Skip, false), KIO::Result_Cancel);

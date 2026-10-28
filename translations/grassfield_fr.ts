@@ -4897,6 +4897,22 @@
         <translation>Arrêter</translation>
     </message>
     <message>
+        <source>Start Over</source>
+        <translation>Recommencer</translation>
+    </message>
+    <message>
+        <source>Part of “%1” is already in this location.</source>
+        <translation>Une partie de «&#xa0;%1&#xa0;» se trouve déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An earlier copy of it stopped before the end. Do you want to resume it where it stopped?</source>
+        <translation>Une copie précédente s’est arrêtée avant la fin. Voulez-vous la reprendre là où elle s’est arrêtée&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
         <source>Rename</source>
         <translation>Renommer</translation>
     </message>
