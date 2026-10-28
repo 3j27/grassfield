@@ -25,6 +25,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkInformation>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -42,6 +43,7 @@ constexpr int kFetchMs = 15000;      // ADR-0037 c
 constexpr qint64 kAppStreamPackageMax = 64 * 1024 * 1024;
 constexpr int kAppStreamDownloadMs = 120000;
 constexpr int kMaxWebApps = 500;
+constexpr qint64 kConfigMax = 1024 * 1024; // grassfield.json (ADR-0020: a real one is a few KiB)
 
 QString configFile()
 {
@@ -212,6 +214,7 @@ struct JobInput {
     bool fetchCatalog = false;
     bool fetchAppData = false;
     bool online = true;
+    bool aur = false; // the AUR source is on: the catalog's AUR apps are offered
 };
 
 std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::atomic_bool &cancel)
@@ -315,6 +318,7 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.appstream = snap->appstream.components;
     model.appstreamRoot = snap->appstream.root;
     model.sync = snap->sync;
+    model.aurOn = in.aur;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
     // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
@@ -469,6 +473,7 @@ void StoreBackend::readAppearance()
     qreal scale = 1;
     QString accent = QStringLiteral("multicolor"), highlight = QStringLiteral("automatic"), doubleClick = QStringLiteral("zoom");
     QString shortcutSetting, formats = QStringLiteral("auto");
+    bool aur = false, flathub = false, screenshots = true; // the schema's defaults (store.*)
     const QByteArray bytes = readSmall(configFile(), 1024 * 1024);
     if (!bytes.isEmpty()) {
         const QJsonObject root = QJsonDocument::fromJson(bytes).object();
@@ -493,10 +498,26 @@ void StoreBackend::readAppearance()
         const QString f = root.value(QStringLiteral("region")).toObject().value(QStringLiteral("formats")).toString();
         if (!f.isEmpty())
             formats = f;
+        // The Store's own keys (SD20): a value that is not a boolean reads as the default, as every reader of the contract.
+        const QJsonObject store = root.value(QStringLiteral("store")).toObject();
+        const QJsonObject sources = store.value(QStringLiteral("sources")).toObject();
+        aur = sources.value(QStringLiteral("aur")).toBool(false);
+        flathub = sources.value(QStringLiteral("flathub")).toBool(false);
+        screenshots = store.value(QStringLiteral("screenshots")).toBool(true);
     } else {
         m_autoAppearance = false;
     }
     m_formats = i18n::formatsLocale(i18n::systemLanguage(), formats);
+    if (aur != m_aur || flathub != m_flathub || screenshots != m_screenshots) {
+        const bool sourcesMoved = aur != m_aur || flathub != m_flathub;
+        m_aur = aur;
+        m_flathub = flathub;
+        m_screenshots = screenshots;
+        *m_screenshotGate = screenshotsAllowed();
+        emit sourcesChanged();
+        if (sourcesMoved && m_snapshot)
+            run(Job{}); // the sources' apps come or go: the model is built again
+    }
     const QString shortcuts = apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = apps::minimizeAvailableInFile();
     if (dark != m_dark || reduce != m_reduceMotion || contrast != m_increaseContrast || scale != m_textScale || accent != m_accentColor
@@ -584,7 +605,7 @@ void StoreBackend::run(Job job)
         emit loadingChanged();
     }
     // SR26: never on a metered connection unless asked (Ctrl+R), never offline.
-    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online};
+    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online, m_aur};
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     m_pool.start([this, in, cancel] {
         std::shared_ptr<const Snapshot> snapshot = buildSnapshot(in, *cancel);
@@ -661,10 +682,45 @@ QVariantMap StoreBackend::appDataStatus() const
 
 QVariantMap StoreBackend::sources() const
 {
-    return {{QStringLiteral("aur"), false},
-            {QStringLiteral("flathub"), false},
+    return {{QStringLiteral("aur"), m_aur},
+            {QStringLiteral("flathub"), m_flathub},
             {QStringLiteral("flatpak"), !QStandardPaths::findExecutable(QStringLiteral("flatpak")).isEmpty()},
             {QStringLiteral("screenshots"), m_screenshots}};
+}
+
+QVariantMap StoreBackend::readConfig() const
+{
+    QVariantMap out{{QStringLiteral("exists"), false}, {QStringLiteral("ok"), false}, {QStringLiteral("text"), QString()}};
+    const QFileInfo info(configFile());
+    if (!info.exists())
+        return out;
+    out.insert(QStringLiteral("exists"), true);
+    // A regular file (a link to one is followed) of at most 1 MiB, read whole; anything else is not used, nothing written.
+    if (!info.isFile() || info.size() > kConfigMax)
+        return out;
+    QFile f(info.filePath());
+    if (!f.open(QIODevice::ReadOnly))
+        return out;
+    const QByteArray text = f.read(kConfigMax + 1);
+    if (text.size() != info.size())
+        return out;
+    out.insert(QStringLiteral("text"), QString::fromUtf8(text));
+    out.insert(QStringLiteral("ok"), true);
+    return out;
+}
+
+QString StoreBackend::writeConfig(const QString &text) const
+{
+    const QByteArray bytes = text.toUtf8();
+    if (bytes.size() > kConfigMax)
+        return QStringLiteral("too large");
+    const QString file = configFile();
+    if (!QDir().mkpath(QFileInfo(file).absolutePath()))
+        return QStringLiteral("cannot create its folder");
+    QSaveFile f(file);
+    if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size())
+        return f.errorString();
+    return f.commit() ? QString() : f.errorString();
 }
 
 QObject *StoreBackend::focusWindow() const

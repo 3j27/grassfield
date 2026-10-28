@@ -274,6 +274,55 @@ TEST(StoreEnv, OfflineOnlyInADevSession)
     EXPECT_FALSE(env::offlineForced());
 }
 
+// The Store's own keys of grassfield.json (SD20): read with the contract's rule (not a boolean: the default), followed while
+// the Store runs, and the file read and written whole for the settings window's switches (Preferences.js sets the key).
+TEST(StoreBackend, SourcesFromGrassfieldJson)
+{
+    Scratch s;
+    const QString config = s.path(QStringLiteral("config/grassfield.json"));
+    {
+        StoreBackend backend;
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("aur")).toBool());
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("flathub")).toBool());
+        EXPECT_TRUE(backend.sources().value(QStringLiteral("screenshots")).toBool());
+        EXPECT_FALSE(backend.readConfig().value(QStringLiteral("exists")).toBool());
+    }
+    storetest::writeFile(config, R"({"version":1,"store":{"sources":{"aur":true,"flathub":"yes"},"screenshots":false}})");
+    {
+        StoreBackend backend;
+        EXPECT_TRUE(backend.sources().value(QStringLiteral("aur")).toBool());
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("flathub")).toBool()); // a string: the default
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("screenshots")).toBool());
+        EXPECT_FALSE(backend.screenshotGate()->load());
+        EXPECT_TRUE(backend.screenshotSource(QStringLiteral("https://example.com/a.png")).isEmpty());
+
+        // Written whole, then followed: the switch's key changes, the source goes.
+        const QVariantMap read = backend.readConfig();
+        ASSERT_TRUE(read.value(QStringLiteral("ok")).toBool());
+        EXPECT_TRUE(read.value(QStringLiteral("text")).toString().contains(QLatin1String("\"aur\":true")));
+        int changes = 0;
+        QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&changes] { ++changes; });
+        EXPECT_EQ(backend.writeConfig(QStringLiteral("{\n  \"version\": 1,\n  \"store\": {\"sources\": {\"aur\": false}}\n}\n")), QString());
+        QEventLoop loop;
+        for (int i = 0; i < 250 && changes == 0; ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+        EXPECT_GE(changes, 1);
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("aur")).toBool());
+        EXPECT_TRUE(backend.sources().value(QStringLiteral("screenshots")).toBool());
+
+        // Never more than 1 MiB, either way; a folder in the file's place is not read.
+        EXPECT_EQ(backend.writeConfig(QString(1024 * 1024 + 1, QLatin1Char(' '))), QStringLiteral("too large"));
+        storetest::writeFile(config, QByteArray(1024 * 1024 + 1, ' '));
+        EXPECT_TRUE(backend.readConfig().value(QStringLiteral("exists")).toBool());
+        EXPECT_FALSE(backend.readConfig().value(QStringLiteral("ok")).toBool());
+        QFile::remove(config);
+        ASSERT_TRUE(QDir().mkpath(config));
+        EXPECT_FALSE(backend.readConfig().value(QStringLiteral("ok")).toBool());
+    }
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;

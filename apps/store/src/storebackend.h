@@ -88,9 +88,9 @@ class StoreBackend : public QObject
     Q_PROPERTY(QVariantMap appData READ appDataStatus NOTIFY dataChanged)
     // {name, initials, picture}: the local user (passwd, AccountsService's picture).
     Q_PROPERTY(QVariantMap user READ user CONSTANT)
-    // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on, step 3 writes them) and the switch of
-    // the screenshots (owner ST6: on).
-    Q_PROPERTY(QVariantMap sources READ sources CONSTANT)
+    // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on) and the switch of the screenshots
+    // (owner ST6: on), read from grassfield.json's "store" keys (the settings window writes aur and screenshots, SD20).
+    Q_PROPERTY(QVariantMap sources READ sources NOTIFY sourcesChanged)
     // The key window (QGuiApplication::focusWindow), null while no window of the Store has the keyboard. Qt matches a
     // window's Shortcuts and its global menu's keys while one of its transient children has the keyboard too, so a key
     // belongs to the key window alone (as Files' FilesApp.focusWindow).
@@ -149,6 +149,10 @@ public:
     Q_INVOKABLE QVariantMap updates() const;
     // Ctrl+R: everything read again and the catalog fetched, metered or not.
     Q_INVOKABLE void refresh();
+    // grassfield.json for the settings window's switches (SD20, as the Settings app writes its keys, ADR-0020): {exists, ok,
+    // text}, at most 1 MiB of a regular file; and its text written back whole (QSaveFile), "" or why it was not.
+    Q_INVOKABLE QVariantMap readConfig() const;
+    Q_INVOKABLE QString writeConfig(const QString &text) const;
     // A product page's Homepage or Bug tracker: https only, never in a dev session; false when not opened.
     Q_INVOKABLE bool openLink(const QString &url);
     // The image source of a screenshot ("" while screenshots are off or the Store is offline).
@@ -184,6 +188,7 @@ public:
 
 signals:
     void appearanceChanged();
+    void sourcesChanged();
     void dataChanged();
     void loadingChanged();
     void networkChanged();
@@ -244,6 +249,8 @@ private:
     bool m_online = true;
     bool m_metered = false;
     bool m_screenshots = true;
+    bool m_aur = false;
+    bool m_flathub = false;
     QVariantMap m_user;
     std::shared_ptr<const Snapshot> m_snapshot;
     bool m_jobRunning = false;

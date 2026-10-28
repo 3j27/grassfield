@@ -273,7 +273,7 @@ ScrollPage {
                 required property int index
                 readonly property string caption: (root.app.captions || [])[index] || ""
                 // Read again when the Store goes offline or comes back (the provider refuses offline anyway).
-                readonly property string source: root.backend.online ? root.backend.screenshotSource(modelData) : ""
+                readonly property string source: root.backend.online && root.backend.sources.screenshots ? root.backend.screenshotSource(modelData) : ""
                 height: shots.height
                 width: picture.status === Image.Ready && picture.implicitHeight > 0
                     ? Math.min(shots.width, Math.round(picture.implicitWidth * height / picture.implicitHeight))

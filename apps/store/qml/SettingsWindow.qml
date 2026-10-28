@@ -1,10 +1,11 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "Preferences.js" as Preferences
 
 // The Store's settings (Ctrl+,; spec SR27, SR28): the optional sources (both off until turned on, owner ST2) and the
-// screenshots' switch (owner ST6, on), read only until step 3 writes them; the catalog in use and why one is not; Arch's
-// app data; what the Store fetches and from where, in plain words; Refresh.
+// screenshots' switch (owner ST6, on), written to grassfield.json's "store" keys (SD20; Flathub's comes with step 3c);
+// the catalog in use and why one is not; Arch's app data; what the Store fetches and from where, in plain words; Refresh.
 Window {
     id: root
 
@@ -14,6 +15,12 @@ Window {
     readonly property var catalog: root.backend.catalog
     readonly property var appData: root.backend.appData
     readonly property var sources: root.backend.sources
+    // Why the last switch could not be saved ("" when it was): the switch shows the file's value again.
+    property string saveError: ""
+
+    function setPreference(path: string, value: bool): void {
+        root.saveError = Preferences.set(root.backend, path, value);
+    }
 
     title: qsTr("Grassfield Store Settings")
     width: Tokens.storeSettingsWidth
@@ -89,6 +96,8 @@ Window {
                     title: qsTr("AUR")
                     detail: qsTr("Packages made by users and reviewed by no one. Their build script runs on this computer.")
                     checked: root.sources.aur
+                    settable: true
+                    onToggled: on => root.setPreference("store.sources.aur", on)
                 }
 
                 SettingsSwitch {
@@ -111,6 +120,8 @@ Window {
                     title: qsTr("Show screenshots")
                     detail: qsTr("Fetched when an app's page opens, from the addresses its description gives, often another site.")
                     checked: root.sources.screenshots
+                    settable: true
+                    onToggled: on => root.setPreference("store.screenshots", on)
                 }
             }
 
@@ -154,12 +165,23 @@ Window {
                 }
 
                 SettingsLine {
+                    visible: root.sources.aur
+                    text: qsTr("From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, the names of the packages installed from outside the repositories, and a build script when you ask to see it.")
+                }
+
+                SettingsLine {
                     text: qsTr("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.")
                 }
             }
 
             SettingsLine {
-                text: qsTr("Turning the sources and the screenshots on and off comes in a later version.")
+                visible: root.saveError !== ""
+                text: qsTr("This setting could not be saved (%1).").arg(root.saveError)
+            }
+
+            SettingsLine {
+                visible: root.sources.flatpak
+                text: qsTr("Turning Flathub on comes in a later version.")
             }
         }
     }
@@ -195,6 +217,9 @@ Window {
         property string title: ""
         property string detail: ""
         property bool checked: false
+        // The switch writes its key (SD20); the others stay read only until their step.
+        property bool settable: false
+        signal toggled(bool on)
         width: parent ? parent.width : 0
         implicitHeight: Math.max(toggle.implicitHeight, texts.implicitHeight)
 
@@ -230,8 +255,9 @@ Window {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             checked: line.checked
-            enabled: false
+            enabled: line.settable
             accessibleName: line.title
+            onToggled: on => line.toggled(on)
         }
     }
 }
