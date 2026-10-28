@@ -105,4 +105,103 @@ TestCase {
         const stacked = [{name: "B", x: 0, y: 1080}, {name: "A", x: 0, y: 0}];
         compare(WindowTiling.nextOutput(stacked, "A", "right"), "B");
     }
+
+    // ---- step 4a: the Layouts section and the suggestions (TL27, TL28) ----
+
+    function test_outputClassFollowsThePluginsRule() {
+        compare(WindowTiling.outputClass(1919, 1080), "small");
+        compare(WindowTiling.outputClass(1440, 900), "small");
+        compare(WindowTiling.outputClass(1920, 1080), "large");
+        compare(WindowTiling.outputClass(2560, 1440), "large");
+        compare(WindowTiling.outputClass(2560, 1080), "ultrawide", "64:27");
+        compare(WindowTiling.outputClass(3440, 1440), "ultrawide", "43:18, about 21:9");
+        compare(WindowTiling.outputClass(2100, 900), "ultrawide", "exactly 21:9");
+        compare(WindowTiling.outputClass(2099, 900), "large", "just under 21:9");
+        compare(WindowTiling.outputClass(1680, 720), "ultrawide", "21:9 under 1920 wide");
+        compare(WindowTiling.outputClass(1080, 1920), "portrait");
+        compare(WindowTiling.outputClass(1000, 1000), "small", "square is not portrait");
+        compare(WindowTiling.outputClass(0, 1080), "small");
+        compare(WindowTiling.outputClass(NaN, 1080), "small");
+    }
+
+    function test_parseNoticeReadsTheTilingNotice() {
+        compare(JSON.stringify(WindowTiling.parseNotice('{"v":"gfc/1","type":"tiling","gen":7,"reason":"placed"}')), JSON.stringify({gen: 7, reason: "placed"}));
+        compare(JSON.stringify(WindowTiling.parseNotice('{"v":"gfc/1","type":"tiling","gen":0}')), JSON.stringify({gen: 0, reason: ""}));
+        for (const text of ["", "x", "null", '{"v":"gfc/2","type":"tiling","gen":1}', '{"v":"gfc/1","type":"tile-hover","gen":1}', '{"v":"gfc/1","type":"tiling"}',
+                 '{"v":"gfc/1","type":"tiling","gen":-1}', '{"v":"gfc/1","type":"tiling","gen":1.5}', '{"v":"gfc/1","type":"tiling","gen":"1"}'])
+            compare(WindowTiling.parseNotice(text), null, text);
+    }
+
+    function reply(suggestion: var): string {
+        return JSON.stringify({v: "gfc/1", type: "tiling", gen: 12, outputs: [], suggestion: suggestion});
+    }
+
+    readonly property var goodSuggestion: ({gen: 12, address: "ABC", layout: "thirds", output: "GF-REF", zones: [{zone: 0, x: 8, y: 64, w: 629, h: 926}, {zone: 2, x: 1283, y: 64, w: 629, h: 926}], windows: ["d1", "0xD2"]})
+
+    function test_parseSuggestionReadsTheReply() {
+        const sg = WindowTiling.parseSuggestion(reply(goodSuggestion));
+        compare(sg.gen, 12);
+        compare(sg.address, "abc");
+        compare(sg.layout, "thirds");
+        compare(sg.output, "GF-REF");
+        compare(JSON.stringify(sg.zones), JSON.stringify(goodSuggestion.zones));
+        compare(JSON.stringify(sg.windows), JSON.stringify(["d1", "d2"]));
+        compare(WindowTiling.parseSuggestion(reply(null)), null, "no suggestion");
+    }
+
+    function test_parseSuggestionRefusesAnythingMalformed() {
+        const bad = [];
+        const variant = change => bad.push(Object.assign({}, goodSuggestion, change));
+        variant({gen: "12"});
+        variant({address: "xyz"});
+        variant({layout: ""});
+        variant({output: 7});
+        variant({zones: []});
+        variant({zones: [{zone: 0, x: 0, y: 0, w: 0, h: 10}]});
+        variant({zones: [{zone: -1, x: 0, y: 0, w: 10, h: 10}]});
+        variant({zones: [{zone: 0.5, x: 0, y: 0, w: 10, h: 10}]});
+        variant({zones: [{zone: 0, x: "0", y: 0, w: 10, h: 10}]});
+        variant({windows: []});
+        variant({windows: ["d1", "nope"]});
+        variant({windows: new Array(13).fill("d1")});
+        for (const sg of bad)
+            compare(WindowTiling.parseSuggestion(reply(sg)), null, JSON.stringify(sg));
+        for (const text of ["", "not json", JSON.stringify({v: "gfc/2", type: "tiling", suggestion: goodSuggestion}), JSON.stringify({v: "gfc/1", type: "stages", suggestion: goodSuggestion})])
+            compare(WindowTiling.parseSuggestion(text), null, text);
+    }
+
+    function test_suggestionGridGivesTheLargestTiles() {
+        // Twelve windows in a quarter of GF-REF: four columns of three rows.
+        const quarter = WindowTiling.suggestionGrid(12, 944, 470, 1.6, 24, 12, 280);
+        compare(quarter.columns, 4);
+        compare(quarter.rows, 3);
+        compare(quarter.tileWidth, 186);
+        compare(quarter.thumbHeight, 116);
+        compare(quarter.tileHeight, 140);
+        verify(quarter.columns * quarter.tileWidth + (quarter.columns + 1) * 12 <= 944);
+        verify(quarter.rows * quarter.tileHeight + (quarter.rows + 1) * 12 <= 470);
+        // Two windows in a tall third: one column, the tiles at their largest width.
+        const third = WindowTiling.suggestionGrid(2, 629, 926, 1.6, 24, 12, 280);
+        compare(third.columns, 1);
+        compare(third.tileWidth, 280);
+        compare(JSON.stringify(WindowTiling.suggestionGrid(0, 900, 900, 1.6, 24, 12, 280)), JSON.stringify({columns: 0, rows: 0, tileWidth: 0, thumbHeight: 0, tileHeight: 0}));
+        compare(WindowTiling.suggestionGrid(3, 10, 10, 1.6, 24, 12, 280).columns, 0, "no room");
+    }
+
+    function test_gridStepMovesThroughTheTiles() {
+        // 7 tiles in rows of 3: 0 1 2 / 3 4 5 / 6
+        compare(WindowTiling.gridStep(-1, 7, 3, "down"), 0, "the first key chooses the first tile");
+        compare(WindowTiling.gridStep(0, 7, 3, "right"), 1);
+        compare(WindowTiling.gridStep(6, 7, 3, "right"), 0, "wraps");
+        compare(WindowTiling.gridStep(0, 7, 3, "left"), 6, "wraps back");
+        compare(WindowTiling.gridStep(1, 7, 3, "down"), 4);
+        compare(WindowTiling.gridStep(4, 7, 3, "down"), 4, "no tile below: stays");
+        compare(WindowTiling.gridStep(3, 7, 3, "down"), 6);
+        compare(WindowTiling.gridStep(1, 7, 3, "up"), 1, "first row: stays");
+        compare(WindowTiling.gridStep(5, 7, 3, "up"), 2);
+        compare(WindowTiling.gridStep(4, 7, 3, "home"), 0);
+        compare(WindowTiling.gridStep(1, 7, 3, "end"), 6);
+        compare(WindowTiling.gridStep(2, 7, 3, "other"), 2);
+        compare(WindowTiling.gridStep(0, 0, 3, "right"), -1, "no tile");
+    }
 }

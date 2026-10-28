@@ -267,6 +267,27 @@ TestCase {
         verify(Minimized.moveToCall("55ab", "a".repeat(64)) !== "");
     }
 
+    // TL27, TL28 (step 4a): a zone of the Layouts section, and a pick of the suggestions into the layout of another window.
+    function test_zoneCallsAreBuiltFromValidatedPieces() {
+        const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.arrange then p.arrange(";
+        compare(Minimized.zoneCall("0x55AB", "thirds", 2), guard + "\"{\\\"layout\\\":\\\"thirds\\\",\\\"windows\\\":[\\\"0x55ab\\\"],\\\"zone\\\":2}\") end end");
+        compare(Minimized.zoneCall("55ab", "quarters", 0, "0xD1"),
+                guard + "\"{\\\"layout\\\":\\\"quarters\\\",\\\"windows\\\":[\\\"0x55ab\\\"],\\\"zone\\\":0,\\\"with\\\":\\\"0xd1\\\"}\") end end");
+        compare(Minimized.zoneCall("55ab", "left-right", 1, ""), Minimized.zoneCall("55ab", "left-right", 1), "an empty with is none");
+        // Every layout of the catalogue, from the Arrange rows to the large and portrait classes.
+        for (const layout of ["left-right", "right-left", "top-bottom", "bottom-top", "quarters", "left-quarters", "right-quarters", "top-quarters", "bottom-quarters",
+                 "wide-left", "thirds", "wide-center", "four-columns", "stacked-thirds"])
+            verify(Minimized.zoneCall("55ab", layout, 0) !== "", layout);
+        // Refused: not a layout, not a zone, a bad address or with, with the window itself.
+        for (const layout of ["THIRDS", "", "halves", "thirds\") end os.exit() --", null])
+            compare(Minimized.zoneCall("55ab", layout, 0), "", String(layout));
+        for (const zone of [-1, 4, 1.5, "1", null, undefined, NaN])
+            compare(Minimized.zoneCall("55ab", "quarters", zone), "", String(zone));
+        for (const address of ["", "zz", "0x", "55ab\"", null])
+            compare(Minimized.zoneCall(address, "quarters", 0) + Minimized.zoneCall("55ab", "quarters", 0, address === "" ? "zz" : address), "", String(address));
+        compare(Minimized.zoneCall("55ab", "quarters", 0, "0x55AB"), "", "with the window itself");
+    }
+
     function test_addIsIdempotentAndRemove() {
         let list = Minimized.add([], rec("a", "foot"));
         list = Minimized.add(list, rec("a", "foot"));

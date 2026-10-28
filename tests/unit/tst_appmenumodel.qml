@@ -211,6 +211,27 @@ TestCase {
         const full = model.tilingPopover({alt: false, tileable: true, canArrange: true, fullscreen: true, outputs: outputs});
         compare(full.sections.length, 0);
         compare(full.rows.map(i => i.id + ":" + i.text).join(","), "fullscreen:Exit Full Screen");
+        compare(full.layouts.length, 0, "no Layouts section in full screen");
+    }
+
+    // The Layouts section (TL27, T1a, T1f): the catalogue of the window's output class, after Fill & Arrange, with tiling-layouts.
+    function test_tilingPopoverLayoutsFollowTheOutputClass() {
+        const p = cls => model.tilingPopover({alt: false, tileable: true, canArrange: true, canLayouts: true, outputClass: cls, fullscreen: false, outputs: []});
+        compare(p("small").layouts.map(l => l.id).join(","), "left-right,wide-left,left-quarters,quarters");
+        compare(p("large").layouts.map(l => l.id).join(","), "left-right,wide-left,left-quarters,quarters,thirds,wide-center");
+        compare(p("ultrawide").layouts.map(l => l.id).join(","), "left-right,wide-left,left-quarters,quarters,thirds,wide-center,four-columns");
+        compare(p("portrait").layouts.map(l => l.id).join(","), "top-bottom,stacked-thirds,top-quarters");
+        compare(p("unknown").layouts.length, 0);
+        const large = p("large").layouts;
+        verify(large.every(l => l.enabled && l.text !== "" && Array.isArray(l.zones) && l.zones.length >= 2), "names and zones from the tiling.layout* tokens");
+        compare(large[4].zones.length, 3, "thirds");
+        compare(large[4].text, "Thirds");
+        compare(JSON.stringify(large[4].zones), JSON.stringify(Tokens.tilingLayoutThirds));
+        // Greyed for a window that cannot be tiled; absent without the plugin's tiling-layouts.
+        verify(model.tilingPopover({alt: false, tileable: false, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: []}).layouts.every(l => !l.enabled));
+        compare(model.tilingPopover({alt: false, tileable: true, canArrange: true, outputClass: "small", fullscreen: false, outputs: []}).layouts.length, 0);
+        // Alt changes the glyph sections, not the Layouts section.
+        compare(model.tilingPopover({alt: true, tileable: true, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: []}).layouts.length, 4);
     }
 
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {

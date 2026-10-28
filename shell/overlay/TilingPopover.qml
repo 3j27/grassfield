@@ -6,13 +6,14 @@ import qs.platform
 import qs.services
 import "TilingNav.js" as TilingNav
 
-// The tiling popover of a window's zoom light (docs/specs/tiling.md TL22-TL26, parity rows M19-M24): popup kind "tiling",
+// The tiling popover of a window's zoom light (docs/specs/tiling.md TL22-TL27, parity rows M19-M24): popup kind "tiling",
 // opened by services/TilingHover from the plugin's tile-hover event, under the light. Its content is AppMenuModel's
-// tilingPopover (the Window menu's rows and glyphs): the sections Move & Resize and Fill & Arrange as rows of glyphs, then
-// Full Screen and Move to <display>; with Alt the alternates (M20), in full screen Exit Full Screen only (M21). Navigable with
-// the arrows, Return and Esc (M24); a click runs a glyph or a row. It closes on Esc, a click outside, an action, and, opened by
-// the hover, once the pointer has been away from the light and the popover for tiling.hoverDelay (the overlay reports the
-// pointer: pointerAt).
+// tilingPopover (the Window menu's rows and glyphs): the sections Move & Resize and Fill & Arrange as rows of glyphs, the
+// Layouts section of the window's output class (TL27: a zone click places the window in that zone, and the suggestions
+// follow), then Full Screen and Move to <display>; with Alt the alternates (M20), in full screen Exit Full Screen only (M21).
+// Navigable with the arrows, Return and Esc (M24), a number picking a layout and a second number a zone (TL26); a click runs a
+// glyph, a zone or a row. It closes on Esc, a click outside, an action, and, opened by the hover, once the pointer has been
+// away from the light and the popover for tiling.hoverDelay (the overlay reports the pointer: pointerAt).
 FocusScope {
     id: root
 
@@ -28,19 +29,32 @@ FocusScope {
         alt: root.altHeld,
         tileable: Popups.data.tileable === true,
         canArrange: Compositor.canArrange,
+        canLayouts: Compositor.canLayouts,
+        outputClass: Compositor.outputClassOf(Popups.screenName),
         fullscreen: root.fullscreen,
         outputs: Compositor.otherOutputs(root.toplevel)
     })
-    // Every glyph and row in reading order, for the keyboard (TilingNav). A delegate finds its entry by `key` (its model data
-    // is a copy, never the same object).
+    // The Layouts section in rows of this many layouts, as the glyph sections.
+    readonly property int layoutColumns: 4
+    // Every glyph, zone and row in reading order, for the keyboard (TilingNav). A delegate finds its entry by `key` (its model
+    // data is a copy, never the same object). The zones of a row of layouts share a line, in the column of their layout.
     readonly property var entries: {
         const out = [];
         root.content.sections.forEach((section, s) => section.items.forEach((item, c) => out.push({key: "s" + s + ":" + c, line: "s" + s, column: c, enabled: item.enabled !== false, item: item})));
+        root.content.layouts.forEach((layout, l) => layout.zones.forEach((zone, z) => out.push({
+                        key: "l" + l + ":" + z,
+                        line: "l" + Math.floor(l / root.layoutColumns),
+                        column: l % root.layoutColumns + z / 10,
+                        enabled: layout.enabled !== false,
+                        item: {id: "zone", layout: layout.id, zone: z, enabled: layout.enabled !== false}
+                    })));
         root.content.rows.forEach((item, r) => out.push({key: "r" + r, line: "r" + r, column: 0, enabled: item.enabled !== false, item: item}));
         return out;
     }
     property int current: -1
     readonly property string currentKey: root.current >= 0 && root.current < root.entries.length ? root.entries[root.current].key : ""
+    // The layout a number key picked (TL26): its zones show their numbers until a second number picks one; -1 for none.
+    property int pickedLayout: -1
 
     width: Tokens.tilingPopoverWidth
     height: column.implicitHeight + 2 * Tokens.menuPadding
@@ -76,8 +90,17 @@ FocusScope {
         case "moveToOutput":
             Compositor.moveToOutput(window, item.output);
             break;
+        case "zone":
+            Compositor.placeInZone(window, item.layout, item.zone);
+            break;
         }
         Popups.close();
+    }
+
+    // The zone of layout `layout` (index in the section) the keyboard or the pointer is on, -1 for none.
+    function zoneOf(layout: int): int {
+        const prefix = "l" + layout + ":";
+        return root.currentKey.startsWith(prefix) ? Number(root.currentKey.slice(prefix.length)) : -1;
     }
 
     // The pointer anywhere on the output (overlay coordinates). Opened by the hover, the popover closes once the pointer has
@@ -106,9 +129,24 @@ FocusScope {
 
     Keys.onPressed: event => {
         root.altHeld = event.key === Qt.Key_Alt || (event.modifiers & Qt.AltModifier) !== 0;
+        // TL26: a number picks a layout of the Layouts section, a second number a zone of it.
+        const digit = root.content.layouts.length > 0 ? TilingNav.digitOf(event.key, event.nativeScanCode) : 0;
+        if (digit > 0) {
+            const pick = TilingNav.numberPick(root.content.layouts, root.pickedLayout, digit);
+            if (pick.zone >= 0)
+                root.run({id: "zone", layout: root.content.layouts[pick.picked].id, zone: pick.zone, enabled: true});
+            else
+                root.pickedLayout = pick.picked;
+            event.accepted = true;
+            return;
+        }
         switch (event.key) {
         case Qt.Key_Escape:
-            Popups.close();
+            // A picked layout lets go first (its numbers go away), the popover then.
+            if (root.pickedLayout >= 0)
+                root.pickedLayout = -1;
+            else
+                Popups.close();
             break;
         case Qt.Key_Return:
         case Qt.Key_Enter:
@@ -229,6 +267,75 @@ FocusScope {
                                     root.current = -1
                                 onClicked: root.run(glyphButton.modelData)
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The Layouts section (TL27): the catalogue of the window's output class, miniature screens whose zones are targets.
+        Column {
+            visible: root.content.layouts.length > 0
+            width: column.width
+
+            MenuSeparator {
+                width: parent.width
+            }
+
+            Item {
+                width: parent.width
+                height: Tokens.menuItemHeight
+
+                Text {
+                    textFormat: Text.PlainText
+                    x: Tokens.menuItemPadding
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Layouts")
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyMenuSize
+                    font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+                    font.weight: Tokens.typographyMenuBoldWeight
+                }
+            }
+
+            Grid {
+                anchors.horizontalCenter: parent.horizontalCenter
+                columns: Math.max(1, Math.min(root.layoutColumns, root.content.layouts.length))
+
+                Repeater {
+                    model: root.content.layouts
+
+                    Item {
+                        id: layoutCell
+
+                        required property var modelData
+                        required property int index
+                        readonly property bool enabledHere: modelData.enabled !== false
+                        readonly property int zoneHere: root.zoneOf(layoutCell.index)
+
+                        width: Tokens.tilingGlyphPitch
+                        height: Tokens.tilingGlyphRowHeight
+                        Accessible.role: Accessible.Grouping
+                        Accessible.name: modelData.text
+
+                        TileGlyph {
+                            anchors.centerIn: parent
+                            width: Tokens.tilingLayoutGlyphWidth
+                            zones: layoutCell.modelData.zones
+                            // At rest every zone is light; the zone under the pointer or the keyboard is drawn in full.
+                            own: root.pickedLayout === layoutCell.index || layoutCell.zoneHere < 0 ? layoutCell.modelData.zones.length : layoutCell.zoneHere
+                            numbered: root.pickedLayout === layoutCell.index
+                            interactive: layoutCell.enabledHere
+                            zoneNames: layoutCell.modelData.zones.map((z, i) => qsTr("%1, zone %2 of %3").arg(layoutCell.modelData.text).arg(i + 1).arg(layoutCell.modelData.zones.length))
+                            color: layoutCell.enabledHere ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                            onZoneHovered: zone => {
+                                if (zone >= 0)
+                                    root.current = root.indexOf("l" + layoutCell.index + ":" + zone);
+                                else if (layoutCell.zoneHere >= 0)
+                                    root.current = -1;
+                            }
+                            onZoneClicked: zone => root.run({id: "zone", layout: layoutCell.modelData.id, zone: zone, enabled: true})
                         }
                     }
                 }

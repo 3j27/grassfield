@@ -23,7 +23,8 @@ FocusScope {
     readonly property real labelHeight: Tokens.menuItemHeight
     readonly property var grid: WindowTiling.suggestionGrid(root.windows.length, root.width, root.height, Tokens.tilingSuggestThumbAspect, root.labelHeight, Tokens.spacingMd,
                                                             Tokens.tilingSuggestTileWidth)
-    property int current: -1
+    // The keyboard's window: the first when a suggestion opens (a visible focus at once; Return takes it).
+    property int current: root.windows.length > 0 ? 0 : -1
     // A window was picked: the plugin's next suggestion (or the end) follows; no second pick meanwhile.
     property bool picked: false
 
@@ -35,7 +36,7 @@ FocusScope {
 
     onSuggestionChanged: {
         root.picked = false;
-        root.current = -1;
+        root.current = root.windows && root.windows.length > 0 ? 0 : -1; // windows is not evaluated yet at creation
     }
     // Every window offered closed meanwhile: the suggestions end.
     onWindowsChanged: {

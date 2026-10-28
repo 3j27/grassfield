@@ -239,6 +239,8 @@ Variants {
                     return Popups.anchorX - width;
                 case "center":
                     return (win.width - width) / 2;
+                case "zone":
+                    return Popups.anchorX + ((Popups.data.width ?? width) - width) / 2;
                 }
                 return Popups.anchorX;
             }
@@ -258,6 +260,8 @@ Variants {
                     return Popups.anchorY - height / 2;
                 case "center":
                     return (win.height - height) / 2 - win.height * Tokens.panelDialogRaise;
+                case "zone":
+                    return Popups.anchorY + ((Popups.data.height ?? height) - height) / 2;
                 }
                 return Popups.anchorY;
             }
@@ -315,6 +319,8 @@ Variants {
                     return noticeDialog;
                 case "tiling":
                     return tilingPopover;
+                case "tilingSuggest":
+                    return tilingSuggestions;
                 }
                 return null;
             }
@@ -415,6 +421,12 @@ Variants {
         Component {
             id: tilingPopover
             TilingPopover {}
+        }
+
+        // The tiling suggestions in an empty zone of a layout (docs/specs/tiling.md TL28).
+        Component {
+            id: tilingSuggestions
+            TilingSuggestions {}
         }
     }
 }
