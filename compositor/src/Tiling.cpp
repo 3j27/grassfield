@@ -1,49 +1,108 @@
 #include "Tiling.hpp"
 
 #include "ClientChrome.hpp"
+#include "DeferredFocus.hpp"
+#include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Stages.hpp"
+#include "TopClamp.hpp"
 #include "core/Minimize.hpp"
-#include "core/Theme.hpp"
+#include "core/TitlebarLayout.hpp"
 
+#include <hyprland/src/desktop/Workspace.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/supplementary/DragController.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/protocols/XDGShell.hpp>
+#include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/xwayland/XSurface.hpp>
+#include <hyprland/src/xwayland/XWayland.hpp>
+
+#include <linux/input-event-codes.h>
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace gf::tiler {
 
     namespace {
-        struct STiled {
-            PHLWINDOWREF window;
-            CBox         before; // the floating surface box from before the first tiling
-            CBox         tiled;  // the box the last tiling gave it: a window moved or resized since is not tiled any more
+        // A Suspended window coming back (TL10): after a Desktop move from a special workspace (minimize, hide, Show
+        // Desktop) its zone must be free; after full screen or zoom its box is put back.
+        struct SResume {
+            uint64_t id        = 0;
+            bool     checkFree = false;
         };
 
-        std::vector<STiled>& tiled() {
-            static std::vector<STiled> list;
-            return list;
+        // The drag of a floating window (the plugin's titlebar drag or one of Hyprland's moves; one seat pointer): the place
+        // under the pointer, shown once the preview delay has passed (TL17).
+        struct SDrag {
+            PHLWINDOWREF        window;
+            std::optional<Snap> candidate;
+            tiling::CDwell      dwell;
+            bool                hyprland = false; // one of Hyprland's moves (ended by Hyprland, tiled after it)
+        };
+
+        // The release of one of Hyprland's moves, handled once Hyprland ended the drag (TL16).
+        struct SMoveRelease {
+            PHLWINDOWREF        window;
+            std::optional<Snap> snap; // the place shown at the release: tiled
+        };
+
+        // TL20: the clicks on one window's resize border, and a double-click waiting for Hyprland to end its resize.
+        struct SBorderClicks {
+            PHLWINDOWREF                window;
+            uint8_t                     sides = 0;
+            gf::titlebar::CClickTracker clicks{}; // braces: its default constructor is explicit
+        };
+        struct SExtend {
+            PHLWINDOWREF window;
+            uint8_t      sides = 0; // with Alt's opposite sides (core extendedSides)
+        };
+
+        struct SState {
+            bool                             ready = false;
+            tiling::CTileBook                book;
+            uint64_t                         posted = 0; // generation of the latest notice
+            PHLWINDOWREF                     resizing;   // a tiled window one of Hyprland's resizes holds
+            bool                             relayoutPending = false;
+            std::vector<SResume>             resuming;
+            gf::deferredFocus::CLater        later; // after Hyprland's own handling (its callback is code of this library)
+            std::vector<CHyprSignalListener> listeners;
+            SDrag                            drag;
+            SP<CEventLoopTimer>              previewTimer; // draws the preview once the delay passed (code of this library: removed in stop())
+            bool                             recheck = false;  // a key may have changed Alt: the drag's place is read again
+            std::optional<Vector2D>          press;            // the pointer at the left button's press (the grip of Hyprland's move)
+            uint32_t                         pressMs = 0;
+            std::optional<SMoveRelease>      moveRelease;
+            SBorderClicks                    border;
+            std::optional<SExtend>           extend;
+        };
+
+        // Constructed on first use inside a guarded call (R13).
+        SState& st() {
+            static SState s;
+            return s;
         }
 
-        void prune() {
-            std::erase_if(tiled(), [](const STiled& t) { return !t.window.lock(); });
-        }
-
-        STiled* entryFor(const PHLWINDOW& w) {
-            prune();
-            for (auto& t : tiled()) {
-                if (t.window.lock() == w)
-                    return &t;
-            }
-            return nullptr;
-        }
+        // The quick look panel (docs/specs/preview.md) is never tiled (TL9).
+        constexpr std::string_view kGlanceClass = "org.grassfield.Preview.Glance";
 
         tiling::Rect toRect(const CBox& b) {
             return tiling::Rect{b.x, b.y, b.w, b.h};
@@ -53,158 +112,1017 @@ namespace gf::tiler {
             return CBox{r.x, r.y, r.w, r.h};
         }
 
-        const std::vector<PHLMONITOR>* monitors() {
-            const auto& state = State::monitorState();
-            return state ? &state->monitors() : nullptr;
+        uint64_t idOf(const PHLWINDOW& w) {
+            return reinterpret_cast<uintptr_t>(w.get());
+        }
+
+        PHLWINDOW windowById(uint64_t id) {
+            if (!Desktop::windowState())
+                return nullptr;
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (w && idOf(w) == id)
+                    return w;
+            }
+            return nullptr;
+        }
+
+        // Enabled outputs only: Hyprland keeps a disconnected monitor (m_enabled false) in its list for a while.
+        std::vector<PHLMONITOR> monitors() {
+            std::vector<PHLMONITOR> out;
+            const auto&             state = State::monitorState();
+            if (!state)
+                return out;
+            for (const auto& m : state->monitors()) {
+                if (m && m->m_enabled)
+                    out.push_back(m);
+            }
+            return out;
         }
 
         PHLMONITOR monitorAt(const Vector2D& p) {
-            const auto* all = monitors();
-            if (!all)
-                return nullptr;
-            for (const auto& m : *all) {
-                if (m && m->logicalBox().containsPoint(p))
+            for (const auto& m : monitors()) {
+                if (m->logicalBox().containsPoint(p))
                     return m;
             }
             return nullptr;
         }
 
+        PHLMONITOR monitorByName(std::string_view name) {
+            for (const auto& m : monitors()) {
+                if (m->m_name == name)
+                    return m;
+            }
+            return nullptr;
+        }
+
+        // The output a window is on now: the one under its middle. Hyprland's m_monitor is not updated by the plugin's own
+        // titlebar drags, so a window dragged to another output would tile back on the old one (R13).
+        PHLMONITOR monitorOf(const PHLWINDOW& w) {
+            const auto target = w ? w->layoutTarget() : nullptr;
+            if (!target)
+                return nullptr;
+            if (auto m = monitorAt(target->position().middle()))
+                return m;
+            const auto m = w->m_monitor.lock();
+            return m && m->m_enabled ? m : nullptr;
+        }
+
         // An edge of `m` is free when no other monitor touches it along an overlapping span: a shared edge leads to the
         // next output (dragging there moves the window over), it never tiles.
         bool edgeFree(const PHLMONITOR& m, bool left) {
-            const CBox  box = m->logicalBox();
-            const auto* all = monitors();
-            if (!all)
-                return true;
-            for (const auto& o : *all) {
-                if (!o || o == m)
+            const CBox box = m->logicalBox();
+            for (const auto& o : monitors()) {
+                if (o == m)
                     continue;
-                const CBox other = o->logicalBox();
-                const bool overlaps = other.y < box.y + box.h && other.y + other.h > box.y;
-                const double edge = left ? box.x : box.x + box.w;
-                const double touch = left ? other.x + other.w : other.x;
+                const CBox   other    = o->logicalBox();
+                const bool   overlaps = other.y < box.y + box.h && other.y + other.h > box.y;
+                const double edge     = left ? box.x : box.x + box.w;
+                const double touch    = left ? other.x + other.w : other.x;
                 if (overlaps && std::abs(edge - touch) < 1.0)
                     return false;
             }
             return true;
         }
 
-        // The window still has the box its last tiling gave it (1 px slack: rounding in the layout).
         bool sameBox(const CBox& a, const CBox& b) {
             return std::abs(a.x - b.x) <= 1.0 && std::abs(a.y - b.y) <= 1.0 && std::abs(a.w - b.w) <= 1.0 && std::abs(a.h - b.h) <= 1.0;
         }
 
-        bool placeable(const PHLWINDOW& w) {
-            if (!w || !w->m_isFloating || w->m_pinned || !w->layoutTarget())
-                return false;
+        bool fullscreenNow(const PHLWINDOW& w) {
             const auto& fs = Fullscreen::controller();
-            return !fs || fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_NONE;
+            return fs && fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_NONE; // zoom is FSMODE_MAXIMIZED
+        }
+
+        // TL9: an X11 window Hyprland floats by type or role: CHyprXWaylandManager::shouldBeFloated's X11 branch
+        // (XWaylandManager.cpp:110-131), read here without its side effects (that function also sets focus flags).
+        bool x11FloatedByHyprland(const PHLWINDOW& w) {
+            if (!w->m_isX11)
+                return false;
+            if (w->isX11OverrideRedirect() || w->isModal())
+                return true;
+            const auto xs = w->m_xwaylandSurface.lock();
+            if (!xs)
+                return true; // nothing to read: never tiled
+            if (xs->m_transient || static_cast<bool>(xs->m_parent) || xs->m_role.contains("task_dialog") || xs->m_role.contains("pop-up"))
+                return true;
+            static constexpr std::array<std::string_view, 10> kTypes{
+                "_NET_WM_WINDOW_TYPE_DIALOG",  "_NET_WM_WINDOW_TYPE_SPLASH",        "_NET_WM_WINDOW_TYPE_TOOLBAR", "_NET_WM_WINDOW_TYPE_UTILITY",
+                "_NET_WM_WINDOW_TYPE_TOOLTIP", "_NET_WM_WINDOW_TYPE_POPUP_MENU",    "_NET_WM_WINDOW_TYPE_DOCK",    "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU",
+                "_NET_WM_WINDOW_TYPE_MENU",    "_KDE_NET_WM_WINDOW_TYPE_OVERRIDE"};
+            for (const auto name : kTypes) {
+                const auto it = HYPRATOMS.find(std::string{name}); // find, never operator[]: Hyprland's table is only read
+                if (it != HYPRATOMS.end() && it->second != 0 && std::ranges::find(xs->m_atoms, it->second) != xs->m_atoms.end())
+                    return true;
+            }
+            return false;
+        }
+
+        // ICCCM WM_NORMAL_HINTS flags (4.1.2.3).
+        constexpr uint32_t kHintMinSize   = 1U << 4;
+        constexpr uint32_t kHintResizeInc = 1U << 6;
+        constexpr uint32_t kHintBaseSize  = 1U << 8;
+        // Hyprland's "no maximum" (CWindow::maxSize: numeric_limits<double>::max() per axis).
+        constexpr double kNoMaximum = 1e7;
+
+        // TL8: the window's limits. Minimum: CWindow::minSize() (a min_size rule, else the client's) and, for an xdg window,
+        // at least the protocol minimum Hyprland's commit clamp applies (Window.cpp:2741-2747). Maximum: likewise the
+        // smaller of the rule and the protocol maximum. X11 increments from WM_NORMAL_HINTS.
+        tiling::Constraints constraintsOf(const PHLWINDOW& w) {
+            tiling::Constraints c;
+            c.band       = gf::chrome::bandOf(w); // none above a window that draws its own chrome (ADR-0015)
+            Vector2D min = w->minSize().value_or(Vector2D{1, 1});
+            Vector2D max = w->maxSize().value_or(Vector2D{0, 0});
+            if (!w->m_isX11) {
+                const auto xdg = w->m_xdgSurface.lock();
+                const auto top = xdg ? xdg->m_toplevel.lock() : nullptr;
+                if (top) {
+                    const auto pmin = top->layoutMinSize();
+                    const auto pmax = top->layoutMaxSize();
+                    min.x           = std::max(min.x, pmin.x);
+                    min.y           = std::max(min.y, pmin.y);
+                    if (pmax.x > 1)
+                        max.x = max.x > 0 && max.x < kNoMaximum ? std::min(max.x, pmax.x) : pmax.x;
+                    if (pmax.y > 1)
+                        max.y = max.y > 0 && max.y < kNoMaximum ? std::min(max.y, pmax.y) : pmax.y;
+                }
+            }
+            c.minW = std::max(1.0, min.x);
+            c.minH = std::max(1.0, min.y);
+            c.maxW = max.x > 0 && max.x < kNoMaximum ? max.x : 0;
+            c.maxH = max.y > 0 && max.y < kNoMaximum ? max.y : 0;
+            if (w->m_isX11) {
+                const auto xs = w->m_xwaylandSurface.lock();
+                if (xs && xs->m_sizeHints) {
+                    const auto& hints = *xs->m_sizeHints;
+                    if (hints.flags & kHintResizeInc) {
+                        c.incW = std::max(0, hints.width_inc);
+                        c.incH = std::max(0, hints.height_inc);
+                    }
+                    if (hints.flags & kHintBaseSize) {
+                        c.baseW = std::max(0, hints.base_width);
+                        c.baseH = std::max(0, hints.base_height);
+                    } else if (hints.flags & kHintMinSize) {
+                        c.baseW = std::max(0, hints.min_width);
+                        c.baseH = std::max(0, hints.min_height);
+                    }
+                }
+            }
+            return c;
+        }
+
+        tiling::WindowFacts factsOf(const PHLWINDOW& w) {
+            const auto target = w ? w->layoutTarget() : nullptr;
+            return tiling::WindowFacts{.mapped    = w && w->m_isMapped,
+                                       .onDesktop = w && w->m_workspace,
+                                       .inSpace   = target && target->space(),
+                                       .floating  = target && target->floating()};
+        }
+
+        // An output showing an open special workspace (a scratchpad): nothing tiles there (TL9), a drop only moves.
+        bool showsSpecial(const PHLMONITOR& m) {
+            return m && m->m_activeSpecialWorkspace;
+        }
+
+        // TL9 (no drag preview, refused by tile and arrange).
+        bool placeable(const PHLWINDOW& w) {
+            if (!w || !tiling::movable(factsOf(w)) || w->isHidden() || !w->m_isFloating || w->m_pinned)
+                return false;
+            if (!w->m_workspace || w->m_workspace->m_isSpecialWorkspace || fullscreenNow(w))
+                return false; // minimized and hidden windows live on special workspaces
+            if (w->parent() || x11FloatedByHyprland(w) || w->m_class == kGlanceClass || gf::stager::inStripStage(w))
+                return false;
+            const auto c = constraintsOf(w);
+            return !((c.maxW > 0 && c.minW >= c.maxW) || (c.maxH > 0 && c.minH >= c.maxH)); // fixed size on an axis
+        }
+
+        // TL1, TL2, TL3: the output minus its reserved area now, minus the Stages strip column; the margin; the grid.
+        tiling::Area areaFor(const PHLMONITOR& m) {
+            CBox box = m->logicalBoxMinusReserved();
+            if (const auto right = gf::stager::stripColumnRight(m); right && *right > box.x) {
+                const double cut = std::min(*right, box.x + box.w) - box.x;
+                box.x += cut;
+                box.w -= cut;
+            }
+            const CBox output = m->logicalBox();
+            return tiling::Area{.box    = toRect(box),
+                                .margin = state().tilingMargins ? tiling::kMargin : 0.0,
+                                .grid   = tiling::Grid{.originX = output.x, .originY = output.y, .step = tiling::gridStep(m->m_scale)}};
+        }
+
+        // Windows of inactive stages (drawn in the strip at their real places): never neighbours, never holding a zone.
+        std::vector<uint64_t> stripWindows() {
+            std::vector<uint64_t> out;
+            for (const auto& r : st().book.records()) {
+                if (const auto w = windowById(r.id); w && gf::stager::inStripStage(w))
+                    out.push_back(r.id);
+            }
+            return out;
+        }
+
+        bool isHalf(tiling::Place place) {
+            return place == tiling::Place::Left || place == tiling::Place::Right || place == tiling::Place::Top || place == tiling::Place::Bottom;
+        }
+
+        // The frames of `zones` (zone order) filled by `windows` (same order) in `area`, fitted to each window's limits.
+        std::vector<tiling::Rect> fitted(const std::vector<tiling::Zone>& zones, const std::vector<PHLWINDOW>& windows, const tiling::Area& area) {
+            std::vector<tiling::Rect>        frames;
+            std::vector<tiling::Constraints> limits;
+            frames.reserve(zones.size());
+            limits.reserve(zones.size());
+            for (size_t i = 0; i < zones.size(); ++i) {
+                frames.push_back(tiling::zoneFrame(zones[i], area));
+                limits.push_back(constraintsOf(windows[i]));
+            }
+            return tiling::fitFrames(zones, frames, limits, area);
+        }
+
+        // The frame of a single place for `w` (TL4, TL7, TL8): Center keeps its size; a half next to a tiled neighbour on
+        // the same output and Desktop takes the rest of the work area beside it.
+        tiling::Rect placeFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
+            const auto band = gf::chrome::bandOf(w);
+            if (place == tiling::Place::Center)
+                return tiling::centerFrame(toRect(w->layoutTarget()->position()), band, area);
+            const tiling::Zone zone  = tiling::zoneOf(place).value_or(tiling::Zone{});
+            tiling::Rect       frame = tiling::zoneFrame(zone, area);
+            if (isHalf(place)) {
+                const auto                strip = stripWindows();
+                std::vector<tiling::Rect> neighbours;
+                for (const auto& r : st().book.records()) {
+                    if (r.id == idOf(w) || r.output != output || r.workspace != workspace || std::ranges::find(strip, r.id) != strip.end())
+                        continue;
+                    if (r.state == tiling::TileState::Tiled || r.state == tiling::TileState::Resizing)
+                        neighbours.push_back(tiling::frameOf(r.box, r.band));
+                }
+                if (const auto beside = tiling::halfBesideNeighbour(place, area, neighbours))
+                    frame = *beside;
+            }
+            const std::array<tiling::Zone, 1>        zones{zone};
+            const std::array<tiling::Rect, 1>        frames{frame};
+            const std::array<tiling::Constraints, 1> limits{constraintsOf(w)};
+            return tiling::fitFrames(zones, frames, limits, area).front();
+        }
+
+        // The frame of a placement alone: its place, its zone of its layout, or its extended sides.
+        std::optional<tiling::Rect> placementFrame(const PHLWINDOW& w, const tiling::Placement& where, const tiling::Area& area, std::string_view output,
+                                                   int64_t workspace) {
+            if (where.place)
+                return placeFrame(w, *where.place, area, output, workspace);
+            if (where.sides != 0) // TL20: the sides an edge double-click extended go to this area's edges, the others stay
+                return tiling::extendFrame(tiling::frameOf(toRect(w->layoutTarget()->position()), gf::chrome::bandOf(w)), where.sides, constraintsOf(w), area);
+            const auto* layout = tiling::layoutById(where.layout);
+            if (!layout || where.zone < 0 || where.zone >= static_cast<int>(layout->zones.size()))
+                return std::nullopt;
+            return fitted({layout->zones[static_cast<size_t>(where.zone)]}, {w}, area).front();
+        }
+
+        // Posts the `tiling` notice when the records changed since the latest one; refusals and the unload always post.
+        void notify(tiling::Reason reason) {
+            auto&      s      = st();
+            const auto gen    = s.book.generation();
+            const bool always = reason == tiling::Reason::Invalid || reason == tiling::Reason::Locked || reason == tiling::Reason::Unavailable;
+            if (!always && gen == s.posted)
+                return;
+            s.posted = gen;
+            gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Tiling, .id = 0}, tiling::noticeJson(gen, reason));
+        }
+
+        // Records of closed windows are dropped; a Tiled window whose box is not the one the plugin gave it (an app's own
+        // configure, a keyboard move or resize, a rule) becomes Free (TL10).
+        void reconcile() {
+            auto&                 s = st();
+            std::vector<uint64_t> gone;
+            for (const auto& r : s.book.records()) {
+                const auto w      = windowById(r.id);
+                const auto target = w && w->m_isMapped ? w->layoutTarget() : nullptr;
+                const bool moved  = target && r.state == tiling::TileState::Tiled && !r.relayout && !sameBox(target->position(), toCBox(r.box));
+                if (!target || moved)
+                    gone.push_back(r.id);
+            }
+            for (const auto id : gone)
+                s.book.forget(id);
+            if (!gone.empty())
+                notify(tiling::Reason::Forgotten);
+        }
+
+        void applySurface(const PHLWINDOW& w, const CBox& surface) {
+            const auto target = w->layoutTarget();
+            if (target && !sameBox(target->position(), surface))
+                g_layoutManager->setTargetGeom(surface, target);
+        }
+
+        // Why tiled windows are placed again.
+        enum class ERelayout : uint8_t {
+            Margins,    // TL2: every Tiled window; one that cannot be placed now (an inactive stage) is deferred, Suspended
+                        // ones are marked
+            OutputGone, // TL11: the windows of a removed output, on the output Hyprland moved them to; one that cannot be
+                        // placed is Free
+            CatchUp,    // the deferred ones that can be placed now; the others keep waiting
+        };
+
+        // Places Tiled windows again from their placement on the work area now. Groups of an arrangement are fitted
+        // together; halves come last (TL7 reads the others' new frames).
+        void relayout(ERelayout why) {
+            auto& s = st();
+            if (!g_layoutManager)
+                return;
+            reconcile();
+            struct SItem {
+                uint64_t          id = 0;
+                PHLWINDOW         w;
+                PHLMONITOR        m;
+                tiling::Placement where;
+                uint64_t          group     = 0;
+                int64_t           workspace = 0;
+                bool              done      = false;
+            };
+            const bool            margins = why == ERelayout::Margins;
+            std::vector<SItem>    items;
+            std::vector<uint64_t> suspended;
+            std::vector<uint64_t> waiting; // cannot be placed now (an inactive stage): placed once it can be, still checked
+            std::vector<uint64_t> lost;    // its output went away and it cannot be placed: Free
+            for (const auto& r : s.book.records()) {
+                if (r.state == tiling::TileState::Suspended) {
+                    if (margins)
+                        suspended.push_back(r.id);
+                    continue;
+                }
+                const bool selected = margins || (why == ERelayout::OutputGone ? r.relayout : r.deferred);
+                if (r.state != tiling::TileState::Tiled || !selected)
+                    continue;
+                const auto w  = windowById(r.id);
+                const bool ok = placeable(w);
+                PHLMONITOR m  = ok && margins ? monitorByName(r.output) : nullptr;
+                if (!m && ok)
+                    m = monitorOf(w);
+                if (!m) {
+                    if (why == ERelayout::OutputGone)
+                        lost.push_back(r.id); // never left with relayout set: it would never be checked again
+                    else if (margins)
+                        waiting.push_back(r.id);
+                    continue;
+                }
+                items.push_back(SItem{.id = r.id, .w = w, .m = m, .where = r.where, .group = r.group, .workspace = w->m_workspace->m_id});
+            }
+            for (const auto id : suspended)
+                s.book.markRelayout(id, true);
+            for (const auto id : waiting)
+                s.book.markDeferred(id, true);
+            for (const auto id : lost)
+                s.book.forget(id);
+            const auto place = [&s](SItem& item, const tiling::Rect& frame) {
+                const CBox surface = toCBox(tiling::surfaceOf(frame, gf::chrome::bandOf(item.w)));
+                applySurface(item.w, surface);
+                s.book.setBox(item.id, toRect(surface), item.m->m_name);
+                item.done = true;
+            };
+            // Arrangement groups, fitted together on their output.
+            for (auto& first : items) {
+                if (first.done || first.where.layout.empty() || first.group == 0)
+                    continue;
+                const auto* layout = tiling::layoutById(first.where.layout);
+                if (!layout)
+                    continue;
+                std::vector<SItem*>       members;
+                std::vector<tiling::Zone> zones;
+                std::vector<PHLWINDOW>    windows;
+                for (auto& other : items) {
+                    if (other.done || other.group != first.group || other.where.layout != first.where.layout || other.m != first.m || other.workspace != first.workspace)
+                        continue;
+                    if (other.where.zone < 0 || other.where.zone >= static_cast<int>(layout->zones.size()))
+                        continue;
+                    members.push_back(&other);
+                    zones.push_back(layout->zones[static_cast<size_t>(other.where.zone)]);
+                    windows.push_back(other.w);
+                }
+                if (members.empty())
+                    continue;
+                const auto frames = fitted(zones, windows, areaFor(first.m));
+                for (size_t i = 0; i < members.size(); ++i)
+                    place(*members[i], frames[i]);
+            }
+            // Single zones and places, halves last.
+            for (const bool halves : {false, true}) {
+                for (auto& item : items) {
+                    if (item.done || (item.where.place && isHalf(*item.where.place)) != halves)
+                        continue;
+                    if (const auto frame = placementFrame(item.w, item.where, areaFor(item.m), item.m->m_name, item.workspace))
+                        place(item, *frame);
+                }
+            }
+            notify(tiling::Reason::Relaid);
+        }
+
+        // Reconciles the records, then places the deferred windows that can be placed now (TL2: the margins changed while
+        // they were in an inactive stage): at the next placement or state read once they can be.
+        void catchUp() {
+            reconcile();
+            const auto records = st().book.records();
+            if (std::ranges::any_of(records, [](const tiling::TileRecord& r) { return r.state == tiling::TileState::Tiled && r.deferred; }))
+                relayout(ERelayout::CatchUp);
+        }
+
+        // Return to Previous Size and a window coming back to a taken zone: `before`, centred in the free area of the
+        // output the window is on when it lies off every output (its output went away).
+        CBox beforeBox(const PHLWINDOW& w, const tiling::Rect& before) {
+            CBox box = toCBox(before);
+            if (monitorAt(box.middle()))
+                return box;
+            auto m = monitorOf(w);
+            if (!m && Desktop::focusState())
+                m = Desktop::focusState()->monitor();
+            if (m) {
+                const CBox area = m->logicalBoxMinusReserved();
+                box.x           = std::round(area.x + (area.w - box.w) / 2);
+                box.y           = std::round(area.y + (area.h - box.h) / 2);
+            }
+            return box;
+        }
+
+        bool hyprlandDrag(eMouseBindMode mode) {
+            return mode == MBIND_MOVE || mode == MBIND_RESIZE || mode == MBIND_RESIZE_BLOCK_RATIO || mode == MBIND_RESIZE_FORCE_RATIO;
+        }
+
+        bool hyprlandDragging() {
+            if (!g_layoutManager)
+                return false;
+            const auto& drag = g_layoutManager->dragController();
+            return drag && hyprlandDrag(drag->mode());
+        }
+
+        // One of Hyprland's drags holds `w` now (a client-chrome window dragged out of its zoom restarts one, ADR-0015 P4).
+        bool heldByHyprlandDrag(const PHLWINDOW& w) {
+            if (!hyprlandDragging())
+                return false;
+            const auto target = g_layoutManager->dragController()->target();
+            return target && target->window() == w;
+        }
+
+        // TL10: a Suspended window comes back. On the output Hyprland shows it on (under its middle, else the focused one):
+        // its own box when that output is the record's and nothing re-placed it meanwhile, else its zone placed there.
+        // From a special workspace the zone must be free (else Free at `before`); from full screen or zoom it is put back.
+        void resumeNow(const SResume& resume) {
+            auto&      s = st();
+            const auto r = s.book.find(resume.id);
+            if (!r || r->state != tiling::TileState::Suspended)
+                return;
+            const auto w = windowById(resume.id);
+            if (!w) {
+                s.book.forget(resume.id);
+                notify(tiling::Reason::Forgotten);
+                return;
+            }
+            if (!g_layoutManager || fullscreenNow(w) || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace)
+                return; // still full screen, zoomed or minimized: stays Suspended (its own event resumes it)
+            if (!placeable(w)) {
+                s.book.forget(resume.id); // back, but not tileable any more (pinned, a parent, a strip): Free for good
+                notify(tiling::Reason::Forgotten);
+                return;
+            }
+            if (heldByHyprlandDrag(w)) {
+                s.book.forget(resume.id); // dragged out of its zoom: it leaves its tile under the pointer
+                notify(tiling::Reason::Moved);
+                return;
+            }
+            const CBox current = w->layoutTarget()->position();
+            auto       m       = monitorAt(current.middle());
+            if (!m && Desktop::focusState())
+                m = Desktop::focusState()->monitor();
+            if (!m || !m->m_enabled)
+                return;
+            const int64_t           workspace = w->m_workspace->m_id;
+            const auto              band      = gf::chrome::bandOf(w);
+            const tiling::Placement where     = r->where;
+            const uint64_t          group     = r->group;
+            const tiling::Rect      before    = r->before;
+            std::optional<tiling::Rect> frame;
+            if (r->output == m->m_name && !r->relayout)
+                frame = tiling::frameOf(r->box, r->band);
+            else
+                frame = placementFrame(w, where, areaFor(m), m->m_name, workspace);
+            const auto strip = stripWindows();
+            if (frame && (!resume.checkFree || s.book.zoneFree(*frame, m->m_name, workspace, resume.id, strip))) {
+                const CBox surface = toCBox(tiling::surfaceOf(*frame, band));
+                applySurface(w, surface);
+                s.book.placed(resume.id, toRect(current), toRect(surface), band, where, m->m_name, workspace, group);
+                notify(tiling::Reason::Restored);
+                return;
+            }
+            g_layoutManager->setTargetGeom(beforeBox(w, before), w->layoutTarget());
+            s.book.forget(resume.id);
+            notify(tiling::Reason::Forgotten);
+        }
+
+        // Resizing -> Tiled with the box Hyprland's resize left (the top clamp has run: it is scheduled first).
+        void finishResize() {
+            auto&      s = st();
+            const auto w = std::exchange(s.resizing, PHLWINDOWREF{}).lock();
+            const auto t = w ? w->layoutTarget() : nullptr;
+            if (!t)
+                return; // closed meanwhile: reconcile() drops the record
+            s.book.endResize(idOf(w), toRect(t->position()));
+            notify(tiling::Reason::Resized);
+        }
+
+        // ---- drags (TL16-TL20) ----
+
+        void scheduleAfter(); // below: its callback is afterEvents
+
+        uint64_t nowMs() {
+            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
+
+        // Alt (Option) held on any keyboard.
+        bool altHeld() {
+            return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_ALT) != 0;
+        }
+
+        // A preview frame appears or goes: it is drawn again.
+        void damage(const std::optional<Snap>& snap) {
+            if (snap && g_pHyprRenderer)
+                g_pHyprRenderer->damageBox(snap->frame);
+        }
+
+        std::optional<Snap> shownOf(const SDrag& d) {
+            return d.dwell.shown() ? d.candidate : std::nullopt;
+        }
+
+        // The preview delay passed with the pointer at rest: the drag's place is read again and shows if the pointer is
+        // still on it. No button held any more: the drag ended without its end seen here. (Not tied to ready(): the titlebar
+        // drag tiles without the tiling listeners; stop() removes the timer at the unload.)
+        void previewDue() {
+            auto&      s = st();
+            const auto w = s.drag.window.lock();
+            if (!w || !g_pInputManager)
+                return;
+            if (!g_pInputManager->hasHeldButtons()) {
+                dragDone();
+                return;
+            }
+            dragMotion(w, g_pInputManager->getMouseCoordsInternal());
+        }
+
+        void armPreviewTimer(uint64_t ms) {
+            auto& s = st();
+            if (!g_pEventLoopManager)
+                return;
+            if (!s.previewTimer) {
+                s.previewTimer = makeShared<CEventLoopTimer>(
+                    std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("tiling preview delay", [] { previewDue(); }); }, nullptr);
+                g_pEventLoopManager->addTimer(s.previewTimer);
+            }
+            s.previewTimer->updateTimeout(std::chrono::milliseconds(ms));
+        }
+
+        // TL16: one of Hyprland's moves of a tiled window passed the drag threshold: Moving, with its size from before
+        // under the pointer at the same place of its grip (macOS). Hyprland keeps the drag's start to itself
+        // (CDragStateController::m_beginDragPositionXY), so its drag is ended and begun again from that box, with the
+        // exclusive device grab an app's move request asked for (CWindow::onXDGMoveRequest), as client chrome does after a
+        // zoom (ClientChrome.cpp P4).
+        void restartAtSizeBefore(const PHLWINDOW& w, const SP<Layout::ITarget>& target, tiling::Rect tiled, const Vector2D& grip, const Vector2D& pointer) {
+            if (!movable(w)) {
+                logRequest(Log::INFO, "window {:x} closed or unmapped: its move not restarted (gate C1)", idOf(w));
+                return;
+            }
+            const auto& drag      = g_layoutManager->dragController();
+            const bool  exclusive = drag && drag->exclusiveDeviceGrab();
+            const auto  before    = beginMove(w);
+            if (!before)
+                return;
+            const auto box = gf::titlebar::unzoomedDragBox(gf::titlebar::Rect{tiled.x, tiled.y, tiled.w, tiled.h}, before->w, before->h, grip.x, grip.y, pointer.x,
+                                                           pointer.y);
+            g_layoutManager->endDragTarget();
+            g_layoutManager->setTargetGeom(CBox{box.x, box.y, box.w, box.h}, target);
+            g_layoutManager->beginDragTarget(target, MBIND_MOVE, std::nullopt, exclusive);
+            logRequest(Log::DEBUG, "Hyprland's move of {:x} leaves its tile: {:.0f}x{:.0f} at {:.0f},{:.0f}", idOf(w), box.w, box.h, box.x, box.y);
+        }
+
+        // One of Hyprland's moves (an app's toolbar drag, Super+drag) is at the pointer, before Hyprland applies the motion:
+        // a tiled window leaves its tile once past the drag threshold (until then it stays Tiled: its release puts it back);
+        // a movable floating window shows the place under the pointer (dragMotion). A window Hyprland itself tiles, dragged
+        // out of its layout for the drag only (CDragStateController::draggingTiled), shows none: Hyprland tiles it again.
+        void hyprlandMove(const PHLWINDOW& w, const SP<Layout::ITarget>& target) {
+            auto& s = st();
+            if (!w || !target || !g_pInputManager)
+                return;
+            const auto& drag = g_layoutManager->dragController();
+            if (drag && drag->draggingTiled()) {
+                if (s.drag.hyprland)
+                    dragDone();
+                return;
+            }
+            const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+            if (const auto r = s.book.find(idOf(w)); r && r->state == tiling::TileState::Tiled) {
+                const Vector2D grip = s.press.value_or(pointer);
+                if (!gf::titlebar::exceedsDragThreshold(pointer.x - grip.x, pointer.y - grip.y))
+                    return;
+                restartAtSizeBefore(w, target, r->box, grip, pointer);
+            }
+            dragMotion(w, pointer);
+            s.drag.hyprland = true;
+        }
+
+        // TL16, after Hyprland ended one of its moves: the place shown at the release is tiled; a tiled window released
+        // under the drag threshold goes back to its tile; a Moving one released elsewhere is Free. A release that did not
+        // end the drag (another button) changes nothing: the drag and its preview go on.
+        void finishMove(const SMoveRelease& rel) {
+            auto& s = st();
+            if (hyprlandDragging())
+                return;
+            const auto w = rel.window.lock();
+            if (s.drag.hyprland)
+                dragDone();
+            if (!w)
+                return;
+            if (!movable(w)) {
+                endMove(w); // closed or unmapped meanwhile (gate C1): nothing is moved
+                return;
+            }
+            if (rel.snap && gf::deferredFocus::sessionLocked()) {
+                endMove(w); // nothing tiles behind the lock screen (TL34, behind Hyprland's own refusal of drags then)
+                return;
+            }
+            if (rel.snap) {
+                tile(w, rel.snap->place, rel.snap->monitor.lock());
+                return;
+            }
+            if (const auto r = s.book.find(idOf(w)); r && r->state == tiling::TileState::Tiled) {
+                applySurface(w, toCBox(r->box));
+                return;
+            }
+            endMove(w);
+        }
+
+        // TL20: a click on `w`'s resize border at `at` (`timeMs`: its press). Two on the same sides within the double-click
+        // time and distance (core CClickTracker) extend those sides, with Alt their opposite sides too, once Hyprland ended
+        // the resize the second press began.
+        void borderClick(const PHLWINDOW& w, const Vector2D& at, uint32_t timeMs) {
+            auto&         s     = st();
+            const uint8_t sides = tiling::sidesAt(at.x, at.y, toRect(w->getWindowMainSurfaceBox()));
+            if (s.border.window.lock() != w || s.border.sides != sides) {
+                s.border.window = w;
+                s.border.sides  = sides;
+                s.border.clicks.reset();
+            }
+            if (!s.border.clicks.press(timeMs, at.x, at.y))
+                return;
+            s.extend = SExtend{.window = w, .sides = tiling::extendedSides(sides, altHeld())};
+            scheduleAfter();
+        }
+
+        // TL20, after Hyprland ended the second click's resize: the sides go to the work area's edges (core extendFrame) and
+        // the window is tiled with a box from before; all four sides (Alt on a corner) is Fill.
+        void extendSides(const SExtend& e) {
+            auto&      s = st();
+            const auto w = e.window.lock();
+            if (!w || e.sides == 0 || !placeable(w) || !g_layoutManager || hyprlandDragging() || gf::deferredFocus::sessionLocked())
+                return; // locked: nothing tiles behind the lock screen (TL34)
+            const auto m = monitorOf(w);
+            if (!m || showsSpecial(m))
+                return;
+            if (e.sides == tiling::kAllSides) {
+                tile(w, tiling::Place::Fill, m);
+                return;
+            }
+            catchUp();
+            const CBox current = w->layoutTarget()->position();
+            const auto band    = gf::chrome::bandOf(w);
+            const auto frame   = tiling::extendFrame(tiling::frameOf(toRect(current), band), e.sides, constraintsOf(w), areaFor(m));
+            const CBox surface = toCBox(tiling::surfaceOf(frame, band));
+            applySurface(w, surface);
+            tiling::Placement where;
+            where.sides = e.sides;
+            s.book.placed(idOf(w), toRect(current), toRect(surface), band, where, m->m_name, w->m_workspace->m_id, 0);
+            logRequest(Log::DEBUG, "edge double-click {:x}: {} extended on {}", idOf(w), tiling::sidesName(e.sides), m->m_name);
+            notify(tiling::Reason::Placed);
+        }
+
+        // After Hyprland's own handling of the events that scheduled it: a resize that ended, outputs that went away,
+        // windows that came back, a move released, an edge double-clicked, a key that may have changed Alt during a drag.
+        void afterEvents() {
+            auto& s = st();
+            if (!s.ready)
+                return;
+            if (s.resizing.lock() && !hyprlandDragging())
+                finishResize();
+            if (std::exchange(s.relayoutPending, false))
+                relayout(ERelayout::OutputGone);
+            for (const auto& resume : std::exchange(s.resuming, {}))
+                resumeNow(resume);
+            if (const auto rel = std::exchange(s.moveRelease, std::nullopt))
+                finishMove(*rel);
+            if (const auto e = std::exchange(s.extend, std::nullopt))
+                extendSides(*e);
+            if (std::exchange(s.recheck, false)) {
+                const auto w = s.drag.window.lock();
+                if (w && g_pInputManager && g_pInputManager->hasHeldButtons())
+                    dragMotion(w, g_pInputManager->getMouseCoordsInternal());
+            }
+        }
+
+        void scheduleAfter() {
+            st().later.schedule([] { gf::guarded("tiling after events", [] { afterEvents(); }); });
+        }
+
+        void onClose(const PHLWINDOW& w) {
+            auto& s = st();
+            if (!w || !s.book.find(idOf(w)))
+                return;
+            s.book.forget(idOf(w));
+            notify(tiling::Reason::Forgotten);
+        }
+
+        // TL12: full screen and zoom suspend; leaving them puts the box back once Hyprland restored the window.
+        void onFullscreen(const PHLWINDOW& w) {
+            auto&      s = st();
+            const auto r = w ? s.book.find(idOf(w)) : nullptr;
+            if (!r)
+                return;
+            if (fullscreenNow(w)) {
+                if (s.book.suspend(idOf(w)))
+                    notify(tiling::Reason::Suspended);
+                return;
+            }
+            if (r->state == tiling::TileState::Suspended && w->m_workspace && !w->m_workspace->m_isSpecialWorkspace) {
+                s.resuming.push_back(SResume{.id = idOf(w), .checkFree = false});
+                scheduleAfter();
+            }
+        }
+
+        // TL14: minimize, hide and Show Desktop move a window to a special workspace (Suspended); back on a regular one it
+        // returns to its zone if it is free. Move to Desktop between regular workspaces keeps the state.
+        void onMoveToWorkspace(const PHLWINDOW& w, const PHLWORKSPACE& ws) {
+            auto&      s = st();
+            const auto r = w && ws ? s.book.find(idOf(w)) : nullptr;
+            if (!r)
+                return;
+            if (ws->m_isSpecialWorkspace) {
+                if (s.book.suspend(idOf(w)))
+                    notify(tiling::Reason::Suspended);
+                return;
+            }
+            if (r->state == tiling::TileState::Suspended) {
+                s.resuming.push_back(SResume{.id = idOf(w), .checkFree = true});
+                scheduleAfter();
+                return;
+            }
+            s.book.setWorkspace(idOf(w), ws->m_id); // the state reply carries no Desktop: no notice
+        }
+
+        // TL11: Hyprland moves the windows of a removed output to another one (its workspaces); the tiled ones are placed
+        // into the same zone there once it did. Not checked meanwhile (markRelayout).
+        void onMonitorRemoved(const PHLMONITOR& m) {
+            auto& s = st();
+            if (!m)
+                return;
+            bool any = false;
+            for (const auto& r : s.book.records()) {
+                if (r.output == m->m_name) {
+                    s.book.markRelayout(r.id, true);
+                    any = true;
+                }
+            }
+            if (!any)
+                return;
+            s.relayoutPending = true;
+            scheduleAfter();
         }
     } // namespace
 
+    bool start() {
+        auto& bus = Event::bus();
+        auto& s   = st();
+        // A load starts with no record, also when the library stayed mapped since a previous load (FR23).
+        s.book.clear();
+        s.posted = s.book.generation();
+        s.resizing.reset();
+        s.relayoutPending = false;
+        s.resuming.clear();
+        s.later.clear(); // a previous stop() cancelled it
+        s.drag = {};
+        s.recheck = false;
+        s.press.reset();
+        s.moveRelease.reset();
+        s.border = {};
+        s.extend.reset();
+        if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
+            return false;
+        auto& ev = bus->m_events;
+        auto& l  = s.listeners;
+        l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("tiling window.close", [&] { onClose(w); }); }));
+        l.push_back(ev.window.fullscreen.listen([](const PHLWINDOW& w) { gf::guarded("tiling window.fullscreen", [&] { onFullscreen(w); }); }));
+        l.push_back(ev.window.moveToWorkspace.listen(
+            [](const PHLWINDOW& w, const PHLWORKSPACE& ws) { gf::guarded("tiling window.moveToWorkspace", [&] { onMoveToWorkspace(w, ws); }); }));
+        l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& m) { gf::guarded("tiling monitor.removed", [&] { onMonitorRemoved(m); }); }));
+        s.ready = true;
+        return true;
+    }
+
+    void stop() {
+        auto& s = st();
+        s.listeners.clear();
+        s.later.cancel();
+        dragDone(); // the preview goes; a drag of Hyprland's goes on as Hyprland's own
+        if (s.previewTimer) {
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(s.previewTimer);
+            s.previewTimer.reset();
+        }
+        s.recheck = false;
+        s.press.reset();
+        s.moveRelease.reset();
+        s.border = {};
+        s.extend.reset();
+        s.resizing.reset();
+        s.relayoutPending = false;
+        s.resuming.clear();
+        s.book.clear(); // windows keep their boxes; groups are forgotten
+        if (std::exchange(s.ready, false))
+            notify(tiling::Reason::Unavailable);
+    }
+
+    bool ready() {
+        return st().ready;
+    }
+
     std::optional<Snap> snapFor(const PHLWINDOW& w, const Vector2D& pointer) {
         const auto& options = state().tilingDrag;
-        if (!placeable(w) || (!options.edges && !options.menuBar))
+        const bool  alt     = options.altDrag && altHeld();
+        if (!placeable(w) || (!options.edges && !options.menuBar && !alt))
             return std::nullopt;
         const auto m = monitorAt(pointer);
-        if (!m)
+        if (!m || showsSpecial(m))
             return std::nullopt;
         const CBox box = m->logicalBox();
         const tiling::Output output{toRect(box), box.y + m->m_reservedArea.top(), edgeFree(m, true), edgeFree(m, false)};
-        const auto place = tiling::placeForPointer(pointer.x, pointer.y, output, options);
+        const auto           area  = areaFor(m);
+        const auto           place = tiling::dragPlace(pointer.x, pointer.y, output, area.box, options, alt);
         if (!place)
             return std::nullopt;
-        const auto current = w->layoutTarget()->position();
-        const auto band    = gf::chrome::bandOf(w); // none above a window that draws its own chrome (ADR-0015)
-        const auto surface = tiling::surfaceFor(*place, toRect(m->logicalBoxMinusReserved()), band, state().tilingMargins, toRect(current));
-        return Snap{*place, toCBox(tiling::frameOf(surface, band)), m};
+        return Snap{*place, toCBox(placeFrame(w, *place, area, m->m_name, w->m_workspace->m_id)), m};
+    }
+
+    std::optional<Snap> dragMotion(const PHLWINDOW& w, const Vector2D& pointer) {
+        auto& s = st();
+        if (!w)
+            return std::nullopt;
+        auto& d = s.drag;
+        if (d.window.lock() != w) {
+            dragDone(); // another window's drag: its preview goes
+            d.window = w;
+        }
+        const auto before = shownOf(d);
+        auto       next   = snapFor(w, pointer);
+        const auto m      = next ? next->monitor.lock() : nullptr;
+        const auto now    = nowMs();
+        d.dwell.update(next ? std::optional{next->place} : std::nullopt, m ? std::string_view{m->m_name} : std::string_view{}, now, altHeld());
+        d.candidate      = std::move(next);
+        const auto after = shownOf(d);
+        const bool same  = before && after ? before->place == after->place && before->frame == after->frame : before.has_value() == after.has_value();
+        if (!same) {
+            damage(before);
+            damage(after);
+        }
+        // The line tests wait for before they capture the preview (tests/compositor/tiling.sh): it shows now.
+        if (after && (!before || before->place != after->place))
+            logRequest(Log::DEBUG, "tiling preview {:x}: {} on {}", idOf(w), tiling::nameOf(after->place), m ? m->m_name : std::string{});
+        if (const auto wait = d.dwell.remaining(now))
+            armPreviewTimer(*wait);
+        return after;
+    }
+
+    void dragDone() {
+        auto& s = st();
+        damage(shownOf(s.drag));
+        s.drag = {};
+        if (s.previewTimer)
+            s.previewTimer->updateTimeout(std::nullopt);
+    }
+
+    std::optional<Snap> previewOf(const PHLWINDOW& w) {
+        const auto& s = st();
+        if (!w || s.drag.window.lock() != w)
+            return std::nullopt;
+        return shownOf(s.drag);
+    }
+
+    void onKey() {
+        auto& s = st();
+        if (!s.ready || !s.drag.window.lock())
+            return;
+        s.recheck = true; // Hyprland applies the key after this listener: Alt is read once it did
+        scheduleAfter();
     }
 
     bool tile(const PHLWINDOW& w, tiling::Place place, const PHLMONITOR& monitor) {
         if (!placeable(w) || !g_layoutManager)
             return false;
+        auto& s = st();
+        catchUp();
+        const auto m = monitor && monitor->m_enabled ? monitor : monitorOf(w);
+        if (!m || showsSpecial(m))
+            return false; // over an open special workspace the drop only moves the window (followOutput)
         const auto target  = w->layoutTarget();
         const CBox current = target->position();
-        // The output the window is on now: the one under its middle. Hyprland's m_monitor is not updated by the plugin's
-        // own titlebar drags, so a window dragged to another output would tile back on the old one (R13).
-        auto m = monitor ? monitor : monitorAt(current.middle());
-        if (!m)
-            m = w->m_monitor.lock();
-        if (!m)
-            return false;
-        const CBox surface = toCBox(tiling::surfaceFor(place, toRect(m->logicalBoxMinusReserved()), gf::chrome::bandOf(w), state().tilingMargins, toRect(current)));
-        if (auto* entry = entryFor(w); entry && sameBox(current, entry->tiled))
-            entry->tiled = surface; // re-tiled: the box from before the first tiling stays
-        else {
-            std::erase_if(tiled(), [&w](const STiled& t) { return t.window.lock() == w; });
-            tiled().push_back(STiled{w, current, surface});
-        }
+        const auto band    = gf::chrome::bandOf(w);
+        const CBox surface = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m), m->m_name, w->m_workspace->m_id), band));
         g_layoutManager->setTargetGeom(surface, target);
-        logRequest(Log::DEBUG, "tile {:x}: {} on {}", reinterpret_cast<uintptr_t>(w.get()), tiling::nameOf(place), m->m_name);
+        followOutput(w); // tiled on another output (a drag's release there, tile() after a drag over): that output's Desktop
+        const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
+        s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = place, .layout = {}, .zone = -1}, m->m_name, workspace, 0);
+        logRequest(Log::DEBUG, "tile {:x}: {} on {}", idOf(w), tiling::nameOf(place), m->m_name);
+        notify(tiling::Reason::Placed);
         return true;
+    }
+
+    bool movable(const PHLWINDOW& w) {
+        return tiling::movable(factsOf(w));
+    }
+
+    void followOutput(const PHLWINDOW& w) {
+        const auto facts = factsOf(w);
+        if (!g_layoutManager || !w)
+            return;
+        if (!tiling::movable(facts)) {
+            // Closed or unmapped (during a drag): no Desktop, no space (gate C1); tiling.sh's C1 cases look for this line.
+            logRequest(Log::INFO, "window {:x} closed or unmapped: its Desktop not changed (gate C1)", idOf(w));
+            return;
+        }
+        const auto                target = w->layoutTarget();
+        const CBox                box    = target->position();
+        const auto                all = monitors();
+        std::vector<tiling::Rect> boxes;
+        boxes.reserve(all.size());
+        for (const auto& m : all)
+            boxes.push_back(toRect(m->logicalBox()));
+        const auto i = tiling::outputUnder(toRect(box), boxes);
+        if (!i)
+            return; // off every output: it keeps its Desktop
+        const auto& m  = all[*i];
+        const auto  ws = m->m_activeSpecialWorkspace ? m->m_activeSpecialWorkspace : m->m_activeWorkspace;
+        if (!ws || !ws->m_space || !tiling::shouldFollow(facts, i, ws->m_space == target->space()))
+            return;
+        target->assignToSpace(ws->m_space);
+        g_layoutManager->setTargetGeom(box, target);
+        logRequest(Log::DEBUG, "window {:x} moved by the plugin onto {}: now on its Desktop {}", idOf(w), m->m_name, ws->m_name);
     }
 
     bool isTiled(const PHLWINDOW& w) {
-        auto* entry = entryFor(w);
-        if (!entry)
+        if (!w)
             return false;
-        // Moved or resized since (by the user, the app, a rule): it left its tile; forget the box from before.
-        const auto target = w->layoutTarget();
-        if (!target || !sameBox(target->position(), entry->tiled)) {
-            std::erase_if(tiled(), [&w](const STiled& t) { return t.window.lock() == w; });
-            return false;
-        }
-        return true;
+        reconcile();
+        const auto r = st().book.find(idOf(w));
+        return r && r->state == tiling::TileState::Tiled;
     }
 
-    std::optional<CBox> takePrevious(const PHLWINDOW& w) {
-        auto* entry = entryFor(w);
-        if (!entry)
+    std::optional<CBox> beginMove(const PHLWINDOW& w) {
+        if (!w)
             return std::nullopt;
-        const CBox before = entry->before;
-        std::erase_if(tiled(), [&w](const STiled& t) { return t.window.lock() == w; });
-        return before;
+        const auto before = st().book.beginMove(idOf(w));
+        if (!before)
+            return std::nullopt;
+        notify(tiling::Reason::Moved);
+        return toCBox(*before);
+    }
+
+    void leave(const PHLWINDOW& w) {
+        auto& s = st();
+        if (!w || !s.book.find(idOf(w)))
+            return;
+        s.book.forget(idOf(w));
+        notify(tiling::Reason::Moved);
+    }
+
+    void endMove(const PHLWINDOW& w) {
+        auto&      s = st();
+        const auto r = w ? s.book.find(idOf(w)) : nullptr;
+        if (!r || r->state != tiling::TileState::Moving)
+            return;
+        s.book.endMove(idOf(w));
+        notify(tiling::Reason::Forgotten);
     }
 
     void tileRequest(std::string_view addressText, std::string_view placeName) {
-        const auto parsed = minimize::parseAddress(addressText);
-        if (!parsed) {
-            logRequest(Log::WARN, "tile: rejected: no such window");
+        if (gf::deferredFocus::sessionLocked()) {
+            logRequest(Log::INFO, "tile: refused: the session is locked");
+            notify(tiling::Reason::Locked);
             return;
         }
-        const uint64_t address = *parsed;
-        PHLWINDOW      window;
-        if (Desktop::windowState()) {
-            for (const auto& w : Desktop::windowState()->windows()) {
-                if (w && reinterpret_cast<uintptr_t>(w.get()) == address)
-                    window = w;
-            }
-        }
+        const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
+        const auto     window  = address != 0 ? windowById(address) : nullptr;
         if (!window) {
             logRequest(Log::WARN, "tile: rejected: no such window");
             return;
         }
         if (placeName == "previous") {
-            const auto before = placeable(window) && g_layoutManager ? takePrevious(window) : std::nullopt;
+            auto&      s      = st();
+            const auto r      = placeable(window) && g_layoutManager ? s.book.find(address) : nullptr;
+            const auto before = r ? s.book.takeBefore(address) : std::nullopt;
             if (!before) {
                 logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", address);
                 return;
             }
-            CBox box = *before;
-            // The output it was on is gone (or the box lies off every output): the size comes back, centred in the free
-            // area of the output the window is on now.
-            if (!monitorAt(box.middle())) {
-                const CBox current = window->layoutTarget()->position();
-                auto       m       = monitorAt(current.middle());
-                if (!m)
-                    m = window->m_monitor.lock();
-                if (m) {
-                    const CBox area = m->logicalBoxMinusReserved();
-                    box.x           = std::round(area.x + (area.w - box.w) / 2);
-                    box.y           = std::round(area.y + (area.h - box.h) / 2);
-                }
-            }
-            g_layoutManager->setTargetGeom(box, window->layoutTarget());
+            g_layoutManager->setTargetGeom(beforeBox(window, *before), window->layoutTarget());
+            notify(tiling::Reason::Forgotten);
             return;
         }
         const auto place = tiling::parsePlace(placeName);
@@ -213,11 +1131,198 @@ namespace gf::tiler {
             return;
         }
         if (!tile(window, *place))
-            logRequest(Log::INFO, "tile {:x}: not placeable (full screen, pinned or not floating)", address);
+            logRequest(Log::INFO, "tile {:x}: not tileable (tiling.md TL9)", address);
     }
 
-    void forgetAll() {
-        tiled().clear();
+    void arrangeRequest(std::string_view json) {
+        auto&      s      = st();
+        const auto refuse = [](std::string_view why) {
+            logRequest(Log::WARN, "arrange: rejected: {}", why);
+            notify(tiling::Reason::Invalid);
+        };
+        if (gf::deferredFocus::sessionLocked()) {
+            logRequest(Log::INFO, "arrange: refused: the session is locked");
+            notify(tiling::Reason::Locked);
+            return;
+        }
+        const auto request = tiling::parseArrange(json);
+        if (!request) {
+            refuse(request.error());
+            return;
+        }
+        if (!g_layoutManager) {
+            refuse("no layout manager");
+            return;
+        }
+        std::vector<PHLWINDOW> windows;
+        for (const auto address : request->windows) {
+            const auto w = windowById(address);
+            if (!placeable(w)) {
+                refuse("a window is not a live tileable window (tiling.md TL9)");
+                return;
+            }
+            windows.push_back(w);
+        }
+        // Every check before anything moves (ADR-0007: a refusal changes nothing). The output is the one the windows are on
+        // (under their middle), whatever Desktop Hyprland still records for them.
+        const auto first = windows.front();
+        const auto here  = monitorOf(first);
+        const auto m     = request->output.empty() ? here : monitorByName(request->output);
+        if (!m) {
+            refuse("the output is unknown");
+            return;
+        }
+        if (here != m) {
+            refuse(std::format("the first window is on {}, not on {} (D3)", here ? here->m_name : "no output", m->m_name));
+            return;
+        }
+        if (showsSpecial(m) || !m->m_activeWorkspace) {
+            refuse(std::format("{} shows a special workspace or no Desktop (TL9)", m->m_name));
+            return;
+        }
+        for (const auto& w : windows) {
+            if (monitorOf(w) != m) {
+                refuse(std::format("the windows are not all on {}", m->m_name));
+                return;
+            }
+        }
+        // Then each window takes the Desktop of the output it is on (D9), whatever moved it there: the plugin's titlebar
+        // drag, or a move Hyprland's own action makes without changing the Desktop (Actions::move).
+        for (const auto& w : windows)
+            followOutput(w);
+        const auto workspace = m->m_activeWorkspace;
+        for (const auto& w : windows) {
+            if (w->m_workspace != workspace) { // followOutput gives every placeable window that Desktop: never expected
+                refuse(std::format("{} shows Desktop {}, a window stayed on Desktop {}", m->m_name, workspace->m_name, w->m_workspace ? w->m_workspace->m_name : "none"));
+                return;
+            }
+        }
+        catchUp();
+        const auto*               layout = tiling::layoutById(request->layout); // parseArrange checked the id
+        std::vector<int>          zoneIndex;
+        std::vector<tiling::Zone> zones;
+        zoneIndex.reserve(layout->zones.size());
+        zones.reserve(layout->zones.size());
+        if (request->zone) {
+            zoneIndex.push_back(*request->zone);
+        } else {
+            // TL6: then the next tileable windows in stacking order (top first) on that output and Desktop, in the active stage.
+            if (request->fill && Desktop::windowState()) {
+                const auto& all = Desktop::windowState()->windows(); // bottom to top
+                for (auto it = all.rbegin(); it != all.rend() && windows.size() < layout->zones.size(); ++it) {
+                    const auto& w = *it;
+                    if (!w || std::ranges::find(windows, w) != windows.end() || w->m_workspace != workspace || !placeable(w) || monitorOf(w) != m)
+                        continue;
+                    windows.push_back(w);
+                }
+            }
+            for (size_t i = 0; i < windows.size(); ++i)
+                zoneIndex.push_back(static_cast<int>(i));
+        }
+        for (const auto i : zoneIndex)
+            zones.push_back(layout->zones[static_cast<size_t>(i)]);
+        const auto frames = fitted(zones, windows, areaFor(m));
+        // The windows placed together form a tile group (TL6, T1d); one window alone has none.
+        const uint64_t group = windows.size() >= 2 ? s.book.newGroup() : 0;
+        for (size_t i = 0; i < windows.size(); ++i) {
+            const auto& w       = windows[i];
+            const auto  target  = w->layoutTarget();
+            const CBox  current = target->position();
+            const auto  band    = gf::chrome::bandOf(w);
+            const CBox  surface = toCBox(tiling::surfaceOf(frames[i], band));
+            g_layoutManager->setTargetGeom(surface, target);
+            s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zoneIndex[i]},
+                          m->m_name, workspace->m_id, group);
+        }
+        logRequest(Log::DEBUG, "arrange: {} with {} window(s) on {}", layout->id, windows.size(), m->m_name);
+        notify(tiling::Reason::Placed);
+    }
+
+    void marginsChanged() {
+        relayout(ERelayout::Margins);
+    }
+
+    std::string stateReply() {
+        auto& s = st();
+        reconcile(); // records only: the reply never moves a window (deferred ones are placed at the next tiling action)
+        const auto                       all = monitors();
+        std::vector<tiling::StateOutput> outputs;
+        outputs.reserve(all.size());
+        for (const auto& m : all) {
+            const auto area = areaFor(m);
+            const CBox box  = m->logicalBox();
+            tiling::StateOutput o{.name = m->m_name, .area = area.box, .outputClass = tiling::classify(box.w, box.h), .grid = area.grid.step, .windows = {}};
+            for (const auto& r : s.book.records()) {
+                if (r.output == m->m_name)
+                    o.windows.push_back(&r);
+            }
+            outputs.push_back(std::move(o));
+        }
+        return tiling::stateJson(s.book.generation(), outputs);
+    }
+
+    void beforePointerMotion() {
+        auto& s = st();
+        if (!s.ready || !g_layoutManager)
+            return;
+        const auto& drag = g_layoutManager->dragController();
+        if (!drag || !hyprlandDrag(drag->mode())) {
+            if (s.resizing.lock())
+                finishResize(); // the drag ended without a release seen here
+            if (s.drag.hyprland)
+                dragDone(); // likewise the preview of a move
+            return;
+        }
+        const auto target = drag->target();
+        const auto w      = target ? target->window() : nullptr;
+        if (drag->mode() == MBIND_MOVE) {
+            hyprlandMove(w, target);
+            return;
+        }
+        if (s.drag.hyprland)
+            dragDone(); // a resize now: no move preview
+        const auto r = w ? s.book.find(idOf(w)) : nullptr;
+        if (r && r->state == tiling::TileState::Tiled && s.book.beginResize(idOf(w)))
+            s.resizing = w;
+    }
+
+    void beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs) {
+        auto& s = st();
+        if (!s.ready || !g_layoutManager || !g_pInputManager)
+            return;
+        const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+        if (pressed) {
+            if (button == BTN_LEFT) {
+                s.press   = pointer;
+                s.pressMs = timeMs;
+            }
+            return;
+        }
+        if (s.resizing.lock())
+            scheduleAfter(); // ends Resizing once Hyprland ended its drag (afterEvents)
+        if (button != BTN_LEFT)
+            return;
+        const auto  grip   = std::exchange(s.press, std::nullopt);
+        const auto& drag   = g_layoutManager->dragController();
+        const auto  mode   = drag ? drag->mode() : MBIND_INVALID;
+        const auto  target = drag && hyprlandDrag(mode) ? drag->target() : nullptr;
+        const auto  w      = target ? target->window() : nullptr;
+        if (!w)
+            return;
+        if (mode == MBIND_MOVE) {
+            // TL16: tiled once Hyprland ended the drag; the top clamp leaves the window to it (the tile lies below the menu
+            // bar), as it does a tiled window put back in its tile.
+            const auto shown = previewOf(w);
+            const auto r     = s.book.find(idOf(w));
+            if (shown || (r && r->state == tiling::TileState::Tiled))
+                gf::topClamp::skip(w);
+            s.moveRelease = SMoveRelease{.window = w, .snap = shown};
+            scheduleAfter();
+            return;
+        }
+        // A resize begun at the press and released where it began: a click on the window's resize border (TL20).
+        if (grip && !gf::titlebar::exceedsDragThreshold(pointer.x - grip->x, pointer.y - grip->y))
+            borderClick(w, *grip, s.pressMs);
     }
 
 } // namespace gf::tiler

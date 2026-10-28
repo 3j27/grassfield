@@ -12,6 +12,7 @@
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
 
+#include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
@@ -68,12 +69,12 @@ namespace {
         bool                      unzoom   = false; // pressed on a maximized window: un-zoom it when the move starts
         CBox                      zoomedSurface;    // surface box of that maximized window at the press
         bool                      untile   = false; // pressed on a tiled window: its size from before comes back when the move starts
-        std::optional<gf::tiler::Snap> snap;        // where a release would tile the window (its preview is drawn)
-        PHLWINDOWREF              window;   // window being moved
+        PHLWINDOWREF              window;   // window being moved (its tiling preview: gf::tiler::previewOf)
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
         CBox                      pressBox; // the same, never changed by an un-zoom or un-tile (a drop on the Stages strip gives it back)
         bool                      plainPress = false; // pressed on a window that was neither zoomed nor tiled
+        bool                      unmovable  = false; // the window closed or unmapped during the drag (logged once, gate C1)
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -229,6 +230,7 @@ namespace {
     // Measured in 0.56.2: a floating window's layout box is its surface box, a maximized one's is the work
     // area (decorations included), hence the surface box recorded at the press as the reference.
     void unzoomUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
+        gf::tiler::leave(w); // a tile kept while zoomed (tiling.md TL12) ends: the window leaves under the pointer
         if (fullscreenMode(w) == Fullscreen::FSMODE_MAXIMIZED)
             toggleZoom(w);
         const CBox  restored = target->position();
@@ -241,10 +243,11 @@ namespace {
     }
 
     // A move that starts on a tiled window gives it back its size from before tiling, under the pointer at the same
-    // relative place on the titlebar (macOS), like the un-zoom above.
+    // relative place on the titlebar (macOS), like the un-zoom above. Its tile record is Moving until the release
+    // (docs/specs/tiling.md TL10): a release in a drag zone tiles it again with the same box from before, elsewhere it is Free.
     void untileUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
         grab.untile        = false;
-        const auto before = gf::tiler::takePrevious(w);
+        const auto before = gf::tiler::beginMove(w);
         if (!before)
             return;
         const CBox tiled = target->position();
@@ -254,27 +257,17 @@ namespace {
         grab.pressPos = pointer;
     }
 
-    // The tiling preview of a drag changes: the old and the new frames are redrawn.
-    void damageSnap(const std::optional<gf::tiler::Snap>& snap) {
-        if (snap && g_pHyprRenderer)
-            g_pHyprRenderer->damageBox(snap->frame);
-    }
-
-    void updateSnap(SPointerGrab& grab, const PHLWINDOW& w, const Vector2D& pointer) {
-        auto next = gf::tiler::snapFor(w, pointer);
-        const bool same = next.has_value() == grab.snap.has_value() && (!next || (next->place == grab.snap->place && next->frame == grab.snap->frame));
-        if (same)
-            return;
-        damageSnap(grab.snap);
-        damageSnap(next);
-        grab.snap = std::move(next);
+    // Hyprland's general:snap:enabled, read at each step (a configuration reload may change it).
+    bool snapEnabled() {
+        const CConfigValue<Config::INTEGER> enabled("general:snap:enabled");
+        return enabled.good() && *enabled != 0;
     }
 
     // Interactive move driven by the plugin: the window follows the pointer from the press point.
     // S2 history: with CLayoutManager::beginDragTarget and CKeybindManager::changeMouseBindMode the window
     // jumped by (window middle - press point). The cause was most likely Config::Actions::focus() warping
     // the cursor to the window middle before the drag started (found afterwards, now avoided in
-    // focusAndRaise). Hyprland's own drag (with snapping) should be re-evaluated in M1; this move has no snapping.
+    // focusAndRaise). Away from a tiling place the window snaps as in Hyprland's own move (tiling.md TL19).
     // Nothing moves until the pointer has passed kDragThreshold: a click (or the first click of a
     // double-click) never writes the window geometry.
     void updateMove(SPointerGrab& grab) {
@@ -282,8 +275,14 @@ namespace {
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
-        if (!target)
+        if (!target || !gf::tiler::movable(w)) {
+            // Closed or unmapped during the drag: no Desktop, no layout space (gate C1). The line is what tiling.sh's C1 cases
+            // look for: the risky state was reached and nothing was moved.
+            if (!std::exchange(grab.unmovable, true))
+                gf::logRequest(Log::INFO, "titlebar drag: window {:x} closed or unmapped during the drag: not moved (gate C1)",
+                               reinterpret_cast<uintptr_t>(w.get()));
             return;
+        }
         const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
         if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
             return;
@@ -294,10 +293,18 @@ namespace {
             untileUnderPointer(grab, w, target, pointer);
         CBox box = grab.startBox;
         box.translate(pointer - grab.pressPos);
+        // TL19: away from a tiling place the window snaps to the outputs' edges and to the other windows as Hyprland's own
+        // move does (the public CLayoutManager::performSnap with the general:snap values), so every drag behaves alike.
+        if (!gf::tiler::snapFor(w, pointer) && snapEnabled()) {
+            Vector2D pos  = box.pos();
+            Vector2D size = box.size();
+            g_layoutManager->performSnap(pos, size, target, MBIND_MOVE, -1, grab.startBox.size());
+            box = CBox{pos.round(), size};
+        }
         // The titlebar stops at the menu bar while the pointer goes on, and follows it again on the way down (macOS).
         box = gf::topClamp::heldMove(w, box, pointer);
         g_layoutManager->setTargetGeom(box, target);
-        updateSnap(grab, w, pointer);
+        gf::tiler::dragMotion(w, pointer); // the place under the pointer, shown after the preview delay (TL17)
     }
 
     std::vector<WP<IPointer>> pointerDevices() {
@@ -402,7 +409,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
             // The window is going away: drop the gesture (and redraw where its tiling preview was). The press ownership
             // stays, so the release that will still arrive is not mistaken for a client's (another titlebar under the
             // pointer consumes it; elsewhere the seat drops it, as the client never saw the press).
-            damageSnap(input.grab.snap);
+            if (input.grab.dragging)
+                gf::tiler::dragDone();
             input.grab = {};
             input.presses.dropGesture();
         }
@@ -585,7 +593,37 @@ void CGrassfieldTitlebar::damageEntire() {
 }
 
 void CGrassfieldTitlebar::draw(PHLMONITOR monitor, float const& alpha) {
-    gf::guarded("titlebar draw", [&] { drawTitlebar(monitor, alpha); });
+    gf::guarded("titlebar draw", [&] {
+        drawPreview(monitor, alpha);
+        drawTitlebar(monitor, alpha);
+    });
+}
+
+// A drag of this window over a tiling place: the place's frame under the window and over the windows behind it (this
+// decoration is drawn under the window's surface, after the windows below it), as the blurred material (owner decision D-8,
+// macOS's frosted pane): its edge, then a plate of Hyprland's blur of the windows behind under the appearance's tint.
+// Cheap: one blurred element, only while a drag shows a place, damage limited to the frame (gf::tiler). Drawn for a window
+// whose bar is hidden too: Hyprland's move of a client-chrome window shows the same preview (tiling.md TL16).
+void CGrassfieldTitlebar::drawPreview(const PHLMONITOR& monitor, float alpha) {
+    const auto w = window();
+    if (!w || !monitor || !g_pHyprRenderer)
+        return;
+    const auto snap = gf::tiler::previewOf(w);
+    if (!snap || snap->monitor.lock() != monitor)
+        return;
+    const float  scale    = monitor->m_scale;
+    const double rounding = std::max(0.0, static_cast<double>(w->rounding()));
+    const float  power    = w->roundingPower();
+    const auto   palette  = theme::titlebarPalette(gf::state().appearance);
+    const int    roundPx  = static_cast<int>(std::round(rounding * scale));
+    CBox preview = snap->frame;
+    preview.translate(-monitor->m_position);
+    addRect(preview.scale(scale).round(), toColor(palette.previewRim, alpha), roundPx, power);
+    CBox inner = snap->frame;
+    inner.translate(-monitor->m_position);
+    inner.expand(-theme::kTilePreviewRim);
+    addBlurredRect(inner.scale(scale).round(), toColor(palette.previewTint, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))),
+                   power, alpha);
 }
 
 void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
@@ -609,25 +647,10 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     const auto   appearance = gf::state().appearance; // follows the shell (config "appearance", audit UX-06)
     const auto   palette    = theme::titlebarPalette(appearance);
     const auto   bgColor    = toColor(palette.background, alpha);
-    const int    roundPx    = static_cast<int>(std::round(rounding * scale));
 
-    // 0. A drag of this window over a tiling place: the place's frame under the window and over the windows behind it (this
-    //    decoration is drawn under the window's surface, after the windows below it), as the blurred material (owner
-    //    decision D-8, macOS's frosted pane): its edge, then a plate of Hyprland's blur of the windows behind under the
-    //    appearance's tint. Cheap: one blurred element, only while a drag has a place, damage limited to the frame.
-    if (const auto& grab = pointerInput().grab; grab.deco == this && grab.snap && grab.snap->monitor.lock() == monitor) {
-        CBox preview = grab.snap->frame;
-        preview.translate(-monitor->m_position);
-        addRect(preview.scale(scale).round(), toColor(palette.previewRim, alpha), roundPx, power);
-        CBox inner = grab.snap->frame;
-        inner.translate(-monitor->m_position);
-        inner.expand(-theme::kTilePreviewRim);
-        addBlurredRect(inner.scale(scale).round(), toColor(palette.previewTint, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))),
-                       power, alpha);
-    }
-
-    // 1. The bar: background, lights and their glyphs, title (drawBar). The pointer is checked again here: the window may
-    //    have moved or gone under a pointer that has not moved since.
+    // 1. The bar (a drag's tiling preview is drawn under it, drawPreview): background, lights and their glyphs, title
+    //    (drawBar). The pointer is checked again here: the window may have moved or gone under a pointer that has not moved
+    //    since.
     const bool hovered = pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
     drawBar(w, bar, scale, rounding, power, alpha, hovered, false);
 
@@ -852,8 +875,8 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     }
 
     // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
-    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, or nothing (the
-    // press is then a single press). Otherwise the press starts an interactive move.
+    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, Fill (tiling.md M40), or
+    // nothing (the press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         switch (gf::state().doubleClickAction) {
             case gf::gfc::DoubleClickAction::Zoom:
@@ -864,6 +887,11 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
             case gf::gfc::DoubleClickAction::Minimize:
                 gf::logRequest(Log::DEBUG, "titlebar double-click -> minimize");
                 requestMinimize(w);
+                input.presses.claim(e.button, false);
+                return true;
+            case gf::gfc::DoubleClickAction::Fill:
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> fill");
+                gf::tiler::tile(w, gf::tiling::Place::Fill);
                 input.presses.claim(e.button, false);
                 return true;
             case gf::gfc::DoubleClickAction::None: break;
@@ -920,7 +948,11 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             // Hyprland sends it, and its release with it.
             if (input.presses.onPress(e.button)) {
                 gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
-                damageSnap(input.grab.snap);
+                if (input.grab.dragging)
+                    gf::tiler::dragDone(); // no preview, no tile
+                gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
+                if (input.grab.moved)
+                    gf::tiler::followOutput(input.grab.window.lock());
                 input.grab = {};
             }
             return;
@@ -941,19 +973,26 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
             updateMove(grab); // final position at the release point (none for a click)
-        // Released over a tiling place: the window takes it (FR47); the preview goes.
-        if (grab.dragging && grab.moved && grab.snap) {
-            damageSnap(grab.snap);
+        // Released over the place shown (after the preview delay, TL17): the window takes it (FR47); the preview goes.
+        // Released elsewhere, or before the place showed, a tiled window dragged away is Free (tiling.md TL10).
+        const auto snap = grab.dragging && grab.moved ? gf::tiler::previewOf(grab.window.lock()) : std::nullopt;
+        if (grab.dragging)
+            gf::tiler::dragDone();
+        if (snap) {
             if (const auto w = grab.window.lock())
-                gf::tiler::tile(w, grab.snap->place, grab.snap->monitor.lock());
+                gf::tiler::tile(w, snap->place, snap->monitor.lock());
         }
+        gf::tiler::endMove(grab.window.lock()); // no-op unless the window is still Moving
+        // Dropped on another output: the window takes that output's Desktop, as after Hyprland's own move (R13).
+        if (grab.dragging && grab.moved)
+            gf::tiler::followOutput(grab.window.lock());
         // Released on the Stages strip (macOS: a window dragged onto the strip becomes a stage of its own): the plugin does
         // what the shell's op move "new" does; the shell cannot see a titlebar drag (stages.md, Shell side work item 1).
         if (grab.dragging && grab.moved && g_pInputManager) {
             if (const auto w = grab.window.lock()) {
                 const auto at = g_pInputManager->getMouseCoordsInternal();
                 const auto& p = grab.pressBox;
-                gf::stager::dropOnStrip(w, at.x, at.y, grab.snap.has_value(),
+                gf::stager::dropOnStrip(w, at.x, at.y, snap.has_value(),
                                         grab.plainPress ? std::optional<gf::stages::Box>{gf::stages::Box{p.x, p.y, p.w, p.h}} : std::nullopt);
             }
         }
@@ -979,7 +1018,11 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         const bool held = g_pInputManager && g_pInputManager->hasHeldButtons();
         if (input.presses.onMotion(held, devicesIntact(input.grab.devices))) {
             gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
-            damageSnap(input.grab.snap);
+            if (input.grab.dragging)
+                gf::tiler::dragDone();
+            gf::tiler::endMove(input.grab.window.lock());
+            if (input.grab.moved)
+                gf::tiler::followOutput(input.grab.window.lock());
             input.grab = {};
             return;
         }
@@ -991,7 +1034,9 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
 void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
         auto& input        = pointerInput();
-        damageSnap(input.grab.snap);
+        if (input.grab.dragging)
+            gf::tiler::dragDone();
+        gf::tiler::endMove(input.grab.window.lock());
         input.grab         = {};
         input.hovered      = nullptr;
         input.activeWindow = {};

@@ -51,7 +51,12 @@
     "appPreviews": []
   },
   "lock": {
-    "idleMinutes": 5
+    "idleMinutes": 5,
+    "displayOffBattery": 2,
+    "displayOffPower": 10,
+    "showUser": true,
+    "showMessage": false,
+    "message": ""
   },
   "hotCorners": {
     "topLeft": "none",
@@ -82,10 +87,15 @@
     "clockShowSeconds": false
   },
   "accent": {
-    "color": "multicolor"
+    "color": "multicolor",
+    "highlight": "automatic"
   },
   "keyboard": {
     "shortcutStyle": "automatic"
+  },
+  "region": {
+    "formats": "auto",
+    "firstDayOfWeek": "auto"
   },
   "icons": {
     "mode": "default",
@@ -96,6 +106,28 @@
     "size": 24,
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
+  },
+  "search": {
+    "showApps": true,
+    "showDocuments": true,
+    "showRecents": true,
+    "showCalculator": true,
+    "showConversions": true,
+    "showSettings": true,
+    "showCommands": true,
+    "historyResetAt": 0,
+    "clipboard": {
+      "enabled": false,
+      "retention": "8h",
+      "keepOnDisk": false,
+      "clearedAt": 0,
+      "pinnedClearedAt": 0
+    }
+  },
+  "screensaver": {
+    "idleMinutes": 0,
+    "kind": "artwork",
+    "folder": ""
   },
   "wallpaper": {
     "source": "builtin",

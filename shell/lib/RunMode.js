@@ -68,6 +68,13 @@ function appsTrace(value) {
     return value === "1";
 }
 
+// GRASSFIELD_APPS_GTK_USE_PORTAL (always honoured): env-grassfield sets it to "1" when the session routes GTK to the portal
+// (ADR-0035 D-8, decision 2b-12); the shell, whose own unit clears GTK_USE_PORTAL, gives GTK_USE_PORTAL=1 back to the apps it
+// starts. Exactly "1".
+function appsGtkPortal(value) {
+    return value === "1";
+}
+
 // A raw home override such as GRASSFIELD_STATE_HOME (always honoured): its value, "" when unset or empty.
 function homeOverride(value) {
     return value ? value : "";

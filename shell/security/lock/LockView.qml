@@ -33,6 +33,10 @@ Item {
     readonly property string shownName: VisualFixtures.active ? VisualFixtures.user : userName
     // file:// URL of the account picture, or "" for the initials disc.
     property string avatarSource: ""
+    // lock.showUser: the account's picture and name (the password field stays).
+    property bool showUser: true
+    // lock.showMessage + lock.message: the user's message above them, plain text ("" for none).
+    property string lockMessage: ""
     // The password field holds no text (read by Lock.qml for the dev L2 check only; never the text or its length).
     readonly property bool fieldEmpty: field.empty
 
@@ -154,10 +158,31 @@ Item {
         }
         spacing: Tokens.spacingSm
 
+        // The user's message (Settings > Lock Screen > Show message when locked): plain text, at most two lines.
+        Text {
+            visible: root.lockMessage !== ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(implicitWidth, Tokens.lockMessageMaxWidth)
+            textFormat: Text.PlainText
+            text: root.lockMessage
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
+            horizontalAlignment: Text.AlignHCenter
+            color: root.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+            layer.enabled: true
+            layer.effect: TextShadow {}
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
         // Avatar: the account picture (resolved by Lock), else the initials on a disc.
         Item {
             id: avatar
 
+            visible: root.showUser
             anchors.horizontalCenter: parent.horizontalCenter
             width: Tokens.lockAvatarSize
             height: Tokens.lockAvatarSize
@@ -212,6 +237,7 @@ Item {
         }
 
         Text {
+            visible: root.showUser
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.shownName

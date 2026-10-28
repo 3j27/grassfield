@@ -52,6 +52,12 @@ namespace gf::ipc {
     // hl.plugin.grassfield.overview_focus is registered and its listeners are (overview-focus).
     bool overviewFocusAvailable();
 
+    // hl.plugin.grassfield.tile and hl.plugin.grassfield.config are registered (window-tiling).
+    bool tilingAvailable();
+
+    // Also hl.plugin.grassfield.arrange, `hyprctl grassfield-tiling` and the tiling listeners (tiling-arrange).
+    bool tilingArrangeAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

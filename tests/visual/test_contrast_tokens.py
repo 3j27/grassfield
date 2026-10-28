@@ -512,8 +512,9 @@ class ContrastTokens(unittest.TestCase):
                      "color: root.fillColor",
                      "border.color: root.focusColor"):
             self.assertIn(line, field)
-        # Every text item on the scrim and the disc uses the primary text colour: date, clock, initials, name, error, notice.
-        self.assertEqual(view.count("color: root.colors.text\n"), 6)
+        # Every text item on the scrim and the disc uses the primary text colour: date, clock, the user's message, initials,
+        # name, error, notice.
+        self.assertEqual(view.count("color: root.colors.text\n"), 7)
         # The error and notice lines (the two AlertMessage items) carry no layer or effect: a failed effect would hide
         # "Authentication service unavailable" / "Crash recovery unavailable" (R12 review of 0513f6e).
         alerts = [i for i in range(len(view)) if view.startswith("Accessible.role: Accessible.AlertMessage", i)]
@@ -725,9 +726,20 @@ class WindowSurfacePairs(unittest.TestCase):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
 
+    def test_sound_table_rows(self):
+        # Settings > Sound's device table: the text on a striped row, on the column header and on the grey selection (the table
+        # without the focus), all over a Settings group; the empty-table note in the window grey on the group.
+        for ap in APPEARANCES:
+            group = self.tok.color("colors", ap, "groupFill")
+            fill = self.tok.color("colors", ap, "fill")
+            text = self.tok.color("colors", ap, "text")
+            for name in ("settings.soundTableStripeOpacity", "settings.soundTableSelectionOpacity"):
+                bg = over(fill, self.tok.path(name), group)
+                self.assertGreaterEqual(wcag(text, bg), 7.0, "text on %s, %s: %.2f:1" % (name, ap, wcag(text, bg)))
+
     def test_row_secondary_on_the_hover_fill(self):
-        # Settings device rows (Wi-Fi, Bluetooth, Sound): while hovered, the hover fill sits on the window or on a Settings group.
-        # The window grey is under 4.5:1 there (3.62:1 in light), so DeviceRow switches to textSecondary on hover.
+        # A Settings row with secondary text and a hover fill: while hovered, the fill sits on the window or on a Settings group.
+        # The window grey is under 4.5:1 there (3.62:1 in light), so such a row switches to textSecondary on hover.
         for ap in APPEARANCES:
             win = self.window(ap)
             on_group = self.tok.color("colors", ap, "groupFill")
@@ -744,6 +756,14 @@ class WindowSurfacePairs(unittest.TestCase):
             fg = self.tok.color("colors", ap, "textSecondary")
             for bg, what in ((win, "the window"), (fill, "a 0.14 fill")):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "textSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
+
+    def test_status_dots_on_a_settings_group(self):
+        # Wi-Fi's "Connected", the Network pane's services: a dot in front of the status text (a graphic, 3:1).
+        for ap in APPEARANCES:
+            group = self.tok.color("colors", ap, "groupFill")
+            for name in ("statusOn", "statusWarn", "statusOff"):
+                r = wcag(self.tok.color("colors", ap, name), group)
+                self.assertGreaterEqual(r, 3.0, "%s on a Settings group, %s: %.2f:1" % (name, ap, r))
 
     def test_dark_settings_groups_stay_visible_against_the_window(self):
         win = self.window("dark")

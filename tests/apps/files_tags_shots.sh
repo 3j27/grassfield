@@ -127,7 +127,7 @@ sleep 2
 shot 7-info-readonly
 "$keys" -k Escape
 sleep 1
-# The sidebar's Red tag lists the tagged files of this folder and below.
-click 552 417 2
+# The sidebar's Red tag lists the tagged files of this folder and below (one row lower since Recents leads the sidebar).
+click 552 449 2
 shot 8-tag-search
 echo "files_tags_shots: done (log $log)"

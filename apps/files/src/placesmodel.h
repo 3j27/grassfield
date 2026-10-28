@@ -60,11 +60,11 @@ signals:
 
 private:
     struct Place {
-        QString section; // "favorites" | "locations" | "tags"
+        QString section; // "recents" | "favorites" | "locations" | "tags"
         QString name;
         QUrl url;
         QString iconName;
-        QString kind; // "folder" | "applications" | "volume" | "network" | "trash" | "tag"
+        QString kind; // "recents" | "folder" | "applications" | "volume" | "network" | "trash" | "tag"
         QString udi;
         bool mounted = true;
         bool ejectable = false;

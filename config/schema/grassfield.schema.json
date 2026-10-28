@@ -361,6 +361,39 @@
           "x-grassfield": {
             "zeroIsExact": true
           }
+        },
+        "displayOffBattery": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 2,
+          "description": "Minutes without input on battery before the displays turn off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery when inactive); 0 = never. Any input turns them on again; the lock follows lock.idleMinutes."
+        },
+        "displayOffPower": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 10,
+          "description": "Minutes without input on the power adapter before the displays turn off while the session is unlocked (Turn display off on power adapter when inactive); 0 = never."
+        },
+        "showUser": {
+          "type": "boolean",
+          "default": true,
+          "description": "The lock screen shows the account's name and picture (Show user name and photo)."
+        },
+        "showMessage": {
+          "type": "boolean",
+          "default": false,
+          "description": "The lock screen shows lock.message (Show message when locked)."
+        },
+        "message": {
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]{0,200}$",
+          "default": "",
+          "description": "The message the lock screen shows: one line of plain text of at most 200 UTF-16 code units (as the settings contract counts), without control characters (C0, C1), line or paragraph separators or bidirectional overrides and isolates.",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
         }
       }
     },
@@ -550,8 +583,24 @@
             "green",
             "graphite"
           ],
-          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent.",
+          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent unless `accent.highlight` names its own.",
           "default": "multicolor"
+        },
+        "highlight": {
+          "type": "string",
+          "enum": [
+            "automatic",
+            "blue",
+            "purple",
+            "pink",
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "graphite"
+          ],
+          "description": "Text highlight colour (Settings > Appearance > Text highlight colour, macOS 27): the colour of selected text in fields and editors, in the shell and the apps. \"automatic\" follows the accent (default); a name uses that accent colour whatever the accent is.",
+          "default": "automatic"
         }
       }
     },
@@ -569,6 +618,39 @@
           ],
           "description": "How menus show keyboard shortcuts: \"mac\" with the macOS symbols (\u2303 \u2325 \u21e7 \u2318, \u2318 for Super), \"pc\" as text (Ctrl+Shift+Q). \"automatic\" (default) picks mac on Apple hardware (firmware vendor \"Apple Inc.\") or with an Apple keyboard attached, pc otherwise (owner decision 2026-10-26, ADR-0024).",
           "default": "automatic"
+        }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Formats of dates, times and numbers (Settings > General > Language & Region). The language itself is Omarchy's (omarchy-language).",
+      "properties": {
+        "formats": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "pattern": "^(auto|[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3}))$",
+          "description": "The locale whose formats the shell uses for dates, times and numbers (\"fr_CH\": Swiss French). \"auto\" (default) follows the language. The language's words stay; only the formats change.",
+          "default": "auto",
+          "x-grassfield": {
+            "rule": "localeName"
+          }
+        },
+        "firstDayOfWeek": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday"
+          ],
+          "description": "The first day of the week in the calendars. \"auto\" (default) follows the formats.",
+          "default": "auto"
         }
       }
     },
@@ -637,6 +719,129 @@
           "default": "#000000",
           "x-grassfield": {
             "rule": "pointerColor"
+          }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Search (Settings > Search; macOS 27 Spotlight).",
+      "properties": {
+        "showApps": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows applications (Settings > Search > Search Results: Applications)."
+        },
+        "showDocuments": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows documents found on this computer (localsearch, plocate) (Settings > Search > Search Results: Documents)."
+        },
+        "showRecents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows recently used documents (Settings > Search > Search Results: Recent Documents)."
+        },
+        "showCalculator": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows the calculator's answer (Settings > Search > Search Results: Calculator)."
+        },
+        "showConversions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows unit conversions (Settings > Search > Search Results: Conversions)."
+        },
+        "showSettings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows Settings panes (Settings > Search > Search Results: Settings)."
+        },
+        "showCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Search shows system commands (Lock Screen, Sleep, Restart, Shut Down, Log Out) (Settings > Search > Search Results: System Commands)."
+        },
+        "historyResetAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999999999999,
+          "default": 0,
+          "description": "Milliseconds since the epoch of the last Delete Search History (Settings > Search): the shell forgets the results the user picked before it (search-usage.json). 0 = never deleted."
+        },
+        "clipboard": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The clipboard history in Search (ADR-0034): captured by grassfield-clipboard-helper while it is on.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Results from Clipboard (Settings > Search; macOS 27). Off until the user allows it (the Clipboard view's prompt). Turning it off deletes the unpinned items; pinned items stay on disk, unread."
+            },
+            "retention": {
+              "type": "string",
+              "enum": [
+                "30m",
+                "8h",
+                "7d"
+              ],
+              "default": "8h",
+              "description": "How long an unpinned item stays in the history: 30 minutes, 8 hours or 7 days (macOS 27's three choices). Pinned items never expire."
+            },
+            "keepOnDisk": {
+              "type": "boolean",
+              "default": false,
+              "description": "Keep clipboard history after logging out (a Grassfield addition): the unpinned items are also written to $XDG_STATE_HOME/grassfield/clipboard/history (0600). Turning it off deletes that store."
+            },
+            "clearedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999999999999,
+              "default": 0,
+              "description": "Milliseconds since the epoch of the last Clear Clipboard History (Settings > Search): the shell deletes every unpinned item when it changes. 0 = never cleared."
+            },
+            "pinnedClearedAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999999999999,
+              "default": 0,
+              "description": "Milliseconds since the epoch of the last Clear Clipboard History with \"Also delete pinned items\": the shell deletes the pinned items too when it changes. 0 = never."
+            }
+          }
+        }
+      }
+    },
+    "screensaver": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Screen saver (Settings > Wallpaper > Screen Saver, ADR-0032).",
+      "properties": {
+        "idleMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 0,
+          "description": "Minutes without input before the screen saver starts while the session is unlocked; 0 = never. It never delays or replaces the idle lock (lock.idleMinutes) or the display power-off."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artwork",
+            "wallpaperClock",
+            "slideshow",
+            "clock"
+          ],
+          "default": "artwork",
+          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, or a clock alone."
+        },
+        "folder": {
+          "type": "string",
+          "default": "",
+          "description": "The slideshow's folder: an absolute path (no control characters, at most 4096 bytes); \"\" = the user's Pictures folder.",
+          "x-grassfield": {
+            "rule": "wallpaperPath"
           }
         }
       }

@@ -6,7 +6,8 @@
 # Two long-lived foot windows stay open for the whole run. Each round: opens a short-lived foot
 # (`foot -e true`), opens a new churn window (the oldest of 4 is killed first), and drives the titlebar
 # of the new window with the virtual pointer (scripts/dev/pointer.sh): drags (some abandoned mid-drag,
-# so the pointer device disappears while a button is held), double-click zoom, zoom button, close
+# so the pointer device disappears while a button is held; every 4th round released on the menu bar after the tiling
+# preview delay, so the window tiles to fill), double-click zoom, zoom button, close
 # button, press-move-away cancel, and (when the plugin advertises "minimize" and grassfield-shell runs)
 # minimize button + restore through a click on the Dock tile.
 # The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
@@ -90,6 +91,21 @@ read -r out_w out_h < <(timeout 20 "$root/scripts/dev/pointer.sh" outputs 2>/dev
   | awk -v o="$out" '$1 == o { split($3, s, "x"); print s[1], s[2] }')
 [[ -n ${out_w:-} && -n ${out_h:-} ]] || { echo "soak: output $out not found" >&2; exit 2; }
 
+# A window opens on the focused output, and a fresh nested session focuses WAYLAND-1, not $out: make $out the focused
+# output (compositor focus, then the pointer parked on it; as tests/visual/flow-lib.sh fl_focus_output) before every
+# window the churn opens. Returns 1 when the focus did not take.
+focus_out() {
+  timeout 10 "$root/scripts/nestctl" dispatch "hl.dsp.focus({ monitor = '$out' })" >/dev/null 2>&1 || true
+  pointer abs $((out_w / 2)) $((out_h / 2))
+  local n
+  for n in 1 2 3 4 5 6; do
+    [[ $(timeout 10 "$root/scripts/nestctl" monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name' | head -n 1) == "$out" ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+focus_out || { echo "soak: harness error: could not make $out the focused output (the churn windows would open on another output)" >&2; exit 2; }
+
 # shellcheck source=soak_lib.sh
 . "$root/tests/compositor/soak_lib.sh"
 # shellcheck source=window_geometry.sh
@@ -121,23 +137,33 @@ if true; then
   read -r out_x out_y < <(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y)"')
 fi
 follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
-# Centre "<x> <y>" (relative to $out) of the Dock tile the shell computed for window <hex> after line <since> of the follow
-# log; waits up to 1.5 s; nothing when the line never came (the request log budget may hold it back) or lies off $out.
+# "<output> <x> <y>": the centre of the Dock tile the shell computed for window <hex>, on the output it lies on (relative to
+# that output: with two outputs the Dock lives on the one whose bottom edge the pointer reached last, not always $out;
+# integrator nested pass of 412b42e, restore 0/0), from line <since> on of the follow log or from Hyprland's in-memory log
+# read through scripts/nestctl as tiling.sh does (`rollinglog`: the follow pipe can deliver a line late or not at all,
+# integrator nested passes of 6355acb and 9c4c568; the plugin logs the line when the minimize starts, before the window
+# reaches special:minimized, so the latest one for <hex> is this minimize's unless the plugin's minimize log budget held it
+# back); waits up to 3 s; nothing when the line never came or lies off every output.
 dock_tile() { # <hex> <since>
-  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 1500))
+  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 3000)) pattern="\[grassfield\] minimize $1: toward the Dock rectangle " snapshot
   while :; do
-    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "$pattern" | tail -n 1)
+    [[ -n $line ]] && break
+    snapshot=$(nestctl rollinglog 2>/dev/null)
+    line=$(grep -a "$pattern" <<<"$snapshot" | tail -n 1)
     [[ -n $line ]] && break
     (($(date +%s%3N) > deadline)) && return 1
     sleep 0.05
   done
   read -r rx ry rw rh < <(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
   [[ -n ${rh:-} ]] || return 1
-  cx=$((rx + rw / 2 - out_x)) cy=$((ry + rh / 2 - out_y))
-  ((cx >= 0 && cx < out_w && cy >= 0 && cy < out_h)) && echo "$cx $cy"
+  cx=$((rx + rw / 2)) cy=$((ry + rh / 2))
+  nestctl monitors -j 2>/dev/null | jq -r --argjson x "$cx" --argjson y "$cy" \
+    '[.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height)][0] | select(. != null) | "\(.name) \($x - .x) \($y - .y)"'
 }
+pointer_on() { local o=$1; shift; timeout 20 "$root/scripts/dev/pointer.sh" output "$o" "$@" >>"$log" 2>&1; }
 minimized_count() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null | jq '[.[] | select(.workspace.name == "special:minimized")] | length'; }
-restore_x="" tile_y="" # the latest tile the shell named while exactly one window was minimized
+restore_tile="" # the latest tile ("<output> <x> <y>") the shell named while exactly one window was minimized
 rand_x() { echo $((100 + RANDOM % (out_w - 200))); }
 rand_y() { echo $((80 + RANDOM % (out_h - 280))); }
 
@@ -282,6 +308,7 @@ while (( $(date +%s) < end_epoch )); do
   for p in "${resident[@]}"; do kill -0 "$p" 2>/dev/null && alive+=("$p"); done
   resident=("${alive[@]}")
   while (( ${#resident[@]} < 2 )); do
+    focus_out || say "soak: warning: $out is not the focused output (a window may open elsewhere)"
     resident+=("$(foot_bg -e sleep "$duration")")
     sleep 0.6
     # Out of the way: grab the new window's real titlebar.
@@ -306,6 +333,14 @@ while (( $(date +%s) < end_epoch )); do
     kill "${pool[0]}" 2>/dev/null
     pool=("${pool[@]:1}")
   fi
+  # A churn window may have moved the focus: $out again before this one opens. A focus that does not take counts as a
+  # round without the new window (unmapped), which fails the run as a harness error when frequent.
+  if ! focus_out; then
+    spawned=$((spawned + 1))
+    unmapped=$((unmapped + 1))
+    say "soak: warning: $out is not the focused output: round skipped"
+    continue
+  fi
   pool+=("$(foot_bg -e sleep 600)")
   npid=${pool[-1]}
   spawned=$((spawned + 1))
@@ -319,11 +354,18 @@ while (( $(date +%s) < end_epoch )); do
   read -r bx by <<<"$(gf_bar_point "$nx" "$ny" "$nw" "$nh")"
 
   case $((round % (7 + minimize_rounds))) in
-    0 | 1) # drag the newest window somewhere and release
+    0 | 1) # drag the newest window somewhere and release; every 4th round onto the menu bar, held past the preview delay,
+      # so that it tiles to fill (a tiling action in the churn, docs/specs/tiling.md TL17)
       try_ drag
       gx=$((bx + RANDOM % 80 - 40))
-      read -r tx ty <<<"$(far_point "$gx" "$by")"
-      pointer abs "$gx" "$by" sleep 50 down drag "$tx" "$ty" sleep 30 up
+      if ((round % 4 == 0)); then
+        tx=$((out_w / 2)) ty=2 hold=$((350 + RANDOM % 300))
+        fills=$((${fills:-0} + 1))
+      else
+        read -r tx ty <<<"$(far_point "$gx" "$by")"
+        hold=30
+      fi
+      pointer abs "$gx" "$by" sleep 50 down drag "$tx" "$ty" sleep "$hold" up
       wait_changed "$npid" "$ng" 1500 >/dev/null && ok_ drag ;;
     2) # abandon a drag: the virtual pointer goes away with the button held; then click elsewhere
       try_ abandoned
@@ -386,25 +428,29 @@ while (( $(date +%s) < end_epoch )); do
         mhex=$(grep -E '^movewindowv2>>[0-9a-f]+,[^,]*,special:minimized$' "$events" | tail -n 1 | sed 's/^movewindowv2>>\([0-9a-f]*\),.*/\1/')
         tile=$(dock_tile "$mhex" "$f0")
         if [[ -n $tile && $(minimized_count) == 1 ]]; then
-          read -r restore_x tile_y <<<"$tile"
-        elif [[ -z $tile && -n $restore_x && $(minimized_count) == 1 ]]; then
-          tile="$restore_x $tile_y" # line held back by the log budget: the same Dock with one minimized window
+          restore_tile=$tile
+        elif [[ -z $tile && -n $restore_tile && $(minimized_count) == 1 ]]; then
+          tile=$restore_tile # line held back by the log budget: the same Dock with one minimized window
           dock_cached=$((${dock_cached:-0} + 1))
         fi
       fi
       if [[ -n $tile ]]; then
         sleep "0.$((150 + RANDOM % 400))"
-        read -r tx ty <<<"$tile"
+        read -r to tx ty <<<"$tile"
         if [[ -z $dock_shot ]]; then
           dock_shot=$dev/soak-dock-$start_epoch.png
-          WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$dock_shot" 2>>"$log" && say "soak: Dock captured at the first minimize: $dock_shot (tile clicked at $tx,$ty)"
+          WAYLAND_DISPLAY=$sock grim -l 0 -o "$to" "$dock_shot" 2>>"$log" && say "soak: Dock captured at the first minimize: $dock_shot (tile clicked at $tx,$ty on $to)"
         fi
         try_ restore
-        pointer abs "$tx" "$ty" sleep 50 click sleep 300
+        pointer_on "$to" abs "$tx" "$ty" sleep 50 click sleep 300
         # Restored: the window is on screen again (on any output: where it lands is not this harness's question).
         for _ in $(seq 1 40); do visible_anywhere "$npid" && { ok_ restore; break; }; sleep 0.1; done
       elif ((moved)); then
         no_tile=$((${no_tile:-0} + 1)) # minimized, but no Dock rectangle known for it: its tile is not clicked
+        # Why, for the report: no line at all (the shell sent no rectangle, or the budget held it back), or a rectangle off
+        # every output.
+        snapshot=$(nestctl rollinglog 2>/dev/null)
+        if grep -aq "minimize $mhex: toward the Dock rectangle " <<<"$snapshot"; then no_tile_off=$((${no_tile_off:-0} + 1)); else no_tile_line=$((${no_tile_line:-0} + 1)); fi
       else
         skipped=$((skipped + 1)) # the minimize button press did not minimize the window
       fi ;;
@@ -431,7 +477,8 @@ sample_tick
 elapsed=$(( $(date +%s) - start_epoch ))
 say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned (no window found for $unmapped), effective/attempted: $(counters)"
 ((${cancel_missed:-0} > 0)) && say "soak: cancel: ${cancel_missed} press(es) did not land on the button (harness miss, not counted as attempts)"
-say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0}; previous tile reused: ${dock_cached:-0}"
+say "soak: drags released on the menu bar to fill (tiling): ${fills:-0} of ${att[drag]:-0}"
+say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0} (no Dock line from the plugin: ${no_tile_line:-0}; a rectangle off every output: ${no_tile_off:-0}); previous tile reused: ${dock_cached:-0}"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
 
 fail=0 harness=0

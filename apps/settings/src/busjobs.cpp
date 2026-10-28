@@ -94,4 +94,31 @@ void BusJobs::start(Job job, Done done, int timeoutMs)
     }).detach();
 }
 
+bool InFlight::begin(const QString &tag, const QString &key)
+{
+    if (m_items.contains(tag))
+        return false;
+    m_items.insert(tag, key);
+    return true;
+}
+
+bool InFlight::runs(const QString &tag, const QString &key) const
+{
+    const auto it = m_items.constFind(tag);
+    return it != m_items.cend() && it.value() == key;
+}
+
+void InFlight::end(const QString &tag)
+{
+    m_items.remove(tag);
+}
+
+QVariantMap InFlight::map() const
+{
+    QVariantMap out;
+    for (auto it = m_items.cbegin(); it != m_items.cend(); ++it)
+        out.insert(it.key(), it.value());
+    return out;
+}
+
 } // namespace grassfield::settings

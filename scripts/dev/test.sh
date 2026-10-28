@@ -225,9 +225,29 @@ gtest_suite tests/unit/wallpaper-tool "apps/wallpaper-tool/build-direct.sh --tes
 # here, then again with ASan and UBSan. The process itself is tests/shell/stack_helper.sh.
 gtest_suite tests/unit/stack-helper "apps/stack-helper/build-direct.sh --tests >/dev/null && apps/stack-helper/build-direct.sh --tests --asan" \
   ".dev/build/stack-helper-unit-tests --gtest_brief=1" ".dev/build/stack-helper-unit-tests-asan --gtest_brief=1"
-# grassfield-settings dev guard and the wallpaper helper door (exact tool path, exact argument vectors).
+# grassfield-clipboard-helper (ADR-0034) logic: the offer types and the hint refusal, the reads' caps, the history and the pins
+# with their limits and retention, the stores' modes and bounds, the image decoding with the format given: built here, then again
+# with ASan and UBSan. The process, against a fake compositor, is tests/shell/clipboard_helper.sh.
+gtest_suite tests/unit/clipboard-helper "apps/clipboard-helper/build-direct.sh --tests >/dev/null && apps/clipboard-helper/build-direct.sh --tests --asan" \
+  "QT_QPA_PLATFORM=offscreen .dev/build/clipboard-helper-unit-tests --gtest_brief=1" "QT_QPA_PLATFORM=offscreen .dev/build/clipboard-helper-unit-tests-asan --gtest_brief=1"
+# grassfield-secrets-handover (ADR-0035 D-12) logic: which items move, the marker, which executables are trusted: built here,
+# then again with ASan and UBSan. The process against fake peers on a private bus is tests/integration/secrets_handover.sh.
+gtest_suite tests/unit/secrets-handover "apps/secrets-handover/build-direct.sh --tests >/dev/null && apps/secrets-handover/build-direct.sh --tests --asan" \
+  ".dev/build/secrets-handover-unit-tests --gtest_brief=1" ".dev/build/secrets-handover-unit-tests-asan --gtest_brief=1"
+# grassfield-portal-settings (ADR-0035 D-8): the values it publishes, the namespace filter, the backend on a scratch settings
+# file (changes, atomic replace, the auto schedule, the announcement at start): built here, then again with ASan and UBSan. With the real portal frontend
+# on a private bus: tests/integration/portal_settings.sh.
+gtest_suite tests/unit/portal-settings "apps/portal-settings/build-direct.sh --tests >/dev/null && apps/portal-settings/build-direct.sh --tests --asan" \
+  ".dev/build/portal-settings-unit-tests --gtest_brief=1" ".dev/build/portal-settings-unit-tests-asan --gtest_brief=1"
+# grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
+# (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
   ".dev/build/settings-unit-tests --gtest_brief=1" ".dev/build/settings-unit-tests-asan --gtest_brief=1"
+# Grassfield Store's read-only backend (ADR-0037 step 1): the catalog's rules, its signature (a fake gpgv here; the real one in
+# tests/integration/store_catalog.sh), cache and serial, the channel and its URLs, AppStream and pacman readers (fakes on
+# scratch paths), the merged model and search, the child-process limits. Built twice: plain, then with ASan and UBSan.
+gtest_suite tests/unit/store "apps/store/build-direct.sh --tests >/dev/null && apps/store/build-direct.sh --tests --asan" \
+  ".dev/build/store-unit-tests --gtest_brief=1" ".dev/build/store-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.
@@ -277,6 +297,12 @@ if want logic; then
   python3 -I tests/ci/run_mode.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/run_mode.py "$rc" PASS
+  # The generated GTK themes (ADR-0035 D-8): 36, each importing GTK's own theme, no colour function, the pairs' contrast. Their
+  # rendering under Xvfb is tests/integration/gtk_themes.sh.
+  rc=0
+  python3 -I tests/ci/gtk_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/gtk_themes.py "$rc" PASS
   # Symbolic glyph stroke width (ADR-0003, audit GF-124): the scanner on samples, then every shipped glyph.
   rc=0
   python3 -I tests/ci/icon_strokes.py --selftest || rc=1

@@ -7,8 +7,11 @@ PointerTheme 1.0 PointerTheme.qml
 singleton FocusReturn 1.0 FocusReturn.qml
 KeyboardRelease 1.0 KeyboardRelease.qml
 UpdateNotice 1.0 UpdateNotice.qml
+ConfigErrors 1.0 ConfigErrors.qml
 singleton StagesLink 1.0 StagesLink.qml
 singleton Usable 1.0 Usable.qml
 UsableProbe 1.0 UsableProbe.qml
 singleton InputSource 1.0 InputSource.qml
 singleton Zoom 1.0 Zoom.qml
+singleton Displays 1.0 Displays.qml
+singleton SessionConfig 1.0 SessionConfig.qml

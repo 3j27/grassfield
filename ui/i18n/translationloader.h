@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QLocale>
+#include <QRegularExpression>
 #include <QString>
 #include <QTranslator>
 
@@ -65,6 +66,24 @@ inline QTranslator *install(const QString &language, QTranslator *previous = nul
     }
     delete translator;
     return nullptr;
+}
+
+// The locale whose formats dates, times and numbers use (`region.formats`, Settings > General > Language & Region). "auto" (or
+// anything that is not a locale name, the contract's localeName rule): the language's own. A locale name such as "fr_CH": the
+// language's words with that region's formats (macOS: the region changes the formats, never the words), i.e. the language in
+// that territory when Qt has it ("en" + "fr_CH" = en_CH); else that region's own locale (Qt has no fr_US: the formats of en_US
+// then come with its words).
+inline QLocale formatsLocale(const QString &language, const QString &formats)
+{
+    static const QRegularExpression name(QRegularExpression::anchoredPattern(QStringLiteral("[a-z]{2,3}(_[A-Z][a-z]{3})?_([A-Z]{2}|[0-9]{3})")));
+    QString lang = language;
+    lang.replace(QLatin1Char('-'), QLatin1Char('_'));
+    const QLocale words(lang.section(QLatin1Char('.'), 0, 0).section(QLatin1Char('@'), 0, 0));
+    if (!name.match(formats).hasMatch())
+        return words;
+    const QLocale chosen(formats);
+    const QLocale pair(words.language(), chosen.territory());
+    return pair.language() == words.language() && pair.territory() == chosen.territory() ? pair : chosen;
 }
 
 // Call before creating the QML engine.

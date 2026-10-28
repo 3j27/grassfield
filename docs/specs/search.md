@@ -11,6 +11,7 @@
 Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit conversion, commands
 (lock, sleep, restart… as real actions), files (localsearch/TinySPARQL via `localsearch` CLI or D-Bus;
 `plocate` fallback), recent documents (`~/.local/share/recently-used.xbel`). Non-goals: own indexer, web search.
+The clipboard history (⌘4, the Clipboard view) has its own spec: `docs/specs/clipboard.md` (ADR-0034).
 
 ## Functional requirements
 1. S1 Open/close via IPC `search toggle` (bound to SUPER+SPACE) within 100 ms warm (P4).
@@ -56,7 +57,17 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 
 - Filter chips (F2c): with a query that has results in two or more of Applications, Commands and Documents (files and recents), a chip row sits under the field (`Filters.js`; the capsule is the Apps category chip). A click narrows the results to that kind (the Top Hit joins its kind; inline answers are hidden) and a second click clears it; a new query clears it. IPC `search filter <apps|commands|documents|"">` is the test hook. The field keeps the text focus; the chips are reachable by keyboard: Tab past the last result group (Shift+Tab before the first) moves the focus ring to the first (last) chip, Left/Right/Home/End move along them, Space or Return selects or clears, Esc or Tab past the end returns to the field, and any other key (typing, Up, Down) leaves the chips and acts on the field. The ring is the shared outside accent ring (`control.focusOutline`). Test: `tests/shell/search_chips`. The `filter` hook answers only in a visual fixture session (`VisualFixtures.active`).
 - No-results notice: a non-empty query that nothing answers, once the file search settled (`filesPending`: the debounce timer and every live `localsearch`/`plocate` process, so the plocate fallback is waited for), shows "No Results for ...", centred under the field.
+- Clipboard view (ADR-0034, `docs/specs/clipboard.md`): ⌘4 in the field (Super+4, forwarded as Ctrl+4), the Clipboard button right of the empty field, or Super+Ctrl+V (IPC `search clipboard`, opening only through `show()`) switch the same window to the clipboard history: the clipboard symbol and "Clipboard" in the field, the More button, the history's rows, the row and More menus and a preview panel beside the results. Backspace in the empty field returns to the results. Test: `tests/shell/search_clipboard`.
 
 ## Limitations (v1)
 - Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
 - localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.
+
+## Settings > Search (2026-10-26)
+Settings > Search (macOS 27's Spotlight pane) chooses which kinds of results Search shows: `search.showApps`,
+`showDocuments` (no `localsearch`/`plocate` process runs while it is off, and the results already in are dropped),
+`showRecents`, `showCalculator`, `showConversions`, `showSettings`, `showCommands`; a kind turned off never shows, the Top Hit
+included. Delete Search History writes `search.historyResetAt` (milliseconds); the shell forgets the results picked before it
+(`Ranking.forgetUsageBefore`), in memory and in `search-usage.json`, also when the deletion happened while it was not running.
+Tests: `tests/shell/search_chips` (the switches and the deletion on the real controller), `tests/unit/tst_searchranking.qml`.
+

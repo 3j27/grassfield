@@ -7,6 +7,7 @@
 #include "backend.h"
 #include "busjobs.h"
 #include "globalmenu.h"
+#include "iconprovider.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
@@ -19,6 +20,8 @@
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
+    grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
     new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
@@ -54,6 +57,8 @@ int main(int argc, char *argv[])
         if (arg.startsWith(QLatin1String("--section=")))
             startSection = arg.mid(10);
     }
+    // Login Items: the applications' icons (the engine owns the provider).
+    engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
     engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)},
                                  {"globalMenu", grassfield::apps::globalMenuAvailable()},
                                  {"startSection", startSection}});

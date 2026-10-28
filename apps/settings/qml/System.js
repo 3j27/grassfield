@@ -1,7 +1,7 @@
 .pragma library
 
 // Pure logic of the system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the backends' answers, the actions as
-// the Backend takes them, display arrangement. No I/O here.
+// the Backend takes them. No I/O here (Displays' helpers are Displays.js).
 //   Wi-Fi and Bluetooth: NetworkManager and BlueZ over D-Bus (src/systembus.h); the Backend answers with a JSON state
 //   (Backend.busQuery) and takes actions as {op: ...} maps (Backend.busAct).
 //   Sound: `wpctl` (PipeWire and WirePlumber have no D-Bus interface): its read-only query and its action programs must stay
@@ -10,9 +10,11 @@
 
 // ---- Read-only queries ---------------------------------------------------------------------------------------------
 
-// The only command-line query of the system sections (the Sound page); Wi-Fi and Bluetooth are read over D-Bus (SystemService.queryBus).
+// The command-line queries of the system sections (the Sound page: the devices, then their PipeWire node names for the Type
+// column); Wi-Fi and Bluetooth are read over D-Bus (SystemService.queryBus).
 var QUERY = {
-    audio: ["wpctl", "status"]
+    audio: ["wpctl", "status"],
+    audioNames: ["wpctl", "status", "-n"]
 };
 
 function validUuid(s) {
@@ -209,20 +211,128 @@ function wifiGlyph(signal) {
 }
 
 // What a click on a network does; `known` maps the SSID hex of each saved profile to its UUID.
-// "current" (already connected), "known" (saved profile with that SSID), "open" (no password) or
-// "password" (secured and new: the password flow lives in Quick Settings).
+// "current" (already connected), "known" (saved profile with that SSID), "open" (no password), "password" (WPA/WPA3
+// personal: the page asks for the passphrase), "account" (802.1X only: a sign-in Settings does not set up) or "unsupported"
+// (WEP).
 function wifiClickKind(net, known) {
     if (net.active)
         return "current";
     if (known[net.hex] !== undefined)
         return "known";
-    return net.secured ? "password" : "open";
+    if (!net.secured)
+        return "open";
+    return /WPA/.test(net.security) ? "password" : net.enterprise ? "account" : "unsupported";
+}
+
+// The two lists of the pane (macOS 27): Known Network (the networks in range with a saved profile, the current one first)
+// and Other Networks (the rest, strongest first). `networks` as parseWifiState gives them.
+function wifiSections(networks, known) {
+    const out = {known: [], other: []};
+    for (const n of networks)
+        (n.active || known[n.hex] !== undefined ? out.known : out.other).push(n);
+    return out;
+}
+
+// A WPA/WPA3 personal passphrase as NetworkManager takes it (src/systembus.cpp isPassphrase): 8 to 63 printable ASCII
+// characters, or 64 hex digits.
+function validPassphrase(psk) {
+    return typeof psk === "string" && (/^[\x20-\x7E]{8,63}$/.test(psk) || /^[0-9A-Fa-f]{64}$/.test(psk));
+}
+
+// Wi-Fi band of a frequency in MHz ("2.4 GHz", "5 GHz", "6 GHz", the number in the language's format: "2,4 GHz" in French);
+// "" when unknown. `locale` defaults to the UI's.
+function wifiBand(mhz, locale) {
+    const f = Number(mhz);
+    const ghz = f >= 5925 ? 6 : f >= 4900 ? 5 : f >= 2400 ? 2.4 : 0;
+    return ghz === 0 ? "" : qsTr("%1 GHz").arg((locale || Qt.locale()).toString(ghz, "f", Number.isInteger(ghz) ? 0 : 1));
+}
+
+// IPv4 subnet mask of a prefix length (24 -> "255.255.255.0"); "" when out of range.
+function subnetMask(prefix) {
+    const n = Number(prefix);
+    if (!Number.isInteger(n) || n < 0 || n > 32)
+        return "";
+    const parts = [];
+    for (let i = 0; i < 4; i++) {
+        const bits = Math.max(0, Math.min(8, n - 8 * i));
+        parts.push(256 - Math.pow(2, 8 - bits));
+    }
+    return parts.join(".");
+}
+
+// The `net.state` JSON of the Backend (src/systembus.h networkState): {devices, vpns} with only well-formed entries (strings
+// where strings are due, lists of strings, the states the Backend gives); null when the text is not that.
+function parseNetState(text) {
+    let j;
+    try {
+        j = JSON.parse(String(text));
+    } catch (e) {
+        return null;
+    }
+    if (j === null || typeof j !== "object" || !Array.isArray(j.devices) || !Array.isArray(j.vpns))
+        return null;
+    const str = v => (typeof v === "string" ? printable(v) : "");
+    const strs = v => (Array.isArray(v) ? v.filter(x => typeof x === "string" && x !== "").map(printable) : []);
+    const states = ["connected", "connecting", "disconnected", "unavailable"];
+    const devices = [];
+    for (const d of j.devices) {
+        if (d === null || typeof d !== "object" || (d.type !== "ethernet" && d.type !== "wifi") || typeof d.name !== "string" || d.name === "")
+            continue;
+        devices.push({
+            name: printable(d.name), type: d.type, state: states.indexOf(d.state) >= 0 ? d.state : "unavailable", mac: str(d.mac),
+            connection: str(d.connection), uuid: validUuid(d.uuid) ? d.uuid : "", ip4: strs(d.ip4), router: str(d.router), dns: strs(d.dns),
+            ip6: strs(d.ip6), router6: str(d.router6), bitrate: Number(d.bitrate) > 0 ? Number(d.bitrate) : 0,
+            frequency: Number(d.frequency) > 0 ? Number(d.frequency) : 0, ssid: typeof d.ssid === "string" ? hexToText(d.ssid).text : "",
+            speed: Number(d.speed) > 0 ? Number(d.speed) : 0
+        });
+    }
+    const vpns = [];
+    for (const v of j.vpns) {
+        if (v !== null && typeof v === "object" && validUuid(v.uuid) && typeof v.name === "string")
+            vpns.push({uuid: v.uuid, name: printable(v.name !== "" ? v.name : v.uuid), kind: v.kind === "wireguard" ? "wireguard" : "vpn",
+                       state: states.indexOf(v.state) >= 0 ? v.state : "disconnected"});
+    }
+    vpns.sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0));
+    const fw = j.firewall !== null && typeof j.firewall === "object" ? j.firewall : {};
+    const firewall = fw.name === "ufw" || fw.name === "firewalld" ? fw.name : "";
+    return {devices: devices, vpns: vpns, firewall: {name: firewall, active: firewall !== "" && fw.active === true}};
+}
+
+// ufw's own switch: ENABLED= of /etc/ufw/ufw.conf (yes or no; ufw.service is active either way). null when the file says neither.
+function ufwEnabled(text) {
+    const m = /^[ \t]*ENABLED[ \t]*=[ \t]*"?(yes|no)"?[ \t]*$/m.exec(String(text));
+    return m ? m[1] === "yes" : null;
+}
+
+// The services of the Network pane (macOS 27), from parseNetState and the Wi-Fi radio (true, false or null): one per device,
+// {id, kind ("wifi" | "ethernet"), name, status ("connected", "connecting", "notConnected", "unplugged", "off"), device}.
+// Connected ones (and connecting) first, in device order: `active`; the rest: `other`. Several Ethernet devices are numbered.
+function networkServices(state, radio) {
+    const out = {active: [], other: []};
+    if (!state)
+        return out;
+    let ethernet = 0;
+    const count = state.devices.filter(d => d.type === "ethernet").length;
+    for (const d of state.devices) {
+        const wifi = d.type === "wifi";
+        if (!wifi)
+            ethernet++;
+        let status = d.state === "connected" ? "connected" : d.state === "connecting" ? "connecting" : "notConnected";
+        if (d.state === "unavailable")
+            status = wifi ? "off" : "unplugged";
+        if (wifi && radio === false)
+            status = "off";
+        const service = {id: d.name, kind: wifi ? "wifi" : "ethernet", number: wifi || count < 2 ? 0 : ethernet, status: status, device: d};
+        (status === "connected" || status === "connecting" ? out.active : out.other).push(service);
+    }
+    return out;
 }
 
 // ---- Bluetooth (BlueZ over D-Bus) ----------------------------------------------------------------------------------
 
-// The `bt.state` JSON of the Backend (src/systembus.h bluetoothState): {present, powered, devices: [{mac, name, connected}]}
-// with the paired devices connected first, then by name; null when the text is not that.
+// The `bt.state` JSON of the Backend (src/systembus.h bluetoothState): {present, powered, discovering, alias, devices: [{mac,
+// name, connected, icon, battery}] with the paired devices connected first, then by name, nearby: [{mac, name, icon, rssi}]
+// strongest first}; null when the text is not that.
 function parseBtState(text) {
     let j;
     try {
@@ -232,13 +342,40 @@ function parseBtState(text) {
     }
     if (j === null || typeof j !== "object" || typeof j.present !== "boolean" || typeof j.powered !== "boolean" || !Array.isArray(j.devices))
         return null;
+    const mac = d => d !== null && typeof d === "object" && typeof d.mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(d.mac);
+    const nameOf = d => (typeof d.name === "string" && d.name.trim() !== "" ? printable(d.name.trim()) : d.mac.toUpperCase());
+    const icon = d => (typeof d.icon === "string" ? d.icon : "");
     const list = [];
     for (const d of j.devices) {
-        if (d !== null && typeof d === "object" && typeof d.mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(d.mac))
-            list.push({mac: d.mac.toUpperCase(), name: typeof d.name === "string" && d.name.trim() !== "" ? printable(d.name.trim()) : d.mac.toUpperCase(), connected: d.connected === true});
+        if (mac(d))
+            list.push({mac: d.mac.toUpperCase(), name: nameOf(d), connected: d.connected === true, icon: icon(d),
+                       battery: Number.isInteger(d.battery) && d.battery >= 0 && d.battery <= 100 ? d.battery : -1});
     }
     list.sort((a, b) => (a.connected === b.connected ? (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1) : a.connected ? -1 : 1));
-    return {present: j.present, powered: j.present && j.powered, devices: list};
+    const nearby = [];
+    for (const d of Array.isArray(j.nearby) ? j.nearby : []) {
+        if (mac(d) && typeof d.name === "string" && d.name.trim() !== "")
+            nearby.push({mac: d.mac.toUpperCase(), name: nameOf(d), icon: icon(d), rssi: Number.isInteger(d.rssi) ? d.rssi : -127});
+    }
+    nearby.sort((a, b) => b.rssi - a.rssi || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1));
+    return {present: j.present, powered: j.present && j.powered, discovering: j.discovering === true, alias: typeof j.alias === "string" ? printable(j.alias) : "",
+            devices: list, nearby: nearby};
+}
+
+// The glyph of a Bluetooth device from BlueZ's Icon (a freedesktop icon name).
+function btGlyph(icon) {
+    const i = String(icon);
+    if (/^audio-(headphones|headset)/.test(i) || i === "audio-card")
+        return "headphones";
+    if (i === "input-keyboard")
+        return "keyboard";
+    if (i === "input-mouse" || i === "input-tablet")
+        return "mouse";
+    if (i === "phone")
+        return "phone";
+    if (i === "computer")
+        return "laptop";
+    return "bluetooth";
 }
 
 // ---- wpctl -------------------------------------------------------------------------------------------------------
@@ -268,6 +405,34 @@ function parseAudio(text) {
         (section === "Sinks" ? out.sinks : out.sources).push(dev);
     }
     return out;
+}
+
+// The kind of an audio device from its PipeWire node name (`wpctl status -n`; ALSA and BlueZ name their nodes
+// alsa_output.<bus>-<path>.<profile> and bluez_output.<address>.<n>): builtin, usb, bluetooth, hdmi, digital, network or virtual.
+function audioKind(nodeName) {
+    const n = String(nodeName);
+    if (/^bluez_(output|input)\./.test(n))
+        return "bluetooth";
+    if (/^(raop_sink|roc_sink|roc_source|tunnel)[._]/.test(n))
+        return "network";
+    if (!/^alsa_(output|input)\./.test(n))
+        return "virtual";
+    if (/^alsa_(output|input)\.usb-/.test(n))
+        return "usb";
+    if (/\.(hdmi|dp)-/.test(n))
+        return "hdmi";
+    if (/\.iec958-/.test(n))
+        return "digital";
+    return "builtin";
+}
+
+// id -> kind for every sink and source of `wpctl status -n`.
+function audioKinds(text) {
+    const a = parseAudio(text);
+    const kinds = {};
+    for (const d of a.sinks.concat(a.sources))
+        kinds[d.id] = audioKind(d.name);
+    return kinds;
 }
 
 function defaultOf(list) {
@@ -311,6 +476,24 @@ function wifiConnectOpen(ssid) {
     return hex.length <= 64 ? {op: "wifi.connectOpen", hex: hex} : null;
 }
 
+// A WPA/WPA3 personal network by its (clean, at most 32 bytes) name, with its passphrase.
+function wifiConnectSecure(ssid, psk) {
+    if (!plainName(ssid) || ssid.indexOf("\uFFFD") >= 0 || !validPassphrase(psk))
+        return null;
+    const hex = textToHex(ssid);
+    return hex.length <= 64 ? {op: "wifi.connectSecure", hex: hex, psk: psk} : null;
+}
+
+// Forget This Network: the saved profile with that UUID.
+function wifiForget(uuid) {
+    return validUuid(uuid) ? {op: "wifi.forget", uuid: uuid} : null;
+}
+
+// A VPN or WireGuard profile switched on or off.
+function vpnConnect(uuid, on) {
+    return validUuid(uuid) ? {op: "vpn.connect", uuid: uuid, on: on === true} : null;
+}
+
 // Disconnect the Wi-Fi device (the Backend takes the first Wi-Fi device; `device` is the one the page knows, a valid name).
 function wifiDisconnect(device) {
     return typeof device === "string" && /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}$/.test(device) ? {op: "wifi.disconnect"} : null;
@@ -322,6 +505,18 @@ function wifiScan() {
 
 function btPower(on) {
     return {op: "bt.power", on: on === true};
+}
+
+function btDiscover(on) {
+    return {op: "bt.discover", on: on === true};
+}
+
+function btPair(mac) {
+    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? {op: "bt.pair", mac: mac.toUpperCase()} : null;
+}
+
+function btForget(mac) {
+    return typeof mac === "string" && /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(mac) ? {op: "bt.forget", mac: mac.toUpperCase()} : null;
 }
 
 function btConnect(mac, connect) {
@@ -346,49 +541,9 @@ function setMute(id, muted) {
     return validId(id) ? ["wpctl", "set-mute", String(id), muted ? "1" : "0"] : null;
 }
 
-// ---- Displays ----------------------------------------------------------------------------------------------------
-
-// "1920 × 1080" (physical pixels) of a screen from Backend.screens().
-function resolutionText(s) {
-    return s.pixelWidth + " × " + s.pixelHeight;
-}
-
-// Refresh rate in hertz without trailing zeros ("60", "59.94"); "" when the compositor reports none.
-function refreshHz(s) {
-    if (!(s.refreshRate > 0))
-        return "";
-    const r = Math.round(s.refreshRate * 100) / 100;
-    return String(r);
-}
-
-// Scale in percent ("100", "150", "125").
-function scalePercent(s) {
-    return String(Math.round((s.scale > 0 ? s.scale : 1) * 100));
-}
-
-// Arrangement preview: the screens' logical rectangles fitted into a box, aspect kept, centred. [{name, x, y, w, h,
-// primary}] in box pixels; each rectangle is at least `minSide` pixels so that a tiny output stays visible.
-function arrangement(screens, boxW, boxH, gap, minSide) {
-    if (screens.length === 0 || boxW <= 0 || boxH <= 0)
-        return [];
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const s of screens) {
-        x0 = Math.min(x0, s.x);
-        y0 = Math.min(y0, s.y);
-        x1 = Math.max(x1, s.x + s.width);
-        y1 = Math.max(y1, s.y + s.height);
-    }
-    const w = Math.max(1, x1 - x0);
-    const h = Math.max(1, y1 - y0);
-    const k = Math.min((boxW - 2 * gap) / w, (boxH - 2 * gap) / h);
-    const ox = (boxW - w * k) / 2;
-    const oy = (boxH - h * k) / 2;
-    return screens.map(s => ({
-            name: s.name,
-            primary: s.primary === true,
-            x: ox + (s.x - x0) * k,
-            y: oy + (s.y - y0) * k,
-            w: Math.max(minSide, s.width * k),
-            h: Math.max(minSide, s.height * k)
-        }));
+// Displays > Brightness: the shell's own command (Brightness.qml), one backlight and a whole percentage.
+function setBrightness(device, level) {
+    if (typeof device !== "string" || !/^[A-Za-z0-9_.:][A-Za-z0-9_.:-]{0,63}$/.test(device) || typeof level !== "number" || isNaN(level))
+        return null;
+    return ["brightnessctl", "-q", "-d", device, "set", Math.round(Math.max(0, Math.min(1, level)) * 100) + "%"];
 }

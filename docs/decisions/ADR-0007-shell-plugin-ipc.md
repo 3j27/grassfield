@@ -91,6 +91,25 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   capabilities event (the plugin re-posts its capabilities when the flag changes; a push then would undo a flag set by
   another caller). `Compositor.stages(request)` sends one operation while `stages` is advertised. Until the shell's strip
   exists nothing sends `op:on`, so the flag alone changes nothing on screen (docs/specs/stages.md "Shell contract" item 1).
+- Window tiling, step 1 (2026-10-27, additive, ADR-0036, docs/specs/tiling.md TL1-TL15): `tile` places gain
+  left-third|middle-third|right-third|left-two-thirds|right-two-thirds; verb `arrange(json)`
+  `{"layout":"<catalogue id>","windows":["0x…",…],"fill":bool?,"zone":int?,"output":"<name>"?}` (at most 4 KiB, 4
+  distinct windows, at most the layout's zone count; `zone` 0-based with exactly one window and `fill` false or absent; ids of the
+  token catalogue `tiling.layout*`), windows[i] takes zone i and, with `fill` (default true), the next tileable windows in
+  stacking order on that output and Desktop (and active stage) fill the rest; the windows placed form a tile group.
+  Event `tiling`, a change notice `{"v":"gfc/1","type":"tiling","gen":N}` plus `reason` (at most 79 bytes: a 20-digit
+  `gen` and `unavailable`); the state is the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid
+  step, tiled windows with state, place or layout and zone, group, box). The reply moves no window (it only drops the
+  records of closed windows and of windows moved by other means). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
+  and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
+  step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
+  refused while the session is locked (`reason:"locked"`, TL34).
+- Window tiling, step 2 (2026-10-27, additive, ADR-0036, docs/specs/tiling.md TL16-TL20): no new event, verb or feature.
+  The `config` allowlist gains `tilingOptionDrag` ∈ true|false (true at load: with Alt held a drag tiles into the nearest
+  half, quarter or fill, TL18). Each window of the `hyprctl grassfield-tiling` reply gains `sides`: the sides a double-click
+  on its resize border extended ("top", "bottom", "left", "right" joined by "-" in that order, e.g. "top-left"; "" for a
+  place or a layout zone, TL20). Drags by Hyprland's own move (an app's toolbar, Super+drag) post the same notices as the
+  plugin's titlebar drag (`moved` when a tiled window leaves its tile, `placed` at a release that tiles).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -116,20 +135,23 @@ event keyboard-focus: address
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
+event tiling: gen reason
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
 enum overview-focus.target: window workspace remembered none press
 enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
+enum tiling.reason: placed moved resized suspended restored forgotten relaid invalid locked unavailable
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile
+feature keyboard-focus tiling-arrange
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange
 ```
 
 ## Evidence

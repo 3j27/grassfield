@@ -5,6 +5,7 @@
 #include <QLocale>
 #include <QString>
 #include <QUrl>
+#include <QVariant>
 
 #include <functional>
 
@@ -15,22 +16,59 @@ class QCollator;
 namespace FileLogic
 {
 
-enum class SortKey { Name = 0, Kind = 1, Date = 2, Size = 3 };
+// The Finder's Sort By keys that Linux can serve (docs/specs/files.md, FP-40): Date Added has no source on Linux files.
+// Date is the modification date; Opened is the last access time (kept by the file system, coarse under relatime).
+enum class SortKey { Name = 0, Kind = 1, Date = 2, Size = 3, Created = 4, Opened = 5, Tags = 6, Application = 7 };
+constexpr int kSortKeyCount = 8;
+
+// The Finder's Group By (FP-39), without Date Added.
+enum class GroupBy { None = 0, Name = 1, Kind = 2, Application = 3, Opened = 4, Modified = 5, Created = 6, Size = 7, Tags = 8 };
+constexpr int kGroupByCount = 9;
 
 struct SortEntry {
     QString name;
     QString kind; // MIME comment, e.g. "PNG image"
     QDateTime modified;
+    QDateTime created;
+    QDateTime opened;
     qint64 size = -1; // -1 for folders (unknown)
     bool isDir = false;
+    // The item's tags in display order (TagLogic::displayOrder: colour keys first, in palette order).
+    QStringList tags;
+    // The name of the application that opens it by default, empty when none.
+    QString application;
+    // Its MIME type followed by every type it inherits from (the Kind groups).
+    QStringList mimeTypes;
 };
 
 // Negative when a sorts before b. With foldersFirst, folders precede files in both directions.
-// `descending` reverses the primary key only; ties are broken by name (ascending), then by code points.
+// `descending` reverses the primary key only; ties are broken by name (ascending), then by code points. Items without
+// the key's value (no tag, no application, an unknown date) come last in either direction.
 int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool descending, bool foldersFirst, const QCollator &collator);
 
-// Default direction when a column is chosen: names and kinds ascending, dates and sizes descending.
+// What a drop of files does (Finder, with Cmd as Ctrl and Option as Alt, decision F-1): Option copies, Cmd moves, both
+// make aliases (symbolic links); without a modifier a drop on the same volume moves and on another volume copies.
+enum class DropAction { Move, Copy, Link };
+DropAction dropAction(bool ctrl, bool alt, bool sameVolume);
+
+// Default direction when a column is chosen: names, kinds, tags and applications ascending, dates and sizes descending.
 bool defaultDescending(SortKey key);
+
+// A group of Group By: `rank` orders the groups (lowest first), the title breaks ties (collator) and heads the group.
+struct Group {
+    int rank = 0;
+    QString title;
+};
+
+// The group of an entry: Name by first letter ("#" for digits and symbols, first); Kind by category (Applications,
+// Archives, Documents, Folders, Images, Movies, Music, PDF Documents, Presentations, Spreadsheets, then Other); Application
+// by name (folders first, Other last); dates newest first (Today, Yesterday, Previous 7 Days, Previous 30 Days, the months
+// of this year, then the years; Unknown last); Size largest first in decimal bands (folders last); Tags by the first tag
+// (colours in palette order, then the others; No Tags last). `now` and `locale` serve the date groups.
+Group groupOf(const SortEntry &e, GroupBy by, const QDateTime &now, const QLocale &locale = QLocale());
+
+// Negative when group a comes before b.
+int compareGroups(const Group &a, const Group &b, const QCollator &collator);
 
 // Decimal (SI) sizes like the macOS file manager: "Zero bytes", "1 byte", "999 bytes", "12 KB",
 // "1.23 MB", "12.3 GB", "123 TB". Negative sizes (folders) give "--".
@@ -89,5 +127,15 @@ QString duplicateName(const QString &name, bool isDir, const QString &copyWord, 
 // Entries of KIO's Network place (remote:/) that Files does not show: the kio-extras "afc:" link to Apple mobile
 // devices (an Apple trademark in its name, master-prompt §14). `item` is the entry's URL, `target` its link target.
 bool hiddenNetworkEntry(const QUrl &item, const QUrl &target);
+
+// The browser window size kept for the next window (ADR-0026 part 1, QSettings window/width and window/height): a side
+// outside kMinKeptWindowSide..kMaxKeptWindowSide is never kept nor used, so a corrupt value never opens a giant or an
+// invisible window (the window minimum then applies in QML, Main.qml newWindow).
+constexpr int kMinKeptWindowSide = 200;
+constexpr int kMaxKeptWindowSide = 16384;
+// A stored side (any QSettings value): the side when it is an integer in bounds, else 0 (none kept).
+int keptWindowSide(const QVariant &value);
+// Whether a window of this size is kept (both sides in bounds).
+bool keepsWindowSize(int width, int height);
 
 } // namespace FileLogic

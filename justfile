@@ -30,17 +30,19 @@ check-licenses:
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland. Verify mode inherits this environment, a
 # running Hyprland's signature included: it runs with a scratch runtime directory and a signature of the installed
 # Hyprland's commit that no instance has, and fails if the session's loader wrote a runtime note there (it must not in
-# verify mode, config/hypr/grassfield/compositor.lua verifying()).
+# verify mode, config/hypr/grassfield/compositor.lua verifying()). session.lua is checked a second time without Omarchy
+# (OMARCHY_PATH=/nonexistent): when the Omarchy include fails, Grassfield's defaults must still load (ADR-0001).
 check-config:
     rt=$(mktemp -d); trap 'rm -rf "$rt"' EXIT; \
     [[ -r /usr/include/hyprland/src/version.h ]] || { echo "check-config: no Hyprland headers (/usr/include/hyprland/src/version.h): install hyprland" >&2; exit 1; }; \
     commit=$(sed -n 's/^#define[[:space:]]*GIT_COMMIT_HASH[[:space:]]*"\([0-9a-f]*\)".*/\1/p' /usr/include/hyprland/src/version.h); \
-    for cfg in dev session; do \
-      out=$(XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
+    for run in dev session session:/nonexistent; do \
+      cfg=${run%%:*}; omarchy=; [[ $run == *:* ]] && omarchy=${run#*:}; \
+      out=$(env ${omarchy:+OMARCHY_PATH=$omarchy} XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
         GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
-        | sed -n '/Config parsing result/,$p'); \
+        | sed -n '/Config parsing result/,$p' || true); \
       printf '%s\n' "$out"; \
-      printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua: no 'config ok'" >&2; exit 1; }; \
+      printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua${omarchy:+ with OMARCHY_PATH=$omarchy}: no 'config ok'" >&2; exit 1; }; \
     done; \
     if compgen -G "$rt/grassfield-compositor-*" >/dev/null; then \
       echo "check-config: verify mode wrote a compositor runtime note" >&2; exit 1; \

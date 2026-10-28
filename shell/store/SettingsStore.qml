@@ -36,6 +36,15 @@ Scope {
     // The file is looked at again this often (ms) whatever the watch says: replacing a symlinked grassfield.json with a regular
     // file leaves a file watch on the old target. A stat of the path, nothing more unless it changed.
     property int pollInterval: 10000
+    // A file found unusable is re-read at once when its signature changes (or the watch reports it); while the signature stays the
+    // same the full re-read backs off: pollInterval, then twice, four times, ... up to this (ms). What can still change without the
+    // signature is the reader (a `head` that stalled or failed), which is worth a try now and then, not every tick: a 1 MiB+ file or
+    // a FIFO cost a bounded read and parse each time. 5 minutes: a permanently unusable file costs one read per 5 minutes (against
+    // one per 10 s). Trade-off: a repair that changes no signature and raises no watch event (a recovered reader) is noticed
+    // within 5 minutes, not 10 s; lock.* stays at its closed default until then.
+    property int badRetryCap: 300000
+    // The full reads started (tests count them).
+    property int fullReads: 0
     // A directory searched before PATH for the tools the bounded read runs (head, stat, ...): tests put a stalled or a failing
     // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
     property string toolDir: ""
@@ -146,8 +155,13 @@ Scope {
         root.validRead = false;
         root.unsafeFile = false;
         // The sentinel no signature equals: whichever read found the file unusable (the load, or the read before a write), the poll
-        // reads it again, so the store recovers when the file or the reader does, whatever the file's signature says.
+        // reads it again (at once when the signature changed, else with a growing pause), so the store recovers when the file or
+        // the reader does, whatever the watch says (it does not report the repair of a symlink to a device, a directory, ...).
         root.lastSignature = "!";
+        // The signature it was found at is not known here (applyRead sets it); until then the next poll reads it once more.
+        root.badSignature = "";
+        root.badLevel = 0;
+        root.badTicks = 0;
         saveTimer.stop();
         retryTimer.stop();
         if ("lock" in root.parsedFile) {
@@ -178,6 +192,13 @@ Scope {
     readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
     readonly property bool dockAnimateOpening: read("dock.animateOpening")
     readonly property bool dockShowIndicators: read("dock.showIndicators")
+    // The clipboard history in Search (ADR-0034): off until allowed; retention of unpinned items; the opt-in history store; the
+    // Clear Clipboard History marks the Settings app writes (milliseconds since the epoch; a change clears).
+    readonly property bool clipboardEnabled: read("search.clipboard.enabled")
+    readonly property string clipboardRetention: read("search.clipboard.retention")
+    readonly property bool clipboardKeepOnDisk: read("search.clipboard.keepOnDisk")
+    readonly property real clipboardClearedAt: read("search.clipboard.clearedAt")
+    readonly property real clipboardPinnedClearedAt: read("search.clipboard.pinnedClearedAt")
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
     // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.
@@ -223,8 +244,13 @@ Scope {
     readonly property string menubarClockHours: read("menubar.clockHours")
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
+    readonly property string accentHighlight: read("accent.highlight")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
+    // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
+    // times and numbers, and the first day of the week in the calendars.
+    readonly property string regionFormats: read("region.formats")
+    readonly property string regionFirstDayOfWeek: read("region.firstDayOfWeek")
     readonly property string iconMode: read("icons.mode")
     readonly property string iconTint: read("icons.tint")
     readonly property string folderColor: read("icons.folderColor")
@@ -247,6 +273,28 @@ Scope {
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
     // false or "0" in a hand-edited file must not switch the auto-lock off).
     readonly property int lockIdleMinutes: read("lock.idleMinutes")
+    // Minutes without input before the displays turn off while unlocked, on battery and on the power adapter; 0 = never.
+    readonly property int lockDisplayOffBattery: read("lock.displayOffBattery")
+    readonly property int lockDisplayOffPower: read("lock.displayOffPower")
+    // The lock screen shows the account's name and picture, and the user's message (plain text, one line).
+    readonly property bool lockShowUser: read("lock.showUser")
+    readonly property bool lockShowMessage: read("lock.showMessage")
+    readonly property string lockMessage: read("lock.message")
+    // The kinds of results Search shows (Settings > Search > Search Results), and the last Delete Search History (milliseconds
+    // since the epoch, 0 = never; a real: it does not fit an int).
+    readonly property bool searchShowApps: read("search.showApps")
+    readonly property bool searchShowDocuments: read("search.showDocuments")
+    readonly property bool searchShowRecents: read("search.showRecents")
+    readonly property bool searchShowCalculator: read("search.showCalculator")
+    readonly property bool searchShowConversions: read("search.showConversions")
+    readonly property bool searchShowSettings: read("search.showSettings")
+    readonly property bool searchShowCommands: read("search.showCommands")
+    readonly property real searchHistoryResetAt: read("search.historyResetAt")
+    // The screen saver (Settings > Wallpaper > Screen Saver, ADR-0032): its delay in minutes (0 = never), which one, and the
+    // slideshow's folder ("" = the Pictures folder).
+    readonly property int screenSaverIdleMinutes: read("screensaver.idleMinutes")
+    readonly property string screenSaverKind: read("screensaver.kind")
+    readonly property string screenSaverFolder: read("screensaver.folder")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")
@@ -362,6 +410,11 @@ Scope {
 
     function setStagesEnabled(value: bool): void {
         change("windows.stages", value);
+    }
+
+    // The Clipboard view's first-use prompt: "Allow" (ADR-0034 CB-6).
+    function setClipboardEnabled(value: bool): void {
+        change("search.clipboard.enabled", value);
     }
 
     function setDesktopShowIcons(value: bool): void {
@@ -598,10 +651,37 @@ Scope {
             return;
         }
         loader.command = ["sh", "-c", root.readScript, "sh", root.filePath, String(root.maxFileBytes)];
+        // The signature the poll saw just before this read (empty for a read the poll did not start): a file found unusable is
+        // remembered at that signature, so a change after it cannot be missed.
+        loader.startSignature = root.probedSignature;
+        root.probedSignature = "";
+        root.fullReads++;
         loader.running = true;
     }
 
     property string lastSignature: ""
+    // The unusable file's state (lastSignature is "!" then): the signature it was found at ("" if unknown), how many times in a row
+    // it was read again at that same signature (the backoff level), and the polls since its last read.
+    property string badSignature: ""
+    property int badLevel: 0
+    property int badTicks: 0
+    property string probedSignature: ""
+
+    // The polls to let pass before the next full read of an unusable file whose signature did not change: 1, 2, 4, ... up to badRetryCap.
+    function badWaitTicks(): int {
+        const cap = Math.max(1, Math.floor(root.badRetryCap / Math.max(1, root.pollInterval)));
+        return Math.min(cap, Math.pow(2, Math.min(root.badLevel, 30)));
+    }
+
+    // A poll's signature of the path: true when the file is to be read in full now. A usable file: when its signature changed. An
+    // unusable one: also then (or when it was never known), else only once the backoff has run out.
+    function pollWantsRead(now: string): bool {
+        if (root.lastSignature !== "!")
+            return now !== root.lastSignature;
+        if (root.badSignature === "" || now !== root.badSignature)
+            return true;
+        return ++root.badTicks >= root.badWaitTicks();
+    }
 
     function badReason(status: string): string {
         switch (status) {
@@ -629,10 +709,13 @@ Scope {
                 root.save();
             root.loadedFile();
         } else {
-            // A sentinel no signature equals: the poll reads such a file again every pollInterval, whether or not the watch
-            // reported its removal or repair (it does not for a symlink to a device, a directory, a file it could not read).
+            // Found at the very signature it was already found unusable at: the backoff grows; any other case starts it over.
+            const same = root.lastSignature === "!" && loader.startSignature !== "" && loader.startSignature === root.badSignature;
+            const level = same ? root.badLevel + 1 : 0;
             root.loaded = true;
             root.takeBadFile(root.badReason(read.status));
+            root.badSignature = loader.startSignature;
+            root.badLevel = level;
         }
         root.armWatch();
     }
@@ -762,6 +845,7 @@ Scope {
     Process {
         id: loader
         environment: root.toolEnvironment
+        property string startSignature: ""
         stdout: StdioCollector {
             onStreamFinished: root.applyRead(text)
         }
@@ -780,8 +864,10 @@ Scope {
             onStreamFinished: {
                 const now = text.trim();
                 // "-" is a path that leads to nothing (read as missing); "!" is the sentinel of a file that could not be used.
-                if (now !== root.lastSignature)
+                if (root.pollWantsRead(now)) {
+                    root.probedSignature = now;
                     root.readFile();
+                }
             }
         }
     }

@@ -67,6 +67,10 @@ Singleton {
     // `address` is lower-case hex without 0x. The Dock bounces the app's icon until the app is activated.
     signal attention(string address)
 
+    // A window closed (Hyprland's `closewindow`), `address` lower-case hex without 0x. The clipboard history drops a paste
+    // aimed at it: a new window can reuse the address (ADR-0034 §4).
+    signal windowClosed(string address)
+
     // Address of a toplevel as Hyprland names it (lower-case hex without 0x), "" when Hyprland does not know it (yet).
     function addressOf(toplevel: var): string {
         const top = hyprlandToplevel(toplevel);
@@ -101,6 +105,20 @@ Singleton {
         const top = hyprlandToplevel(toplevel);
         const data = top ? top.lastIpcObject : null;
         return data && data.pid ? data.pid : 0;
+    }
+
+    // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
+    // from its events)} (NotResponding).
+    function knownWindows(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => {
+            const d = t.lastIpcObject;
+            return {
+                pid: d && d.pid ? d.pid : 0,
+                cls: d && d.class ? d.class : "",
+                title: t.title ?? ""
+            };
+        });
     }
 
     // Activate (focus, un-minimize) a toplevel through the protocol. A window parked by hide()
@@ -876,8 +894,12 @@ Singleton {
                 root.onWindowMoved(event.data);
             else if (event.name === "openwindow")
                 minimizedSyncTimer.restart(); // a window may map directly onto special:minimized
-            else if (event.name === "closewindow")
-                root.lastWorkspace.delete(Minimized.normalizeAddress(event.data));
+            else if (event.name === "closewindow") {
+                const closed = Minimized.normalizeAddress(event.data);
+                root.lastWorkspace.delete(closed);
+                if (closed !== "")
+                    root.windowClosed(closed);
+            }
             switch (event.name) {
             case "openwindow":
             case "closewindow":

@@ -112,6 +112,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
     void activate(gf::titlebar::Button button);
     void drawTitlebar(const PHLMONITOR& monitor, float alpha);
+    // The tiling preview of a drag of this window (gf::tiler::previewOf), under the window and over the windows behind it;
+    // also for a window whose bar is hidden (client chrome: Hyprland's move, tiling.md TL16).
+    void drawPreview(const PHLMONITOR& monitor, float alpha);
     // The glyphs over the lights; `bar` in monitor-local logical coordinates. `fullscreen`: the zoom light shows the arrows
     // and minimize none (unavailable).
     void drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen);

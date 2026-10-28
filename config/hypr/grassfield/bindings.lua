@@ -119,6 +119,8 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 
 -- Shell surfaces (handled by grassfield-shell IPC targets)
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
+-- The clipboard history in Search (ADR-0034, docs/specs/clipboard.md CB-5): opens Search in its Clipboard view; again closes it.
+bind("SUPER + CTRL + V", "Clipboard history", shell("search", "clipboard"))
 -- Apps (the dedicated Apps / Launchpad media key; plain F4 stays with the applications, docs/specs/apps.md A11).
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
@@ -169,10 +171,19 @@ bind("XF86MonBrightnessDown", "Brightness down", shell("brightness", "down"), { 
 bind("XF86KbdBrightnessUp", "Keyboard brightness up", shell("keyboard", "up"), { repeating = true, locked = true })
 bind("XF86KbdBrightnessDown", "Keyboard brightness down", shell("keyboard", "down"), { repeating = true, locked = true })
 
--- Trackpad gestures (L2: verified by the owner on real hardware; nested sessions have no touchpad).
-hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
-hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd(qs_ipc .. " call overview open") end })
-hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd(qs_ipc .. " call overview close") end })
+-- Trackpad gestures (L2: verified by the owner on real hardware; nested sessions have no touchpad). Settings > Trackpad > More
+-- Gestures turns each off (mouse-trackpad.lua, read by grassfield.input, which the session loads first; without it, all on).
+local input = package.loaded["grassfield.input"]
+local gestures = (type(input) == "table" and input.settings) and input.settings() or { gesture_spaces = true, gesture_overview = true, gesture_apps = true }
+if gestures.gesture_spaces then
+  hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
+end
+if gestures.gesture_overview then
+  hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd(qs_ipc .. " call overview open") end })
+  hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd(qs_ipc .. " call overview close") end })
+end
 -- Apps: pinch with the thumb and three fingers opens it, spreading them closes it (macOS 26, docs/specs/apps.md A11).
-hl.gesture({ fingers = 4, direction = "pinchin", action = function() hl.exec_cmd(qs_ipc .. " call apps open") end })
-hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.exec_cmd(qs_ipc .. " call apps close") end })
+if gestures.gesture_apps then
+  hl.gesture({ fingers = 4, direction = "pinchin", action = function() hl.exec_cmd(qs_ipc .. " call apps open") end })
+  hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.exec_cmd(qs_ipc .. " call apps close") end })
+end

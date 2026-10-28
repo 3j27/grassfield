@@ -51,6 +51,9 @@ import "../../lib/RunMode.js" as RunMode
 // Hyprland event exists for it) and takes a fresh lock as soon as the session is found unlocked.
 // A foreign locker that takes the lock over is left alone (the session stays locked); its release
 // is followed by a fresh Grassfield lock.
+//
+// Every Hyprland query of the lock goes through requestMonitors(), which sends none while Quickshell's monitor model is
+// empty (a QML query creates no monitor object and, sent too early, keeps that model empty: see there).
 Singleton {
     id: root
 
@@ -99,6 +102,13 @@ Singleton {
     readonly property bool hyprland: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== ""
     // Consecutive Hyprland answers reporting the session unlocked while holding (see checkOwnership).
     property int unlockedAnswers: 0
+    // Quickshell's monitor model was found empty when the lock wanted to ask Hyprland (requestMonitors): logged once, cleared
+    // when a monitor object appears (monitorsAdded).
+    property bool emptyModelLogged: false
+    // The start-up stranded-lock check has not decided yet: it is running, or it ran out of ticks on an unknown state (the
+    // monitor model still empty, outputs still coming up). Cleared once Hyprland reported the session locked (taken over)
+    // or unlocked, or this shell locked; while set, monitors appearing run the check again at once (monitorsAdded).
+    property bool strandedUndecided: false
     // The lock surface (one per screen) whose window has the keyboard, else null: none of this shell's lock
     // surfaces has it (another client's lock surface took it, or a window did after the session was unlocked
     // under this lock). Only ever speeds the ownership check up.
@@ -153,6 +163,9 @@ Singleton {
             return "refused: missing-pam";
         }
         strandedProbe.stop();
+        // Never again after this shell locked: the cached answers would then show its own lock (a stale LOCK after the
+        // unlock would re-lock the session on the next monitor plugged in).
+        strandedUndecided = false;
         console.info("grassfield-lock: lock requested (" + reason + ")");
         inheritedLock = reason === "restore";
         Popups.close();
@@ -190,12 +203,14 @@ Singleton {
     // Ask Hyprland again whether the session is locked (repeated lock request, before sleep, lock
     // surface lost keyboard focus). `secure` is false until the answer; checkOwnership() takes a
     // fresh lock if the session is found unlocked. A lock confirmed less than verifyGraceMs ago
-    // needs no answer: the compositor's own `locked` event is the proof.
+    // needs no answer: the compositor's own `locked` event is the proof. While Quickshell's monitor
+    // model is empty no query is sent (requestMonitors): `secure` then stays false until the model
+    // fills and an answer confirms the lock (monitorsAdded asks at once).
     function verify(): void {
         if (!holding || !hyprland || secureGrace.running)
             return;
         verified = false;
-        Hyprland.refreshMonitors();
+        requestMonitors();
     }
 
     // The session is unlocked under a lock object that still reports secure (another client took
@@ -228,11 +243,47 @@ Singleton {
         const action = Machine.ownershipAction(state, unlockedAnswers);
         unlockedAnswers = state === "unlocked" ? unlockedAnswers + 1 : 0;
         if (action === "confirm")
-            Hyprland.refreshMonitors();
+            requestMonitors();
         else if (action === "relock")
             relock("confirmed by Hyprland");
         else
             verified = true; // "ok": the session is locked; "unknown": WlSessionLock's word is all there is
+    }
+
+    // The lock's only Hyprland monitor query (verify, checkOwnership's confirmation, checkStranded, ownershipProbe,
+    // monitorsAdded); the answer reaches checkOwnership through monitorAnswers. Never sent while Quickshell's monitor model is
+    // empty (Machine.monitorQueryAllowed): Quickshell 0.3.1's QML query creates no monitor object, and one sent before
+    // Hyprland answered Quickshell's own first query makes Quickshell drop that query, so the model would stay empty until a
+    // monitor event and no check here would ever get an answer. Until Quickshell's own answer fills the model, the lock state
+    // is unknown: nothing is verified, relocked or taken over, and WlSessionLock keeps the session locked (fail closed).
+    // Returns whether the query was sent.
+    function requestMonitors(): bool {
+        if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {
+            if (!emptyModelLogged)
+                console.warn("grassfield-lock: Hyprland's monitor model is empty (Quickshell has no monitor object yet): no monitor query sent; the session lock state is unknown until Quickshell's own query fills it");
+            emptyModelLogged = true;
+            return false;
+        }
+        Hyprland.refreshMonitors();
+        return true;
+    }
+
+    // Quickshell created a monitor object: the model filled once Hyprland answered Quickshell's own query, or an output
+    // appeared. monitorAnswers watches it from now on, but the answer that created it came before (Quickshell fills a new
+    // monitor, then adds it to the model), so while holding a fresh answer is asked for at once rather than at the next
+    // ownershipProbe tick; it reaches checkOwnership through the new delegate. Before this shell locked, a start-up
+    // stranded check that has not decided (still running, or out of ticks because Quickshell's first answer came after
+    // them) runs again on that answer, so a dead client's stranded lock is taken over as soon as the model fills. That
+    // check only ever locks.
+    function monitorsAdded(): void {
+        if (emptyModelLogged) {
+            emptyModelLogged = false;
+            console.info("grassfield-lock: Hyprland's monitor model has " + Hyprland.monitors.values.length + " monitor(s); lock state queries resume");
+        }
+        if (holding)
+            requestMonitors();
+        else if (strandedUndecided)
+            checkStranded();
     }
 
     // Called by the controller after a PAM success only: the only path that clears the carried
@@ -320,21 +371,24 @@ Singleton {
     function checkStranded(): void {
         if (currentlyLocked()) {
             strandedProbe.stop();
+            strandedUndecided = false;
             return;
         }
         const monitors = Hyprland.monitors.values.map(m => m.lastIpcObject);
         const state = Machine.compositorLockState(monitors);
         if (state === "locked") {
             strandedProbe.stop();
+            strandedUndecided = false;
             console.warn("grassfield-lock: the compositor holds a session lock this shell did not take (a crash with a missing or wrong marker, or a foreign locker); taking it over");
             lock("restore");
         } else if (state === "unlocked") {
             strandedProbe.stop();
+            strandedUndecided = false;
         } else if (--strandedProbe.remaining <= 0) {
-            strandedProbe.stop();
+            strandedProbe.stop(); // still undecided: monitorsAdded runs the check again when monitors appear
             console.info("grassfield-lock: compositor lock state unknown; relying on the crash recovery marker");
         } else {
-            Hyprland.refreshMonitors();
+            requestMonitors(); // none while the monitor model is empty: Quickshell's own answer fills it
         }
     }
 
@@ -461,6 +515,8 @@ Singleton {
                 anchors.fill: parent
                 userName: root.userName
                 avatarSource: root.avatarSource
+                showUser: Settings.lockShowUser
+                lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
                 inputEnabled: controller.pamAvailable
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
@@ -537,7 +593,10 @@ Singleton {
     }
 
     // Bounded startup check (at most 20 Hyprland monitor queries in 10 s, only until this instance
-    // first locks); outputs may still be coming up, so an unknown answer is asked again.
+    // first locks); outputs may still be coming up, so an unknown answer is asked again. While
+    // Quickshell's monitor model is still empty nothing is asked (requestMonitors) and the state stays
+    // unknown; if it is still unknown after the 20 ticks, the crash recovery marker decides until
+    // monitors appear, which runs the check once more (monitorsAdded, strandedUndecided).
     Timer {
         id: strandedProbe
 
@@ -553,7 +612,8 @@ Singleton {
     // is suspected (takeoverSuspected). Hyprland 0.56.2 emits no event when a session lock is taken
     // over or released (verified on its event socket), so a query is the only way to notice that the
     // session was unlocked under this lock. The answer is handled by checkOwnership() (monitorAnswers),
-    // as are answers to anyone's query. A changed interval restarts the timer.
+    // as are answers to anyone's query. A changed interval restarts the timer. A tick while Quickshell's
+    // monitor model is empty sends nothing (requestMonitors); the ticks after it fills do.
     Timer {
         id: ownershipProbe
 
@@ -563,7 +623,7 @@ Singleton {
         interval: Machine.probeInterval(root.takeoverSuspected)
         repeat: true
         running: root.holding && root.hyprland && !devPause.running
-        onTriggered: Hyprland.refreshMonitors()
+        onTriggered: root.requestMonitors()
     }
 
     // Runs for ownershipProbe.verifyGraceMs after the compositor confirmed a lock of this shell (its `locked` event,
@@ -583,11 +643,14 @@ Singleton {
         onTriggered: console.warn("grassfield-lock: dev pause of the lock ownership check ended")
     }
 
+    // Follows the live model, whether or not a lock is held: a monitor object Quickshell creates later (the model filling
+    // after start, an output plugged in) gets its own Connections at once (see monitorsAdded).
     Instantiator {
         id: monitorAnswers
 
         active: root.hyprland
         model: Hyprland.monitors
+        onObjectAdded: Qt.callLater(root.monitorsAdded)
 
         delegate: Connections {
             required property HyprlandMonitor modelData
@@ -675,8 +738,10 @@ Singleton {
         if (controller.pamSuppressed)
             console.warn("grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)");
         restore(false, "start");
-        if (!controller.locked && root.hyprland)
+        if (!controller.locked && root.hyprland) {
+            strandedUndecided = true;
             strandedProbe.start();
+        }
     }
 
     // Dev hooks (dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of

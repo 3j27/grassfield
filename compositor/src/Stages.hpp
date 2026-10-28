@@ -27,6 +27,14 @@ namespace gf::stager {
     // start() succeeded and stop() has not run.
     bool ready();
 
+    // Window tiling's work area (docs/specs/tiling.md TL1): while Stages is on, the right edge (layout x) of the column
+    // `monitor`'s strip holds: its tiles as the shell last sent them with op:on (shown or hidden) plus kStripDropMargin.
+    // nullopt when Stages is off or the monitor has no strip.
+    std::optional<double> stripColumnRight(const PHLMONITOR& monitor);
+
+    // `w` belongs to an inactive stage (drawn in a strip): tiling neither fills nor counts it (tiling.md TL6, TL10).
+    bool inStripStage(const PHLWINDOW& w);
+
     // Called from the plugin's first pointer button listener, before anything else of the plugin and before Hyprland
     // delivers the button: a pointer focus left on a window Stages blocks (no motion since the block) is refreshed to the
     // surface under the cursor, or the event reaches no surface. Never cancels the event. No-op unless ready().

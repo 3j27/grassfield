@@ -8,11 +8,17 @@ T.Control {
 
     property bool checked: false
     property string accessibleName: ""
+    // The large switch of a pane's header row (macOS 27 Wi-Fi, Bluetooth): a 44 x 20 track, a 26 x 16 knob.
+    property bool large: false
 
     signal toggled(bool checked)
 
-    implicitWidth: Tokens.controlToggleWidth
-    implicitHeight: Tokens.controlToggleHeight
+    implicitWidth: root.large ? Tokens.controlToggleLargeWidth : Tokens.controlToggleWidth
+    implicitHeight: root.large ? Tokens.controlToggleLargeHeight : Tokens.controlToggleHeight
+    // Disabled on its own, as macOS draws a switch that cannot be changed: the track stays (an off switch remains visible,
+    // on white too), the knob fades, and the accent when on. Disabled through a container (Settings' blocked page), the
+    // container dims it once already.
+    readonly property bool dimmed: !root.enabled && (!root.parent || root.parent.enabled)
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
@@ -41,7 +47,8 @@ T.Control {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        color: root.checked ? Appearance.withAlpha(Appearance.colors.accent, root.dimmed ? Tokens.materialDisabledOpacity : 1)
+                            : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
 
         Behavior on color {
             ColorAnimation {
@@ -58,13 +65,14 @@ T.Control {
     }
 
     Rectangle {
-        readonly property real inset: (Tokens.controlToggleHeight - Tokens.controlToggleKnobHeight) / 2
-        width: Tokens.controlToggleKnobWidth
-        height: Tokens.controlToggleKnobHeight
+        readonly property real inset: (root.height - height) / 2
+        width: root.large ? Tokens.controlToggleLargeKnobWidth : Tokens.controlToggleKnobWidth
+        height: root.large ? Tokens.controlToggleLargeKnobHeight : Tokens.controlToggleKnobHeight
         radius: height / 2
         y: inset
         x: root.checked ? root.width - width - inset : inset
         color: Appearance.colors.knob
+        opacity: root.dimmed ? Tokens.controlToggleDisabledKnobOpacity : 1
 
         Behavior on x {
             NumberAnimation {

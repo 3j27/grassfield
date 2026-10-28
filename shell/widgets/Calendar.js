@@ -8,6 +8,14 @@ function daysInMonth(year, month) {
     return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
+// The first weekday (0 = Sunday ... 6 = Saturday): `region.firstDayOfWeek` ("monday" ... "sunday"), else the formats' own
+// (`localeFirstDay`, Locale.firstDayOfWeek) for "auto" or anything else.
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+function firstDay(setting, localeFirstDay) {
+    const i = DAYS.indexOf(setting);
+    return i >= 0 ? i : localeFirstDay;
+}
+
 // Weekday indexes (0 = Sunday ... 6 = Saturday) of the seven columns, starting at firstDay.
 function weekdayOrder(firstDay) {
     const out = [];

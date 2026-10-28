@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# Review of the lock's monitor queries (Quickshell 0.3.1 IPC, read in its source): Hyprland.refreshMonitors() from QML never
+# creates a monitor object, and one sent before Hyprland answered Quickshell's own first query (`j/status`) makes Quickshell
+# drop its start-up monitors query as a duplicate, so Hyprland.monitors stays empty until a monitor event: the lock's
+# stranded check ended unknown, its ownership watcher had nothing to watch (no re-lock after a foreign release) and verify()
+# never got an answer. Lock.qml now sends no query while that model is empty (requestMonitors). The REAL Lock singleton runs
+# offscreen (tests/security/lock_monitor_model.d/probe.qml, a dev session) against:
+#   no-socket    a Hyprland directory with no socket (every query fails at once, the model stays empty): Quickshell's own
+#                monitors query is the only one made (its debug log counts them), the start-up check ends unknown after its
+#                20 ticks (no takeover: the crash recovery marker decides) and the empty model is logged exactly once.
+#                Runs everywhere, the Claude Code sandbox included.
+#   slow-status  a fake Hyprland that answers `j/status` after 1.2 s and holds a monitors query that arrives before that
+#                answer until 0.3 s after it (Hyprland answers queued requests in order); its one monitor lists LOCK (a
+#                stranded session lock). No monitors query reaches it before the status answer; the model fills from
+#                Quickshell's own query; the start-up check takes the stranded lock over; an answer about the monitor
+#                created after start reaches checkOwnership (the ownership watcher attached to it).
+#   late-status  the same LOCK monitor, `j/status` answered after 12.5 s, past the start-up check's 20 ticks of 500 ms (opus
+#                review of 94ab527, MINOR-1): the check ends unknown first, then the model fills and the check runs again
+#                (monitorsAdded): the stranded lock is taken over once, after the "unknown" line.
+#   no-status    a fake Hyprland that never answers `j/status`: no monitors query reaches it at all, the start-up check ends
+#                unknown and the empty model is logged exactly once.
+#   controls     no-socket and slow-status again on a copy of shell/security whose empty-model guard is removed (the code
+#                before the fix): the lock queries an empty model, and with the slow fake the model never fills (the
+#                probe fails); late-status on a copy whose re-run on the filling is removed: no takeover. They prove the
+#                checks above see the bugs.
+# The fake needs Unix sockets: its scenarios SKIP where none can be created (the sandbox). A socket path holds at most 107
+# bytes, which a checkout path can exceed: the runtime directories (Hyprland's sockets) sit on a short base of their own
+# (/tmp/gf-lmm.*), and a fake-backed scenario whose fake did not bind both sockets, or exited, FAILs without running its
+# checks (it would otherwise run with no Hyprland at all and pass vacuously). Offscreen there is no compositor:
+# a taken-over lock stays requested ("locking"), never confirmed, so the holding paths (verify, ownershipProbe,
+# monitorsAdded's fresh query) are checked statically by lock_surfaces.sh and in nested by reload_locked.sh. Nothing here can
+# reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE and XDG_RUNTIME_DIR point at the test's own directory.
+# Plain shell test: PASS/FAIL lines, non-zero on failure.
+set -euo pipefail
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+cd "$root"
+unset QT_QPA_PLATFORMTHEME
+if ! command -v qs >/dev/null; then
+  echo "SKIP: lock monitor model: qs missing: NOT VERIFIED"
+  exit 0
+fi
+mkdir -p "$root/.dev"
+tmp=$(mktemp -d "$root/.dev/lock-monitor-model.XXXXXX")
+fake=""
+short=""
+trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp" ${short:+"$short"}' EXIT
+# The runtime directories' short base, independent of the checkout path: /tmp when writable, else $TMPDIR (the sandbox,
+# where the fake scenarios SKIP anyway).
+short=$(mktemp -d /tmp/gf-lmm.XXXXXX 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/gf-lmm.XXXXXX")
+ui/i18n/build-direct.sh >/dev/null
+scripts/dev/i18n-build.sh >/dev/null
+sig=gf-lmm
+fail=0
+pass() { echo "PASS: lock monitor model $*"; }
+bad() { echo "FAIL: lock monitor model $*"; fail=1; }
+count() { grep -c -- "$1" <<<"$2" || true; }
+monitor_queries() { grep -c 'Making request: "j/monitors"' <<<"$1" || true; } # Quickshell's debug log of every query it makes
+
+# The fake Hyprland: a request socket that logs every request and answer in order, and a silent event socket. Python's
+# standard library only.
+cat >"$tmp/fake.py" <<'PY'
+import json, os, socket, sys, threading, time
+base, log, scenario = sys.argv[1], sys.argv[2], sys.argv[3]
+lock = threading.Lock()
+status_answered = threading.Event()
+MONITOR = {"id": 0, "name": "GF-1", "description": "GF GF-1", "make": "GF", "model": "GF-1", "serial": "", "width": 1920,
+           "height": 1080, "refreshRate": 60.0, "x": 0, "y": 0, "scale": 1.0, "transform": 0, "disabled": False,
+           "focused": True, "activeWorkspace": {"id": 1, "name": "1"}, "specialWorkspace": {"id": 0, "name": ""},
+           "solitary": "0", "solitaryBlockedBy": ["LOCK", "WINDOWED", "CANDIDATE"], "availableModes": ["1920x1080@60.00Hz"]}
+def note(line):
+    with lock:
+        with open(log, "a") as f:
+            f.write(line + "\n")
+def answer(c):
+    data = c.recv(65536).decode(errors="replace").strip()
+    note("request " + data.replace("\n", "\\n"))
+    if data == "j/status":
+        if scenario == "no-status":
+            time.sleep(3600)  # never answered
+            return
+        time.sleep(12.5 if scenario == "late-status" else 1.2)
+        c.sendall(json.dumps({"configProvider": "lua"}).encode())
+        note("answered j/status")
+        status_answered.set()
+    elif data == "j/monitors":
+        if not status_answered.is_set() and scenario == "slow-status":
+            status_answered.wait()
+            time.sleep(0.3)
+        c.sendall(json.dumps([MONITOR]).encode())
+        note("answered j/monitors")
+    else:
+        c.sendall(b"[]" if data.startswith("j/") else b"ok")
+    c.close()
+def serve_events():
+    s = socket.socket(socket.AF_UNIX)
+    s.bind(os.path.join(base, ".socket2.sock"))
+    s.listen(4)
+    held = []
+    while True:
+        c, _ = s.accept()
+        held.append(c)
+threading.Thread(target=serve_events, daemon=True).start()
+s = socket.socket(socket.AF_UNIX)
+s.bind(os.path.join(base, ".socket.sock"))
+s.listen(16)
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=answer, args=(c,), daemon=True).start()
+PY
+
+# A config directory: the probe as shell.qml next to links to every module of the real shell; with "remove", shell/security
+# is a copy whose empty-model guard is removed; with "norerun", a copy whose stranded check does not run again when the
+# model fills.
+make_cfg() { # <dir> keep|remove|norerun
+  local dir=$1 entry name
+  mkdir -p "$dir"
+  for entry in shell/*; do
+    name=$(basename "$entry")
+    if [[ $name == shell.qml ]]; then
+      continue
+    elif [[ $name == security && $2 != keep ]]; then
+      cp -a "$root/$entry" "$dir/security"
+    else
+      ln -s "$root/$entry" "$dir/$name"
+    fi
+  done
+  cp tests/security/lock_monitor_model.d/probe.qml "$dir/shell.qml"
+  if [[ $2 != keep ]]; then
+    python3 -I - "$dir/security/lock/Lock.qml" "$2" <<'PY'
+import sys
+p, mutation = sys.argv[1], sys.argv[2]
+s = open(p).read()
+old, new = {
+    "remove": ("if (!Machine.monitorQueryAllowed(Hyprland.monitors.values.length)) {", "if (false) {"),
+    "norerun": ("else if (strandedUndecided)\n            checkStranded();", "else if (false)\n            checkStranded();"),
+}[mutation]
+assert s.count(old) == 1, "not in Lock.qml: " + old
+open(p, "w").write(s.replace(old, new))
+PY
+  fi
+}
+
+# One run of the probe: <name> <fake scenario|none> <probe scenario> <config dir>, with its own runtime directory on the
+# short base (and fake). Sets $out (Quickshell's output, its Hyprland IPC debug log included) and $requests (the fake's
+# log). Returns 1, after a FAIL line, when a fake was asked for and did not bind both sockets or exited: the probe is then
+# not run and the caller skips that scenario's checks.
+run() {
+  local name=$1 fake_scenario=$2 probe_scenario=$3 cfg=$4 work=$tmp/$1 rt=$short/$1 sock why=""
+  mkdir -p "$rt/hypr/$sig" "$work/cache" "$work/home" "$work/state" "$work/config"
+  chmod 700 "$rt" "$work/cache"
+  requests=$work/requests.log
+  : >"$requests"
+  out=""
+  if [[ $fake_scenario != none ]]; then
+    python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$requests" "$fake_scenario" 2>"$work/fake.err" &
+    fake=$!
+    for _ in $(seq 50); do [[ -S $rt/hypr/$sig/.socket.sock && -S $rt/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
+    for sock in .socket.sock .socket2.sock; do
+      [[ -S $rt/hypr/$sig/$sock ]] || why+="no $sock; "
+    done
+    kill -0 "$fake" 2>/dev/null || why+="the fake exited; "
+    if [[ -n $why ]]; then
+      bad "$name: the fake Hyprland did not start (${why}$(tail -n 1 "$work/fake.err" 2>/dev/null)): its checks are not run"
+      kill "$fake" 2>/dev/null || true
+      wait "$fake" 2>/dev/null || true
+      fake=""
+      return 1
+    fi
+  fi
+  out=$(env -u WAYLAND_DISPLAY -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION -u GRASSFIELD_DEV_ALLOW_PAM \
+    -u GRASSFIELD_VISUAL_FIXTURES GRASSFIELD_DEV=1 LOCK_MONITOR_SCENARIO="$probe_scenario" HOME="$work/home" \
+    GRASSFIELD_STATE_HOME="$work/state" GRASSFIELD_CONFIG_HOME="$work/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
+    XDG_RUNTIME_DIR="$rt" XDG_CACHE_HOME="$work/cache" QT_QPA_PLATFORM=offscreen \
+    QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_LANG=en GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" \
+    timeout 60 qs -p "$cfg" --no-color --log-rules "quickshell.hyprland.ipc.debug=true" 2>&1) || true
+  if [[ -n $fake ]]; then
+    kill "$fake" 2>/dev/null || true
+    wait "$fake" 2>/dev/null || true
+    fake=""
+  fi
+}
+
+# The probe's verdict and the start-up check's end on a model that stays empty (no-socket, no-status).
+check_empty() { # <label>
+  if grep -q "lock-monitor-model: PASS empty" <<<"$out"; then
+    pass "$1: the model stays empty, the lock was neither taken nor released"
+  else
+    bad "$1: $(grep -E 'lock-monitor-model:|ERROR|WARN qml' <<<"$out" | head -n 5)"
+  fi
+  local empty
+  empty=$(count "monitor model is empty" "$out")
+  if [[ $empty == 1 ]]; then pass "$1: the empty model was logged exactly once"; else bad "$1: the empty model was logged $empty times, not once"; fi
+  if [[ $(count "compositor lock state unknown; relying on the crash recovery marker" "$out") == 1 && $(count "taking it over" "$out") == 0 ]]; then
+    pass "$1: the start-up check ended unknown, without a takeover"
+  else
+    bad "$1: the start-up check did not end unknown without a takeover"
+  fi
+}
+
+make_cfg "$tmp/cfg" keep
+make_cfg "$tmp/cfg-control" remove
+make_cfg "$tmp/cfg-norerun" norerun
+
+run nosock none empty "$tmp/cfg"
+check_empty "no Hyprland socket"
+queries=$(monitor_queries "$out")
+if [[ $queries == 1 ]]; then
+  pass "no Hyprland socket: Quickshell's own monitors query is the only one (the lock sent none to the empty model)"
+else
+  bad "no Hyprland socket: $queries monitors queries, not 1 (Quickshell's own)"
+fi
+run nosockc none empty "$tmp/cfg-control"
+queries=$(monitor_queries "$out")
+if ((queries > 1)); then
+  pass "control: with the guard removed the lock queries the empty model ($queries monitors queries)"
+else
+  bad "control: with the guard removed only $queries monitors queries: the check above cannot see the bug"
+fi
+
+if ! python3 -I -c 'import socket; socket.socket(socket.AF_UNIX).close()' 2>/dev/null; then
+  echo "SKIP: lock monitor model: the fake Hyprland scenarios (slow-status, late-status, no-status, their controls) need Unix sockets, which cannot be created here (sandbox): NOT VERIFIED"
+  exit $fail
+fi
+
+if run slow slow-status slow-status "$tmp/cfg"; then
+  if grep -q "lock-monitor-model: PASS slow-status" <<<"$out"; then
+    pass "slow first answer: the model fills, the stranded lock is taken over, an answer reaches checkOwnership"
+  else
+    bad "slow first answer: $(grep -E 'lock-monitor-model:|ERROR|WARN qml' <<<"$out" | head -n 5)"
+  fi
+  status_line=$(grep -n -m1 -x 'answered j/status' "$requests" | cut -d: -f1 || true)
+  monitors_line=$(grep -n -m1 -x 'request j/monitors' "$requests" | cut -d: -f1 || true)
+  if [[ -n $status_line && -n $monitors_line ]] && ((monitors_line > status_line)); then
+    pass "slow first answer: no monitors query reached Hyprland before its first answer"
+  else
+    bad "slow first answer: monitors query at line ${monitors_line:-none}, status answer at line ${status_line:-none}: $(head -n 6 "$requests" | tr '\n' ' ')"
+  fi
+  if [[ $(count "taking it over" "$out") == 1 ]]; then pass "slow first answer: the stranded lock was taken over once"; else bad "slow first answer: no takeover logged"; fi
+  empty=$(count "monitor model is empty" "$out")
+  resumed=$(count "lock state queries resume" "$out")
+  if ((empty <= 1 && resumed == empty)); then
+    pass "slow first answer: the empty model was logged at most once ($empty), and its filling as often ($resumed)"
+  else
+    bad "slow first answer: the empty model was logged $empty times, its filling $resumed times"
+  fi
+fi
+
+if run late late-status late-status "$tmp/cfg"; then
+  if grep -q "lock-monitor-model: PASS late-status" <<<"$out"; then
+    pass "late first answer: the model fills after the start-up check's ticks, the stranded lock is taken over"
+  else
+    bad "late first answer: $(grep -E 'lock-monitor-model:|ERROR|WARN qml' <<<"$out" | head -n 5)"
+  fi
+  # The check ran out of ticks first: the takeover came from the model filling (monitorsAdded), and only once.
+  unknown_at=$(grep -n -m1 "compositor lock state unknown; relying on the crash recovery marker" <<<"$out" | cut -d: -f1 || true)
+  takeover_at=$(grep -n -m1 "taking it over" <<<"$out" | cut -d: -f1 || true)
+  if grep -qx 'answered j/status' "$requests" && [[ -n $unknown_at && -n $takeover_at ]] && ((takeover_at > unknown_at)) \
+    && [[ $(count "taking it over" "$out") == 1 ]]; then
+    pass "late first answer: the check ended unknown, then took the stranded lock over once when the model filled"
+  else
+    bad "late first answer: unknown at line ${unknown_at:-none}, takeover at line ${takeover_at:-none} ($(count "taking it over" "$out") takeovers)"
+  fi
+fi
+
+if run latec late-status late-status "$tmp/cfg-norerun"; then
+  if grep -qx 'answered j/status' "$requests" && grep -q "lock-monitor-model: FAIL late-status: stranded-lock-taken-over" <<<"$out"; then
+    pass "control: without the re-run on the filling, a late first answer leaves the stranded lock alone (the bug is seen)"
+  else
+    bad "control: without the re-run the late-status probe did not fail on the takeover, or the fake was not asked: $(grep 'lock-monitor-model:' <<<"$out" || echo 'no result')"
+  fi
+fi
+
+if run nostat no-status empty "$tmp/cfg"; then
+  check_empty "no first answer"
+  # The fake did receive Quickshell's first query (held): Hyprland was there, it just never answered.
+  if grep -qx 'request j/status' "$requests"; then pass "no first answer: the fake received Quickshell's first query"; else bad "no first answer: the fake never received Quickshell's first query"; fi
+  queries=$(grep -c -x 'request j/monitors' "$requests" || true)
+  if [[ $queries == 0 ]]; then pass "no first answer: no monitors query reached Hyprland"; else bad "no first answer: $queries monitors queries reached Hyprland"; fi
+fi
+
+if run slowc slow-status slow-status "$tmp/cfg-control"; then
+  # Hyprland answered (the status answer and the lock's early monitors query are in the fake's log): the model stayed empty
+  # because of the early query, not because no Hyprland was there.
+  if grep -qx 'answered j/status' "$requests" && grep -qx 'request j/monitors' "$requests" \
+    && grep -q "lock-monitor-model: FAIL slow-status: model-filled" <<<"$out"; then
+    pass "control: with the guard removed and a slow first answer the model never fills (the bug is seen)"
+  else
+    bad "control: with the guard removed the slow-status probe did not fail on the model, or the fake was not asked: $(grep 'lock-monitor-model:' <<<"$out" || echo 'no result'); $(head -n 4 "$requests" | tr '\n' ' ')"
+  fi
+fi
+exit $fail

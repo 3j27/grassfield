@@ -1,8 +1,11 @@
 #include "foldermodel.h"
 
+#include "applicationslogic.h"
 #include "filelogic.h"
 #include "folderstylestore.h"
 #include "imageproviders.h"
+#include "imagesize.h"
+#include "recents.h"
 #include "taglogic.h"
 #include "tagsearch.h"
 #include "tagstore.h"
@@ -15,10 +18,12 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QIcon>
+#include <QImage>
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QScopedValueRollback>
 
+#include <KApplicationTrader>
 #include <KDirLister>
 #include <KDirModel>
 #include <KDirNotify>
@@ -32,7 +37,7 @@
 // QT_LOGGING_RULES="grassfield.files.debug=true": listing times, selection and expectation traces.
 Q_LOGGING_CATEGORY(lcFiles, "grassfield.files", QtInfoMsg)
 
-// The matches of a tag search: a flat list of items (the proxy reads them through FolderModel::sourceItem).
+// The matches of a tag search, or the recent files: a flat list of items (the proxy reads them through FolderModel::sourceItem).
 class ItemListModel : public QAbstractListModel
 {
 public:
@@ -48,6 +53,7 @@ public:
 
     KFileItem item(int row) const { return row >= 0 && row < m_items.size() ? m_items.at(row) : KFileItem(); }
     int rowOf(const QUrl &url) const { return m_rows.value(url, -1); }
+    const KFileItemList &items() const { return m_items; }
 
     void append(const KFileItemList &items)
     {
@@ -159,35 +165,48 @@ QString resolvedIconName(const KFileItem &item)
 
 // Only the fields the active key compares: lessThan runs O(n log n) times while a folder is listed,
 // and the MIME comment is a database lookup.
-FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key)
+// An item's MIME type name without sniffing its content on the GUI thread: the lister resolves types lazily
+// (setDelayedMimeTypes); until an item's type is known, the extension/name guess (memoized per file name: the glob lookup
+// is ~100 us and sorting asks O(n log n) times).
+QString mimeNameOf(const KFileItem &item)
 {
-    FileLogic::SortEntry e;
-    e.name = item.text();
-    e.isDir = item.isDir();
-    if (key == FileLogic::SortKey::Kind) {
-        // The lister resolves MIME types lazily (setDelayedMimeTypes): never sniff file content on the
-        // GUI thread while sorting. Until an item's type is known, use the extension/name guess.
-        if (item.isMimeTypeKnown()) {
-            e.kind = item.mimeComment();
-        } else {
-            // Memoized per file name: the glob lookup is ~100 us and lessThan asks O(n log n) times.
-            static QHash<QString, QString> guesses;
-            static const QMimeDatabase db;
-            const QString name = item.name();
-            auto it = guesses.constFind(name);
-            if (it == guesses.cend()) {
-                if (guesses.size() > 50000)
-                    guesses.clear();
-                it = guesses.insert(name, db.mimeTypeForFile(name, QMimeDatabase::MatchExtension).comment());
-            }
-            e.kind = *it;
-        }
+    if (item.isMimeTypeKnown())
+        return item.mimetype();
+    static QHash<QString, QString> guesses;
+    static const QMimeDatabase db;
+    const QString name = item.name();
+    auto it = guesses.constFind(name);
+    if (it == guesses.cend()) {
+        if (guesses.size() > 50000)
+            guesses.clear();
+        it = guesses.insert(name, db.mimeTypeForFile(name, QMimeDatabase::MatchExtension).name());
     }
-    else if (key == FileLogic::SortKey::Date)
-        e.modified = item.time(KFileItem::ModificationTime);
-    else if (key == FileLogic::SortKey::Size)
-        e.size = e.isDir ? -1 : qint64(item.size());
-    return e;
+    return *it;
+}
+
+// A MIME type's comment, its name followed by its ancestors, and the name of the application that opens it by
+// default: memoized per type (KApplicationTrader reads the service database).
+struct MimeFacts {
+    QString comment;
+    QStringList lineage;
+    QString application;
+};
+
+const MimeFacts &mimeFacts(const QString &name)
+{
+    static QHash<QString, MimeFacts> facts;
+    auto it = facts.constFind(name);
+    if (it == facts.cend()) {
+        static const QMimeDatabase db;
+        const QMimeType type = db.mimeTypeForName(name);
+        MimeFacts f;
+        f.comment = type.comment();
+        f.lineage = QStringList{type.name()} + type.allAncestors();
+        const KService::Ptr service = KApplicationTrader::preferredService(type.name());
+        f.application = service ? service->name() : QString();
+        it = facts.insert(name, f);
+    }
+    return *it;
 }
 
 struct PreviewMimes {
@@ -234,6 +253,32 @@ FolderModel::FolderModel(QObject *parent)
         if (isApplications())
             loadApplications();
     });
+
+    // Before the proxy's own connections (setSourceModel): the items that changed are grouped afresh when they are sorted
+    // again (KDirModel reports each item whose type it found, one by one).
+    connect(m_dirModel, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        for (int row = topLeft.row(); row <= bottomRight.row(); row++)
+            m_groupCache.remove(m_dirModel->itemForIndex(topLeft.siblingAtRow(row)).url());
+    });
+    connect(m_results, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        for (int row = topLeft.row(); row <= bottomRight.row(); row++)
+            m_groupCache.remove(m_results->item(row).url());
+    });
+    // Items that go, and the old names of renamed ones, leave the cache too: a new item at the same URL is grouped afresh.
+    connect(m_dirModel, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this](const QModelIndex &parent, int first, int last) {
+        for (int row = first; row <= last; row++)
+            m_groupCache.remove(m_dirModel->itemForIndex(m_dirModel->index(row, 0, parent)).url());
+    });
+    connect(m_results, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this](const QModelIndex &, int first, int last) {
+        for (int row = first; row <= last; row++)
+            m_groupCache.remove(m_results->item(row).url());
+    });
+    connect(m_lister, &KCoreDirLister::refreshItems, this, [this](const QList<QPair<KFileItem, KFileItem>> &items) {
+        for (const auto &change : items)
+            m_groupCache.remove(change.first.url());
+    });
+    m_dayTimer.setSingleShot(true);
+    connect(&m_dayTimer, &QTimer::timeout, this, &FolderModel::regroupForNewDay);
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -245,6 +290,17 @@ FolderModel::FolderModel(QObject *parent)
     m_collator.setNumericMode(true);
     m_collator.setCaseSensitivity(Qt::CaseInsensitive);
     sort(0, Qt::AscendingOrder);
+    // Rows that come, go or change may change the groups (the list view's sections follow GroupRole by themselves).
+    connect(this, &QAbstractItemModel::rowsInserted, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::modelReset, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::layoutChanged, this, &FolderModel::groupsDirty);
+    connect(this, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &, const QModelIndex &, const QList<int> &roles) {
+        // Selection, thumbnails, picture sizes and folder looks do not move an item to another group.
+        if (m_groupBy != 0 && !roles.contains(SelectedRole) && !roles.contains(ThumbnailRole) && !roles.contains(LargeThumbnailRole)
+            && !roles.contains(DimensionsRole))
+            groupsDirty();
+    });
 
     connect(m_lister, &KCoreDirLister::started, this, [this] {
         m_loading = true;
@@ -359,7 +415,7 @@ FolderModel::~FolderModel()
 
 void FolderModel::setUrl(const QUrl &url)
 {
-    const bool search = TagLogic::isSearchUrl(url);
+    const bool search = TagLogic::isSearchUrl(url) || Recents::isRecentsUrl(url);
     const bool applications = ApplicationsLogic::isLocationUrl(url);
     const QUrl clean = search ? url : applications ? ApplicationsLogic::locationUrl() : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
     if (clean == m_url && (search || applications || m_lister->url().isValid()))
@@ -373,17 +429,23 @@ void FolderModel::setUrl(const QUrl &url)
     clearAllPreviews();
     m_tags.clear();
     m_styles.clear();
+    m_dimensions.clear();
+    clearGroupCache();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
     stopSearch();
+    stopRecents();
     if (search) {
-        // The folder listing stops; the matches of the search are the rows.
+        // The folder listing stops; the matches of the search (or the recent files) are the rows.
         m_lister->stop();
         m_results->clear();
         if (sourceModel() != m_results)
             setSourceModel(m_results);
-        startSearch();
+        if (Recents::isRecentsUrl(m_url))
+            startRecents();
+        else
+            startSearch();
     } else if (applications) {
         // The folder listing stops; the installed applications are the rows.
         m_lister->stop();
@@ -407,12 +469,83 @@ void FolderModel::setUrl(const QUrl &url)
 
 bool FolderModel::isSearch() const
 {
-    return TagLogic::isSearchUrl(m_url);
+    return TagLogic::isSearchUrl(m_url) || isRecents();
+}
+
+bool FolderModel::isRecents() const
+{
+    return Recents::isRecentsUrl(m_url);
+}
+
+void FolderModel::startRecents()
+{
+    const quint64 generation = ++m_recentsGeneration;
+    if (!m_recentsWatcher) {
+        m_recentsWatcher = new QFileSystemWatcher(this);
+        // Applications rewrite the file (a new inode): the folder is watched too. A burst of changes reads it once.
+        m_recentsTimer.setSingleShot(true);
+        m_recentsTimer.setInterval(300);
+        connect(&m_recentsTimer, &QTimer::timeout, this, [this] {
+            if (isRecents())
+                startRecents();
+        });
+        connect(m_recentsWatcher, &QFileSystemWatcher::fileChanged, &m_recentsTimer, qOverload<>(&QTimer::start));
+        connect(m_recentsWatcher, &QFileSystemWatcher::directoryChanged, &m_recentsTimer, qOverload<>(&QTimer::start));
+    }
+    const QString file = Recents::xbelPath();
+    m_recentsWatcher->removePaths(m_recentsWatcher->files() + m_recentsWatcher->directories());
+    if (QFileInfo::exists(file))
+        m_recentsWatcher->addPath(file);
+    if (QFileInfo::exists(QFileInfo(file).absolutePath()))
+        m_recentsWatcher->addPath(QFileInfo(file).absolutePath());
+    watchChanges();
+    m_listTimer.start();
+    m_loading = true;
+    emit loadingChanged();
+    auto *loader = new RecentsLoader(generation, file, Recents::renamed());
+    connect(loader, &RecentsLoader::loaded, this, [this](quint64 gen, const QStringList &paths, const QVariantList &used) {
+        if (gen != m_recentsGeneration || !isRecents())
+            return;
+        m_recentTimes.clear();
+        for (int i = 0; i < paths.size() && i < used.size(); ++i)
+            m_recentTimes.insert(QUrl::fromLocalFile(paths.at(i)), used.at(i).toDateTime());
+        // The list as it is now: files that left it go, new ones come (the selection keeps what is still listed).
+        QList<QUrl> gone;
+        const QSet<QString> now(paths.cbegin(), paths.cend());
+        for (const KFileItem &item : m_results->items()) {
+            if (!now.contains(item.localPath()))
+                gone.append(item.url());
+        }
+        removeResults(gone);
+        QStringList fresh;
+        for (const QString &path : paths) {
+            if (m_results->rowOf(QUrl::fromLocalFile(path)) < 0)
+                fresh.append(path);
+        }
+        addResults(fresh);
+        clearGroupCache();
+        invalidate();
+        qCDebug(lcFiles) << "recents" << rowCount() << "files in" << m_listTimer.elapsed() << "ms";
+        m_loading = false;
+        emit loadingChanged();
+    });
+    connect(loader, &QThread::finished, loader, &QObject::deleteLater);
+    loader->start();
+}
+
+void FolderModel::stopRecents()
+{
+    // A load in flight finishes on its own; its result is dropped (generation).
+    ++m_recentsGeneration;
+    m_recentTimes.clear();
+    m_recentsTimer.stop();
+    if (m_recentsWatcher)
+        m_recentsWatcher->removePaths(m_recentsWatcher->files() + m_recentsWatcher->directories());
 }
 
 void FolderModel::setSortKey(int key)
 {
-    key = qBound(0, key, 3);
+    key = qBound(0, key, FileLogic::kSortKeyCount - 1);
     if (key == m_sortKey)
         return;
     m_sortKey = key;
@@ -483,6 +616,8 @@ QString FolderModel::title() const
 {
     if (isApplications())
         return tr("Applications");
+    if (isRecents())
+        return tr("Recents");
     if (isSearch())
         return TagLogic::displayName(TagLogic::searchTag(m_url));
     const QList<FileLogic::Segment> segments = FileLogic::pathSegments(m_url, QDir::homePath(), tr("Computer"), tr("Trash"));
@@ -536,6 +671,7 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {TagColorsRole, "tagColors"},
         {FolderColorRole, "folderColor"},
         {FolderGlyphRole, "folderGlyph"},
+        {GroupRole, "group"},
     };
 }
 
@@ -598,6 +734,8 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
         return styleOf(item).color;
     case FolderGlyphRole:
         return styleOf(item).glyph;
+    case GroupRole:
+        return groupFor(item).title;
     case TagColorsRole: {
         QVariantList colors;
         const QList<int> indices = TagLogic::colorIndices(tagsOf(item));
@@ -726,7 +864,8 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
     for (const QUrl &url : urls) {
         m_tags.remove(url);
         m_styles.remove(url);
-        if (!isSearch()) {
+        // Only a tag search's rows depend on tags; Recents lists its files whatever their tags.
+        if (!isSearch() || isRecents()) {
             emitRowChanged(url, {TagsRole, TagColorsRole});
             continue;
         }
@@ -745,12 +884,157 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
         removeResults(gone);
     if (!joined.isEmpty())
         addResults(joined);
+    // Tags are read by the proxy, not its source: a sort or grouping by tags is redone here.
+    if (m_sortKey == int(FileLogic::SortKey::Tags) || m_groupBy == int(FileLogic::GroupBy::Tags)) {
+        for (const QUrl &url : urls)
+            m_groupCache.remove(url);
+        invalidate();
+    }
+}
+
+FileLogic::SortEntry FolderModel::sortEntry(const KFileItem &item, FileLogic::SortKey key) const
+{
+    using FileLogic::GroupBy;
+    using FileLogic::SortKey;
+    const auto by = GroupBy(m_groupBy);
+    FileLogic::SortEntry e;
+    e.name = item.text();
+    e.isDir = item.isDir();
+    const bool typed = key == SortKey::Kind || key == SortKey::Application || by == GroupBy::Kind || by == GroupBy::Application;
+    if (typed && !e.isDir) {
+        const MimeFacts facts = mimeFacts(mimeNameOf(item));
+        e.kind = facts.comment;
+        e.mimeTypes = facts.lineage;
+        e.application = facts.application;
+    } else if (key == SortKey::Kind) {
+        e.kind = item.mimeComment();
+    }
+    if (key == SortKey::Date || by == GroupBy::Modified)
+        e.modified = item.time(KFileItem::ModificationTime);
+    if (key == SortKey::Created || by == GroupBy::Created)
+        e.created = item.time(KFileItem::CreationTime);
+    if (key == SortKey::Opened || by == GroupBy::Opened)
+        e.opened = isRecents() ? m_recentTimes.value(item.url()) : item.time(KFileItem::AccessTime);
+    if (key == SortKey::Size || by == GroupBy::Size)
+        e.size = e.isDir ? -1 : qint64(item.size());
+    if (key == SortKey::Tags || by == GroupBy::Tags)
+        e.tags = TagLogic::displayOrder(tagsOf(item));
+    return e;
+}
+
+FileLogic::Group FolderModel::groupFor(const KFileItem &item) const
+{
+    if (m_groupBy == 0)
+        return {};
+    const QUrl url = item.url();
+    const auto it = m_groupCache.constFind(url);
+    if (it != m_groupCache.cend())
+        return *it;
+    if (!m_groupClock.isValid() || m_groupClock.elapsed() > 60000) {
+        m_groupNow = QDateTime::currentDateTime();
+        m_groupClock.restart();
+        if (!m_groupDay.isValid()) {
+            m_groupDay = m_groupNow.date();
+        } else if (m_groupNow.date() != m_groupDay && !m_newDayQueued) {
+            // Not now: this may be in the middle of a sort.
+            m_newDayQueued = true;
+            QTimer::singleShot(0, const_cast<FolderModel *>(this), &FolderModel::regroupForNewDay);
+        }
+    }
+    const FileLogic::Group g = FileLogic::groupOf(sortEntry(item, FileLogic::SortKey::Name), FileLogic::GroupBy(m_groupBy), m_groupNow);
+    m_groupCache.insert(url, g);
+    return g;
+}
+
+void FolderModel::groupsDirty()
+{
+    m_groupsValid = false;
+    if (m_groupsNotifyQueued || m_groupBy == 0)
+        return;
+    m_groupsNotifyQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_groupsNotifyQueued = false;
+        emit groupsChanged();
+    });
+}
+
+void FolderModel::clearGroupCache()
+{
+    m_groupCache.clear();
+    m_groupDay = QDate();
+}
+
+void FolderModel::regroupForNewDay()
+{
+    m_newDayQueued = false;
+    if (m_groupBy == 0)
+        return;
+    clearGroupCache();
+    m_groupClock.invalidate();
+    armDayTimer();
+    // Sorted again: the layout change marks the groups dirty.
+    invalidate();
+}
+
+void FolderModel::armDayTimer()
+{
+    if (m_groupBy == 0) {
+        m_dayTimer.stop();
+        return;
+    }
+    const QDateTime now = QDateTime::currentDateTime();
+    // A second past midnight (a timer may fire a little early); a suspended machine is caught by groupFor on wake.
+    m_dayTimer.start(int(qMax<qint64>(1000, now.msecsTo(QDateTime(now.date().addDays(1), QTime(0, 0))) + 1000)));
+}
+
+QVariantList FolderModel::groups() const
+{
+    if (m_groupsValid)
+        return m_groups;
+    m_groups.clear();
+    m_groupsValid = true;
+    if (m_groupBy == 0)
+        return m_groups;
+    const int n = rowCount();
+    QString title;
+    int first = 0;
+    for (int row = 0; row < n; row++) {
+        const QString t = groupFor(sourceItem(mapToSource(index(row, 0)))).title;
+        if (row > 0 && t != title) {
+            m_groups.append(QVariantMap{{QStringLiteral("title"), title}, {QStringLiteral("first"), first}, {QStringLiteral("count"), row - first}});
+            first = row;
+        }
+        title = t;
+    }
+    if (n > 0)
+        m_groups.append(QVariantMap{{QStringLiteral("title"), title}, {QStringLiteral("first"), first}, {QStringLiteral("count"), n - first}});
+    return m_groups;
+}
+
+void FolderModel::setGroupBy(int by)
+{
+    by = qBound(0, by, FileLogic::kGroupByCount - 1);
+    if (by == m_groupBy)
+        return;
+    m_groupBy = by;
+    clearGroupCache();
+    armDayTimer();
+    m_groupsValid = false;
+    invalidate();
+    emit sortChanged();
+    emit groupsChanged();
 }
 
 bool FolderModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
     const KFileItem a = sourceItem(left);
     const KFileItem b = sourceItem(right);
+    if (m_groupBy != 0) {
+        // Groups first, in their own order whatever the sort direction (Finder).
+        const int g = FileLogic::compareGroups(groupFor(a), groupFor(b), m_collator);
+        if (g != 0)
+            return g < 0;
+    }
     const auto key = FileLogic::SortKey(m_sortKey);
     return FileLogic::compareEntries(sortEntry(a, key), sortEntry(b, key), key, m_descending, m_foldersFirst, m_collator) < 0;
 }
@@ -984,6 +1268,7 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("url")] = item.url();
     m[QStringLiteral("iconName")] = resolvedIconName(item);
     m[QStringLiteral("thumbnail")] = thumbnailFor(m_small, item.url());
+    m[QStringLiteral("largeThumbnail")] = thumbnailFor(m_large, item.url());
     m[QStringLiteral("kind")] = item.mimeComment();
     m[QStringLiteral("mimeType")] = item.mimetype();
     m[QStringLiteral("isDir")] = item.isDir();
@@ -1007,6 +1292,7 @@ QVariantMap FolderModel::info(int row) const
     for (const QString &tag : tags)
         names.append(TagLogic::displayName(tag));
     m[QStringLiteral("tags")] = names;
+    m[QStringLiteral("tagKeys")] = tags;
     QVariantList colors;
     const QList<int> indices = TagLogic::colorIndices(tags);
     for (int c : indices)
@@ -1016,6 +1302,44 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("folderColor")] = style.color;
     m[QStringLiteral("folderGlyph")] = style.glyph;
     return m;
+}
+
+QString FolderModel::dimensionsAt(int row)
+{
+    const KFileItem item = itemAt(row);
+    // What the listing already knows decides, nothing is looked at here: a local regular file (the listing's mode, links
+    // followed) whose type says picture. ImageSize::check() looks again on the worker before anything is opened.
+    if (item.isNull() || !item.isLocalFile() || item.isDir() || !item.isRegularFile() || !item.currentMimeType().name().startsWith(QLatin1String("image/")))
+        return QString();
+    const QString path = item.localPath();
+    if (path.isEmpty())
+        return QString();
+    const QDateTime modified = item.time(KFileItem::ModificationTime);
+    const qint64 size = qint64(item.size());
+    const auto it = m_dimensions.constFind(path);
+    if (it != m_dimensions.cend() && it->modified == modified && it->size == size)
+        return it->pending || !it->pixels.isValid() ? QString() : tr("%1 × %2").arg(it->pixels.width()).arg(it->pixels.height());
+    if (m_dimensions.size() >= kMaxDimensions)
+        m_dimensions.clear();
+    m_dimensions.insert(path, {item.url(), modified, size, true, QSize()});
+    if (!m_sizeReader)
+        m_sizeReader = std::make_unique<ImageSize::Reader>(this, [this](const QString &p, QSize pixels) { dimensionsReady(p, pixels); });
+    m_sizeReader->request(path);
+    return QString();
+}
+
+void FolderModel::dimensionsReady(const QString &path, QSize pixels)
+{
+    const auto it = m_dimensions.find(path);
+    // Dropped meanwhile (another folder, the cache full): a later dimensionsAt asks again.
+    if (it == m_dimensions.end() || !it->pending)
+        return;
+    it->pending = false;
+    it->pixels = pixels;
+    // A file changed while it was read is asked again by the next dimensionsAt (its time or size no longer match).
+    const int r = rowForUrl(it->url);
+    if (r >= 0)
+        emit dataChanged(index(r, 0), index(r, 0), {DimensionsRole});
 }
 
 void FolderModel::requestPreview(int row, bool large)
@@ -1320,13 +1644,24 @@ void FolderModel::renameResult(const QUrl &from, const QUrl &to)
 {
     if (m_results->rowOf(from) < 0)
         return;
-    // Moved out of the searched folder (or to the Trash): it leaves the results.
-    const QUrl folder = TagLogic::searchFolder(m_url);
-    if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
-        removeResults({from});
-        return;
+    if (isRecents()) {
+        // Still a recent file under its new name; to the Trash, it leaves Recents.
+        if (!to.isLocalFile()) {
+            removeResults({from});
+            return;
+        }
+        Recents::noteRenamed(from.toLocalFile(), to.toLocalFile());
+        m_recentTimes.insert(to, m_recentTimes.take(from));
+    } else {
+        // Moved out of the searched folder (or to the Trash): it leaves the results.
+        const QUrl folder = TagLogic::searchFolder(m_url);
+        if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
+            removeResults({from});
+            return;
+        }
     }
     const bool selected = m_selected.remove(from);
+    m_groupCache.remove(from);
     forgetThumbnail(m_small, from, false);
     forgetThumbnail(m_large, from, false);
     m_tags.remove(from);

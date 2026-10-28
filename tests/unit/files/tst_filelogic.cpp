@@ -106,6 +106,126 @@ TEST(SortKeys, DefaultDirections)
     EXPECT_TRUE(defaultDescending(SortKey::Size));
 }
 
+TEST(SortKeys, NewKeysPutItemsWithoutAValueLast)
+{
+    const QCollator c = naturalCollator();
+    const QDateTime older(QDate(2026, 1, 1), QTime(10, 0));
+    const QDateTime newer(QDate(2026, 6, 1), QTime(10, 0));
+    SortEntry a = file("a"), b = file("b"), none = file("c");
+    a.created = older;
+    b.created = newer;
+    EXPECT_LT(compareEntries(a, b, SortKey::Created, false, false, c), 0);
+    EXPECT_LT(compareEntries(b, a, SortKey::Created, true, false, c), 0);
+    EXPECT_LT(compareEntries(a, none, SortKey::Created, false, false, c), 0) << "no creation date: last";
+    EXPECT_LT(compareEntries(a, none, SortKey::Created, true, false, c), 0) << "last in both directions";
+    a.opened = newer;
+    EXPECT_LT(compareEntries(a, b, SortKey::Opened, false, false, c), 0) << "b has no last-opened date";
+
+    SortEntry red = file("z"), work = file("y"), plain = file("x");
+    red.tags = {QStringLiteral("Red"), QStringLiteral("Work")};
+    work.tags = {QStringLiteral("Work")};
+    EXPECT_LT(compareEntries(red, work, SortKey::Tags, false, false, c), 0) << "colour tags before the others";
+    EXPECT_LT(compareEntries(work, plain, SortKey::Tags, false, false, c), 0) << "untagged last";
+    EXPECT_LT(compareEntries(work, plain, SortKey::Tags, true, false, c), 0);
+
+    SortEntry viewer = file("b"), editor = file("a"), nothing = file("c");
+    viewer.application = QStringLiteral("Viewer");
+    editor.application = QStringLiteral("Editor");
+    EXPECT_LT(compareEntries(editor, viewer, SortKey::Application, false, false, c), 0);
+    EXPECT_LT(compareEntries(viewer, nothing, SortKey::Application, false, false, c), 0);
+    EXPECT_TRUE(defaultDescending(SortKey::Created));
+    EXPECT_TRUE(defaultDescending(SortKey::Opened));
+    EXPECT_FALSE(defaultDescending(SortKey::Tags));
+    EXPECT_FALSE(defaultDescending(SortKey::Application));
+}
+
+TEST(Drops, FinderModifiers)
+{
+    EXPECT_EQ(dropAction(false, false, true), DropAction::Move) << "same volume: move";
+    EXPECT_EQ(dropAction(false, false, false), DropAction::Copy) << "another volume: copy";
+    EXPECT_EQ(dropAction(false, true, true), DropAction::Copy) << "Option copies";
+    EXPECT_EQ(dropAction(true, false, false), DropAction::Move) << "Cmd moves, even to another volume";
+    EXPECT_EQ(dropAction(true, true, true), DropAction::Link) << "Option-Cmd makes an alias";
+    EXPECT_EQ(dropAction(true, true, false), DropAction::Link);
+}
+
+TEST(Groups, DatesNewestFirst)
+{
+    const QLocale en(QLocale::English, QLocale::UnitedStates);
+    const QDateTime now(QDate(2026, 10, 26), QTime(15, 0));
+    auto at = [](int y, int m, int d) {
+        SortEntry e = file("f");
+        e.modified = QDateTime(QDate(y, m, d), QTime(9, 0));
+        return e;
+    };
+    EXPECT_EQ(groupOf(at(2026, 10, 26), GroupBy::Modified, now, en).title, QStringLiteral("Today"));
+    EXPECT_EQ(groupOf(at(2026, 10, 25), GroupBy::Modified, now, en).title, QStringLiteral("Yesterday"));
+    EXPECT_EQ(groupOf(at(2026, 10, 20), GroupBy::Modified, now, en).title, QStringLiteral("Previous 7 Days"));
+    EXPECT_EQ(groupOf(at(2026, 10, 1), GroupBy::Modified, now, en).title, QStringLiteral("Previous 30 Days"));
+    EXPECT_EQ(groupOf(at(2026, 3, 4), GroupBy::Modified, now, en).title, QStringLiteral("March"));
+    EXPECT_EQ(groupOf(at(2024, 12, 31), GroupBy::Modified, now, en).title, QStringLiteral("2024"));
+    EXPECT_EQ(groupOf(file("f"), GroupBy::Modified, now, en).title, QStringLiteral("Unknown"));
+    const QCollator c = naturalCollator();
+    const QList<SortEntry> order = {at(2026, 10, 26), at(2026, 10, 25), at(2026, 10, 20), at(2026, 10, 1), at(2026, 9, 1), at(2026, 3, 4),
+                                    at(2025, 7, 1), at(2024, 12, 31), file("f")};
+    for (int i = 1; i < order.size(); i++)
+        EXPECT_LT(compareGroups(groupOf(order[i - 1], GroupBy::Modified, now, en), groupOf(order[i], GroupBy::Modified, now, en), c), 0) << i;
+}
+
+TEST(Groups, KindNameSizeTagsApplication)
+{
+    const QLocale en(QLocale::English, QLocale::UnitedStates);
+    const QDateTime now(QDate(2026, 10, 26), QTime(15, 0));
+    auto typed = [](const QStringList &types) {
+        SortEntry e = file("f");
+        e.mimeTypes = types;
+        return e;
+    };
+    EXPECT_EQ(groupOf(folder("d"), GroupBy::Kind, now, en).title, QStringLiteral("Folders"));
+    EXPECT_EQ(groupOf(typed({"image/png"}), GroupBy::Kind, now, en).title, QStringLiteral("Images"));
+    EXPECT_EQ(groupOf(typed({"application/pdf"}), GroupBy::Kind, now, en).title, QStringLiteral("PDF Documents"));
+    EXPECT_EQ(groupOf(typed({"application/x-shellscript", "application/x-executable", "text/plain"}), GroupBy::Kind, now, en).title,
+              QStringLiteral("Applications"))
+        << "the type's own match wins over its ancestors'";
+    EXPECT_EQ(groupOf(typed({"text/markdown", "text/plain"}), GroupBy::Kind, now, en).title, QStringLiteral("Documents"));
+    EXPECT_EQ(groupOf(typed({"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), GroupBy::Kind, now, en).title,
+              QStringLiteral("Spreadsheets"));
+    const Group other = groupOf(typed({"application/octet-stream"}), GroupBy::Kind, now, en);
+    EXPECT_EQ(other.title, QStringLiteral("Other"));
+    const QCollator c = naturalCollator();
+    EXPECT_LT(compareGroups(groupOf(typed({"image/png"}), GroupBy::Kind, now, en), other, c), 0) << "Other last";
+
+    EXPECT_EQ(groupOf(file("apple"), GroupBy::Name, now, en).title, QStringLiteral("A"));
+    EXPECT_EQ(groupOf(file("Éclair"), GroupBy::Name, now, en).title, QStringLiteral("E")) << "accents fold";
+    EXPECT_EQ(groupOf(file("2026 notes"), GroupBy::Name, now, en).title, QStringLiteral("#"));
+    EXPECT_LT(compareGroups(groupOf(file("2026"), GroupBy::Name, now, en), groupOf(file("a"), GroupBy::Name, now, en), c), 0);
+
+    EXPECT_EQ(groupOf(file("f", 0), GroupBy::Size, now, en).title, QStringLiteral("Zero bytes"));
+    EXPECT_EQ(groupOf(file("f", 5000), GroupBy::Size, now, en).title, QStringLiteral("Less than 100 KB"));
+    EXPECT_EQ(groupOf(file("f", 500000), GroupBy::Size, now, en).title, QStringLiteral("100 KB to 1 MB"));
+    EXPECT_EQ(groupOf(file("f", 5000000), GroupBy::Size, now, en).title, QStringLiteral("1 MB to 100 MB"));
+    EXPECT_EQ(groupOf(file("f", 500000000), GroupBy::Size, now, en).title, QStringLiteral("100 MB to 1 GB"));
+    EXPECT_EQ(groupOf(file("f", 5000000000LL), GroupBy::Size, now, en).title, QStringLiteral("More than 1 GB"));
+    EXPECT_LT(compareGroups(groupOf(file("f", 5000000000LL), GroupBy::Size, now, en), groupOf(file("f", 0), GroupBy::Size, now, en), c), 0)
+        << "largest first";
+
+    SortEntry red = file("r"), work = file("w"), plain = file("p");
+    red.tags = {QStringLiteral("Red"), QStringLiteral("Work")};
+    work.tags = {QStringLiteral("Work")};
+    EXPECT_EQ(groupOf(red, GroupBy::Tags, now, en).title, QStringLiteral("Red")) << "the first tag";
+    EXPECT_EQ(groupOf(work, GroupBy::Tags, now, en).title, QStringLiteral("Work"));
+    EXPECT_EQ(groupOf(plain, GroupBy::Tags, now, en).title, QStringLiteral("No Tags"));
+    EXPECT_LT(compareGroups(groupOf(red, GroupBy::Tags, now, en), groupOf(work, GroupBy::Tags, now, en), c), 0);
+    EXPECT_LT(compareGroups(groupOf(work, GroupBy::Tags, now, en), groupOf(plain, GroupBy::Tags, now, en), c), 0);
+
+    SortEntry app = file("a");
+    app.application = QStringLiteral("Viewer");
+    EXPECT_EQ(groupOf(app, GroupBy::Application, now, en).title, QStringLiteral("Viewer"));
+    EXPECT_EQ(groupOf(file("b"), GroupBy::Application, now, en).title, QStringLiteral("Other"));
+    EXPECT_EQ(groupOf(folder("d"), GroupBy::Application, now, en).title, QStringLiteral("Folders"));
+    EXPECT_TRUE(groupOf(file("x"), GroupBy::None, now, en).title.isEmpty());
+}
+
 TEST(SizeFormat, Bytes)
 {
     const QLocale c = QLocale::c();
@@ -292,4 +412,33 @@ TEST(NetworkPlace, HidesTheAppleDevicesEntry)
     EXPECT_FALSE(hiddenNetworkEntry(QUrl("remote:/mtp-network"), QUrl("mtp:/")));
     // Only the Network place: a local file of that name stays visible.
     EXPECT_FALSE(hiddenNetworkEntry(QUrl::fromLocalFile("/tmp/afc-network.desktop"), QUrl::fromLocalFile("/tmp/afc-network.desktop")));
+}
+
+// ADR-0026 part 1: the kept window size. QSettings returns what Files.conf holds (a string from the INI file, an int
+// once written in this process); anything but an integer side in 200..16384 reads as none kept.
+TEST(WindowSize, AKeptSideIsAnIntegerInBounds)
+{
+    EXPECT_EQ(keptWindowSide(QVariant(1000)), 1000);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("640"))), 640);
+    EXPECT_EQ(keptWindowSide(QVariant(kMinKeptWindowSide)), kMinKeptWindowSide);
+    EXPECT_EQ(keptWindowSide(QVariant(kMaxKeptWindowSide)), kMaxKeptWindowSide);
+    EXPECT_EQ(keptWindowSide(QVariant(kMinKeptWindowSide - 1)), 0) << "too small: an invisible window";
+    EXPECT_EQ(keptWindowSide(QVariant(kMaxKeptWindowSide + 1)), 0) << "too large: a giant window";
+    EXPECT_EQ(keptWindowSide(QVariant(-800)), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("99999999999"))), 0) << "past int";
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("wide"))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral(""))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant(QStringLiteral("640px"))), 0);
+    EXPECT_EQ(keptWindowSide(QVariant()), 0) << "never kept";
+}
+
+TEST(WindowSize, OnlyASizeInBoundsIsKept)
+{
+    EXPECT_TRUE(keepsWindowSize(920, 560));
+    EXPECT_TRUE(keepsWindowSize(kMinKeptWindowSide, kMaxKeptWindowSide));
+    EXPECT_FALSE(keepsWindowSize(kMinKeptWindowSide - 1, 560));
+    EXPECT_FALSE(keepsWindowSize(920, kMinKeptWindowSide - 1));
+    EXPECT_FALSE(keepsWindowSize(kMaxKeptWindowSide + 1, 560));
+    EXPECT_FALSE(keepsWindowSize(920, kMaxKeptWindowSide + 1));
+    EXPECT_FALSE(keepsWindowSize(0, 0));
 }

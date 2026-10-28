@@ -1,0 +1,140 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Grassfield.Ui
+
+// A row of pictures to choose from, each with its name under it (macOS 27 Appearance: the Light / Dark / Auto thumbnails,
+// the icon styles). The chosen one has an accent ring around its picture and its name in bold and the text colour; the
+// others have their name in the secondary colour. One focus stop like a segmented control: Left/Right (and Up/Down) move
+// the choice; the keyboard focus is a ring in the focus colour outside the selection ring. The component's box is the
+// pictures with room for their rings; the names are centred under them and may reach past it.
+// model: [{id, text}]; value: the chosen id; picked(id) on a user change. picture: a Component drawn in each cell, whose
+// item gets `choice` (the id).
+FocusScope {
+    id: root
+
+    property var model: []
+    property string value: ""
+    property string accessibleName: ""
+    property real pictureWidth: 0
+    property real pictureHeight: 0
+    property real pictureRadius: 0
+    // From one picture's left edge to the next one's.
+    property real pitch: 0
+    property real ringGap: 0
+    // The name's baseline below the picture.
+    property real captionBaseline: 0
+    property Component picture: null
+
+    signal picked(string id)
+
+    readonly property real ringPad: Tokens.settingsChoiceRingWidth + root.ringGap
+    readonly property int currentIndex: {
+        for (let i = 0; i < root.model.length; i++) {
+            if (root.model[i].id === root.value)
+                return i;
+        }
+        return -1;
+    }
+
+    implicitWidth: root.model.length > 0 ? (root.model.length - 1) * root.pitch + root.pictureWidth + 2 * root.ringPad : 0
+    implicitHeight: root.ringPad + root.pictureHeight + root.captionBaseline + Tokens.spacingXs
+    activeFocusOnTab: true
+    Accessible.role: Accessible.RadioButton
+    Accessible.name: root.accessibleName
+    Accessible.description: root.currentIndex >= 0 ? root.model[root.currentIndex].text : ""
+    Accessible.focusable: true
+
+    function step(direction: int): void {
+        if (root.model.length === 0)
+            return;
+        const next = Math.max(0, Math.min(root.model.length - 1, (root.currentIndex < 0 ? 0 : root.currentIndex) + direction));
+        if (next !== root.currentIndex)
+            root.picked(root.model[next].id);
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) {
+            root.step(-1);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Down) {
+            root.step(1);
+            event.accepted = true;
+        }
+    }
+
+    Repeater {
+        model: root.model
+
+        delegate: Item {
+            id: cell
+
+            required property var modelData
+            required property int index
+            readonly property bool selected: cell.index === root.currentIndex
+
+            x: root.ringPad + cell.index * root.pitch
+            y: root.ringPad
+            width: root.pictureWidth
+            height: root.pictureHeight + root.captionBaseline
+            Accessible.role: Accessible.RadioButton
+            Accessible.name: cell.modelData.text
+            Accessible.checkable: true
+            Accessible.checked: cell.selected
+            Accessible.onPressAction: root.picked(cell.modelData.id)
+
+            // The keyboard focus: outside the selection ring, set off from it, in the focus colour.
+            Rectangle {
+                x: -(root.ringPad + Tokens.iconModePreviewFocusGap + Tokens.controlFocusOutline)
+                y: x
+                width: root.pictureWidth - 2 * x
+                height: root.pictureHeight - 2 * x
+                radius: root.pictureRadius - x
+                color: "transparent"
+                border.width: Tokens.controlFocusOutline
+                border.color: Appearance.focusRingColor
+                visible: cell.selected && root.activeFocus
+            }
+
+            // The selection ring, in the accent, a little outside the picture.
+            Rectangle {
+                x: -root.ringPad
+                y: x
+                width: root.pictureWidth - 2 * x
+                height: root.pictureHeight - 2 * x
+                radius: root.pictureRadius - x
+                color: "transparent"
+                border.width: Tokens.settingsChoiceRingWidth
+                border.color: Appearance.colors.accent
+                visible: cell.selected
+            }
+
+            Loader {
+                width: root.pictureWidth
+                height: root.pictureHeight
+                sourceComponent: root.picture
+                onLoaded: item.choice = Qt.binding(() => cell.modelData.id)
+            }
+
+            Text {
+                id: caption
+                textFormat: Text.PlainText
+                x: Math.round((root.pictureWidth - width) / 2)
+                y: root.pictureHeight + root.captionBaseline - baselineOffset
+                text: cell.modelData.text
+                color: cell.selected ? Appearance.colors.text : Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.settingsCaptionDetailSize
+                font.weight: cell.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.ArrowCursor
+                onClicked: {
+                    root.forceActiveFocus();
+                    root.picked(cell.modelData.id);
+                }
+            }
+        }
+    }
+}

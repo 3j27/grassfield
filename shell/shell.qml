@@ -13,6 +13,7 @@ import qs.osd
 import qs.overview
 import qs.overlay
 import qs.platform
+import qs.saver
 import qs.search
 import qs.security.idle
 import qs.security.lock
@@ -36,6 +37,18 @@ ShellRoot {
     // locale) before the surfaces below evaluate their qsTr() strings.
     readonly property string language: Translator.language
 
+    // The session configuration's watchers (keyboard.lua and mouse-trackpad.lua, SessionConfig, ADR-0031 amendment) start with
+    // the shell: Quickshell makes a singleton only when it is first used, and nothing else uses it before a display trial.
+    readonly property int sessionConfigReloads: SessionConfig.reloads
+
+    // The formats of dates, times and numbers (region.formats, Settings > General > Language & Region): the Translator makes
+    // them the default locale, so every Qt.locale() of the shell (menu bar clock, widgets, lock screen) follows.
+    Binding {
+        target: Translator
+        property: "formats"
+        value: Settings.regionFormats
+    }
+
     Binding {
         target: Appearance
         property: "dark"
@@ -47,6 +60,18 @@ ShellRoot {
         target: SessionState
         property: "locked"
         value: Lock.locked
+    }
+    Binding {
+        target: SessionState
+        property: "saverShown"
+        value: saver.shown
+    }
+
+    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
+    Binding {
+        target: SessionState
+        property: "authorizing"
+        value: authAgent.requestActive
     }
 
     Connections {
@@ -93,6 +118,12 @@ ShellRoot {
         value: Settings.accentColor
     }
 
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: Settings.accentHighlight
+    }
+
     // Adaptive glass: what lies behind it on each output, when known (ADR-0024 G-3).
     Binding {
         target: Appearance
@@ -130,6 +161,13 @@ ShellRoot {
         target: Zoom
         property: "ready"
         value: Settings.validRead
+    }
+
+    // Settings > Displays (ADR-0031): the backlight goes into the displays state the Settings app reads.
+    Binding {
+        target: Displays
+        property: "backlight"
+        value: Brightness.deviceAvailable ? {device: Brightness.device, level: Brightness.deviceLevel} : null
     }
 
     // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
@@ -296,6 +334,25 @@ ShellRoot {
         }
     }
 
+    // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar stays: on 0.56.2 the source is empty,
+    // decision 3-15).
+    // The lines are the details (no terminal: decision 3-6); the notice goes once they are gone.
+    ConfigErrors {
+        property string noticeKey: ""
+        onAppeared: (lines, more) => {
+            if (noticeKey !== "")
+                Notifications.clear(noticeKey);
+            // Singular/plural pair (the catalogs carry no numerus forms).
+            const rest = more === 0 ? "" : (more === 1 ? qsTr("and 1 more") : qsTr("and %1 more").arg(more));
+            noticeKey = Notifications.postInternal(qsTr("Some settings could not be applied"), noticeBody(lines, rest));
+        }
+        onCleared: {
+            if (noticeKey !== "")
+                Notifications.clear(noticeKey);
+            noticeKey = "";
+        }
+    }
+
     Connections {
         target: SettingsApp
 
@@ -343,10 +400,19 @@ ShellRoot {
     Search {
         id: searchSurface
     }
-    AuthAgent {}
+    AuthAgent {
+        id: authAgent
+    }
     Idle {
+        id: idle
         // Applications' org.freedesktop.ScreenSaver inhibitors, served by the menu bridge (GF-016).
         busInhibited: MenuBridge.screenSaverInhibited
+    }
+    // The screen saver (ADR-0032): the same inhibitors keep it off; its slideshow stops while the displays are off.
+    Saver {
+        id: saver
+        busInhibited: MenuBridge.screenSaverInhibited
+        displaysOff: idle.displayOff
     }
     Overview {
         id: overviewSurface
@@ -377,6 +443,7 @@ ShellRoot {
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
-    // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max)
+    // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length)
 }

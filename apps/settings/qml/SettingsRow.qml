@@ -9,6 +9,12 @@ Item {
     property string subtitle: ""
     // Read-only value shown instead of a control (About, Keyboard).
     property string valueText: ""
+    // An optional coloured tile before the title (macOS 27 rows with an icon: About's software and displays, Storage).
+    property string glyph: ""
+    property string tileColor: "graphite"
+    property real tileSize: Tokens.settingsNavTileSize
+    // The labels' offset from the row's middle (macOS 27 slider rows set their title a little higher).
+    property real labelsOffset: 0
     default property alias control: slot.data
 
     width: parent ? parent.width : implicitWidth
@@ -31,14 +37,33 @@ Item {
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
+    Rectangle {
+        id: tile
+        visible: root.glyph !== ""
+        x: Tokens.settingsNavTileInset
+        anchors.verticalCenter: parent.verticalCenter
+        width: root.tileSize
+        height: width
+        radius: Math.round(root.tileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
+        color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
+
+        Icon {
+            anchors.centerIn: parent
+            name: root.glyph
+            size: Math.round(root.tileSize * Tokens.settingsNavGlyphSize / Tokens.settingsNavTileSize)
+            color: Tokens.settingsSidebarTileGlyph
+        }
+    }
+
     Column {
         id: labels
         anchors {
             left: parent.left
-            leftMargin: Tokens.settingsRowInset
+            leftMargin: root.glyph !== "" ? 2 * Tokens.settingsNavTileInset + root.tileSize : Tokens.settingsRowInset
             right: slot.left
             rightMargin: Tokens.spacingLg
             verticalCenter: parent.verticalCenter
+            verticalCenterOffset: root.labelsOffset
         }
 
         Text {
@@ -75,6 +100,8 @@ Item {
         Text {
             id: valueLabel
             textFormat: Text.PlainText
+            // Centred on the row's control (Date & Time: the date beside its Set… button).
+            anchors.verticalCenter: parent.verticalCenter
             visible: root.valueText !== ""
             // The natural width comes from TextMetrics, not from this Text's implicitWidth, which changes as the text
             // wraps and looped (real session 2026-10-22, "SettingsRow.qml:72: Binding loop detected for property width").

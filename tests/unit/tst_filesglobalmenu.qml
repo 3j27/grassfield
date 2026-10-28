@@ -5,7 +5,8 @@ import "../../apps/files/qml"
 
 // The global menu's Customize Folder item follows the selection (apps/files/qml/GlobalMenu.qml customizeEnabled): going
 // from one file to one folder (the number of selected items stays 1) must enable it. The old binding depended on `count`
-// and an untracked function and stayed stale.
+// and an untracked function and stayed stale. The tab and window items (docs/specs/files.md "Tabs and windows") follow
+// the window, its tabs and the closed-tab stack; Sort By shows the shown folder's own arrangement.
 TestCase {
     id: test
     name: "FilesGlobalMenu"
@@ -48,6 +49,11 @@ TestCase {
         property bool foldersFirst: true
         property bool showHidden: false
         property bool devSession: false
+        property bool tabBarShown: false
+        property bool sidebarShown: true
+        property bool pathBarShown: false
+        property bool statusBarShown: false
+        property url newWindowUrl: "file:///sandbox"
         property var places: ({trashEmpty: true})
         function folderStyleUnavailable(urls: var): string {
             return "";
@@ -64,9 +70,25 @@ TestCase {
     }
 
     QtObject {
+        id: fakeManager
+        property var closedTabs: []
+        property var windows: [fakeWin]
+        property int reopened: 0
+        property int merged: 0
+        function reopenClosedTab(win: var): void {
+            fakeManager.reopened++;
+        }
+        function mergeAllWindows(win: var): void {
+            fakeManager.merged++;
+        }
+    }
+
+    QtObject {
         id: fakeWin
         property var app: fakeApp
-        property var tab: ({canBack: false, canForward: false, segments: []})
+        property var manager: fakeManager
+        property bool tabBarVisible: false
+        property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true, groupBy: 8})
         property var folder: folder
         property var tabs: []
         property int currentIndex: 0
@@ -133,5 +155,117 @@ TestCase {
         item.triggered();
         compare(fakeWin.ejected, 1);
         fakeWin.canEject = false;
+    }
+
+    function item(menu: var, text: string): var {
+        for (let i = 0; i < menu.items.length; i++) {
+            if (menu.items[i].text === text)
+                return menu.items[i];
+        }
+        return null;
+    }
+
+    function test_tabAndWindowItems() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const file = bar.menus[0];
+        const view = bar.menus[2];
+        const reopen = test.item(file, "Reopen Closed Tab");
+        verify(reopen !== null);
+        compare(reopen.shortcut.toString(), "Ctrl+Alt+Shift+T");
+        compare(reopen.enabled, false, "no closed tab");
+        fakeManager.closedTabs = [{url: "file:///sandbox/a"}];
+        compare(reopen.enabled, true);
+        reopen.triggered();
+        compare(fakeManager.reopened, 1);
+        fakeManager.closedTabs = [];
+
+        const bar1 = test.item(view, "Show Tab Bar");
+        verify(bar1 !== null, "Show Tab Bar while the bar is hidden");
+        compare(bar1.shortcut.toString(), "Ctrl+Shift+T");
+        fakeWin.tabBarVisible = true;
+        verify(test.item(view, "Hide Tab Bar") !== null, "Hide Tab Bar while it shows");
+        fakeWin.tabBarVisible = false;
+
+        const merge = test.item(view, "Merge All Windows");
+        verify(merge !== null);
+        compare(merge.enabled, false, "one window");
+        fakeManager.windows = [fakeWin, fakeApp];
+        compare(merge.enabled, true);
+        merge.triggered();
+        compare(fakeManager.merged, 1);
+        fakeManager.windows = [fakeWin];
+        compare(test.item(view, "Move Tab to New Window").enabled, false, "one tab");
+        compare(test.item(file, "Close Window").visible, true, "one tab: Close Window is the Cmd-W item");
+    }
+
+    // View > Show/Hide Sidebar, Path Bar and Status Bar (decision F-11: the bars hidden, the sidebar shown by default).
+    function test_barItems() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const view = bar.menus[2];
+        const sidebar = test.item(view, "Hide Sidebar");
+        verify(sidebar !== null);
+        compare(sidebar.shortcut.toString(), "Ctrl+Super+S");
+        sidebar.triggered();
+        compare(fakeApp.sidebarShown, false);
+        verify(test.item(view, "Show Sidebar") !== null);
+        fakeApp.sidebarShown = true;
+
+        const path = test.item(view, "Show Path Bar");
+        verify(path !== null);
+        compare(path.shortcut.toString(), "Ctrl+Alt+P");
+        path.triggered();
+        compare(fakeApp.pathBarShown, true);
+        verify(test.item(view, "Hide Path Bar") !== null);
+        fakeApp.pathBarShown = false;
+
+        const status = test.item(view, "Show Status Bar");
+        verify(status !== null);
+        compare(status.shortcut.toString(), "Ctrl+/");
+        status.triggered();
+        compare(fakeApp.statusBarShown, true);
+        fakeApp.statusBarShown = false;
+    }
+
+    // Use Groups and Group By check the tab's grouping (the shown folder's own); Sort By lists the Finder's keys.
+    function test_groupByFollowsTheTab() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const view = bar.menus[2];
+        const use = test.item(view, "Use Groups");
+        verify(use !== null);
+        compare(use.shortcut.toString(), "Ctrl+Super+0");
+        compare(use.checked, true, "the tab groups");
+        const group = bar.groupMenu;
+        const titles = [];
+        let checked = "";
+        for (let i = 0; i < group.items.length; i++) {
+            titles.push(group.items[i].text);
+            if (group.items[i].checked)
+                checked = group.items[i].text;
+        }
+        compare(titles, ["None", "Name", "Kind", "Application", "Date Last Opened", "Date Modified", "Date Created", "Size", "Tags"]);
+        compare(checked, "Tags");
+        const sorts = [];
+        for (let i = 0; i < bar.sortMenu.items.length; i++)
+            sorts.push(bar.sortMenu.items[i].text);
+        compare(sorts.slice(0, 8), ["Name", "Kind", "Application", "Date Last Opened", "Date Modified", "Date Created", "Size", "Tags"]);
+    }
+
+    // Sort By checks the tab's arrangement (the shown folder's own), not a global setting.
+    function test_sortByFollowsTheTab() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        const sort = bar.sortMenu;
+        verify(sort !== null);
+        let checked = [];
+        for (let i = 0; i < sort.items.length; i++) {
+            if (sort.items[i].checked)
+                checked.push(sort.items[i].text);
+        }
+        compare(checked.indexOf("Date Modified") >= 0, true, "the tab sorts by date");
+        compare(checked.indexOf("Descending") >= 0, true, "descending");
+        compare(checked.indexOf("Name") >= 0, false);
     }
 }

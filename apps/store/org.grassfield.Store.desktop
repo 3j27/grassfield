@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Grassfield Store
+Name[fr]=Grassfield Store
+GenericName=Software
+GenericName[fr]=Logiciels
+Comment=Find apps, read about them and open them
+Comment[fr]=Trouver des apps, les découvrir et les ouvrir
+Keywords=apps;install;software;store;catalog;
+Keywords[fr]=apps;installer;logiciels;boutique;catalogue;
+Exec=grassfield-store
+Icon=org.grassfield.Store
+Terminal=false
+Categories=System;PackageManager;
+StartupWMClass=org.grassfield.Store

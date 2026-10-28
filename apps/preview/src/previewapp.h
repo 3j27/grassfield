@@ -38,6 +38,7 @@ class PreviewApp : public QObject
     Q_PROPERTY(bool canMinimize READ canMinimize NOTIFY appearanceChanged)
     // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
+    Q_PROPERTY(QString accentHighlight READ accentHighlight NOTIFY appearanceChanged)
     // keyboard.shortcutStyle resolved for this device: "mac" (macOS symbols in menus) or "pc" (text), shortcutstyle.h.
     Q_PROPERTY(QString shortcutStyle READ shortcutStyle NOTIFY appearanceChanged)
 
@@ -62,6 +63,7 @@ public:
     QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
     bool canMinimize() const { return m_canMinimize; }
     QString accentColor() const { return m_accentColor; }
+    QString accentHighlight() const { return m_accentHighlight; }
     QString shortcutStyle() const { return m_shortcutStyle; }
 
     // Path of file `index` for the image provider (render thread): empty when out of range.
@@ -107,6 +109,7 @@ private:
     QString m_titlebarDoubleClick = QStringLiteral("zoom");
     bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");
+    QString m_accentHighlight = QStringLiteral("automatic");
     const bool m_macDevice = grassfield::apps::macDeviceHere();
     QString m_shortcutStyle = QStringLiteral("pc");
     QFileSystemWatcher m_watcher;

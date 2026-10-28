@@ -9,6 +9,8 @@ TestCase {
     id: test
     name: "FilesGallery"
     when: windowShown
+    // Shown: pointer events and drags reach only visible items.
+    visible: true
     width: 900
     height: 520
 
@@ -17,6 +19,7 @@ TestCase {
         id: listing
 
         property int currentRow: -1
+        property int selectedCount: 0
         property bool loading: false
         property string error: ""
         property url url: "file:///sandbox"
@@ -28,8 +31,22 @@ TestCase {
             listing.currentRow = row;
             for (let i = 0; i < listing.count; i++)
                 listing.setProperty(i, "selected", i === row);
+            listing.selectedCount = row >= 0 ? 1 : 0;
+        }
+        // The preview pane's reads (PreviewPane.qml).
+        function isSelected(row: int): bool {
+            return row >= 0 && row === listing.currentRow;
+        }
+        function selectedRows(): var {
+            return listing.currentRow >= 0 ? [listing.currentRow] : [];
+        }
+        function urlAt(row: int): url {
+            return listing.get(row).url;
         }
         function info(row: int): var {
+            // Nothing selected: the shown folder.
+            if (row < 0)
+                return {name: "sandbox", kind: "Folder", sizeText: "", isDir: true, created: "", modified: "", accessed: "", where: "/"};
             return {name: listing.get(row).name, kind: "Plain text document", sizeText: "1 KB", isDir: false, created: "Today at 10:00", modified: "Today at 11:00", accessed: "", where: "/sandbox"};
         }
         function requestPreview(row: int, large: bool): void {
@@ -73,9 +90,26 @@ TestCase {
 
         property string searchText: ""
         property int activated: -1
+        property int renamed: -1
         property int glances: 0
+        property var win: null
         property var app: QtObject {
             property bool galleryInfo: true
+            property var typedTags: []
+            property var removedTags: []
+
+            function rotatableImages(urls: var): var {
+                return [];
+            }
+            function tagsUnavailable(urls: var): string {
+                return "";
+            }
+            function addTypedTag(urls: var, text: string): void {
+                typedTags = typedTags.concat([text]);
+            }
+            function removeTag(urls: var, tag: string): void {
+                removedTags = removedTags.concat([tag]);
+            }
 
             function baseNameLength(name: string, isDir: bool): int {
                 return name.length;
@@ -83,8 +117,23 @@ TestCase {
             function uriList(urls: var): string {
                 return "";
             }
+            function isRecents(url: url): bool {
+                return String(url).startsWith("grassfield-recents:");
+            }
         }
 
+        // BrowserTab's drag bracket: dragStarted before the system drag, dragFinished from its end.
+        property var dragEvents: []
+        function dragStarted(): void {
+            tab.dragEvents = tab.dragEvents.concat(["started"]);
+        }
+        function dragFinished(dropAction: int): void {
+            tab.dragEvents = tab.dragEvents.concat(["finished"]);
+        }
+
+        function focusView(): void {
+            gallery.focusView();
+        }
         function isRenaming(model: var, url: url): bool {
             return false;
         }
@@ -115,7 +164,8 @@ TestCase {
                 tab.glances++;
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return) {
-                tab.activate(model.currentRow, model);
+                // BrowserTab: Return renames the selected item (macOS, docs/specs/files.md F-4).
+                tab.renamed = model.currentRow;
                 event.accepted = true;
             }
         }
@@ -126,6 +176,18 @@ TestCase {
         anchors.fill: parent
         tab: tab
         model: listing
+    }
+
+    // A drag from elsewhere (Drag.Internal: delivered within this window, like the system drag reaches the DropAreas).
+    Item {
+        id: incoming
+        width: 4
+        height: 4
+        Drag.keys: ["text/uri-list"]
+        Drag.dragType: Drag.Internal
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+        Drag.hotSpot.x: 2
+        Drag.hotSpot.y: 2
     }
 
     function init(): void {
@@ -170,7 +232,7 @@ TestCase {
         keyClick(Qt.Key_Space);
         compare(tab.glances, before + 1);
         keyClick(Qt.Key_Return);
-        compare(tab.activated, 1);
+        compare(tab.renamed, 1, "Return renames the shown item");
     }
 
     function test_largePreviewFollowsTheCurrentItem() {
@@ -189,6 +251,59 @@ TestCase {
         compare(gallery.info.name, "epsilon.md");
         // The previous page stays in the view's cache next to the new current one: its request is still held.
         tryVerify(() => listing.largeLive[delta] !== undefined);
+    }
+
+    function test_tagsFieldAddsWhatWasTyped() {
+        const input = findChild(gallery, "previewTagInput");
+        verify(input !== null);
+        input.forceActiveFocus();
+        input.text = "  Work ";
+        keyClick(Qt.Key_Return);
+        compare(tab.app.typedTags, ["  Work "], "the typed text goes to FilesApp, which resolves colour names");
+        compare(input.text, "", "the field empties once the tag is added");
+        keyClick(Qt.Key_Return);
+        compare(tab.app.typedTags.length, 1, "an empty field adds nothing");
+        keyClick(Qt.Key_Escape);
+        verify(!input.activeFocus, "Escape returns to the view");
+    }
+
+    // Recents is a list, not a place (Finder): a drag over it is refused (no target, the drop does nothing), a folder takes it.
+    function test_recentsRefusesDrops() {
+        const over = gallery.mapToItem(test, 100, 100);
+        for (const where of [{url: "grassfield-recents:/", accepted: false}, {url: "file:///sandbox", accepted: true}]) {
+            listing.url = where.url;
+            incoming.x = over.x;
+            incoming.y = over.y;
+            incoming.Drag.active = true;
+            // Moves of an internal drag are delivered from the event loop.
+            incoming.x += 1;
+            wait(20);
+            if (where.accepted)
+                verify(incoming.Drag.target !== null, "a folder's background takes the drag");
+            else
+                compare(incoming.Drag.target, null, "Recents takes no drag");
+            const action = incoming.Drag.drop();
+            if (!where.accepted)
+                compare(action, Qt.IgnoreAction, "the drop on Recents is refused");
+            incoming.Drag.active = false;
+        }
+        listing.url = "file:///sandbox";
+    }
+
+    // A drag from the strip brackets the system drag with the tab's dragStarted and dragFinished (BrowserTab keeps the
+    // view that started it alive until then: Nav.shownView).
+    function test_aDragFromTheStripIsBracketed() {
+        tab.dragEvents = [];
+        const cell = gallery.rowPosition(listing, 1);
+        const local = test.mapFromItem(null, cell.x, cell.y);
+        mousePress(test, local.x, local.y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(test, local.x + i * 8, local.y);
+        mouseRelease(test, local.x + 48, local.y);
+        tryVerify(() => tab.dragEvents.length >= 1, 2000, "the drag started");
+        compare(tab.dragEvents[0], "started");
+        // Offscreen, the platform drag ends at once (no drop).
+        tryVerify(() => tab.dragEvents.indexOf("finished") > 0, 2000, "and ended after it started");
     }
 
     function test_infoPanelFollowsItsPreference() {
