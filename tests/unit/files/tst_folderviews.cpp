@@ -606,6 +606,16 @@ TEST(FolderViews, NoWriteIsLostBetweenProcesses)
 
 // 68,000 short entries in a valid file just under the limit: the load keeps the 2,000 most recent in linear time (the
 // old load moved each key with removeAll: 41 s on the UI thread).
+// Load-sensitive, as scripts/dev/test.sh treats a timing budget elsewhere: a budget missed while the 1-minute load is above the
+// core count says nothing about the code, so the test is reported as skipped (never as passed), after its other checks.
+static bool machineLoaded()
+{
+    QFile f(QStringLiteral("/proc/loadavg"));
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    return f.readAll().split(' ').value(0).toDouble() > std::thread::hardware_concurrency();
+}
+
 TEST(FolderViews, ManyShortEntriesLoadInLinearTime)
 {
     auto dir = sandbox();
@@ -633,7 +643,10 @@ TEST(FolderViews, ManyShortEntriesLoadInLinearTime)
     timer.start();
     views.load();
     const qint64 loadMs = timer.elapsed();
-    EXPECT_LT(loadMs, 2000) << "load of 68,000 entries";
+    const bool loadedBudgetMissed = loadMs >= 2000 && machineLoaded();
+    if (!loadedBudgetMissed) {
+        EXPECT_LT(loadMs, 2000) << "load of 68,000 entries";
+    }
     RecordProperty("loadMs", int(loadMs));
     EXPECT_FALSE(views.readOnly());
     EXPECT_EQ(views.count(), FolderViews::kMaxEntries);
@@ -643,12 +656,17 @@ TEST(FolderViews, ManyShortEntriesLoadInLinearTime)
     timer.restart();
     ASSERT_EQ(views.set(QStringLiteral("a:new"), entry(QStringLiteral("gallery"))), kWritten);
     const qint64 writeMs = timer.elapsed();
-    EXPECT_LT(writeMs, 2000) << "first write after the load";
+    const bool writeBudgetMissed = writeMs >= 2000 && machineLoaded();
+    if (!writeBudgetMissed) {
+        EXPECT_LT(writeMs, 2000) << "first write after the load";
+    }
     RecordProperty("writeMs", int(writeMs));
     FolderViews check(file);
     check.load();
     EXPECT_EQ(check.count(), FolderViews::kMaxEntries);
     EXPECT_EQ(check.entry(QStringLiteral("a:new")).mode, QStringLiteral("gallery"));
+    if (loadedBudgetMissed || writeBudgetMissed)
+        GTEST_SKIP() << "timing budget not judged: the machine load is above the core count";
 }
 
 // A change is seen by device, inode, size and time, not by the modification time alone: a replacement of the same size

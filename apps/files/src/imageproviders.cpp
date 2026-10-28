@@ -1,8 +1,18 @@
 #include "imageproviders.h"
 
+#include "appicons.h"
+#include "applicationslogic.h"
+
+#include <QAtomicInt>
+#include <QCoreApplication>
 #include <QIcon>
 #include <QMutexLocker>
 #include <QPixmap>
+#include <QPointer>
+#include <QThreadPool>
+
+#include <cstdlib>
+#include <memory>
 
 QMutex ThumbnailStore::s_mutex;
 QHash<QString, QImage> ThumbnailStore::s_images;
@@ -64,4 +74,88 @@ QPixmap IconProvider::requestPixmap(const QString &id, QSize *size, const QSize 
     if (size)
         *size = pixmap.size();
     return pixmap;
+}
+
+namespace
+{
+// Finished from the GUI thread. Qt requires finished() after cancel() too, so a cancelled response is still finished (empty).
+class IconResponse : public QQuickImageResponse
+{
+public:
+    QQuickTextureFactory *textureFactory() const override { return QQuickTextureFactory::textureFactoryForImage(m_image); }
+    void cancel() override { m_cancelled->storeRelaxed(1); }
+    // Shared with the worker, which must not touch the response itself (the engine may delete it at any time).
+    std::shared_ptr<QAtomicInt> cancelFlag() const { return m_cancelled; }
+    bool cancelled() const { return m_cancelled->loadRelaxed() != 0; }
+    void done(const QImage &image)
+    {
+        m_image = image;
+        emit finished();
+    }
+
+private:
+    QImage m_image;
+    std::shared_ptr<QAtomicInt> m_cancelled = std::make_shared<QAtomicInt>(0);
+};
+
+// The decodes run on a pool of their own that is never destroyed (no join at exit); a worker only waits for its decoder child,
+// which has a deadline and is killed at quit (AppIconProvider::shutdown), so the workers are idle or ending when Qt shuts down.
+QThreadPool *decodePool()
+{
+    static QThreadPool *pool = [] {
+        auto *p = new QThreadPool;
+        p->setMaxThreadCount(3);
+        return p;
+    }();
+    return pool;
+}
+} // namespace
+
+void AppIconProvider::shutdown()
+{
+    // Quit: no new decode, the running children are killed (their workers return within milliseconds), then a bounded wait
+    // so no worker is still inside Qt when the static destruction starts. A worker that has not yet seen the quit can still be
+    // in waitForStarted (2 s) and, after the kill, in waitForFinished (1 s, appicons.cpp loadIsolated): the wait covers both.
+    AppIcons::shutdown();
+    decodePool()->waitForDone(3500);
+}
+
+QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
+{
+    // However the process ends (aboutToQuit, or exit() from anywhere), the decoders are killed and the workers are gone before
+    // Qt's static teardown: a worker still inside Qt at that point crashed Files on quit (round 4 review, SIGSEGV).
+    static const bool atExit = [] {
+        AppIcons::setExitHook([] { AppIconProvider::shutdown(); });
+        std::atexit([] { AppIconProvider::shutdown(); });
+        return true;
+    }();
+    Q_UNUSED(atExit)
+    auto *response = new IconResponse;
+    const QSize want = requestedSize.isValid() && !requestedSize.isEmpty() ? requestedSize : QSize(64, 64);
+    // The roots are computed here (QStandardPaths), on the thread Qt calls the provider from, once.
+    static const QStringList roots = ApplicationsLogic::iconRoots();
+    QPointer<IconResponse> guard(response);
+    const std::shared_ptr<QAtomicInt> cancelled = response->cancelFlag();
+    decodePool()->start([guard, cancelled, id, want] {
+        QImage image;
+        if (cancelled->loadRelaxed() == 0)
+            image = AppIcons::loadIsolated(id, roots, want);
+        // Done on the GUI thread, always (also after cancel): the fallback needs the icon theme, and QIcon is only used there.
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [guard, image, want] {
+                if (!guard)
+                    return;
+                if (guard->cancelled() || !image.isNull()) {
+                    guard->done(image);
+                    return;
+                }
+                QIcon icon = QIcon::fromTheme(QStringLiteral("application-x-executable"));
+                if (icon.isNull())
+                    icon = QIcon::fromTheme(QStringLiteral("text-x-generic"));
+                guard->done(icon.pixmap(want).toImage());
+            },
+            Qt::QueuedConnection);
+    });
+    return response;
 }

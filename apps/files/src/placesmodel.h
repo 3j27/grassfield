@@ -7,7 +7,7 @@
 
 class KCoreDirLister;
 
-// Sidebar entries: Favorites (standard user folders that exist), Locations (the system volume and
+// Sidebar entries: Favorites (Home, Applications, the standard user folders that exist), Locations (the system volume and
 // Solid storage volumes, Network only when a KIO smb/sftp worker is installed, Trash) and Tags (the tags in use,
 // FilesApp: colour tags first; a tag entry has no URL of its own, the sidebar searches it in the shown folder).
 // Mount and eject go through Solid::StorageAccess (udisks2 + polkit); nothing is mounted by hand.
@@ -64,7 +64,7 @@ private:
         QString name;
         QUrl url;
         QString iconName;
-        QString kind; // "recents" | "folder" | "volume" | "network" | "trash" | "tag"
+        QString kind; // "recents" | "folder" | "applications" | "volume" | "network" | "trash" | "tag"
         QString udi;
         bool mounted = true;
         bool ejectable = false;
