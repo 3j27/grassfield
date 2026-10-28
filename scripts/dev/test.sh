@@ -247,6 +247,12 @@ gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/nul
 # scratch paths), the merged model and search, the child-process limits. Built twice: plain, then with ASan and UBSan.
 gtest_suite tests/unit/store "apps/store/build-direct.sh --tests >/dev/null && apps/store/build-direct.sh --tests --asan" \
   ".dev/build/store-unit-tests --gtest_brief=1" ".dev/build/store-unit-tests-asan --gtest_brief=1"
+# The activity monitor's sampler (ADR-0038 step 1): the /proc and /sys parsers on fixtures, the owners and kinds, the per-tab
+# reads and their turns, the kept descriptors, the TCP counters through sock_diag (the real kernel, loopback sockets of the
+# test), the names made safe to show. Built twice: plain, then with ASan and UBSan. Other owners through the real kernel:
+# tests/integration/activity_owners.sh; the cost per tab: tests/apps/activity_cost.sh.
+gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/null && apps/activity/build-direct.sh --tests --asan" \
+  ".dev/build/activity-unit-tests --gtest_brief=1" ".dev/build/activity-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.

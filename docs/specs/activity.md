@@ -1,14 +1,16 @@
 # Activity Monitor spec · apps-engineer (app), shell-engineer (projection, IPC, Dock tile) · owner brief 2026-10-28
 Decision record: `docs/decisions/ADR-0038-activity-monitor.md` (owner questions AQ1 to AQ7, decisions AD1 to AD31). Parity
 row by row: `docs/audits/activity-2026-10-28/parity.md`. Evidence of the kernel facts: `docs/audits/activity-2026-10-28/`
-(probes A0 to A8). The app is "Activity Monitor" / « Moniteur d'activité » (owner, AQ1; needs legal review); this spec says
+(probes A0 to A10). The app is "Activity Monitor" / « Moniteur d'activité » (owner, AQ1; needs legal review); this spec says
 "the app". Internal names: `apps/activity`, `grassfield-activity`, `org.grassfield.Activity`.
 
 Status: step 0 (docs). Requirements are numbered AM1 to AM79, gates AM-P1 to AM-P4; each names the step that builds it
 (ADR-0038 "Delivery order", owner AQ7: macOS first). The owner's answers of 2026-10-28 are built in: AQ2 TCP only and
 labelled, AQ3 the Energy Impact index, AQ4 other owners' processes shown read-only, AQ5 End Task behind a setting, AQ6
 Ctrl+Shift+Esc. Revised after the integrator's opus review of e3882de (ADR-0038 "Review history"); the changed requirements
-say "review of e3882de".
+say "review of e3882de". Step 0 is merged (pull request #37). Step 1, the sampler without a window (AM20 to AM49's data,
+AM79's fixture roots as test options; AM-P2 measured), is built in its own pull request: its results are in
+`docs/audits/activity-2026-10-28/step1.md`, and the places it changed say "step 1".
 
 ## macOS reference behavior (Apple's Activity Monitor User Guide, macOS 27; described in words, no Apple image committed)
 - One window: a toolbar with the Stop button, the Info button and an action menu, five tabs (CPU, Memory, Energy, Disk,
@@ -165,9 +167,12 @@ items (Settings does it); a background collector; any network access.
 ### Energy (step 1 data, step 2 window; AQ3)
 - **AM36** Energy Impact (owner, AQ3): a relative index without unit, `EI = %CPU + %GPU + 0.02 × wake-ups/s + 1.0 × disk MB/s`
   (provisional weights; the step calibrates them against the laptop's `power_now` in an owner L2 run, then fixes and pins
-  them). Shown with one decimal; never called watts.
+  them). Shown with one decimal; never called watts. An unknown term counts as 0 (no GPU client, a first sample of wake-ups
+  or disk bytes). Another owner's process shows "—": its `io` and descriptors are refused, so its index would leave terms
+  out (step 1).
 - **AM37** Average Energy Impact (optional): the mean of EI since the app opened or since the process started, whichever is
-  later; the header's tooltip says so.
+  later; the header's tooltip says so. Weighted by time over the samples that computed EI, that is while the Energy tab was
+  shown (its reads are made only then, ADR-0038 d; step 1).
 - **AM38** Preventing Sleep: "Yes" when the process holds a logind inhibitor whose What includes `sleep` or `idle` in `block`
   mode (`org.freedesktop.login1.Manager.ListInhibitors`, system bus, read when the tab is shown and at each sample), or when
   the projection marks one of its windows `idleInhibit`; "No" otherwise.
@@ -415,13 +420,13 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 |---|---|---|---|
 | A-S1 | every formula of AM20 to AM47 on fixture `/proc` and `/sys` trees, including "—" cases and first-sample rates | `tests/unit/activity/tst_sampler.cpp` (gtest) | L0 |
 | A-S2 | owners (own, system account, other user), the Kernel row, the My/System/Other views, other owners' "—" cells and hidden command lines, row identity across pid reuse | `tst_sampler.cpp` (fixture trees with three uids) | L0 |
-| A-S2b | the same against the real kernel: a process of another uid (a test container with two users, as the probes) shows its CPU and memory, "—" for disk, and every action is refused | `tests/apps/activity_owners.sh` (container only) | L1 |
+| A-S2b | the same against the real kernel: a process of another uid (a test container with two users, as the probes) shows its CPU and memory, "—" for disk, and every action is refused. Step 1: its rows (not own, Other Users, the kernel's short name, no command line, no argv[0] title anywhere, memory read, no `io`, no descriptors) and the user's own row beside it; the refused actions join with step 2 | `tests/integration/activity_owners.sh` (container only) | L1 |
 | A-S3 | AM33's levels at each threshold; AM32's sum; AM34's naming | `tst_memory.cpp` | L0 |
-| A-S4 | AM54's and AM65's classification of fixture cgroup paths: a uwsm scope and a uwsm service in `app-graphical.slice` (Apps), `session.slice`, `session-graphical.slice`, `init.scope`, `wayland-session-bindpid@1234.service` in `background.slice` and a login `session-3.scope` (Session), `app.slice` services (Background); unit names from a desktop id and from a command with `\x2d` escapes, unescaped and matched (AD20) | `tst_kinds.cpp` | L0 |
+| A-S4 | AM54's and AM65's classification of fixture cgroup paths: a uwsm scope and a uwsm service in `app-graphical.slice` (Apps), `session.slice`, `session-graphical.slice`, `init.scope`, `wayland-session-bindpid@1234.service` in `background.slice` and a login `session-3.scope` (Session), `app.slice` services (Background); unit names from a desktop id and from a command with `\x2d` escapes, unescaped and matched (AD20) | `tst_units.cpp` (step 1; named `tst_kinds.cpp` before) | L0 |
 | A-S5 | sock_diag parsing and socket-to-process matching (captured netlink replies) | `tst_netdiag.cpp` | L0 |
 | A-S6 | AM51's path: `stat` read through the `/proc/<pid>` descriptor; a child that ended and was reaped between the check and the send is never signalled (ESRCH), even when a new process has taken its pid (a pid-reuse fixture); a start-time mismatch drops the row | `tst_signals.cpp` | L0 |
 | A-S7 | projection and Dock tile file validation (sizes, versions, kinds, ranges, a stale writer by pid or by start time); the runtime folder of two displays (a nested display's files never read by the other) | `tst_activityfiles.cpp` (app) and `tests/unit/tst_docktilegraph.qml` (shell) | L0 |
-| A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_names.cpp` | L0 |
+| A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_textclean.cpp` and `tst_sampler.cpp` (step 1; named `tst_names.cpp` before) | L0 |
 | A-S9 | AM23's and AM43's turns: one fifth of the threads and one tenth of the descriptor lists per sample, a new process at once, every process covered within five and ten samples | `tst_sampler.cpp` | L0 |
 | A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen | `tests/apps/activity_window.sh` | L1 |
 | A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop | `tests/apps/activity_actions.sh` | L1 |
@@ -477,14 +482,23 @@ integrator sets them again from those numbers if they differ. Each is measured p
 - **AM-P1** The app's whole CPU (Δ utime + stime of its own `stat` over 10 minutes, sampler and window together) with the
   window visible on the tab, at the rates above.
 - **AM-P2** One sample, read as ADR-0038 d says (the listing, `stat`, the tab's own reads, the turns of AM23 and AM43); the
-  dev build counts each kind of read so the test can tell which one went over.
+  dev build counts each kind of read so the test can tell which one went over. Step 1: the gate is the **median of 101
+  samples** taken back to back after a first one (which opens every kept descriptor and has no rates), on the sampler
+  thread's clock; the 95th percentile and the maximum are printed beside it and not gated. The per-process files are kept
+  open and re-read with `pread` while their process lives (about two descriptors per process: `stat`, and `status` on the
+  Memory tab); the app raises its soft `RLIMIT_NOFILE` at start to the hard limit, at most 16 384 (the session's soft limit
+  is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is opened, read and closed each time,
+  slower and never an error (`tst_sampler.cpp`).
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
 - The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window
   storm (20 windows opened and closed).
 Method: `tests/apps/activity_cost.sh` builds the fixture (as `sampcost spawn` and `sampcost tcp` do), starts the app
 (offscreen and nested), switches through the tabs at both rates, samples its `/proc/<pid>/stat` and `smaps_rollup` and its
-dev read counters, and fails over a threshold; results recorded in the step's audit file. A real session is measured again
+dev read counters, and fails over a threshold; results recorded in the step's audit file. Step 1 has no window yet: the
+script measures AM-P2 with `activity-sampler-bench`, the product sampler on the A10 fixture, and refuses to run as root
+(root reads every process's `io` and descriptors, which is not the user's cost); step 2 adds the app for AM-P1, AM-P3 and
+AM-P4. Step 1's figures on this cloud machine: CPU 4.6 ms, Memory 7.0, Energy 8.7, Disk 4.2, Network 4.7 (medians). A real session is measured again
 at step 5 (L2), with its own number of processes, threads and descriptors noted beside the results.
 
 ## Known limitations (honest, user-visible gaps vs macOS)
