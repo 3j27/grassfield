@@ -37,6 +37,9 @@ Item {
     property bool keepsKeyboard: false
     // False while the confirm button may not act yet (the Store's sheet while it checks a plan): Return does nothing either.
     property bool confirmEnabled: true
+    // True while the sheet takes no click and no key (Files' KIO question that just replaced another one: the second click
+    // of a double click, or a repeated Return, meant for that one must not answer this one).
+    property bool holdInput: false
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -57,7 +60,8 @@ Item {
             field.forceActiveFocus();
             field.selectAll();
         } else {
-            panel.forceActiveFocus();
+            // Not a button the user clicked last time: Return is the default button's, never that one's.
+            keySink.forceActiveFocus();
         }
     }
 
@@ -120,7 +124,9 @@ Item {
         }
 
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_Escape) {
+            if (root.holdInput) {
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Escape) {
                 root.cancel();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -130,6 +136,21 @@ Item {
                     root.confirm();
                 event.accepted = true;
             }
+        }
+
+        // Where the keyboard is when the sheet opens without a field: Return, Esc and the rest reach the panel's handler.
+        Item {
+            id: keySink
+            focus: true
+        }
+
+        // Swallows every click while the sheet holds its input (holdInput); above the pane.
+        MouseArea {
+            anchors.fill: parent
+            z: 1
+            enabled: root.holdInput
+            acceptedButtons: Qt.AllButtons
+            hoverEnabled: root.holdInput
         }
 
         T.Pane {
@@ -147,6 +168,7 @@ Item {
                 spacing: Tokens.spacingMd
 
                 Text {
+                    id: titleText
                     textFormat: Text.PlainText
                     width: parent.width
                     text: root.title
@@ -157,37 +179,61 @@ Item {
                     font.weight: Tokens.typographyMenuBoldWeight
                 }
 
+                // The message, the field and the body; they scroll when the sheet would be taller than its window (a
+                // long text an application gave), so the buttons stay on screen. Laid out as before when they fit.
+                Flickable {
+                    id: scroller
+                    // What the window leaves for them: its height less the sheet's margins, padding, title, buttons and
+                    // error line.
+                    readonly property real room: root.height - 2 * Tokens.spacingLg - pane.topPadding - pane.bottomPadding - titleText.height - buttonRow.height - (errorLine.visible ? errorLine.height + content.spacing : 0) - 2 * content.spacing
+                    width: parent.width
+                    height: Math.max(0, Math.min(middle.implicitHeight, room))
+                    contentWidth: width
+                    contentHeight: middle.implicitHeight
+                    interactive: contentHeight > height
+                    clip: interactive
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+
+                    Column {
+                        id: middle
+                        width: scroller.width
+                        spacing: Tokens.spacingMd
+
+                        Text {
+                            textFormat: Text.PlainText
+                            visible: root.message !== ""
+                            width: parent.width
+                            text: root.message
+                            wrapMode: Text.Wrap
+                            color: Appearance.colors.textSecondary
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyBodySize
+                        }
+
+                        TextField {
+                            id: field
+                            visible: root.withField
+                            width: parent.width
+                            focus: root.withField
+                            placeholderText: root.placeholder
+                            echoMode: root.fieldPassword ? TextInput.Password : TextInput.Normal
+                            // A password (Wi-Fi's join): the input method neither learns, stores nor predicts it (GF-118).
+                            inputMethodHints: root.fieldPassword ? Qt.ImhSensitiveData | Qt.ImhNoPredictiveText : Qt.ImhNone
+                            accessibleName: root.title
+                            onTextChanged: root.errorText = ""
+                        }
+
+                        Column {
+                            id: bodySlot
+                            width: parent.width
+                            spacing: Tokens.spacingMd
+                        }
+                    }
+                }
+
                 Text {
-                    textFormat: Text.PlainText
-                    visible: root.message !== ""
-                    width: parent.width
-                    text: root.message
-                    wrapMode: Text.Wrap
-                    color: Appearance.colors.textSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                }
-
-                TextField {
-                    id: field
-                    visible: root.withField
-                    width: parent.width
-                    focus: root.withField
-                    placeholderText: root.placeholder
-                    echoMode: root.fieldPassword ? TextInput.Password : TextInput.Normal
-                    // A password (Wi-Fi's join): the input method neither learns, stores nor predicts it (GF-118).
-                    inputMethodHints: root.fieldPassword ? Qt.ImhSensitiveData | Qt.ImhNoPredictiveText : Qt.ImhNone
-                    accessibleName: root.title
-                    onTextChanged: root.errorText = ""
-                }
-
-                Column {
-                    id: bodySlot
-                    width: parent.width
-                    spacing: Tokens.spacingMd
-                }
-
-                Text {
+                    id: errorLine
                     textFormat: Text.PlainText
                     visible: root.errorText !== ""
                     width: parent.width
@@ -219,6 +265,8 @@ Item {
                             Button {
                                 required property var modelData
                                 text: modelData.text
+                                // A click leaves the keyboard where it was: Return stays the default button's.
+                                focusPolicy: Qt.TabFocus
                                 onClicked: root.extra(modelData.id)
                             }
                         }
@@ -234,11 +282,13 @@ Item {
                             visible: root.showCancel
                             text: root.cancelText
                             primary: root.returnCancels
+                            focusPolicy: Qt.TabFocus
                             onClicked: root.cancel()
                         }
 
                         Button {
                             text: root.confirmText
+                            focusPolicy: Qt.TabFocus
                             primary: !root.destructive && !root.returnCancels
                             destructive: root.destructive
                             enabled: root.confirmEnabled
