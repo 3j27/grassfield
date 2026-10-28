@@ -1619,6 +1619,8 @@ QtObject {
     readonly property int settingsDeviceGlyphInset: 10
     // the (i) button: a 16.5-pt ring, the glyph's ring is 20/24 of its box [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoSize: 20
+    // estimate: the red count of available updates on the sidebar's General row and General's Software Update row (U19), a capsule at the 11-pt caption size [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int settingsCountBadgeSize: 16
     // the (i) box's right edge 10 from the group edge (its ring 12) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoInset: 10
     // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
@@ -3090,6 +3092,24 @@ QtObject {
     readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
     // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeButtonDisabledOpacity: 0.45
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSize: 26
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeRingStroke: 2.5
+    // estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSweep: 100
+    // estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingTurnMs: 1100
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
+    readonly property int storeRingStopSize: 8
+    // estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingStopRadius: 2
+    // estimate: the package rows an install or uninstall sheet shows before it scrolls [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetListMaxRows: 8
+    // estimate: one package row of that list [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetRowHeight: Math.round(20 * Appearance.textScale)
+    // estimate: the line under an app's button saying how its last operation ended [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeResultGap: 6
     // estimate: a category tile [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeCategoryHeight: 64
     // estimate: a column of category tiles: three at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
@@ -3218,4 +3238,25 @@ QtObject {
     readonly property var tilingClassUltraWide: ["left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"]
     // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
     readonly property var tilingClassPortrait: ["top-bottom", "stacked-thirds", "top-quarters"]
+
+    // the first automatic check, 10 minutes after the shell starts (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateFirstCheckMs: 600000
+    // then an automatic check every 6 hours (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateIntervalMs: 21600000
+    // the pane checks when it opens unless a check finished less than this ago (U8) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdatePaneFreshMs: 60000
+    // the checker stops itself after 180 s and its children 5 s later; the shell kills it past this backstop (U1) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateCheckTimeoutMs: 200000
+    // the waiter blocks up to 7200 s on Omarchy's update lock, then checks for up to 180 s (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitTimeoutMs: 7400000
+    // a waiter whose own answer is update-running again (its 2-hour wait ended with Omarchy's lock still held, or a dev fixture) starts the next one after this, never in a loop (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitRetryMs: 60000
+    // a busy answer (another run of the checker holds its lock) is tried again once after this (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateBusyRetryMs: 60000
+    // an automatic check skipped while offline or metered is looked at again after this, or when the connectivity changes (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateRecheckMs: 1800000
+    // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateMeteredTimeoutMs: 10000
+    // estimate: after Update Now the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateLaunchCheckMs: 5000
 }

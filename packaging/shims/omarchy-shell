@@ -12,6 +12,10 @@
 #                 is tried once more before sleep), waits for its IPC, then `qs ipc -p /usr/share/grassfield/shell call lock lock`
 #   lock status   {"secure": <Hyprland reports LOCK on every monitor>, "requested": <grassfield-shell's crash-recovery
 #                 marker says "locked">} (read-only: hyprctl -j monitors, the marker file)
+# It also forwards Omarchy's update status (omarchy-update-status, called by `omarchy update` while its lock is held:
+# `omarchy.system-update refresh|clear`) as a check request to Grassfield's Software Update (ADR-0033 d.5, U9): only the
+# request goes, through a short `qs ipc` call; the shell's waiter checks once the lock is released, and nothing started
+# here outlives the call (a long-lived child would inherit and keep Omarchy's lock).
 # Every other call fails as Omarchy's wrapper does when its shell is not running ("-q": silent success). Nothing here
 # unlocks. Test: tests/security/sleep_lock_units.sh.
 # Quickshell's option variables are cleared: a stray QS_MANIFEST or QS_CONFIG_NAME made `qs ipc -p` exit 108 ("--path
@@ -74,8 +78,13 @@ lock_status() {
   printf '{"secure": %s, "requested": %s}\n' "$secure" "$requested"
 }
 
+update_check() {
+  timeout -k 0.2 2 qs ipc -p /usr/share/grassfield/shell call update check omarchy >/dev/null 2>&1 || fail "grassfield-shell is not running"
+}
+
 case "${1:-} ${2:-}" in
   "lock lock") lock_lock ;;
   "lock status") lock_status ;;
+  "omarchy.system-update refresh" | "omarchy.system-update clear") update_check ;;
   *) fail "omarchy-shell is not running (Grassfield session)" ;;
 esac

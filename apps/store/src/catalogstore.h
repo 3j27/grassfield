@@ -2,7 +2,7 @@
 // pass, every time, whether it was just fetched or read from the cache (the cache is the user's to change).
 //   cache (regenerable): <cacheDir>/<channel>/grassfield-catalog.v1.json, .sig, etag; <cacheDir>/icons/<sha256>.png
 //   state: <stateDir>/store.json, version 1: {"catalog": {"<channel>": {"serial": N, "fetchedAt": "<UTC>"}}} (other keys
-//          kept; step 3 adds the operation in flight)
+//          kept: the operations add the one in flight, operations.h; statefile.h writes it)
 // A serial lower than the accepted one is a replayed old catalog: refused, the accepted one stays.
 #pragma once
 

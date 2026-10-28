@@ -100,9 +100,10 @@ def rm(name):
     try: os.unlink(os.path.join(S, name))
     except FileNotFoundError: pass
 
-def setup(base="file://" + SRV, server=None, listed=True, conf=True, sections=None):
+def setup(base="file://" + SRV, server=None, listed=True, conf=True, sections=None, keep_cache=False):
     shutil.rmtree(S, ignore_errors=True); os.makedirs(S)
-    shutil.rmtree(tmp + "/cache", ignore_errors=True)
+    if not keep_cache:
+        shutil.rmtree(tmp + "/cache", ignore_errors=True)
     os.makedirs(tmp + "/keyring", exist_ok=True)
     m.REPOSITORY_CONF = tmp + "/repository.conf"
     m.GRASSFIELD_CONF = tmp + "/grassfield.conf"
@@ -147,6 +148,32 @@ R102 = {"version": "1.0.2-1", "date": "2026-11-09", "notes": {"en": "Later."}}
 # -- states
 setup(listed=False, conf=False); r = run()
 check("no [grassfield] and no file -> not-set-up", r["state"] == "not-set-up" and r["channel"] is None, r)
+# Turned off (or never set up): the system's updates are still listed, without any [grassfield] sync (integrator decision
+# of 2026-10-28: macOS always offers its system updates; ADR-0033 "Step 2 as built").
+setup(listed=False, conf=False)
+put("updates", "omarchy 4.0.4-1 -> 4.0.6-1\nlinux 6.18.1-1 -> 6.18.2-1\ngrassfield-desktop 1.0.0-1 -> 1.0.1-1\n")
+r = run()
+check("not-set-up lists Omarchy's release and the other updates",
+      r["state"] == "not-set-up" and r["omarchy"]["available"] == "4.0.6-1" and r["others"] == 1
+      and [p["name"] for p in r["otherPackages"]] == ["linux"] and r["lastSuccessAt"] is not None, r)
+check("not-set-up: no [grassfield] sync, no Grassfield release, no notes fetched", not os.path.exists(S + "/fakeroot.log")
+      and r["grassfield"]["available"] is None and r["grassfield"]["notes"] == [], r)
+# A blocking episode, then Turn Off…, then Set Up… a month later: the first failure starts a new count (integrator re-review
+# of 5ae52b1, minor 2).
+T = 1793000000
+setup(); put("health-fail", ""); run(now=T); r = run(now=T + 16 * 60)
+check("two failures 16 minutes apart -> blocking (the episode before Turn Off…)", r["state"] == "blocking", r)
+failure_count = tmp + "/cache/grassfield/health-db/failures"
+setup(listed=False, conf=False, keep_cache=True); r = run(now=T + 20 * 60)
+check("Turn Off… (not-set-up) forgets the failure count", r["state"] == "not-set-up" and not os.path.exists(failure_count), r)
+setup(keep_cache=True); put("health-fail", ""); r = run(now=T + 30 * 86400)
+check("Set Up… a month later: its first sync failure is failed with a retry, not blocking",
+      r["state"] == "failed" and r["episode"] is None and r["retryAt"] is not None, r)
+setup(listed=False, conf=False); put("checkupdates-fail", ""); r = run()
+check("not-set-up, checkupdates failing -> failed (not counted towards blocking)",
+      r["state"] == "failed" and r["error"] == "unavailable" and r["episode"] is None and r["retryAt"] is None, r)
+setup(listed=False, conf=False); put("checkupdates-fail", ""); r = run(offline=True)
+check("not-set-up, offline -> failed/offline", r["state"] == "failed" and r["error"] == "offline", r)
 setup(listed=False); r = run()
 check("the file without the [grassfield] lines -> repair (channel read from the file)", r["state"] == "repair" and r["channel"] == "stable", r)
 setup(); put("conf-broken", ""); r = run()
@@ -178,6 +205,8 @@ check("available: Grassfield 1.0.0-1 -> 1.0.1-1, Omarchy 4.0.4-1 -> 4.0.6-1",
       r["state"] == "available" and (gf["installed"], gf["available"]) == ("1.0.0-1", "1.0.1-1")
       and (r["omarchy"]["installed"], r["omarchy"]["available"]) == ("4.0.4-1", "4.0.6-1"), r)
 check("others: linux only (grassfield-icons belongs to the Grassfield release)", r["others"] == 1, r)
+check("otherPackages: the list behind the count, with its versions", r["otherPackages"] == [
+      {"name": "linux", "installed": "6.18.1-1", "available": "6.18.2-1"}] and "otherPackagesTruncated" not in r, r)
 check("notes: only the releases above the installed one and up to the available one", [n["version"] for n in gf["notes"]] == ["1.0.1-1"], gf)
 check("notes: control and bidirectional characters removed, line feeds kept, fr kept",
       gf["notes"] and gf["notes"][0]["notes"] == {"en": "Fixes.\nTabbed[31m red", "fr": "Corrections."}, gf)
@@ -185,6 +214,41 @@ setup(); put("updates", "grassfield-desktop 1.0.0-1 -> 1.0.2-1\n"); notes([R101,
 r = run()
 check("notes newest first", [n["version"] for n in r["grassfield"]["notes"]] == ["1.0.2-1", "1.0.1-1"], r)
 check("omarchy installed but not updated -> no Omarchy release", r["omarchy"]["available"] is None and r["omarchy"]["installed"] == "4.0.4-1", r)
+
+setup(); put("updates", "zstd 1.5.6-1 -> 1.5.7-1\nomarchy-dev 4.0.4-1 -> 4.0.6-1\nglibc 2.42-1 -> 2.42-2\ngrassfield-store 1.0.0-1 -> 1.0.1-1\n")
+r = run()
+check("otherPackages sorted by name; omarchy-dev (not installed) is another package; grassfield-* never listed",
+      [p["name"] for p in r["otherPackages"]] == ["glibc", "omarchy-dev", "zstd"] and r["others"] == 3, r)
+
+# -- the 256 KiB cap (ADR-0033 d.3.5): the list of other updates is cut first, then the notes; the counts stay
+def emitted(result):
+    import contextlib, io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        m.emit(result)
+    text = out.getvalue()
+    return len(text.encode("utf-8")), json.loads(text)
+def big(packages, notes):
+    pkgs = [{"name": "package-%05d-%s" % (i, "x" * 40), "installed": "1.0-1", "available": "1.1-1"} for i in range(packages)]
+    rel = [{"version": "1.0.%d-1" % i, "date": "2026-11-02", "notes": {"en": "e" * 8000, "fr": "f" * 8000}} for i in range(notes)]
+    return {"version": 1, "state": "available", "grassfield": {"installed": "1.0.0-1", "available": "1.0.9-1", "notes": rel,
+            "notesError": None}, "omarchy": {"installed": None, "available": None}, "others": packages, "otherPackages": pkgs}
+n, out = emitted(big(100, 2))
+check("under the cap: nothing cut", out["others"] == 100 and len(out["otherPackages"]) == 100 and len(out["grassfield"]["notes"]) == 2
+      and "otherPackagesTruncated" not in out, n)
+n, out = emitted(big(5000, 2))
+check("a long list: cut first, flagged; notes and counts kept; the line within 256 KiB (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["otherPackagesTruncated"] is True and 0 < len(out["otherPackages"]) < 5000
+      and out["otherPackages"][0]["name"].startswith("package-00000") and out["others"] == 5000
+      and len(out["grassfield"]["notes"]) == 2 and out["grassfield"]["notesError"] is None, (n, len(out["otherPackages"])))
+n, out = emitted(big(10, 20))
+check("notes alone past the cap: the notes go (notesError), the whole list stays, not flagged (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["grassfield"]["notes"] == [] and out["grassfield"]["notesError"] == "unavailable"
+      and len(out["otherPackages"]) == 10 and "otherPackagesTruncated" not in out and out["others"] == 10, n)
+n, out = emitted(big(5000, 20))
+check("both past the cap: notes gone, the list cut to what fits, flagged (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["grassfield"]["notes"] == [] and out["otherPackagesTruncated"] is True
+      and 0 < len(out["otherPackages"]) < 5000 and out["others"] == 5000, n)
 
 def notes_refused(desc, prepare, **where):
     setup(**where); put("updates", "grassfield-desktop 1.0.0-1 -> 1.0.1-1\n"); notes([R101])

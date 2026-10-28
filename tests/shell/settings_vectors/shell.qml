@@ -106,6 +106,7 @@ ShellRoot {
             "search.clipboard.keepOnDisk": "clipboardKeepOnDisk",
             "search.clipboard.clearedAt": "clipboardClearedAt",
             "search.clipboard.pinnedClearedAt": "clipboardPinnedClearedAt",
+            "updates.automaticCheck": "updatesAutomaticCheck",
             "wallpaper.source": "wallpaper.source",
             "wallpaper.path": "wallpaper.path",
             "wallpaper.color": "wallpaper.color",

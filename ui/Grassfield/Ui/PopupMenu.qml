@@ -4,7 +4,7 @@ import "MenuNav.js" as MenuNav
 import "MenuPlace.js" as MenuPlace
 
 // macOS-style menu on the frosted material. The host window supplies the blur region (see Material).
-// model: [{id, text, shortcut?, iconName?, enabled?, checked?, destructive?, separator?, submenu?: [...]}]
+// model: [{id, text, shortcut?, detail?, iconName?, enabled?, checked?, destructive?, separator?, submenu?: [...]}]
 // A row may also be a swatch row (SwatchRow): {id, swatches: [{id, color, name, state}], caption?, enabled?, accessibleName?};
 // choosing a swatch activates the swatch object itself (its own id).
 // Keyboard: Up/Down/Home/End move, Return/Space activate, Right opens a submenu, Left closes it, Esc closes; on a
@@ -327,6 +327,7 @@ FocusScope {
                     MenuItem {
                         text: row.modelData.text !== undefined ? row.modelData.text : ""
                         shortcut: row.modelData.shortcut !== undefined ? row.modelData.shortcut : ""
+                        detail: row.modelData.detail !== undefined ? row.modelData.detail : ""
                         iconName: row.modelData.iconName !== undefined ? row.modelData.iconName : ""
                         checked: row.modelData.checked === true
                         destructive: row.modelData.destructive === true

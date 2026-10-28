@@ -179,7 +179,8 @@ gestures, screen corners or session helpers (`config/hypr/grassfield/bindings.lu
 **dev** = test hook, refused outside a dev session (the dev rule: the relative `RunMode.dev` call in the security modules,
 `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing, others answer `refused`); **fixtures** = dev
 session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`, `VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
-approves polkit. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
+approves polkit, except `update check`, which starts Grassfield's own update checker (ADR-0033 d: a one-shot child
+of the shell, as the user, read-only towards pacman) and returns nothing it found. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
 one that does not exist, when an action has no real-session caller or is gated, and when a dev or fixtures function
 does not check its gate.
 
@@ -199,6 +200,7 @@ does not check its gate.
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
 | anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
 | anr | status | dev | returns the marked apps' window titles |
+| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
@@ -646,6 +648,19 @@ VERIFIED until run).
   call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
+Grassfield Store's action (ADR-0037 b.1, SD2, SD17): for `org.grassfield.store.manage-packages` only, the sheet reads polkit's
+message, which polkitd expands with the helper's argument vector as pkexec reports it (`$(command_line)`), by one strict
+pattern (`AuthDialogModel.storeRequestOf`: the policy's English or French message, `/usr/lib/grassfield/grassfield-store-helper`,
+`install` or `remove`, a 32-digit operation id, 1 to 64 package names of ADR-0037 e.5, nothing else). It then says
+"Install xterm, gimp" (or "Remove …") in place of the message, and adds "Program: <the helper's path>" under "Action: <id>";
+a message that does not match, or the same message for another action, is shown as polkit gives it, one capped line. The
+names come from polkit, never from the program that asked. Every name is shown, none elided (the password is never asked
+for a package the user cannot see): past `storeLines` (8) the message scrolls inside a bounded area (wheel, drag, its scroll
+bar; Tab reaches it, then the arrow keys, Page Up/Down, Home and End), so the action line and the buttons stay in the sheet;
+the area takes no focus while AuthAgent keeps the keys. Unit-tested (`tst_authdialogmodel` test_storeRequestInPlainWords:
+15 messages that must not be read, the other action; `tst_authdialog` test_12_storeRequestNamesPackagesAndProgram and
+test_13_storeRequestNamesEveryPackage: 64 names of 128 characters, the helper's most).
+
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
 `responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,

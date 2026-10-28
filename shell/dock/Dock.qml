@@ -138,6 +138,10 @@ Scope {
     property real attentionAt: 0
     property bool attentionReveal: false
     readonly property var attentionKeys: Attention.tileKeys(attention, attentionGroups())
+    // The apps' own launcher state (MenuBridge) with the count the shell sets itself: Software Update's releases on
+    // Grassfield Settings (ADR-0033 U18; ADR-0018: an app's own count wins over its notifications').
+    readonly property string settingsId: "org.grassfield.settings"
+    readonly property var launcherState: DockModel.withCount(MenuBridge.launcher, settingsId, SoftwareUpdate.count)
 
     // One entry per app tile: its key and the addresses of its windows.
     function attentionGroups(): var {
@@ -1558,9 +1562,11 @@ Scope {
                                 readonly property bool attentive: isApp && running && root.attentionKeys.indexOf(modelData.key) >= 0
                                 readonly property bool attentionHops: attentive && !Appearance.reduceMotion
                                 // The count the app set itself (LauncherEntry) wins over the notifications' while it is known; 0 hides it.
-                                readonly property int badge: isApp ? DockModel.tileBadge(Notifications.history, modelData, MenuBridge.launcher) : 0
+                                readonly property int badge: isApp ? DockModel.tileBadge(Notifications.history, modelData, root.launcherState) : 0
+                                // Settings' badge counts Software Update's releases, not notifications (its accessible name says so).
+                                readonly property bool updatesBadge: isApp && SoftwareUpdate.count > 0 && DockModel.isApp(modelData, root.settingsId)
                                 // Progress the app set on its tile: 0..1, -1 for no bar.
-                                readonly property real progress: isApp ? DockModel.tileProgress(MenuBridge.launcher, modelData) : -1
+                                readonly property real progress: isApp ? DockModel.tileProgress(root.launcherState, modelData) : -1
                                 // Neighbours of a dragged tile make room along the Dock (or close the gap while it is dragged out).
                                 readonly property real shiftMain: {
                                     // A folder is dragged over the shelf: the tiles from the slot on make room for it (macOS).
@@ -1647,7 +1653,7 @@ Scope {
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isAppsTile ? qsTr("Apps") : isFolder ? qsTr("%1, folder stack").arg(label) : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "") + (attentive ? qsTr(", needs attention") : "")))
+                                Accessible.name: isAppsTile ? qsTr("Apps") : isFolder ? qsTr("%1, folder stack").arg(label) : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (updatesBadge ? (badge === 1 ? qsTr(", 1 update") : qsTr(", %1 updates").arg(badge)) : (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge))) : "") + (attentive ? qsTr(", needs attention") : "")))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
