@@ -57,6 +57,9 @@ Window {
         // The Applications location holds launchers, not files: nothing there to choose or to save into.
         if (tab.isApplications)
             return false;
+        // The disk is being asked whether the name exists (never on the GUI thread, FC7): one answer at a time.
+        if (panel.probing)
+            return false;
         if (panel.saving)
             return nameField.text !== "";
         if (panel.kind === "saveFiles")
@@ -65,6 +68,10 @@ Window {
     }
     // Answered: the panel waits for the portal to take it away.
     property bool answered: false
+    // The panel's questions to the disk (FileChooser.probe: off the GUI thread, answered within its deadline): token ->
+    // what to do with the kinds. A hung mount never stalls this panel or any other.
+    property var probes: ({})
+    readonly property bool probing: Object.keys(panel.probes).length > 0
     // A panel that first gets the keyboard late (it opened behind the lock, or under another window) takes keys only after a
     // click in it (spec common rule 6, the hold rule): a key meant for something else never answers it unseen.
     property bool keysHeld: false
@@ -172,17 +179,22 @@ Window {
             return;
         }
         const target = PanelLogic.childUrl(tab.url, name);
-        const kind = panel.host.pathKind(Qt.url(target));
-        if (kind === 2) {
-            panel.alert(qsTr("“%1” is a folder.").arg(DisplayName.text(name)), qsTr("Choose another name, or open the folder to save in it."));
-        } else if (kind === 1) {
-            // macOS: Cancel is the default; Replace overwrites (the application writes the file).
-            panel.ask(qsTr("“%1” already exists. Do you want to replace it?").arg(DisplayName.text(name)),
-                      qsTr("A file or folder with the same name already exists in the folder “%1”. Replacing it will overwrite its current contents.").arg(DisplayName.text(tab.title)),
-                      qsTr("Replace"), () => panel.finish([target]));
-        } else {
-            panel.finish([target]);
-        }
+        const title = tab.title;
+        panel.askDisk([target], kinds => {
+            const kind = kinds[target];
+            if (kind === -2) {
+                panel.notResponding(title);
+            } else if (kind === 2) {
+                panel.alert(qsTr("“%1” is a folder.").arg(DisplayName.text(name)), qsTr("Choose another name, or open the folder to save in it."));
+            } else if (kind === 1) {
+                // macOS: Cancel is the default; Replace overwrites (the application writes the file).
+                panel.ask(qsTr("“%1” already exists. Do you want to replace it?").arg(DisplayName.text(name)),
+                          qsTr("A file or folder with the same name already exists in the folder “%1”. Replacing it will overwrite its current contents.").arg(DisplayName.text(title)),
+                          qsTr("Replace"), () => panel.finish([target]));
+            } else {
+                panel.finish([target]);
+            }
+        });
     }
 
     function saveFiles(): void {
@@ -194,8 +206,16 @@ Window {
         }
         const names = panel.request.files || [];
         const uris = names.map(n => PanelLogic.childUrl(folder, n));
-        const clashes = PanelLogic.clashes(names, folder, u => panel.host.pathKind(Qt.url(u)));
         const where = DisplayName.text(decodeURIComponent(folder.replace(/\/+$/, "").split("/").pop()) || "/");
+        panel.askDisk(uris, kinds => panel.saveFilesIn(folder, where, names, uris, kinds));
+    }
+
+    function saveFilesIn(folder: string, where: string, names: var, uris: var, kinds: var): void {
+        if (uris.some(u => kinds[u] === -2)) {
+            panel.notResponding(where);
+            return;
+        }
+        const clashes = PanelLogic.clashes(names, folder, u => kinds[u]);
         if (clashes.some(c => c.folder)) {
             panel.alert(qsTr("A folder in “%1” has the name of an item to save.").arg(where), clashes.filter(c => c.folder).map(c => DisplayName.text(c.name)).join("\n"));
         } else if (clashes.length > 0) {
@@ -209,6 +229,34 @@ Window {
         } else {
             panel.finish(uris);
         }
+    }
+
+    // Asks the disk what `urls` name, off the GUI thread; then(kinds) with {url: kind} (-2 not responding, -1 not local,
+    // 0 nothing, 1 a file, 2 a folder).
+    function askDisk(urls: var, then: var): void {
+        const token = panel.host.probe(urls);
+        const next = Object.assign({}, panel.probes);
+        next[token] = then;
+        panel.probes = next;
+    }
+
+    Connections {
+        target: panel.host
+        function onProbed(token: int, kinds: var): void {
+            const then = panel.probes[token];
+            if (!then)
+                return;
+            const next = Object.assign({}, panel.probes);
+            delete next[token];
+            panel.probes = next;
+            if (!panel.answered)
+                then(kinds);
+        }
+    }
+
+    // A folder that did not answer in time (a share gone, a sleeping disk), as the Finder says of a server that went away.
+    function notResponding(folder: string): void {
+        panel.alert(qsTr("“%1” isn’t responding.").arg(DisplayName.text(folder)), qsTr("Choose another folder, or try again later."));
     }
 
     // A message with OK only.
@@ -359,9 +407,10 @@ Window {
 
     // Keys (Ctrl stands for Command, as in Files) ----------------------------------------------------------------------------
 
+    // Go to Folder works in the compact Save panel too; going there expands it (macOS).
     Shortcut {
         sequences: ["Ctrl+Shift+G", "Ctrl+L"]
-        enabled: panel.keysLive && panel.expanded
+        enabled: panel.keysLive
         onActivated: panel.goToFolder("")
     }
     Shortcut {
@@ -742,7 +791,7 @@ Window {
                     app: panel.app
                     win: panel
                     chooser: panel
-                    startUrl: Qt.url(PanelLogic.startFolder(panel.request, panel.memory, panel.places, u => panel.host.pathKind(Qt.url(u)) === 2))
+                    startUrl: Qt.url(PanelLogic.startFolder(panel.request, panel.memory, panel.places, u => (panel.request.folderKinds || {})[String(u)] === 2))
                 }
             }
         }
@@ -940,12 +989,29 @@ Window {
         withField: true
         placeholder: qsTr("~/Documents, /usr/share or trash:/")
         confirmText: qsTr("Go")
+        // The address at once; whether a folder is there, off the GUI thread (FC7): the sheet comes back with the reason
+        // when there is none.
         confirmHandler: text => {
-            const url = panel.app.resolveLocation(text, tab.url);
+            const url = panel.app.locationUrl(text, tab.url);
             if (String(url) === "")
                 return qsTr("The folder “%1” can’t be found.").arg(text);
-            panel.expanded = true;
-            tab.navigate(url, true);
+            if (!PanelLogic.isLocal(url)) {
+                panel.expanded = true;
+                tab.navigate(url, true);
+                return "";
+            }
+            const key = String(url);
+            panel.askDisk([key], kinds => {
+                if (kinds[key] === 2) {
+                    panel.expanded = true;
+                    tab.navigate(url, true);
+                    return;
+                }
+                goSheet.focusBack = panel.focusTarget();
+                goSheet.setField(text);
+                goSheet.open();
+                goSheet.errorText = kinds[key] === -2 ? qsTr("“%1” isn’t responding.").arg(text) : qsTr("The folder “%1” can’t be found.").arg(text);
+            });
             return "";
         }
     }
@@ -957,7 +1023,8 @@ Window {
         withField: true
         confirmText: qsTr("Create")
         confirmHandler: name => {
-            // Invalid or taken names answer at once (the sheet stays with the reason); KIO's own error comes later.
+            // An invalid name answers at once (the sheet stays with the reason); a taken name or KIO's error comes when KIO
+            // answers (the disk is never read on the GUI thread, FC7): the sheet comes back with the reason.
             let refused = "";
             let answered = false;
             panel.app.makeFolder(tab.url, name, (url, error) => {
@@ -965,7 +1032,10 @@ Window {
                 if (error !== "" && newFolderSheet.shown) {
                     refused = error;
                 } else if (error !== "") {
-                    panel.alert(qsTr("The folder can’t be made."), error);
+                    newFolderSheet.focusBack = panel.focusTarget();
+                    newFolderSheet.setField(name);
+                    newFolderSheet.open();
+                    newFolderSheet.errorText = error;
                 } else {
                     tab.navigate(Qt.url(url), true);
                 }

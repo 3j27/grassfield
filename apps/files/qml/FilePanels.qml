@@ -57,7 +57,7 @@ QtObject {
             requestId: id,
             request: request,
             memory: root.host.memory(request.appId),
-            places: root.host.places()
+            places: request.places || {}
         });
         if (!panel) {
             console.warn("grassfield-portal: cannot make a panel:", root.panelComponent.errorString());

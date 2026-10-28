@@ -202,6 +202,9 @@ public:
     Q_INVOKABLE bool isDirectChild(const QUrl &parent, const QUrl &child) const;
     // "Go to Folder": "~", "~/x", absolute paths, paths relative to `base`, or URLs. Invalid if no such folder.
     Q_INVOKABLE QUrl resolveLocation(const QString &text, const QUrl &base) const;
+    // The address resolveLocation reads, without reading the disk (a local URL whether or not a folder is there; invalid for
+    // empty text): the panels ask the disk off the GUI thread (grassfield-portal's FileChooser::probe).
+    Q_INVOKABLE QUrl locationUrl(const QString &text, const QUrl &base) const;
 
     // Opening.
     Q_INVOKABLE void open(const QList<QUrl> &urls);
@@ -234,7 +237,8 @@ public:
     Q_INVOKABLE void emptyTrash();
     Q_INVOKABLE void newFolder(const QUrl &directory, QObject *folder);
     // New Folder of the Save panel (grassfield-portal): a folder named `name` in `directory`, then callback(url, error): the
-    // new folder's URL, or "" and why it was not made (an invalid or taken name, KIO's error).
+    // new folder's URL, or "" and why it was not made (an invalid name at once; a taken name or KIO's error when KIO answers,
+    // never from a look at the disk on the GUI thread).
     Q_INVOKABLE void makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback);
     Q_INVOKABLE void rename(const QUrl &url, const QString &newName, QObject *folder);
     Q_INVOKABLE void duplicate(const QList<QUrl> &urls, QObject *folder);

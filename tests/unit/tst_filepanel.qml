@@ -271,6 +271,17 @@ TestCase {
         function resolveLocation(text: string, base: url): url {
             return test.tree[text] ? text : "";
         }
+        // FilesApp::locationUrl: the address only, no look at the disk.
+        function locationUrl(text: string, base: url): url {
+            const t = text.trim();
+            if (t === "")
+                return "";
+            if (t.indexOf(":/") > 0)
+                return t;
+            if (t.startsWith("/"))
+                return "file://" + t;
+            return String(base).replace(/\/+$/, "") + "/" + t;
+        }
         function uriList(urls: var): string {
             return "";
         }
@@ -290,21 +301,36 @@ TestCase {
         id: fakeHost
         property var answers: []
         property var remembered: []
-        // URL -> 0 none, 1 file, 2 folder (pathKind); the tree's folders are folders.
+        // URL -> 0 none, 1 file, 2 folder (FileChooser::pathKindOf); the tree's folders are folders. A URL that starts with
+        // one of `slow` does not answer (-2), as a hung mount.
         property var kinds: ({})
+        property var slow: []
+        property int nextToken: 1
+        signal probed(int token, var kinds)
         function answer(id: int, response: int, map: var): void {
             fakeHost.answers = fakeHost.answers.concat([{id: id, response: response, map: map}]);
         }
         function remember(appId: string, entry: var): void {
             fakeHost.remembered = fakeHost.remembered.concat([{appId: appId, entry: entry}]);
         }
-        function pathKind(target: url): int {
-            const s = String(target);
+        function kindOf(text: string): int {
+            const s = String(text);
             if (!s.startsWith("file:"))
                 return -1;
+            if (fakeHost.slow.some(p => s.startsWith(p)))
+                return -2;
             if (test.entries(s))
                 return 2;
-            return fakeHost.kinds[s] ?? 0;
+            return fakeHost.kinds[s] ?? fakeHost.kinds[decodeURI(s)] ?? 0;
+        }
+        // FileChooser::probe: answered later, never from inside the call.
+        function probe(urls: var): int {
+            const token = fakeHost.nextToken++;
+            const kinds = {};
+            for (const u of urls)
+                kinds[u] = fakeHost.kindOf(u);
+            Qt.callLater(() => fakeHost.probed(token, kinds));
+            return token;
         }
         function appName(appId: string): string {
             return "Example";
@@ -330,9 +356,11 @@ TestCase {
             host: fakeHost
             manager: fakeManager
             requestId: 7
-            places: ({home: "file:///home/u", desktop: "", documents: "file:///home/u/Documents", downloads: ""})
+            places: test.places
         }
     }
+
+    readonly property var places: ({home: "file:///home/u", desktop: "", documents: "file:///home/u/Documents", downloads: ""})
 
     function request(fields: var): var {
         return Object.assign({kind: "open", appId: "org.example.App", title: "", acceptLabel: "", modal: true, parented: false, multiple: false,
@@ -345,7 +373,16 @@ TestCase {
         fakeHost.answers = [];
         fakeHost.remembered = [];
         fakeHost.kinds = {};
-        const panel = createTemporaryObject(panelComponent, test, Object.assign({request: test.request(fields)}, extra || {}));
+        // What the backend probed before the panel (FileChooser::handle): the folders it may start in.
+        const request = test.request(fields);
+        const memory = (extra && extra.memory) || {};
+        const places = (extra && extra.places) || test.places;
+        const kinds = {};
+        for (const u of [request.currentFolder, memory.folder || "", places.documents, places.home])
+            if (u)
+                kinds[u] = fakeHost.kindOf(u);
+        request.folderKinds = kinds;
+        const panel = createTemporaryObject(panelComponent, test, Object.assign({request: request}, extra || {}));
         verify(panel !== null, "FilePanel");
         panel.show();
         panel.requestActivate();
@@ -575,7 +612,7 @@ TestCase {
         compare(name.text, "Report.txt");
         name.text = PanelLogic.nameForFormat(name.text, ["*.md"]);
         panel.pressDefault();
-        compare(fakeHost.answers.length, 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/Report.md"]);
         compare(fakeHost.answers[0].map.filter, 1);
         compare(fakeHost.remembered[0].entry.expanded, false);
@@ -598,14 +635,14 @@ TestCase {
         const panel = test.openPanel({kind: "save", currentName: "a.txt", currentFolder: "file:///home/u/Documents"});
         fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1};
         panel.pressDefault();
-        verify(panel.sheetShown, "the replace question");
+        tryVerify(() => panel.sheetShown, 1000, "the replace question");
         compare(fakeHost.answers.length, 0);
         // Return is Cancel (macOS: Replace is never the default here).
         keyClick(Qt.Key_Return);
         tryVerify(() => !panel.sheetShown);
         compare(fakeHost.answers.length, 0);
         panel.pressDefault();
-        verify(panel.sheetShown);
+        tryVerify(() => panel.sheetShown);
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet !== null);
         sheet.confirm();
@@ -616,7 +653,7 @@ TestCase {
     function test_save_with_a_folders_name_is_refused(): void {
         const panel = test.openPanel({kind: "save", currentName: "Sub", currentFolder: "file:///home/u/Documents"});
         panel.pressDefault();
-        verify(panel.sheetShown);
+        tryVerify(() => panel.sheetShown);
         compare(fakeHost.answers.length, 0);
     }
 
@@ -626,7 +663,7 @@ TestCase {
         verify(tab.folder.get(test.rowOf(tab.folder, "a.txt")).dimmed, "a folder panel");
         fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1};
         panel.pressDefault();
-        verify(panel.sheetShown);
+        tryVerify(() => panel.sheetShown);
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet.title.indexOf("a.txt") >= 0);
         sheet.confirm();
@@ -687,7 +724,7 @@ TestCase {
         compare(where.key("sftp://host/srv/"), "sftp://host/srv");
         compare(where.key("network:/"), "network:/");
         panel.pressDefault();
-        compare(fakeHost.answers.length, 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris.length, 1);
         compare(decodeURIComponent(fakeHost.answers[0].map.uris[0]), "file:///home/u/My Documents/new file.txt");
     }
@@ -715,6 +752,65 @@ TestCase {
         sidebar.openTagMenu("", 10, 10);
         verify(!panel.menuLayer.visible, "no Tags menu in a panel");
         fakeApp.hiddenTags = [];
+    }
+
+    // A folder that does not answer (a hung mount; integrator review of bd78424, MAJOR 1): the panel opens in the next folder
+    // it may start in, and a Save there says the folder is not responding instead of answering or waiting.
+    function test_a_folder_that_does_not_answer_is_passed_over(): void {
+        fakeHost.slow = ["file:///home/u/Documents/Sub"];
+        const panel = test.openPanel({kind: "save", currentName: "a.txt", currentFolder: "file:///home/u/Documents/Sub"}, {memory: {expanded: true}});
+        const tab = test.findTab(panel.contentItem);
+        compare(String(tab.url), "file:///home/u/Documents", "the next folder: Documents");
+        fakeHost.slow = ["file:///home/u/Documents"];
+        panel.pressDefault();
+        verify(!panel.acceptEnabled, "one question to the disk at a time");
+        tryVerify(() => panel.sheetShown);
+        const sheet = test.findSheet(panel.contentItem, true);
+        compare(sheet.title, "“Documents” isn’t responding.");
+        compare(fakeHost.answers.length, 0);
+        fakeHost.slow = [];
+    }
+
+    // Go to Folder (Cmd-Shift-G) in the compact Save panel: the sheet opens, and going there expands the panel (macOS;
+    // integrator review of bd78424, MINOR 2); a folder that is not there brings the sheet back with the reason.
+    function test_go_to_folder_in_the_compact_save_panel(): void {
+        const panel = test.openPanel({kind: "save", currentName: "a.txt", currentFolder: "file:///home/u/Documents"});
+        const tab = test.findTab(panel.contentItem);
+        verify(!panel.expanded);
+        keyClick(Qt.Key_G, Qt.ControlModifier | Qt.ShiftModifier);
+        tryVerify(() => panel.sheetShown);
+        let sheet = test.findSheet(panel.contentItem, true);
+        sheet.setField("Gone");
+        sheet.confirm();
+        tryVerify(() => test.findSheet(panel.contentItem, true) !== null && test.findSheet(panel.contentItem, true).errorText !== "");
+        sheet = test.findSheet(panel.contentItem, true);
+        compare(sheet.errorText, "The folder “Gone” can’t be found.");
+        verify(!panel.expanded);
+        sheet.setField("Sub");
+        sheet.confirm();
+        tryCompare(tab, "url", Qt.url("file:///home/u/Documents/Sub"));
+        verify(panel.expanded, "going to a folder expands the panel");
+    }
+
+    // The Save As field (integrator review of bd78424, MINOR 3): the name is selected without its extension, Esc in it
+    // cancels the panel, and a name that cannot be a file's is refused with the reason.
+    function test_the_save_as_field(): void {
+        let panel = test.openPanel({kind: "save", currentName: "Report.final.txt", currentFolder: "file:///home/u/Documents"});
+        let name = test.findField(panel.contentItem);
+        verify(name !== null);
+        tryCompare(name, "activeFocus", true);
+        compare(name.selectedText, "Report.final", "the name without its extension");
+        name.text = "a/b";
+        panel.pressDefault();
+        tryVerify(() => panel.sheetShown);
+        compare(test.findSheet(panel.contentItem, true).title, "The name “a/b” can’t be used.");
+        compare(fakeHost.answers.length, 0);
+        test.findSheet(panel.contentItem, true).confirm();
+        tryVerify(() => !panel.sheetShown);
+        name.forceActiveFocus();
+        keyClick(Qt.Key_Escape);
+        tryVerify(() => fakeHost.answers.length === 1);
+        compare(fakeHost.answers[0].response, 1, "Esc in the field cancels");
     }
 
     function test_a_drop_shows_the_item_and_moves_nothing(): void {
@@ -749,6 +845,18 @@ TestCase {
     }
 
     // The shown Sheet under `item` (Sheet.shown), or null.
+    // The Save As field: the panel's first TextField.
+    function findField(item: var): var {
+        if (item instanceof TextField)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const f = test.findField(item.children[i]);
+            if (f)
+                return f;
+        }
+        return null;
+    }
+
     function findSheet(item: var, shown: bool): var {
         if (item instanceof Sheet && (!shown || item.shown))
             return item;

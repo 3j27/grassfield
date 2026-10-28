@@ -722,6 +722,15 @@ bool FilesApp::isDirectChild(const QUrl &parent, const QUrl &child) const
 
 QUrl FilesApp::resolveLocation(const QString &text, const QUrl &base) const
 {
+    const QUrl url = locationUrl(text, base);
+    if (!url.isLocalFile())
+        return url;
+    const QFileInfo info(url.toLocalFile());
+    return info.isDir() ? QUrl::fromLocalFile(info.absoluteFilePath()) : QUrl();
+}
+
+QUrl FilesApp::locationUrl(const QString &text, const QUrl &base) const
+{
     const QString t = text.trimmed();
     if (t.isEmpty())
         return {};
@@ -745,8 +754,7 @@ QUrl FilesApp::resolveLocation(const QString &text, const QUrl &base) const
         url.setPath(url.path() + QLatin1Char('/') + t);
         return url;
     }
-    const QFileInfo info(QDir::cleanPath(path));
-    return info.isDir() ? QUrl::fromLocalFile(info.absoluteFilePath()) : QUrl();
+    return QUrl::fromLocalFile(QDir::cleanPath(path));
 }
 
 void FilesApp::open(const QList<QUrl> &urls)
@@ -1162,14 +1170,16 @@ void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSV
         answer({}, tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(name)));
         return;
     }
-    if (nameTaken(directory, name)) {
-        answer({}, tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(name)));
-        return;
-    }
+    // No look at the folder first: the panels never read the disk on the GUI thread (a hung mount would stall every panel,
+    // ADR-0035 4b-11); KIO's mkdir says when the name is taken.
     const QUrl url = childUrl(directory, name);
     KIO::MkdirJob *job = KIO::mkdir(url);
     attachDelegate(job);
-    connect(job, &KJob::result, this, [this, job, url, answer]() mutable {
+    connect(job, &KJob::result, this, [this, job, url, name, answer]() mutable {
+        if (job->error() == KIO::ERR_DIR_ALREADY_EXIST || job->error() == KIO::ERR_FILE_ALREADY_EXIST) {
+            answer({}, tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(name)));
+            return;
+        }
         if (job->error()) {
             answer({}, job->errorString());
             return;

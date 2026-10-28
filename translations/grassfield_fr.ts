@@ -3754,6 +3754,14 @@
         <translation>Les remplacer écrasera leur contenu actuel.</translation>
     </message>
     <message>
+        <source>“%1” isn’t responding.</source>
+        <translation>«&#xa0;%1&#xa0;» ne répond pas.</translation>
+    </message>
+    <message>
+        <source>Choose another folder, or try again later.</source>
+        <translation>Choisissez un autre dossier ou réessayez plus tard.</translation>
+    </message>
+    <message>
         <source>OK</source>
         <translation>OK</translation>
     </message>
@@ -3840,10 +3848,6 @@
     <message>
         <source>Create</source>
         <translation>Créer</translation>
-    </message>
-    <message>
-        <source>The folder can’t be made.</source>
-        <translation>Le dossier ne peut pas être créé.</translation>
     </message>
 </context>
 <context>
