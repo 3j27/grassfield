@@ -114,18 +114,31 @@ TEST(FrameLog, JsonCarriesRendersAndMarks) {
 // Integrator review of a6d04df (MAJOR 2): a main-loop stall before a render shows only as a late render. A beat of the loop
 // later than kStallUs past its due time records the stall; the plugin's own work outside a render is recorded beside it.
 TEST(FrameLog, ALateBeatIsAStallFromItsDueTime) {
-    EXPECT_FALSE(stallOf(10'000, 10'000).has_value());
-    EXPECT_FALSE(stallOf(10'000, 10'000 + kStallUs).has_value()) << "within kStallUs: on time";
-    EXPECT_EQ(stallOf(10'000, 10'001 + kStallUs), (RenderSpan{.beginUs = 10'000, .cpuUs = kStallUs + 1}));
-    EXPECT_EQ(stallOf(10'000, 60'000), (RenderSpan{.beginUs = 10'000, .cpuUs = 50'000})) << "a 50 ms stall";
-    EXPECT_FALSE(stallOf(10'000, 9'000).has_value()) << "early (a timer that fired before its due time)";
+    EXPECT_FALSE(stallOf(10'000, 10'000, 0).has_value());
+    EXPECT_FALSE(stallOf(10'000, 10'000 + kStallUs, 0).has_value()) << "within kStallUs: on time";
+    EXPECT_EQ(stallOf(10'000, 10'001 + kStallUs, 7), (Stall{.beginUs = 10'000, .lengthUs = kStallUs + 1, .cpuUs = 7}));
+    EXPECT_EQ(stallOf(10'000, 60'000, 51'000), (Stall{.beginUs = 10'000, .lengthUs = 50'000, .cpuUs = 51'000})) << "a 50 ms stall, the thread working";
+    EXPECT_EQ(stallOf(10'000, 60'000, 900).value_or(Stall{}).cpuUs, 900U) << "the same stall with the thread waiting";
+    EXPECT_FALSE(stallOf(10'000, 9'000, 0).has_value()) << "early (a timer that fired before its due time)";
     EXPECT_LT(kStallUs, kBeatUs);
 }
 
+TEST(FrameLog, StallsAreKeptInTimeOrder) {
+    CStallRing ring;
+    EXPECT_TRUE(ring.push({.beginUs = 100, .lengthUs = 3000, .cpuUs = 10}));
+    EXPECT_FALSE(ring.push({.beginUs = 100, .lengthUs = 1, .cpuUs = 1})) << "not after the newest";
+    EXPECT_TRUE(ring.push({.beginUs = 8000, .lengthUs = 50'000, .cpuUs = 49'000}));
+    EXPECT_EQ(ring.snapshot(), (std::vector<Stall>{{.beginUs = 100, .lengthUs = 3000, .cpuUs = 10}, {.beginUs = 8000, .lengthUs = 50'000, .cpuUs = 49'000}}));
+    ring.clear();
+    EXPECT_TRUE(ring.snapshot().empty());
+}
+
 TEST(FrameLog, JsonCarriesTheLoopsStallsAndThePluginsWork) {
-    const LoopRecords loop{.beats = 250, .stalls = {{.beginUs = 100, .cpuUs = 50'000}}, .work = {{.beginUs = 7, .cpuUs = 300}, {.beginUs = 90, .cpuUs = 12}}};
+    const LoopRecords loop{.beats  = 250,
+                           .stalls = {{.beginUs = 100, .lengthUs = 50'000, .cpuUs = 1200}},
+                           .work   = {{.beginUs = 7, .cpuUs = 300}, {.beginUs = 90, .cpuUs = 12}}};
     EXPECT_EQ(framesJson({}, {}, loop), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[],"marks":[],)"
-                                        R"("loop":{"beats":250,"stalls":[[100,50000]],"work":[[7,300],[90,12]]}})");
+                                        R"("loop":{"beats":250,"stalls":[[100,50000,1200]],"work":[[7,300],[90,12]]}})");
 }
 
 // Review of part B, 2026-10-24: off unless a measurement asked, bounded, and nothing kept from a locked session.

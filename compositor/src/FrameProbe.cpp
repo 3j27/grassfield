@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <format>
 #include <memory>
 #include <vector>
@@ -33,10 +34,11 @@ namespace gf::frameProbe {
             std::vector<CHyprSignalListener> listeners; // monitors added / removed, render begin and end
             std::vector<SMonitor>            monitors;
             frames::CMarkRing                marks;
-            frames::CSpanRing                stalls; // the event loop's late beats (core stallOf)
+            frames::CStallRing               stalls; // the event loop's late beats (core stallOf)
             frames::CSpanRing                work;   // the plugin's own work outside a render (work())
             uint64_t                         beats   = 0;
             uint64_t                         beatDue = 0; // when the armed beat is due (0: none armed)
+            uint64_t                         beatCpu = 0; // the main thread's CPU time at the previous beat
             SP<CEventLoopTimer>              beatTimer;   // code of this library: removed in stop()
             frames::CRecording               recording;    // off until a start request, at most kMaxRecordingMs
             bool                             holdsRecords = false; // something was recorded since the last drop
@@ -92,8 +94,17 @@ namespace gf::frameProbe {
             return true;
         }
 
-        // A beat of the event loop while recording (frames::kBeatUs): a late one records the stall it shows (core stallOf);
-        // the beats stop with the recording (its end, the lock: nothing is recorded then).
+        // The CPU time this thread (Hyprland's main thread: the beats and the renders run on it) has used, in microseconds.
+        uint64_t threadCpuUs() {
+            timespec ts{};
+            if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0)
+                return 0;
+            return static_cast<uint64_t>(ts.tv_sec) * 1'000'000 + static_cast<uint64_t>(ts.tv_nsec) / 1'000;
+        }
+
+        // A beat of the event loop while recording (frames::kBeatUs): a late one records the stall it shows, with the main
+        // thread's CPU time since the previous beat (core stallOf); the beats stop with the recording (its end, the lock:
+        // nothing is recorded then).
         void beat() {
             auto& s = st();
             if (!s.ready || !s.beatTimer || !recordingNow()) {
@@ -101,12 +112,14 @@ namespace gf::frameProbe {
                 return; // not armed again
             }
             const uint64_t now = microseconds(Time::steadyNow());
+            const uint64_t cpu = threadCpuUs();
             if (s.beatDue != 0) {
-                if (const auto stall = frames::stallOf(s.beatDue, now))
+                if (const auto stall = frames::stallOf(s.beatDue, now, cpu >= s.beatCpu ? cpu - s.beatCpu : 0))
                     s.stalls.push(*stall);
                 ++s.beats;
             }
             s.beatDue = now + frames::kBeatUs;
+            s.beatCpu = cpu;
             s.beatTimer->updateTimeout(std::chrono::microseconds(frames::kBeatUs));
         }
 
@@ -120,6 +133,7 @@ namespace gf::frameProbe {
                 g_pEventLoopManager->addTimer(s.beatTimer);
             }
             s.beatDue = microseconds(Time::steadyNow()) + frames::kBeatUs;
+            s.beatCpu = threadCpuUs();
             s.beatTimer->updateTimeout(std::chrono::microseconds(frames::kBeatUs));
         }
 

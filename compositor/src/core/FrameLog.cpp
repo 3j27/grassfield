@@ -53,34 +53,6 @@ namespace gf::frames {
         return out;
     }
 
-    bool CSpanRing::push(const RenderSpan& span) {
-        if (m_any && span.beginUs <= m_last)
-            return false;
-        m_slots[m_next] = span;
-        m_next          = (m_next + 1) % kCapacity;
-        if (m_size < kCapacity)
-            ++m_size;
-        m_last = span.beginUs;
-        m_any  = true;
-        return true;
-    }
-
-    void CSpanRing::clear() {
-        m_next = 0;
-        m_size = 0;
-        m_last = 0;
-        m_any  = false;
-    }
-
-    std::vector<RenderSpan> CSpanRing::snapshot() const {
-        std::vector<RenderSpan> out;
-        out.reserve(m_size);
-        const size_t first = (m_next + kCapacity - m_size) % kCapacity;
-        for (size_t i = 0; i < m_size; ++i)
-            out.push_back(m_slots[(first + i) % kCapacity]);
-        return out;
-    }
-
     namespace {
         // At most `max` bytes, never ending inside a UTF-8 sequence (continuation bytes 10xxxxxx are dropped with their
         // lead byte).
@@ -120,10 +92,10 @@ namespace gf::frames {
         return out;
     }
 
-    std::optional<RenderSpan> stallOf(uint64_t dueUs, uint64_t nowUs) {
+    std::optional<Stall> stallOf(uint64_t dueUs, uint64_t nowUs, uint64_t cpuUs) {
         if (nowUs <= dueUs + kStallUs)
             return std::nullopt;
-        return RenderSpan{.beginUs = dueUs, .cpuUs = nowUs - dueUs};
+        return Stall{.beginUs = dueUs, .lengthUs = nowUs - dueUs, .cpuUs = cpuUs};
     }
 
     std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks, const LoopRecords& loop) {
@@ -156,17 +128,18 @@ namespace gf::frames {
                 out += ',';
             out += std::format(R"({{"t":{},"what":"{}"}})", marks[i].us, gfc::jsonEscape(cut(marks[i].what, kMaxMarkBytes)));
         }
-        const auto spans = [&out](std::span<const RenderSpan> list) {
-            for (size_t i = 0; i < list.size(); ++i) {
-                if (i > 0)
-                    out += ',';
-                out += std::format("[{},{}]", list[i].beginUs, list[i].cpuUs);
-            }
-        };
         out += std::format(R"(],"loop":{{"beats":{},"stalls":[)", loop.beats);
-        spans(loop.stalls);
+        for (size_t i = 0; i < loop.stalls.size(); ++i) {
+            if (i > 0)
+                out += ',';
+            out += std::format("[{},{},{}]", loop.stalls[i].beginUs, loop.stalls[i].lengthUs, loop.stalls[i].cpuUs);
+        }
         out += R"(],"work":[)";
-        spans(loop.work);
+        for (size_t i = 0; i < loop.work.size(); ++i) {
+            if (i > 0)
+                out += ',';
+            out += std::format("[{},{}]", loop.work[i].beginUs, loop.work[i].cpuUs);
+        }
         out += "]}}";
         return out;
     }
