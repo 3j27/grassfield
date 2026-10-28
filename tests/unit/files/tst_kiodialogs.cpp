@@ -25,6 +25,8 @@
 #include <KIO/OpenWithHandlerInterface>
 #include <KIO/StatJob>
 #include <KIO/UntrustedProgramHandlerInterface>
+#include <KJobTrackerInterface>
+#include <kio/jobtracker.h>
 #include <kio/workerbase.h>
 
 #include <gtest/gtest.h>
@@ -34,6 +36,7 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <typeinfo>
 
 // Readable QString values in gtest's messages.
 void PrintTo(const QString &value, std::ostream *os)
@@ -391,6 +394,26 @@ TEST_F(KioDialogsTest, TheCertificateSheetAnswersKiosFollowUp)
     }));
     EXPECT_EQ(boxAnswers, QList<int>{KIO::WorkerBase::SecondaryAction});
 
+    // Continue, then a deletion question first: it clears "Always trust" (every kind of question does).
+    sslAnswers.clear();
+    boxAnswers.clear();
+    ask->askIgnoreSslErrors(ssl, nullptr);
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(),
+                     {{QStringLiteral("button"), QStringLiteral("continue")}, {QStringLiteral("alwaysTrust"), true}});
+    ASSERT_TRUE(waitFor([&sslAnswers] {
+        return !sslAnswers.isEmpty();
+    }));
+    ask->askUserDelete({url(QStringLiteral("from/x"))}, KIO::AskUserActionInterface::Delete, KIO::AskUserActionInterface::DefaultConfirmation);
+    ASSERT_EQ(s_prompts->current().value(QStringLiteral("kind")).toString(), QStringLiteral("delete"));
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("cancel")}});
+    followUp();
+    ASSERT_EQ(s_prompts->current().value(QStringLiteral("kind")).toString(), QStringLiteral("message"));
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("cancel")}});
+    ASSERT_TRUE(waitFor([&boxAnswers] {
+        return !boxAnswers.isEmpty();
+    }));
+    EXPECT_EQ(boxAnswers, QList<int>{KIO::WorkerBase::Cancel});
+
     // Continue, then another kind of question first: it is a sheet, and "Always trust" answers nothing after it.
     sslAnswers.clear();
     boxAnswers.clear();
@@ -422,6 +445,18 @@ TEST_F(KioDialogsTest, AQuestionGoesWithTheDelegateThatAsked)
     delete delegate;
     EXPECT_TRUE(s_prompts->current().isEmpty());
     s_prompts->reply(id, {{QStringLiteral("button"), QStringLiteral("primary")}}); // a late reply: nothing happens
+
+    // Answered, then the delegate goes before the answer is delivered (the next turn of the event loop): it is not.
+    auto *second = KioDialogs::createDelegate();
+    auto *ask2 = second->findChild<GrassfieldAskUserAction *>();
+    ASSERT_NE(ask2, nullptr);
+    ask2->requestUserMessageBox(KIO::AskUserActionInterface::QuestionTwoActions, QStringLiteral("Overwrite?"), QString(),
+                                QStringLiteral("Yes"), QStringLiteral("No"));
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("primary")}});
+    delete second;
+    QEventLoop settle;
+    QTimer::singleShot(50, &settle, &QEventLoop::quit);
+    settle.exec(); // a delivery to the deleted extension would crash here
 }
 
 TEST_F(KioDialogsTest, KiosOwnJobsGetGrassfieldsDelegate)
@@ -494,6 +529,16 @@ TEST_F(KioDialogsTest, UndoOfALinkOpensNoProgressWindow)
     QObject::disconnect(done);
     EXPECT_FALSE(QFileInfo(path(QStringLiteral("to/a.txt"))).isSymLink()) << "the link is removed";
     EXPECT_TRUE(s_reported.isEmpty()) << (s_reported.isEmpty() ? std::string() : s_reported.first().toStdString());
+}
+
+TEST_F(KioDialogsTest, AJobKioTracksMakesNoProgressWindow)
+{
+    // A KIO job started without HideProgressInfo registers with KIO's job tracker as it is made (statjob.cpp:51-53); KIO's
+    // own tracker, with no KDE job server on the bus, makes its progress widget right there (KWidgetJobTracker), and
+    // deletes it when the job ends: checked at once, not only after the case.
+    KIO::StatJob *job = KIO::stat(url(QStringLiteral("from")));
+    EXPECT_TRUE(QApplication::topLevelWidgets().isEmpty()) << "KIO's progress window";
+    EXPECT_TRUE(run(job));
 }
 
 // What Files pastes: items only (ADR-0035 4a-14). Text, an image, or URLs KIO::paste would not take as items would go to
@@ -585,8 +630,9 @@ int main(int argc, char **argv)
     delete prompts;
     // Once Files' prompts are gone, KIO's default factory and undo interface are KIO's again.
     if (dynamic_cast<GrassfieldJobUiDelegate *>(std::unique_ptr<KJobUiDelegate>(KIO::createDefaultJobUiDelegate()).get())
-        || dynamic_cast<GrassfieldUndoUi *>(KIO::FileUndoManager::self()->uiInterface())) {
-        std::fprintf(stderr, "Grassfield's delegate factory or undo interface outlived Files' prompts\n");
+        || dynamic_cast<GrassfieldUndoUi *>(KIO::FileUndoManager::self()->uiInterface())
+        || typeid(*KIO::getJobTracker()) == typeid(KJobTrackerInterface)) {
+        std::fprintf(stderr, "Grassfield's delegate factory, undo interface or job tracker outlived Files' prompts\n");
         return 1;
     }
     return result;

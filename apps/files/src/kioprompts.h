@@ -6,6 +6,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <memory>
 
 #include <KIO/AskUserActionInterface>
 #include <KIO/FileUndoManager>
@@ -56,9 +57,10 @@ private:
         int id = 0;
         QVariantMap request;
         Answer answer;
-        // The owner, if there was one when it was asked (an answer never reaches one that is gone).
+        // The owner, if there was one when it was asked (an answer never reaches one that is gone, or a job that ended).
         QPointer<QObject> owner;
         bool owned = false;
+        std::shared_ptr<bool> ended;
         QList<QMetaObject::Connection> connections;
     };
     void forget(const Pending &pending);

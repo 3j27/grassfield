@@ -50,7 +50,6 @@
 #include <KIO/PasteJob>
 #include <KIO/RestoreJob>
 #include <KIO/SimpleJob>
-#include <KUrlMimeData>
 
 namespace
 {
@@ -141,11 +140,6 @@ QString countText(const QString &one, const QString &many, qsizetype n)
     return n == 1 ? one : many.arg(n);
 }
 
-QList<QUrl> clipboardUrls()
-{
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data ? KUrlMimeData::urlsFromMimeData(data) : QList<QUrl>();
-}
 } // namespace
 
 FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
@@ -354,7 +348,7 @@ bool FilesApp::canPaste() const
 
 int FilesApp::clipboardCount() const
 {
-    return int(clipboardUrls().size());
+    return int(KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).size());
 }
 
 QString FilesApp::viewMode() const
@@ -900,10 +894,11 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
 {
     const QMimeData *data = QGuiApplication::clipboard()->mimeData();
     // Items only, as the Finder: text or an image would go to KIO's own file-name dialogs (KioDialogs::pastableItems).
-    if (KioDialogs::pastableItems(data).isEmpty())
+    // The checks below and KIO::paste see the same list: KIO's own (local URLs first, valid ones).
+    const QList<QUrl> urls = KioDialogs::pastableItems(data);
+    if (urls.isEmpty())
         return;
     const bool cut = KIO::isClipboardDataCut(data);
-    const QList<QUrl> urls = KUrlMimeData::urlsFromMimeData(data);
     // Copying items into their own folder makes "name copy" duplicates instead of a conflict.
     if (!cut && !urls.isEmpty()) {
         bool sameFolder = true;
@@ -917,9 +912,17 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
     if (refuseTwin(this, destination, urls))
         return;
     // KIO::paste records the copy or move in FileUndoManager itself.
-    KIO::PasteJob *job = KIO::paste(data, destination, KIO::HideProgressInfo);
-    if (!job)
+    // KIO::paste reads its data when the job starts, after this returns: the items checked above, owned by the job, not
+    // the clipboard's data, which may change or go meanwhile.
+    auto *items = new QMimeData;
+    items->setUrls(urls);
+    KIO::setClipboardDataCut(items, cut);
+    KIO::PasteJob *job = KIO::paste(items, destination, KIO::HideProgressInfo);
+    if (!job) {
+        delete items;
         return;
+    }
+    items->setParent(job);
     attachDelegate(job);
     QPointer<QObject> target = folder;
     // What the job really created: a Rename or Skip answer in the conflict dialog puts a folder elsewhere than

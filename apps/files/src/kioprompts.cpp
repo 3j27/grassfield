@@ -131,17 +131,18 @@ int KioPrompts::ask(const QVariantMap &request, QObject *owner, const Answer &an
     QVariantMap r = request;
     r.insert(QStringLiteral("id"), id);
     auto *job = qobject_cast<KJob *>(owner);
+    // Set when the job ends, and kept by the answer that may still be on its way (KioPrompts::reply).
+    const auto ended = std::make_shared<bool>(false);
+    if (job) {
+        connect(job, &KJob::finished, this, [ended] {
+            *ended = true;
+        });
+    }
     if (m_responder) {
         // As a sheet would: after the call that asked returns, and only while its owner exists (and its job runs).
         const auto responder = m_responder;
         const QPointer<QObject> guard(owner);
         const bool owned = owner != nullptr;
-        const auto ended = std::make_shared<bool>(false);
-        if (job) {
-            connect(job, &KJob::finished, this, [ended] {
-                *ended = true;
-            });
-        }
         QTimer::singleShot(0, this, [r, answer, responder, guard, owned, ended] {
             if (owned && (!guard || *ended))
                 return;
@@ -149,7 +150,7 @@ int KioPrompts::ask(const QVariantMap &request, QObject *owner, const Answer &an
         });
         return id;
     }
-    Pending pending{id, r, answer, owner, owner != nullptr, {}};
+    Pending pending{id, r, answer, owner, owner != nullptr, ended, {}};
     if (owner) {
         pending.connections << connect(owner, &QObject::destroyed, this, [this, id] {
             withdraw(id);
@@ -183,7 +184,7 @@ void KioPrompts::reply(int id, const QVariantMap &reply)
         // After the caller returns: KIO connects to some answers only once it has asked (the certificate's,
         // usernotificationhandler.cpp:136-140), and a sheet may answer as it opens (a kind it does not know).
         QTimer::singleShot(0, this, [p, reply] {
-            if (!p.owned || p.owner)
+            if (!p.owned || (p.owner && !*p.ended))
                 p.answer(reply);
         });
         return;
