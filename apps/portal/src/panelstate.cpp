@@ -23,8 +23,10 @@ bool knownView(const QString &view)
 // A local absolute folder URL as kept, "" for anything else.
 QString folderUrl(const QString &text)
 {
-    const QUrl url(text, QUrl::StrictMode);
-    if (!url.isValid() || !url.isLocalFile() || !url.host().isEmpty() || !url.toLocalFile().startsWith(u'/'))
+    // Tolerant: the panel gives its folder as QML prints a URL (a space left as it is).
+    const QUrl url(text);
+    if (!url.isValid() || !url.isLocalFile() || !url.host().isEmpty() || url.hasQuery() || url.hasFragment()
+        || !url.toLocalFile().startsWith(u'/'))
         return {};
     return url.toString(QUrl::FullyEncoded);
 }

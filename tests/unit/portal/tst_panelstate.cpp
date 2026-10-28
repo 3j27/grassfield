@@ -30,6 +30,22 @@ TEST(PanelState, RemembersEachApplicationsFolderViewAndSize)
     EXPECT_EQ(again.entry(QString()).view, QStringLiteral("list"));
 }
 
+// A folder with a space or any letter, as QML prints its URL (the space as it is) or encoded: the same folder, kept encoded
+// (review of step 4b, BLOCKER 1).
+TEST(PanelState, KeepsAFolderWithASpace)
+{
+    QTemporaryDir dir;
+    PanelState state(dir.filePath(QStringLiteral("portal-filechooser.json")));
+    const QString kept = QStringLiteral("file:///home/u/My%20Documents/R%C3%A9sum%C3%A9s");
+    state.remember(QStringLiteral("a"), {QString::fromUtf8("file:///home/u/My Documents/R\u00e9sum\u00e9s"), QStringLiteral("list"), false, 0}, 1);
+    EXPECT_EQ(state.entry(QStringLiteral("a")).folder, kept);
+    state.remember(QStringLiteral("b"), {kept, QStringLiteral("list"), false, 0}, 2);
+    EXPECT_EQ(state.entry(QStringLiteral("b")).folder, kept);
+    // A query or a fragment is no folder.
+    state.remember(QStringLiteral("c"), {QStringLiteral("file:///home/u/a#b"), QStringLiteral("list"), false, 0}, 3);
+    EXPECT_TRUE(state.entry(QStringLiteral("c")).folder.isEmpty());
+}
+
 TEST(PanelState, KeepsOnlyWhatItCanUse)
 {
     QTemporaryDir dir;

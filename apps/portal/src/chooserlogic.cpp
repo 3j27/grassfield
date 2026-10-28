@@ -77,12 +77,18 @@ namespace grassfield::portal::chooser {
 
 namespace {
 
-// A value of the options vardict: a QDBusArgument when it came over the bus, the type itself when a test built it.
+// A value of the options vardict: a QDBusArgument when it came over the bus, the type itself when a test built it. A value
+// whose D-Bus type is not T's is no value: QtDBus would read past it (a crash), and any process on the session bus can call
+// the backend directly, without the frontend's type checks (review of step 4b, MINOR 3).
 template<class T>
 T fromVariant(const QVariant &value)
 {
-    if (value.metaType() == QMetaType::fromType<QDBusArgument>())
-        return qdbus_cast<T>(value.value<QDBusArgument>());
+    if (value.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        const auto arg = value.value<QDBusArgument>();
+        if (arg.currentSignature() != QLatin1String(QDBusMetaType::typeToSignature(QMetaType::fromType<T>())))
+            return T();
+        return qdbus_cast<T>(arg);
+    }
     return value.value<T>();
 }
 
@@ -138,10 +144,13 @@ bool validFilter(const Filter &filter)
 {
     if (filter.name.isEmpty() || filter.rules.isEmpty() || filter.rules.size() > kMaxRules)
         return false;
-    for (const FilterRule &rule : filter.rules)
+    qsizetype total = 0;
+    for (const FilterRule &rule : filter.rules) {
         if (rule.type > 1 || rule.pattern.isEmpty() || rule.pattern.size() > kMaxTextLength)
             return false;
-    return true;
+        total += rule.pattern.size();
+    }
+    return total <= kMaxFilterPatternLength;
 }
 
 QString fileUrl(const QString &path)
@@ -152,7 +161,9 @@ QString fileUrl(const QString &path)
 // A local absolute path from a file URL the panel returned, "" when it is not one.
 QString localPath(const QString &uri)
 {
-    const QUrl url(uri, QUrl::StrictMode);
+    // Tolerant: QML's url-to-string conversion leaves a space as it is ("file:///tmp/My Dir/a b.txt"), which StrictMode
+    // refuses (review of step 4b, BLOCKER 1); the checks below decide what is a local file.
+    const QUrl url(uri);
     if (!url.isValid() || url.scheme() != QLatin1String("file") || !url.host().isEmpty() || url.hasQuery() || url.hasFragment())
         return {};
     QString path = url.toLocalFile();
@@ -193,20 +204,20 @@ Request parse(Kind kind, const QString &appId, const QString &parentWindow, cons
         r.directory = options.value(QStringLiteral("directory")).toBool();
     }
 
-    // Filters (Open and Save): the valid ones, as given; the current one is shown first. With no list, the current filter
-    // alone is the list (the interface allows any current filter then).
+    // Filters (Open and Save): the valid ones, exactly as given (the application finds the one returned by its name), the
+    // current one shown first. With no list, the current filter alone is the list (the interface allows any current filter
+    // then). Only the panel's copy of the names is made plain (toQml).
     if (kind != Kind::SaveFiles) {
         const auto given = fromVariant<QList<Filter>>(options.value(QStringLiteral("filters")));
         for (const Filter &f : given) {
             if (r.filters.size() >= kMaxFilters)
                 break;
             if (validFilter(f))
-                r.filters.append(Filter{oneLine(f.name), f.rules});
+                r.filters.append(f);
         }
         if (options.contains(QStringLiteral("current_filter"))) {
-            Filter current = fromVariant<Filter>(options.value(QStringLiteral("current_filter")));
+            const Filter current = fromVariant<Filter>(options.value(QStringLiteral("current_filter")));
             if (validFilter(current)) {
-                current.name = oneLine(current.name);
                 if (r.filters.isEmpty())
                     r.filters.append(current);
                 r.currentFilter = qMax(0, int(r.filters.indexOf(current)));
@@ -216,25 +227,26 @@ Request parse(Kind kind, const QString &appId, const QString &parentWindow, cons
             r.currentFilter = 0;
     }
 
-    // Choices: a pop-up when it has options (its initial value one of them, else the first), a check box without.
+    // Choices: a pop-up when it has options (its initial value one of them, else the first), a check box without. Ids are
+    // returned exactly as given (an id or an option id longer than the bound is no choice, never a truncated one).
     QSet<QString> ids;
     const auto choices = fromVariant<QList<Choice>>(options.value(QStringLiteral("choices")));
     for (const Choice &given : choices) {
         if (r.choices.size() >= kMaxChoices)
             break;
-        if (given.id.isEmpty() || ids.contains(given.id))
+        if (given.id.isEmpty() || given.id.size() > kMaxTextLength || ids.contains(given.id))
             continue;
         Choice c;
-        c.id = given.id.left(kMaxTextLength);
+        c.id = given.id;
         c.label = oneLine(withoutMnemonic(given.label));
         QSet<QString> optionIds;
         for (const Pair &o : given.options) {
             if (c.options.size() >= kMaxChoiceOptions)
                 break;
-            if (o.first.isEmpty() || optionIds.contains(o.first))
+            if (o.first.isEmpty() || o.first.size() > kMaxTextLength || optionIds.contains(o.first))
                 continue;
             optionIds.insert(o.first);
-            c.options.append(Pair{o.first.left(kMaxTextLength), oneLine(withoutMnemonic(o.second))});
+            c.options.append(Pair{o.first, oneLine(withoutMnemonic(o.second))});
         }
         if (c.options.isEmpty())
             c.initial = given.initial == QLatin1String("true") ? QStringLiteral("true") : QStringLiteral("false");
@@ -264,8 +276,11 @@ Request parse(Kind kind, const QString &appId, const QString &parentWindow, cons
     }
     if (kind == Kind::SaveFiles) {
         const auto names = fromVariant<QByteArrayList>(options.value(QStringLiteral("files")));
+        // More names than the bound: the request ends (an answer for some of them only would look complete).
+        if (names.size() > kMaxFiles)
+            r.error = QStringLiteral("SaveFiles: too many file names");
         for (QByteArray bytes : names) {
-            if (r.files.size() >= kMaxFiles)
+            if (!r.error.isEmpty())
                 break;
             if (bytes.endsWith('\0'))
                 bytes.chop(1);
@@ -287,9 +302,10 @@ QVariantMap toQml(const Request &r)
     QVariantList filters;
     for (const Filter &f : r.filters) {
         QStringList globs, mimes;
+        // The panel's copy: the name as one line of plain text.
         for (const FilterRule &rule : f.rules)
             (rule.type == 0 ? globs : mimes).append(rule.pattern);
-        filters.append(QVariantMap{{QStringLiteral("name"), f.name}, {QStringLiteral("globs"), globs}, {QStringLiteral("mimeTypes"), mimes}});
+        filters.append(QVariantMap{{QStringLiteral("name"), oneLine(f.name)}, {QStringLiteral("globs"), globs}, {QStringLiteral("mimeTypes"), mimes}});
     }
     QVariantList choices;
     for (const Choice &c : r.choices) {

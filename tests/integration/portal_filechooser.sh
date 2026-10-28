@@ -43,10 +43,11 @@ check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedeskt
   "$pk/xdg/xdg-desktop-portal/portals/grassfield.portal" "$pk/dbus/$name.service" "$unit"
 desc="the session's routing sends FileChooser to grassfield, then gtk"
 check grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
-desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened"
+desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened, every place the user may write writable (4b-12)"
 check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME" \
-  NoNewPrivileges=yes ProtectSystem=strict RestrictSUIDSGID=yes LockPersonality=yes "ReadWritePaths=-%h -%t -/tmp -/var/tmp -/run/media -/media -/mnt"; do
-  grep -qx "$l" "$1" || { echo "missing: $l"; exit 1; }; done; ! grep -q "^Restart=" "$1"' _ "$unit"
+  NoNewPrivileges=yes ProtectSystem=full RestrictSUIDSGID=yes LockPersonality=yes; do
+  grep -qx "$l" "$1" || { echo "missing: $l"; exit 1; }; done; ! grep -q "^Restart=" "$1" &&
+  ! grep -q "^\(UMask\|ReadOnlyPaths\|ProtectHome\)=" "$1"' _ "$unit"
 desc="the PKGBUILD builds and installs the backend, its unit, .portal and D-Bus service files, and depends on KWindowSystem"
 check bash -c 'grep -q "cmake -S \"\$(_root)/apps/portal\"" "$1" && grep -q "cmake --install \"\$srcdir/portal-build\"" "$1" &&
   grep -q "for unit in .* portal; do" "$1" && grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal" "$1" &&
@@ -79,7 +80,7 @@ fakes=$root/tests/fixtures/fake-portal-backend.py
 # instead). Sets d.
 scenario() { # scenario <name> <answer> [later] [qml dir] [frontend: real|silent] [extra environment of the backend]
   d=$tmp/$1
-  mkdir -p "$d/services" "$d/home/Documents" "$d/run" "$d/cfg" "$d/xdg" "$d/state" "$d/config"
+  mkdir -p "$d/services" "$d/home/Documents" "$d/home/My Documents" "$d/run" "$d/cfg" "$d/xdg" "$d/state" "$d/config"
   chmod 700 "$d/run"
   echo hello >"$d/home/Documents/a.txt"
   cp -r "$pk/xdg/." "$d/xdg/"
@@ -120,20 +121,20 @@ scenario save accept || exit 1
 got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.FileChooser \(.*config\)" "$d/frontend.log" | sort -u)
 desc="1 the frontend routes FileChooser to the Grassfield backend [$got]"
 check test "$got" = "Using grassfield.portal for org.freedesktop.impl.portal.FileChooser (interface specific config)"
-out=$(choose SaveFile "{\"current_name\": \"new.txt\", \"current_folder\": \"$d/home/Documents\", \"filters\": [[\"Text\", [[0, \"*.txt\"]]], [\"Markdown\", [[0, \"*.md\"]]]], \"choices\": [[\"enc\", \"Encoding\", [[\"utf8\", \"UTF-8\"], [\"latin1\", \"Western\"]], \"latin1\"]]}" 20)
+out=$(choose SaveFile "{\"current_name\": \"new file.txt\", \"current_folder\": \"$d/home/My Documents\", \"filters\": [[\"Text\", [[0, \"*.txt\"]]], [\"Markdown\", [[0, \"*.md\"]]]], \"choices\": [[\"enc\", \"Encoding\", [[\"utf8\", \"UTF-8\"], [\"latin1\", \"Western\"]], \"latin1\"]]}" 20)
 got=$(value '[d.get("response"), d.get("results", {}).get("uris"), d.get("results", {}).get("choices"), d.get("results", {}).get("current_filter")]' <<<"$out")
-desc="1 SaveFile: the suggested name in the suggested folder, the choice and the filter reach the application [$got]"
-check test "$got" = "[0, [\"file://$d/home/Documents/new.txt\"], [[\"enc\", \"latin1\"]], [\"Text\", [[0, \"*.txt\"]]]]"
+desc="1 SaveFile: the suggested name in the suggested folder (both with a space), the choice and the filter reach the application [$got]"
+check test "$got" = "[0, [\"file://$d/home/My%20Documents/new%20file.txt\"], [[\"enc\", \"latin1\"]], [\"Text\", [[0, \"*.txt\"]]]]"
 out=$(choose OpenFile "{\"directory\": true, \"accept_label\": \"_Choose\"}" 20)
 got=$(value '[d.get("response"), d.get("results", {}).get("uris")]' <<<"$out")
 desc="1 OpenFile of a folder: the panel opens where the application's last panel was left, and answers that folder [$got]"
-check test "$got" = "[0, [\"file://$d/home/Documents\"]]"
+check test "$got" = "[0, [\"file://$d/home/My%20Documents\"]]"
 desc="1 the backend was started once, by D-Bus activation, and outlived its panels, each of which drew [$(starts) start(s), $(grep -c 'panel shown' "$d/backend.log") panel(s): $(grep -o 'panel shown in [0-9]* ms' "$d/backend.log" | tr '\n' ';')]"
 check test "$(starts) $(grep -c 'panel shown' "$d/backend.log")" = "1 2"
 desc="1 idle, the backend quits by itself (5 s here)"
 check wait_until 15 unowned "$name"
 desc="1 the panels kept the application's last folder (portal-filechooser.json)"
-check grep -q "\"folder\":\"file://$d/home/Documents\"" "$d/state/portal-filechooser.json"
+check grep -qF "\"folder\":\"file://$d/home/My%20Documents\"" "$d/state/portal-filechooser.json"
 stop_bus
 
 # 2 --------------------------------------------------------------------------------------------------------------------
