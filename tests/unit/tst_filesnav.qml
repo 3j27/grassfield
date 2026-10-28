@@ -60,6 +60,26 @@ TestCase {
         compare(h.index, 1);
     }
 
+    // The Applications location (grassfield-apps:/) in a tab's history: Back and Forward return to it like to a folder, and a
+    // second visit while it is shown adds no entry.
+    function test_historyWithTheApplicationsLocation() {
+        const apps = "grassfield-apps:/";
+        let h = Nav.pushHistory([], -1, "file:///home/u");
+        h = Nav.pushHistory(h.entries, h.index, apps);
+        h = Nav.pushHistory(h.entries, h.index, apps);
+        compare(h.entries, ["file:///home/u", apps]);
+        compare(h.index, 1);
+        // Back to the folder, then on to the location again (Forward is the entry after the index).
+        const back = h.index - 1;
+        compare(h.entries[back], "file:///home/u");
+        compare(h.entries[back + 1], apps);
+        // Back, then elsewhere: the location is a dropped forward entry.
+        h = Nav.pushHistory(h.entries, back, "file:///home/u/Documents");
+        compare(h.entries, ["file:///home/u", "file:///home/u/Documents"]);
+        // The location has no stored view yet: the tab's own view and sort stay.
+        compare(Nav.viewFor("icons", undefined, "list"), "icons");
+    }
+
     function test_typeahead() {
         compare(Nav.typeahead("", "a", 0, 1000), "a");
         compare(Nav.typeahead("a", "l", 200, 1000), "al");

@@ -23,7 +23,7 @@ Platform.MenuBar {
     readonly property var folder: bar.win.folder
     readonly property int count: bar.folder ? bar.folder.selectedCount : 0
     readonly property bool inTrash: bar.folder !== null && bar.folder.isTrash
-    readonly property bool inApplications: bar.folder !== null && bar.folder.isApplications
+    readonly property bool inApplications: bar.folder !== null && bar.folder.isApplications === true
     readonly property bool writable: bar.folder !== null && bar.folder.writable
     // Items can be renamed, cut and trashed (BrowserTab.itemsEditable: a writable folder or a tag search).
     readonly property bool editable: bar.folder !== null && !bar.inTrash && (bar.folder.writable || bar.folder.isSearch)

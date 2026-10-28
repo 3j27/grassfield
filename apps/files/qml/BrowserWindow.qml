@@ -488,6 +488,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+Shift+A"
+        enabled: !win.childIsKey
         onActivated: win.tab.navigate(win.app.applicationsUrl(), true)
         onActivatedAmbiguously: activated()
     }
