@@ -6,7 +6,8 @@ import "TagColors.js" as TagColors
 // Sidebar: Favorites (standard folders that exist), Locations (system volume, Solid volumes with
 // eject, Network when a KIO network worker is installed, Trash) and Tags (the tags in use: a click lists the items
 // with that tag in the shown folder and below, a drop tags the dropped items, the context menu removes the tag from
-// the sidebar). Items accept drops.
+// the sidebar). Items accept drops. In an Open or Save panel (the tab's chooser set) it changes nothing: a tag takes no
+// drop and has no menu.
 FocusScope {
     id: root
 
@@ -15,6 +16,8 @@ FocusScope {
     property var tab: null
 
     readonly property var places: root.app.places
+    // The tab browses for an Open or Save panel (grassfield-portal, ADR-0035 D-4).
+    readonly property bool choosing: !!(root.tab && root.tab.chooser)
     readonly property int currentRow: root.tab ? root.places.rowForUrl(root.tab.url) : -1
     property int keyRow: -1
     // Space kept free at the top for the window lights (the toolbar drawn over it, ADR-0015).
@@ -68,7 +71,7 @@ FocusScope {
     // The Tags section's context menu (on a tag or on the header): Remove from Sidebar (a tag only) and, while some tags
     // are removed, Show Hidden Tag > the tags to list again (the way back; the files keep their tags either way).
     function openTagMenu(tag: string, x: real, y: real): void {
-        if (!root.tab)
+        if (!root.tab || root.choosing)
             return;
         const items = [];
         if (tag !== "")
@@ -164,8 +167,8 @@ FocusScope {
             visible: header.section !== "recents"
             // The Tags header has a menu (Show Hidden Tag) that a right click opens: the same menu through an accessible
             // action (A11Y-09). The other headers are plain headings.
-            Accessible.role: header.section === "tags" ? Accessible.Button : Accessible.Heading
-            Accessible.name: header.section === "favorites" ? qsTr("Favorites") : header.section === "tags" ? qsTr("Tags menu") : qsTr("Locations")
+            Accessible.role: header.section === "tags" && !root.choosing ? Accessible.Button : Accessible.Heading
+            Accessible.name: header.section === "favorites" ? qsTr("Favorites") : header.section === "tags" ? (root.choosing ? qsTr("Tags") : qsTr("Tags menu")) : qsTr("Locations")
             Accessible.onPressAction: {
                 if (header.section === "tags") {
                     const p = header.mapToItem(null, header.width / 2, header.height / 2);
@@ -176,7 +179,7 @@ FocusScope {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.RightButton
-                enabled: header.section === "tags"
+                enabled: header.section === "tags" && !root.choosing
                 onClicked: event => {
                     const p = mapToItem(null, event.x, event.y);
                     root.openTagMenu("", p.x, p.y);
@@ -298,8 +301,9 @@ FocusScope {
         DropArea {
             id: drop
             anchors.fill: parent
-            // Network and Recents take no drop (Recents is a list, not a place: Finder; it does not spring open either).
-            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents"
+            // Network and Recents take no drop (Recents is a list, not a place: Finder; it does not spring open either), nor a
+            // tag in a panel.
+            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents" && !(entry.isTag && root.choosing)
             keys: ["text/uri-list"]
             // A place rested on during a drag opens in the tab (spring-loaded); a tag does not.
             onEntered: {

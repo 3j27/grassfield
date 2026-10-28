@@ -466,6 +466,9 @@ Window {
         id: content
         anchors.fill: parent
         focus: true
+        // The panel is a dialog named by its title (spec common rule 4; the window itself carries no accessible role).
+        Accessible.role: Accessible.Dialog
+        Accessible.name: panel.title
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape || (event.key === Qt.Key_Period && (event.modifiers & Qt.ControlModifier))) {
                 panel.cancel();
@@ -551,19 +554,25 @@ Window {
                     font.pixelSize: Tokens.typographyBodySize
                 }
 
-                // Where: the shown folder and the folders enclosing it, then the standard places.
+                // Where: the shown folder and the folders enclosing it, then the standard places. One entry per folder: a
+                // folder's URL as QML prints it, without a trailing "/" (the places come encoded and with one, the tab's URL
+                // without either).
                 ComboBox {
                     id: whereBox
+                    function key(url: var): string {
+                        const text = String(Qt.url(url));
+                        return text.length > "file:///".length ? text.replace(/\/+$/, "") : text;
+                    }
                     visible: !panel.expanded
                     width: Tokens.filesPanelFieldWidth
                     accessibleName: qsTr("Where")
-                    value: String(tab.url)
+                    value: whereBox.key(tab.url)
                     model: {
                         const items = [];
                         const seen = {};
                         const segments = tab.segments;
                         const add = (url, label) => {
-                            const key = String(url);
+                            const key = whereBox.key(url);
                             if (key === "" || seen[key])
                                 return;
                             seen[key] = true;

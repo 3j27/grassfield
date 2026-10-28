@@ -19,6 +19,7 @@ TestCase {
             "file:///home/u": [["Documents", true], ["notes.txt", false]],
             "file:///home/u/Documents": [["a.txt", false], ["b.png", false], ["Sub", true]],
             "file:///home/u/Documents/Sub": [["x.txt", false]],
+            "file:///home/u/My Documents": [["c.txt", false]],
             "smb://server/share": [["remote.txt", false]]
         })
 
@@ -625,6 +626,31 @@ TestCase {
         const sheet = test.findSheet(panel.contentItem, true);
         sheet.confirm();
         compare(fakeApp.made, ["file:///home/u/Documents/untitled folder"]);
+    }
+
+    // A folder with a space (review of step 4b, BLOCKER 1 and NIT 15): Where lists it once, though the places come encoded and
+    // with a trailing "/", and Save answers the name in it (the backend reads the URL as QML prints it).
+    function test_where_lists_a_folder_with_a_space_once(): void {
+        const panel = test.openPanel({kind: "save", currentName: "new file.txt", currentFolder: "file:///home/u/My Documents"},
+                                     {places: {home: "file:///home/u/", desktop: "", documents: "file:///home/u/My%20Documents/", downloads: ""}});
+        let where = null;
+        const walk = item => {
+            if (item instanceof ComboBox && item.accessibleName === "Where" && !where)
+                where = item;
+            for (let i = 0; i < item.children.length; i++)
+                walk(item.children[i]);
+        };
+        walk(panel.contentItem);
+        verify(where !== null, "the Where pop-up");
+        const ids = [];
+        for (let i = 0; i < where.model.length; i++)
+            ids.push(where.model[i].id);
+        compare(ids.filter(i => i === "file:///home/u/My Documents").length, 1, ids.join(", "));
+        compare(ids.filter(i => i === "file:///home/u").length, 1, ids.join(", "));
+        compare(where.value, "file:///home/u/My Documents");
+        panel.pressDefault();
+        compare(fakeHost.answers.length, 1);
+        compare(fakeHost.answers[0].map.uris, ["file:///home/u/My Documents/new%20file.txt"]);
     }
 
     function test_a_drop_shows_the_item_and_moves_nothing(): void {
