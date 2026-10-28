@@ -613,7 +613,7 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   Files' prompts go):
   - `AskUserActionInterface`: rename/overwrite (Keep Both / Skip at the leading edge, Stop / Replace at the trailing edge,
     "Merge" for a folder onto a folder, Apply to All for several items; Keep Both names the new item as KIO does,
-    `KFileUtils::suggestName`), skip (Try Again, or Rename for characters the destination refuses, Stop, and for several
+    `KFileUtils::suggestName`; Resume / Start Over / Stop for a copy that stopped part way), skip (Try Again, or Rename for characters the destination refuses, Stop, and for several
     items Skip and Apply to All; one item that can't be retried: OK), the permanent deletions KIO asks about (a plain move to the Trash is not asked), `requestUserMessageBox` as a sheet
     with the worker's buttons (Show Details for its details), `askIgnoreSslErrors` as the certificate sheet (Show Certificate
     lists the chain as text: subject, issuer, validity, SHA-256, the problems found): Cancel is the default button (Return
@@ -627,8 +627,9 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - KD2 every answer is the KIO answer the widget dialog gives for the same choice (`RenameDialog_Result`, `SkipDialog_Result`,
   `KIO::WorkerBase::ButtonCode`), so jobs behave exactly as before.
 - KD3 the sheets show in the Files window the user last worked in when the question came, one at a time, and stay there
-  until answered (in another window if that one closes); a question waits while another sheet of that window is open (Go
-  to Folder, a confirmation); a question whose job ends goes away unanswered; keyboard as common rule 3 (4a-9).
+  until answered (in another window if that one closes); a question waits while another sheet or a menu of that window is
+  open (Go to Folder, a confirmation, a context or toolbar menu) and keeps its choices; while shown it keeps the keyboard;
+  a question whose job ends goes away unanswered; keyboard as common rule 3 (4a-9).
 - KD4 errors and warnings KIO shows by itself (where KIO turns its automatic handling on) are notice sheets; Undo reports its
   errors on the window's error line, keeps a copy changed since it was made and says so (4a-11); no job of Files opens
   KIO's progress window (4a-12).
@@ -640,9 +641,10 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   answered as the sheets answer, do what that answer says (Replace, Keep Both, Stop, Skip with Apply to All asked once, a
   folder copied and a folder moved onto a folder merged, a file onto a folder never "Merge", a sheet's reply, a withdrawn
   question; `tests/unit/files/tst_kiodialogs.cpp`); the sheets' texts, buttons and replies (`tests/unit/tst_fileskiosheets.qml`);
-  the window that shows a question, and a question that waits for Go to Folder (`tests/unit/tst_filesbrowser.qml`).
+  the window that shows a question, a question that waits for Go to Folder and for a menu, and a sheet that takes the
+  keyboard back (`tests/unit/tst_filesbrowser.qml`).
 - A-KD2 (L0) no widget is created by those jobs, KIO's own jobs resolve Grassfield's extensions, an error KIO reports itself
-  is a notice, Undo of a changed copy keeps it and Undo of a link opens no progress window, only items are pastable, and
+  is a notice, Undo of a changed copy keeps it, a job KIO tracks makes no progress window, only items are pastable, and
   Files' sources hold no KIO or Qt widget dialog, set no other delegate, never use KIO's paste test and never enable "open
   or execute" (`tst_kiodialogs.cpp`).
 - A-KD4 (L0) certificate: Return and Esc cancel; Continue answers KIO's follow-up with "Current Session only" (30 minutes),

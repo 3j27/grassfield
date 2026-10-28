@@ -1157,18 +1157,21 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
 - **4a-7. A folder onto a folder.** KIO's Overwrite writes into the folder (its items with the same name are asked about one
   by one); "Replace" would say the folder's content goes. **Choice:** the button says "Merge" (Finder's word for it)
   whenever KIO offers Overwrite onto a folder, as KIO's own dialog says "Write Into" (`renamedialog.cpp:304-312`): a move
-  within one file system asks without `SourceIsDirectory` (`copyjob.cpp:2521-2533`; internal review, MAJOR 1), and KIO
-  never offers Overwrite for a file onto a folder (`:2521-2524`).
+  within one file system asks without `SourceIsDirectory` (`copyjob.cpp:2521-2533`; internal review, MAJOR 1). KIO offers
+  no Overwrite for a local file onto a folder (`:2521-2524`); for a remote source it guesses from the error
+  (`copyjob.cpp:2457`), and shows "Write Into" then too, as the sheet shows "Merge".
 - **4a-8. The name Keep Both gives.** Options: (a) KIO's (`KFileUtils::suggestName`: "Report (1).pdf"); (b) Finder's
   ("Report 2.pdf"). **Choice: (a)**: with Apply to All, KIO names the following items itself with the same function, so one
   operation never mixes two rules.
 - **4a-9. Which window shows a question.** Files' jobs belong to the app, not to a window. Options: (a) every window; (b) the
   window the user last worked in when it was asked, kept there until it is answered, moved to another window if that one
   closes. **Choice: (b)** (a sheet belongs to one window); with no browser window open (`--info`), the question gets its safe
-  answer (Stop, Cancel, Don't Delete). One sheet at a time in a window, as AppKit queues a window's sheets: a question
-  waits, out of sight and of the keyboard's reach, while Go to Folder or a confirmation is open in that window, and shows
-  once it closes (internal review, MAJOR 2: the first version opened it behind the other sheet, with the keyboard, where
-  Return would have answered Replace unseen).
+  answer (Stop, Cancel, Don't Delete). One sheet at a time in a window, as AppKit queues a window's sheets and holds them
+  during menu tracking: a question waits, out of sight and of the keyboard's reach, while Go to Folder, a confirmation or
+  a menu is open in that window, and shows once it closes, with the choices already made on it (internal review, MAJOR 2,
+  and counter-review, MAJOR: the first versions opened it behind the other sheet, then under an open menu, with the
+  keyboard, where Return would have answered Replace unseen). While shown, the sheet keeps the keyboard: a view that takes
+  it a moment later (a navigation's queued focus, an inline rename that ends) gives it back (counter-review, MINOR 1).
 - **4a-10. Delete confirmations KIO asks for** (`askUserDelete`). Files asks before its own permanent deletions. **Choice:**
   every permanent deletion KIO asks about is a sheet; a plain move to the Trash is not asked (macOS) unless KIO forces the
   question. KIO's "do not ask again" answers (`kiorc` for deletions, `kioslaverc` for a worker's message boxes,
@@ -1194,10 +1197,17 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
   (a) keep it (KDE dialogs); (b) paste items only, as the Finder does (Paste is unavailable for text); (c) a Grassfield
   "name the new file" sheet. **Choice: (b)**: Paste is offered only when the clipboard holds items (`text/uri-list`, the
   form `KIO::paste` copies or moves, `pastejob.cpp:68-70`); `tst_kiodialogs.cpp` fails if Files' sources call KIO's own
-  test (`canPasteMimeData`, which accepts text).
+  test (`canPasteMimeData`, which accepts text). Paste's count, its checks and the job use the same list, KIO's (local URLs
+  first, valid ones), and the job gets its own copy of it, not the clipboard's data, which it reads a moment later.
 - **4a-15. Skip for one item** (internal review, MINOR 3). KIO's skip dialog offers Skip and Skip All only when there are
-  several items (`skipdialog.cpp:58-72`); for one, Try Again (or Rename) and Cancel, or OK alone when it can't be retried.
-  **Choice:** the same buttons (KD2), so a one-file copy that fails ends with its error, never as a silent skip.
+  several items still to do (`skipdialog.cpp:58-72`; `copyjob.cpp:1540, 1854, 2045`, so not for the last one either); for
+  one, Try Again (or Rename) and Cancel, or OK alone when it can't be retried. **Choice:** the same buttons (KD2), so a
+  one-file copy that fails ends with its error, never as a silent skip.
+- **4a-16. A copy that stopped part way** (counter-review, MINOR 2). KIO asks before resuming it (`filecopyjob.cpp:355-376`,
+  Overwrite, Resume, no new name), after an interrupted copy left `name.part`. Options: (a) the conflict sheet without
+  Resume (Replace or Stop only: the part already copied is lost); (b) a sheet of its own: "Part of “X” is already in this
+  location." with Resume (the default), Start Over and Stop. **Choice: (b)**, KIO's answers (`Result_Resume`,
+  `Result_ResumeAll` with Apply to All, `Result_Overwrite`).
 
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
