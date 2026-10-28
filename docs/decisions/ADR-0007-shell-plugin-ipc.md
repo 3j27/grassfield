@@ -134,6 +134,15 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   in that layout). It is published while the tile records are still those of `gen` (the generation of the `placed`
   notice that announced it): any later change ends it. Feature `tiling-layouts`, advertised together with
   `tiling-arrange`.
+- Window tiling, step 4b (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL29): verb `group_front(address)`: the
+  members of the window's tile group on screen on its Desktop (Tiled or being resized; not minimized, full screen or
+  hidden) come forward in their stacking order, above every other window, then the window itself when it is on screen;
+  the shell calls it right before it activates the window (a window brought forward from the Dock, the app switcher or
+  the Overview), so the window ends in front whichever of the two reaches the compositor first. It
+  changes no tile record and posts no notice; a window without a group changes nothing. Refused while the session is
+  locked (`tiling` notice `reason:"locked"`) and for an unknown window (`reason:"invalid"`). The groups themselves are the
+  `group` of each window in the `hyprctl grassfield-tiling` reply (step 1). Feature `tiling-groups`, advertised with
+  `tiling-arrange` when the verb registered.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -176,8 +185,8 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front
 ```
 
 ## Evidence

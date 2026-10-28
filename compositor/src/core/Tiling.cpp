@@ -1074,6 +1074,27 @@ namespace gf::tiling {
         return request;
     }
 
+    // ---- tile groups ----
+
+    std::vector<uint64_t> groupRaiseOrder(std::span<const TileRecord> records, uint64_t chosen, std::span<const uint64_t> stack) {
+        std::vector<uint64_t> out;
+        const auto            self = std::ranges::find_if(records, [chosen](const TileRecord& r) { return r.id == chosen; });
+        if (self == records.end() || self->group == 0)
+            return out;
+        for (const auto id : stack) {
+            if (id == chosen || std::ranges::find(out, id) != out.end())
+                continue;
+            const auto r = std::ranges::find_if(records, [id](const TileRecord& o) { return o.id == id; });
+            if (r != records.end() && r->group == self->group && r->workspace == self->workspace &&
+                (r->state == TileState::Tiled || r->state == TileState::Resizing))
+                out.push_back(id);
+        }
+        // The chosen one last, over its group: the shell's activation can reach the compositor before this request.
+        if (!out.empty() && (self->state == TileState::Tiled || self->state == TileState::Resizing) && std::ranges::find(stack, chosen) != stack.end())
+            out.push_back(chosen);
+        return out;
+    }
+
     // ---- suggestions ----
 
     std::vector<int> zonesHeld(std::span<const TileRecord> records, const TileRecord& asker) {

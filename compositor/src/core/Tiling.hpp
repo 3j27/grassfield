@@ -455,6 +455,16 @@ namespace gf::tiling {
     };
     std::expected<ArrangeRequest, std::string> parseArrange(std::string_view json);
 
+    // ---- tile groups (TL29) ----
+
+    // The members of the group of `chosen` that come forward with it (a window brought forward from the Dock, the app
+    // switcher or the Overview), in the order to raise them: the stacking order, bottom first (`stack`: window ids, bottom to
+    // top). Members on screen only (Tiled or Resizing) on the Desktop of `chosen`; a suspended one (minimized, full screen,
+    // hidden) stays where it is. `chosen` comes last when it is on screen too: the shell's activation that follows raises it
+    // as well, but may reach the compositor first. Empty when no member comes forward (`chosen` has no group, or none on
+    // screen beside it).
+    std::vector<uint64_t> groupRaiseOrder(std::span<const TileRecord> records, uint64_t chosen, std::span<const uint64_t> stack);
+
     // ---- suggestions (TL28) ----
 
     // The zones of the layout instance of `asker` that a window holds: its own and those of the members of its group placed
