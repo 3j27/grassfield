@@ -3120,6 +3120,14 @@
         <translation>%1, pile de dossier</translation>
     </message>
     <message>
+        <source>, 1 update</source>
+        <translation>, 1 mise à jour</translation>
+    </message>
+    <message>
+        <source>, %1 updates</source>
+        <translation>, %1 mises à jour</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
@@ -8715,6 +8723,14 @@
         <translation>Réglages…</translation>
     </message>
     <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+    <message>
         <source>Recent Items</source>
         <translation>Éléments récents</translation>
     </message>
@@ -9968,6 +9984,26 @@
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>
         <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
+    </message>
+    <message>
+        <source>Updates are stopped</source>
+        <translation>Les mises à jour sont bloquées</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s update repository cannot be used, and this stops every system update. Open Software Update to turn Grassfield updates off.</source>
+        <translation>Le dépôt de mises à jour de Grassfield est inutilisable, ce qui bloque toutes les mises à jour du système. Ouvrez Mise à jour de logiciels pour désactiver les mises à jour de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 is available</source>
+        <translation>Grassfield %1 est disponible</translation>
+    </message>
+    <message>
+        <source>See what&apos;s new in Software Update.</source>
+        <translation>Découvrez les nouveautés dans Mise à jour de logiciels.</translation>
+    </message>
+    <message>
+        <source>Omarchy %1 is available</source>
+        <translation>Omarchy %1 est disponible</translation>
     </message>
     <message>
         <source>and 1 more</source>

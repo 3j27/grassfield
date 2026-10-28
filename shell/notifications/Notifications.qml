@@ -263,6 +263,17 @@ Singleton {
         return key;
     }
 
+    // Shell notices whose click does something (Software Update's open the pane, ADR-0033 U20, U22): key -> the function a
+    // click runs. In memory only, like the transient entries they belong to; gone with the entry.
+    property var internalActions: ({})
+
+    // postInternal, and a click on the banner or the Center's entry runs `activate` (then the entry goes, as any other).
+    function postInternalAction(summary: string, body: string, activate: var): string {
+        const key = postInternal(summary, body);
+        internalActions[key] = activate;
+        return key;
+    }
+
     // The desktop's Edit Widgets… (macOS model): the Center opens straight on its widget gallery. The Center's column
     // takes the request (galleryWanted) when it is created, or at once when it is already open.
     property bool galleryWanted: false
@@ -341,8 +352,13 @@ Singleton {
             n.dismiss();
     }
 
-    // Activates the default action (if any) and the sender's window; clears the entry.
+    // Activates the default action (if any) and the sender's window, or a shell notice's own action; clears the entry.
     function activateDefault(key: string): void {
+        const own = internalActions[key];
+        if (typeof own === "function") {
+            delete internalActions[key];
+            own();
+        }
         const n = liveByKey[key];
         if (n) {
             const action = (n.actions || []).find(a => a.identifier === "default");
@@ -708,6 +724,7 @@ Singleton {
     // ---- internals ----
 
     function finishLive(key: string): void {
+        delete internalActions[key];
         const n = liveByKey[key];
         if (n) {
             delete liveByKey[key];
