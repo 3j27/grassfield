@@ -24,7 +24,7 @@ owns that cost. A stall with little CPU is the main thread waiting (descheduled 
 its length in CPU is the compositor working (integrator nested pass of ce82fd3).
 
 Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE]
-       [--work=FILE] [--beats=N] [--gate=PREFIX ...]
+       [--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL]
   frames.txt   "<presented us> <interval us>" (the intervals spanning a request already left out)
   renders.all  "<begin us> <cpu us>"
   marks.all    "<us> <name>"
@@ -32,11 +32,15 @@ Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <ref
                stallOf), with the main thread's CPU time from the beat before (the stall and up to one beat period)
   --work       "<begin us> <length us>": the plugin's own work outside a render
   --beats      the beats the loop probe ran (0: the loop was not probed, so a stall could not be seen)
-  --gate=PREFIX the scenarios whose label starts with PREFIX are judged here: PASS when their animations hold frames and no
-               long frame the compositor caused, FAIL (exit 1) otherwise, also when the renders or the loop were not
-               recorded; the client-paced ones are information (the shared edge's drag, tiling.md TL30, ADR-0036 D34 as
-               amended: each window shows the buffer its app commits, at its pace). Without it the script only reports
-               (exit 0).
+  --gate=PREFIX the scenarios whose label starts with PREFIX are judged here (the shared edge's drag, tiling.md TL30,
+               ADR-0036 D34 as amended); FAIL (exit 1) when the renders, the loop or the plugin's work were not recorded or
+               the animation holds no frame, else PASS when both hold: (a) the plugin's own work is at most 1 ms in every
+               frame of the animation; (b) its compositor-caused long frames per second of animation are at most 1.25 times
+               the baseline's (--baseline), or none without a baseline. The client-paced ones are information (each window
+               shows the buffer its app commits, at its pace). Without it the script only reports (exit 0).
+  --baseline=LABEL the scenario a gated one is compared with: Hyprland's own resize_on_border drag of one of the same windows,
+               with the same glide (the integrator's D34 gate, 2026-10-28: the shared edge is judged against what Hyprland's
+               own resize costs, not against zero); not measured: FAIL.
 """
 import sys
 from collections import defaultdict
@@ -80,7 +84,7 @@ def held(lo, hi, loop, renders):
 
 
 # compositor/src/core/FrameLog.hpp kBeatUs: a stall's CPU time covers it and at most one beat period before it.
-BEAT_US = 4000
+BEAT_US = 1000
 
 
 def stall_cpu(lo, hi, stalls):
@@ -112,12 +116,18 @@ def classify(start, end, renders, cpu_limit, wait_limit, loop=()):
     return "other", begin - start, cpu, before
 
 
+# The D34 gate (integrator, 2026-10-28): the plugin's own work in one frame, and the shared edge's compositor-caused long frames
+# per second against the baseline's.
+WORK_LIMIT_US = 1000
+BASELINE_FACTOR = 1.25
+
+
 def new_part():
-    return {"frames": 0, "long": 0, "compositor": 0, "client": 0, "other": 0, "longest": 0}
+    return {"frames": 0, "long": 0, "compositor": 0, "client": 0, "other": 0, "longest": 0, "work_max": 0, "work_any": False}
 
 
 def main(argv):
-    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": []}
+    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": [], "--baseline": []}
     rest = []
     for a in argv:
         key = a.split("=", 1)[0]
@@ -133,8 +143,9 @@ def main(argv):
         beats = -1
     if len(argv) != 7 or beats < 0:
         print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE] "
-              "[--work=FILE] [--beats=N] [--gate=PREFIX ...]", file=sys.stderr)
+              "[--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL]", file=sys.stderr)
         return 2
+    baseline = options["--baseline"][-1] if options["--baseline"] else None
     stalls = sorted((int(a[0]), int(a[1]), int(a[2]) if len(a) >= 3 else None) for path in options["--stalls"] for a in rows(path, 2))
     work = sorted((int(a[0]), int(a[1])) for path in options["--work"] for a in rows(path, 2))
     loop = sorted([(b, n) for b, n, _ in stalls] + work)
@@ -152,11 +163,12 @@ def main(argv):
         events.append((r[0], start, window, tail))
     long_limit, cpu_limit, wait_limit, detail_limit = 1.2 * period, 0.8 * period, 0.5 * period, 3 * period
 
-    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list),
+    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list), "anim_us": 0,
                                "held": {"frames": 0, "stalls": 0, "stall_cpu": 0.0, "stall_cpu_known": False, "work": 0, "render": 0}})
     details = []
     for name, start, window, tail in events:
         acc = per[name]
+        acc["anim_us"] += window
         end, tail_end = start + window, start + window + tail
         acc["cpu"].extend(c for b, c in renders if start < b <= end)
         for us, what in marks:
@@ -168,6 +180,9 @@ def main(argv):
             part = "animation" if t <= end else "tail"
             p = acc[part]
             p["frames"] += 1
+            in_frame = held(t - interval, t, work, ())
+            p["work_max"] = max(p["work_max"], in_frame)
+            p["work_any"] = p["work_any"] or in_frame > 0
             if interval <= long_limit:
                 continue
             kind, wait, cpu, before = classify(t - interval, t, renders, cpu_limit, wait_limit, loop)
@@ -232,11 +247,31 @@ def main(argv):
             print(f"FAIL {name}: no frame was presented in the animation")
             status = 1
             continue
-        verdict = "PASS" if a["compositor"] == 0 else "FAIL"
+        if not a["work_any"]:
+            print(f"FAIL {name}: no work of the plugin recorded in the animation, the drag's own cost cannot be judged")
+            status = 1
+            continue
+        work_ok = a["work_max"] <= WORK_LIMIT_US
+        work_text = f"(a) the plugin's own work at most {a['work_max'] / 1000:.2f} ms in a frame (gate: {WORK_LIMIT_US / 1000:.0f} ms)"
+        seconds = per[name]["anim_us"] / 1e6
+        rate = a["compositor"] / seconds if seconds > 0 else float("inf")
+        if baseline is None:
+            rate_ok = a["compositor"] == 0
+            rate_text = f"(b) {a['compositor']} long frame(s) caused by the compositor in the animation (gate: 0, no baseline)"
+        else:
+            b = per.get(baseline)
+            if b is None or b["animation"]["frames"] == 0 or b["anim_us"] <= 0:
+                print(f"FAIL {name}: the baseline {baseline} was not measured, (b) cannot be judged; {work_text}")
+                status = 1
+                continue
+            base_rate = b["animation"]["compositor"] / (b["anim_us"] / 1e6)
+            rate_ok = rate <= base_rate * BASELINE_FACTOR + 1e-9
+            rate_text = (f"(b) {a['compositor']} compositor-caused long frame(s) in {seconds:.2f} s, {rate:.1f}/s, against {baseline}'s "
+                         f"{b['animation']['compositor']} in {b['anim_us'] / 1e6:.2f} s, {base_rate:.1f}/s (gate: {base_rate * BASELINE_FACTOR:.1f}/s)")
+        verdict = "PASS" if work_ok and rate_ok else "FAIL"
         if verdict == "FAIL":
             status = 1
-        print(f"{verdict} {name}: {a['compositor']} long frame(s) caused by the compositor in the animation (gate: 0); "
-              f"{a['client']} paced by a client and {a['other']} other, information")
+        print(f"{verdict} {name}: {work_text}; {rate_text}; {a['client']} paced by a client and {a['other']} other, information")
     return status
 
 

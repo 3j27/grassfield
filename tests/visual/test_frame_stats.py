@@ -123,7 +123,9 @@ def attribution(argv):
         return fa_mod.main(argv)
 
 
-gate = ["--gate=shared-edge", "--beats=250"]
+# The plugin's own work in every frame of the drag (200 us each): the gate needs it recorded (D34 gate, (a)).
+w_small = write("%d %d" % (1_000_000 + i * p_us + 1000, 200) for i in range(0, 13))
+gate = ["--gate=shared-edge", "--beats=250", "--work=" + w_small]
 check("attribution: a client-paced long frame passes the shared edge's gate",
       attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700"] + gate) == 0)
 check("attribution: a long frame the compositor caused fails it",
@@ -153,21 +155,21 @@ check("attribution: a short stall (under the budget) leaves the late render the 
 check("attribution: a beat held by the render itself is not counted again",
       attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_render] + gate) == 0)
 check("attribution: no loop beats cannot pass the gate (a stall could not be seen)",
-      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge", "--work=" + w_small]) == 1)
 check("attribution: held time is the union of the spans, outside the renders",
       fa_mod.held(0, 100, [(10, 30), (20, 30), (80, 40)], [(30, 10)]) == 50)
 # Integrator nested pass of ce82fd3: each compositor-caused frame is listed with the loop's held time split into stalls
 # (with the main thread's CPU share in them: a waiting thread is not the compositor working) and the plugin's work.
 check("attribution: a stall's CPU share is its CPU over its length plus one beat",
-      fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 14_000)]) == 10_000 and fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 700)]) == 500)
+      fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 11_000)]) == 10_000 and fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 550)]) == 500)
 check("attribution: no CPU known, no CPU share", fa_mod.stall_cpu(0, 10_000, [(0, 10_000, None)]) is None)
 s_cpu = write(["%d %d %d" % (long_start + 1000, 30000, 1500)])
 detail = io.StringIO()
 with contextlib.redirect_stdout(detail):
-    fa_mod.main(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_cpu, "--work=" + w_pre] + gate)
+    fa_mod.main(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_cpu, "--work=" + w_pre, "--gate=shared-edge", "--beats=250"])
 text = detail.getvalue()
 check("attribution: the compositor-caused frame is listed with its stalls, their CPU share and the plugin's work",
-      "compositor (render began" in text and "stalls 30.0 ms" in text and "on its CPU for about 1.3 ms" in text
+      "compositor (render began" in text and "stalls 30.0 ms" in text and "on its CPU for about 1.5 ms" in text
       and "the plugin's work 15.0 ms" in text)
 check("attribution: the scenario's compositor-caused frames are summed",
       "its 1 compositor-caused long frame(s) in the animation, in total: loop stalls 30.0 ms" in text)
@@ -175,7 +177,66 @@ ev_far = write(["shared-edge %d 400 0" % (9_000_000 * 1000)])
 check("attribution: a gated scenario with no frame in its animation fails",
       attribution(["x", f_long, r_client, m_none, ev_far, "60", "700"] + gate) == 1)
 
-for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu):
+# Integrator re-review of ce82fd3. Python mutants P5 (a long frame with no render in it: the loop's held time alone decides)
+# and P8 (a stall after its render began does not count before it); and the probe's resolution: a 12 ms hold before a 3 ms
+# render is recorded at most one beat (1 ms) short, 11 ms, and still fails.
+r_none_long = write("%d %d" % r for r in renders_client[:5] + renders_client[6:])
+check("attribution: a long frame with no render, the loop held over the budget, is the compositor's",
+      attribution(["x", f_long, r_none_long, m_none, ev_edge, "60", "700", "--stalls=" + s_pre] + gate) == 1)
+check("attribution: a long frame with no render and the loop free is other",
+      attribution(["x", f_long, r_none_long, m_none, ev_edge, "60", "700"] + gate) == 0)
+r_early = write("%d %d" % r for r in renders_client[:5] + [(long_start + 2000, 3000)] + renders_client[6:])
+s_after = write(["%d %d" % (long_start + 6000, 34000)])
+check("attribution: a stall after the render began does not count before it",
+      attribution(["x", f_long, r_early, m_none, ev_edge, "60", "700", "--stalls=" + s_after] + gate) == 0)
+s_hold = write(["%d %d" % (long_start + 34000, 11000)])
+check("attribution: a 12 ms hold (recorded 11 ms) before a 3 ms render fails",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_hold] + gate) == 1)
+
+# The D34 gate restated by the integrator (2026-10-28): (a) the plugin's own work at most 1 ms in every frame of the drag;
+# (b) its compositor-caused long frames per second at most 1.25 times the baseline's (Hyprland's own resize of one of the
+# same windows, the same glide).
+def scenario(base, comp):
+    fr = [(base + i * p_us, p_us) for i in range(1, 6)] + [(base + 8 * p_us, 3 * p_us)] + [(base + (8 + i) * p_us, p_us) for i in range(1, 5)]
+    late = (base + 5 * p_us + 1000, 40000) if comp else (base + 8 * p_us - 4000, 3000)
+    rs = [(base + i * p_us - 4000, 3000) for i in range(1, 6)] + [late] + [(base + (8 + i) * p_us - 4000, 3000) for i in range(1, 5)]
+    return fr, rs
+
+
+def run_pair(edge_comp, base_comp, with_baseline=True, extra=()):
+    fe, re_ = scenario(1_000_000, edge_comp)
+    fb_, rb_ = scenario(3_000_000, base_comp)
+    evs = ["shared-edge %d 400 0" % (1_000_000 * 1000)] + (["edge-baseline %d 400 0" % (3_000_000 * 1000)] if with_baseline else [])
+    files = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(re_ + rb_)), write(evs)]
+    rc = attribution(["x", files[0], files[1], m_none, files[2], "60", "700", "--baseline=edge-baseline"] + gate + list(extra))
+    for f in files:
+        os.unlink(f)
+    return rc
+
+
+check("gate (b): as many compositor-caused long frames per second as the baseline pass", run_pair(True, True) == 0)
+check("gate (b): more than 1.25 times the baseline's fail", run_pair(True, False) == 1)
+check("gate (b): none on either side pass", run_pair(False, False) == 0)
+check("gate (b): a baseline not measured fails", run_pair(False, False, with_baseline=False) == 1)
+w_big = write(["%d %d" % (1_000_000 + 2 * p_us + 2000, 1500)])
+check("gate (a): the plugin's own work over 1 ms in one frame fails", run_pair(False, False, extra=["--work=" + w_big]) == 1)
+w_ok = write(["%d %d" % (1_000_000 + 2 * p_us + 2000, 700)])
+check("gate (a): 0.9 ms in one frame passes", run_pair(False, False, extra=["--work=" + w_ok]) == 0)
+check("gate (a): no work of the plugin recorded in the animation fails",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge", "--beats=250"]) == 1)
+verdict = io.StringIO()
+with contextlib.redirect_stdout(verdict):
+    fe, re_ = scenario(1_000_000, True)
+    fb_, rb_ = scenario(3_000_000, True)
+    vf = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(re_ + rb_)),
+          write(["shared-edge %d 400 0" % (1_000_000 * 1000), "edge-baseline %d 400 0" % (3_000_000 * 1000)])]
+    fa_mod.main(["x", vf[0], vf[1], m_none, vf[2], "60", "700", "--baseline=edge-baseline"] + gate)
+check("gate: the verdict names both parts with their numbers",
+      "PASS shared-edge: (a) the plugin's own work at most 0.60 ms in a frame (gate: 1 ms); (b) 1 compositor-caused long frame(s) in 0.40 s, 2.5/s, "
+      "against edge-baseline's 1 in 0.40 s, 2.5/s (gate: 3.1/s)" in verdict.getvalue())
+
+for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu,
+          w_small, r_none_long, r_early, s_after, s_hold, w_big, w_ok, *vf):
     os.unlink(p)
 
 sys.exit(1 if failures else 0)
