@@ -10,7 +10,7 @@ import "../platform/WindowTiling.js" as WindowTiling
 // "tilingSuggest", opened by services/TilingSuggest in the first empty zone of the layout a window is filling (the overlay
 // centres it in that zone). It offers the windows that can take the zone, each a live thumbnail (ScreencopyView) with its
 // app's icon and title, on glass; a click or Return places the chosen window there and the plugin's next suggestion follows
-// for the next empty zone; the arrows move between the windows; Esc or a click outside ends the suggestions.
+// for the next empty zone; the arrows move between the windows; Esc, any other key or a click outside ends the suggestions.
 FocusScope {
     id: root
 
@@ -85,8 +85,19 @@ FocusScope {
                 [Qt.Key_End]: "end"
             }[event.key]);
             break;
+        case Qt.Key_Shift:
+        case Qt.Key_Control:
+        case Qt.Key_Alt:
+        case Qt.Key_AltGr:
+        case Qt.Key_Meta:
+        case Qt.Key_Super_L:
+        case Qt.Key_Super_R:
+        case Qt.Key_CapsLock:
+            return; // a modifier alone is no answer
         default:
-            return;
+            // Any other key: the user moved on, the suggestions end (as a click outside does).
+            TilingSuggest.dismiss();
+            break;
         }
         event.accepted = true;
     }

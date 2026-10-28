@@ -37,6 +37,8 @@ Singleton {
         if (!screen)
             return "no output";
         const zone = suggestion.zones[0];
+        if (!root.shown)
+            console.info("grassfield: tiling suggestions shown for " + suggestion.address + " (" + suggestion.windows.length + " windows, zone " + zone.zone + " of " + suggestion.layout + ")");
         Popups.open("tilingSuggest", screen.name, zone.x - screen.x, zone.y - screen.y, "zone", {
             suggestion: suggestion,
             width: zone.w,

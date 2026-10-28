@@ -338,8 +338,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   shows the suggestion when it belongs to that notice and fills that window's layout; services/TilingSuggest opens popup kind
   `tilingSuggest` (overlay/TilingSuggestions) centred in the first empty zone: menu glass, the windows as live thumbnails
   (ScreencopyView) with the app's icon and the window's title, as large as the zone allows (`WindowTiling.suggestionGrid`,
-  at most `tiling.suggestTileWidth`), the arrows (`WindowTiling.gridStep`), Return or a click to pick, Esc or a click outside
-  to end. A pick is `arrange` with `zone` and `with`: the window joins the asker's group (a new group when it had none); a
+  at most `tiling.suggestTileWidth`), the arrows (`WindowTiling.gridStep`), Return or a click to pick, Esc, any other key
+  (a modifier alone aside) or a click outside to end. A pick is `arrange` with `zone` and `with`: the window joins the asker's group (a new group when it had none); a
   minimized window is restored without the Dock animation, then placed (D27). A refused pick (a zone held meanwhile) changes
   nothing and the suggestion stays. The suggestions are refused over the lock, the polkit sheet, a full-attention surface and
   the Dock's keyboard mode, and never take the place of another popup than the tiling popover.
