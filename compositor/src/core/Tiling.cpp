@@ -92,6 +92,56 @@ namespace gf::tiling {
         m_shown = false;
     }
 
+    HoverChange CHoverDwell::update(std::optional<uint64_t> window, uint64_t nowMs) {
+        HoverChange change;
+        if (window != m_window) {
+            if (m_entered)
+                change.leave = m_window;
+            m_window  = window;
+            m_since   = nowMs;
+            m_entered = false;
+            m_held    = false;
+        }
+        if (m_window && !m_entered && !m_held && nowMs - m_since >= kHoverDelay) {
+            m_entered    = true;
+            change.enter = m_window;
+        }
+        return change;
+    }
+
+    HoverChange CHoverDwell::press() {
+        HoverChange change;
+        if (m_entered)
+            change.leave = m_window;
+        m_entered = false;
+        m_held    = m_window.has_value();
+        return change;
+    }
+
+    std::optional<uint64_t> CHoverDwell::remaining(uint64_t nowMs) const {
+        if (!m_window || m_entered || m_held)
+            return std::nullopt;
+        const uint64_t waited = nowMs - m_since;
+        return waited >= kHoverDelay ? 0 : kHoverDelay - waited;
+    }
+
+    std::optional<uint64_t> CHoverDwell::entered() const {
+        return m_entered ? m_window : std::nullopt;
+    }
+
+    void CHoverDwell::reset() {
+        m_window.reset();
+        m_since   = 0;
+        m_entered = false;
+        m_held    = false;
+    }
+
+    HoverCoverEffect hoverCoverEffect(const HoverCover& cover) {
+        if (cover.locked || std::ranges::any_of(cover.exclusiveNamespaces, [](const std::string& name) { return name != kShellPopupNamespace; }))
+            return HoverCoverEffect::Away;
+        return cover.layerUnderPointer ? HoverCoverEffect::Over : HoverCoverEffect::None;
+    }
+
     // ---- geometry ----
 
     std::optional<Zone> zoneOf(Place place) {
@@ -514,6 +564,18 @@ namespace gf::tiling {
         return out;
     }
 
+    Rect moveToArea(const Rect& frame, const Rect& from, const Rect& to) {
+        const auto axis = [](double pos, double len, double fromStart, double fromLen, double toStart, double toLen) {
+            const double size  = std::min(len, toLen);
+            const double space = fromLen - len;
+            const double share = space > 0 ? std::clamp((pos - fromStart) / space, 0.0, 1.0) : 0.5;
+            return std::pair{std::round(toStart + (share * (toLen - size))), std::round(size)};
+        };
+        const auto [x, w] = axis(frame.x, frame.w, from.x, from.w, to.x, to.w);
+        const auto [y, h] = axis(frame.y, frame.h, from.y, from.h, to.y, to.h);
+        return Rect{x, y, std::max(1.0, w), std::max(1.0, h)};
+    }
+
     Rect frameOf(const Rect& surface, double titlebar) {
         return Rect{surface.x, surface.y - titlebar, surface.w, surface.h + titlebar};
     }
@@ -888,11 +950,12 @@ namespace gf::tiling {
         constexpr size_t kMaxStringBytes = 64;
         constexpr int    kMaxDepth       = 4;
 
-        bool outputNameOk(std::string_view name) {
-            return !name.empty() && name.size() <= kMaxOutputName &&
-                std::ranges::all_of(name, [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'; });
-        }
     } // namespace
+
+    bool outputNameOk(std::string_view name) {
+        return !name.empty() && name.size() <= kMaxOutputName &&
+            std::ranges::all_of(name, [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'; });
+    }
 
     std::expected<ArrangeRequest, std::string> parseArrange(std::string_view json) {
         if (json.size() > kMaxArrangeBytes)
@@ -1056,6 +1119,25 @@ namespace gf::tiling {
             out += "]}";
         }
         out += "]}";
+        return out;
+    }
+
+    std::string_view hoverStateName(HoverState state) {
+        switch (state) {
+            case HoverState::Enter: return "enter";
+            case HoverState::Leave: return "leave";
+            case HoverState::Open: return "open";
+        }
+        return "leave";
+    }
+
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable) {
+        std::string out{R"({"v":")"};
+        out += gf::gfc::jsonEscape(gf::gfc::kVersion);
+        out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
+        if (state != HoverState::Leave)
+            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable);
+        out += '}';
         return out;
     }
 

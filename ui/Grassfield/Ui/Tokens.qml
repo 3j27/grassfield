@@ -1619,6 +1619,8 @@ QtObject {
     readonly property int settingsDeviceGlyphInset: 10
     // the (i) button: a 16.5-pt ring, the glyph's ring is 20/24 of its box [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoSize: 20
+    // estimate: the red count of available updates on the sidebar's General row and General's Software Update row (U19), a capsule at the 11-pt caption size [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int settingsCountBadgeSize: 16
     // the (i) box's right edge 10 from the group edge (its ring 12) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoInset: 10
     // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
@@ -3200,6 +3202,32 @@ QtObject {
     readonly property real tilingCenterMaxFraction: 0.9
     // estimate until measured in nested against the owner's captures: a drag's tiling preview shows after the pointer rests this long on a place (ms); Alt shows it at once (parity row M08: macOS shows a short delay, U) [ref: docs/specs/tiling.md § Drags; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property int tilingPreviewDelay: 250
+    // estimate until measured in nested against the owner's captures: the pointer rests this long on the zoom light before the tiling popover opens (ms; about a second on macOS, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingHoverDelay: 1000
+    // the tiling popover's width (pt; owner's captures gs-068-161 and gs-069-175, parity row M19: 230 x 251) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPopoverWidth: 230
+    // estimate until measured in nested against the owner's captures: the zoom light's centre from the popover's left edge (pt; about 25 of 230 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPopoverLightInset: 25
+    // a tiling glyph of the popover, the miniature screen's width (pt; parity row M19: 26-pt glyphs) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphWidth: 26
+    // estimate until measured in nested against the owner's captures: the miniature screen's height (pt; about 26 x 20 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphHeight: 20
+    // between the centres of two glyphs of a popover row (pt; parity row M19: 52 pitch) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphPitch: 52
+    // estimate until measured: the miniature screen's outline at the popover size (pt; thinner glyphs scale it down, never under 1 px) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphStroke: 1.5
+    // estimate until measured: the space between the outline and the zones inside it (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphInset: 1.5
+    // estimate until measured: the space between two zones of an arrangement glyph (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphGap: 1
+    // estimate until measured: the miniature screen's corner radius (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphRadius: 4
+    // the zones of an arrangement glyph other than the window's own (the window's own area dark, the others light: parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphOtherOpacity: 0.35
+    // the Center glyph's window, in twelfths of the miniature screen, one zone [x, y, w, h] (a window smaller than the screen, in its middle) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property var tilingGlyphCenter: [[3, 3, 6, 6]]
+    // estimate until measured: a row of glyphs in the popover (pt; 251 pt in all for two headed rows, Full Screen and the separators, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphRowHeight: 44
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property var tilingLayoutLeftRight: [[0, 0, 6, 12], [6, 0, 6, 12]]
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
@@ -3236,4 +3264,25 @@ QtObject {
     readonly property var tilingClassUltraWide: ["left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"]
     // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
     readonly property var tilingClassPortrait: ["top-bottom", "stacked-thirds", "top-quarters"]
+
+    // the first automatic check, 10 minutes after the shell starts (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateFirstCheckMs: 600000
+    // then an automatic check every 6 hours (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateIntervalMs: 21600000
+    // the pane checks when it opens unless a check finished less than this ago (U8) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdatePaneFreshMs: 60000
+    // the checker stops itself after 180 s and its children 5 s later; the shell kills it past this backstop (U1) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateCheckTimeoutMs: 200000
+    // the waiter blocks up to 7200 s on Omarchy's update lock, then checks for up to 180 s (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitTimeoutMs: 7400000
+    // a waiter whose own answer is update-running again (its 2-hour wait ended with Omarchy's lock still held, or a dev fixture) starts the next one after this, never in a loop (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitRetryMs: 60000
+    // a busy answer (another run of the checker holds its lock) is tried again once after this (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateBusyRetryMs: 60000
+    // an automatic check skipped while offline or metered is looked at again after this, or when the connectivity changes (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateRecheckMs: 1800000
+    // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateMeteredTimeoutMs: 10000
+    // estimate: after Update Now the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateLaunchCheckMs: 5000
 }

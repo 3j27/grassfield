@@ -158,8 +158,11 @@ dock_tile() { # <hex> <since>
   read -r rx ry rw rh < <(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
   [[ -n ${rh:-} ]] || return 1
   cx=$((rx + rw / 2)) cy=$((ry + rh / 2))
+  # The Dock rectangle is in layout (logical) coordinates; `monitors -j` gives each output's mode in device pixels, before the
+  # scale and the rotation (the integrator's note on the merge of PR #28): its logical size is the mode over the scale.
   nestctl monitors -j 2>/dev/null | jq -r --argjson x "$cx" --argjson y "$cy" \
-    '[.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height)][0] | select(. != null) | "\(.name) \($x - .x) \($y - .y)"'
+    '[.[] | (if (.scale // 0) > 0 then .scale else 1 end) as $s | (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end | map(. / $s)) as $size
+      | select($x >= .x and $x < .x + $size[0] and $y >= .y and $y < .y + $size[1])][0] | select(. != null) | "\(.name) \($x - .x) \($y - .y)"'
 }
 pointer_on() { local o=$1; shift; timeout 20 "$root/scripts/dev/pointer.sh" output "$o" "$@" >>"$log" 2>&1; }
 minimized_count() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null | jq '[.[] | select(.workspace.name == "special:minimized")] | length'; }

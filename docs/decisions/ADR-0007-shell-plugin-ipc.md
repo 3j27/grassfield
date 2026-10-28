@@ -110,6 +110,18 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   on its resize border extended ("top", "bottom", "left", "right" joined by "-" in that order, e.g. "top-left"; "" for a
   place or a layout zone, TL20). Drags by Hyprland's own move (an app's toolbar, Super+drag) post the same notices as the
   plugin's titlebar drag (`moved` when a tiled window leaves its tile, `placed` at a release that tiles).
+- Window tiling, step 3 (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL22-TL26): event `tile-hover`
+  `{"v":"gfc/1","type":"tile-hover","address":"<hex>","state":"enter|leave|open"}`; `enter` (the pointer rested
+  `tiling.hoverDelay` on a window's zoom light, no button held) and `open` (verb `tile_popover`) add the light's rect
+  `x y w h` (global layout coordinates, one decimal) and `tileable` (the window can be tiled now: the popover greys its
+  tiles otherwise); `leave` follows an `enter` when the pointer leaves the light or a button is pressed. One zoom light at
+  a time (throttle channel `TileHover`, the latest state wins). Verb `tile_popover(address)` posts `open` for that window
+  (the zoom light of its titlebar, or of a Grassfield app's own chrome, else the top-left corner of its frame). Verb
+  `move_to(address, output)` moves a window onto another output: a tiled one into the same place, layout zone or extended
+  sides there, any other to the same relative place with its size (capped at that output's work area); it takes that
+  output's Desktop. A refused `move_to` posts the `tiling` notice with `reason:"invalid"` (unknown or same output, a window
+  that cannot move) or `reason:"locked"`; a move posts `placed` (tiled) or `forgotten` (a record ended). Feature
+  `tile-hover`, advertised with `window-tiling` only when both verbs registered.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -136,6 +148,7 @@ event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
+event tile-hover: address state x y w h tileable
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
@@ -148,10 +161,11 @@ enum overview-focus.target: window workspace remembered none press
 enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
 enum tiling.reason: placed moved resized suspended restored forgotten relaid invalid locked unavailable
+enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange
+feature keyboard-focus tiling-arrange tile-hover
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to
 ```
 
 ## Evidence

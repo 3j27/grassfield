@@ -108,6 +108,69 @@ namespace gf::tiling {
         bool                 m_shown = false;
     };
 
+    // TL22: the pointer resting on a window's zoom light for kHoverDelay ms (token tiling.hoverDelay) is a hover: `enter`,
+    // and `leave` once the pointer is off that light. One light at a time. A press while the pointer is on the light (its
+    // click zooms the window) ends the hover and holds it off until the pointer has left that light.
+    inline constexpr uint64_t kHoverDelay = theme::tokens::kTilingHoverDelay;
+    struct HoverChange {
+        std::optional<uint64_t> leave; // the window whose hover ended (post leave)
+        std::optional<uint64_t> enter; // the window whose hover began (post enter)
+    };
+    class CHoverDwell {
+      public:
+        // The pointer is over the zoom light of window `window` (nullopt: over none) at `nowMs`.
+        HoverChange             update(std::optional<uint64_t> window, uint64_t nowMs);
+        // A press (or a drag) begins: a hover that began ends, and the light waits until the pointer has left it.
+        HoverChange             press();
+        // Milliseconds until the light under the pointer is a hover if the pointer stays (the timer that posts enter then);
+        // nullopt when there is nothing to wait for.
+        std::optional<uint64_t> remaining(uint64_t nowMs) const;
+        std::optional<uint64_t> entered() const;
+        void                    reset();
+
+      private:
+        std::optional<uint64_t> m_window;
+        uint64_t                m_since   = 0;
+        bool                    m_entered = false;
+        bool                    m_held    = false; // pressed: no hover on this light until the pointer leaves it
+    };
+
+    // The shell's popup layer (shell/overlay/Overlay.qml): mapped Exclusive while a shell popup is open, the tiling popover
+    // included, on the output of that popup only.
+    inline constexpr std::string_view kShellPopupNamespace = "grassfield-overlay";
+    // What hides every zoom light from the hover now (TL22, TL34; integrator review of 4ead6fb): the session is locked; an
+    // Exclusive layer other than the shell's popup layer is mapped anywhere (the polkit sheet, Search, Apps, the Overview, the
+    // switcher, the Notification Center, the Dock's keyboard mode, a third-party one); or a Top or Overlay layer, or a layer
+    // popup, is under the pointer (the light is covered, the shell's own popup layer too).
+    struct HoverCover {
+        bool                     locked = false;
+        std::vector<std::string> exclusiveNamespaces; // of the mapped Exclusive layers
+        bool                     layerUnderPointer = false;
+    };
+    // What a cover does to the hover (D24; integrator nested rerun of 25e757c). Away: the lock or a foreign Exclusive layer
+    // took the desktop; the hover ends and starts over once it is back (CHoverDwell::update with no light), so a pointer that
+    // rested on a light through the lock gives a hover after the delay. Over: a layer covers the light (the shell's open
+    // popover included); as a press, the light waits until the pointer has left it, so a popover closed over the light does not
+    // come back by itself. The lock and a foreign Exclusive layer come first.
+    enum class HoverCoverEffect : uint8_t {
+        None,
+        Away,
+        Over,
+    };
+    HoverCoverEffect hoverCoverEffect(const HoverCover& cover);
+
+    // The `tile-hover` event (gfc/1). enter: the pointer rested on the window's zoom light (TL22); leave: it left that light;
+    // open: hl.plugin.grassfield.tile_popover asked for the popover with the keyboard (Super+Ctrl+L, TL26). enter and open
+    // carry the light's box (layout coordinates) and whether the window can be tiled (TL9: the shell greys the glyphs):
+    // {"v":"gfc/1","type":"tile-hover","address":"<hex>","state":"enter","x":…,"y":…,"w":…,"h":…,"tileable":true}. Bounded.
+    enum class HoverState : uint8_t {
+        Enter,
+        Leave,
+        Open,
+    };
+    std::string_view hoverStateName(HoverState state); // its "state" in the event
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false);
+
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
     // Desktop). `outputs`: the outputs' logical boxes.
@@ -229,6 +292,11 @@ namespace gf::tiling {
 
     // "top", "bottom", "left", "right" joined by "-" in that order ("top-left", "left-right"); "" for none.
     std::string sidesName(uint8_t sides);
+
+    // Move to <display> of a window that is not tiled (TL23): its frame `frame` in the work area `from` goes to the work area
+    // `to` at the same relative place (the free space left and above it keeps its share on each axis), its size kept, at
+    // most `to`'s; whole logical px.
+    Rect moveToArea(const Rect& frame, const Rect& from, const Rect& to);
 
     // The frame (titlebar included) of a surface box: what the preview draws; and back.
     Rect frameOf(const Rect& surface, double titlebar);
@@ -370,6 +438,8 @@ namespace gf::tiling {
     // one window goes to that zone of the layout and nothing is filled. Untrusted: strictly validated, at most kMaxArrangeBytes.
     inline constexpr size_t kMaxArrangeBytes = 4096;
     inline constexpr size_t kMaxOutputName   = 64;
+    // An output name a request may carry: 1 to kMaxOutputName characters of [A-Za-z0-9._-].
+    bool outputNameOk(std::string_view name);
     struct ArrangeRequest {
         std::string           layout;
         std::vector<uint64_t> windows;

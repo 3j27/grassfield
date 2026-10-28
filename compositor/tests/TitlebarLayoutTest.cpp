@@ -441,3 +441,20 @@ TEST(Theme, PaletteComesFromTheTokensForBothAppearances) {
     EXPECT_GT(kTilePreviewRim, 0.0);
     EXPECT_EQ(kDefaultAppearance, Appearance::Dark) << "Grassfield's default until the shell pushes its appearance";
 }
+
+TEST(TitlebarLayout, AGrassfieldAppsZoomLightSitsInItsRow) {
+    // The plugin's titlebar row: lights at x 9, 32, 55; the zoom light is the third.
+    const Rect titlebar = appZoomLight(true);
+    EXPECT_DOUBLE_EQ(titlebar.x, 55);
+    EXPECT_DOUBLE_EQ(titlebar.y, 9);
+    EXPECT_DOUBLE_EQ(titlebar.w, 14);
+    EXPECT_DOUBLE_EQ(titlebar.h, 14);
+    const Rect plugin = buttonRect(Button::Zoom);
+    EXPECT_DOUBLE_EQ(titlebar.x, plugin.x) << "the titlebar row is the plugin's own";
+    EXPECT_DOUBLE_EQ(titlebar.y, plugin.y);
+    // The unified toolbar row: the first light's centre at (26, 26), pitch 23: the zoom light's centre at (72, 26).
+    const Rect unified = appZoomLight(false);
+    EXPECT_DOUBLE_EQ(unified.x + unified.w / 2, 72);
+    EXPECT_DOUBLE_EQ(unified.y + unified.h / 2, 26);
+    EXPECT_DOUBLE_EQ(unified.w, 14);
+}

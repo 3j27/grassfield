@@ -1,4 +1,5 @@
 import QtQml
+import Grassfield.Ui
 
 // Application menu models (T0, docs/specs/menubar.md). Pure: builds menu item arrays from a
 // plain context object, so it is unit-tested without a compositor (tests/unit/tst_appmenumodel.qml).
@@ -6,9 +7,10 @@ import QtQml
 // ctx: {displayOnly?: bool (app named from the Stages event, no key window: window commands disabled), hasApp, appName, entry: {id, actions: [{id, name}]} | null, singleMain: bool,
 //       windows: [{ref, title, focused, minimized}], focusedWindow: ref | null,
 //       fullscreen: bool, maximized: bool, windowSpaceId: int,
-//       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling")}
-// Items: {id, text, shortcut?, enabled?, checked?, separator?, submenu?, ...payload}; AppMenus.run()
-// performs them.
+//       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling"),
+//       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover")}
+// Items: {id, text, shortcut?, glyph?, enabled?, checked?, separator?, header?, alternate?, submenu?, ...payload}; AppMenus.run()
+// performs them. The tiling popover's model (tilingPopover) shares the tiling rows (docs/specs/tiling.md TL23, TL25).
 QtObject {
     id: root
 
@@ -23,8 +25,161 @@ QtObject {
         tileRight: qsTr("Super+Ctrl+Right"),
         tileTop: qsTr("Super+Ctrl+Up"),
         tileBottom: qsTr("Super+Ctrl+Down"),
-        tilePrevious: qsTr("Super+Ctrl+R")
+        tileTopLeft: qsTr("Super+Ctrl+U"),
+        tileTopRight: qsTr("Super+Ctrl+I"),
+        tileBottomLeft: qsTr("Super+Ctrl+J"),
+        tileBottomRight: qsTr("Super+Ctrl+K"),
+        tileFill: qsTr("Super+Ctrl+Return"),
+        tileCenter: qsTr("Super+Ctrl+C"),
+        tilePrevious: qsTr("Super+Ctrl+R"),
+        arrangeLeftRight: qsTr("Super+Ctrl+Shift+Left"),
+        arrangeRightLeft: qsTr("Super+Ctrl+Shift+Right"),
+        arrangeTopBottom: qsTr("Super+Ctrl+Shift+Up"),
+        arrangeBottomTop: qsTr("Super+Ctrl+Shift+Down"),
+        arrangeLeftQuarters: qsTr("Super+Ctrl+Alt+Shift+Left"),
+        arrangeRightQuarters: qsTr("Super+Ctrl+Alt+Shift+Right"),
+        arrangeTopQuarters: qsTr("Super+Ctrl+Alt+Shift+Up"),
+        arrangeBottomQuarters: qsTr("Super+Ctrl+Alt+Shift+Down")
     })
+
+    // ---- Window tiling rows (docs/specs/tiling.md TL23, TL25): glyphs from the tiling.* tokens ----
+
+    // The zones of a layout of the catalogue (the tiling.layout* tokens: [x, y, w, h] in twelfths).
+    readonly property var layoutZones: ({
+            "left-right": Tokens.tilingLayoutLeftRight,
+            "right-left": Tokens.tilingLayoutRightLeft,
+            "top-bottom": Tokens.tilingLayoutTopBottom,
+            "bottom-top": Tokens.tilingLayoutBottomTop,
+            "quarters": Tokens.tilingLayoutQuarters,
+            "left-quarters": Tokens.tilingLayoutLeftQuarters,
+            "right-quarters": Tokens.tilingLayoutRightQuarters,
+            "top-quarters": Tokens.tilingLayoutTopQuarters,
+            "bottom-quarters": Tokens.tilingLayoutBottomQuarters
+        })
+
+    // A place's glyph: its zone alone (the halves and quarters are zones of the catalogue; Fill the whole screen).
+    function placeGlyph(place: string): var {
+        const quarters = Tokens.tilingLayoutQuarters;
+        const zone = {
+            "left": Tokens.tilingLayoutLeftRight[0],
+            "right": Tokens.tilingLayoutLeftRight[1],
+            "top": Tokens.tilingLayoutTopBottom[0],
+            "bottom": Tokens.tilingLayoutTopBottom[1],
+            "top-left": quarters[0],
+            "top-right": quarters[1],
+            "bottom-left": quarters[2],
+            "bottom-right": quarters[3],
+            "fill": [0, 0, 12, 12],
+            "center": Tokens.tilingGlyphCenter[0]
+        }[place];
+        return zone ? {zones: [zone], own: 0} : null;
+    }
+
+    // An arrangement's glyph: the window's own zone (the first) in full, the others light; Quarters, four equal windows, in full
+    // (as macOS draws it).
+    function layoutGlyph(layout: string): var {
+        const zones = root.layoutZones[layout];
+        return zones ? {zones: zones, own: layout === "quarters" ? -1 : 0} : null;
+    }
+
+    readonly property var placeNames: ({
+            "left": qsTr("Left"),
+            "right": qsTr("Right"),
+            "top": qsTr("Top"),
+            "bottom": qsTr("Bottom"),
+            "top-left": qsTr("Top Left"),
+            "top-right": qsTr("Top Right"),
+            "bottom-left": qsTr("Bottom Left"),
+            "bottom-right": qsTr("Bottom Right"),
+            "fill": qsTr("Fill"),
+            "center": qsTr("Center"),
+            "previous": qsTr("Return to Previous Size")
+        })
+
+    readonly property var layoutNames: ({
+            "left-right": qsTr("Left & Right"),
+            "right-left": qsTr("Right & Left"),
+            "top-bottom": qsTr("Top & Bottom"),
+            "bottom-top": qsTr("Bottom & Top"),
+            "quarters": qsTr("Quarters"),
+            "left-quarters": qsTr("Left & Quarters"),
+            "right-quarters": qsTr("Right & Quarters"),
+            "top-quarters": qsTr("Top & Quarters"),
+            "bottom-quarters": qsTr("Bottom & Quarters")
+        })
+
+    readonly property var placeShortcuts: ({
+            "left": root.shortcuts.tileLeft,
+            "right": root.shortcuts.tileRight,
+            "top": root.shortcuts.tileTop,
+            "bottom": root.shortcuts.tileBottom,
+            "top-left": root.shortcuts.tileTopLeft,
+            "top-right": root.shortcuts.tileTopRight,
+            "bottom-left": root.shortcuts.tileBottomLeft,
+            "bottom-right": root.shortcuts.tileBottomRight,
+            "fill": root.shortcuts.tileFill,
+            "center": root.shortcuts.tileCenter,
+            "previous": root.shortcuts.tilePrevious
+        })
+
+    readonly property var layoutShortcuts: ({
+            "left-right": root.shortcuts.arrangeLeftRight,
+            "right-left": root.shortcuts.arrangeRightLeft,
+            "top-bottom": root.shortcuts.arrangeTopBottom,
+            "bottom-top": root.shortcuts.arrangeBottomTop,
+            "left-quarters": root.shortcuts.arrangeLeftQuarters,
+            "right-quarters": root.shortcuts.arrangeRightQuarters,
+            "top-quarters": root.shortcuts.arrangeTopQuarters,
+            "bottom-quarters": root.shortcuts.arrangeBottomQuarters
+        })
+
+    function tileItem(place: string, enabled: bool): var {
+        const glyph = root.placeGlyph(place);
+        const item = {id: "tile", place: place, text: root.placeNames[place], shortcut: root.placeShortcuts[place] || "", enabled: enabled};
+        if (glyph)
+            item.glyph = glyph;
+        return item;
+    }
+
+    function arrangeItem(layout: string, enabled: bool): var {
+        return {id: "arrange", layout: layout, text: root.layoutNames[layout], shortcut: root.layoutShortcuts[layout] || "", glyph: root.layoutGlyph(layout), enabled: enabled};
+    }
+
+    // An output as Settings > Displays names it (M23): the built-in panel, else its model, else its connector.
+    function outputLabel(output: var): string {
+        if (output.builtIn)
+            return qsTr("Built-in Display");
+        return output.model !== "" ? output.model : output.name;
+    }
+
+    function moveToOutputItems(outputs: var, enabled: bool): var {
+        return (outputs || []).map(o => ({id: "moveToOutput", output: o.name, text: qsTr("Move to %1").arg(root.outputLabel(o)), iconName: "display", enabled: enabled}));
+    }
+
+    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, fullscreen, outputs}. {sections: [{title,
+    // items}], rows}: the glyph sections Move & Resize and Fill & Arrange (with Alt: the quarters, Center, Right & Left and Right
+    // & Quarters), then Full Screen and one Move to <display> row per other output; in full screen only Exit Full Screen. The
+    // glyphs of a window that cannot be tiled now are greyed. The Layouts section comes with step 4 and Full Screen's Left
+    // and Right of Screen with step 6 (ADR-0036 D16).
+    function tilingPopover(ctx: var): var {
+        if (ctx.fullscreen)
+            return {sections: [], rows: [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
+        const can = ctx.tileable === true;
+        const arrange = can && ctx.canArrange === true;
+        const places = ctx.alt ? ["top-left", "top-right", "bottom-left", "bottom-right"] : ["left", "right", "top", "bottom"];
+        return {
+            sections: [
+                {title: qsTr("Move & Resize"), items: places.map(p => root.tileItem(p, can))},
+                {title: qsTr("Fill & Arrange"), items: [
+                        root.tileItem(ctx.alt ? "center" : "fill", can),
+                        root.arrangeItem(ctx.alt ? "right-left" : "left-right", arrange),
+                        root.arrangeItem(ctx.alt ? "right-quarters" : "left-quarters", arrange),
+                        root.arrangeItem("quarters", arrange)
+                    ]}
+            ],
+            rows: [{id: "fullscreen", text: qsTr("Full Screen"), glyph: {zones: [], own: -1}, enabled: true}].concat(root.moveToOutputItems(ctx.outputs, can))
+        };
+    }
 
     // Longest window title shown in the Window menu.
     readonly property int titleMax: 40
@@ -90,33 +245,48 @@ QtObject {
         spaces.push({separator: true});
         spaces.push({id: "moveToNew", space: ctx.newSpaceId, text: qsTr("New Desktop")});
 
-        // Window tiling (macOS 15+): Fill, Center and Move & Resize, placed by the compositor plugin (window-tiling). The plugin
-        // places floating windows only: not in full screen, not zoomed (unzoom first, as macOS greys them for a zoomed window).
+        // Window tiling (macOS 15+, TL25): Fill, Center, Move & Resize and Move to <display>, placed by the compositor plugin
+        // (window-tiling). The plugin places floating windows only: not in full screen, not zoomed (unzoom first, as macOS greys
+        // them for a zoomed window). Move & Resize has the headed sections Halves, Quarters and Arrange (with Alt the "&
+        // Quarters" alternates in place, M28; with the plugin's tiling-arrange only), then Return to Previous Size. Full Screen
+        // Tile comes with step 6 (M29).
         const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized;
-        const tile = (place, text, shortcut) => ({id: "tile", place: place, text: text, shortcut: shortcut, enabled: canTile});
-        const tiling = ctx.canTile === true ? [
-            tile("fill", qsTr("Fill"), ""),
-            tile("center", qsTr("Center"), ""),
-            {id: "moveResize", text: qsTr("Move & Resize"), enabled: canTile, submenu: [
-                    tile("left", qsTr("Left"), root.shortcuts.tileLeft),
-                    tile("right", qsTr("Right"), root.shortcuts.tileRight),
-                    tile("top", qsTr("Top"), root.shortcuts.tileTop),
-                    tile("bottom", qsTr("Bottom"), root.shortcuts.tileBottom),
-                    {separator: true},
-                    tile("top-left", qsTr("Top Left"), ""),
-                    tile("top-right", qsTr("Top Right"), ""),
-                    tile("bottom-left", qsTr("Bottom Left"), ""),
-                    tile("bottom-right", qsTr("Bottom Right"), ""),
-                    {separator: true},
-                    tile("previous", qsTr("Return to Previous Size"), root.shortcuts.tilePrevious)
-                ]},
-            {separator: true}
+        const arrange = (layout, quarters) => Object.assign(root.arrangeItem(layout, canTile), {alternate: root.arrangeItem(quarters, canTile)});
+        const arrangeRows = ctx.canArrange === true ? [
+            {separator: true},
+            {header: true, text: qsTr("Arrange")},
+            arrange("left-right", "left-quarters"),
+            arrange("right-left", "right-quarters"),
+            arrange("top-bottom", "top-quarters"),
+            arrange("bottom-top", "bottom-quarters"),
+            root.arrangeItem("quarters", canTile)
         ] : [];
+        const tiling = ctx.canTile === true ? [
+            root.tileItem("fill", canTile),
+            root.tileItem("center", canTile),
+            {separator: true},
+            {id: "moveResize", text: qsTr("Move & Resize"), enabled: canTile, submenu: [
+                    {header: true, text: qsTr("Halves")},
+                    root.tileItem("left", canTile),
+                    root.tileItem("right", canTile),
+                    root.tileItem("top", canTile),
+                    root.tileItem("bottom", canTile),
+                    {separator: true},
+                    {header: true, text: qsTr("Quarters")},
+                    root.tileItem("top-left", canTile),
+                    root.tileItem("top-right", canTile),
+                    root.tileItem("bottom-left", canTile),
+                    root.tileItem("bottom-right", canTile)
+                ].concat(arrangeRows, [
+                    {separator: true},
+                    root.tileItem("previous", canTile)
+                ])}
+        ].concat(root.moveToOutputItems(ctx.outputs, canTile), [{separator: true}]) : [];
 
         const items = [
             {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct},
             {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct}
-        ].concat(tiling.length > 0 ? [{separator: true}].concat(tiling) : [], [
+        ].concat(tiling, [
             {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct},
             {separator: true},
             {id: "moveMenu", text: qsTr("Move to Desktop"), enabled: canAct, submenu: spaces},

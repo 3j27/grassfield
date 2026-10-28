@@ -6,7 +6,8 @@
 // record rebuilt after a shell restart).
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages", "arrange",
+    "tile_popover", "move_to"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -42,6 +43,36 @@ function tileCall(address, place) {
     if (hex === "" || typeof place !== "string" || tilePlaces.indexOf(place) < 0)
         return "";
     return guardedPluginCall("tile", ["\"0x" + hex + "\"", "\"" + place + "\""]);
+}
+
+// hl.plugin.grassfield.arrange(json) (capability "tiling-arrange", docs/specs/tiling.md TL6): the window takes the first zone of
+// the layout, the next windows in stacking order on its output fill the others. The layout is one of these catalogue ids
+// (the Arrange rows and their Alt alternates, TL25, TL26); "" when anything is invalid (callers must not dispatch it).
+var arrangeLayouts = ["left-right", "right-left", "top-bottom", "bottom-top", "quarters", "left-quarters", "right-quarters", "top-quarters", "bottom-quarters"];
+
+function arrangeCall(address, layout) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || typeof layout !== "string" || arrangeLayouts.indexOf(layout) < 0)
+        return "";
+    // Only validated pieces: the JSON holds no quote or backslash to escape for Lua but the JSON's own quotes.
+    const json = JSON.stringify({layout: layout, windows: ["0x" + hex]});
+    return guardedPluginCall("arrange", ["\"" + json.replace(/"/g, "\\\"") + "\""]);
+}
+
+// hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of
+// that window, with its zoom light, and the shell opens the tiling popover with the keyboard. "" when the address is invalid.
+function tilePopoverCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("tile_popover", ["\"0x" + hex + "\""]);
+}
+
+// hl.plugin.grassfield.move_to(address, output) (capability "tile-hover", TL23, TL26): the window onto that output, in the
+// same tile when it is tiled. The output name is 1 to 64 characters of [A-Za-z0-9._-] (the plugin's own rule); "" otherwise.
+function moveToCall(address, output) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || typeof output !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(output))
+        return "";
+    return guardedPluginCall("move_to", ["\"0x" + hex + "\"", "\"" + output + "\""]);
 }
 
 // hl.plugin.grassfield.cursor_refresh() (gfc/1 capability "cursor-refresh"): the plugin redraws the cursor with the

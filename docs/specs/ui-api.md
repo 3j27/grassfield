@@ -70,4 +70,6 @@ add SettingsContract
 add MenuShortcut
 add GlassTint
 add RimmedCapsule
+add TileGlyph
+add SoftwareUpdateLogic
 ```

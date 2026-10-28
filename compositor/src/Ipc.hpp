@@ -58,6 +58,9 @@ namespace gf::ipc {
     // Also hl.plugin.grassfield.arrange, `hyprctl grassfield-tiling` and the tiling listeners (tiling-arrange).
     bool tilingArrangeAvailable();
 
+    // Also hl.plugin.grassfield.tile_popover and hl.plugin.grassfield.move_to (tile-hover: the zoom light's popover events).
+    bool tileHoverAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

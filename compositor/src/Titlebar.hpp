@@ -65,6 +65,11 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // titlebar's lights the pointer is over (their glyphs show, macOS).
     static void onGlobalMouseMove();
 
+    // The session lock (g_pSessionLockManager's lock and unlock events; tiling.md TL22, D24): either ends the zoom light's hover
+    // and forgets the light under the pointer; the unlock then looks at that light again from the event loop (after Hyprland's
+    // own handling: its lock gone), so a pointer resting on a light through the lock gives a hover after the delay, unmoved.
+    static void onSessionLock(bool locked);
+
     // Drops any gesture and press ownership (plugin unload).
     static void cancelPointerGrab();
 
@@ -96,6 +101,16 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
 
     // The titlebar of this full-screen window is revealed.
     bool revealed() const;
+
+    // TL22, TL24 (docs/specs/tiling.md): the zoom light of `w` in global layout coordinates: its titlebar's while the bar is
+    // shown or revealed, or the light a Grassfield app draws itself (the client-chrome tag on an org.grassfield.* window,
+    // its row named by its xdg-toplevel tag: "info" the titlebar row, any other role the unified toolbar row); nullopt for
+    // any other window (third-party client chrome: no popover on hover).
+    static std::optional<CBox> zoomLightOf(const PHLWINDOW& w);
+
+    // hl.plugin.grassfield.tile_popover(address) (TL26): a tile-hover "open" event for that window, with its zoom light, or
+    // the top-left corner of its frame when it has no known light. Untrusted: the address is compared with the live windows.
+    static void popoverRequest(std::string_view address);
 
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates

@@ -27,6 +27,7 @@ Window {
             wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
             accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
+            "software-update": "graphite",
             datetime: "blue", language: "blue", login: "graphite", privacy: "blue",
             "accessibility-zoom": "graphite", "accessibility-display": "blue", "accessibility-motion": "green", "accessibility-keyboard": "graphite",
             "privacy-location": "blue", "privacy-background": "graphite", "privacy-camera": "graphite", "privacy-remote-desktop": "blue",
@@ -55,7 +56,7 @@ Window {
         {id: "network", group: 1, title: qsTr("Network"), icon: "globe", keywords: qsTr("ethernet wired ip address router dns firewall")},
         {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
         {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
-        {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about storage date time language region login items startup")},
+        {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about software update storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
@@ -73,6 +74,7 @@ Window {
         {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
         {id: "printers", group: 5, title: qsTr("Printers"), icon: "printer", keywords: qsTr("printer printing print queue cups paper size default printer add remove airprint ipp everywhere")},
         {id: "about", parent: "general", title: qsTr("About"), icon: "laptop", keywords: qsTr("version system hardware processor memory computer name graphics serial")},
+        {id: "software-update", parent: "general", title: qsTr("Software Update"), icon: "gear", keywords: qsTr("software update upgrade new version release notes beta omarchy packages automatic")},
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
@@ -173,6 +175,13 @@ Window {
     SystemService {
         id: sys
         backend: root.backend
+    }
+
+    // Software Update (ADR-0033): what the shell found, for the pane and the badges of the General rows (U19).
+    SoftwareUpdateState {
+        id: updateState
+        backend: root.backend
+        system: sys
     }
 
     // The window's own surface and its secondary text grey (Appearance.windowSurface, Appearance.windowSecondary).
@@ -493,7 +502,7 @@ Window {
                 width: ListView.view.width
                 height: Tokens.settingsSidebarItemHeight + entry.gap
                 Accessible.role: Accessible.ListItem
-                Accessible.name: entry.modelData.title
+                Accessible.name: countBadge.count > 0 ? entry.modelData.title + ", " + countBadge.spoken : entry.modelData.title
                 Accessible.selectable: true
                 Accessible.selected: entry.selected
                 Accessible.onPressAction: root.select(entry.modelData.id)
@@ -544,7 +553,7 @@ Window {
                         anchors {
                             left: glyph.right
                             leftMargin: Tokens.spacingSm
-                            right: parent.right
+                            right: countBadge.visible ? countBadge.left : parent.right
                             rightMargin: Tokens.spacingSm
                             verticalCenter: parent.verticalCenter
                         }
@@ -554,6 +563,15 @@ Window {
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                         font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+                    }
+
+                    // Available updates (U19): a red count on General, and on Software Update among search results.
+                    CountBadge {
+                        id: countBadge
+                        anchors.right: parent.right
+                        anchors.rightMargin: Tokens.spacingSm
+                        anchors.verticalCenter: parent.verticalCenter
+                        count: entry.modelData.id === "general" || entry.modelData.id === "software-update" ? updateState.count : 0
                     }
 
                     MouseArea {
@@ -778,6 +796,8 @@ Window {
                     return generalPage;
                 case "about":
                     return aboutPage;
+                case "software-update":
+                    return softwareUpdatePage;
                 case "storage":
                     return storagePage;
                 case "datetime":
@@ -1131,8 +1151,45 @@ Window {
     Component {
         id: generalPage
         GeneralPage {
+            updateCount: updateState.count
             onOpen: id => root.select(id)
         }
+    }
+
+    Component {
+        id: softwareUpdatePage
+        SoftwareUpdatePage {
+            updates: updateState
+            store: cfg
+            system: sys
+            onInfoRequested: topic => updateSheet.openFor(topic)
+            onEndSessionRequested: action => (action === "restart" ? restartSheet : logOutSheet).open()
+        }
+    }
+
+    // Software Update's (i) sheets, More Info… and the other updates.
+    SoftwareUpdateSheet {
+        id: updateSheet
+        updates: updateState
+        store: cfg
+    }
+
+    // Software Update > Log Out…, Restart… (U14): asked first, in the words of the Grassfield menu; then the session ends the way
+    // that menu ends it (grassfield-session-end: every application may keep its window to save its work).
+    Sheet {
+        id: logOutSheet
+        title: qsTr("Are you sure you want to quit all applications and log out now?")
+        message: qsTr("Open applications will be closed.")
+        confirmText: qsTr("Log Out")
+        onAccepted: updateState.endSession("logout")
+    }
+
+    Sheet {
+        id: restartSheet
+        title: qsTr("Are you sure you want to restart your computer now?")
+        message: qsTr("Open applications will be closed.")
+        confirmText: qsTr("Restart")
+        onAccepted: updateState.endSession("restart")
     }
 
     Component {
@@ -1264,7 +1321,7 @@ Window {
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
         volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
-        lockMessageSheet, batteryOptionsSheet, screenCornersSheet]
+        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet]
 
     Instantiator {
         model: root.sheets
