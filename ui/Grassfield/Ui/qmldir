@@ -57,4 +57,5 @@ NotificationPrefs 1.0 NotificationPrefs.js
 SettingsContract 1.0 SettingsContract.js
 MenuShortcut 1.0 MenuShortcut.js
 GlassTint 1.0 GlassTint.js
+TileGlyph 1.0 TileGlyph.qml
 SoftwareUpdateLogic 1.0 SoftwareUpdateLogic.js

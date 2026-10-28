@@ -67,6 +67,13 @@ ShellRoot {
         value: saver.shown
     }
 
+    // The Dock's keyboard mode for the tiling popover, which never opens over it (services/TilingHover, TL22).
+    Binding {
+        target: TilingHover
+        property: "dockKeyboard"
+        value: dock.keyboardMode
+    }
+
     // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
     Binding {
         target: SessionState
@@ -414,6 +421,7 @@ ShellRoot {
         onSearchRequested: searchSurface.toggle()
     }
     Dock {
+        id: dock
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}
@@ -468,7 +476,8 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
-    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing SoftwareUpdate starts its
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
+    // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing SoftwareUpdate starts its
     // automatic checks and registers its IPC target "update" (ADR-0033 d.7).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "software update", SoftwareUpdate.count)
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "software update", SoftwareUpdate.count)
 }

@@ -208,7 +208,7 @@ does not check its gate.
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
-| windows | minimize, tile, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything) |
+| windows | minimize, tile, arrange, tilePopover, nextOutput, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R/U/I/J/K/RETURN/C, SUPER+CTRL+SHIFT+arrows and SUPER+CTRL+ALT+SHIFT+arrows (`arrange`: a layout of the catalogue), SUPER+CTRL+L (`tilePopover`: the tiling popover of the focused window), SUPER+CTRL+ALT+LEFT/RIGHT (`nextOutput`: the focused window onto the next output), SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything); the tiling functions move only the focused window and the next ones of its output, through the plugin's validated verbs (docs/specs/tiling.md TL26) |
 | zoom | toggle, zoomIn, zoomOut | action | SUPER+ALT+8, SUPER+ALT+= and SUPER+ALT+- (`config/hypr/grassfield/bindings.lua`); change `accessibility.zoom` and `zoomLevel` only |
 | notifications | toggleCenter | action | SUPER+N, screen corner (in process) |
 | notifications | dnd, status | dev | `dnd` would let another process silence notices (security notices too) |
@@ -375,16 +375,24 @@ shell no longer relies on that alone:
   `Overview.show` (also its own `locked`), `Notifications.toggleCenter` / `openWidgetGallery`, `Dock.enterKeyboardMode`,
   the desktop's context menu and attribution card (`IconsView.openMenu` / `openAbout`), the widget menu (an Overlay
   layer with the keyboard, `DesktopWidgets` `onMenuRequested`; review of 1d2c856), and the window commands of IPC target
-  `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
+  `windows` (minimize, tile, arrange, tilePopover, nextOutput, hide, cycleApp). The Switcher already refused
   (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
-  Planned, not built (window tiling, ADR-0036, `docs/specs/tiling.md` TL34): the tiling popover (popup kind `tiling`,
-  through `Popups.open`), the suggestions overlay, the shared-edge handle and the `windows` functions `arrange`,
-  `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
+  Built in tiling step 3 (ADR-0036, `docs/specs/tiling.md` TL22-TL26, TL34): the tiling popover is popup kind `tiling`,
+  opened only through `Popups.open` (services/TilingHover, on the plugin's `tile-hover` event or Super+Ctrl+L), and the
+  `windows` functions `arrange`, `tilePopover` and `nextOutput` refuse first; the popover closes with every popup when the
+  lock engages. Planned, not built (steps 4-5): the suggestions overlay and the shared-edge handle join this list, and close
+  when the lock engages, in the step that adds each of them.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
   Super+drag) and the double-click on a resize border are pointer gestures Hyprland does not start on a locked session; the
-  plugin checks the lock again when it would tile after such a release and then moves nothing.
+  plugin checks the lock again when it would tile after such a release and then moves nothing. Tiling step 3:
+  `hl.plugin.grassfield.move_to` refuses while the session is locked (`tiling` notice with `reason:"locked"`, no window
+  moves); the `tile-hover` event and `hl.plugin.grassfield.tile_popover` (which only posts that event) change nothing by
+  themselves: the shell refuses the popover (`TilingHover.show` asks `SessionState.refuses` first, and refuses it over the
+  polkit sheet, a full-attention surface and the Dock's keyboard mode), and the plugin posts no hover while the session is
+  locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
+  review of 4ead6fb).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
@@ -478,7 +486,9 @@ shell no longer relies on that alone:
 - Fail mode: if the shell's `SessionState` wiring were missing, surfaces would open under the lock surface (Hyprland still
   shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
 Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
-control open while unlocked, all close at the lock, 17 popup kinds and every entry point refused while locked, open again
+control open while unlocked, the tiling popover's own guard (refused over Search, Apps, the polkit sheet and the Dock's
+keyboard mode, another window's popover closed first), all close at the lock, 18 popup kinds and every entry point refused
+while locked, open again
 after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
 close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
 `tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
