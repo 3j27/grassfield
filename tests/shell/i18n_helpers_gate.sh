@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 92 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. The variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -337,12 +337,31 @@ declare -A variants=(
   [shiftfor]='void a() { for (int i = 0; i < 3; ++i) errors << "Failed"; }'
   [shiftif]='void a(int n) { if (n == 0) errors << "Failed"; }'
   [shiftelse]='void a(int n) { if (n) {} else errors << "Failed"; }'
-  [shiftlast]='void A::a() { m_reasons.last() << "Failed"; }'
+  [shiftlastcall]='void A::a() { m_reasons.last() << "Failed"; }'
   [shifttemplatecall]='void A::a() { m_errors.value<int>() << "Failed"; }'
   [appendmsg]='void a() { msg.append("Failed"); }'
   [argsnotfirst]='void a(QStringList &reasons) { reasons << statusText << "Failed"; }'
   [chargeerrors]='void a() { chargeErrors << "Failed"; }'
   [targeterrors]='void a() { m_targetErrors << "Failed"; }'
+  [accessorref]='void a(Result &r) { r.errors() << "Failed"; }'
+  [accessorptr]='void A::a() { m->reasons() << "Failed"; }'
+  [accessordptr]='void A::a() { d->statusLines() << "Failed"; }'
+  [shifternary]='void a(int n) { (n == 0 ? warnings : errors) << "Failed"; }'
+  [shiftdo]='void a(int n) { do errors << "Failed"; while (n); }'
+  [shiftwhile]='void a(int n) { while (n) errors << "Failed"; }'
+  [shiftelseif]='void a(int n) { if (n) {} else if (n > 1) errors << "Failed"; }'
+  [shiftswitch]='void a(int n) { switch (n) errors << "Failed"; }'
+  [shiftnested]='void a(int n) { for (int i = f(g(n)); i < 3; ++i) errors << "Failed"; }'
+  [keytooltiptext]='QJsonObject a() { return QJsonObject{{"tooltiptext", "Failed"}}; }'
+  [keyerrorstatuses]='QJsonObject a() { return QJsonObject{{"errorstatuses", "Failed"}}; }'
+  [keyinfomsg]='QJsonObject a() { return QJsonObject{{"infomsg", "Failed"}}; }'
+  [keydetailtext]='QJsonObject a() { return QJsonObject{{"detailtext", "Failed"}}; }'
+  [keyfailmsg]='QJsonObject a() { return QJsonObject{{"failmsg", "Failed"}}; }'
+  [keyerrordesc]='QJsonObject a() { return QJsonObject{{"errordesc", "Failed"}}; }'
+  [keyerrorhint]='QJsonObject a() { return QJsonObject{{"errorhint", "Failed"}}; }'
+  [keyerrorlabel]='QJsonObject a() { return QJsonObject{{"errorlabel", "Failed"}}; }'
+  [keyerrortitle]='QJsonObject a() { return QJsonObject{{"errortitle", "Failed"}}; }'
+  [keyusertip]='QJsonObject a() { return QJsonObject{{"usertip", "Failed"}}; }'
   [shiftderef]='void a() { (*reasons) << "Text"; }'
   [shiftcast]='void a() { static_cast<QStringList &>(reasons) << "Text"; }'
   [shiftassign]='void a() { reasons = QStringList() << "Failed"; }'
@@ -362,6 +381,8 @@ declare -A variants=(
   [shifterrorlist]='void a() { errorlist << "Failed"; }'
   [shiftchain]='void a(Result &r) { r.errors << QStringLiteral("failed") << QStringLiteral("it broke"); }'
 )
+desc="part (f): every key of the variants table is unique (a duplicate would silently drop a case)"
+check bash -c '[[ -z $(sed -n "/^declare -A variants=(/,/^)/p" "$1" | grep -o "^  \[[A-Za-z0-9_]*\]=" | sort | uniq -d) ]]' _ "$root/tests/shell/i18n_helpers_gate.sh"
 for name in "${!variants[@]}"; do
   cppcase "$name" "${variants[$name]}"
   desc="part (f): $name is reported"
@@ -404,6 +425,7 @@ void w(QStringList &args, bool x) { args << statusText << "enable"; args << reas
 void y(QTextStream &o) { o.insert("titles", "File:"); o.insert(QStringLiteral("set_toplevel_description"), QStringLiteral("os")); }
 void z(QStringList &statusFlags, QJsonObject &o) { statusFlags << "active"; o.insert("errorCode", "ENOENT"); QJsonObject{{"statusIcon", "network-wireless"}, {"statusType", "wifi"}}; }
 void x(QTextStream &cerr, QString &outline, QString &context, QString &hinting) { cerr << "failed"; outline << "failed"; context << "failed"; hinting << "failed"; }
+void ab(QStringList &statusArgs, QStringList &toollist, QStringList &infolist, QJsonObject &o) { statusArgs << "enable"; toollist << "Hello"; infolist << "Hello"; o.insert("toolTipIcon", "dialog-information"); QJsonObject{{"toolTipIcon", "dialog-information"}}; }
 void aa(QStringList *items, QStringList &names, QStringList &paths, int i) { items[i] << "Hello"; paths[i] << "Hello"; }
 CPP
 desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"

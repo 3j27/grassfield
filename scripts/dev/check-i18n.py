@@ -361,12 +361,13 @@ CPP_KEY_WORDS = {"reason", "error", "message", "text", "title", "label", "status
                  "detail", "body", "caption", "tooltip", "info", "warning", "subtitle", "information"}
 CPP_LIST_WORDS = {"reason", "error", "message", "text", "title", "label", "status", "note", "hint", "warning", "detail", "line", "subtitle", "information"}
 CPP_TOKEN_FOLLOWERS = {"code", "icon", "id", "ids", "flag", "flags", "type", "kind"}
-CPP_RUN_ON_QUALIFIERS = ("last", "first", "current", "short", "long", "error", "err", "status", "user", "sub", "help", "tool", "detail", "info", "fail")
+CPP_RUN_ON_QUALIFIERS = ("last", "first", "current", "short", "long", "error", "err", "status", "user", "sub", "help", "tooltip", "detail", "info", "fail")
 CPP_RUN_ON_TAILS = {"msg", "message", "error", "reason", "status", "list", "text", "note", "line", "string", "detail", "description", "desc",
                     "hint", "label", "title", "tip"}  # plurals are stripped before the lookup (errormessages, errordetails)
 # Words Qt and the code base write as one: toolTip / ToolTip / kToolTip are "tool"+"tip" after the split, so a compound key word is
 # also matched against two adjacent segments.
 CPP_COMPOUND_WORDS = {"tooltip"}
+CPP_RUN_ON_EXCLUDED = {"info": {"list"}}  # infolist is a list of infos, not a text (toollist likewise: "tool" is no qualifier)
 CPP_ARGV_SEGMENTS = {"arg", "args", "argument", "arguments", "cmd", "command", "commands", "argv"}
 # list-building calls and `<<`: the text goes in when the receiver names text; args/argv/cmd lists stay clean. The receiver of append()
 # & co is the word before . or ->; of `<<` the FIRST operand of the statement, reduced to its last member (index, cast, parentheses,
@@ -374,12 +375,33 @@ CPP_ARGV_SEGMENTS = {"arg", "args", "argument", "arguments", "cmd", "command", "
 # an argument list. msg and err are receivers of append() only: `msg << "x"` is a QDBusMessage, `err << ..` a QTextStream.
 CPP_LIST_METHODS = {"append", "push_back", "prepend", "emplace_back", "emplaceBack", "push"}
 CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:" + "|".join(sorted(CPP_LIST_METHODS)) + r")\s*\(")
-CPP_CONTROL_PREFIX = re.compile(r"^\s*(?:else\s+)?(?:(?:if|for|while|switch)\s*\((?:[^()]|\([^()]*\))*\)|else\b|do\b)\s*")
 
 
 def cpp_segments(name):
     bare = re.sub(r"^m_", "", name)
     return [seg.lower() for part in bare.split("_") for seg in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", part)]
+
+
+def cpp_stems(word):
+    """The word and its singulars: statuses is status (not statuse), messages is message, lines is line."""
+    return [word] + ([word[:-1]] if word.endswith("s") else []) + ([word[:-2]] if word.endswith("es") else [])
+
+
+def cpp_strip_control(operand):
+    """Drop leading `if (...)`, `for (...)`, `while (...)`, `switch (...)`, `else`, `do` (parentheses balanced to any depth)."""
+    while True:
+        m = re.match(r"\s*(?:(if|for|while|switch)\b\s*(\()|(else|do)\b)", operand)
+        if not m:
+            return operand
+        end = m.end()
+        if m.group(2):
+            depth = 1
+            while end < len(operand) and depth:
+                depth += {"(": 1, ")": -1}.get(operand[end], 0)
+                end += 1
+            if depth:
+                return operand
+        operand = operand[end:]
 
 
 def cpp_names_text(name, words, exempt=frozenset()):
@@ -391,12 +413,13 @@ def cpp_names_text(name, words, exempt=frozenset()):
             continue
         if seg in exempt:
             continue
-        stems = [seg] + ([seg[:-1]] if seg.endswith("s") else []) + ([seg[:-2]] if seg.endswith("es") else [])
+        stems = cpp_stems(seg)
         hit = any(stem in words for stem in stems)
         if not hit and k + 1 < len(segments):
-            hit = any(seg + segments[k + 1] == w for w in CPP_COMPOUND_WORDS if w in words)
+            hit = (any(seg + segments[k + 1] == w for w in CPP_COMPOUND_WORDS if w in words)
+                   and not (k + 2 < len(segments) and segments[k + 2] in CPP_TOKEN_FOLLOWERS))  # toolTipIcon is a token
         if not hit and seg.isalpha():
-            hit = any(seg.startswith(q) and (seg[len(q):] in CPP_RUN_ON_TAILS or seg[len(q):].rstrip("s") in CPP_RUN_ON_TAILS)
+            hit = any(seg.startswith(q) and any(t in CPP_RUN_ON_TAILS and t not in CPP_RUN_ON_EXCLUDED.get(q, ()) for t in cpp_stems(seg[len(q):]))
                       for q in CPP_RUN_ON_QUALIFIERS)
         if hit and seg == "description" and snake and (len(segments) > 2 or segments[0] in ("set", "get")):
             hit = False
@@ -409,18 +432,15 @@ def cpp_shift_receiver(before):
     """The name `before` shifts into: the last member of its first `<<` operand (`a.b[0].c << x << y` is c), taken from the left side
     of an assignment when there is one (`const QStringList reasons = QStringList() << x` is reasons)."""
     operand = before.split("<<")[0]
-    while True:  # a control prefix is not part of the receiver: `for (...; ...) errors <<`, `if (n == 0) errors <<`, `else errors <<`
-        stripped = CPP_CONTROL_PREFIX.sub("", operand, count=1)
-        if stripped == operand:
-            break
-        operand = stripped
+    operand = cpp_strip_control(operand)  # not part of the receiver: `for (...; ...) errors <<`, `else errors <<`
     operand = re.split(r"(?<![=!<>+\-*/|&^%])\+?=(?!=)", operand)[0]  # `reasons = QStringList() <<`: the left of the assignment
     while True:  # drop indexes and template arguments (casts)
         reduced = re.sub(r"\[[^\[\]]*\]|<[^<>]*>", "", operand)
         if reduced == operand:
             break
         operand = reduced
-    operand = re.sub(r"(?:\.|->)\s*\w+\s*\([^()]*\)", "", operand)  # m_reasons.last() << x: the list is m_reasons
+    # m_reasons.last() << x: the list is m_reasons; an accessor that names the list (r.errors(), d->statusLines()) is the receiver
+    operand = re.sub(r"(?:\.|->)\s*(\w+)\s*\([^()]*\)", lambda m: m.group(0) if cpp_names_text(m.group(1), CPP_LIST_WORDS) else "", operand)
     names = re.findall(r"[A-Za-z_]\w*", operand)
     return names[-1] if names else ""
 
