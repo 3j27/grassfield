@@ -1,7 +1,7 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
-Status: step 1 on its branch (engine and placement, TL1-TL15: plugin and tokens; no shell, Settings or config/hypr
-change). Steps 2-6 are not built. Below, "Today" is the state before step 1. A requirement
+Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 on its branch (drags, TL16-TL21: plugin and
+tokens; no shell, Settings or config/hypr change). Steps 3-6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -161,10 +161,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 | any | the window closes or unmaps; the plugin unloads | — | forgotten |
 
   Move to Desktop keeps the state (the box does not change). A group lives while it has two members that are Tiled,
-  Resizing or Suspended. Step 1 builds every row but one: Hyprland's move of a tiled window ends the record at its first
-  motion (Free, the tiled size kept); restarting that drag at the size from before, and tiling at its release, is TL16
-  (step 2). The plugin reads the records (and applies the last row) when it places a window, answers
-  `hyprctl grassfield-tiling` or the titlebar drag starts.
+  Resizing or Suspended. Step 1 built every row but one; step 2 builds the last (Hyprland's move of a tiled window:
+  Moving at its size from before once past the drag threshold, tiled again at a release on the place shown, TL16; in
+  step 1 the record ended at the first motion, ADR-0036 D2). The plugin reads the records (and applies the last row) when
+  it places a window, answers `hyprctl grassfield-tiling` or the titlebar drag starts.
 
   A zone is **free** on an output and Desktop when no other window that is Tiled or Resizing there has a frame that
   overlaps the zone's frame by more than 1 logical pixel on both axes (windows that are Free, Moving or Suspended do not
@@ -195,18 +195,46 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Window.cpp:2825-2837, is checked in step 2). At the release a pending tile wins over the top clamp (FR56): the tile's
   frame lies inside the work area, below the menu bar, and the clamp's deferred callback leaves a window the release has
   just tiled alone; without a tile, the clamp applies as today.
+  Step 2 as built: the plugin's pointer listener sees each motion of Hyprland's move before Hyprland applies it (the
+  `input.mouse.move` event comes first in `CInputManager::mouseMoveUnified`). A tiled window past the drag threshold
+  (`kDragThreshold`, 4 px from the press) becomes Moving: its drag is ended, its box set to the size from before at the
+  same place of the grip (`unzoomedDragBox`), and the drag begun again with the exclusive device grab the drag had (an
+  app's `xdg_toplevel.move` asks for it, `CWindow::onXDGMoveRequest`; read with `exclusiveDeviceGrab()` before the end:
+  yes, it is carried). A tiled window released under the threshold goes back to its tile (ADR-0036 D12). The release
+  that ends the move records the place shown; once Hyprland ended the drag the window is tiled there (the top clamp's
+  pending callback is dropped, `gf::topClamp::skip`), else a Moving window is Free. A window Hyprland itself tiles, lifted
+  out of its layout for the drag (`draggingTiled()`), shows no preview (D15). The preview is drawn by the window's own
+  titlebar decoration, also when its bar is hidden (client chrome). Not tied to the tiling listeners for the titlebar
+  drag; Hyprland's moves need them.
 - **TL17** The preview appears after the pointer has rested in a zone for `tiling.previewDelay` (value measured in nested
   against the owner's captures; macOS shows a short delay, U); leaving the zone hides it at once; a release before the
   delay does not tile. With Alt held there is no delay.
+  Step 2 as built: one dwell for every drag (core `CDwell`: the place and its output; a change starts over), a timer that
+  draws the preview when the pointer rests, Alt read again after each key once Hyprland applied it. `tiling.previewDelay`
+  is 250 ms, an estimate until measured in nested (ADR-0036 D11).
 - **TL18** Alt-drag (M06, setting "Hold Alt key while dragging windows to tile", `windows.tilingOptionDrag`, on): while Alt
   is held during a move, the zone is the nearest half, quarter or fill from the pointer's position in the work area (the
   work area split in thirds across and down: corners give quarters, side thirds halves, the top-middle third fill, the
   centre the half on the pointer's side), whatever the edge and menu-bar settings.
+  Step 2 as built: core `placeForAltPointer` and `dragPlace`; the bottom-middle cell gives the half on the pointer's side
+  too (ADR-0036 D10); a pointer outside the work area (menu bar, Dock) counts in the nearest cell; the plugin accepts
+  `config("tilingOptionDrag", true|false)` (on at load; the Settings switch is step 5).
 - **TL19** The plugin's titlebar drag snaps to other windows and to the work area edges as Hyprland's drag does (public
   `performSnap`, `general:snap` values), outside tile zones (M11).
+  Step 2 as built: `performSnap` with Hyprland's `general:snap:enabled` read at each step, only while no place is under
+  the pointer (shown or still waiting for the delay).
 - **TL20** Double-click on a window's resize border (M14-M15): that side extends to the work area edge (with the margin
   when margins are on); with Alt, the opposite side too; on a corner with Alt, the window fills the work area. The window
   is then tiled (it has a box from before).
+  Step 2 as built: a left click whose press began one of Hyprland's resizes of a window (its border with
+  `resize_on_border`, or the app's own resize handles through `xdg_toplevel.resize`) and whose release comes within the
+  drag threshold is a click on its resize border; two on the same sides within the double-click time and distance
+  (`CClickTracker`) are a double-click (ADR-0036 D13), acted on once Hyprland ended the second resize. The sides are those
+  the press lies beyond (core `sidesAt`; a press in a rounded corner, inside the surface, gives that corner); without Alt
+  a corner extends its two sides (D14). Core `extendFrame` moves them to the edges of the whole-area frame (inside the
+  margin, on the grid) and keeps the others; limits keep the side that did not move. The record's placement is its
+  sides (`sides` in the state reply): a margins change or a removed output moves them to the new area's edges. Alt on a
+  corner (all four sides) is Fill. Refused while locked; not for windows that cannot be tiled (TL9).
 - **TL21** Unchanged rules: an output edge shared with another output never tiles (the drag moves the window over); the
   corner band is `tiling.cornerBand` (96) along a free side edge; the edge distance is `tiling.edge` (4). Since step 1 a
   window the plugin moves onto another output (its titlebar drag, a tile there) belongs to the Desktop that output shows,
@@ -328,8 +356,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   `{"layout":"<catalogue id>","windows":["0x…",…],"output":"<name>"?}` (at most 4 windows, 4 KiB); `config` keys
   `tilingOptionDrag`, `tilingLayouts`, `tilingSuggestions`, `tilingGroups` and `titlebarDoubleClick` = `fill`.
 - **Plugin events:** `tiling` notice `{gen, reason}` (bounded); `tile-hover` `{address, state: enter|leave, x, y, w, h}`.
-- **Plugin reply:** `hyprctl grassfield-tiling`: per output the work area, the tiled windows (address, zone, group) and a
-  pending suggestion.
+- **Plugin reply:** `hyprctl grassfield-tiling`: per output the work area, the tiled windows (address, place, layout and
+  zone or the sides an edge double-click extended, group, box) and, from step 4, a pending suggestion.
 - **Features:** `window-tiling` (today) plus one per capability (layouts and arrangements, hover, groups, shared edge),
   each advertised only when its listeners and verbs registered.
 - **Shell IPC (`qs ipc`, for key bindings):** `windows tile <place>` (today), `windows arrange <layout>`, `windows
@@ -347,8 +375,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - No plugin: every window stays where it is; no tiling menu items, no popover, no suggestions, no groups, no handle; the
   keys do nothing; Settings shows the tiling rows with the "needs the Grassfield compositor extension" footnote; Hyprland's
   drags move windows as usual (C2).
-- Unload during a drag, a popover or suggestions: the plugin removes its listeners and the preview, posts empty
-  capabilities; the shell closes the popover and the overlay; windows keep their boxes; groups are forgotten.
+- Unload during a drag, a popover or suggestions: the plugin removes its listeners, the preview and its timer, posts empty
+  capabilities; the shell closes the popover and the overlay; windows keep their boxes; groups are forgotten; a drag of
+  Hyprland's in progress goes on as Hyprland's own.
+- Tiling listeners missing (tiling-arrange not advertised): the titlebar drag and `tile` still tile; Hyprland's moves
+  and the edge double-click move and resize windows as Hyprland does, without tiling.
 - A missing feature (older plugin): the shell hides only what that feature serves.
 
 ## Automated tests · Manual verification steps

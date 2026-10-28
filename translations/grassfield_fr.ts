@@ -3235,6 +3235,10 @@
         <translation>Ouvrir dans Fichiers</translation>
     </message>
     <message>
+        <source>Application Not Responding</source>
+        <translation>L’application ne répond pas</translation>
+    </message>
+    <message>
         <source>Recent Documents</source>
         <translation>Documents récents</translation>
     </message>
@@ -3776,6 +3780,10 @@
     <message>
         <source>Open applications</source>
         <translation>Applications ouvertes</translation>
+    </message>
+    <message>
+        <source>%1 (Not Responding)</source>
+        <translation>%1 (ne répond pas)</translation>
     </message>
     <message>
         <source>Cancel</source>
@@ -6493,6 +6501,14 @@
     <message>
         <source>Development session: Shut Down is disabled here so it cannot power off your real computer.</source>
         <translation>Session de développement&#xa0;: l’extinction est désactivée ici pour ne pas éteindre votre vrai ordinateur.</translation>
+    </message>
+    <message>
+        <source>Force Quit</source>
+        <translation>Forcer à quitter</translation>
+    </message>
+    <message>
+        <source>The application had already quit.</source>
+        <translation>L’application s’était déjà fermée.</translation>
     </message>
 </context>
 <context>
@@ -10350,6 +10366,18 @@
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>
         <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
+    </message>
+    <message>
+        <source>and 1 more</source>
+        <translation>et 1 autre</translation>
+    </message>
+    <message>
+        <source>and %1 more</source>
+        <translation>et %1 autres</translation>
+    </message>
+    <message>
+        <source>Some settings could not be applied</source>
+        <translation>Certains réglages n’ont pas pu être appliqués</translation>
     </message>
     <message>
         <source>Grassfield Settings is not installed</source>

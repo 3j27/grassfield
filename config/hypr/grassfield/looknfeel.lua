@@ -91,6 +91,9 @@ hl.config({
     on_focus_under_fullscreen = 1,
     initial_workspace_tracking = 0,
     background_color = "rgba(1c1c1eff)",
+    -- ADR-0035 D-3: an app is "not responding" after three missed pings, about 4.5 s (Omarchy's own value); the shell then
+    -- marks it in Force Quit and its Dock menu (packaging/session-bin/hyprland-dialog).
+    anr_missed_pings = 3,
   },
 
   cursor = {

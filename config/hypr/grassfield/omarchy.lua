@@ -39,13 +39,16 @@ end
 -- whole session config (found by tests/shell/hyprland_screens.sh). An error inside Omarchy's envs.lua does not reach the
 -- early return below: Hyprland's own `require` turns it into a config error and returns an empty table (Hyprland 0.56.2
 -- src/config/lua/ConfigManager.cpp:312-377); only a module that cannot be found is raised to `pcall`.
-function M.guard_path(shim_dir)
+-- ADR-0035 D-3: `session_bin`, Grassfield's stand-ins for the compositor's own helpers (packaging/session-bin/:
+-- hyprland-dialog), comes right after them when it is installed: Hyprland runs those helpers from this PATH.
+function M.guard_path(shim_dir, session_bin)
   if not exists(shim_dir .. "/omarchy-restart-shell") then return false end
   local bin = omarchy_path .. "/bin"
   local parts = { shim_dir }
+  if session_bin and exists(session_bin .. "/hyprland-dialog") then parts[#parts + 1] = session_bin end
   if M.ok then parts[#parts + 1] = bin end
   for entry in (os.getenv("PATH") or "/usr/local/bin:/usr/bin"):gmatch("[^:]+") do
-    if entry ~= shim_dir and entry ~= bin then parts[#parts + 1] = entry end
+    if entry ~= shim_dir and entry ~= bin and entry ~= session_bin then parts[#parts + 1] = entry end
   end
   hl.env("PATH", table.concat(parts, ":"))
   return true

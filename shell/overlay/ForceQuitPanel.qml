@@ -6,13 +6,48 @@ import qs.platform
 import qs.services
 
 // Force Quit: lists open windows by app; choosing one asks for confirmation, then SIGKILLs the
-// client PID reported by Hyprland. Nothing is killed without the second confirmation.
+// client PID reported by Hyprland. Nothing is killed without the second confirmation. An app that does not respond
+// (NotResponding, ADR-0035 D-3) shows "(Not Responding)" in the destructive colour and is selected when the panel opens.
 Dialog {
     id: root
 
     readonly property var windows: Compositor.toplevels ? Compositor.toplevels.values : []
     readonly property var selected: list.currentIndex >= 0 && list.currentIndex < windows.length ? windows[list.currentIndex] : null
     readonly property int selectedPid: selected ? Compositor.pidOf(selected) : 0
+    // The class Hyprland reports for the selected window: the confirmation checks that the pid still owns a window of it.
+    readonly property string selectedClass: {
+        const top = selected ? Compositor.hyprlandToplevel(selected) : null;
+        return top && top.lastIpcObject && top.lastIpcObject.class ? top.lastIpcObject.class : "";
+    }
+
+    // The selection follows a window, not a row: the window list is a new array each time a window opens or closes, which
+    // resets the view's row. Before the user moves it, it goes onto the first app that does not respond and never away from
+    // the app shown when a mark clears (NotResponding.selectionAfterChange, ADR-0035 decision 3-13).
+    readonly property int preferred: NotResponding.initialIndex(windows.map(t => Compositor.pidOf(t)))
+    property var current: null
+    property bool userMoved: false
+
+    function select(index: int): void {
+        list.currentIndex = index;
+        current = index >= 0 && index < windows.length ? windows[index] : null;
+        if (index >= 0)
+            list.positionViewAtIndex(index, ListView.Contain);
+    }
+
+    function userSelect(index: int): void {
+        userMoved = true;
+        select(index);
+    }
+
+    function sync(): void {
+        const kept = current ? windows.indexOf(current) : -1;
+        const marked = preferred >= 0 && preferred < windows.length && NotResponding.isMarked(Compositor.pidOf(windows[preferred]));
+        select(NotResponding.selectionAfterChange(userMoved, kept, preferred, marked));
+    }
+
+    onPreferredChanged: sync()
+    // After the view took its new model (which resets its row).
+    onWindowsChanged: Qt.callLater(sync)
 
     title: qsTr("Force Quit Applications")
     message: qsTr("If an app is not responding, select it and choose Force Quit.")
@@ -23,13 +58,16 @@ Dialog {
         if (!selected || selectedPid <= 1)
             return;
         Popups.confirm(qsTr("Force quit “%1”?").arg(Apps.nameFor(selected.appId)),
-            qsTr("Unsaved changes in this application will be lost."), qsTr("Force Quit"), "forcequit", {pid: selectedPid}, true);
+            qsTr("Unsaved changes in this application will be lost."), qsTr("Force Quit"), "forcequit", {pid: selectedPid, cls: selectedClass}, true);
     }
 
     onRejected: Popups.close()
 
     // Windows opened after the shell started have no pid until Hyprland's list is refreshed.
-    Component.onCompleted: Compositor.refreshToplevels()
+    Component.onCompleted: {
+        Compositor.refreshToplevels();
+        sync();
+    }
 
     content: [
         Rectangle {
@@ -48,10 +86,11 @@ Dialog {
                 focus: true
                 activeFocusOnTab: true
                 model: root.windows
-                currentIndex: root.windows.length > 0 ? 0 : -1
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Open applications")
                 Keys.onReturnPressed: root.ask()
+                Keys.onUpPressed: root.userSelect(Math.max(0, list.currentIndex - 1))
+                Keys.onDownPressed: root.userSelect(Math.min(root.windows.length - 1, list.currentIndex + 1))
 
                 delegate: Item {
                     id: row
@@ -59,11 +98,12 @@ Dialog {
                     required property var modelData
                     required property int index
                     readonly property bool current: ListView.isCurrentItem
+                    readonly property bool notResponding: NotResponding.isMarked(Compositor.pidOf(row.modelData))
 
                     width: ListView.view.width
                     height: Tokens.menuItemHeight
                     Accessible.role: Accessible.ListItem
-                    Accessible.name: Apps.nameFor(row.modelData.appId)
+                    Accessible.name: row.notResponding ? qsTr("%1 (Not Responding)").arg(Apps.nameFor(row.modelData.appId)) : Apps.nameFor(row.modelData.appId)
                     Accessible.selected: row.current
 
                     Rectangle {
@@ -93,9 +133,9 @@ Dialog {
                             anchors.verticalCenter: parent.verticalCenter
                             width: list.width - 3 * Tokens.spacingLg
                             elide: Text.ElideRight
-                            text: Apps.nameFor(row.modelData.appId)
+                            text: row.notResponding ? qsTr("%1 (Not Responding)").arg(Apps.nameFor(row.modelData.appId)) : Apps.nameFor(row.modelData.appId)
                             textFormat: Text.PlainText
-                            color: row.current ? Appearance.colors.selectionText : Appearance.colors.text
+                            color: row.current ? Appearance.colors.selectionText : (row.notResponding ? Appearance.colors.danger : Appearance.colors.text)
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyMenuSize
                         }
@@ -104,7 +144,7 @@ Dialog {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            list.currentIndex = row.index;
+                            root.userSelect(row.index);
                             list.forceActiveFocus();
                         }
                         onDoubleClicked: root.ask()
