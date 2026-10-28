@@ -1,0 +1,423 @@
+# Activity Monitor spec · apps-engineer (app), shell-engineer (projection, IPC, Dock tile) · owner brief 2026-10-28
+Decision record: `docs/decisions/ADR-0038-activity-monitor.md` (owner questions AQ1 to AQ7, decisions AD1 to AD24). Parity
+row by row: `docs/audits/activity-2026-10-28/parity.md`. Evidence of the kernel facts: `docs/audits/activity-2026-10-28/`
+(probes A0 to A8). The visible name is AQ1's; this spec says "the app". Internal names: `apps/activity`,
+`grassfield-activity`, `org.grassfield.Activity`.
+
+Status: step 0 (docs). Requirements are numbered AM1 to AM79, gates AM-P1 to AM-P4; each names the step that builds it
+(ADR-0038 "Delivery order"). A requirement that depends on an owner answer says so.
+
+## macOS reference behavior (Apple's Activity Monitor User Guide, macOS 27; described in words, no Apple image committed)
+- One window: a toolbar with the Stop button, the Info button and an action menu, five tabs (CPU, Memory, Energy, Disk,
+  Network), a search field; the process table; the summary of the tab at the bottom of the window.
+- CPU: System, User and Idle shares, the CPU load graph, Threads and Processes. Memory: the Memory Pressure graph, Physical
+  Memory, Memory Used (App Memory, Wired Memory, Compressed), Cached Files, Swap Used. Energy: Energy Impact ("lower is
+  better"), 12 hr Power (laptops), App Nap, Preventing Sleep, Graphics Card; at the bottom the battery's charge, time
+  remaining or until full, time on battery or on AC, Battery (Last 12 hours). Disk: reads, writes, data read and written,
+  per second, graph IO or Data. Network: packets and data in and out, per second, graph Packets or Data.
+- View menu: Columns, Dock Icon (application icon, or a live CPU, CPU history, network or disk graph), Update Frequency
+  (every 5 seconds by default), the process filters (All Processes; All Processes, Hierarchically; My Processes; System
+  Processes; Other User Processes; Active Processes; Inactive Processes; GPU Processes; Windowed Processes; Selected
+  Processes; Applications in last 12 hours; Processes, by GPU), Inspect Process, Quit Process, Send Signal to Process.
+- Window menu: CPU Usage, CPU History, GPU History.
+- Quit ("quits when it's safe to do so") and Force Quit (ends at once, data may be lost); a hung process is "(Not
+  Responding)" in red; a process of another user needs an administrator.
+- A process's details: double-click or the Info button.
+
+## Windows 11 reference (what is taken; ADR-0038 g)
+Processes grouped by type with expandable groups; Performance (CPU overall or per logical processor, memory, disk, network,
+GPU, each with details); App history (per app since a date, with a delete action); Efficiency mode (a process's lower
+priority, refused for the system's own); columns from the header; search by name or PID; End task from the taskbar's menu
+(a switch, off by default); Ctrl+Shift+Esc. Not taken: ADR-0038 h and the parity matrix.
+
+## Purpose and non-goals
+Purpose: let the user see what their computer is doing, find what is slow, hot, hung or heavy, and stop it, with macOS 27's
+window and the most useful Windows 11 views, at a cost the user does not notice.
+
+Non-goals: root code or polkit actions; other users' processes beyond AQ4; stack sampling and diagnostics; editing login
+items (Settings does it); a background collector; any network access.
+
+## Terms
+- **Sample:** one read of the counters at the update frequency. A **rate** is the change between two samples divided by the
+  wall time between them (`CLOCK_MONOTONIC`).
+- **Own process:** real uid equals the app's uid (`/proc/<pid>/status` `Uid:` first field); kernel threads (empty
+  `cmdline` and `PF_KTHREAD` in `stat` flags) are never listed.
+- **Row identity:** (pid, start time) where start time is `stat` field 22. A pid with another start time is another process.
+- **App unit:** the systemd unit a process belongs to, from `/proc/<pid>/cgroup` (`0::` line): `app-…​.scope` or
+  `app-…​.service` under `app-graphical.slice` (uwsm, ADR-0038 A7), or a user service.
+- **Projection:** the shell's file `$XDG_RUNTIME_DIR/grassfield/activity/windows.json` (AM60).
+- **"—":** the kernel refused the read (another owner's or a non-dumpable process, A1) or the driver gives no such value.
+
+## Functional requirements
+
+### Window and navigation (step 2)
+- **AM1** One instance: launching the app while it runs brings its main window to the front (the mechanism Settings and the
+  Store use). Closing the main window quits the app (AD17).
+- **AM2** The main window opens at its last frame (`activity.json`), else at the token size `activity.windowWidth` ×
+  `activity.windowHeight`, never smaller than `activity.windowMinWidth` × `activity.windowMinHeight`. Opaque window, ADR-0024
+  radius, unified toolbar (ADR-0015).
+- **AM3** Toolbar, left to right: the traffic lights; the title (the app's name) with the current view as subtitle; the
+  Stop button (Quit Process, enabled with a selection of own processes); the Info button (Inspect, enabled with one row);
+  the action menu (…: Quit Process, Inspect Process, Send Signal to Process…, Efficiency Mode, Copy); the segmented control
+  CPU, Memory, Energy, Disk, Network; the search field. Every control has a tooltip, an accessible name and keyboard
+  focus.
+- **AM4** The tab chosen is remembered. Each tab has its own columns, sort and summary.
+- **AM5** The summary area at the bottom of the window has the token height `activity.summaryHeight`; it holds the tab's
+  figures (label and value pairs, tokens' type scale) and its graph. Its graphs and the table update at the same sample.
+- **AM6** Menus: the app menu (About, Hide, Quit), File (Close Window), Edit (Copy, Select All, Find), View, Window, Help,
+  exported to the menu bar (T1, `apps/globalmenu.h`). There is no settings window: the View menu holds the options (macOS).
+- **AM7** Light and dark appearance and the accent follow the session; table rows alternate with the token fill
+  `activity.rowAlternate`; graphs use tokens only (`activity.graphSystem`, `activity.graphUser`, `activity.graphRead`,
+  `activity.graphWrite`, `activity.graphIn`, `activity.graphOut`, `activity.pressureGreen`, `activity.pressureYellow`,
+  `activity.pressureRed`), each holding A2's 3:1 against the graph's background in both appearances.
+- **AM8** While the window is hidden or minimized no per-process sample is taken (AM-P3). Back on screen, the next sample
+  comes at once; rates restart from it (no rate is drawn from a gap).
+- **AM9** View > Update Frequency: Very Often (1 sec), Often (2 sec), Normally (5 sec), default Normally; the choice is
+  remembered and applies to every window of the app.
+
+### The table (step 2)
+- **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt), the name,
+  then the tab's columns. A click on a header sorts by it; a second click reverses. Defaults: CPU by % CPU, Memory by
+  Memory, Energy by Energy Impact, Disk by Bytes Written, Network by Sent Bytes, each descending.
+- **AM11** Selection: one or several rows (Shift, Ctrl). The selection follows its processes (row identity) across samples
+  and sorts; a process that ends leaves the selection. The scroll position never jumps on a refresh.
+- **AM12** Views (View menu, one checked; the subtitle names it): All Processes (default); All Processes, Hierarchically
+  (AM13); Processes, by Type (AM65); Processes, by GPU (AM49); Active Processes (CPU share above 0 in the last sample);
+  Inactive Processes (the others); GPU Processes (with a GPU client); Windowed Processes (owning a window per the
+  projection); Selected Processes (the rows selected when chosen, kept until another view). If AQ4 = B: My Processes,
+  System Processes, Other User Processes.
+- **AM13** Hierarchically: a tree by parent pid (`stat` field 4); a process whose parent is not listed is a root; rows have
+  disclosure triangles; expansion is kept across samples.
+- **AM14** Search: a live filter (no Return needed), case-insensitive, matching the process name, the app name, the command
+  (own processes) or a PID that starts with the digits typed. Ctrl+F focuses the field, Esc clears it. In a grouped view a
+  group stays when one of its processes matches.
+- **AM15** Columns: View > Columns lists the current tab's optional columns, checked when shown; the header's context menu
+  lists the same. The name column cannot be hidden. Widths are resizable; columns, widths and order are remembered per tab.
+- **AM16** Values: sizes in the session's locale with the unit scale Files uses (kB, MB, GB, decimal), times as `h:mm:ss.ss`,
+  shares with one decimal, "—" where Terms say so. A column with no value for any row still shows its header.
+- **AM17** Names and icons: a process owning a window (projection) takes its app's desktop entry name and icon; another
+  process of the same app unit takes the app's icon and its own executable name; any other takes the basename of
+  `cmdline`'s first word, else `comm`. A name is plain text (no markup), elided in the middle.
+- **AM18** Rows of processes that ended go at the next sample; new processes appear at the next sample in sort order.
+- **AM19** Edit > Copy (Ctrl+C) copies the selected rows as text: the visible columns' headers, then one line per row,
+  values separated by tabs, as shown.
+
+### CPU (step 1 data, step 2 window)
+- **AM20** % CPU = Δ(utime + stime) of the whole thread group (`stat` fields 14 and 15) ÷ (Δt × `CLK_TCK`) × 100: a share of
+  one logical processor (can pass 100, AD4). The first sample of a process shows "—" in rate columns.
+- **AM21** CPU Time = utime + stime since the process started, `h:mm:ss.ss`.
+- **AM22** Threads = `stat` field 20.
+- **AM23** Wake Ups (optional): Δ of `voluntary_ctxt_switches` summed over `/proc/<pid>/task/*/status` ÷ Δt, read only while
+  the column or the Energy tab is shown (cost, AM-P1).
+- **AM24** % GPU and GPU Time: AM48.
+- **AM25** Open Files (optional): the entries of `/proc/<pid>/fd`, re-counted at most every 10 s per process.
+- **AM26** Kind (optional): App, Background or Session (AM65).
+- **AM27** Status (optional): Not Responding (projection), Efficiency Mode (AM68), Stopped (`stat` state T), Zombie (Z);
+  empty otherwise. The name of a process that does not respond carries " (Not Responding)" (fr « (ne répond pas) », the
+  string the Force Quit panel uses) in `colors.danger`, in every tab (macOS).
+- **AM28** Command (optional): `cmdline`'s words joined by spaces, elided at the end; "—" for a process that refuses it.
+- **AM29** Summary: System, User, Idle (AD5: User = Σ % CPU of own processes ÷ number of logical processors, System =
+  non-idle share of `/proc/stat`'s `cpu` line minus User, never below 0, Idle = `idle + iowait` share); the CPU Load graph
+  (System and User stacked, `activity.historySamples` samples); Threads = the total of `/proc/loadavg`'s fourth field;
+  Processes = the number of numeric entries of `/proc`.
+
+### Memory (step 1 data, step 2 window)
+- **AM30** Memory = `RssAnon + VmSwap` (`status`, AD6).
+- **AM31** Optional: Real Memory (`VmRSS`), Private Memory (`RssAnon`), Shared Memory (`RssFile + RssShmem`), Compressed
+  Memory (`VmSwap`; titled Swapped Memory under AM34), Peak Memory (`VmHWM`), Page Ins (`stat` field 12, major faults),
+  Threads, PID.
+- **AM32** Summary (AD7): Physical Memory, Memory Used, App Memory, Wired Memory, Compressed, Cached Files, Swap Used, from
+  `/proc/meminfo`, `/sys/block/zram*/mm_stat` (third field, `mem_used_total`, summed) and `/proc/swaps`. App + Wired +
+  Compressed = Memory Used (App is the remainder, never below 0).
+- **AM33** Memory Pressure graph: height = `(MemTotal − MemAvailable) ÷ MemTotal`; colour red when `full avg10` of
+  `/proc/pressure/memory` ≥ 5 or `MemAvailable` < 5 % of `MemTotal`, else yellow when `some avg10` ≥ 10 or `MemAvailable` <
+  15 %, else green (provisional thresholds, pinned by tests, tuned at step 1 with a memory-pressure fixture in a container).
+  Without `/proc/pressure` (kernel without PSI) the colour follows the memory left only.
+- **AM34** "Compressed Memory" names the column when every active swap device in `/proc/swaps` is zram; otherwise it is
+  "Swapped Memory" and Swap Used counts the non-zram devices.
+- **AM35** Memory figures are bytes; the summary shows them with AM16's unit scale.
+
+### Energy (step 1 data, step 2 window; AQ3)
+- **AM36** Energy Impact (AQ3 = A): a relative index without unit, `EI = %CPU + %GPU + 0.02 × wake-ups/s + 1.0 × disk MB/s`
+  (provisional weights; the step calibrates them against the laptop's `power_now` in an owner L2 run, then fixes and pins
+  them). Shown with one decimal; never called watts.
+- **AM37** Average Energy Impact (optional): the mean of EI since the app opened or since the process started, whichever is
+  later; the header's tooltip says so.
+- **AM38** Preventing Sleep: "Yes" when the process holds a logind inhibitor whose What includes `sleep` or `idle` in `block`
+  mode (`org.freedesktop.login1.Manager.ListInhibitors`, system bus, read when the tab is shown and at each sample), or when
+  the projection marks one of its windows `idleInhibit`; "No" otherwise.
+- **AM39** Summary: the Energy Impact graph (Σ EI of own processes). On a computer with a battery (UPower's DisplayDevice
+  `IsPresent`): Remaining charge (`Percentage`), Time remaining (`TimeToEmpty`, "Calculating…" at 0) or Time until full
+  (`TimeToFull`), "Battery Is Charged" when full, Time on battery or Time on AC (from the last state change in UPower's
+  history), and Battery (Last 12 hours) (`GetHistory("charge", 43200, 120)`). Without a battery only the graph shows.
+- **AM40** Not built: App Nap, Graphics Card, 12 hr Power (ADR-0038 h).
+
+### Disk (step 1 data, step 2 window)
+- **AM41** Bytes Read and Bytes Written = `io` `read_bytes` and `write_bytes` since the process started (storage, not page
+  cache); optional Read/s and Written/s (rates). "—" when `io` is refused.
+- **AM42** Summary from `/proc/diskstats`, counting only whole physical disks (a `/sys/block/<name>/device` link exists: no
+  loop, zram, dm or md device, no partition): Reads in (field 4), Writes out (field 8), Data read (field 6 × 512), Data
+  written (field 10 × 512), each since boot, and per second; the graph shows IO (reads and writes per second) or Data (bytes
+  per second), chosen by a pop-up above it (remembered).
+
+### Network (step 1 data, step 2 window; AQ2)
+- **AM43** (AQ2 = A) Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets per process, headed "(TCP)": a `NETLINK_SOCK_DIAG`
+  dump of TCP sockets (IPv4 and IPv6) with `tcp_info` (`tcpi_bytes_acked`, `tcpi_bytes_received`, `tcpi_segs_out`,
+  `tcpi_segs_in`), each socket matched to the own process whose `fd/` holds `socket:[inode]` (descriptor lists re-read at
+  most every 10 s and for new processes). A process's value = Σ over the sockets seen since the app opened (a socket's last
+  values are kept after it closes). A line under the table: "UDP traffic, such as some video, is counted only in the totals
+  below." (AQ2 = B: the four columns are absent; the tab keeps PID and the summary.)
+- **AM44** Summary from `/proc/net/dev`, every interface except `lo`: Packets in, Packets out, Data received, Data sent
+  (since boot) and per second; the graph shows Packets or Data (a pop-up, remembered).
+
+### GPU (step 1 data, step 2 window)
+- **AM45** GPU clients: each own process's DRM descriptors (`fd/` links to `/dev/dri/*`), their `fdinfo` keys `drm-driver`,
+  `drm-pdev`, `drm-client-id`, `drm-engine-<name>`, `drm-engine-capacity-<name>`, `drm-memory-<region>`; one client per
+  (`drm-pdev`, `drm-client-id`) even when several descriptors share it.
+- **AM46** Engine share of a client = Δ`drm-engine-<name>` (ns) ÷ (Δt × capacity); % GPU of a process = its busiest engine
+  (Σ over its clients, capped at 100); GPU Time = Σ of its engines' times.
+- **AM47** A system GPU's engine share = Σ over the user's clients on that `drm-pdev`, capped at 100 (the compositor is one of
+  them); its name from `/sys/class/drm/card*/device` (vendor and device ids looked up in `/usr/share/hwdata/pci.ids` when
+  present, else "GPU <n>"), its driver from the `driver` link.
+- **AM48** A driver without `drm-engine-*` keys gives "—" in % GPU and GPU Time, and no GPU in GPU History or Performance
+  (verified on the owner's i915 at step 1, read-only).
+- **AM49** Processes, by GPU (macOS 27): one group per GPU (`drm-pdev`) with its client processes; processes without a client
+  are not listed in this view.
+
+### Quit, Force Quit, signals (step 2; Quit of windowed processes through the shell at step 3)
+- **AM50** The Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the sheet "Are you sure you want
+  to quit this process?" (several rows: "Are you sure you want to quit these %n processes?"), buttons Cancel, Force Quit,
+  Quit; Quit is the default (Return), Esc cancels.
+- **AM51** Before the sheet shows, the app opens a pidfd for each selected row and checks the start time again; a row whose
+  process ended is dropped (none left: no sheet).
+- **AM52** Quit: a process owning windows (projection) → IPC `activity quit <pid>` to the shell (AM61); `ok` → nothing more
+  (the app may ask to save); `no-windows` → `SIGTERM` through the pidfd; `refused`, no answer within 1 s, or no projection
+  for a process of an app unit → the sheet stays with "The process couldn't be quit safely." and only Cancel and Force
+  Quit. A process without windows → `SIGTERM` through the pidfd.
+- **AM53** Force Quit → `SIGKILL` through the pidfd. ESRCH (it ended) is silent; any other error shows "The process couldn't
+  be quit." with the reason in the journal.
+- **AM54** Session processes (AD22: a process of `session.slice`, `session-graphical.slice` or the user manager's
+  `init.scope`): Quit and Force Quit first show a second sheet "Quitting “%1” may end your session or stop part of it.",
+  buttons Cancel and Force Quit (destructive, not default). The app refuses to signal itself from the table (its own row's
+  Quit closes its window instead).
+- **AM55** View > Send Signal to Process… (one row): a sheet with a pop-up of Hangup (SIGHUP), Interrupt (SIGINT), Quit
+  (SIGQUIT), Abort (SIGABRT), Kill (SIGKILL), Alarm (SIGALRM), Terminate (SIGTERM), User Defined 1 (SIGUSR1), User Defined 2
+  (SIGUSR2), Stop (SIGSTOP), Continue (SIGCONT); Cancel and Send; the pidfd path of AM51.
+- **AM56** Dev guard (ADR-0019): in a dev session AM52 to AM55 and AM68 act only on processes descending from the nested
+  compositor (its pid from the dev state) or named by a test fixture; any other is refused with one "dev guard" journal line
+  and the sheet says "Development session: only the nested session's processes can be quit."
+
+### Inspect (step 2)
+- **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
+  request raises it), refreshed at the update frequency while open. Header: Parent Process (name and pid; a click inspects
+  it), Process Group (pgid), User, % CPU, Recent hangs (the number of times the projection marked it since the app opened).
+- **AM58** Tabs: **Memory** (Real Memory Size, Virtual Memory Size, Shared Memory Size, Private Memory Size, Proportional
+  Memory Size from `smaps_rollup` `Pss` read at most every 5 s, Swapped, Peak); **Statistics** (Threads, CPU Time user and
+  system, Context Switches voluntary and involuntary summed over the threads, Faults minor and major, Read and Write calls
+  from `io` `syscr`/`syscw`, Started (date and time), Nice, Scheduler policy, Unit (the systemd unit), Command, Executable
+  (`exe`), Working Folder (`cwd`)); **Open Files and Ports** (one line per descriptor: a file's path, a pipe, a TCP or UDP
+  socket with local and remote address and port from `/proc/net/{tcp,tcp6,udp,udp6}` by inode, a local socket's path from
+  `/proc/net/unix`, or the kernel's own name such as `anon_inode:[eventfd]`). A value the kernel refuses is "—".
+- **AM59** Buttons: Quit (AM50's sheet for this process). No Sample button. Environment variables are never read.
+
+### The shell (step 3)
+- **AM60** Projection: while a toplevel with app id `org.grassfield.Activity` exists, the shell writes
+  `$XDG_RUNTIME_DIR/grassfield/activity/windows.json` (folder 0700, file 0600, written to a temporary name then renamed):
+  `{"v":1,"writer":<shell pid>,"windows":[{"pid":N,"app":"<app id>","idleInhibit":bool}…],"notResponding":[N…]}`, at most 256
+  windows, from `Compositor.knownWindows()` after `Compositor.refreshToplevels()` on a window opening, closing or changing
+  class, and from `NotResponding.marks`, coalesced over 250 ms. No title. The file is removed when the last such toplevel
+  closes and when the shell stops. The app reads it on change (inotify); a file whose `writer` pid is not alive
+  (`kill(pid, 0)`) is stale and ignored.
+- **AM61** IPC target `activity`, function `quit(pid: int): string`, class action, caller `grassfield-activity`: refused
+  (`refused`) for a pid ≤ 1 or in a dev session for a pid outside the nested session; otherwise refreshes the toplevels,
+  closes every window whose client pid is `pid` (`Compositor.close`, as the Dock's Quit) and answers `ok`, or `no-windows`
+  when there was none. Never kills. Listed in `docs/specs/security.md` "IPC surface" and `tests/security/ipc_inventory.sh`.
+- **AM62** Dock tile graph: View > Dock Icon: Show Application Icon (default), Show Network Usage, Show Disk Activity, Show
+  CPU Usage, Show CPU History. Other than the icon, the app writes `$XDG_RUNTIME_DIR/grassfield/activity/dock-tile.json`
+  (0600, renamed into place) at each sample: `{"v":1,"pid":<app pid>,"kind":"network|disk|cpu-usage|cpu-history",
+  "samples":[…]}`, at most 32 samples, each a number or a pair in [0, 1] the app has scaled (network and disk: in and out over
+  the window's maximum; CPU usage: one value, drawn as a 10-segment gauge; CPU history: pairs System and User), at most 2
+  KiB. The Dock reads only that path, only for the `org.grassfield.Activity` tile while it is running, rejects a file over 2
+  KiB, a `v` other than 1, an unknown kind or a value out of range, and draws the graph over the tile with tokens
+  (`dock.tileGraph*`), the running dot and badge unchanged. The app removes the file when the icon is chosen and when it
+  quits; the Dock drops a file whose `pid` is not alive.
+- **AM63** Force Quit panel and Dock menu: AQ5 (recorded in ADR-0038 after the answer).
+- **AM64** Keyboard shortcut: AQ6 (a binding in `config/hypr/grassfield/bindings.lua` that starts the app through the shell's
+  launch path, so it gets its own scope; its label in Settings' keyboard shortcuts list).
+
+### From Windows 11 (step 4)
+- **AM65** Processes, by Type: three groups with a count in their header, Apps, Background Processes, Session Processes. A
+  process is in Apps when its unit is under `app-graphical.slice` or it owns a window (projection), one sub-group per unit
+  (name and icon from the window's app id, else the desktop entry whose `Exec` basename equals the unit's command part,
+  else that part); in Session Processes when its unit is under `session.slice` or `session-graphical.slice` or is the user
+  manager's `init.scope`; otherwise in Background Processes. A group's row sums its processes (CPU, memory, disk, network,
+  energy); groups and sub-groups expand and collapse, kept across samples.
+- **AM66** Performance window (Window > Performance, Ctrl+5): a sidebar with one row per resource (CPU; Memory; each
+  physical disk; each network interface but `lo`, Wi-Fi or Ethernet from `/sys/class/net/<if>/wireless` and `type`; each GPU
+  with clients), each with a small live graph and its current value; the selected resource's large graph (`activity.
+  historySamples` samples) and details:
+  - CPU: Overall or Logical Processors (one small graph per `cpuN` line of `/proc/stat`, a pop-up), Utilization, Speed (mean
+    `scaling_cur_freq`), Base Speed (`base_frequency` when present), Processes, Threads, Up Time (`/proc/uptime`), Cores and
+    Logical Processors (`topology/`), L1, L2, L3 caches (`cache/index*/size`).
+  - Memory: In Use, Available, Committed (`Committed_AS` of `CommitLimit`), Cached, Compressed, Swap Used, and a composition
+    bar (In Use, Compressed, Cached, Free).
+  - Disk: Active Time (Δ field 13 ÷ Δt), Read Speed, Write Speed, Average Response Time (Δ(fields 7 + 11) ÷ Δ(fields 4 + 8)),
+    Capacity (`size` × 512), Type (SSD or HDD from `queue/rotational`), Model (`device/model`).
+  - Network: Send and Receive throughput (two series), Interface, Kind, IPv4 and IPv6 addresses (`getifaddrs`), and for Wi-Fi
+    the network's name from NetworkManager (system bus, read-only) and the signal from `/proc/net/wireless`.
+  - GPU: one graph per engine (AM47), memory per region where `drm-memory-*` reports it, Driver.
+- **AM67** App History window (Window > App History, Ctrl+6): a period pop-up (Last 12 Hours (default), Last 7 Days, Last 30
+  Days) and a line "Resource use since <date> for <user>"; rows per app: name and icon, CPU Time, Memory Peak (when the
+  record has it), Launches, Last Used; sortable. Source, read when the window opens and on the period's change:
+  `journalctl --user -o json MESSAGE_ID=ae8f7b866b0347b9af31fe1c80b127c0 --since <start>` (records of units named
+  `app-*.scope` or `app-*@*.service` under `app-graphical.slice`; fields as systemd writes them, `CPU_USAGE_NSEC` and the
+  memory peak field, verified on the owner's journal at step 4, read-only), plus each live app unit's `cpu.stat`
+  `usage_usec`. Apps match AM65's naming. Delete Usage History… asks, then stores the cut-off in `activity.json`; earlier
+  records are ignored (the journal is not written). No journal access (an error from `journalctl`) shows "Usage history isn't
+  available." and nothing else.
+- **AM68** Efficiency Mode (View menu, action menu, context menu; a checked item for the selected process): available only
+  for a process whose unit is an app unit or a user service (not a Session process, AM54's list); sets the unit's CPU weight
+  to the lowest systemd accepts (`CPUWeight=idle` where supported, else 1) with
+  `org.freedesktop.systemd1.Manager.SetUnitProperties(unit, runtime=true, …)` on the session bus, and the unset value to turn
+  it off. The first time, a sheet "Turn on Efficiency Mode for “%1”?" explains that the whole app runs at the lowest
+  priority when the computer is busy, with "Don't ask again" (remembered), Cancel and Turn On. Status shows "Efficiency
+  Mode" for every process of that unit while the unit's `cpu.weight` (read from its cgroup) is the low value, so a change
+  made elsewhere shows too. Unavailable items are disabled with the reason in their tooltip ("This process isn't running as
+  an app.", "This process is part of your session.").
+- **AM69** Window > Login Items… opens Settings on General > Login Items (`grassfield-settings --section=login` through the
+  shell's launch path or `uwsm-app`); nothing of that pane is in the app.
+- **AM70** Status column and Copy: AM27, AM19.
+
+### Small windows (step 5)
+- **AM71** Window > CPU Usage (Ctrl+2): a small window with one vertical bar per logical processor, current share,
+  System and User stacked.
+- **AM72** Window > CPU History (Ctrl+3): one small graph per logical processor; Window > GPU History (Ctrl+4): one graph per
+  GPU (AM47); View > Clear CPU History (Ctrl+K) empties the CPU graphs.
+- **AM73** Window > Keep CPU Windows on Top: those windows carry a toplevel tag the Grassfield session's Hyprland rules pin
+  above other windows (AD23); without the rule the item is absent.
+
+### Persistence, degraded behaviour, dev (every step)
+- **AM74** `activity.json` (state, version 1, written by the app only, ADR-0020 row): window frames, tab, view, columns,
+  widths and sort per tab, graph pop-ups, update frequency, Dock icon, "Don't ask again", App History's period and cut-off.
+  An unknown version or a broken file is set aside (renamed `.bad`) and defaults are used.
+- **AM75** No shell: no projection (no "(Not Responding)", no Windowed Processes view, Quit as AM52), no Dock graph; everything
+  else works.
+- **AM76** No systemd user manager on the session bus: Efficiency Mode absent; App History shows AM67's message.
+- **AM77** No UPower: AM39's battery part absent.
+- **AM78** No `/proc/pressure`: AM33's fallback.
+- **AM79** Fixture tree (tests only): in a dev session, `GRASSFIELD_PROC_ROOT` and `GRASSFIELD_SYS_ROOT` (dev plumbing,
+  `runmode.h` `devValue`) point the sampler at a fixture tree; outside a dev session they are ignored.
+
+## Keyboard
+| Keys | Action |
+|---|---|
+| Ctrl+F | focus the search field (Esc clears it) |
+| Ctrl+I | Inspect the selected process |
+| Ctrl+Alt+Q | Quit Process (the sheet) |
+| Ctrl+C, Ctrl+A | Copy, Select All |
+| Ctrl+1 to Ctrl+6 | the main window, CPU Usage, CPU History, GPU History, Performance, App History |
+| Ctrl+K | Clear CPU History |
+| Ctrl+W, Ctrl+Q | close the window, quit the app |
+| Up, Down, Home, End, Page Up, Page Down, Shift+arrows | move and extend the selection |
+| Left, Right | collapse and expand a tree row or group |
+| Tab, Shift+Tab | toolbar controls, tabs, search, table, summary pop-ups |
+| AQ6's shortcut | open the app from anywhere |
+Shortcuts follow the other Grassfield apps' Ctrl-for-Command mapping and the menu shortcut style of ADR-0024 (symbols on a
+Mac keyboard, text on a PC).
+
+## Accessibility
+- Table: role table, rows with role row and a name made of the process name and the visible values ("Firefox, 12.4 percent
+  CPU, 1.2 gigabytes"), headers as column headers with their sort state.
+- Graphs: an accessible name with the current values ("CPU load: system 8 percent, user 22 percent"), updated at most every
+  5 s for screen readers.
+- Sheets: focus on the default button; destructive buttons named as such. Every control keyboard-reachable with a visible
+  focus ring (A1).
+- Colour is never the only cue: "(Not Responding)" is text; the pressure level is also in the graph's accessible name and a
+  label ("Memory pressure: normal, high, critical").
+
+## i18n (en and fr)
+Every visible string through `qsTr()`; fr complete (I1). French follows macOS's: tabs « Processeur », « Mémoire »,
+« Énergie », « Disque », « Réseau »; « Quitter », « Forcer à quitter », « Pression de la mémoire », « Mémoire physique »,
+« Mémoire utilisée », « Mémoire de l'app », « Mémoire résidente » (Wired), « Compressée », « Fichiers en cache », « Swap
+utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in the locale's format.
+
+## Refusals (what is refused, and what the user sees)
+| Case | What the user sees |
+|---|---|
+| A process of another user (AQ4 = B) | actions greyed; tooltip "You can only quit your own processes." |
+| A read the kernel refuses | "—" in that cell |
+| Quit of a windowed process without the shell | AM52's message; Force Quit offered |
+| A session process | AM54's second sheet |
+| Efficiency Mode outside an app unit or for a session process | the item disabled, AM68's reasons |
+| The app's own row | Quit closes its window; Force Quit and signals refused ("This app can't force quit itself.") |
+| Dev session, a process outside the nested session | AM56's message |
+
+## Acceptance criteria (each mapped to a test; level)
+| ID | Criterion | Test | Level |
+|---|---|---|---|
+| A-S1 | every formula of AM20 to AM47 on fixture `/proc` and `/sys` trees, including "—" cases and first-sample rates | `tests/unit/activity/tst_sampler.cpp` (gtest) | L0 |
+| A-S2 | own-process filter, kernel threads excluded, row identity across pid reuse | `tst_sampler.cpp` | L0 |
+| A-S3 | AM33's levels at each threshold; AM32's sum; AM34's naming | `tst_memory.cpp` | L0 |
+| A-S4 | AM65's classification of fixture cgroup paths (uwsm scope, uwsm service, session.slice, init.scope, app.slice, a login `session-N.scope`) | `tst_kinds.cpp` | L0 |
+| A-S5 | sock_diag parsing and socket-to-process matching (captured netlink replies) | `tst_netdiag.cpp` | L0 |
+| A-S6 | pidfd path: a target that ended is never signalled (a real child reaped between open and send), a start-time mismatch drops the row | `tst_signals.cpp` | L0 |
+| A-S7 | projection and Dock tile file validation (sizes, versions, kinds, ranges, stale writer) | `tst_activityfiles.cpp` (app) and `tests/unit/tst_docktilegraph.qml` (shell) | L0 |
+| A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen | `tests/apps/activity_window.sh` | L1 |
+| A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent | `tests/apps/activity_actions.sh` | L1 |
+| A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
+| A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
+| A-I1 | `ipc_inventory.sh` lists `activity quit` | `tests/security/ipc_inventory.sh` | L0 |
+| A-P | AM-P1 to AM-P4 | `tests/apps/activity_cost.sh` | L1 (and L2 on the owner's machine) |
+| A-E | Efficiency Mode on a test scope (`systemd-run --user --scope --unit=grassfield-test-…`) sets and reverts the weight | `tests/apps/activity_efficiency.sh` (L2: the owner's user manager; refuses to run outside it) | L2 |
+| A-H | App History on a fixture journal export | `tst_history.cpp` | L0 |
+
+## Interfaces / contracts (versions)
+- `activity/windows.json` v1 (AM60) and `activity/dock-tile.json` v1 (AM62): new, between the shell and the app; a
+  breaking change bumps `v` and needs this ADR amended.
+- IPC `activity quit` (AM61): `docs/specs/security.md` "IPC surface".
+- `activity.json` v1 (AM74): ADR-0020.
+- Read-only D-Bus: logind `ListInhibitors`, UPower (DisplayDevice, `GetHistory`), NetworkManager (active connection name);
+  read-write: the systemd user manager `SetUnitProperties` (runtime only, AM68).
+- Kernel interfaces: `/proc/<pid>/{stat,status,io,cmdline,cgroup,fd,fdinfo,task,smaps_rollup,exe,cwd}`, `/proc/{stat,
+  meminfo,loadavg,uptime,diskstats,swaps,pressure/memory}`, `/proc/net/{dev,tcp,tcp6,udp,udp6,unix,wireless}`, `/sys/block`,
+  `/sys/class/{drm,net}`, `/sys/devices/system/cpu`, `NETLINK_SOCK_DIAG`, `pidfd_open`, `pidfd_send_signal` (Linux ≥ 5.3).
+
+## Dependencies (verified versions)
+Qt 6 (Core, Gui, Qml, Quick, DBus; as Settings and the Store), Grassfield.Ui, glibc (`getifaddrs`, `syscall`), the kernel
+(6.18.44 in the probes), systemd 262 and uwsm 0.27.1 (A6, A7; the owner's versions checked at step 1), `journalctl`.
+No new package.
+
+## Degraded behavior
+AM75 to AM78; a kernel without `pidfd_open` (older than 5.3) is not supported by Omarchy 4 and is not handled.
+
+## Automated tests · Manual verification steps
+Automated: the table above. Manual (owner, L2): AM36's calibration on the laptop; AM39 on battery and on AC; AM43 with a
+download in a browser (TCP) and a video (QUIC, only in the totals); AM48 on i915; AM-P1 to AM-P4 on the real session;
+Efficiency Mode on a real app with a CPU load (`stress-ng` once installed by the owner) to see its share fall under
+contention.
+
+## Performance (gates)
+- **AM-P1** Window visible, CPU tab, about 400 processes: the app's CPU (Δ utime + stime of its own `stat` over 10 minutes)
+  ≤ 0.5 % of one core at Normally (5 sec) and ≤ 1.5 % at Very Often (1 sec).
+- **AM-P2** One sample of the sampler (its thread's `CLOCK_THREAD_CPUTIME_ID`) ≤ 5 ms on the reference machine with about 400
+  processes, the CPU tab's columns; the Network tab and GPU columns measured separately and reported.
+- **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
+- **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
+- The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window
+  storm (20 windows opened and closed).
+Method: `tests/apps/activity_cost.sh` spawns N sleeping processes, starts the app (offscreen and nested), samples its
+`/proc/<pid>/stat` and `smaps_rollup`, and fails over the budget; results recorded in the step's audit file.
+
+## Known limitations (honest, user-visible gaps vs macOS)
+- Only the user's processes are listed (AQ4); totals include everything, so the rows do not add up to System.
+- Network per process is TCP only and starts when the app opens (AQ2); UDP, including QUIC video, is only in the totals.
+- Energy Impact is Grassfield's own estimate (AQ3); no 12 hr Power, App Nap or Graphics Card.
+- No Sample Process, Spindump or System Diagnostics.
+- Wake Ups count voluntary context switches, not package wake-ups from idle.
+- GPU figures need a driver that reports `drm-engine-*`; another user's GPU use is not seen.
+- The app quits with its last window, so the Dock graph lasts while a window is open or minimized (macOS keeps it running).
+- Efficiency Mode lowers a whole app's CPU weight, only under contention, only until the app quits or the session ends, and
+  not its disk priority (the `io` controller is not delegated to the user manager).
+- App History covers apps started in their own scope (from the Dock, Apps, Search or a uwsm launch), from systemd's records
+  of apps that ended plus the running ones, as far back as the journal keeps them.
+- A process that ended between two samples moves its last slice of CPU to System.
