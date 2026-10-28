@@ -87,6 +87,36 @@ ShellRoot {
         apps.show();
         check("control: apps opens unlocked", apps.open);
         apps.hide();
+        // The tiling popover's own guard, unlocked (integrator re-review of c92ccb2): never over Search, Apps, the polkit sheet or
+        // the Dock's keyboard mode, and another window's popover closes before a new one opens while the same window's stays.
+        // TilingHover.show says why it did not open (the harness has no plugin). Before the Overview, whose keyboard release is
+        // not immediate (it would still be a FocusReturn holder).
+        const hover = (address, state) => ({address: address, state: state, light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
+        let why = "";
+        search.show("");
+        why = TilingHover.show(hover("b", "enter"));
+        check("tiling: no popover over Search (" + why + ")", why === "search" && !Popups.active);
+        search.hide();
+        apps.show();
+        why = TilingHover.show(hover("b", "enter"));
+        check("tiling: no popover over Apps (" + why + ")", why === "apps" && !Popups.active);
+        apps.hide();
+        SessionState.authorizing = true;
+        why = TilingHover.show(hover("b", "open"));
+        check("tiling: no popover over the polkit sheet (" + why + ")", why === "authorization" && !Popups.active);
+        SessionState.authorizing = false;
+        TilingHover.dockKeyboard = true;
+        why = TilingHover.show(hover("b", "enter"));
+        check("tiling: no popover over the Dock's keyboard mode (" + why + ")", why === "dock" && !Popups.active);
+        TilingHover.dockKeyboard = false;
+        why = TilingHover.show(hover("b", "enter"));
+        check("tiling: control, nothing refuses it (" + why + ": no plugin here)", why === "unavailable");
+        Popups.open("tiling", "", 0, 0, "below", {address: "a"});
+        TilingHover.show(hover("a", "open"));
+        check("tiling: the same window's popover stays", Popups.kind === "tiling" && Popups.data.address === "a");
+        TilingHover.show(hover("b", "open"));
+        check("tiling: another window's popover closes first", !Popups.active);
+        Popups.close();
         Notifications.toggleCenter("");
         check("control: notification center opens unlocked", Notifications.centerOpen);
         Notifications.closeCenter();
@@ -134,7 +164,7 @@ ShellRoot {
         check("locked: overview.show stays closed", !overview.open);
         overview.toggle();
         check("locked: overview.toggle stays closed", !overview.open);
-        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "about", "forcequit", "appabout", "notice", "confirm"];
+        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "about", "forcequit", "appabout", "notice", "confirm", "tiling"];
         const opened = [];
         for (const k of kinds) {
             Popups.open(k, "", 0, 0, "left", {});
@@ -155,6 +185,10 @@ ShellRoot {
         if (Popups.active)
             opened.push("notice");
         check("locked: no popup kind opens (" + opened.join(", ") + ")", opened.length === 0);
+        // Tiling step 3 (integrator review of 4ead6fb): the plugin's tile-hover event and Super+Ctrl+L go through here.
+        TilingHover.show({address: "1", state: "open", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
+        TilingHover.show({address: "1", state: "enter", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
+        check("locked: the tiling popover does not open (TilingHover.show)", !Popups.active);
         check("locked: nothing is open at all (" + anyOpen() + ")", anyOpen() === "");
 
         // Unlock: back to normal.

@@ -255,3 +255,17 @@ TEST(Protocol, TilingArrangeComesWithWindowTiling) {
         << "never without window-tiling";
     EXPECT_EQ(luaDispatchRequest(kLuaArrange), "hl.plugin.grassfield.arrange()");
 }
+
+TEST(Protocol, TileHoverComesWithWindowTiling) {
+    EXPECT_EQ(kFeatureTileHover, "tile-hover");
+    EXPECT_EQ(kLuaTilePopover, "tile_popover");
+    EXPECT_EQ(kLuaMoveTo, "move_to");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tile-hover"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tile-hover"]})")
+        << "independent of tiling-arrange";
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "never without window-tiling";
+}

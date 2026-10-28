@@ -17,3 +17,4 @@ ControlCenter 1.0 ControlCenter.qml
 DockMenu 1.0 DockMenu.qml
 ExclusiveSurfaces 1.0 ExclusiveSurfaces.qml
 StackPopup 1.0 StackPopup.qml
+TilingPopover 1.0 TilingPopover.qml

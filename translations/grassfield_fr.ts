@@ -502,8 +502,116 @@
         <translation>Super+Ctrl+Bas</translation>
     </message>
     <message>
+        <source>Super+Ctrl+U</source>
+        <translation>Super+Ctrl+U</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+I</source>
+        <translation>Super+Ctrl+I</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+J</source>
+        <translation>Super+Ctrl+J</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+K</source>
+        <translation>Super+Ctrl+K</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Return</source>
+        <translation>Super+Ctrl+Entrée</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+C</source>
+        <translation>Super+Ctrl+C</translation>
+    </message>
+    <message>
         <source>Super+Ctrl+R</source>
         <translation>Super+Ctrl+R</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Left</source>
+        <translation>Super+Ctrl+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Right</source>
+        <translation>Super+Ctrl+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Up</source>
+        <translation>Super+Ctrl+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Down</source>
+        <translation>Super+Ctrl+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Left</source>
+        <translation>Super+Ctrl+Alt+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Right</source>
+        <translation>Super+Ctrl+Alt+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Up</source>
+        <translation>Super+Ctrl+Alt+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Down</source>
+        <translation>Super+Ctrl+Alt+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Left &amp; Right</source>
+        <translation>Gauche et droite</translation>
+    </message>
+    <message>
+        <source>Right &amp; Left</source>
+        <translation>Droite et gauche</translation>
+    </message>
+    <message>
+        <source>Top &amp; Bottom</source>
+        <translation>Haut et bas</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Top</source>
+        <translation>Bas et haut</translation>
+    </message>
+    <message>
+        <source>Quarters</source>
+        <translation>Quarts</translation>
+    </message>
+    <message>
+        <source>Left &amp; Quarters</source>
+        <translation>Gauche et quarts</translation>
+    </message>
+    <message>
+        <source>Right &amp; Quarters</source>
+        <translation>Droite et quarts</translation>
+    </message>
+    <message>
+        <source>Top &amp; Quarters</source>
+        <translation>Haut et quarts</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Quarters</source>
+        <translation>Bas et quarts</translation>
+    </message>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>Move to %1</source>
+        <translation>Déplacer vers %1</translation>
+    </message>
+    <message>
+        <source>Fill &amp; Arrange</source>
+        <translation>Remplir et disposer</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
     <message>
         <source>About %1</source>
@@ -596,6 +704,14 @@
     <message>
         <source>Return to Previous Size</source>
         <translation>Revenir à la taille précédente</translation>
+    </message>
+    <message>
+        <source>Arrange</source>
+        <translation>Disposer</translation>
+    </message>
+    <message>
+        <source>Halves</source>
+        <translation>Moitiés</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -1408,6 +1524,26 @@
         <translation>-</translation>
     </message>
     <message>
+        <source>U</source>
+        <translation>U</translation>
+    </message>
+    <message>
+        <source>I</source>
+        <translation>I</translation>
+    </message>
+    <message>
+        <source>J</source>
+        <translation>J</translation>
+    </message>
+    <message>
+        <source>K</source>
+        <translation>K</translation>
+    </message>
+    <message>
+        <source>L</source>
+        <translation>L</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -1454,6 +1590,74 @@
     <message>
         <source>Return the window to its previous size</source>
         <translation>Rendre à la fenêtre sa taille précédente</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-left quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-right quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur droit</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-left quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-right quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur droit</translation>
+    </message>
+    <message>
+        <source>Fill the screen with the window</source>
+        <translation>Remplir l’écran avec la fenêtre</translation>
+    </message>
+    <message>
+        <source>Center the window</source>
+        <translation>Centrer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and right</source>
+        <translation>Disposer les fenêtres à gauche et à droite</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and left</source>
+        <translation>Disposer les fenêtres à droite et à gauche</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and bottom</source>
+        <translation>Disposer les fenêtres en haut et en bas</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and top</source>
+        <translation>Disposer les fenêtres en bas et en haut</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and in quarters</source>
+        <translation>Disposer les fenêtres à gauche et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and in quarters</source>
+        <translation>Disposer les fenêtres à droite et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and in quarters</source>
+        <translation>Disposer les fenêtres en haut et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and in quarters</source>
+        <translation>Disposer les fenêtres en bas et en quarts</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the left</source>
+        <translation>Déplacer la fenêtre vers l’écran de gauche</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the right</source>
+        <translation>Déplacer la fenêtre vers l’écran de droite</translation>
+    </message>
+    <message>
+        <source>Show the tiling options of the window</source>
+        <translation>Afficher les options de disposition de la fenêtre</translation>
     </message>
     <message>
         <source>Minimize window</source>
@@ -9671,6 +9875,13 @@
     <message>
         <source>Page %1</source>
         <translation>Page %1</translation>
+    </message>
+</context>
+<context>
+    <name>TilingPopover</name>
+    <message>
+        <source>Window tiling</source>
+        <translation>Disposition de la fenêtre</translation>
     </message>
 </context>
 <context>
