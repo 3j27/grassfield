@@ -38,7 +38,7 @@ QByteArray readTail(const QString &path, qint64 max)
 
 bool isName(const QString &name)
 {
-    static const QRegularExpression re(QStringLiteral("^[a-z0-9@_+][a-z0-9@._+-]{0,127}$"));
+    static const QRegularExpression re(QStringLiteral(R"(\A[a-z0-9@_+][a-z0-9@._+-]{0,127}\z)"));
     return re.match(name).hasMatch();
 }
 
@@ -73,6 +73,8 @@ QJsonObject OperationRecord::toJson() const
             {QStringLiteral("name"), name},
             {QStringLiteral("packages"), QJsonArray::fromStringList(packages)},
             {QStringLiteral("plan"), planned},
+            {QStringLiteral("recipe"), recipe},
+            {QStringLiteral("args"), QJsonArray::fromStringList(args)},
             {QStringLiteral("webName"), webName},
             {QStringLiteral("webUrl"), webUrl},
             {QStringLiteral("startedAt"), startedAt.toUTC().toString(Qt::ISODate)}};
@@ -96,14 +98,20 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
             return std::nullopt;
         r.plan.append(p);
     }
+    r.recipe = o.value(QStringLiteral("recipe")).toString();
+    for (const QJsonValue &v : o.value(QStringLiteral("args")).toArray())
+        r.args.append(v.toString());
     r.webName = o.value(QStringLiteral("webName")).toString();
     r.webUrl = o.value(QStringLiteral("webUrl")).toString();
     r.startedAt = QDateTime::fromString(o.value(QStringLiteral("startedAt")).toString(), Qt::ISODate);
     const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove");
-    const bool helperOk = r.path == QLatin1String("helper") && !r.packages.isEmpty() && r.packages.size() <= 64
-        && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
+    const bool namesOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
+    const bool helperOk = r.path == QLatin1String("helper") && namesOk;
+    // A setup's recipe of the operation's own kind (e.5).
+    const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && isRecipe(r.recipe) && isRecipeArgs(r.args)
+        && r.recipe.startsWith(r.kind == QLatin1String("install") ? QLatin1String("omarchy-install-") : QLatin1String("omarchy-remove-"));
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
-    if (!isOperationId(r.id) || !kindOk || !(helperOk || webOk))
+    if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk))
         return std::nullopt;
     return r;
 }
@@ -120,8 +128,30 @@ QString newOperationId()
 
 bool isOperationId(const QString &id)
 {
-    static const QRegularExpression re(QStringLiteral("^[0-9a-f]{32}$"));
+    static const QRegularExpression re(QStringLiteral(R"(\A[0-9a-f]{32}\z)"));
     return re.match(id).hasMatch();
+}
+
+bool isRecipe(const QString &recipe)
+{
+    static const QRegularExpression re(QStringLiteral(R"(\Aomarchy-(install|remove)-[a-z0-9-]+\z)"));
+    return recipe.size() <= 128 && re.match(recipe).hasMatch();
+}
+
+bool isRecipeArgs(const QStringList &args)
+{
+    static const QRegularExpression re(QStringLiteral(R"(\A[a-z0-9][a-z0-9.-]{0,63}\z)"));
+    return args.size() <= 4 && std::all_of(args.cbegin(), args.cend(), [](const QString &a) { return re.match(a).hasMatch(); });
+}
+
+QString terminalCommand(const QString &run, const QString &id, qint64 deadline, const QString &recipe, const QStringList &args)
+{
+    // The launcher runs it with `bash -c`: every token is one of e.5's patterns, none of them holds a character the shell
+    // reads (the script checks them again).
+    static const QRegularExpression path(QStringLiteral(R"(\A(/[a-z0-9._-]+)+\z)"));
+    if (!path.match(run).hasMatch() || !isOperationId(id) || deadline <= 0 || !isRecipe(recipe) || !isRecipeArgs(args))
+        return {};
+    return (QStringList{run, id, QString::number(deadline), QStringLiteral("setup"), recipe} + args).join(QLatin1Char(' '));
 }
 
 std::optional<int> helperExitCode(const QString &statusDir, const QString &id)
@@ -255,11 +285,12 @@ QVariantList Operations::list() const
 {
     QVariantList out;
     for (const Item &i : items()) {
-        static const char *states[] = {"waiting", "authorizing", "running", "checking"};
+        static const char *states[] = {"waiting", "authorizing", "opening", "running", "checking"};
         out.append(QVariantMap{{QStringLiteral("id"), i.record.id},
                                {QStringLiteral("app"), i.record.app},
                                {QStringLiteral("name"), i.record.name},
                                {QStringLiteral("kind"), i.record.kind},
+                               {QStringLiteral("path"), i.record.path},
                                {QStringLiteral("state"), QString::fromLatin1(states[int(i.state)])},
                                {QStringLiteral("blocked"), i.blocked},
                                {QStringLiteral("done"), i.done},
@@ -307,16 +338,17 @@ void Operations::startNext()
     if (m_current || m_queue.isEmpty())
         return;
     Item &next = m_queue.first();
-    if (next.record.path == QLatin1String("helper")) {
-        // Only when pacman is not running and Omarchy's update lock is free (taken here, held until the helper ends).
-        if (QFileInfo::exists(m_config.dbLock) || !takeUpdateLock()) {
-            if (!next.blocked) {
-                next.blocked = true;
-                emit changed();
-            }
-            m_retry.start();
-            return;
+    // Only when pacman is not running and Omarchy's update lock is free: taken here for the helper (held until it ends);
+    // for the terminal, grassfield-store-run takes it (b.2), so the Store only reads it.
+    const bool helper = next.record.path == QLatin1String("helper");
+    const bool terminal = next.record.path == QLatin1String("terminal");
+    if ((helper || terminal) && (QFileInfo::exists(m_config.dbLock) || (helper ? !takeUpdateLock() : lockHeld(m_config.updateLock)))) {
+        if (!next.blocked) {
+            next.blocked = true;
+            emit changed();
         }
+        m_retry.start();
+        return;
     }
     m_current = m_queue.takeFirst();
     m_current->blocked = false;
@@ -324,8 +356,10 @@ void Operations::startNext()
     m_output.clear();
     m_followOnly = false;
     writeRecord(m_current->record);
-    if (m_current->record.path == QLatin1String("helper"))
+    if (helper)
         startHelper(*m_current);
+    else if (terminal)
+        startTerminal(*m_current);
     else
         startWebApp(*m_current);
     emit changed();
@@ -390,12 +424,143 @@ void Operations::startWebApp(Item &item)
     m_poll.start();
 }
 
+void Operations::startTerminal(Item &item)
+{
+    item.state = State::Opening;
+    m_logOffset = QFileInfo(m_config.pacmanLog).size();
+    m_runningSince = QDateTime();
+    const OperationRecord &r = item.record;
+    const QString dir = m_config.runDir;
+    // Nothing ran: the installation failed (its folder or its pins), or the terminal did not open. Queued: conclude() must
+    // not run inside startNext(), which still changes m_current.
+    const auto fail = [this](const QString &why, bool launcher) {
+        m_output += why.toUtf8();
+        QMetaObject::invokeMethod(this, [this, launcher] {
+            if (launcher)
+                conclude(std::nullopt, QStringLiteral("terminalDidNotOpen"));
+            else
+                conclude(1, QString());
+        }, Qt::QueuedConnection);
+    };
+    // Its folder: the user's own, 0700, as grassfield-store-run wants it.
+    const bool made = !dir.isEmpty() && QDir().mkpath(dir);
+    const QFileInfo info(dir);
+    if (!made || info.isSymLink() || !info.isDir() || info.ownerId() != ::getuid()
+        || !QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+        fail(QStringLiteral("%1: not a folder of the user's own").arg(dir), false);
+        return;
+    }
+    // The catalog's pins, "<sha256>  <path>" per line (sha256sum's form), written whole then renamed.
+    QByteArray pins;
+    for (const auto &[path, digest] : r.pins)
+        pins += digest.toLatin1() + "  " + QFile::encodeName(path) + '\n';
+    const QByteArray temp = QFile::encodeName(dir + QStringLiteral("/.") + r.id + QStringLiteral(".pins"));
+    const int fd = ::open(temp.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW | O_NOCTTY, 0600);
+    const bool written = fd >= 0 && ::write(fd, pins.constData(), size_t(pins.size())) == pins.size();
+    if (fd >= 0)
+        ::close(fd);
+    if (r.pins.isEmpty() || !written || ::rename(temp.constData(), QFile::encodeName(dir + QLatin1Char('/') + r.id + QStringLiteral(".pins")).constData()) != 0) {
+        ::unlink(temp.constData());
+        fail(QStringLiteral("%1: the pins could not be written").arg(dir), false);
+        return;
+    }
+    // The script refuses to start once this deadline has passed (the terminal opened too late).
+    const qint64 deadline = QDateTime::currentSecsSinceEpoch() + qMax(1, m_config.terminalStartMs / 1000);
+    const QString command = terminalCommand(m_config.run, r.id, deadline, r.recipe, r.args);
+    const QStringList argv = command.isEmpty() ? QStringList()
+                                               : m_config.omarchy(QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), {command});
+    QProcess launcher;
+    launcher.setProgram(argv.value(0));
+    launcher.setArguments(argv.mid(1));
+    launcher.setStandardInputFile(QProcess::nullDevice());
+    launcher.setStandardOutputFile(QProcess::nullDevice());
+    launcher.setStandardErrorFile(QProcess::nullDevice());
+    if (argv.isEmpty() || !launcher.startDetached()) {
+        fail(QStringLiteral("omarchy-launch-floating-terminal-with-presentation did not start"), true);
+        return;
+    }
+    m_poll.start();
+}
+
+void Operations::countProgress(Item &item)
+{
+    const QByteArray tail = [this] {
+        QFile f(m_config.pacmanLog);
+        if (!f.open(QIODevice::ReadOnly) || f.size() < m_logOffset)
+            return QByteArray();
+        f.seek(m_logOffset);
+        return f.read(8 * 1024 * 1024);
+    }();
+    QStringList names;
+    for (const PlannedPackage &p : item.record.plan)
+        names.append(p.name);
+    const int done = countLogged(tail, item.record.kind == QLatin1String("install") ? QStringLiteral("installed") : QStringLiteral("removed"), names);
+    if (done != item.done) {
+        item.done = done;
+        emit changed();
+    }
+}
+
+void Operations::pollTerminal(Item &item, qint64 elapsed)
+{
+    const QString dir = m_config.runDir;
+    const QString &id = item.record.id;
+    if (item.state == State::Opening) {
+        // An exit file before the started file: the script refused before running anything (too late, busy).
+        if (const auto code = helperExitCode(dir, id)) {
+            conclude(code, QString());
+            return;
+        }
+        if (!QFileInfo::exists(dir + QLatin1Char('/') + id + QStringLiteral(".started"))) {
+            if (elapsed > qint64(m_config.terminalStartMs) + m_config.terminalGraceMs)
+                conclude(std::nullopt, QStringLiteral("terminalDidNotOpen"));
+            return;
+        }
+        item.state = State::Running;
+        m_runningSince = QDateTime::currentDateTimeUtc();
+        emit changed();
+    }
+    countProgress(item);
+    // Whether it runs first, then its exit file: a script that ended before the first read wrote that file before it ended.
+    const bool running = helperRunning(dir, id);
+    if (const auto code = helperExitCode(dir, id)) {
+        conclude(code, QString());
+    } else if (!running) {
+        // Gone without an exit file: the terminal was closed.
+        conclude(std::nullopt, QString());
+    } else if (m_runningSince.isValid() && m_runningSince.msecsTo(QDateTime::currentDateTimeUtc()) > m_config.terminalMs) {
+        // Past 3 h: the Store stops waiting and reads the state; it never signals the terminal.
+        m_output += "\n(the Store stopped waiting for it)";
+        conclude(std::nullopt, QStringLiteral("lostTrack"));
+    }
+}
+
+void Operations::pruneRunDir(const QString &keep)
+{
+    const QString dir = m_config.runDir;
+    if (dir.isEmpty() || QFileInfo(dir).isSymLink())
+        return;
+    static const QRegularExpression name(QStringLiteral(R"(\A\.?([0-9a-f]{32})\.(pins|started|exit)\z)"));
+    const QDateTime before = QDateTime::currentDateTimeUtc().addMSecs(-(m_config.terminalMs + 3600 * 1000));
+    QDirIterator it(dir, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot);
+    while (it.hasNext()) {
+        it.next();
+        const QRegularExpressionMatch m = name.match(it.fileName());
+        if (m.hasMatch() && m.captured(1) != keep && it.fileInfo().lastModified() < before)
+            QFile::remove(it.filePath());
+    }
+}
+
 void Operations::poll()
 {
     if (!m_current || m_concluding)
         return;
     Item &item = *m_current;
     const qint64 elapsed = item.record.startedAt.msecsTo(QDateTime::currentDateTimeUtc());
+    if (item.record.path == QLatin1String("terminal")) {
+        pollTerminal(item, elapsed);
+        return;
+    }
     if (item.record.path == QLatin1String("webapp")) {
         // Past its limit: SIGTERM to its group, SIGKILL 5 s later (it touches only the user's files).
         if (m_process && m_process->processId() > 0 && elapsed > m_config.webAppMs) {
@@ -425,26 +590,13 @@ void Operations::poll()
         }
     }
     if (item.state == State::Running) {
-        const QByteArray tail = [this] {
-            QFile f(m_config.pacmanLog);
-            if (!f.open(QIODevice::ReadOnly) || f.size() < m_logOffset)
-                return QByteArray();
-            f.seek(m_logOffset);
-            return f.read(8 * 1024 * 1024);
-        }();
-        QStringList names;
-        for (const PlannedPackage &p : item.record.plan)
-            names.append(p.name);
-        const int done = countLogged(tail, item.record.kind == QLatin1String("install") ? QStringLiteral("installed") : QStringLiteral("removed"), names);
-        if (done != item.done) {
-            item.done = done;
-            emit changed();
-        }
+        countProgress(item);
         if (m_followOnly) {
-            // A helper of an earlier run: it ends with its exit file.
+            // A helper of an earlier run: it ends with its exit file, written before it ended (read after whether it runs).
+            const bool running = helperRunning(dir, item.record.id);
             if (const auto code = helperExitCode(dir, item.record.id))
                 conclude(code, QString());
-            else if (!helperRunning(dir, item.record.id))
+            else if (!running)
                 conclude(std::nullopt, QString());
             return;
         }
@@ -484,7 +636,7 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
     const QString applications = m_config.applications;
     QThreadPool::globalInstance()->start([self, record, pacman, applications, then] {
         int present = 0, total = 0;
-        if (record.path == QLatin1String("helper")) {
+        if (record.path == QLatin1String("helper") || record.path == QLatin1String("terminal")) {
             QStringList names;
             for (const PlannedPackage &p : record.plan)
                 names.append(p.name);
@@ -526,7 +678,8 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
     m_concluding = true;
     m_poll.stop();
     const bool lostTrack = output == QLatin1String("lostTrack");
-    if (!output.isEmpty() && !lostTrack)
+    const bool didNotOpen = output == QLatin1String("terminalDidNotOpen");
+    if (!output.isEmpty() && !lostTrack && !didNotOpen)
         m_output += output.toUtf8();
     if (m_process) {
         m_process->disconnect(this);
@@ -539,7 +692,7 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
     m_current->state = State::Checking;
     emit changed();
     const OperationRecord record = m_current->record;
-    readState(record, [this, record, exitCode, lostTrack](int present, int total) {
+    readState(record, [this, record, exitCode, lostTrack, didNotOpen](int present, int total) {
         releaseUpdateLock();
         Result result;
         result.app = record.app;
@@ -558,6 +711,29 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
             result.outcome.clear();
         } else if (lostTrack) {
             result.outcome = QStringLiteral("lostTrack");
+        } else if (didNotOpen && present == 0) {
+            result.outcome = QStringLiteral("terminalDidNotOpen");
+        } else if (exitCode && present == 0 && record.path == QLatin1String("terminal")) {
+            // grassfield-store-run's codes (b.2): nothing ran but for 1 and 130.
+            switch (*exitCode) {
+            case 3:
+                result.outcome = QStringLiteral("busy");
+                break;
+            case 4:
+                result.outcome = QStringLiteral("unfinished");
+                break;
+            case 5:
+                result.outcome = QStringLiteral("omarchyChanged");
+                break;
+            case 6:
+                result.outcome = QStringLiteral("terminalDidNotOpen");
+                break;
+            case 130:
+                result.outcome = QStringLiteral("cancelled"); // Ctrl+C in the terminal: the user's own choice, nothing said
+                break;
+            default:
+                result.outcome = QStringLiteral("failed");
+            }
         } else if (exitCode && present == 0) {
             // Nothing happened: what the exit code says (the helper's codes, pkexec's 126 and 127).
             switch (*exitCode) {
@@ -594,6 +770,10 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
             m_results.insert(record.app, result);
         else
             m_results.remove(record.app);
+        if (record.path == QLatin1String("terminal") && !m_config.runDir.isEmpty()) {
+            for (const QString &suffix : {QStringLiteral(".pins"), QStringLiteral(".started"), QStringLiteral(".exit")})
+                QFile::remove(m_config.runDir + QLatin1Char('/') + record.id + suffix);
+        }
         clearRecord();
         m_current.reset();
         m_concluding = false;
@@ -608,6 +788,7 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
 void Operations::recover()
 {
     const auto record = OperationRecord::fromJson(readStoreState(m_config.stateFile).value(kOperationKey).toObject());
+    pruneRunDir(record ? record->id : QString());
     if (!record) {
         clearRecord();
         return;
@@ -617,6 +798,23 @@ void Operations::recover()
     item.state = State::Running;
     m_current = item;
     m_output.clear();
+    if (record->path == QLatin1String("terminal")) {
+        // The script still running is followed again; a terminal asked for moments ago may still open.
+        const QString dir = m_config.runDir;
+        const bool started = QFileInfo::exists(dir + QLatin1Char('/') + record->id + QStringLiteral(".started"));
+        const qint64 since = record->startedAt.msecsTo(QDateTime::currentDateTimeUtc());
+        if (!helperExitCode(dir, record->id)
+            && ((started && helperRunning(dir, record->id)) || (!started && since >= 0 && since <= qint64(m_config.terminalStartMs) + m_config.terminalGraceMs))) {
+            m_current->state = started ? State::Running : State::Opening;
+            m_logOffset = 0;
+            m_runningSince = QDateTime::currentDateTimeUtc();
+            m_poll.start();
+            emit changed();
+            return;
+        }
+        conclude(helperExitCode(dir, record->id), QString());
+        return;
+    }
     if (record->path == QLatin1String("helper") && !helperExitCode(m_config.statusDir, record->id) && helperRunning(m_config.statusDir, record->id)) {
         // Still running: followed again until its exit file comes (its lock is taken when free).
         m_followOnly = true;

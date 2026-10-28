@@ -53,6 +53,8 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../branding/icons/apps/org.grassfie
 # The root helper of repository installs and removals and its polkit action (ADR-0037 b.1): the only root code of the Store.
 install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/grassfield-store-helper DESTINATION lib/grassfield)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/org.grassfield.store.policy DESTINATION share/polkit-1/actions)
+# The script an Omarchy setup runs through in Omarchy's terminal, as the user (ADR-0037 b.2).
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/grassfield-store-run DESTINATION lib/grassfield)
 
 # Unit tests (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
 find_package(GTest)

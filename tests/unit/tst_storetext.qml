@@ -51,6 +51,18 @@ TestCase {
         compare(Store.operationText({kind: "install", state: "running", done: 2, total: 3}), "Installing: 2 of 3");
         compare(Store.operationText({kind: "remove", state: "running", done: 1, total: 2}), "Uninstalling: 1 of 2");
         compare(Store.operationText({kind: "remove", state: "checking"}), "Finishing the uninstallation…");
+        // Omarchy's terminal (b.2): opening it, then the recipe running there; pacman's count when its log has one.
+        compare(Store.operationText({kind: "install", path: "terminal", state: "opening"}), "Opening Terminal…");
+        compare(Store.operationText({kind: "install", path: "terminal", state: "running", done: 0, total: 3}), "Installing in Terminal…");
+        compare(Store.operationText({kind: "remove", path: "terminal", state: "running", done: 0, total: 1}), "Uninstalling in Terminal…");
+        compare(Store.operationText({kind: "install", path: "terminal", state: "running", done: 1, total: 3}), "Installing: 1 of 3");
+        compare(Store.resultText({kind: "install", outcome: "terminalDidNotOpen"}), "The terminal did not open.");
+        verify(Store.canTryAgain({outcome: "terminalDidNotOpen"}));
+        compare(Store.resultText({kind: "install", outcome: "omarchyChanged"}),
+                "This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+        verify(!Store.canTryAgain({outcome: "omarchyChanged"}), "trying again changes nothing until the catalog has");
+        compare(Store.getBlockText("omarchyChanged"), Store.resultText({outcome: "omarchyChanged"}));
+        compare(Store.uninstallReasonText("omarchyChanged"), Store.resultText({outcome: "omarchyChanged"}));
         compare(Store.resultText({kind: "install", outcome: "interrupted", present: 15, total: 110}),
                 "The installation was interrupted: 15 of 110 packages were installed.");
         compare(Store.resultText({kind: "remove", outcome: "notFinished"}), "The uninstallation did not finish.");

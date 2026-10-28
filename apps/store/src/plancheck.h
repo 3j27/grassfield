@@ -1,8 +1,8 @@
 // The plan check (ADR-0037 e.4; spec SR15, SR22): what an install or an uninstall from a repository would do, read as the
 // user before anything is queued (S10: pacman -S --print and -Rs --print need no root and no lock), and why it cannot run.
-// grassfield-store-helper checks again under its lock (b.1), and the queue checks the locks again before each operation.
-// The parsers are pure; checkInstall and checkRemove run pacman (childprocess.h) and one HEAD request (fetch.h), on a
-// worker thread.
+// grassfield-store-helper checks again under its lock (b.1), grassfield-store-run for a setup (b.2), and the queue checks
+// the locks again before each operation. The parsers are pure; the checks run pacman (childprocess.h) and one HEAD request
+// (fetch.h), and a setup's read the installed Omarchy's pinned files, on a worker thread.
 #pragma once
 
 #include "removal.h"
@@ -39,6 +39,7 @@ enum class Refusal {
     Offline,    // an install needs the network
     Dependency, // (uninstall) other installed packages need it
     Protected,  // (uninstall) the plan takes a protected package along
+    OmarchyChanged, // (setup) the installed Omarchy lacks the recipe, or a pinned file differs from the catalog's pin
     Failed,     // pacman could not be asked
 };
 
@@ -69,6 +70,17 @@ struct PlanTools {
     std::function<int(const QUrl &)> head;
 };
 
+// A setup's recipe and the catalog's pins (ADR-0037 g), checked against the installed Omarchy at `root`.
+struct SetupCheck {
+    QString root;   // ${OMARCHY_PATH:-/usr/share/omarchy}
+    QString recipe; // omarchy-install-… or omarchy-remove-…
+    QList<std::pair<QString, QString>> pins; // (path in Omarchy's folder, SHA-256)
+};
+
+// The first pinned file that is missing or differs from its pin in Omarchy's folder `root` (its path, in pin order), ""
+// when every one matches; "(no pins)" for an empty list (nothing says the files are the ones read).
+QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins);
+
 // Someone holds `path` with flock (Omarchy's update lock): asked by taking it without waiting and letting it go at once.
 // A missing file is free.
 bool lockHeld(const QString &path);
@@ -77,5 +89,10 @@ bool lockHeld(const QString &path);
 // this one starts), so the locks are not read.
 InstallPlan checkInstall(const QStringList &packages, const PlanTools &tools, bool online, bool ownOperation);
 RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const PlanTools &tools, bool ownOperation);
+// A setup (b.2): the recipe and the pins first (OmarchyChanged, the file in `detail`), then its packages as above: what
+// pacman would add (the recipe may add more, our catalog's text says what), what -Rns would remove (the recipe's
+// omarchy-pkg-drop).
+InstallPlan checkSetupInstall(const QStringList &packages, const SetupCheck &setup, const PlanTools &tools, bool online, bool ownOperation);
+RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup, const DenyList &deny, const PlanTools &tools, bool ownOperation);
 
 } // namespace grassfield::store
