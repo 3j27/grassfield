@@ -395,6 +395,40 @@ TestCase {
         compare(fakePrompts.replies[0].applyToAll, true);
     }
 
+    // Owner decision Q18 (ADR-0035): in the copy/move conflict sheet Return replaces, as the Finder (the written exception
+    // to common rule 3); Replace is drawn as the default button, Stop is not. Merge and Resume are the defaults of theirs.
+    function test_conflictReturnReplaces(): void {
+        const s = KioSheetsLogic.sheet(test.conflict({}));
+        compare([s.confirmId, s.returnCancels, s.destructive], ["replace", false, false]);
+        compare(KioSheetsLogic.sheet(test.conflict({
+            merge: true
+        })).confirmId, "replace");
+        compare(KioSheetsLogic.sheet(test.conflict({
+            resume: true,
+            keepBoth: false
+        })).confirmId, "resume");
+
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 131,
+            skip: true,
+            applyToAll: true
+        });
+        test.shown(sheet);
+        verify(test.find(sheet, "Replace").primary, "Replace is the default button");
+        verify(!test.find(sheet, "Stop").primary, "Stop is not");
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].button, "replace");
+        compare(fakePrompts.replies[0].applyToAll, false);
+        fakePrompts.current = test.conflict({
+            id: 132
+        });
+        test.shown(sheet);
+        keyClick(Qt.Key_Enter);
+        compare(fakePrompts.replies[1].button, "replace", "Enter too");
+    }
+
     // A deletion: Delete answers "delete"; Return cancels (a destructive button is never the default, common rule 3).
     function test_deletion(): void {
         const sheets = test.make();
