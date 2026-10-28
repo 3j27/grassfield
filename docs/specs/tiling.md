@@ -256,10 +256,15 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Never over the lock or another surface (integrator review of 4ead6fb): the plugin counts no light while the session is
   locked, while an Exclusive layer other than the shell's popup layer is mapped (the polkit sheet, Search, Apps, the
   Overview, the switcher, the Notification Center, the Dock's keyboard mode, any third-party one) or while a Top or Overlay
-  layer or a layer popup is under the pointer (core `hoverCovered`; a hover that began ends, and the light waits until the
-  pointer has left it, as after a press); the shell refuses the popover while locked (first decision), while the polkit
-  sheet, a full-attention surface (FocusReturn's holders) or the Dock's keyboard mode is up (`WindowTiling.hoverRefusedBy`),
-  and closes the open popover before opening another window's.
+  layer or a layer popup is under the pointer (core `hoverCoverEffect`, D24: under the lock or a foreign Exclusive layer a
+  hover that began ends and the light is forgotten, so the hover starts over once the desktop is back; under a layer, the
+  shell's open popover included, it ends and the light waits until the pointer has left it, as after a press, so a popover
+  closed over the light does not come back by itself). The session lock's own events end the hover too, and the unlock
+  looks at the light under the pointer again from the event loop: a pointer resting on a light through the lock gives a
+  hover `tiling.hoverDelay` after the unlock, with no pointer motion (integrator nested rerun of 25e757c). The shell
+  refuses the popover while locked (first decision), while the polkit sheet, a full-attention surface (FocusReturn's
+  holders) or the Dock's keyboard mode is up (`WindowTiling.hoverRefusedBy`), and closes the open popover before opening
+  another window's.
   While it is open the overlay holds the pointer, so the plugin's `leave` is ignored: the popover itself closes after
   `tiling.hoverDelay` away from the light and from it, counted only once the overlay saw the pointer. It also closes when
   the window enters or leaves full screen or goes away, and with the feature.

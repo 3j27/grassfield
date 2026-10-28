@@ -890,16 +890,59 @@ TEST(TilingHover, AnotherLightStartsOverAndLeavesTheFirst) {
 }
 
 // TL22, TL34 (integrator review of 4ead6fb): nothing of the hover over the lock, under a foreign Exclusive layer or under a layer.
+// D24 (integrator nested rerun of 25e757c): the lock and a foreign Exclusive layer take the desktop away (the hover starts over
+// once it is back), a layer over the light holds it as a press.
 TEST(TilingHover, CoveredLightsAreNoHover) {
-    EXPECT_FALSE(hoverCovered(HoverCover{})) << "nothing covers the lights";
-    EXPECT_TRUE(hoverCovered(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = false})) << "the session is locked";
-    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {}, .layerUnderPointer = true})) << "a layer is under the pointer";
-    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-polkit"}, .layerUnderPointer = false}))
+    using enum HoverCoverEffect;
+    EXPECT_EQ(hoverCoverEffect(HoverCover{}), None) << "nothing covers the lights";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = false}), Away) << "the session is locked";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {}, .layerUnderPointer = true}), Over) << "a layer is under the pointer";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = true}), Away) << "the lock comes first";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-polkit"}, .layerUnderPointer = false}), Away)
         << "the polkit sheet (any Exclusive layer but the shell's popups)";
-    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}, "grassfield-search"}, .layerUnderPointer = false}));
-    EXPECT_FALSE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = false}))
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-search"}, .layerUnderPointer = true}), Away)
+        << "a foreign Exclusive layer comes before a layer under the pointer";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}, "grassfield-search"}, .layerUnderPointer = false}),
+              Away);
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = false}), None)
         << "the shell's popup layer on another output: its own pointer test covers its output";
-    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {""}, .layerUnderPointer = false})) << "a nameless Exclusive layer";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = true}), Over)
+        << "the shell's open popover over the light holds it";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {""}, .layerUnderPointer = false}), Away) << "a nameless Exclusive layer";
+}
+
+// D24: what the glue does with each effect (Titlebar.cpp updateZoomHover, and the unlock, which forgets the hover and looks
+// again): Away is update with no light, Over is press.
+TEST(TilingHover, TheHoverStartsOverAfterTheLock) {
+    CHoverDwell h;
+    h.update(5, 0);
+    h.update(5, kHoverDelay);
+    ASSERT_EQ(h.entered(), 5U) << "the popover is open";
+    auto c = h.update(std::nullopt, kHoverDelay + 10); // the lock comes, the pointer resting on the light
+    EXPECT_EQ(c.leave, 5U);
+    EXPECT_FALSE(h.remaining(kHoverDelay + 10).has_value()) << "nothing to wait for while locked";
+    c = h.update(5, 5000); // unlocked, the pointer still on that light: no new hover needed
+    EXPECT_FALSE(c.enter.has_value()) << "the delay again";
+    EXPECT_EQ(h.remaining(5000), kHoverDelay) << "the timer the glue arms";
+    EXPECT_EQ(h.update(5, 5000 + kHoverDelay).enter, 5U) << "the hover is back";
+
+    // A light held by a layer over it (Over, as a press), then the lock: the unlock gives that light a hover again.
+    CHoverDwell held;
+    held.update(6, 0);
+    held.update(6, kHoverDelay);
+    EXPECT_EQ(held.press().leave, 6U);
+    EXPECT_FALSE(held.update(6, 3 * kHoverDelay).enter.has_value()) << "held while the pointer stays";
+    EXPECT_FALSE(held.update(std::nullopt, 3 * kHoverDelay + 1).leave.has_value()) << "the lock: nothing entered to leave";
+    held.update(6, 4 * kHoverDelay);
+    EXPECT_EQ(held.update(6, 5 * kHoverDelay).enter, 6U) << "the lock ended the hold";
+
+    // Over, by contrast, keeps the light waiting until the pointer leaves it (a popover closed over the light stays closed).
+    CHoverDwell over;
+    over.update(7, 0);
+    over.update(7, kHoverDelay);
+    over.press();
+    EXPECT_FALSE(over.update(7, 9 * kHoverDelay).enter.has_value());
+    EXPECT_FALSE(over.remaining(9 * kHoverDelay).has_value());
 }
 
 TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {

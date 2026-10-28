@@ -456,8 +456,8 @@ namespace {
     }
 
     // TL22, TL34 (integrator review of 4ead6fb): nothing of the hover over the lock, under a foreign Exclusive layer or under a
-    // layer (core hoverCovered). Read only: Hyprland's lists are never changed.
-    bool zoomLightsCovered(const Vector2D& pos) {
+    // layer (core hoverCoverEffect). Read only: Hyprland's lists are never changed.
+    gf::tiling::HoverCoverEffect zoomLightsCover(const Vector2D& pos) {
         gf::tiling::HoverCover cover{.locked = gf::deferredFocus::sessionLocked(), .exclusiveNamespaces = {}, .layerUnderPointer = false};
         if (g_pInputManager) {
             for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
@@ -466,29 +466,31 @@ namespace {
                     cover.exclusiveNamespaces.push_back(ls->m_namespace);
             }
         }
-        if (!gf::tiling::hoverCovered(cover))
+        if (gf::tiling::hoverCoverEffect(cover) == gf::tiling::HoverCoverEffect::None)
             cover.layerUnderPointer = layerUnderPointer(pos); // the hit test only when nothing else covers the lights
-        return gf::tiling::hoverCovered(cover);
+        return gf::tiling::hoverCoverEffect(cover);
     }
 
-    // TL22: the zoom light under the pointer now (pointer motion, the hover delay's timer). No button may be held: a press
-    // ends the hover until the pointer leaves the light (CHoverDwell::press). Covered lights (zoomLightsCovered) count as a
-    // press too: a hover that began ends, and that light waits until the pointer has left it, so a popover the user closed
-    // over the light does not come back by itself, and the popover's own layer never hands the hover to a light under it.
+    // TL22: the zoom light under the pointer now (pointer motion, the hover delay's timer, the unlock). No button may be held:
+    // a press ends the hover until the pointer leaves the light (CHoverDwell::press). Covered lights (D24): the lock or a
+    // foreign Exclusive layer ends the hover and forgets the light, so the hover starts over once the desktop is back; a layer
+    // over the light counts as a press, so a popover the user closed over the light does not come back by itself, and the
+    // popover's own layer never hands the hover to a light under it.
     void updateZoomHover() {
         auto& input = pointerInput();
         if (!g_pInputManager)
             return;
-        const Vector2D pos = g_pInputManager->getMouseCoordsInternal();
-        if (zoomLightsCovered(pos)) {
-            postHover(input.zoomHover.press(), nullptr, CBox{});
+        const Vector2D pos     = g_pInputManager->getMouseCoordsInternal();
+        const auto     now     = nowMs();
+        const auto     covered = zoomLightsCover(pos);
+        if (covered != gf::tiling::HoverCoverEffect::None) {
+            postHover(covered == gf::tiling::HoverCoverEffect::Away ? input.zoomHover.update(std::nullopt, now) : input.zoomHover.press(), nullptr, CBox{});
             if (input.zoomTimer)
                 input.zoomTimer->updateTimeout(std::nullopt);
             return;
         }
         const auto at     = g_pInputManager->hasHeldButtons() ? std::nullopt : zoomLightAt(pos);
         const auto w      = at ? at->first : nullptr;
-        const auto now    = nowMs();
         const auto change = input.zoomHover.update(w ? std::optional{addressOf(w)} : std::nullopt, now);
         postHover(change, w, at ? at->second : CBox{});
         if (const auto wait = input.zoomHover.remaining(now))
@@ -1208,6 +1210,17 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         }
         if (input.grab.dragging)
             updateMove(input.grab);
+    });
+}
+
+void CGrassfieldTitlebar::onSessionLock(bool locked) {
+    gf::guarded("titlebar session lock", [locked] {
+        auto& input = pointerInput();
+        postHover(input.zoomHover.update(std::nullopt, nowMs()), nullptr, CBox{});
+        if (!locked)
+            armZoomTimer(0);
+        else if (input.zoomTimer)
+            input.zoomTimer->updateTimeout(std::nullopt);
     });
 }
 

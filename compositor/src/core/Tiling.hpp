@@ -147,7 +147,17 @@ namespace gf::tiling {
         std::vector<std::string> exclusiveNamespaces; // of the mapped Exclusive layers
         bool                     layerUnderPointer = false;
     };
-    bool hoverCovered(const HoverCover& cover);
+    // What a cover does to the hover (D24; integrator nested rerun of 25e757c). Away: the lock or a foreign Exclusive layer
+    // took the desktop; the hover ends and starts over once it is back (CHoverDwell::update with no light), so a pointer that
+    // rested on a light through the lock gives a hover after the delay. Over: a layer covers the light (the shell's open
+    // popover included); as a press, the light waits until the pointer has left it, so a popover closed over the light does not
+    // come back by itself. The lock and a foreign Exclusive layer come first.
+    enum class HoverCoverEffect : uint8_t {
+        None,
+        Away,
+        Over,
+    };
+    HoverCoverEffect hoverCoverEffect(const HoverCover& cover);
 
     // The `tile-hover` event (gfc/1). enter: the pointer rested on the window's zoom light (TL22); leave: it left that light;
     // open: hl.plugin.grassfield.tile_popover asked for the popover with the keyboard (Super+Ctrl+L, TL26). enter and open

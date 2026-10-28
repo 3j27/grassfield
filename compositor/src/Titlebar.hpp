@@ -65,6 +65,11 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // titlebar's lights the pointer is over (their glyphs show, macOS).
     static void onGlobalMouseMove();
 
+    // The session lock (g_pSessionLockManager's lock and unlock events; tiling.md TL22, D24): either ends the zoom light's hover
+    // and forgets the light under the pointer; the unlock then looks at that light again from the event loop (after Hyprland's
+    // own handling: its lock gone), so a pointer resting on a light through the lock gives a hover after the delay, unmoved.
+    static void onSessionLock(bool locked);
+
     // Drops any gesture and press ownership (plugin unload).
     static void cancelPointerGrab();
 
