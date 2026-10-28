@@ -161,12 +161,34 @@ TestCase {
             text: "Access denied",
             retry: true,
             rename: false,
+            skip: true,
             applyToAll: true
         });
         compare(s.title, "The operation can’t be completed.");
         compare(s.message, "Access denied");
         compare([s.confirmId, s.cancelId], ["retry", "stop"]);
         compare(s.extras.map(e => e.id), ["skip"]);
+        // One item: no Skip (KIO's SkipDialog); one that can't be retried has OK only, which stops.
+        s = KioSheetsLogic.sheet({
+            id: 11,
+            kind: "skip",
+            text: "Access denied",
+            retry: true,
+            rename: false,
+            skip: false,
+            applyToAll: false
+        });
+        compare(s.extras, []);
+        s = KioSheetsLogic.sheet({
+            id: 12,
+            kind: "skip",
+            text: "Access denied",
+            retry: false,
+            rename: false,
+            skip: false,
+            applyToAll: false
+        });
+        compare([s.confirmText, s.confirmId, s.showCancel], ["OK", "stop", false]);
 
         s = KioSheetsLogic.sheet({
             id: 2,

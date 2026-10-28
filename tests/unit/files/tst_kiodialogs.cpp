@@ -239,6 +239,34 @@ TEST_F(KioDialogsTest, AFolderOntoAFolderIsAMerge)
     EXPECT_EQ(names(QStringLiteral("to/Photos")), (QStringList{QStringLiteral("new.jpg"), QStringLiteral("old.jpg")}));
 }
 
+TEST_F(KioDialogsTest, AFolderMovedOntoAFolderIsAMerge)
+{
+    // Within one file system KIO first renames, and asks without SourceIsDirectory (copyjob.cpp:2521-2533).
+    QDir().mkpath(path(QStringLiteral("from/Photos")));
+    QDir().mkpath(path(QStringLiteral("to/Photos")));
+    write(QStringLiteral("from/Photos/new.jpg"), "n");
+    write(QStringLiteral("to/Photos/old.jpg"), "o");
+    answer({{QStringLiteral("button"), QStringLiteral("replace")}});
+    EXPECT_TRUE(run(withGrassfieldsDelegate(KIO::move(url(QStringLiteral("from/Photos")), url(QStringLiteral("to")), KIO::HideProgressInfo))));
+    ASSERT_EQ(m_asked.size(), 1);
+    EXPECT_TRUE(m_asked.first().value(QStringLiteral("merge")).toBool());
+    EXPECT_EQ(m_asked.first().value(QStringLiteral("mode")).toString(), QStringLiteral("move"));
+    EXPECT_EQ(names(QStringLiteral("to/Photos")), (QStringList{QStringLiteral("new.jpg"), QStringLiteral("old.jpg")}));
+    EXPECT_FALSE(QFileInfo::exists(path(QStringLiteral("from/Photos"))));
+}
+
+TEST_F(KioDialogsTest, AFileOntoAFolderIsNeverAMerge)
+{
+    write(QStringLiteral("from/Photos"), "a file");
+    QDir().mkpath(path(QStringLiteral("to/Photos")));
+    answer({{QStringLiteral("button"), QStringLiteral("stop")}});
+    EXPECT_FALSE(run(withGrassfieldsDelegate(KIO::copy(url(QStringLiteral("from/Photos")), url(QStringLiteral("to")), KIO::HideProgressInfo))));
+    ASSERT_EQ(m_asked.size(), 1);
+    EXPECT_FALSE(m_asked.first().value(QStringLiteral("merge")).toBool());
+    EXPECT_FALSE(m_asked.first().value(QStringLiteral("replace")).toBool());
+    EXPECT_TRUE(m_asked.first().value(QStringLiteral("destIsFolder")).toBool());
+}
+
 TEST_F(KioDialogsTest, TheSheetsAnswerReachesTheJob)
 {
     write(QStringLiteral("from/a.txt"), "new");

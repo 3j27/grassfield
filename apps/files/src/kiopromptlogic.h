@@ -26,11 +26,12 @@ enum class ConflictChoice { KeepBoth, Skip, Stop, Replace };
 // KIO's answer; a choice the sheet did not offer is Stop (Result_Cancel).
 KIO::RenameDialog_Result conflictResult(KIO::RenameDialog_Options options, ConflictChoice choice, bool applyToAll);
 
-// The skip sheet ("The operation can’t be completed…"): Skip / Stop, Rename (characters the destination refuses) or
-// Try Again.
+// The skip sheet ("The operation can’t be completed…"): Stop, Rename (characters the destination refuses) or Try Again,
+// and Skip for several items (KIO's SkipDialog has no Skip for one: skipdialog.cpp:41-80).
 struct SkipButtons {
     bool rename = false; // SkipDialog_Replace_Invalid_Chars: replace them with "_"
     bool retry = false; // not SkipDialog_Hide_Retry, and no Rename
+    bool skip = false; // SkipDialog_MultipleItems
     bool applyToAll = false; // SkipDialog_MultipleItems
 };
 SkipButtons skipButtons(KIO::SkipDialog_Options options);

@@ -60,7 +60,10 @@ TEST(KioPrompts, TheSkipSheetOffersWhatKioAllows)
     const auto plain = skipButtons({});
     EXPECT_TRUE(plain.retry);
     EXPECT_FALSE(plain.rename);
+    // One item: no Skip (KIO's SkipDialog shows Skip and Skip All for several items only).
+    EXPECT_FALSE(plain.skip);
     EXPECT_FALSE(plain.applyToAll);
+    EXPECT_TRUE(skipButtons(KIO::SkipDialog_MultipleItems).skip);
     EXPECT_FALSE(skipButtons(KIO::SkipDialog_Hide_Retry).retry);
     // Characters the destination refuses: Rename (KIO's "Replace") takes Try Again's place.
     const auto chars = skipButtons(KIO::SkipDialog_Replace_Invalid_Chars | KIO::SkipDialog_MultipleItems);
@@ -81,8 +84,9 @@ TEST(KioPrompts, EachSkipChoiceGivesKiosAnswer)
     EXPECT_EQ(skipResult(chars, SkipChoice::Rename, false), KIO::Result_ReplaceInvalidChars);
     EXPECT_EQ(skipResult(chars, SkipChoice::Rename, true), KIO::Result_ReplaceAllInvalidChars);
     EXPECT_EQ(skipResult(many, SkipChoice::Rename, false), KIO::Result_Cancel);
-    // Apply to All exists only for several items.
-    EXPECT_EQ(skipResult({}, SkipChoice::Skip, true), KIO::Result_Skip);
+    // One item has no Skip: a Skip that comes anyway stops.
+    EXPECT_EQ(skipResult({}, SkipChoice::Skip, true), KIO::Result_Cancel);
+    EXPECT_EQ(skipResult({}, SkipChoice::Stop, false), KIO::Result_Cancel);
 }
 
 TEST(KioPrompts, MessageBoxesAnswerWithKiosButtonCodes)

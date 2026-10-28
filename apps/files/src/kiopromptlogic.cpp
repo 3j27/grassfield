@@ -39,6 +39,7 @@ SkipButtons skipButtons(KIO::SkipDialog_Options options)
     SkipButtons b;
     b.rename = options.testFlag(KIO::SkipDialog_Replace_Invalid_Chars);
     b.retry = !options.testFlag(KIO::SkipDialog_Hide_Retry) && !b.rename;
+    b.skip = options.testFlag(KIO::SkipDialog_MultipleItems);
     b.applyToAll = options.testFlag(KIO::SkipDialog_MultipleItems);
     return b;
 }
@@ -49,7 +50,7 @@ KIO::SkipDialog_Result skipResult(KIO::SkipDialog_Options options, SkipChoice ch
     const bool all = applyToAll && b.applyToAll;
     switch (choice) {
     case SkipChoice::Skip:
-        return all ? KIO::Result_AutoSkip : KIO::Result_Skip;
+        return b.skip ? (all ? KIO::Result_AutoSkip : KIO::Result_Skip) : KIO::Result_Cancel;
     case SkipChoice::Rename:
         return b.rename ? (all ? KIO::Result_ReplaceAllInvalidChars : KIO::Result_ReplaceInvalidChars) : KIO::Result_Cancel;
     case SkipChoice::Retry:

@@ -231,8 +231,10 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
         {QStringLiteral("name"), itemName(dest)},
         {QStringLiteral("folder"), itemName(folder)},
         {QStringLiteral("mode"), mode},
-        // A folder onto a folder: KIO's Overwrite writes into it (a merge), it does not replace it.
-        {QStringLiteral("merge"), options.testFlag(KIO::RenameDialog_SourceIsDirectory) && options.testFlag(KIO::RenameDialog_DestIsDirectory)},
+        // Overwrite onto a folder: KIO writes into it (a merge), it does not replace it (RenameDialog's "Write Into",
+        // renamedialog.cpp:304-312). KIO never offers Overwrite for a file onto a folder (copyjob.cpp:2521-2524), and a move
+        // within one file system asks without SourceIsDirectory (copyjob.cpp:2521-2533).
+        {QStringLiteral("merge"), options.testFlag(KIO::RenameDialog_Overwrite) && options.testFlag(KIO::RenameDialog_DestIsDirectory)},
         {QStringLiteral("destIsFolder"), options.testFlag(KIO::RenameDialog_DestIsDirectory)},
         {QStringLiteral("itself"), options.testFlag(KIO::RenameDialog_OverwriteItself)},
         {QStringLiteral("replace"), b.replace},
@@ -267,12 +269,14 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
 
 void GrassfieldAskUserAction::askUserSkip(KJob *job, KIO::SkipDialog_Options options, const QString &errorText)
 {
+    m_alwaysTrust.reset();
     const SkipButtons b = skipButtons(options);
     const QVariantMap request{
         {kKind, QStringLiteral("skip")},
         {QStringLiteral("text"), plainText(errorText)},
         {QStringLiteral("rename"), b.rename},
         {QStringLiteral("retry"), b.retry},
+        {QStringLiteral("skip"), b.skip},
         {QStringLiteral("applyToAll"), b.applyToAll},
     };
     m_prompts->ask(request, job, [self = QPointer<GrassfieldAskUserAction>(this), job, options](const QVariantMap &reply) {

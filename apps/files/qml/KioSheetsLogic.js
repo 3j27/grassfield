@@ -74,30 +74,38 @@ function conflict(request) {
     };
 }
 
-// An item the operation can't handle (KIO's SkipDialog): Skip it, Stop, or Try Again (or rename it, for characters the
-// destination refuses).
+// An item the operation can't handle (KIO's SkipDialog): Try Again (or Rename, for characters the destination refuses),
+// Stop, and Skip when there are other items; one item that can't be retried has OK only (it stops).
 function skip(request) {
     const extras = [];
-    let confirmText = qsTr("Skip");
-    let confirmId = "skip";
+    let confirmText;
+    let confirmId;
+    let showCancel = true;
     let message = request.text || "";
     if (request.rename) {
         confirmText = qsTr("Rename");
         confirmId = "rename";
         message = (message !== "" ? message + "\n\n" : "") + qsTr("Rename replaces the characters the destination doesn’t allow with “_”.");
-        extras.push({id: "skip", text: qsTr("Skip")});
     } else if (request.retry) {
         confirmText = qsTr("Try Again");
         confirmId = "retry";
-        extras.push({id: "skip", text: qsTr("Skip")});
+    } else if (request.skip) {
+        confirmText = qsTr("Skip");
+        confirmId = "skip";
+    } else {
+        confirmText = qsTr("OK");
+        confirmId = "stop";
+        showCancel = false;
     }
+    if (request.skip && confirmId !== "skip")
+        extras.push({id: "skip", text: qsTr("Skip")});
     return {
         title: qsTr("The operation can’t be completed."),
         message: message,
         confirmText: confirmText,
         confirmId: confirmId,
         destructive: false,
-        showCancel: true,
+        showCancel: showCancel,
         cancelText: qsTr("Stop"),
         cancelId: "stop",
         returnCancels: false,
@@ -187,8 +195,8 @@ function message(request) {
     };
 }
 
-// A server whose certificate KIO's worker can't verify: Cancel is the default (Return and Esc), Continue connects once,
-// "Always trust" (with the certificate shown) remembers it.
+// A server whose certificate KIO's worker can't verify: Cancel is the default (Return and Esc); Continue accepts it for
+// 30 minutes (KIO's "Current Session only"), or for good when "Always trust" (shown with the certificate) is ticked.
 function certificate(request) {
     return {
         title: qsTr("Files can’t verify the identity of the server “%1”.").arg(request.host),
