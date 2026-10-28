@@ -817,7 +817,7 @@ passwords too (D-12). Q12: the amendment text above.
 
 ### D-12. KIO's and KWallet's dialogs in Grassfield's own apps (category A + S; inventory K1–K8; owner decision Q11)
 Upstream facts (inventory § K, KIO and KWallet v6.31.0): `grassfield-desktop` depends on kio (`packaging/arch/PKGBUILD:136`),
-which depends on kwallet (probe P15). Files runs its jobs with KIO's default widget delegate (`apps/files/src/filesapp.cpp:62-67`),
+which depends on kwallet (probe P15). Files ran its jobs with KIO's default widget delegate (`apps/files/src/filesapp.cpp:62-67`, until step 4a),
 so KIO's Qt-widget dialogs (file exists, skip, certificate, Open With) appear inside a Grassfield app, and the D-4 panel built
 from Files' sources would inherit them. Network passwords come from KIO's password server `org.kde.kpasswdserver6`
 (`src/core/kpasswdserverclient.cpp:31`), D-Bus activated as kiod6 (P15): KDE's `KPasswordDialog`
@@ -828,9 +828,10 @@ Options (asked 2026-10-27, recommended first):
 - **K1. Grassfield takes them.** (a) Files and `grassfield-portal` set a Grassfield UI delegate on each job they start, as Files
   already sets KIO's (`apps/files/src/filesapp.cpp:62-67`), with Grassfield implementations of KIO's delegate extensions as its
   children (`AskUserActionInterface`, `OpenWithHandlerInterface`, `UntrustedProgramHandlerInterface`,
-  `OpenOrExecuteFileInterface`); KIO finds them through the job, its parent job or its composite job
+  `OpenOrExecuteFileInterface`, which has no installed header: decision 4a-4); KIO finds them through the job, its parent job or its composite job
   (`KIO::delegateExtension`, `src/core/jobuidelegatefactory.h:102-126`). Not `KIO::setDefaultJobUiDelegateFactory`: it is
-  marked Internal and KIOWidgets registers its own factory through it (`:85-92`; counter-review of PR #13, minor). The sheets:
+  marked Internal and KIOWidgets registers its own factory through it (`:85-92`; counter-review of PR #13, minor).
+  **Superseded by 4a-2**: KIO's own sub-jobs keep a default delegate of their own, so Files sets both. The sheets:
   the macOS "An item named “X” already exists" alert (Keep Both / Stop / Replace, Apply to All), the skip sheet, the
   certificate sheet (Cancel is the default button; Continue accepts for 30 minutes, as KIO's "Current Session only",
   `src/widgets/sslui.cpp:96-106`; a permanent rule only when the user ticks "Always trust “host”", unticked every time), the
@@ -1098,6 +1099,137 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   (a)**: the cost is a short start of ksecretd per login, invisible to the user, while giving up would strand passwords that a
   later unlock of the wallet (by any KWallet client) would let move without any step from the user.
 
+**Delivered in step 4a (D-12 a in Files).** `apps/files/src/kioprompts.{h,cpp}`: `GrassfieldJobUiDelegate` (KIO's own
+`KIO::JobUiDelegate` class, so clipboard updates and the rest stay KIO's, with Grassfield's extensions as its children:
+`GrassfieldAskUserAction`, `GrassfieldOpenWithHandler`, `GrassfieldUntrustedProgramHandler`), set on every job Files starts
+(`attachDelegate`) and made KIO's default factory while Files runs (4a-2), installed before Files' first job (the Trash
+listing); `GrassfieldUndoUi` for KIO's `FileUndoManager`; a job tracker that tracks nothing (4a-12);
+`KioPrompts`, the queue of questions the window shows one at a time (`current`, `reply`), each withdrawn when its job ends
+(KIO closes its own dialog then). `apps/files/src/kiopromptlogic.{h,cpp}`: which buttons a sheet offers for the options KIO
+passes and the KIO answer each choice gives, the one KIO's widget dialog gives for the same choice (KD2: `renamedialog.cpp`,
+`skipdialog.cpp`, `widgetsaskuseractionhandler.cpp:460-485`). `apps/files/qml/KioSheets.qml` and `KioSheetsLogic.js`: the
+sheets (conflict, skip, deletion, a worker's message, certificate, notice) on Grassfield.Ui's `Sheet`, which gains buttons at
+its leading edge (`extraButtons`, `extra(id)`, on a row of their own when the row is too narrow) and `returnCancels`; Main.qml
+places a question in a window (4a-9). Tests: `tests/unit/files/tst_kioprompts.cpp` (the table of KD2: every choice, with and
+without Apply to All, every message type, the certificate's follow-up, deletions, plain text), `tests/unit/files/tst_kiodialogs.cpp`
+(its own process with a scratch home: real KIO copy and move jobs through KIO's file worker answered as the sheets answer:
+Replace, Keep Both, Stop, Skip with Apply to All asked once, a folder merged, a sheet's reply reaching the job, a question
+withdrawn when its job ends, KIO's own jobs resolving Grassfield's extensions, an error KIO reports itself, Undo of a copy
+changed since; after each, no widget exists; Files' sources hold no KIO or Qt widget dialog and set no other delegate),
+`tests/unit/tst_fileskiosheets.qml` (texts, buttons and replies, Return, Esc, Apply to All, Show Certificate and Always trust,
+a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the window that shows a question).
+
+**Decisions of step 4a** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **4a-1. Splitting step 4.** Options: (a) one pull request: the Files library split, the delegates and `grassfield-portal`
+  with its FileChooser; (b) 4a: the delegates in Files (D-12 a), then 4b: the library split with its first user, the
+  portal's Open and Save panels (D-4), whose KIO jobs get the same delegates. **Choice: (b)**: Files' users get the macOS
+  sheets now, with no new process; the library split lands with the code that needs it (no abstraction before its user),
+  and the delegate classes move into it unchanged.
+- **4a-2. KIO's default delegate factory.** Found in KIO 6.31: KIO gives the jobs it makes itself a default delegate of their
+  own (`FileCopyJob`, `TransferJob`, `StatJob`, `DirectCopyJob`… `src/core/filecopyjob.cpp:94`, `job.cpp:282`), and
+  `KIO::delegateExtension` looks at a job's own delegate before its parent's: a worker's message box or certificate question
+  raised on such a sub-job, and every job of Undo, would reach KIOWidgets' widget handler whatever delegate Files set on the
+  job it started. Options: (a) per-job delegates only (the plan, K1(a)); (b) also make Grassfield's delegate KIO's default
+  factory while Files runs (`KIO::setDefaultJobUiDelegateFactory`, marked Internal). **Choice: (b)**, the per-job delegate
+  kept: no KDE dialog reaches the user from any job of Files. Files restores KIO's factory when its prompts go, and
+  `tst_kiodialogs.cpp` fails if a KIO update changes how the factory is reached (a build of either path fails if it goes).
+- **4a-3. Errors and warnings KIO shows by itself.** Files' jobs report their errors through the window's error line
+  (automatic handling off). Where KIO turns automatic handling on for a job of its own (`KDirModel`'s renames,
+  `src/widgets/kdirmodel.cpp:1038`), the error or warning is a Grassfield notice sheet, not KIO's message box.
+- **4a-4. "Open or Execute?" (`OpenOrExecuteFileInterface`).** KIO 6.31 installs no header for it, so no implementation is
+  possible without KIO's private headers. KIO asks it only of a job that enables `setShowOpenOrExecuteDialog`, which Files
+  never does (it never runs what it opens, `LaunchGuard`). **Choice:** no implementation; `tst_kiodialogs.cpp` fails if
+  Files' sources ever enable it.
+- **4a-5. No application set for a document's type** (`OpenWithHandlerInterface`). Options: (a) KDE's `KOpenWithDialog` until
+  step 5; (b) a Grassfield notice that names the document and points to Open With; (c) the Choose Application sheet now.
+  **Choice: (b)**: no KDE dialog, and the sheet of section 2 stays step 5's (D-5); step 5 replaces the notice with it.
+- **4a-6. "Always trust".** After Continue on a certificate, KIO's http worker asks a second question on the same job: accept
+  the certificate "Forever" or for the "Current Session only" (30 minutes; `kioworkers/http/http.cpp:310-336`). Options:
+  (a) show it as a second sheet; (b) answer it from the first sheet's "Always trust “host”" box (unticked at every opening).
+  **Choice: (b)**: one sheet, as macOS. The answer goes to the next question of that kind (`WarningTwoActionsCancel`) on the
+  same job's delegate, with no time limit (internal review, MINOR 1: the first version allowed 10 s, but KIO asks worker
+  message boxes one at a time, so the follow-up can wait behind another job's question, and would then have been shown as
+  a sheet whose default button trusts "Forever"); any other question on that delegate clears it first. The http worker is
+  KIO 6.31's only caller of `sslError`, and it asks the follow-up right after a Continue. The box shows with the
+  certificate (Show Certificate), where macOS shows its trust setting. Every answer reaches KIO after the call that gave it
+  returns (KIO connects to the certificate's answer only once it has asked, `usernotificationhandler.cpp:136-140`; internal
+  review, MINOR 2).
+- **4a-7. A folder onto a folder.** KIO's Overwrite writes into the folder (its items with the same name are asked about one
+  by one); "Replace" would say the folder's content goes. **Choice:** the button says "Merge" (Finder's word for it)
+  whenever KIO offers Overwrite onto a folder, as KIO's own dialog says "Write Into" (`renamedialog.cpp:304-312`): a move
+  within one file system asks without `SourceIsDirectory` (`copyjob.cpp:2521-2533`; internal review, MAJOR 1). KIO offers
+  no Overwrite for a local file onto a folder (`:2521-2524`); for a remote source it guesses from the error
+  (`copyjob.cpp:2457`), and shows "Write Into" then too, as the sheet shows "Merge".
+- **4a-8. The name Keep Both gives.** Options: (a) KIO's (`KFileUtils::suggestName`: "Report (1).pdf"); (b) Finder's
+  ("Report 2.pdf"). **Choice: (a)**: with Apply to All, KIO names the following items itself with the same function, so one
+  operation never mixes two rules.
+- **4a-9. Which window shows a question.** Files' jobs belong to the app, not to a window. Options: (a) every window; (b) the
+  window the user last worked in when it was asked, kept there until it is answered, moved to another window if that one
+  closes. **Choice: (b)** (a sheet belongs to one window); with no browser window open (`--info`), the question gets its safe
+  answer (Stop, Cancel, Don't Delete). One sheet at a time in a window, as AppKit queues a window's sheets and holds them
+  during menu tracking: a question waits, out of sight and of the keyboard's reach, while Go to Folder, a confirmation or
+  a menu is open in that window, and shows once it closes, with the choices already made on it (internal review, MAJOR 2,
+  and counter-review, MAJOR: the first versions opened it behind the other sheet, then under an open menu, with the
+  keyboard, where Return would have answered Replace unseen). While shown, the sheet keeps the keyboard: a view that takes
+  it a moment later (a navigation's queued focus, an inline rename that ends) gives it back (counter-review, MINOR 1).
+- **4a-10. Delete confirmations KIO asks for** (`askUserDelete`). Files asks before its own permanent deletions. **Choice:**
+  every permanent deletion KIO asks about is a sheet; a plain move to the Trash is not asked (macOS) unless KIO forces the
+  question. KIO's "do not ask again" answers (`kiorc` for deletions, `kioslaverc` for a worker's message boxes,
+  `widgetsaskuseractionhandler.cpp:401-405`) are neither read nor written: no setting lives in a file for the user, and
+  every question Files shows can be answered on the spot.
+- **4a-11. Undo of a copy changed since it was made.** KIO asks synchronously whether to delete it anyway. Options: (a) a
+  synchronous sheet (a nested event loop in the app); (b) keep the copy and say so on the window's error line. **Choice:
+  (b)**: nothing the user changed is deleted, and the message says how to remove it (Move to Trash).
+- **4a-12. KIO's progress window.** Found by `tst_kiodialogs.cpp`: an undo's job goes to KIO's job tracker, which, with no
+  KDE job server on the bus (a Grassfield session), opens KIO's progress window (`KWidgetJobTracker`,
+  `src/widgets/kdynamicjobtracker.cpp:103-195`; inventory K9); so does any job KIO starts without `HideProgressInfo`, such
+  as the removal of a link by Undo (`fileundomanager.cpp:699`; internal review, MINOR 4). **Choice:** while Files runs, KIO's
+  job tracker is one that tracks nothing (`KIO::setJobTracker`, marked internal, restored when Files' prompts go), and Undo
+  asks for no progress either: no KIO progress window from any job of Files, as Files' own jobs
+  (`KIO::HideProgressInfo`). Files shows its own activity in the status bar.
+- **4a-13. The words.** Finder's: "An item named “X” already exists in this location.", "An older item…" or "A newer item…"
+  when the dates tell, "Do you want to replace it with the one you’re moving?" (copying), Keep Both / Skip at the leading
+  edge, Stop and Replace at the trailing edge, Apply to All. A question of a kind this version does not know is answered
+  Stop rather than left waiting. The certificate's host, subject and issuer are shown as file names are (no bidi override,
+  no line break: `FileLogic::displayName`), since whoever made the certificate chose them.
+- **4a-14. Pasting text or an image** (internal review, MAJOR 3). `KIO::paste` of data without items asks a file name and a
+  format in KIO's own widget dialogs (`KIO::PasteDialog`, `src/widgets/paste.cpp:37-126`), outside any delegate. Options:
+  (a) keep it (KDE dialogs); (b) paste items only, as the Finder does (Paste is unavailable for text); (c) a Grassfield
+  "name the new file" sheet. **Choice: (b)**: Paste is offered only when the clipboard holds items (`text/uri-list`, the
+  form `KIO::paste` copies or moves, `pastejob.cpp:68-70`); `tst_kiodialogs.cpp` fails if Files' sources call KIO's own
+  test (`canPasteMimeData`, which accepts text). Paste's count, its checks and the job use the same list, KIO's (local URLs
+  first, valid ones), and the job gets its own copy of it, not the clipboard's data, which it reads a moment later.
+- **4a-15. Skip for one item** (internal review, MINOR 3). KIO's skip dialog offers Skip and Skip All only when there are
+  several items still to do (`skipdialog.cpp:58-72`; `copyjob.cpp:1540, 1854, 2045`, so not for the last one either); for
+  one, Try Again (or Rename) and Cancel, or OK alone when it can't be retried. **Choice:** the same buttons (KD2), so a
+  one-file copy that fails ends with its error, never as a silent skip.
+- **4a-16. A copy that stopped part way** (counter-review, MINOR 2). KIO asks before resuming it (`filecopyjob.cpp:355-376`,
+  Overwrite, Resume, no new name), after an interrupted copy left `name.part`. Options: (a) the conflict sheet without
+  Resume (Replace or Stop only: the part already copied is lost); (b) a sheet of its own: "Part of “X” is already in this
+  location." with Resume (the default), Start Over and Stop. **Choice: (b)**, KIO's answers (`Result_Resume`,
+  `Result_ResumeAll` with Apply to All, `Result_Overwrite`).
+- **4a-17. What Return does on a warning or a deletion** (integrator review of c0dd590, MAJOR 1). A worker's warning (an
+  sftp host key that changed: "Connect Anyway", kio-extras' `kio_sftp.cpp:855-886`; the certificate's "Forever" when it
+  shows as a sheet) took its action on Return, where KDE's own box defaults to Cancel (`kmessagedialog.cpp:357-386`), and
+  common rule 3 says a destructive button is never the default. **Choice:** on a warning, Return gives Cancel, or the
+  secondary action where there is no Cancel; on a permanent deletion KIO asks about, Return cancels. Questions that are
+  not warnings keep their primary action as the default. The conflict sheet's default is the owner's decision Q18 (below):
+  Replace, as the Finder, a written exception to common rule 3 for that sheet only.
+- **4a-18. One answer, one question** (integrator review of c0dd590, MAJOR 2). The next question shows in the same sheet the
+  moment one is answered, so the second click of a double click on Replace, or a Return held down, answered a second job's
+  question unseen. **Choice:** a question takes no click and no key for the double-click interval after it shows
+  (`Sheet.holdInput`, `Application.styleHints.mouseDoubleClickInterval`), and a sheet answers nothing on a key's
+  auto-repeat, so Return held past the hold does not answer the next question either (integrator re-review: Grassfield's
+  key repeat starts after 250 ms, `config/hypr/grassfield/omarchy.lua:113-114`). Found while testing it: a button the user clicked kept
+  the keyboard, so in the next question Return pressed that button (Delete, Keep Both) instead of the default. A sheet
+  without a field now opens with the keyboard on itself, and its buttons take the keyboard only by Tab.
+- **4a-19. A long message** (integrator review, MINOR 4). A 200-line worker message made the sheet taller than its window,
+  buttons out of sight. **Choice:** the message, the field and the body scroll inside the sheet when they would not fit
+  (`Sheet.qml`, laid out as before when they fit); the title and the buttons stay. Every Grassfield sheet gets it.
+- **4a-20. Names inside KIO's texts** (integrator review, MINOR 5). A skip text or a worker's message names files and hosts
+  others chose: their direction overrides and isolates show as <U+XXXX>, as in file names (`FileLogic::displayName`), and
+  other control characters go; line breaks stay (`KioPromptLogic::plainText`).
+
 ### Plumbing shared by D-3 and D-6
 - One new packaged directory, `/usr/lib/grassfield/session-bin`, for the stand-ins of programs that Hyprland and xdph find by
   name. It is put first in PATH exactly where `omarchy-shims` is today (`omarchy.lua` `guard_path` for the compositor,
@@ -1143,7 +1275,8 @@ requests #8, #9 and #10 are merged (owner).
    After #8–#10.
 4. **Open and Save panels** (D-4) and **KIO's dialogs in Files** (D-12 a): the Files library split, Grassfield's KIO delegate
    extensions for Files and the panel, `grassfield-portal` with the FileChooser interface. Coordinated with the open Files pull
-   request #7 (views).
+   request #7 (views). In two pull requests (decision 4a-1): **4a**, the delegates and sheets in Files; **4b**, the library
+   split and the portal.
 5. **Open With and permission alerts** (D-5).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13).
@@ -1187,6 +1320,7 @@ review.
 | Q16 | Rename Quit to "Force Quit" in the app menu of a hung app | no, macOS model / yes | « Non, modèle macOS (Recommandé) » | no |
 | Q17 | Which daemon holds the Secret Service in the Grassfield session (D-12) | Q17-a gnome-keyring started with the session / Q17-b KWallet's takeover off for the session / Q17-c as is | « Bloquer KWallet » | Q17-b (not the recommended option) |
 | Q17 (when) | When to deliver Q17's answer | with step 2 / in step 9 | « Avec l'étape 2 (Recommandé) » | with step 2 |
+| Q18 | Return (the default button) in the copy/move conflict sheet, "An item named “X” already exists" (step 4a; integrator review of c0dd590, point 3) | Replace, as the Finder / Stop, as KIO's dialog / Keep Both | relayed by the integrator on grassfieldhq/grassfield#33, 2026-10-28: "Replace … like Finder" | Replace: a written exception to common rule 3 (a destructive button is never the default) for the copy/move conflict sheet only (with Merge for a folder and Resume for a copy that stopped part way); a worker's warnings and the deletions keep Return = Cancel (4a-17) |
 
 ## macOS reference
 One system draws every system question: open and save panels and the print sheet are AppKit's, shown as sheets of the app's
