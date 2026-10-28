@@ -1029,8 +1029,9 @@ namespace gf::tiler {
         }
 
         // The frames of the drag's delta (core dragEdge) on the windows still there: each surface box set and its animation
-        // ended at once (as a step of Hyprland's own resize: setTargetGeom, warpPositionSize). A window closed, unmapped or
-        // no longer Resizing meanwhile (full screen, zoom, minimized: Suspended; forgotten) is left out; the others go on.
+        // ended at once (as a step of Hyprland's own resize: setTargetGeom, warpPositionSize). A window closed, unmapped (its
+        // Desktop and layout space gone while the object lives: gate C1, setTargetGeom would reach the missing space) or no
+        // longer Resizing meanwhile (full screen, zoom, minimized: Suspended; forgotten) is left out; the others go on.
         void edgeApply() {
             auto& s = st();
             if (!s.edge || !g_layoutManager)
@@ -1043,7 +1044,7 @@ namespace gf::tiler {
             for (const auto& f : frames) {
                 const uint64_t id = f.first;
                 const auto     w  = windowById(id);
-                const auto     t  = w && w->m_isMapped ? w->layoutTarget() : nullptr;
+                const auto     t  = tiling::movable(factsOf(w)) ? w->layoutTarget() : nullptr; // C1: mapped, on a Desktop, in a layout space
                 const auto     e  = std::ranges::find_if(d.windows, [id](const tiling::EdgeWindow& x) { return x.id == id; });
                 const auto     r  = s.book.find(id);
                 if (!t || e == d.windows.end() || !r || r->state != tiling::TileState::Resizing)
