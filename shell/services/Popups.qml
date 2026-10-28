@@ -9,7 +9,7 @@ import Quickshell.Io
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
 //
 // kind: "" | "system" | "app" | "appfile" | "appwindow" | "appbridge" | "tray" | "volume" | "network" | "battery" | "controlcenter" | "dock" | "dockstack"
-//       | "about" | "forcequit" | "confirm" | "appabout" | "notice"
+//       | "about" | "forcequit" | "confirm" | "appabout" | "notice" | "tiling"
 Singleton {
     id: root
 
@@ -17,7 +17,9 @@ Singleton {
     property string screenName: ""
     // Anchor in screen coordinates. align: "left" (popup's left edge at x, top at y),
     // "right" (right edge at x), "above" (centered on x, bottom edge at y), "rightOf" (left edge at x, centered on y: the Dock on
-    // the left edge) and "leftOf" (right edge at x, centered on y: the Dock on the right edge), "center" (screen centre).
+    // the left edge) and "leftOf" (right edge at x, centered on y: the Dock on the right edge), "center" (screen centre),
+    // "below" (left edge at x, top edge at y; its bottom edge at data.flipY instead when the screen has no room below: the
+    // tiling popover under a zoom light, docs/specs/tiling.md TL22).
     property real anchorX: 0
     property real anchorY: 0
     property string align: "left"

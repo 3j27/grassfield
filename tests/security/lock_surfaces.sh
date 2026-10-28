@@ -91,11 +91,13 @@ opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
 compositor = read("shell/platform/Compositor.qml")
 windows = ipc(compositor, "windows")
-for name in ("minimize", "tile", "hide", "cycleApp"):
+for name in ("minimize", "tile", "arrange", "tilePopover", "nextOutput", "hide", "cycleApp"):
     first_decision("shell/platform/Compositor.qml", f"windows.{name}", R) if windows is None else first_decision("shell/platform/Compositor.qml", name, R, text=windows, lines=2)
 # The plugin's minimize-request event (the titlebar button and, since GF-056 P8, a tagged window's own minimize button)
 # moves nothing behind the lock either.
 first_decision("shell/platform/Compositor.qml", "minimizeByAddress", R, text=compositor, lines=2)
+# Tiling step 3 (integrator review of 4ead6fb): the plugin's hover event and Super+Ctrl+L open the popover only through here.
+first_decision("shell/services/TilingHover.qml", "show", R)
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
 # Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
 # keyboard) also refuse and close.
@@ -295,7 +297,7 @@ expect("polkit sheet: the field is focused only where it may be (the agent: when
        backdrop is not None and len(re.findall(r"\.focusField\(\)", agent)) == 3
        and len(re.findall(r"\bfocusField\(\)", dialog_src)) == 3 and re.search(r"Component\.onCompleted:\s*focusField\(\)", dialog_src) is not None
        and re.search(r"function focusField\(\):\s*void\s*\{\s*if\s*\(root\.inputEnabled\)\s*field\.forceActiveFocus\(\);\s*\}", dialog_src) is not None
-       and len(re.findall(r"enabled:\s*root\.inputEnabled\b", dialog_src)) == 2 and re.search(r"property bool inputEnabled:\s*true\s*\n", dialog_src) is not None
+       and len(re.findall(r"enabled:\s*root\.inputEnabled\b", dialog_src)) == 3 and re.search(r"id:\s*identityList\s*enabled:\s*root\.inputEnabled\b", dialog_src) is not None and re.search(r"property bool inputEnabled:\s*true\s*\n", dialog_src) is not None
        and re.search(r"function onFailed\(\):\s*void\s*\{\s*shakeAnimation\.restart\(\);\s*root\.focusField\(\);\s*\}", dialog_src) is not None)
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
        re.search(r"if\s*\(!dialogModel\.active\)\s*dialogModel\.noteEnded\(\);", arrive) is not None)
@@ -480,7 +482,7 @@ mut=$tmp/mutant
 for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.qml shell/search/Search.qml shell/launchpad/AppsController.qml \
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
-  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml; do
+  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -490,6 +492,10 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
   'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows arrange")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows tilePopover")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows nextOutput")#false' \
+  'shell/services/TilingHover.qml#SessionState.refuses("tiling popover")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows minimize request")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \
@@ -527,6 +533,8 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#if (typing && !dialogModel.active && !SessionState.locked) {#if (root.lingering) {' \
   'shell/security/polkit/AuthDialog.qml#        if (root.inputEnabled)\n            field.forceActiveFocus();#        field.forceActiveFocus();' \
   'shell/security/polkit/AuthDialog.qml#                id: field\n                enabled: root.inputEnabled#                id: field' \
+  'shell/security/polkit/AuthDialog.qml#            id: identityList\n            enabled: root.inputEnabled#            id: identityList' \
+  'shell/security/polkit/AuthDialog.qml#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).\n                enabled: root.inputEnabled#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).' \
   'shell/security/polkit/AuthAgent.qml#        const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());#        let typing = false;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());\n        typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \
   'shell/security/polkit/AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \
   'shell/security/polkit/AuthAgent.qml#visible: !SessionState.locked && (root.requestOpen || root.sinkingKeys)#visible: !SessionState.locked && root.requestOpen' \

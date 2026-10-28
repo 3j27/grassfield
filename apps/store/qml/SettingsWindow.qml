@@ -49,8 +49,10 @@ Window {
         return qsTr("Arch's app data is not available yet: apps show their package's description.");
     }
 
+    // Only while this window is the key window: Qt also matches its Shortcuts while the Store's window has the keyboard.
     Shortcut {
         sequences: ["Ctrl+W", "Esc"]
+        enabled: root.backend.focusWindow === root
         onActivated: root.close()
     }
 

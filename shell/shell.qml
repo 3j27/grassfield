@@ -67,6 +67,13 @@ ShellRoot {
         value: saver.shown
     }
 
+    // The Dock's keyboard mode for the tiling popover, which never opens over it (services/TilingHover, TL22).
+    Binding {
+        target: TilingHover
+        property: "dockKeyboard"
+        value: dock.keyboardMode
+    }
+
     // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
     Binding {
         target: SessionState
@@ -334,6 +341,30 @@ ShellRoot {
         }
     }
 
+    // Software Update (ADR-0033 U14, U20, U22): GF-083's pending logout goes to the pane through software-update.json; each
+    // newly found release, and each episode of a [grassfield] that stops every update, is one notice whose click opens
+    // Settings > General > Software Update (never for a check the user started: the service does not announce those).
+    Binding {
+        target: SoftwareUpdate
+        property: "logoutPending"
+        value: updateNotice.updatePending
+    }
+
+    Connections {
+        target: SoftwareUpdate
+
+        function onAnnounce(kind: string, version: string, installed: string): void {
+            const open = () => SettingsApp.openSection("software-update");
+            const name = SoftwareUpdate.releaseName(version, installed);
+            if (kind === "blocking")
+                Notifications.postInternalAction(qsTr("Updates are stopped"), qsTr("Grassfield's update repository cannot be used, and this stops every system update. Open Software Update to turn Grassfield updates off."), open);
+            else if (kind === "grassfield")
+                Notifications.postInternalAction(qsTr("Grassfield %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
+            else if (kind === "omarchy")
+                Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
+        }
+    }
+
     // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar stays: on 0.56.2 the source is empty,
     // decision 3-15).
     // The lines are the details (no terminal: decision 3-6); the notice goes once they are gone.
@@ -390,6 +421,7 @@ ShellRoot {
         onSearchRequested: searchSurface.toggle()
     }
     Dock {
+        id: dock
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}
@@ -444,6 +476,8 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
-    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length)
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
+    // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing SoftwareUpdate starts its
+    // automatic checks and registers its IPC target "update" (ADR-0033 d.7).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "software update", SoftwareUpdate.count)
 }

@@ -367,3 +367,40 @@ TEST(ClipLogic, WriterWaitIsTheIdleLimitUntilTheOverallLimit)
     EXPECT_EQ(writerWaitMs(kWriterMaxMs + 10000), 0);
     EXPECT_EQ(writerWaitMs(-5), kWriterIdleMs) << "a clock that went back counts as 0";
 }
+
+// A clear written in the settings while no helper ran (review of f7cd664): carried out at the next start when it differs from the
+// one recorded; with no record, only the items from before it go.
+TEST(ClipLogic, ClearActionAtStart)
+{
+    EXPECT_EQ(clearAction(-1, 5000, true), ClearAction::Keep) << "not given";
+    EXPECT_EQ(clearAction(0, 5000, true), ClearAction::Keep) << "never cleared (a settings file reset to its defaults)";
+    EXPECT_EQ(clearAction(5000, 5000, true), ClearAction::Keep) << "already carried out";
+    EXPECT_EQ(clearAction(6000, 5000, true), ClearAction::DeleteAll) << "a newer clear";
+    EXPECT_EQ(clearAction(4000, 5000, true), ClearAction::DeleteAll) << "a clear made after the clock was set back";
+    EXPECT_EQ(clearAction(6000, 0, true), ClearAction::DeleteAll) << "the first clear";
+    EXPECT_EQ(clearAction(6000, 0, false), ClearAction::DropOlder) << "no record: only what came before it";
+    EXPECT_EQ(clearAction(0, 0, false), ClearAction::Keep);
+}
+
+TEST(ClipLogic, KeptAfterAClearWithoutARecord)
+{
+    Item old;
+    old.id = "00000000000000b1";
+    old.copiedAtMs = 1000;
+    old.pinnedAtMs = 7000;
+    Item fresh;
+    fresh.id = "00000000000000b2";
+    fresh.copiedAtMs = 6000;
+    fresh.pinnedAtMs = 2000;
+    const QList<Item> items = {old, fresh};
+    auto ids = [](const QList<Item> &list) {
+        QByteArray out;
+        for (const Item &it : list)
+            out += it.id.right(1);
+        return out;
+    };
+    EXPECT_EQ(ids(keptAfterClear(items, 5000, false)), QByteArray("2")) << "the history: by the copy's time";
+    EXPECT_EQ(ids(keptAfterClear(items, 5000, true)), QByteArray("1")) << "the pins: by the pin's time";
+    EXPECT_EQ(ids(keptAfterClear(items, 6000, false)), QByteArray("")) << "copied at the clear's very time: it goes";
+    EXPECT_EQ(ids(keptAfterClear(items, 0, false)), QByteArray("12"));
+}

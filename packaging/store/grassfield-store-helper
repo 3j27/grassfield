@@ -1,0 +1,240 @@
+#!/bin/bash -p
+# grassfield-store-helper: the program of Grassfield Store's polkit action org.grassfield.store.manage-packages (ADR-0037
+# b.1, owner decision ST4; docs/specs/store.md SR15-SR22). OPUS SECURITY REVIEW REQUIRED: it runs as root.
+# Started only as `pkexec /usr/lib/grassfield/grassfield-store-helper <verb> <op-id> <package>...` by Grassfield Store,
+# which waits for it:
+#   install <op-id> <package>...  pacman -S --needed --noconfirm --noprogressbar -- <packages>: names a repository has,
+#                                 each an app (it owns an application entry, /usr/share/applications/<id>.desktop: SD1,
+#                                 read from the package file pacman downloaded and checked, before anything is installed),
+#                                 and a plan that changes no installed package (never a partial upgrade)
+#   remove <op-id> <package>...   pacman -Rns --noconfirm --noprogressbar -- <packages>: apps the user installed from a
+#                                 repository only (installed explicitly, owning an application entry, not denied), and a
+#                                 whole plan (-s takes unneeded dependencies along) that names no denied package (S16)
+# 1 to 64 package names; the operation id is 32 lowercase hexadecimal digits the Store made. Both verbs refuse while
+# another run of this helper or pacman (db.lck) is running, and while pacman -Qu lists a package not "[ignored]" (an
+# update that did not finish: the databases are newer than the system, S12); install also refuses a name pacman -Qu
+# lists at all, "[ignored]" included (IgnorePkg holds it back). Never -y, --overwrite, -dd, -U, a file.
+# The lock's descriptor (9) is closed for every program it starts: pacman, its scriptlets and hooks never hold the lock.
+# Exit: 0 done; 1 failed (pacman's message is in the log); 2 usage, or an operation id used before; 3 busy (another run
+# of this helper, or pacman's db.lck); 4 the last system update did not finish; 5 a name no repository has, a plan
+# pacman cannot resolve, or one that would change an installed package; 6 a removal the rule refuses; 7 an install of a
+# package that owns no application entry. pkexec itself exits 126 (not authorized, or the dialog dismissed) and 127
+# (authentication failed).
+#
+# Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
+# environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it starts
+# (grassfield-channel-helper's rule; it reads no variable, not even pkexec's PKEXEC_UID). The variables bash exports itself
+# (PWD, SHLVL) are removed last.
+#
+# What it writes, besides what pacman writes: in /run/grassfield-store/ (root, 0755), <op-id>.log (its messages and
+# pacman's output, 0644, at most 8 MiB), <op-id>.started (its pid and start time from /proc, for the Store to know it still
+# runs), <op-id>.exit (the exit code, by rename, last), helper.lock (0600). Only the 16 newest operations' files are kept.
+# Its descriptors are /dev/null and the log, never the pipe it was started with, and it ignores SIGHUP and SIGPIPE: the
+# Store quitting cannot stop pacman (S6). It never signals anything.
+if IFS= read -r -d '' _ 2>/dev/null </proc/$$/environ; then   # stderr first: without /proc, no message
+  exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-store-helper "$@"
+fi
+while read -r gs_var; do unset -v "$gs_var" 2>/dev/null; done < <(compgen -e)
+unset -v gs_var
+export PATH=/usr/bin LC_ALL=C
+IFS=$' \t\n'
+umask 022
+set -uo pipefail
+trap '' HUP PIPE
+cd / || exit 1
+# Never the pipe it was started with: a terminal (a person running it by hand) keeps its messages, anything else goes to
+# /dev/null until the log exists.
+exec </dev/null
+[[ -t 1 ]] || exec >/dev/null
+[[ -t 2 ]] || exec 2>/dev/null
+
+GS_DIR=/run/grassfield-store
+GS_LOG_MAX=$((8 << 20))
+GS_KEEP=16
+GS_OMARCHY_LISTS=(/usr/share/omarchy/install/omarchy-base.packages /usr/share/omarchy/install/omarchy-other.packages)
+GS_ENTRY='^/?usr/share/applications/[^/]+\.desktop$'
+
+usage() {
+  echo "usage: grassfield-store-helper install|remove <op-id> <package>... (run by Grassfield Store through pkexec)" >&2
+  exit 2
+}
+((EUID == 0)) || { echo "grassfield-store-helper: must run as root" >&2; exit 2; }
+(($# >= 3 && $# <= 66)) || usage
+verb=$1 op=$2
+shift 2
+[[ $verb == install || $verb == remove ]] || usage
+[[ $op =~ ^[0-9a-f]{32}$ ]] || usage
+for name in "$@"; do
+  [[ $name =~ ^[a-z0-9@_+][a-z0-9@._+-]{0,127}$ ]] || usage
+done
+
+# The status folder: root's own, 0755 (the Store reads it as the user), never a link.
+(umask 022 && mkdir -p -- "$GS_DIR") 2>/dev/null
+[[ -d $GS_DIR && ! -L $GS_DIR && $(stat -c %u:%a -- "$GS_DIR") == 0:755 ]] ||
+  { echo "grassfield-store-helper: $GS_DIR is not root's own folder (0755): refused" >&2; exit 1; }
+log=$GS_DIR/$op.log
+# An operation id is used once: its log is made here or the run stops (noclobber makes > fail on an existing file).
+(set -C && : >"$log") 2>/dev/null || { echo "grassfield-store-helper: operation $op was used before" >&2; exit 2; }
+exec >>"$log" 2>&1
+
+say() { echo "grassfield-store-helper: $*"; }
+# The exit file, by rename (the Store never reads half a file), then the exit.
+finish() { # code [message]
+  (($# > 1)) && say "$2"
+  printf '%s\n' "$1" >|"$GS_DIR/.$op.exit" && mv -f -- "$GS_DIR/.$op.exit" "$GS_DIR/$op.exit"
+  exit "$1"
+}
+
+# Its pid and start time (field 22 of /proc/<pid>/stat, in clock ticks since boot; the command name before it is in
+# parentheses and may hold spaces): a pid alone could be another process's after this one ends.
+read -r stat </proc/$$/stat || finish 1 "cannot read /proc/$$/stat"
+rest=${stat##*) }
+read -r -a fields <<<"$rest"
+printf '%s %s\n' "$$" "${fields[19]-}" >|"$GS_DIR/.$op.started" && mv -f -- "$GS_DIR/.$op.started" "$GS_DIR/$op.started" ||
+  finish 1 "cannot write $GS_DIR/$op.started"
+say "$verb $* (operation $op)"
+
+# The files of older operations: the 16 newest kept (the Store needs the last one, after a crash).
+mapfile -t olds < <(find "$GS_DIR" -maxdepth 1 -type f -name '*.started' -printf '%T@ %f\n' | sort -rn | awk -v keep="$GS_KEEP" 'NR > keep { sub(/\.started$/, "", $2); print $2 }')
+for old in "${olds[@]}"; do
+  [[ $old =~ ^[0-9a-f]{32}$ ]] && rm -f -- "$GS_DIR/$old.started" "$GS_DIR/$old.log" "$GS_DIR/$old.exit"
+done
+
+# One run at a time: a lock only root can open (flock needs no write access, so a lock others could read could be held
+# by any user and block every install). Every program started below gets `9<&-`: a process a package's scriptlet leaves
+# running would otherwise keep the lock, and every later run would say "busy".
+lock=$GS_DIR/helper.lock
+(umask 077 && : >>"$lock") || finish 1 "cannot create $lock"
+[[ -f $lock && ! -L $lock && $(stat -c %u:%a -- "$lock") == 0:600 ]] || finish 1 "$lock is not root's own (0600): refused"
+exec 9<"$lock" || finish 1 "cannot open $lock"
+flock -n 9 || finish 3 "another installation is running: try again when it has finished"
+
+# pacman's database folder, from pacman's own configuration.
+dbpath=$(pacman-conf DBPath 9<&-) || finish 1 "pacman-conf DBPath failed"
+dbpath=${dbpath%/}
+[[ -n $dbpath ]] || finish 1 "pacman's database folder is unknown"
+[[ ! -e $dbpath/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left $dbpath/db.lck)"
+
+# The last system update finished: pacman -Qu lists nothing but packages the user holds with IgnorePkg (S12). Those are
+# kept by name ("<name> <old> -> <new> [ignored]"): install refuses them below.
+declare -A held=()
+while IFS= read -r line; do
+  [[ -z $line ]] && continue
+  [[ $line == *' [ignored]' ]] && { held[${line%% *}]=1; continue; }
+  finish 4 "the last system update did not finish ($line): update the system first"
+done < <(pacman -Qu 2>/dev/null 9<&-)
+
+# Every name a repository has (pacman -Slq: exact names, never what a package provides).
+declare -A sync=()
+while IFS= read -r line; do sync[$line]=1; done < <(pacman -Slq 2>/dev/null 9<&-)
+for name in "$@"; do
+  [[ -n ${sync[$name]-} ]] || finish 5 "$name: no repository has this package"
+done
+
+# pacman, its output appended to the log up to the log's cap, the rest read and dropped (pacman never writes to a closed
+# pipe); its exit code.
+pacman_logged() {
+  local used budget
+  used=$(stat -c %s -- "$log" 2>/dev/null || echo "$GS_LOG_MAX")
+  budget=$((GS_LOG_MAX - 65536 - used))
+  ((budget > 0)) || budget=0
+  pacman "$@" 2>&1 9<&- | { head -c "$budget"; cat >/dev/null; } 9<&-
+  return "${PIPESTATUS[0]}"
+}
+
+if [[ $verb == install ]]; then
+  # No installed package may change, which would be a partial upgrade (or downgrade) that only a whole system update may
+  # bring. A package IgnorePkg holds back is one pacman asks about, and under --noconfirm installs anyway:
+  # - asked for by name (pacman -Qu showed it "[ignored]", above): refused here by name, whatever pacman answers. (With its
+  #   question reading /dev/null, pacman 7.1's plan below lists it at the new version, so the installed-package check
+  #   refuses it too: measured, store_helper.sh.)
+  for name in "$@"; do
+    [[ -z ${held[$name]-} ]] || finish 5 "$name is held back by IgnorePkg and newer in the repositories: it is not updated alone"
+  done
+  # - needed as a dependency: the whole plan, read first and without --noconfirm (S10), fails, its question reading
+  #   /dev/null ("could not satisfy dependencies"). An older version a dependency asks for comes with no question: the plan
+  #   names an installed package. The Store refuses the same plans (plancheck.cpp); this holds for any caller. Every line
+  #   must be a package, or nothing installs.
+  plan=$(pacman -S --needed --print --print-format '%n %v %l' -- "$@" 9<&-) || finish 5 "pacman cannot install $*: update the system first"
+  declare -A installed=() url=()
+  while IFS= read -r line; do installed[$line]=1; done < <(pacman -Qq 2>/dev/null 9<&-)
+  while read -r pkg version location extra; do
+    [[ -z $pkg ]] && continue
+    [[ $pkg =~ ^[a-z0-9@_+][a-z0-9@._+-]*$ && -n $location && -z $extra ]] || finish 5 "pacman's plan cannot be read: nothing installed"
+    [[ -n ${installed[$pkg]-} ]] && finish 5 "installing $* would replace the installed $pkg with $version alone: update the system first"
+    url[$pkg]=$location
+  done <<<"$plan"
+  # SD1: each name owns an application entry, so the Store can remove whatever it installed. An installed name is read
+  # from pacman's database; any other from its package file, which pacman -Sw downloads into its cache and checks (its
+  # signature, as for an install) before pacman -Qlp reads the file list. Nothing is installed before every name passed.
+  wanted=()
+  for name in "$@"; do
+    if [[ -n ${installed[$name]-} ]]; then
+      pacman -Qlq -- "$name" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
+    else
+      wanted+=("$name")
+    fi
+  done
+  if ((${#wanted[@]})); then
+    say "downloading ${wanted[*]} to check what each one holds"
+    pacman_logged -Sw --noconfirm --noprogressbar -- "${wanted[@]}" || finish 1 "pacman could not download the packages"
+    mapfile -t caches < <(pacman-conf CacheDir 9<&-)
+    for name in "${wanted[@]}"; do
+      file=${url[$name]-}
+      file=${file##*/}
+      [[ -n $file && $file != .* && $file == "$name"-* ]] || finish 5 "$name: pacman names no package file"
+      path=""
+      for cache in "${caches[@]}"; do
+        [[ -f ${cache%/}/$file && ! -L ${cache%/}/$file ]] && { path=${cache%/}/$file; break; }
+      done
+      [[ -n $path ]] || finish 1 "$name: $file is not in pacman's cache"
+      pacman -Qlpq -- "$path" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
+    done
+  fi
+  say "pacman -S --needed --noconfirm --noprogressbar -- $*"
+  pacman_logged -S --needed --noconfirm --noprogressbar -- "$@"
+  code=$?
+  ((code == 0)) && finish 0 "done"
+  finish 1 "pacman exited with $code"
+fi
+
+# remove: the rule of ADR-0037 b.1 (S16). The deny list lives here, in the code: changing it is a reviewed change.
+declare -A omarchy=() hold=() explicit=()
+for list in "${GS_OMARCHY_LISTS[@]}"; do
+  [[ -f $list ]] || continue
+  while IFS= read -r line; do
+    line=${line%%#*}
+    for word in $line; do omarchy[$word]=1; done
+  done <"$list"
+done
+((${#omarchy[@]})) || finish 6 "Omarchy's package lists are missing or empty: nothing can be removed"
+while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9<&-)
+while IFS= read -r line; do explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null 9<&-)
+
+denied() { # name: 0 when the system, Omarchy or Grassfield needs it
+  case $1 in
+    base | base-devel | filesystem | glibc | bash | coreutils | util-linux | shadow | pam | sudo | polkit | dbus | dbus-broker | \
+      dbus-broker-units | kmod | mkinitcpio | dracut | grub | efibootmgr | refind | syslinux | snapper | btrfs-progs | \
+      cryptsetup | lvm2 | plymouth | archlinux-keyring | intel-ucode | amd-ucode) return 0 ;;
+    linux | linux-* | systemd | systemd-* | limine | limine-* | pacman | pacman-* | yay | yay-* | omarchy | omarchy-* | \
+      grassfield | grassfield-*) return 0 ;;
+    *-firmware | *-firmware-*) return 0 ;;
+  esac
+  [[ -n ${omarchy[$1]-} || -n ${hold[$1]-} ]]
+}
+
+for name in "$@"; do
+  denied "$name" && finish 6 "$name is part of the system, Omarchy or Grassfield: not removed"
+  [[ -n ${explicit[$name]-} ]] || finish 6 "$name was not installed as an app (it is not installed, or another package needs it)"
+  pacman -Qlq -- "$name" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 6 "$name owns no application entry: not an app"
+done
+# The whole plan: -Rns removes what -Rs --print lists (pacman refuses --print with -n).
+plan=$(pacman -Rs --print --print-format '%n' -- "$@" 2>&1 9<&-) || { echo "$plan"; finish 5 "pacman cannot remove these packages"; }
+for name in $plan; do
+  denied "$name" && finish 6 "removing $* would also remove $name, part of the system, Omarchy or Grassfield: not removed"
+done
+say "pacman -Rns --noconfirm --noprogressbar -- $*"
+pacman_logged -Rns --noconfirm --noprogressbar -- "$@"
+code=$?
+((code == 0)) && finish 0 "done"
+finish 1 "pacman exited with $code"

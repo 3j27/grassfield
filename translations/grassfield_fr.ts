@@ -502,8 +502,116 @@
         <translation>Super+Ctrl+Bas</translation>
     </message>
     <message>
+        <source>Super+Ctrl+U</source>
+        <translation>Super+Ctrl+U</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+I</source>
+        <translation>Super+Ctrl+I</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+J</source>
+        <translation>Super+Ctrl+J</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+K</source>
+        <translation>Super+Ctrl+K</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Return</source>
+        <translation>Super+Ctrl+Entrée</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+C</source>
+        <translation>Super+Ctrl+C</translation>
+    </message>
+    <message>
         <source>Super+Ctrl+R</source>
         <translation>Super+Ctrl+R</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Left</source>
+        <translation>Super+Ctrl+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Right</source>
+        <translation>Super+Ctrl+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Up</source>
+        <translation>Super+Ctrl+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Down</source>
+        <translation>Super+Ctrl+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Left</source>
+        <translation>Super+Ctrl+Alt+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Right</source>
+        <translation>Super+Ctrl+Alt+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Up</source>
+        <translation>Super+Ctrl+Alt+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Down</source>
+        <translation>Super+Ctrl+Alt+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Left &amp; Right</source>
+        <translation>Gauche et droite</translation>
+    </message>
+    <message>
+        <source>Right &amp; Left</source>
+        <translation>Droite et gauche</translation>
+    </message>
+    <message>
+        <source>Top &amp; Bottom</source>
+        <translation>Haut et bas</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Top</source>
+        <translation>Bas et haut</translation>
+    </message>
+    <message>
+        <source>Quarters</source>
+        <translation>Quarts</translation>
+    </message>
+    <message>
+        <source>Left &amp; Quarters</source>
+        <translation>Gauche et quarts</translation>
+    </message>
+    <message>
+        <source>Right &amp; Quarters</source>
+        <translation>Droite et quarts</translation>
+    </message>
+    <message>
+        <source>Top &amp; Quarters</source>
+        <translation>Haut et quarts</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Quarters</source>
+        <translation>Bas et quarts</translation>
+    </message>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>Move to %1</source>
+        <translation>Déplacer vers %1</translation>
+    </message>
+    <message>
+        <source>Fill &amp; Arrange</source>
+        <translation>Remplir et disposer</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
     <message>
         <source>About %1</source>
@@ -596,6 +704,14 @@
     <message>
         <source>Return to Previous Size</source>
         <translation>Revenir à la taille précédente</translation>
+    </message>
+    <message>
+        <source>Arrange</source>
+        <translation>Disposer</translation>
+    </message>
+    <message>
+        <source>Halves</source>
+        <translation>Moitiés</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -968,6 +1084,10 @@
         <translation>Action&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Program: %1</source>
+        <translation>Programme&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>User: %1</source>
         <translation>Utilisateur&#xa0;: %1</translation>
     </message>
@@ -1005,6 +1125,14 @@
     <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
+        <source>Install %1</source>
+        <translation>Installer %1</translation>
+    </message>
+    <message>
+        <source>Remove %1</source>
+        <translation>Supprimer %1</translation>
     </message>
     <message>
         <source>Incorrect password. Try again.</source>
@@ -1396,6 +1524,26 @@
         <translation>-</translation>
     </message>
     <message>
+        <source>U</source>
+        <translation>U</translation>
+    </message>
+    <message>
+        <source>I</source>
+        <translation>I</translation>
+    </message>
+    <message>
+        <source>J</source>
+        <translation>J</translation>
+    </message>
+    <message>
+        <source>K</source>
+        <translation>K</translation>
+    </message>
+    <message>
+        <source>L</source>
+        <translation>L</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -1442,6 +1590,74 @@
     <message>
         <source>Return the window to its previous size</source>
         <translation>Rendre à la fenêtre sa taille précédente</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-left quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-right quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur droit</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-left quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-right quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur droit</translation>
+    </message>
+    <message>
+        <source>Fill the screen with the window</source>
+        <translation>Remplir l’écran avec la fenêtre</translation>
+    </message>
+    <message>
+        <source>Center the window</source>
+        <translation>Centrer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and right</source>
+        <translation>Disposer les fenêtres à gauche et à droite</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and left</source>
+        <translation>Disposer les fenêtres à droite et à gauche</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and bottom</source>
+        <translation>Disposer les fenêtres en haut et en bas</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and top</source>
+        <translation>Disposer les fenêtres en bas et en haut</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and in quarters</source>
+        <translation>Disposer les fenêtres à gauche et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and in quarters</source>
+        <translation>Disposer les fenêtres à droite et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and in quarters</source>
+        <translation>Disposer les fenêtres en haut et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and in quarters</source>
+        <translation>Disposer les fenêtres en bas et en quarts</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the left</source>
+        <translation>Déplacer la fenêtre vers l’écran de gauche</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the right</source>
+        <translation>Déplacer la fenêtre vers l’écran de droite</translation>
+    </message>
+    <message>
+        <source>Show the tiling options of the window</source>
+        <translation>Afficher les options de disposition de la fenêtre</translation>
     </message>
     <message>
         <source>Minimize window</source>
@@ -2582,6 +2798,17 @@
     </message>
 </context>
 <context>
+    <name>CountBadge</name>
+    <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+</context>
+<context>
     <name>CurrentNetworkRow</name>
     <message>
         <source>Secured</source>
@@ -3118,6 +3345,14 @@
     <message>
         <source>%1, folder stack</source>
         <translation>%1, pile de dossier</translation>
+    </message>
+    <message>
+        <source>, 1 update</source>
+        <translation>, 1 mise à jour</translation>
+    </message>
+    <message>
+        <source>, %1 updates</source>
+        <translation>, %1 mises à jour</translation>
     </message>
     <message>
         <source>Remove</source>
@@ -3836,6 +4071,10 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
     </message>
     <message>
         <source>Storage</source>
@@ -5126,10 +5365,6 @@
         <translation>Général</translation>
     </message>
     <message>
-        <source>about storage date time language region login items startup</source>
-        <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
-    </message>
-    <message>
         <source>Desktop &amp; Dock</source>
         <translation>Bureau et Dock</translation>
     </message>
@@ -5144,6 +5379,10 @@
     <message>
         <source>menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent</source>
         <translation>barre des menus horloge date heure secondes 24 heures masquer éléments d’état batterie pourcentage wifi son concentration en cours de lecture arrière-plan transparent</translation>
+    </message>
+    <message>
+        <source>search results history calculator conversions documents commands clipboard copy paste</source>
+        <translation>recherche résultats historique calculatrice conversions documents commandes presse-papiers copier coller</translation>
     </message>
     <message>
         <source>Notifications</source>
@@ -5194,12 +5433,12 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
-        <source>vision physical motor zoom display motion keyboard</source>
-        <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+        <source>about software update storage date time language region login items startup</source>
+        <translation>informations mise à jour logiciels stockage date heure langue région ouverture éléments démarrage</translation>
     </message>
     <message>
-        <source>search results history calculator conversions documents commands</source>
-        <translation>recherche résultats historique calculatrice conversions documents commandes</translation>
+        <source>vision physical motor zoom display motion keyboard</source>
+        <translation>vue physique motricité zoom affichage mouvement clavier</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -5248,6 +5487,14 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>software update upgrade new version release notes beta omarchy packages automatic</source>
+        <translation>mise à jour logiciels mettre à niveau nouvelle version notes de version bêta omarchy paquets automatique</translation>
     </message>
     <message>
         <source>Storage</source>
@@ -5374,6 +5621,26 @@
         <translation>Rechercher dans les réglages</translation>
     </message>
     <message>
+        <source>Are you sure you want to quit all applications and log out now?</source>
+        <translation>Voulez-vous vraiment quitter toutes les applications et fermer la session maintenant&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Open applications will be closed.</source>
+        <translation>Les applications ouvertes seront fermées.</translation>
+    </message>
+    <message>
+        <source>Log Out</source>
+        <translation>Fermer la session</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restart your computer now?</source>
+        <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Restart</source>
+        <translation>Redémarrer</translation>
+    </message>
+    <message>
         <source>Delete your search history?</source>
         <translation>Supprimer votre historique de recherche ?</translation>
     </message>
@@ -5384,6 +5651,22 @@
     <message>
         <source>Delete</source>
         <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Clear your clipboard history?</source>
+        <translation>Effacer votre historique du presse-papiers&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The items you copied are deleted from Search. Pinned items stay unless you delete them too.</source>
+        <translation>Les éléments que vous avez copiés sont supprimés de la Recherche. Les éléments épinglés restent, sauf si vous les supprimez aussi.</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
+    </message>
+    <message>
+        <source>Also delete pinned items</source>
+        <translation>Supprimer aussi les éléments épinglés</translation>
     </message>
     <message>
         <source>Search</source>
@@ -5422,8 +5705,56 @@
         <translation>Mises à jour</translation>
     </message>
     <message>
+        <source>“%1” could not be opened.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas pu être ouverte.</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>No message was recorded.</source>
+        <translation>Aucun message n’a été enregistré.</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Show in Store</source>
+        <translation>Afficher dans le Store</translation>
+    </message>
+    <message>
+        <source>Uninstall…</source>
+        <translation>Désinstaller…</translation>
+    </message>
+    <message>
         <source>Loading apps…</source>
         <translation>Chargement des apps…</translation>
+    </message>
+    <message>
+        <source>A package manager stopped mid-way and left its lock: nothing installs until it goes.</source>
+        <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou&#xa0;: rien ne s’installe tant qu’il est là.</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>A package manager stopped mid-way</source>
+        <translation>Un gestionnaire de paquets s’est arrêté en cours de route</translation>
+    </message>
+    <message>
+        <source>pacman&apos;s lock file is still there, but no pacman is running. If nothing is installing or updating (Software Update included), remove the lock in a terminal, then try again:</source>
+        <translation>Le fichier de verrou de pacman est toujours là, mais aucun pacman ne tourne. Si rien n’est en cours d’installation ni de mise à jour (Mise à jour de logiciels comprise), supprimez le verrou dans un terminal, puis réessayez&#xa0;:</translation>
     </message>
     <message>
         <source>You&apos;re offline. The catalog is from %1.</source>
@@ -5442,8 +5773,28 @@
         <translation>Le catalogue Grassfield n’est pas disponible : les apps d’Arch sont affichées.</translation>
     </message>
     <message>
+        <source>Installations: %1</source>
+        <translation>Installations&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Don&apos;t Uninstall “%1”</source>
+        <translation>Ne pas désinstaller «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Don&apos;t Install “%1”</source>
+        <translation>Ne pas installer «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
         <source>Store Settings</source>
         <translation>Réglages du Store</translation>
+    </message>
+    <message>
+        <source>App</source>
+        <translation>App</translation>
+    </message>
+    <message>
+        <source>Installations</source>
+        <translation>Installations</translation>
     </message>
 </context>
 <context>
@@ -6093,6 +6444,157 @@
     </message>
 </context>
 <context>
+    <name>OperationSheet</name>
+    <message>
+        <source>Uninstall “%1”?</source>
+        <translation>Désinstaller «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Install “%1”?</source>
+        <translation>Installer «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Finish the system update first</source>
+        <translation>Terminez d’abord la mise à jour du système</translation>
+    </message>
+    <message>
+        <source>Update your system first</source>
+        <translation>Mettez d’abord le système à jour</translation>
+    </message>
+    <message>
+        <source>Another installation or an update is running</source>
+        <translation>Une autre installation ou une mise à jour est en cours</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline</source>
+        <translation>Vous êtes hors ligne</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be uninstalled</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée</translation>
+    </message>
+    <message>
+        <source>Uninstalling it would also remove part of the system</source>
+        <translation>La désinstaller retirerait aussi une partie du système</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be uninstalled now</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée pour le moment</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be installed now</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être installée pour le moment</translation>
+    </message>
+    <message>
+        <source>Checking what this changes…</source>
+        <translation>Vérification de ce que cela change…</translation>
+    </message>
+    <message>
+        <source>The launcher and its icon are removed from Apps.</source>
+        <translation>Le lanceur et son icône sont retirés d’Apps.</translation>
+    </message>
+    <message>
+        <source>A launcher that opens %1 in your browser is added to Apps, with its icon.</source>
+        <translation>Un lanceur qui ouvre %1 dans votre navigateur est ajouté à Apps, avec son icône.</translation>
+    </message>
+    <message>
+        <source>These packages will be removed. Your files and settings stay.</source>
+        <translation>Ces paquets seront supprimés. Vos fichiers et vos réglages restent.</translation>
+    </message>
+    <message>
+        <source>These packages will be installed:</source>
+        <translation>Ces paquets seront installés&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s “%1” runs in a Terminal window, which asks for your password.</source>
+        <translation>La commande «&#xa0;%1&#xa0;» d’Omarchy s’exécute dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>It also deletes: %1</source>
+        <translation>Elle supprime aussi&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>These packages will be removed:</source>
+        <translation>Ces paquets seront supprimés&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
+        <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>This app needs newer packages than this computer has. Update your system in Software Update, then try again.</source>
+        <translation>Cette app a besoin de paquets plus récents que ceux de cet ordinateur. Mettez le système à jour dans Mise à jour de logiciels, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>Try again when it has finished.</source>
+        <translation>Réessayez quand elle sera terminée.</translation>
+    </message>
+    <message>
+        <source>Installing an app needs a connection to the internet.</source>
+        <translation>Installer une app nécessite une connexion à Internet.</translation>
+    </message>
+    <message>
+        <source>Other apps need it: %1.</source>
+        <translation>D’autres apps en ont besoin&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.</source>
+        <translation>Désinstaller «&#xa0;%1&#xa0;» retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
+    </message>
+    <message>
+        <source>The Store could not read what this would change.</source>
+        <translation>Le Store n’a pas pu lire ce que cela changerait.</translation>
+    </message>
+    <message>
+        <source>Uninstall</source>
+        <translation>Désinstaller</translation>
+    </message>
+    <message>
+        <source>Install</source>
+        <translation>Installer</translation>
+    </message>
+    <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Checking</source>
+        <translation>Vérification</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Licence</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Licence not stated</source>
+        <translation>Licence non indiquée</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>Téléchargement</translation>
+    </message>
+    <message>
+        <source>Installed size</source>
+        <translation>Taille installée</translation>
+    </message>
+    <message>
+        <source>Packages to remove</source>
+        <translation>Paquets à supprimer</translation>
+    </message>
+    <message>
+        <source>Packages to install</source>
+        <translation>Paquets à installer</translation>
+    </message>
+</context>
+<context>
     <name>OsdWindow</name>
     <message>
         <source>Brightness %1%</source>
@@ -6674,12 +7176,28 @@
 <context>
     <name>ProductPage</name>
     <message>
+        <source>More for %1</source>
+        <translation>Plus pour %1</translation>
+    </message>
+    <message>
+        <source>Uninstall…</source>
+        <translation>Désinstaller…</translation>
+    </message>
+    <message>
         <source>Licence: %1</source>
         <translation>Licence&#xa0;: %1</translation>
     </message>
     <message>
         <source>Licence not stated</source>
         <translation>Licence non indiquée</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
     </message>
     <message>
         <source>This app has no window of its own: it runs in a terminal.</source>
@@ -7502,6 +8020,26 @@
         <translation>matériel</translation>
     </message>
     <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>update</source>
+        <translation>mise à jour</translation>
+    </message>
+    <message>
+        <source>upgrade</source>
+        <translation>mettre à niveau</translation>
+    </message>
+    <message>
+        <source>new version</source>
+        <translation>nouvelle version</translation>
+    </message>
+    <message>
+        <source>beta</source>
+        <translation>bêta</translation>
+    </message>
+    <message>
         <source>Recent</source>
         <translation>Récents</translation>
     </message>
@@ -7602,6 +8140,46 @@
     <message>
         <source>System Commands</source>
         <translation>Commandes système</translation>
+    </message>
+    <message>
+        <source>Results from Clipboard</source>
+        <translation>Résultats du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Allows Search to find and show items you copied. Personal and sensitive information may appear in the results. Turning it off deletes the items you did not pin.</source>
+        <translation>Permet à la Recherche de trouver et d’afficher les éléments que vous avez copiés. Des informations personnelles et sensibles peuvent apparaître dans les résultats. La désactivation supprime les éléments que vous n’avez pas épinglés.</translation>
+    </message>
+    <message>
+        <source>Clipboard history is available in Search for</source>
+        <translation>L’historique du presse-papiers est disponible dans la Recherche pendant</translation>
+    </message>
+    <message>
+        <source>30 minutes</source>
+        <translation>30 minutes</translation>
+    </message>
+    <message>
+        <source>8 hours</source>
+        <translation>8 heures</translation>
+    </message>
+    <message>
+        <source>7 days</source>
+        <translation>7 jours</translation>
+    </message>
+    <message>
+        <source>Keep clipboard history after logging out</source>
+        <translation>Conserver l’historique après la déconnexion</translation>
+    </message>
+    <message>
+        <source>The items you did not pin are kept on this computer, readable only by you, until they are no longer available.</source>
+        <translation>Les éléments que vous n’avez pas épinglés sont conservés sur cet ordinateur, lisibles par vous seul, jusqu’à ce qu’ils ne soient plus disponibles.</translation>
+    </message>
+    <message>
+        <source>Clipboard History</source>
+        <translation>Historique du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Clear Clipboard History…</source>
+        <translation>Effacer l’historique du presse-papiers…</translation>
     </message>
     <message>
         <source>Results for “%1”</source>
@@ -8052,6 +8630,363 @@
     </message>
 </context>
 <context>
+    <name>SoftwareUpdate</name>
+    <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+</context>
+<context>
+    <name>SoftwareUpdatePage</name>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>Today, %1</source>
+        <translation>Aujourd’hui, %1</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation>Recherche de mises à jour…</translation>
+    </message>
+    <message>
+        <source>An update is running in Omarchy&apos;s terminal</source>
+        <translation>Une mise à jour est en cours dans le terminal d’Omarchy</translation>
+    </message>
+    <message>
+        <source>This computer is up to date</source>
+        <translation>Cet ordinateur est à jour</translation>
+    </message>
+    <message>
+        <source>Updates are available</source>
+        <translation>Des mises à jour sont disponibles</translation>
+    </message>
+    <message>
+        <source>Software Update could not check for updates</source>
+        <translation>Mise à jour de logiciels n’a pas pu rechercher de mises à jour</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s package repository cannot be used</source>
+        <translation>Le dépôt de paquets de Grassfield est inutilisable</translation>
+    </message>
+    <message>
+        <source>Grassfield updates need to be repaired</source>
+        <translation>Les mises à jour de Grassfield doivent être réparées</translation>
+    </message>
+    <message>
+        <source>Grassfield updates are not set up</source>
+        <translation>Les mises à jour de Grassfield ne sont pas configurées</translation>
+    </message>
+    <message>
+        <source>Software Update has not checked for updates yet</source>
+        <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour</translation>
+    </message>
+    <message>
+        <source>Software Update checks again when it has finished.</source>
+        <translation>Mise à jour de logiciels vérifiera de nouveau une fois la mise à jour terminée.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1, Omarchy %2</source>
+        <translation>Grassfield %1, Omarchy %2</translation>
+    </message>
+    <message>
+        <source>This computer is offline.</source>
+        <translation>Cet ordinateur est hors ligne.</translation>
+    </message>
+    <message>
+        <source>The checker said: %1</source>
+        <translation>Le vérificateur a répondu&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>The package servers did not answer.</source>
+        <translation>Les serveurs de paquets n’ont pas répondu.</translation>
+    </message>
+    <message>
+        <source>Until it works again, every system update stops, security fixes included. Turn Grassfield updates off to update the system now; you can set them up again later.</source>
+        <translation>Tant qu’il ne fonctionne pas, toutes les mises à jour du système sont bloquées, correctifs de sécurité compris. Désactivez les mises à jour de Grassfield pour mettre le système à jour maintenant&#xa0;; vous pourrez les configurer de nouveau plus tard.</translation>
+    </message>
+    <message>
+        <source>Omarchy rewrote the system&apos;s package configuration, or it was changed by hand. Repair puts Grassfield&apos;s repository back; it asks for an administrator&apos;s password.</source>
+        <translation>Omarchy a réécrit la configuration des paquets du système, ou elle a été modifiée à la main. Réparer remet le dépôt de Grassfield en place&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>Set Up adds Grassfield&apos;s package repository to the system; it asks for an administrator&apos;s password.</source>
+        <translation>Configurer ajoute le dépôt de paquets de Grassfield au système&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>The system&apos;s package configuration points Grassfield updates elsewhere. Repair puts Grassfield&apos;s repository back; it asks for an administrator&apos;s password.</source>
+        <translation>La configuration des paquets du système dirige les mises à jour de Grassfield ailleurs. Réparer remet le dépôt de Grassfield en place&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>the change failed</source>
+        <translation>la modification a échoué</translation>
+    </message>
+    <message>
+        <source>not allowed</source>
+        <translation>non autorisé</translation>
+    </message>
+    <message>
+        <source>Beta updates were not changed: %1</source>
+        <translation>Les mises à jour bêta n’ont pas été modifiées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not set up: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été configurées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not repaired: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été réparées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not turned off: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été désactivées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Restart to finish updating</source>
+        <translation>Redémarrez pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Log out to finish updating Grassfield</source>
+        <translation>Fermez la session pour terminer la mise à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>Part of the update is used only after the computer restarts.</source>
+        <translation>Une partie de la mise à jour n’est utilisée qu’après le redémarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>The new version of Grassfield starts when you log in again.</source>
+        <translation>La nouvelle version de Grassfield démarre à votre prochaine ouverture de session.</translation>
+    </message>
+    <message>
+        <source>Restart…</source>
+        <translation>Redémarrer…</translation>
+    </message>
+    <message>
+        <source>Log Out…</source>
+        <translation>Fermer la session…</translation>
+    </message>
+    <message>
+        <source>Automatic Updates</source>
+        <translation>Mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>Rechercher les mises à jour</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivées</translation>
+    </message>
+    <message>
+        <source>Automatic Updates details</source>
+        <translation>Détails des mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Beta Updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta</source>
+        <translation>Grassfield bêta</translation>
+    </message>
+    <message>
+        <source>Beta Updates details</source>
+        <translation>Détails des mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Repair…</source>
+        <translation>Réparer…</translation>
+    </message>
+    <message>
+        <source>Turn Off Grassfield Updates…</source>
+        <translation>Désactiver les mises à jour de Grassfield…</translation>
+    </message>
+    <message>
+        <source>Grassfield %1</source>
+        <translation>Grassfield %1</translation>
+    </message>
+    <message>
+        <source>Installed: %1</source>
+        <translation>Version installée&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>More Info…</source>
+        <translation>Plus d’informations…</translation>
+    </message>
+    <message>
+        <source>Omarchy %1</source>
+        <translation>Omarchy %1</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s release notes are on its project page.</source>
+        <translation>Les notes de version d’Omarchy sont sur la page de son projet.</translation>
+    </message>
+    <message>
+        <source>1 other update</source>
+        <translation>1 autre mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 other updates</source>
+        <translation>%1 autres mises à jour</translation>
+    </message>
+    <message>
+        <source>System packages, updated with Omarchy&apos;s update.</source>
+        <translation>Paquets du système, mis à jour par la mise à jour d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Other updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update cannot run while Grassfield&apos;s repository cannot be used.</source>
+        <translation>La mise à jour d’Omarchy ne peut pas s’exécuter tant que le dépôt de Grassfield est inutilisable.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update installs everything listed here.</source>
+        <translation>La mise à jour d’Omarchy installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
+        <source>Update Now needs Omarchy&apos;s update command, which this system does not have.</source>
+        <translation>Mettre à jour maintenant nécessite la commande de mise à jour d’Omarchy, absente de ce système.</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s own updates are not available in this build: it has no package repository or signing key yet.</source>
+        <translation>Les mises à jour propres à Grassfield ne sont pas disponibles dans cette version&#xa0;: elle n’a pas encore de dépôt de paquets ni de clé de signature.</translation>
+    </message>
+    <message>
+        <source>It runs in Omarchy&apos;s terminal and asks before it starts.</source>
+        <translation>Elle s’exécute dans le terminal d’Omarchy et demande confirmation avant de commencer.</translation>
+    </message>
+    <message>
+        <source>Update Now</source>
+        <translation>Mettre à jour maintenant</translation>
+    </message>
+    <message>
+        <source>Last checked: %1</source>
+        <translation>Dernière vérification&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Not checked yet</source>
+        <translation>Pas encore vérifié</translation>
+    </message>
+    <message>
+        <source>Last successful check: %1</source>
+        <translation>Dernière vérification réussie&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Check Now</source>
+        <translation>Vérifier maintenant</translation>
+    </message>
+</context>
+<context>
+    <name>SoftwareUpdateSheet</name>
+    <message>
+        <source>Beta Updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Grassfield %1</source>
+        <translation>Grassfield %1</translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation>Notes de version</translation>
+    </message>
+    <message>
+        <source>Other Updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>Automatic Updates</source>
+        <translation>Mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta gets the next version of Grassfield before its release. Leaving the beta keeps the beta version until a newer stable version comes out: an older version is never installed.</source>
+        <translation>Grassfield bêta reçoit la prochaine version de Grassfield avant sa sortie. Quitter la bêta conserve la version bêta jusqu’à la sortie d’une version stable plus récente&#xa0;: une version plus ancienne n’est jamais installée.</translation>
+    </message>
+    <message>
+        <source>Release notes are not available.</source>
+        <translation>Les notes de version ne sont pas disponibles.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update installs these packages too.</source>
+        <translation>La mise à jour d’Omarchy installe aussi ces paquets.</translation>
+    </message>
+    <message>
+        <source>Grassfield checks for updates in the background and tells you when one is found. It never downloads or installs anything by itself: Update Now runs Omarchy&apos;s update, which asks before it starts.</source>
+        <translation>Grassfield recherche les mises à jour en arrière-plan et vous prévient quand il en trouve une. Il ne télécharge ni n’installe jamais rien de lui-même&#xa0;: Mettre à jour maintenant lance la mise à jour d’Omarchy, qui demande confirmation avant de commencer.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>Rechercher les mises à jour</translation>
+    </message>
+    <message>
+        <source>Beta updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Set up Grassfield updates first.</source>
+        <translation>Configurez d’abord les mises à jour de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivées</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta</source>
+        <translation>Grassfield bêta</translation>
+    </message>
+    <message>
+        <source>Grassfield updates</source>
+        <translation>Mises à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>Turning them off removes Grassfield&apos;s package repository from the system; nothing installed is removed.</source>
+        <translation>Les désactiver retire le dépôt de paquets de Grassfield du système&#xa0;; rien de ce qui est installé n’est supprimé.</translation>
+    </message>
+    <message>
+        <source>Turn Off Grassfield Updates…</source>
+        <translation>Désactiver les mises à jour de Grassfield…</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 (%2)</source>
+        <translation>Grassfield %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Other updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>%1 → %2</source>
+        <translation>%1 → %2</translation>
+    </message>
+    <message>
+        <source>The list was too long to show in full.</source>
+        <translation>La liste était trop longue pour être affichée en entier.</translation>
+    </message>
+</context>
+<context>
     <name>SoundDeviceTable</name>
     <message>
         <source>Name</source>
@@ -8349,6 +9284,174 @@
         <translation>Hors dépôts</translation>
     </message>
     <message>
+        <source>dev: not applied</source>
+        <translation>dév.&#xa0;: non appliqué</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline.</source>
+        <translation>Vous êtes hors ligne.</translation>
+    </message>
+    <message>
+        <source>This computer can&apos;t install apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
+        <translation>Cet ordinateur ne peut pas installer d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+    </message>
+    <message>
+        <source>This web app&apos;s icon hasn&apos;t been downloaded yet. Refresh the Store, then try again.</source>
+        <translation>L’icône de cette app web n’a pas encore été téléchargée. Actualisez le Store, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>Installing apps from this source comes in a later version of the Store.</source>
+        <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
+    </message>
+    <message>
+        <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
+    </message>
+    <message>
+        <source>Waiting for another installation or an update to finish</source>
+        <translation>En attente de la fin d’une autre installation ou d’une mise à jour</translation>
+    </message>
+    <message>
+        <source>Waiting</source>
+        <translation>En attente</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Opening Terminal…</source>
+        <translation>Ouverture du Terminal…</translation>
+    </message>
+    <message>
+        <source>Finishing the uninstallation…</source>
+        <translation>Fin de la désinstallation…</translation>
+    </message>
+    <message>
+        <source>Finishing the installation…</source>
+        <translation>Fin de l’installation…</translation>
+    </message>
+    <message>
+        <source>Uninstalling: %1 of %2</source>
+        <translation>Désinstallation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Installing: %1 of %2</source>
+        <translation>Installation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Uninstalling in Terminal…</source>
+        <translation>Désinstallation dans le Terminal…</translation>
+    </message>
+    <message>
+        <source>Installing in Terminal…</source>
+        <translation>Installation dans le Terminal…</translation>
+    </message>
+    <message>
+        <source>Uninstalling…</source>
+        <translation>Désinstallation…</translation>
+    </message>
+    <message>
+        <source>Installing…</source>
+        <translation>Installation…</translation>
+    </message>
+    <message>
+        <source>The uninstallation was interrupted: %1 of %2 packages were removed.</source>
+        <translation>La désinstallation a été interrompue&#xa0;: %1 paquets sur %2 ont été supprimés.</translation>
+    </message>
+    <message>
+        <source>The installation was interrupted: %1 of %2 packages were installed.</source>
+        <translation>L’installation a été interrompue&#xa0;: %1 paquets sur %2 ont été installés.</translation>
+    </message>
+    <message>
+        <source>The uninstallation did not finish.</source>
+        <translation>La désinstallation ne s’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>The installation did not finish.</source>
+        <translation>L’installation ne s’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>The Store stopped following this operation after a long time. Check what is installed in Installed.</source>
+        <translation>Le Store a cessé de suivre cette opération au bout d’un long moment. Vérifiez ce qui est installé dans Installées.</translation>
+    </message>
+    <message>
+        <source>The request for permission timed out.</source>
+        <translation>La demande d’autorisation a expiré.</translation>
+    </message>
+    <message>
+        <source>The uninstallation could not start: permission was not given.</source>
+        <translation>La désinstallation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
+    </message>
+    <message>
+        <source>The installation could not start: permission was not given.</source>
+        <translation>L’installation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
+    </message>
+    <message>
+        <source>Another installation or an update is running.</source>
+        <translation>Une autre installation ou une mise à jour est en cours.</translation>
+    </message>
+    <message>
+        <source>Finish the system update first.</source>
+        <translation>Terminez d’abord la mise à jour du système.</translation>
+    </message>
+    <message>
+        <source>Update your system first.</source>
+        <translation>Mettez d’abord le système à jour.</translation>
+    </message>
+    <message>
+        <source>This app can&apos;t be uninstalled from the Store.</source>
+        <translation>Cette app ne peut pas être désinstallée depuis le Store.</translation>
+    </message>
+    <message>
+        <source>This package isn&apos;t an app: the Store installs only apps.</source>
+        <translation>Ce paquet n’est pas une app&#xa0;: le Store n’installe que des apps.</translation>
+    </message>
+    <message>
+        <source>The uninstallation failed.</source>
+        <translation>La désinstallation a échoué.</translation>
+    </message>
+    <message>
+        <source>The installation failed.</source>
+        <translation>L’installation a échoué.</translation>
+    </message>
+    <message>
+        <source>The terminal did not open.</source>
+        <translation>Le terminal ne s’est pas ouvert.</translation>
+    </message>
+    <message>
+        <source>Part of Omarchy</source>
+        <translation>Fait partie d’Omarchy</translation>
+    </message>
+    <message>
+        <source>Part of Grassfield</source>
+        <translation>Fait partie de Grassfield</translation>
+    </message>
+    <message>
+        <source>Part of the system</source>
+        <translation>Fait partie du système</translation>
+    </message>
+    <message>
+        <source>Installed with another app</source>
+        <translation>Installée avec une autre app</translation>
+    </message>
+    <message>
+        <source>Not an app: it has no window of its own</source>
+        <translation>Pas une app&#xa0;: elle n’a pas de fenêtre à elle</translation>
+    </message>
+    <message>
+        <source>Not from a repository: uninstalling it comes in a later version of the Store</source>
+        <translation>Hors dépôts&#xa0;: sa désinstallation arrive dans une prochaine version du Store</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s package lists can&apos;t be read, so the Store uninstalls nothing</source>
+        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues&#xa0;: le Store ne désinstalle rien</translation>
+    </message>
+    <message>
+        <source>This computer can&apos;t uninstall apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
+        <translation>Cet ordinateur ne peut pas désinstaller d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
@@ -8500,6 +9603,14 @@
 <context>
     <name>StoreButton</name>
     <message>
+        <source>Installing and opening apps work in the Store&apos;s window.</source>
+        <translation>L’installation et l’ouverture d’apps se font dans la fenêtre du Store.</translation>
+    </message>
+    <message>
+        <source>This app has no window of its own.</source>
+        <translation>Cette app n’a pas de fenêtre à elle.</translation>
+    </message>
+    <message>
         <source>Open %1</source>
         <translation>Ouvrir %1</translation>
     </message>
@@ -8512,8 +9623,8 @@
         <translation>Obtenir %1</translation>
     </message>
     <message>
-        <source>Installing and opening apps from the Store come in a later version.</source>
-        <translation>L’installation et l’ouverture des apps depuis le Store arrivent dans une prochaine version.</translation>
+        <source>Remove %1 from the queue</source>
+        <translation>Retirer %1 de la file d’attente</translation>
     </message>
 </context>
 <context>
@@ -8563,6 +9674,10 @@
     <message>
         <source>timed out</source>
         <translation>Délai dépassé</translation>
+    </message>
+    <message>
+        <source>the answer file cannot be read</source>
+        <translation>le fichier de réponse est illisible</translation>
     </message>
     <message>
         <source>no answer</source>
@@ -8822,6 +9937,13 @@
     </message>
 </context>
 <context>
+    <name>TextSheet</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+</context>
+<context>
     <name>TextView</name>
     <message>
         <source>Text %1</source>
@@ -8837,6 +9959,13 @@
     <message>
         <source>Page %1</source>
         <translation>Page %1</translation>
+    </message>
+</context>
+<context>
+    <name>TilingPopover</name>
+    <message>
+        <source>Window tiling</source>
+        <translation>Disposition de la fenêtre</translation>
     </message>
 </context>
 <context>
@@ -9964,6 +11093,30 @@
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>
         <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
+    </message>
+    <message>
+        <source>Updates are stopped</source>
+        <translation>Les mises à jour sont bloquées</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s update repository cannot be used, and this stops every system update. Open Software Update to turn Grassfield updates off.</source>
+        <translation>Le dépôt de mises à jour de Grassfield est inutilisable, ce qui bloque toutes les mises à jour du système. Ouvrez Mise à jour de logiciels pour désactiver les mises à jour de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 is available</source>
+        <translation>Grassfield %1 est disponible</translation>
+    </message>
+    <message>
+        <source>See what&apos;s new in Software Update.</source>
+        <translation>Découvrez les nouveautés dans Mise à jour de logiciels.</translation>
+    </message>
+    <message>
+        <source>Omarchy %1 is available</source>
+        <translation>Omarchy %1 est disponible</translation>
+    </message>
+    <message>
+        <source>Update Now in Software Update installs it.</source>
+        <translation>Mettre à jour maintenant, dans Mise à jour de logiciels, l’installe.</translation>
     </message>
     <message>
         <source>and 1 more</source>

@@ -55,6 +55,11 @@ namespace gf::titlebar {
     // Bounding square of a button (the drawn circle is inscribed in it).
     Rect buttonRect(Button button, const Metrics& m = {});
 
+    // The zoom light a Grassfield app draws itself (ADR-0015 WindowControls, ui/Grassfield/Ui/WindowActions.js
+    // lightGeometry), relative to its surface's top-left: in the 32-pt titlebar row (`titlebarRow`, the "info" role) as
+    // the plugin's own titlebar, else in the unified toolbar row (52 pt, the first light's centre at 26, 26).
+    Rect appZoomLight(bool titlebarRow);
+
     // X coordinate of the right edge of the last button.
     double buttonsRightEdge(const Metrics& m = {});
 

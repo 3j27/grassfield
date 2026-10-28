@@ -4,6 +4,7 @@
 
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -94,6 +95,35 @@ FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &
     }
     reply->deleteLater();
     return result;
+}
+
+int headStatus(const QUrl &url, int timeoutMs, bool devPlumbing)
+{
+    if (!requestAllowed(url, devPlumbing))
+        return -1;
+    if (url.isLocalFile())
+        return QFileInfo(url.toLocalFile()).isFile() ? 200 : 404;
+    QNetworkAccessManager manager;
+    manager.setCookieJar(nullptr);
+    manager.setRedirectPolicy(QNetworkRequest::UserVerifiedRedirectPolicy);
+    QNetworkReply *reply = manager.head(storeRequest(url, FetchLimits{0, timeoutMs}));
+    QEventLoop loop;
+    bool refused = false;
+    QObject::connect(reply, &QNetworkReply::redirected, reply, [&](const QUrl &to) {
+        if (requestAllowed(to, false)) {
+            emit reply->redirectAllowed();
+        } else {
+            refused = true;
+            reply->abort();
+        }
+    });
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QTimer::singleShot(2 * timeoutMs, &loop, [&] { reply->abort(); });
+    if (!reply->isFinished())
+        loop.exec();
+    const int code = refused ? -1 : reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    reply->deleteLater();
+    return code;
 }
 
 bool downloadTo(const QUrl &url, const QString &file, const FetchLimits &limits, bool devPlumbing)

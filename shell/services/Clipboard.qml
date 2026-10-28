@@ -15,7 +15,8 @@ import "ClipboardLogic.js" as Logic
 Singleton {
     id: root
 
-    readonly property bool enabled: Settings.clipboardEnabled
+    // Settings > Search > Results from Clipboard, as of grassfield.json's last usable read (takeSettings).
+    property bool enabled: false
     // "off" (history off), "dev-off" (a dev session without GRASSFIELD_CLIPBOARD_DISPLAY), "starting", "ok", "unsupported" (no
     // ext-data-control-v1 or lock notifier: the view says so), "error" (retried with a growing pause)
     property string state: "off"
@@ -61,8 +62,31 @@ Singleton {
     property bool stopping: false
     property int retryMs: 2000
     property bool waiting: false
-    property real lastClearedAt: -1
-    property real lastPinnedClearedAt: -1
+    // Nothing is decided on values grassfield.json did not give. Before its first read every key reads its default (the history
+    // off, no clear asked); a malformed, unreadable or unsafe file reads the defaults or the last good values, a missing or an
+    // empty one (what a cut write leaves) the defaults. Acting on those would delete a kept history (review of f7cd664) or skip
+    // a clear, and an unreadable file must never delete anything (reviews of c1fc254 and 3f924d9). So the service takes the
+    // file's values only from a usable read (valid and not empty), once the read is complete (the store sets validRead before
+    // it takes the new values), and keeps the last usable ones otherwise. The first usable read makes the first decision
+    // (init); with no usable file (a missing one included) nothing runs and nothing is deleted until Settings or Search's
+    // Allow writes one.
+    property bool initialized: false
+    readonly property bool settingsUsable: Settings.validRead && !Settings.emptyFile
+    readonly property string settingsRead: JSON.stringify([root.settingsUsable, Settings.clipboardEnabled, Settings.clipboardRetention,
+        Settings.clipboardKeepOnDisk, Settings.clipboardClearedAt, Settings.clipboardPinnedClearedAt])
+    onSettingsReadChanged: Qt.callLater(root.takeSettings)
+
+    function takeSettings(): void {
+        if (!root.settingsUsable)
+            return;
+        root.retention = Logic.retentionMs(Settings.clipboardRetention);
+        root.keepOnDisk = Settings.clipboardKeepOnDisk;
+        root.clearedAt = Settings.clipboardClearedAt;
+        root.pinnedClearedAt = Settings.clipboardPinnedClearedAt;
+        // Last: a helper it starts is given the values above.
+        root.enabled = Settings.clipboardEnabled;
+        root.init();
+    }
 
     function send(fields: var): void {
         if (root.helper.running)
@@ -87,7 +111,7 @@ Singleton {
         if (root.helper.running)
             root.send(["CH"]);
         else
-            root.historyClear.running = true;
+            root.clearHistoryStore();
     }
     function search(seq: int, query: string): void {
         root.send(["Q", String(seq), query]);
@@ -161,18 +185,20 @@ Singleton {
             return;
         }
         if (!root.runnable) {
+            // No helper can run: Settings' clears are carried out all the same.
+            root.applyClears();
             root.state = Mode.dev ? "dev-off" : "error";
             if (Mode.dev)
                 console.info("grassfield: clipboard history off in development (set GRASSFIELD_CLIPBOARD_DISPLAY to the nested socket)");
             return;
         }
-        root.lastClearedAt = Settings.clipboardClearedAt;
-        root.lastPinnedClearedAt = Settings.clipboardPinnedClearedAt;
         root.state = "starting";
         root.wanted = true;
     }
 
     onEnabledChanged: {
+        if (!root.initialized)
+            return;
         if (root.enabled) {
             root.start();
             return;
@@ -186,31 +212,68 @@ Singleton {
             root.send(["D", "0"]);
             root.send(["QUIT"]);
         } else {
-            root.historyClear.running = true;
+            root.clearHistoryStore();
         }
         root.wanted = false;
     }
 
-    readonly property real retention: Logic.retentionMs(Settings.clipboardRetention)
+    // The other settings, as of the last usable read (takeSettings).
+    property real retention: Logic.retentionMs("")
     onRetentionChanged: root.send(["T", String(root.retention)])
-    readonly property bool keepOnDisk: Settings.clipboardKeepOnDisk
+    property bool keepOnDisk: false
     onKeepOnDiskChanged: root.send(["D", root.keepOnDisk ? "1" : "0"])
-    readonly property real clearedAt: Settings.clipboardClearedAt
-    onClearedAtChanged: {
-        if (root.lastClearedAt >= 0 && root.clearedAt !== root.lastClearedAt)
-            root.clearHistory();
-        root.lastClearedAt = root.clearedAt;
+    // Settings' clears (Clear Clipboard History…, with or without the pinned items): the running helper clears and records the
+    // setting's time; with the history off, --apply-clears carries them out now; a helper about to start is given them. The
+    // helper records what it carried out, so a clear written while the shell was stopped is carried out at the next start.
+    property real clearedAt: 0
+    onClearedAtChanged: root.clearAsked(false)
+    property real pinnedClearedAt: 0
+    onPinnedClearedAtChanged: root.clearAsked(true)
+
+    function clearAsked(pinned: bool): void {
+        if (!root.initialized)
+            return;
+        if (root.helper.running)
+            root.send([pinned ? "CP" : "CH", Logic.clearTimeArg(pinned ? root.pinnedClearedAt : root.clearedAt)]);
+        else if (!root.wanted)
+            root.applyClears();
     }
-    readonly property real pinnedClearedAt: Settings.clipboardPinnedClearedAt
-    onPinnedClearedAtChanged: {
-        if (root.lastPinnedClearedAt >= 0 && root.pinnedClearedAt !== root.lastPinnedClearedAt) {
-            if (root.helper.running)
-                root.send(["CP"]);
-            else
-                root.pinnedClear.running = true;
+
+    // The store jobs run without a helper (--clear-history, --apply-clears), one after the other: a job asked while one runs
+    // waits for it. Each Process is started before its flag is dropped, so the helper (which waits for both) never starts
+    // between two of them.
+    function clearHistoryStore(): void {
+        if (root.historyClear.running || root.clearsApply.running)
+            root.historyAgain = true;
+        else
+            root.historyClear.running = true;
+    }
+    function applyClears(): void {
+        if (root.historyClear.running || root.clearsApply.running)
+            root.clearsAgain = true;
+        else
+            root.startClearsApply();
+    }
+    // The times are read when it starts: a binding on them may not be updated yet inside onClearedAtChanged, which would carry
+    // out the previous clear.
+    function startClearsApply(): void {
+        root.clearsApply.command = [root.tool, "--apply-clears", "--state", root.storeDir, "--cleared-at",
+            Logic.clearTimeArg(root.clearedAt), "--pinned-cleared-at", Logic.clearTimeArg(root.pinnedClearedAt)];
+        root.clearsApply.running = true;
+    }
+    function storeJobEnded(): void {
+        if (root.historyClear.running || root.clearsApply.running)
+            return;
+        if (root.historyAgain) {
+            root.historyClear.running = true;
+            root.historyAgain = false;
+        } else if (root.clearsAgain) {
+            root.startClearsApply();
+            root.clearsAgain = false;
         }
-        root.lastPinnedClearedAt = root.pinnedClearedAt;
     }
+    property bool historyAgain: false
+    property bool clearsAgain: false
 
     // Capture follows the shell's own lock as well (SessionState.locked covers its "locking" phase).
     readonly property bool sessionLocked: SessionState.locked
@@ -218,9 +281,11 @@ Singleton {
 
     readonly property Process helper: Process {
         // Never while a store is being cleared without it (it would load what is being deleted).
-        running: (root.wanted || root.stopping) && !root.waiting && !root.historyClear.running && !root.pinnedClear.running
+        running: (root.wanted || root.stopping) && !root.waiting && !root.historyClear.running && !root.clearsApply.running
+            && !root.historyAgain && !root.clearsAgain
         command: [root.tool, "--display", root.display, "--state", root.storeDir, "--runtime", root.runtimeDir,
-            "--retention", String(root.retention), "--history-store", root.keepOnDisk ? "1" : "0"]
+            "--retention", String(root.retention), "--history-store", root.keepOnDisk ? "1" : "0",
+            "--cleared-at", Logic.clearTimeArg(root.clearedAt), "--pinned-cleared-at", Logic.clearTimeArg(root.pinnedClearedAt)]
         stdinEnabled: true
         stdout: SplitParser {
             onRead: line => root.handle(line)
@@ -256,21 +321,40 @@ Singleton {
         onTriggered: root.waiting = false
     }
 
-    // With the history off: the stores the helper would delete if it ran (a turned-off history keeps no unpinned item on disk;
-    // Settings' "Also delete pinned items").
+    // With the history off: the history store the helper would delete if it ran (a turned-off history keeps no unpinned item on
+    // disk), and Settings' clears not carried out yet ("Also delete pinned items" deletes the pinned store).
     readonly property Process historyClear: Process {
         command: [root.tool, "--clear-history", "--state", root.storeDir]
+        onRunningChanged: {
+            if (!running)
+                root.storeJobEnded();
+        }
     }
-    readonly property Process pinnedClear: Process {
-        command: [root.tool, "--clear-pinned", "--state", root.storeDir]
+    readonly property Process clearsApply: Process {
+        // Set by startClearsApply.
+        command: []
+        onRunningChanged: {
+            if (!running)
+                root.storeJobEnded();
+        }
     }
 
-    Component.onCompleted: {
-        if (root.enabled)
+    // The first decision, on the first usable read: run the helper (it carries out the clears asked before anything is shown),
+    // or, with the history off, delete the history store, then carry out the clears.
+    function init(): void {
+        if (root.initialized)
+            return;
+        root.initialized = true;
+        if (root.enabled) {
             root.start();
-        else
-            root.historyClear.running = true;
+        } else {
+            root.clearHistoryStore();
+            root.applyClears();
+        }
     }
+
+    // The settings may have been read before this service was created.
+    Component.onCompleted: Qt.callLater(root.takeSettings)
 
     // ---- Paste on choice (ADR-0034 §4, Q9) ----
 
@@ -303,8 +387,10 @@ Singleton {
         root.pasteTargetClosed = false;
     }
 
-    // Copy: the item goes on the clipboard and nothing is pasted; copyConfirmed or copyRefused follows.
+    // Copy: the item goes on the clipboard and nothing is pasted; copyConfirmed or copyRefused follows. A paste still waiting
+    // is dropped: the clipboard is about to hold this item, which Ctrl+V would paste instead of the one chosen.
     function copyItem(id: string): void {
+        root.cancelPaste("another item copied");
         root.pendingCopy = id;
         root.copy(id, false);
         root.copyWait.restart();
@@ -382,6 +468,22 @@ Singleton {
         root.pendingPaste = null;
     }
 
+    // What one check of a confirmed paste sees (Logic.pasteStep's input): the paste's own target and whether it closed, never
+    // the live pasteTarget; whether the helper still owns the item chosen (`A` names the owned item, "" once another app took
+    // the clipboard).
+    function pasteState(p: var, activeAddress: string): var {
+        return {
+            locked: SessionState.locked,
+            helperLocked: root.helperLocked,
+            rememberedAddress: p.target,
+            activeAddress: activeAddress,
+            closedSinceOpen: p.closed,
+            otherSurfaceOpen: FocusReturn.anyOpen(),
+            ownsItem: root.ownedId === p.id,
+            expired: root.pasteExpired
+        };
+    }
+
     function pasteTick(): void {
         const p = root.pendingPaste;
         if (p === null || !p.copied) {
@@ -389,15 +491,7 @@ Singleton {
             return;
         }
         const active = Compositor.activeWindow();
-        const step = Logic.pasteStep({
-            locked: SessionState.locked,
-            helperLocked: root.helperLocked,
-            rememberedAddress: p.target,
-            activeAddress: active ? active.address : "",
-            closedSinceOpen: p.closed,
-            otherSurfaceOpen: FocusReturn.anyOpen(),
-            expired: root.pasteExpired
-        });
+        const step = Logic.pasteStep(root.pasteState(p, active ? active.address : ""));
         if (step === "wait")
             return;
         if (step !== "send") {

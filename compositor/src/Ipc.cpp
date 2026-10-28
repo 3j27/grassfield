@@ -190,13 +190,17 @@ namespace gf::ipc {
         return tilingAvailable() && state().luaArrangeRegistered && state().hyprctlTilingCommand != nullptr && tiler::ready();
     }
 
+    bool tileHoverAvailable() {
+        return tilingAvailable() && state().luaTilePopoverRegistered && state().luaMoveToRegistered;
+    }
+
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 tilingAvailable(), layerPointer::ready(), state().luaConfigRegistered, chrome::ready(),
                                                 frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
-                                                appmenuAvailable(), tilingArrangeAvailable());
+                                                appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -537,6 +541,37 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.tile_popover(address): the tiling popover of that window, opened from the keyboard (TL26).
+        // Untrusted: copied out of Lua with a fixed limit; the address is compared with the live windows.
+        int luaTilePopover(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            guarded("hl.plugin.grassfield.tile_popover", [&] {
+                if (!address.ok) {
+                    logRequest(Log::WARN, "tile_popover: rejected: invalid arguments");
+                    return;
+                }
+                CGrassfieldTitlebar::popoverRequest(address.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
+        // hl.plugin.grassfield.move_to(address, output): Window > Move to <display> and the next-display keys (TL23, TL26).
+        // Untrusted: both strings are copied out of Lua with fixed limits; the output name is checked (core outputNameOk) and
+        // compared with the live outputs, the address with the live windows.
+        int luaMoveTo(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            const auto output  = readString<tiling::kMaxOutputName + 1>(L, 2);
+            guarded("hl.plugin.grassfield.move_to", [&] {
+                if (!address.ok || !output.ok) {
+                    logRequest(Log::WARN, "move_to: rejected: invalid arguments");
+                    tiler::moveToRequest("", ""); // posts the refusal (reason invalid, or locked)
+                    return;
+                }
+                tiler::moveToRequest(address.view(), output.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
         // hl.plugin.grassfield.appmenu(address): re-posts the appmenu event of a mapped window (the shell calls it
         // after a restart). Untrusted: the address is parsed and compared with the live windows.
         int luaAppmenu(lua_State* L) {
@@ -658,6 +693,8 @@ namespace gf::ipc {
         s.luaOverviewFocusRegistered = overviewFocus::ready() && addLua(gfc::kLuaOverviewFocus, luaOverviewFocus);   // only with its listeners
         s.luaTileRegistered          = addLua(gfc::kLuaTile, luaTile);
         s.luaArrangeRegistered       = tiler::ready() && addLua(gfc::kLuaArrange, luaArrange); // only with its listeners
+        s.luaTilePopoverRegistered   = addLua(gfc::kLuaTilePopover, luaTilePopover);
+        s.luaMoveToRegistered        = addLua(gfc::kLuaMoveTo, luaMoveTo);
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -704,6 +741,8 @@ namespace gf::ipc {
         removeLua(s.luaOverviewFocusRegistered, gfc::kLuaOverviewFocus);
         removeLua(s.luaTileRegistered, gfc::kLuaTile);
         removeLua(s.luaArrangeRegistered, gfc::kLuaArrange);
+        removeLua(s.luaTilePopoverRegistered, gfc::kLuaTilePopover);
+        removeLua(s.luaMoveToRegistered, gfc::kLuaMoveTo);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

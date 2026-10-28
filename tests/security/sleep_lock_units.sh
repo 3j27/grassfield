@@ -147,7 +147,11 @@ SH
 cat >"$tmp/sbin/qs" <<'SH'
 #!/bin/sh
 echo "qs $*" >>"$STUB_LOG"
-[ "$*" = "ipc -p /usr/share/grassfield/shell call lock lock" ] || exit 9
+case "$*" in
+  "ipc -p /usr/share/grassfield/shell call lock lock") ;;
+  "ipc -p /usr/share/grassfield/shell call update check omarchy") [ -n "$STUB_QS" ] || exit 1; echo ok; exit 0 ;;
+  *) exit 9 ;;
+esac
 [ -n "$STUB_QS" ] || exit 1
 printf '%s\n' "$STUB_QS"
 SH
@@ -216,6 +220,21 @@ for args in "lock unlock" "notifications dismissAll" "shell toggle omarchy.menu"
   out=$(shimrun active ok "$locked" $args; echo "rc=$shim_rc")
   [[ $out == "rc=1" ]] && ! grep -q "^qs \|systemctl --user start" "$tmp/log" && pass "stand-in: '$args' fails and does nothing" || bad "stand-in: '$args' -> $out / $(tr '\n' ';' <"$tmp/log")"
 done
+# Omarchy's update status (ADR-0033 U9): forwarded as one check request, nothing else started.
+for verb in refresh clear; do
+  out=$(shimrun active ok "$locked" -q omarchy.system-update "$verb"; echo "rc=$shim_rc")
+  [[ $out == "rc=0" && $(cat "$tmp/log") == "qs ipc -p /usr/share/grassfield/shell call update check omarchy" ]] \
+    && pass "stand-in: -q omarchy.system-update $verb sends one 'update check omarchy' to the shell, starts nothing" \
+    || bad "stand-in: omarchy.system-update $verb -> $out / $(tr '\n' ';' <"$tmp/log")"
+done
+out=$(shimrun failed "" "$locked" -q omarchy.system-update refresh; echo "rc=$shim_rc")
+[[ $out == "rc=0" ]] && ! grep -q "systemctl --user start" "$tmp/log" \
+  && pass "stand-in: no shell to ask: -q omarchy.system-update refresh is a silent success that starts nothing (omarchy update goes on)" \
+  || bad "stand-in: no shell: $out / $(tr '\n' ';' <"$tmp/log")"
+out=$(shimrun failed "" "$locked" omarchy.system-update refresh; echo "rc=$shim_rc")
+[[ $out == "rc=1" ]] && pass "stand-in: without -q, no shell to ask is a failure" || bad "stand-in: no shell without -q gave $out"
+out=$(shimrun active ok "$locked" omarchy.system-update install; echo "rc=$shim_rc")
+[[ $out == "rc=1" ]] && ! grep -q "^qs " "$tmp/log" && pass "stand-in: another omarchy.system-update verb fails and does nothing" || bad "stand-in: omarchy.system-update install -> $out"
 out=$(shimrun active ok "$locked" -q lock unlock; echo "rc=$shim_rc")
 [[ $out == "rc=0" ]] && ! grep -q "^qs " "$tmp/log" && pass "stand-in: -q makes an unknown call a silent success, still doing nothing" || bad "stand-in: -q gave $out"
 grep -q "unlock_and_destroy\|lock unlock\|call lock release" "$shim" && bad "stand-in: mentions an unlock call" || pass "stand-in: has no unlock path"

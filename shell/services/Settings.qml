@@ -52,6 +52,7 @@ Singleton {
     readonly property bool clipboardKeepOnDisk: store.clipboardKeepOnDisk
     readonly property real clipboardClearedAt: store.clipboardClearedAt
     readonly property real clipboardPinnedClearedAt: store.clipboardPinnedClearedAt
+    readonly property bool updatesAutomaticCheck: store.updatesAutomaticCheck
     readonly property var dockRecent: store.dockRecent
     readonly property var dockFolders: store.dockFolders
     readonly property var dockStackOptions: store.dockStackOptions
@@ -74,6 +75,8 @@ Singleton {
     readonly property bool loaded: store.loaded
     // ... and is valid (false while it is malformed): the pointer theme acts on defaults only then.
     readonly property bool validRead: store.validRead
+    // ... and was empty (every key at its default): the clipboard history deletes nothing on it.
+    readonly property bool emptyFile: store.emptyFile
     readonly property bool writeBlocked: store.writeBlocked
     readonly property int pointerSize: store.pointerSize
     readonly property string pointerOutlineColor: store.pointerOutlineColor

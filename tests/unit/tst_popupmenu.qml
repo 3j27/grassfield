@@ -38,6 +38,23 @@ TestCase {
         }
     }
 
+    // Window > Move & Resize (docs/specs/tiling.md TL25): headed sections, glyph rows and Alt alternates, in a submenu.
+    Component {
+        id: tilingMenuComponent
+        PopupMenu {
+            model: [
+                {id: "fill", text: "Fill", glyph: {zones: [[0, 0, 12, 12]], own: 0}},
+                {id: "move", text: "Move & Resize", submenu: [
+                        {header: true, text: "Arrange"},
+                        {id: "arrange", layout: "left-right", text: "Left & Right", glyph: {zones: [[0, 0, 6, 12], [6, 0, 6, 12]], own: 0},
+                            alternate: {id: "arrange", layout: "left-quarters", text: "Left & Quarters", glyph: {zones: [[0, 0, 6, 12], [6, 0, 6, 6], [6, 6, 6, 6]], own: 0}}},
+                        {id: "arrange", layout: "quarters", text: "Quarters"}
+                    ]},
+                {id: "plain", text: "Plain", alternate: {id: "other", text: "Other"}}
+            ]
+        }
+    }
+
     Component {
         id: itemComponent
         MenuItem {
@@ -389,6 +406,62 @@ TestCase {
         verify(m.altHeld);
         keyRelease(Qt.Key_Alt, Qt.NoModifier);
         verify(!m.altHeld);
+    }
+
+    function makeTilingMenu() {
+        const m = createTemporaryObject(tilingMenuComponent, testCase);
+        m.forceActiveFocus();
+        activatedSpy.target = m;
+        activatedSpy.clear();
+        return m;
+    }
+
+    // Alt shows each row's alternate in place and runs it; the rows come back on release (macOS Option alternates, M28).
+    function test_alternatesWhileAltIsHeld() {
+        const m = makeTilingMenu();
+        compare(m.displayModel[2].id, "plain");
+        keyPress(Qt.Key_Alt, Qt.AltModifier);
+        compare(m.displayModel[2].id, "other");
+        compare(m.displayModel[0].id, "fill", "a row without an alternate stays");
+        keyClick(Qt.Key_Up, Qt.AltModifier);
+        keyClick(Qt.Key_Return, Qt.AltModifier);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "other");
+        keyRelease(Qt.Key_Alt, Qt.NoModifier);
+        compare(m.displayModel[2].id, "plain");
+    }
+
+    // A submenu opened by the pointer has no keyboard: it follows the Alt of the menu that opened it. Its header is skipped by
+    // the keys and its first row is selected.
+    function test_submenuFollowsTheParentsAltAndSkipsItsHeader() {
+        const m = makeTilingMenu();
+        m.openSubmenuAt(1, false, false);
+        wait(50);
+        const sub = m.submenuItem;
+        verify(sub !== null);
+        compare(sub.displayModel[1].layout, "left-right");
+        m.altHeld = true;
+        compare(sub.displayModel[1].layout, "left-quarters");
+        compare(sub.displayModel[2].layout, "quarters");
+        m.altHeld = false;
+        compare(sub.displayModel[1].layout, "left-right");
+        sub.forceActiveFocus();
+        keyClick(Qt.Key_Down);
+        compare(sub.currentIndex, 1, "the header is skipped");
+        keyPress(Qt.Key_Alt, Qt.AltModifier);
+        keyClick(Qt.Key_Return, Qt.AltModifier);
+        keyRelease(Qt.Key_Alt, Qt.NoModifier);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].layout, "left-quarters");
+    }
+
+    // A glyph row shifts its label like an icon row; a header row is text only.
+    function test_glyphAndHeaderRows() {
+        const m = makeTilingMenu();
+        const glyphRow = createTemporaryObject(itemComponent, testCase, {text: "Fill", glyph: {zones: [[0, 0, 12, 12]], own: 0}});
+        const plainRow = createTemporaryObject(itemComponent, testCase, {text: "Fill"});
+        compare(glyphRow.labelX, plainRow.labelX + Tokens.menuIconSize + Tokens.spacingSm);
+        verify(m.width >= Tokens.menuMinWidth);
     }
 
     SignalSpy {

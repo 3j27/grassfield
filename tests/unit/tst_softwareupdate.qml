@@ -1,0 +1,257 @@
+import QtQuick
+import QtTest
+import "../../ui/Grassfield/Ui/SoftwareUpdateLogic.js" as Logic
+
+// Software Update step 2 (ADR-0033 d; docs/specs/updates.md A9): the checker's answers read, the last success kept through a
+// failure, the releases counted for the badge, each new version and `blocking` episode announced once, versions as people
+// read them, the checker's arguments and the automatic schedule (fake clock); and what Settings' pane reads from them: the
+// file, the channel, whether the build can set updates up, the notes in the session's language, the pane's view.
+TestCase {
+    name: "SoftwareUpdate"
+
+    function answer(state, extra) {
+        return Object.assign({version: 1, state: state, checkedAt: "2026-10-28T10:00:00Z"}, extra || {});
+    }
+
+    function available(gf, om) {
+        return answer("available", {
+            channel: "stable",
+            grassfield: {installed: "1.0.0-1", available: gf || null, notes: [], notesError: null},
+            omarchy: {installed: "4.0.4-1", available: om || null},
+            others: 2,
+            otherPackages: [{name: "glibc", installed: "2.42-1", available: "2.42-2"}, {name: "linux", installed: "6.18.1-1", available: "6.18.2-1"}]
+        });
+    }
+
+    function test_onlyTheCheckersAnswersAreRead() {
+        compare(Logic.parse(JSON.stringify(available("1.0.1-1"))).state, "available");
+        for (const s of ["not-set-up", "repair", "blocking", "up-to-date", "available", "failed", "update-running", "busy"])
+            compare(Logic.parse(JSON.stringify(answer(s))).state, s, s);
+        compare(Logic.parse(""), null, "nothing printed");
+        compare(Logic.parse("not json"), null);
+        compare(Logic.parse("[1]"), null, "not an object");
+        compare(Logic.parse("null"), null);
+        compare(Logic.parse(JSON.stringify({version: 2, state: "available"})), null, "another version");
+        compare(Logic.parse(JSON.stringify({version: 1, state: "installing"})), null, "an unknown state");
+        compare(Logic.parse(undefined), null);
+        compare(Logic.parse("{\"version\":1,\"state\":\"failed\",\"x\":\"" + "a".repeat(310 * 1024) + "\"}"), null, "longer than any answer");
+    }
+
+    function test_aRunWithoutAnAnswerIsAFailure() {
+        const a = Logic.noAnswer(Date.UTC(2026, 9, 28, 10, 0, 0), "the checker could not start");
+        compare([a.version, a.state, a.error, a.message, a.checkedAt], [1, "failed", "unavailable", "the checker could not start", "2026-10-28T10:00:00Z"]);
+    }
+
+    function test_theLastSuccessIsKeptThroughAFailure() {
+        let f = Logic.combine(Logic.normalize(null), available("1.0.1-1", "4.0.6-1"));
+        compare(f.state, "available");
+        compare(f.previous, undefined);
+        compare(Logic.releases(f), 2, "Grassfield and Omarchy");
+        f = Logic.combine(f, answer("failed", {error: "offline", lastSuccessAt: "2026-10-28T10:00:00Z"}));
+        compare([f.state, f.error], ["failed", "offline"]);
+        compare(f.previous.grassfield.available, "1.0.1-1", "what was found stays");
+        compare(f.previous.otherPackages.length, 2);
+        compare(Logic.releases(f), 2, "the badge stays through a failure");
+        f = Logic.combine(f, answer("update-running"));
+        compare(f.previous.omarchy.available, "4.0.6-1", "and while omarchy update runs");
+        f = Logic.combine(f, answer("blocking", {episode: "2026-10-28T09:00:00Z"}));
+        compare(Logic.releases(f), 2);
+        f = Logic.combine(f, answer("up-to-date", {grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}}));
+        compare(f.previous, undefined, "a success replaces it");
+        compare(Logic.releases(f), 0);
+        f = Logic.combine(Logic.combine(f, available("1.0.2-1")), answer("not-set-up"));
+        compare(f.previous, undefined, "turned off: Grassfield's release is no longer checked, nothing kept");
+        compare(Logic.releases(f), 0);
+    }
+
+    // Grassfield updates off (not-set-up) still lists the system's updates (the integrator's decision of 2026-10-28): Omarchy's
+    // release counts, is announced, shows in the pane, and stays through a failure.
+    function test_turnedOffStillListsTheSystemsUpdates() {
+        const off = answer("not-set-up", {channel: null, grassfield: {installed: "1.0.0-1", available: null, notes: [], notesError: null},
+            omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 1, otherPackages: [{name: "linux", installed: "6.18.1-1", available: "6.18.2-1"}]});
+        let f = Logic.combine(Logic.normalize(null), off);
+        compare(Logic.releases(f), 1, "Omarchy's release");
+        compare(Logic.news(Logic.normalize(null), off).map(n => n.id), ["omarchy 4.0.6-1"]);
+        const v = Logic.view(f, false);
+        compare([v.kind, v.omarchy.available, v.grassfield, v.others, v.otherPackages.length], ["not-set-up", "4.0.6-1", null, 1, 1]);
+        f = Logic.combine(f, answer("failed", {error: "offline"}));
+        compare(f.previous.state, "not-set-up", "a failure keeps what the last check found");
+        compare(Logic.releases(f), 1);
+        compare(Logic.view(f, false).omarchy.available, "4.0.6-1");
+    }
+
+    function test_aBusyAnswerChangesNothing() {
+        compare(Logic.combine(Logic.normalize(null), answer("busy")), null);
+        compare(Logic.combine(Logic.normalize(null), null), null);
+    }
+
+    function test_theFileKeepsTheAnnouncedVersionsAndThePendingLogout() {
+        let f = Logic.normalize({version: 1, state: "up-to-date", announced: ["grassfield 1.0.1-1", 7, null], logoutPending: true});
+        compare(f.announced, ["grassfield 1.0.1-1"], "only strings");
+        f = Logic.combine(f, available("1.0.2-1"));
+        compare(f.announced, ["grassfield 1.0.1-1"]);
+        compare(f.logoutPending, true);
+        f = Logic.withLogoutPending(f, false);
+        compare(f.logoutPending, undefined);
+        compare(Logic.normalize({version: 3, announced: ["x"]}).announced, [], "another version reads as empty");
+        compare(Logic.normalize("junk").state, "");
+        let many = Logic.normalize(null);
+        for (let i = 0; i < 40; i++)
+            many = Logic.withAnnounced(many, [{id: "omarchy 4.0." + i + "-1"}]);
+        compare(many.announced.length, 32, "bounded, the oldest dropped");
+        compare(many.announced[31], "omarchy 4.0.39-1");
+    }
+
+    function test_eachNewReleaseIsAnnouncedOnce() {
+        let f = Logic.normalize(null);
+        let items = Logic.news(f, available("1.0.1-1", "4.0.6-1"));
+        compare(items.map(n => n.id), ["grassfield 1.0.1-1", "omarchy 4.0.6-1"]);
+        compare(items[0].installed, "1.0.0-1");
+        f = Logic.withAnnounced(Logic.combine(f, available("1.0.1-1", "4.0.6-1")), items);
+        compare(Logic.news(f, available("1.0.1-1", "4.0.6-1")), [], "never twice");
+        compare(Logic.news(f, available("1.0.2-1", "4.0.6-1")).map(n => n.id), ["grassfield 1.0.2-1"], "a newer version is new");
+        compare(Logic.news(f, answer("up-to-date")), []);
+        compare(Logic.news(f, answer("failed")), []);
+    }
+
+    function test_aBlockingEpisodeIsAnnouncedOnce() {
+        let f = Logic.normalize(null);
+        const a = answer("blocking", {episode: "2026-10-28T09:00:00Z"});
+        const items = Logic.news(f, a);
+        compare(items.map(n => n.id), ["blocking 2026-10-28T09:00:00Z"]);
+        f = Logic.withAnnounced(Logic.combine(f, a), items);
+        compare(Logic.news(f, a), [], "still the same episode");
+        compare(Logic.news(f, answer("blocking", {episode: "2026-10-29T09:00:00Z"})).length, 1, "a new episode");
+        compare(Logic.news(f, answer("blocking")), [], "no episode, nothing to name");
+    }
+
+    function test_releasesCountTheBadge() {
+        compare(Logic.releases(Logic.normalize(null)), 0);
+        compare(Logic.releases(available("1.0.1-1")), 1);
+        compare(Logic.releases(available(null, "4.0.6-1")), 1);
+        compare(Logic.releases(available("1.0.1-1", "4.0.6-1")), 2);
+        compare(Logic.releases(answer("up-to-date")), 0);
+        compare(Logic.releases(answer("available")), 0, "an answer without releases counts none");
+    }
+
+    function test_versionsAsPeopleReadThem() {
+        compare(Logic.displayVersion("1.0.1-1"), "1.0.1");
+        compare(Logic.displayVersion("1.1.0beta1-3"), "1.1.0-beta1");
+        compare(Logic.displayVersion("1.0.0rc1-5"), "1.0.0-rc1");
+        compare(Logic.displayVersion("2:4.0.6-1"), "4.0.6");
+        compare(Logic.displayVersion("4.0.6"), "4.0.6");
+        compare(Logic.rebuildOf("1.0.1-3", "1.0.1-4"), "4", "a rebuild for a new Hyprland (O7)");
+        compare(Logic.rebuildOf("1.0.0-3", "1.0.1-3"), "");
+        compare(Logic.rebuildOf("", "1.0.1-1"), "");
+        compare(Logic.releaseName("1.0.1-4", "1.0.1-3"), "1.0.1-4");
+        compare(Logic.releaseName("1.0.1-1", "1.0.0-1"), "1.0.1");
+        compare(Logic.releaseName("1.1.0beta1-3", "1.0.1-3"), "1.1.0-beta1");
+    }
+
+    function test_theCheckersArguments() {
+        compare(Logic.checkerArgs("/usr/lib/grassfield/grassfield-update-check", false, false), ["/usr/lib/grassfield/grassfield-update-check"]);
+        compare(Logic.checkerArgs("c", true, false), ["c", "--offline"]);
+        compare(Logic.checkerArgs("c", false, true), ["c", "--after-update-lock"]);
+        compare(Logic.checkerArgs("c", true, true), ["c", "--offline", "--after-update-lock"]);
+    }
+
+    function test_theAutomaticSchedule() {
+        const min = 60 * 1000, hour = 60 * min, start = Date.UTC(2026, 9, 28, 8, 0, 0);
+        const first = 10 * min, every = 6 * hour;
+        compare(Logic.nextAutomatic(start, 0, 0, first, every), start + first, "never checked: 10 minutes after the start");
+        compare(Logic.nextAutomatic(start, start - 7 * hour, 0, first, every), start + first, "checked long ago");
+        compare(Logic.nextAutomatic(start, start - 1 * hour, 0, first, every), start + 5 * hour, "a restarted shell waits for the 6 hours");
+        compare(Logic.nextAutomatic(start, start + 30 * min, 0, first, every), start + 30 * min + every, "then every 6 hours");
+        compare(Logic.nextAutomatic(start, start + 30 * min, start + 45 * min, first, every), start + 45 * min, "the checker's retry (U3) comes first");
+        compare(Logic.timeOf("2026-10-28T10:00:00Z"), Date.UTC(2026, 9, 28, 10, 0, 0));
+        compare(Logic.timeOf(undefined), 0);
+        compare(Logic.timeOf("never"), 0);
+    }
+
+    function test_meteredConnections() {
+        verify(Logic.metered("yes\n"));
+        verify(Logic.metered("--\nyes (guessed)\n"), "any device");
+        verify(!Logic.metered("no\n"));
+        verify(!Logic.metered("unknown\n"));
+        verify(!Logic.metered(""), "an unreadable answer is not metered");
+    }
+
+    function test_settingsReadsTheShellsFile() {
+        const f = Logic.fromText(JSON.stringify(Object.assign(available("1.0.1-1"), {announced: ["grassfield 1.0.1-1"], logoutPending: true})));
+        compare(f.state, "available");
+        compare(f.announced, ["grassfield 1.0.1-1"]);
+        compare(f.logoutPending, true);
+        compare(Logic.releases(f), 1);
+        compare(Logic.fromText("").state, "", "no file yet");
+        compare(Logic.fromText("{").state, "", "half written");
+        compare(Logic.fromText("[]").state, "");
+        compare(Logic.fromText(undefined).state, "");
+        compare(Logic.fromText("{\"version\":1,\"state\":\"up-to-date\",\"x\":\"" + "a".repeat(1100 * 1024) + "\"}").state, "", "longer than the shell's file can be");
+    }
+
+    function test_theChannelAsPrinted() {
+        for (const c of ["stable", "beta", "custom", "repair", "off"])
+            compare(Logic.channelOf(c + "\n"), c);
+        compare(Logic.channelOf("  beta  "), "beta");
+        compare(Logic.channelOf("grassfield-channel-set: missing /usr/share/grassfield/pacman/repository.conf"), "");
+        compare(Logic.channelOf(""), "");
+        compare(Logic.channelOf("Beta"), "");
+    }
+
+    function test_aBuildWithoutKeyOrHostCannotSetUp() {
+        const conf = (base, fp) => "# comment\nGRASSFIELD_REPO_BASE=" + base + "\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_SIGNING_FINGERPRINT=" + fp + "\n";
+        const fp = "0123456789ABCDEF0123456789ABCDEF01234567";
+        verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", "")), "this repository's own placeholder");
+        verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", fp)), "a key but no host");
+        verify(!Logic.buildReady(conf("https://packages.example.org", "")), "a host but no key");
+        verify(!Logic.buildReady(conf("https://invalid/x", fp)));
+        verify(!Logic.buildReady(conf("http://packages.example.org", fp)), "https only");
+        verify(Logic.buildReady(conf("https://packages.example.org", fp)));
+        verify(Logic.buildReady(conf("https://packages.example.org:8443/grassfield", fp)));
+        verify(Logic.buildReady(conf("file:///srv/repo", fp)), "the container tests' base");
+        verify(!Logic.buildReady(""), "no repository.conf");
+        verify(!Logic.buildReady(undefined));
+    }
+
+    function test_notesInTheSessionsLanguage() {
+        const gf = {installed: "1.0.0-1", available: "1.0.2-1", notes: [
+                {version: "1.0.2-1", date: "2026-11-02", notes: {en: "Faster Dock.", fr: "Dock plus rapide."}},
+                {version: "1.0.1-1", date: "2026-10-30", notes: {en: "Fixes."}},
+                {version: "1.0.0-9", date: "x", notes: "junk"}, null]};
+        compare(Logic.notesFor(gf, "fr_FR"), [{version: "1.0.2-1", date: "2026-11-02", text: "Dock plus rapide."}, {version: "1.0.1-1", date: "2026-10-30", text: "Fixes."}],
+            "French where it is given, English otherwise, newest first");
+        compare(Logic.notesFor(gf, "en_GB")[0].text, "Faster Dock.");
+        compare(Logic.notesFor(gf, "de")[0].text, "Faster Dock.");
+        compare(Logic.notesFor({notes: []}, "fr"), []);
+        compare(Logic.notesFor(null, "fr"), []);
+    }
+
+    function test_thePanesView() {
+        let v = Logic.view(Logic.normalize(null), false);
+        compare(v.kind, "never");
+        compare(v.grassfield, null);
+        compare(Logic.view(Logic.normalize(null), true).kind, "checking");
+        v = Logic.view(available("1.0.1-1", "4.0.6-1"), false);
+        compare([v.kind, v.grassfield.available, v.omarchy.available, v.others, v.otherPackages.length, v.channel], ["available", "1.0.1-1", "4.0.6-1", 2, 2, "stable"]);
+        compare(v.installed, {grassfield: "1.0.0-1", omarchy: "4.0.4-1"});
+        verify(!v.repair);
+        // A failure keeps what the last success found, with its time.
+        const failed = Logic.combine(Logic.combine(Logic.normalize(null), available("1.0.1-1")), answer("failed", {error: "offline", checkedAt: "2026-10-28T12:00:00Z"}));
+        v = Logic.view(failed, false);
+        compare([v.kind, v.error, v.grassfield.available, v.lastSuccessAt, v.checkedAt], ["failed", "offline", "1.0.1-1", Date.UTC(2026, 9, 28, 10, 0, 0), Date.UTC(2026, 9, 28, 12, 0, 0)]);
+        compare(Logic.view(answer("failed"), false).error, "unavailable");
+        v = Logic.view(answer("up-to-date", {channel: "custom", grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}}), false);
+        compare([v.kind, v.repair, v.grassfield, v.others], ["up-to-date", true, null, 0], "a custom channel is repaired");
+        verify(Logic.view(answer("repair"), false).repair);
+        compare(Logic.view(answer("busy"), false).kind, "never", "busy is no state of the pane");
+        compare(Logic.view(answer("update-running"), false).kind, "update-running");
+    }
+
+    function test_aNewAnswerEndsTheWait() {
+        const before = answer("up-to-date");
+        verify(!Logic.answered(before, Object.assign({}, before, {logoutPending: true})), "the pending logout written alone");
+        verify(Logic.answered(before, answer("available", {checkedAt: "2026-10-28T10:05:00Z"})));
+        verify(Logic.answered(Logic.normalize(null), before), "the first answer");
+        verify(!Logic.answered(before, Logic.normalize(null)));
+    }
+}

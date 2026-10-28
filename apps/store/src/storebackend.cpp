@@ -11,11 +11,16 @@
 #include "storeenv.h"
 #include "translationloader.h"
 
+#include <QCoreApplication>
+#include <QRegularExpression>
+
 #include <QCollator>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QWindow>
 #include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -41,6 +46,12 @@ constexpr int kMaxWebApps = 500;
 QString configFile()
 {
     return apps::runmode::configDir() + QStringLiteral("/grassfield.json");
+}
+
+// The application when it is a QGuiApplication (the window's), else null (the unit tests' QCoreApplication).
+QGuiApplication *guiApp()
+{
+    return qobject_cast<QGuiApplication *>(QCoreApplication::instance());
 }
 
 QByteArray readSmall(const QString &path, qint64 max)
@@ -114,10 +125,12 @@ QList<view::WebAppEntry> readWebApps()
     QDirIterator it(dataHome() + QStringLiteral("/applications"), {QStringLiteral("*.desktop")}, QDir::Files);
     int seen = 0;
     while (it.hasNext() && seen++ < kMaxWebApps) {
-        const auto entry = view::parseWebAppEntry(readSmall(it.next(), 64 * 1024));
+        const QString path = it.next();
+        const auto entry = view::parseWebAppEntry(readSmall(path, 64 * 1024));
         if (entry) {
             view::WebAppEntry e = *entry;
             e.icon = webAppIcon(e.icon);
+            e.file = QFileInfo(path).completeBaseName();
             out.append(e);
         }
     }
@@ -150,6 +163,51 @@ QSet<QString> foreignWithEntry(const QString &pacman, const QSet<QString> &forei
     return out;
 }
 
+// The application entries of /usr/share/applications and the packages that own them (pacman -Qo, as the user): package ->
+// desktop ids, sorted. An entry no package owns is left out.
+QHash<QString, QStringList> readEntries(const QString &pacman, const QString &dir)
+{
+    QHash<QString, QStringList> out;
+    QStringList files;
+    for (const QString &name : QDir(dir).entryList({QStringLiteral("*.desktop")}, QDir::Files, QDir::Name)) {
+        if (isDesktopId(name))
+            files.append(dir + QLatin1Char('/') + name);
+        if (files.size() >= 4000)
+            break;
+    }
+    if (files.isEmpty())
+        return out;
+    // pacman -Qo exits 1 when a file has no owner; the others are still listed.
+    const ChildResult r = runChild(pacman, QStringList{QStringLiteral("-Qo"), QStringLiteral("--")} + files);
+    if (!r.started || r.timedOut || r.overflow)
+        return out;
+    static const QRegularExpression owned(QStringLiteral("^(\\S+) is owned by (\\S+) \\S+$"));
+    for (const QByteArray &line : r.out.split('\n')) {
+        const QRegularExpressionMatch m = owned.match(QString::fromUtf8(line).trimmed());
+        if (!m.hasMatch() || !isPackageName(m.captured(2)))
+            continue;
+        out[m.captured(2)].append(QFileInfo(m.captured(1)).fileName());
+    }
+    for (QStringList &ids : out)
+        ids.sort();
+    return out;
+}
+
+// What the Store never removes (removal.h): Omarchy's two package lists, read where Omarchy installs them, and pacman's
+// HoldPkg (pacman-conf; pacman's own default when it cannot be read).
+DenyList readDenyList()
+{
+    DenyList deny;
+    for (const QString &list : {QStringLiteral("/omarchy-base.packages"), QStringLiteral("/omarchy-other.packages")})
+        deny.omarchy.unite(parsePackageList(readSmall(env::omarchyLists() + list, 1024 * 1024)));
+    const ChildResult hold = runChild(env::pacmanConf(), {QStringLiteral("HoldPkg")});
+    if (hold.ok())
+        deny.holdPkg = parsePackageList(hold.out);
+    if (deny.holdPkg.isEmpty())
+        deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
+    return deny;
+}
+
 struct JobInput {
     bool fetchCatalog = false;
     bool fetchAppData = false;
@@ -169,6 +227,8 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     if (cancel)
         return snap;
     snap->foreignWithEntry = foreignWithEntry(env::pacman(), pacman.foreign());
+    snap->entries = readEntries(env::pacman(), env::systemApplications());
+    snap->deny = readDenyList();
 
     // Arch's AppStream: installed, else the copy fetched before (refreshed first when asked and online).
     const QString root = env::swcatalogRoot();
@@ -257,6 +317,18 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.sync = snap->sync;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
+    // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
+    // runs while a pinned file differs.
+    const QString omarchy = env::omarchyRoot();
+    snap->apps.removeIf([&omarchy](const StoreApp &a) {
+        if (a.source != CatalogSource::Kind::OmarchySetup || !a.entry)
+            return false;
+        const QFileInfo install(omarchy + QStringLiteral("/bin/") + a.entry->source.install);
+        const QFileInfo remove(omarchy + QStringLiteral("/bin/") + a.entry->source.remove);
+        return !install.isFile() || !install.isExecutable() || !remove.isFile() || !remove.isExecutable();
+    });
+    if (snap->catalog && snap->catalog->omarchy)
+        snap->omarchyDiffers = omarchyDifference(omarchy, snap->catalog->omarchy->files);
     QSet<QString> webUrls;
     for (const view::WebAppEntry &w : snap->webApps)
         webUrls.insert(w.url);
@@ -264,6 +336,14 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
         StoreApp &a = snap->apps[i];
         if (a.source == CatalogSource::Kind::WebApp && a.entry)
             a.installed = webUrls.contains(a.entry->source.url);
+        // Open's entry when neither our catalog nor AppStream names one: the package's own (the first by name, f); a
+        // setup's, its first package's that has one.
+        if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::Repo && a.installed)
+            a.desktopId = snap->entries.value(a.package).value(0);
+        for (const QString &p : a.packages) {
+            if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::OmarchySetup && a.installed)
+                a.desktopId = snap->entries.value(p).value(0);
+        }
         snap->index.insert(a.id, i);
     }
     // The tints of the hero and card artwork: the app's icon decoded here, off the GUI thread.
@@ -292,6 +372,9 @@ StoreBackend::StoreBackend(QObject *parent)
     , m_cancel(std::make_shared<std::atomic_bool>(false))
 {
     m_pool.setMaxThreadCount(2); // one load and one product page's pacman -Si at a time
+    // qGuiApp casts whatever application there is: the unit tests' is a QCoreApplication.
+    if (auto *gui = guiApp())
+        connect(gui, &QGuiApplication::focusWindowChanged, this, &StoreBackend::focusWindowChanged);
     const QString system = i18n::systemLanguage();
     m_language = system.startsWith(QLatin1String("fr")) ? QStringLiteral("fr") : QStringLiteral("en");
     m_macDevice = apps::macDeviceHere();
@@ -336,6 +419,38 @@ StoreBackend::StoreBackend(QObject *parent)
                                                   ? QUrl::fromLocalFile(picture).toString() : QString()}};
     }
     readNetwork();
+
+    // The queue (operations.h): the system's programs, or in a dev session the fake ones (ADR-0019; none: nothing runs).
+    OperationsConfig ops;
+    ops.pkexec = env::pkexec();
+    ops.helper = env::helperPath;
+    ops.statusDir = env::statusDir();
+    ops.updateLock = env::updateLock();
+    ops.dbLock = env::dbLock();
+    ops.pacmanLog = env::pacmanLog();
+    ops.pacman = env::pacman();
+    ops.stateFile = env::stateFile();
+    ops.applications = dataHome() + QStringLiteral("/applications");
+    ops.run = env::runPath;
+    ops.runDir = env::runDir();
+    ops.omarchy = [](const QString &command, const QStringList &args) {
+        const QString fake = env::installer();
+        if (apps::runmode::dev())
+            return fake.isEmpty() ? QStringList() : QStringList{fake, command} + args;
+        return QStringList{env::omarchyCommand(command)} + args;
+    };
+    m_operations = std::make_unique<Operations>(ops);
+    connect(m_operations.get(), &Operations::changed, this, &StoreBackend::operationsChanged);
+    connect(m_operations.get(), &Operations::finished, this, [this](const QString &app) {
+        m_installPlans.remove(app);
+        m_removePlans.remove(app);
+        checkStaleLock();
+        run(Job{}); // the system changed: read it again
+    });
+    connect(m_operations.get(), &Operations::idle, this, [this] {
+        if (m_quitWhenIdle)
+            QCoreApplication::quit();
+    });
 }
 
 StoreBackend::~StoreBackend()
@@ -438,8 +553,11 @@ bool StoreBackend::catalogStale() const
 
 void StoreBackend::start()
 {
-    // A first load from what is on this computer, at once; then the fetches it calls for.
+    // A first load from what is on this computer, at once; then the fetches it calls for. An operation an earlier run left
+    // in store.json is compared with what is there (SR20), and pacman's lock read.
     run(Job{});
+    m_operations->recover();
+    checkStaleLock();
 }
 
 void StoreBackend::refresh()
@@ -549,6 +667,11 @@ QVariantMap StoreBackend::sources() const
             {QStringLiteral("screenshots"), m_screenshots}};
 }
 
+QObject *StoreBackend::focusWindow() const
+{
+    return guiApp() ? QGuiApplication::focusWindow() : nullptr;
+}
+
 QVariantList StoreBackend::sections() const
 {
     if (!m_snapshot)
@@ -652,7 +775,7 @@ QVariantList StoreBackend::installed() const
     for (const view::WebAppEntry &w : s.webApps) {
         if (catalogWebUrls.contains(w.url))
             continue;
-        webApps.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("webapp:") + w.name},
+        webApps.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("webapp:") + w.file},
                                    {QStringLiteral("name"), w.name},
                                    {QStringLiteral("summary"), QUrl(w.url).host()},
                                    {QStringLiteral("icon"), w.icon.isEmpty() ? QString() : QUrl::fromLocalFile(w.icon).toString()},
@@ -710,6 +833,492 @@ QString StoreBackend::screenshotSource(const QString &url) const
     if (!screenshotsAllowed() || !isHttpsUrl(url))
         return {};
     return QStringLiteral("image://screenshot/") + QString::fromLatin1(QUrl::toPercentEncoding(url));
+}
+
+QVariantList StoreBackend::operations() const
+{
+    return m_operations->list();
+}
+
+QVariantMap StoreBackend::results() const
+{
+    QVariantMap out;
+    const auto all = m_operations->results();
+    for (auto it = all.cbegin(); it != all.cend(); ++it) {
+        out.insert(it.key(), QVariantMap{{QStringLiteral("kind"), it->kind},
+                                         {QStringLiteral("name"), it->record.name},
+                                         {QStringLiteral("outcome"), it->outcome},
+                                         {QStringLiteral("present"), it->present},
+                                         {QStringLiteral("total"), it->total},
+                                         {QStringLiteral("details"), it->details}});
+    }
+    return out;
+}
+
+void StoreBackend::checkStaleLock()
+{
+    // db.lck there and no pacman running (its process name, /proc/<pid>/comm): pacman stopped mid-way (S6).
+    bool stale = QFileInfo::exists(env::dbLock());
+    if (stale && env::fixture().isEmpty()) {
+        QDirIterator it(QStringLiteral("/proc"), QDir::Dirs | QDir::NoDotAndDotDot);
+        while (stale && it.hasNext()) {
+            const QString dir = it.next();
+            if (QFileInfo(dir).fileName().toLongLong() > 0 && readSmall(dir + QStringLiteral("/comm"), 64).trimmed() == "pacman")
+                stale = false;
+        }
+    }
+    if (stale != m_staleLock) {
+        m_staleLock = stale;
+        emit operationsChanged();
+    }
+}
+
+std::optional<view::WebAppEntry> StoreBackend::otherWebApp(const QString &id) const
+{
+    if (!m_snapshot || !id.startsWith(QLatin1String("webapp:")))
+        return std::nullopt;
+    const QString file = id.mid(7);
+    for (const view::WebAppEntry &w : m_snapshot->webApps) {
+        if (w.file == file && isWebAppName(w.file) && isHttpsUrl(w.url))
+            return w;
+    }
+    return std::nullopt;
+}
+
+const StoreApp *StoreBackend::storeApp(const QString &id) const
+{
+    if (!m_snapshot || !m_snapshot->index.contains(id))
+        return nullptr;
+    return &m_snapshot->apps.at(m_snapshot->index.value(id));
+}
+
+QString StoreBackend::getBlock(const StoreApp &a) const
+{
+    switch (a.source) {
+    case CatalogSource::Kind::Repo:
+        if (env::pkexec().isEmpty())
+            return QStringLiteral("dev");
+        if (!apps::runmode::dev() && (!QFileInfo(env::helperPath).isExecutable() || !QFileInfo(env::pkexec()).isExecutable()))
+            return QStringLiteral("missing");
+        break;
+    case CatalogSource::Kind::WebApp:
+        if (apps::runmode::dev() && env::installer().isEmpty())
+            return QStringLiteral("dev");
+        if (!apps::runmode::dev() && !QFileInfo(env::omarchyCommand(QStringLiteral("omarchy-webapp-install"))).isExecutable())
+            return QStringLiteral("missing");
+        if (!a.entry)
+            return QStringLiteral("source");
+        if (a.icon.isEmpty())
+            return QStringLiteral("icon"); // its icon is not cached yet (fetched with the catalog)
+        break;
+    case CatalogSource::Kind::OmarchySetup:
+        if (const QString block = terminalBlock(); !block.isEmpty())
+            return block;
+        break;
+    default:
+        return QStringLiteral("source"); // the AUR and Flathub install with step 3's later parts (3b2, 3c)
+    }
+    return m_online ? QString() : QStringLiteral("offline");
+}
+
+QString StoreBackend::terminalBlock() const
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    if (apps::runmode::dev() && env::installer().isEmpty())
+        return QStringLiteral("dev");
+    if (!apps::runmode::dev() && (!QFileInfo(env::omarchyCommand(launcher)).isExecutable() || !QFileInfo(env::runPath).isExecutable()))
+        return QStringLiteral("missing");
+    if (env::runDir().isEmpty())
+        return QStringLiteral("missing");
+    if (!m_snapshot || !m_snapshot->catalog || !m_snapshot->catalog->omarchy || !m_snapshot->omarchyDiffers.isEmpty())
+        return QStringLiteral("omarchyChanged");
+    return {};
+}
+
+SetupCheck StoreBackend::setupCheck(const StoreApp &a, bool install) const
+{
+    SetupCheck check;
+    check.root = env::omarchyRoot();
+    if (a.entry)
+        check.recipe = install ? a.entry->source.install : a.entry->source.remove;
+    if (m_snapshot && m_snapshot->catalog && m_snapshot->catalog->omarchy)
+        check.pins = m_snapshot->catalog->omarchy->files;
+    return check;
+}
+
+QString StoreBackend::uninstallBlock(const StoreApp &a) const
+{
+    if (!a.installed)
+        return QStringLiteral("notInstalled");
+    if (a.source == CatalogSource::Kind::WebApp) {
+        if (apps::runmode::dev() && env::installer().isEmpty())
+            return QStringLiteral("dev");
+        if (!apps::runmode::dev() && !QFileInfo(env::omarchyCommand(QStringLiteral("omarchy-webapp-remove"))).isExecutable())
+            return QStringLiteral("missing");
+        return {};
+    }
+    if (a.source == CatalogSource::Kind::OmarchySetup && m_snapshot) {
+        // The recipe removes its packages (omarchy-pkg-drop, pacman -Rns): never one the deny list names (b.1's list).
+        for (const QString &p : a.packages) {
+            switch (protection(p, m_snapshot->deny)) {
+            case Protection::None:
+                break;
+            case Protection::System:
+                return QStringLiteral("system");
+            case Protection::Omarchy:
+                return QStringLiteral("omarchy");
+            case Protection::Grassfield:
+                return QStringLiteral("grassfield");
+            }
+        }
+        if (!m_snapshot->deny.omarchyRead())
+            return QStringLiteral("listsMissing");
+        return terminalBlock();
+    }
+    if (a.source != CatalogSource::Kind::Repo || !m_snapshot)
+        return QStringLiteral("source");
+    RemovalFacts facts;
+    facts.installed = a.installed;
+    facts.explicitlyInstalled = m_snapshot->explicitPackages.contains(a.package);
+    facts.inRepository = std::any_of(m_snapshot->sync.cbegin(), m_snapshot->sync.cend(), [&a](const SyncPackage &p) { return p.name == a.package; });
+    facts.ownsEntry = m_snapshot->entries.contains(a.package);
+    switch (removal(a.package, facts, m_snapshot->deny)) {
+    case Removal::Removable:
+        break;
+    case Removal::NotInstalled:
+        return QStringLiteral("notInstalled");
+    case Removal::PartOfSystem:
+        return QStringLiteral("system");
+    case Removal::PartOfOmarchy:
+        return QStringLiteral("omarchy");
+    case Removal::PartOfGrassfield:
+        return QStringLiteral("grassfield");
+    case Removal::Dependency:
+        return QStringLiteral("dependency");
+    case Removal::NotAnApp:
+        return QStringLiteral("notApp");
+    case Removal::NotFromRepository:
+        return QStringLiteral("notFromRepository");
+    case Removal::ListsMissing:
+        return QStringLiteral("listsMissing");
+    }
+    if (env::pkexec().isEmpty())
+        return QStringLiteral("dev");
+    if (!apps::runmode::dev() && (!QFileInfo(env::helperPath).isExecutable() || !QFileInfo(env::pkexec()).isExecutable()))
+        return QStringLiteral("missing");
+    return {};
+}
+
+QVariantMap StoreBackend::actions(const QString &id) const
+{
+    if (const auto w = otherWebApp(id)) {
+        const bool can = apps::runmode::dev() ? !env::installer().isEmpty()
+                                              : QFileInfo(env::omarchyCommand(QStringLiteral("omarchy-webapp-remove"))).isExecutable();
+        return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
+                {QStringLiteral("uninstall"), can ? QString() : (apps::runmode::dev() ? QStringLiteral("dev") : QStringLiteral("missing"))}};
+    }
+    const StoreApp *a = storeApp(id);
+    if (!a)
+        return {{QStringLiteral("installed"), false}, {QStringLiteral("launcher"), false},
+                {QStringLiteral("get"), QStringLiteral("source")}, {QStringLiteral("uninstall"), QStringLiteral("source")}};
+    const bool launcher = a->source == CatalogSource::Kind::WebApp ? a->installed : !a->desktopId.isEmpty();
+    return {{QStringLiteral("installed"), a->installed},
+            {QStringLiteral("launcher"), launcher},
+            {QStringLiteral("get"), a->installed ? QStringLiteral("installed") : getBlock(*a)},
+            {QStringLiteral("uninstall"), uninstallBlock(*a)}};
+}
+
+PlanTools StoreBackend::planTools() const
+{
+    PlanTools tools;
+    tools.pacman = env::pacman();
+    tools.dbLock = env::dbLock();
+    tools.updateLock = env::updateLock();
+    tools.devPlumbing = !env::fixture().isEmpty();
+    const bool dev = tools.devPlumbing;
+    tools.head = [dev](const QUrl &url) { return headStatus(url, kFetchMs, dev); };
+    return tools;
+}
+
+namespace {
+
+QVariantList packageList(const QList<PlannedPackage> &packages, const QLocale &locale)
+{
+    QVariantList out;
+    for (const PlannedPackage &p : packages)
+        out.append(QVariantMap{{QStringLiteral("name"), p.name},
+                               {QStringLiteral("version"), p.version},
+                               {QStringLiteral("repo"), p.repo},
+                               {QStringLiteral("size"), view::sizeText(p.downloadSize, locale)}});
+    return out;
+}
+
+QString refusalName(Refusal r)
+{
+    switch (r) {
+    case Refusal::None:
+        return {};
+    case Refusal::Busy:
+        return QStringLiteral("busy");
+    case Refusal::Unfinished:
+        return QStringLiteral("unfinished");
+    case Refusal::Outdated:
+        return QStringLiteral("outdated");
+    case Refusal::Offline:
+        return QStringLiteral("offline");
+    case Refusal::Dependency:
+        return QStringLiteral("dependency");
+    case Refusal::Protected:
+        return QStringLiteral("protected");
+    case Refusal::OmarchyChanged:
+        return QStringLiteral("omarchyChanged");
+    case Refusal::Failed:
+        return QStringLiteral("failed");
+    }
+    return QStringLiteral("failed");
+}
+
+} // namespace
+
+void StoreBackend::plan(const QString &id, const QString &kind)
+{
+    if (otherWebApp(id)) {
+        const bool ok = kind == QLatin1String("remove") && actions(id).value(QStringLiteral("uninstall")).toString().isEmpty();
+        emit planReady(id, kind, ok ? QVariantMap{{QStringLiteral("refusal"), QString()}, {QStringLiteral("packages"), QVariantList()}}
+                                    : QVariantMap{{QStringLiteral("refusal"), QStringLiteral("unavailable")}});
+        return;
+    }
+    const StoreApp *a = storeApp(id);
+    const bool install = kind == QLatin1String("install");
+    if (!a || (!install && kind != QLatin1String("remove"))) {
+        emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}});
+        return;
+    }
+    const QString block = install ? getBlock(*a) : uninstallBlock(*a);
+    if (!block.isEmpty() && !(install && block == QLatin1String("offline"))) {
+        emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), block}});
+        return;
+    }
+    if (a->source == CatalogSource::Kind::WebApp) {
+        // The sheet alone (owner, ST3): nothing pacman plans; a launcher and its icon, in the user's own files.
+        emit planReady(id, kind, {{QStringLiteral("refusal"), block == QLatin1String("offline") ? QStringLiteral("offline") : QString()},
+                                  {QStringLiteral("packages"), QVariantList()}});
+        return;
+    }
+    const PlanTools tools = planTools();
+    const bool setup = a->source == CatalogSource::Kind::OmarchySetup;
+    const QStringList packages = setup ? a->packages : QStringList{a->package};
+    const SetupCheck check = setup ? setupCheck(*a, install) : SetupCheck{};
+    const bool online = m_online;
+    const bool own = m_operations->running();
+    const DenyList deny = m_snapshot->deny;
+    const QLocale locale = m_formats;
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, id, kind, install, setup, packages, check, tools, online, own, deny, locale, cancel] {
+        QVariantMap out;
+        if (install) {
+            InstallPlan p = setup ? checkSetupInstall(packages, check, tools, online, own) : checkInstall(packages, tools, online, own);
+            out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
+                   {QStringLiteral("packages"), packageList(p.packages, locale)},
+                   {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
+                   {QStringLiteral("installed"), view::sizeText(p.installedSize, locale)},
+                   {QStringLiteral("unfinished"), p.unfinished},
+                   {QStringLiteral("upgrades"), p.upgrades},
+                   {QStringLiteral("detail"), p.detail}};
+            if (*cancel)
+                return;
+            QMetaObject::invokeMethod(this, [this, id, kind, out, p] {
+                if (p.refusal == Refusal::None)
+                    m_installPlans.insert(id, p);
+                else
+                    m_installPlans.remove(id);
+                emit planReady(id, kind, out);
+            }, Qt::QueuedConnection);
+        } else {
+            RemovePlan p = setup ? checkSetupRemove(packages, check, deny, tools, own) : checkRemove(packages, deny, tools, own);
+            out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
+                   {QStringLiteral("packages"), packageList(p.packages, locale)},
+                   {QStringLiteral("dependents"), p.dependents},
+                   {QStringLiteral("protected"), p.protectedPackage},
+                   {QStringLiteral("detail"), p.detail}};
+            if (*cancel)
+                return;
+            QMetaObject::invokeMethod(this, [this, id, kind, out, p] {
+                if (p.refusal == Refusal::None)
+                    m_removePlans.insert(id, p);
+                else
+                    m_removePlans.remove(id);
+                emit planReady(id, kind, out);
+            }, Qt::QueuedConnection);
+        }
+    });
+}
+
+bool StoreBackend::install(const QString &id)
+{
+    const StoreApp *a = storeApp(id);
+    if (!a || a->installed || m_operations->queued(id) || !getBlock(*a).isEmpty())
+        return false;
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = QStringLiteral("install");
+    r.app = a->id;
+    r.name = a->name.pick(m_language);
+    if (a->source == CatalogSource::Kind::WebApp) {
+        r.path = QStringLiteral("webapp");
+        r.webName = a->name.pick(m_language);
+        r.webUrl = a->entry->source.url;
+        r.webIcon = a->icon;
+        if (!isWebAppName(r.webName) || !isHttpsUrl(r.webUrl))
+            return false;
+    } else {
+        // The plan its sheet showed (planReady); the helper, or grassfield-store-run for a setup, checks it all again.
+        const auto it = m_installPlans.constFind(id);
+        if (it == m_installPlans.cend() || it->packages.isEmpty())
+            return false;
+        if (a->source == CatalogSource::Kind::OmarchySetup) {
+            const SetupCheck check = setupCheck(*a, true);
+            r.path = QStringLiteral("terminal");
+            r.packages = a->packages;
+            r.recipe = check.recipe;
+            r.args = a->entry->source.args;
+            r.pins = check.pins;
+        } else {
+            r.path = QStringLiteral("helper");
+            r.packages = {a->package};
+        }
+        r.plan = it->packages;
+    }
+    m_installPlans.remove(id);
+    m_operations->enqueue(r);
+    return true;
+}
+
+bool StoreBackend::uninstall(const QString &id)
+{
+    if (const auto w = otherWebApp(id)) {
+        if (m_operations->queued(id) || !actions(id).value(QStringLiteral("uninstall")).toString().isEmpty())
+            return false;
+        OperationRecord r;
+        r.id = newOperationId();
+        r.kind = QStringLiteral("remove");
+        r.path = QStringLiteral("webapp");
+        r.app = id;
+        r.name = w->name;
+        r.webName = w->file;
+        r.webUrl = w->url;
+        m_operations->enqueue(r);
+        return true;
+    }
+    const StoreApp *a = storeApp(id);
+    if (!a || m_operations->queued(id) || !uninstallBlock(*a).isEmpty())
+        return false;
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = QStringLiteral("remove");
+    r.app = a->id;
+    r.name = a->name.pick(m_language);
+    if (a->source == CatalogSource::Kind::WebApp) {
+        // The launcher's own name: the file Omarchy wrote for this address.
+        QString file;
+        for (const view::WebAppEntry &w : m_snapshot->webApps) {
+            if (a->entry && w.url == a->entry->source.url)
+                file = w.file;
+        }
+        if (!isWebAppName(file))
+            return false;
+        r.path = QStringLiteral("webapp");
+        r.webName = file;
+        r.webUrl = a->entry->source.url;
+    } else {
+        const auto it = m_removePlans.constFind(id);
+        if (it == m_removePlans.cend() || it->packages.isEmpty())
+            return false;
+        if (a->source == CatalogSource::Kind::OmarchySetup) {
+            const SetupCheck check = setupCheck(*a, false);
+            r.path = QStringLiteral("terminal");
+            r.packages = a->packages;
+            r.recipe = check.recipe;
+            r.args = a->entry->source.removeArgs;
+            r.pins = check.pins;
+        } else {
+            r.path = QStringLiteral("helper");
+            r.packages = {a->package};
+        }
+        r.plan = it->packages;
+    }
+    m_removePlans.remove(id);
+    m_operations->enqueue(r);
+    return true;
+}
+
+bool StoreBackend::removeWaiting(const QString &operationId)
+{
+    return m_operations->removeWaiting(operationId);
+}
+
+void StoreBackend::dismiss(const QString &id)
+{
+    m_operations->dismiss(id);
+}
+
+bool StoreBackend::open(const QString &id)
+{
+    const StoreApp *a = storeApp(id);
+    const auto other = otherWebApp(id);
+    if (!other && (!a || !a->installed))
+        return false;
+    QStringList argv;
+    if (other) {
+        argv = {QStringLiteral("omarchy-launch-webapp"), other->url};
+    } else if (a->source == CatalogSource::Kind::WebApp) {
+        // Omarchy's own launcher, which scopes the browser itself (S14: the entry's file name has spaces uwsm refuses).
+        if (!a->entry || !isHttpsUrl(a->entry->source.url))
+            return false;
+        argv = {QStringLiteral("omarchy-launch-webapp"), a->entry->source.url};
+    } else {
+        if (!isDesktopId(a->desktopId))
+            return false;
+        argv = {QStringLiteral("uwsm-app"), QStringLiteral("--"), a->desktopId};
+    }
+    if (apps::runmode::dev()) {
+        // Only through the fake program (ADR-0011's dev open policy: a dev session starts nothing of the owner's).
+        const QString fake = env::installer();
+        return !fake.isEmpty() && QProcess::startDetached(fake, argv);
+    }
+    if (argv.constFirst() == QLatin1String("omarchy-launch-webapp"))
+        return QProcess::startDetached(env::omarchyCommand(argv.constFirst()), argv.mid(1));
+    const QString uwsm = QStandardPaths::findExecutable(QStringLiteral("uwsm-app"));
+    return !uwsm.isEmpty() && QProcess::startDetached(uwsm, argv.mid(1));
+}
+
+bool StoreBackend::openSoftwareUpdate()
+{
+    const QStringList argv{QStringLiteral("grassfield-settings"), QStringLiteral("--section=general")};
+    if (apps::runmode::dev()) {
+        const QString fake = env::installer();
+        return !fake.isEmpty() && QProcess::startDetached(fake, argv);
+    }
+    return apps::startApplication(argv.constFirst(), argv.mid(1));
+}
+
+void StoreBackend::quitWhenIdle()
+{
+    if (!m_operations->running()) {
+        QCoreApplication::quit();
+        return;
+    }
+    // The running operation ends in pacman or Omarchy's command: the Store waits for it (it holds Omarchy's lock and keeps
+    // the result), without a window; the waiting ones are dropped.
+    for (const Operations::Item &i : m_operations->items()) {
+        if (i.state == Operations::State::Waiting)
+            m_operations->removeWaiting(i.record.id);
+    }
+    m_quitWhenIdle = true;
+    if (guiApp()) {
+        for (QWindow *w : QGuiApplication::topLevelWindows())
+            w->close();
+    }
 }
 
 } // namespace grassfield::store

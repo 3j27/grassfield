@@ -1,0 +1,373 @@
+{
+ "comment": "The deny list of grassfield-store-helper's remove (ADR-0037 b.1, S16), held to the same answers by the Store's C++ rule (apps/store/src/removal.cpp, tests/unit/store/tst_removal.cpp) and by the helper itself (tests/integration/store_helper.sh runs its denied() on every case). protection: none (allowed), system, omarchy or grassfield (the reason the Store shows).",
+ "omarchyLists": [
+  "btop",
+  "chromium",
+  "gs-omarchy-app",
+  "alacritty",
+  "linux"
+ ],
+ "holdPkg": [
+  "pacman",
+  "glibc",
+  "gs-held"
+ ],
+ "cases": [
+  {
+   "name": "base",
+   "protection": "system"
+  },
+  {
+   "name": "base-devel",
+   "protection": "system"
+  },
+  {
+   "name": "filesystem",
+   "protection": "system"
+  },
+  {
+   "name": "glibc",
+   "protection": "system"
+  },
+  {
+   "name": "bash",
+   "protection": "system"
+  },
+  {
+   "name": "coreutils",
+   "protection": "system"
+  },
+  {
+   "name": "util-linux",
+   "protection": "system"
+  },
+  {
+   "name": "shadow",
+   "protection": "system"
+  },
+  {
+   "name": "pam",
+   "protection": "system"
+  },
+  {
+   "name": "sudo",
+   "protection": "system"
+  },
+  {
+   "name": "polkit",
+   "protection": "system"
+  },
+  {
+   "name": "dbus",
+   "protection": "system"
+  },
+  {
+   "name": "dbus-broker",
+   "protection": "system"
+  },
+  {
+   "name": "dbus-broker-units",
+   "protection": "system"
+  },
+  {
+   "name": "kmod",
+   "protection": "system"
+  },
+  {
+   "name": "mkinitcpio",
+   "protection": "system"
+  },
+  {
+   "name": "dracut",
+   "protection": "system"
+  },
+  {
+   "name": "grub",
+   "protection": "system"
+  },
+  {
+   "name": "efibootmgr",
+   "protection": "system"
+  },
+  {
+   "name": "refind",
+   "protection": "system"
+  },
+  {
+   "name": "syslinux",
+   "protection": "system"
+  },
+  {
+   "name": "snapper",
+   "protection": "system"
+  },
+  {
+   "name": "btrfs-progs",
+   "protection": "system"
+  },
+  {
+   "name": "cryptsetup",
+   "protection": "system"
+  },
+  {
+   "name": "lvm2",
+   "protection": "system"
+  },
+  {
+   "name": "plymouth",
+   "protection": "system"
+  },
+  {
+   "name": "archlinux-keyring",
+   "protection": "system"
+  },
+  {
+   "name": "intel-ucode",
+   "protection": "system"
+  },
+  {
+   "name": "amd-ucode",
+   "protection": "system"
+  },
+  {
+   "name": "linux",
+   "protection": "system"
+  },
+  {
+   "name": "linux-lts",
+   "protection": "system"
+  },
+  {
+   "name": "linux-zen",
+   "protection": "system"
+  },
+  {
+   "name": "linux-headers",
+   "protection": "system"
+  },
+  {
+   "name": "linux-firmware",
+   "protection": "system"
+  },
+  {
+   "name": "linux-firmware-intel",
+   "protection": "system"
+  },
+  {
+   "name": "systemd",
+   "protection": "system"
+  },
+  {
+   "name": "systemd-libs",
+   "protection": "system"
+  },
+  {
+   "name": "systemd-sysvcompat",
+   "protection": "system"
+  },
+  {
+   "name": "limine",
+   "protection": "system"
+  },
+  {
+   "name": "limine-snapper-sync",
+   "protection": "system"
+  },
+  {
+   "name": "limine-mkinitcpio-hook",
+   "protection": "system"
+  },
+  {
+   "name": "pacman",
+   "protection": "system"
+  },
+  {
+   "name": "pacman-contrib",
+   "protection": "system"
+  },
+  {
+   "name": "sof-firmware",
+   "protection": "system"
+  },
+  {
+   "name": "alsa-firmware",
+   "protection": "system"
+  },
+  {
+   "name": "b43-firmware-classic",
+   "protection": "system"
+  },
+  {
+   "name": "gs-held",
+   "protection": "system"
+  },
+  {
+   "name": "omarchy",
+   "protection": "omarchy"
+  },
+  {
+   "name": "omarchy-keyring",
+   "protection": "omarchy"
+  },
+  {
+   "name": "omarchy-nvim",
+   "protection": "omarchy"
+  },
+  {
+   "name": "omarchy-chromium",
+   "protection": "omarchy"
+  },
+  {
+   "name": "yay",
+   "protection": "omarchy"
+  },
+  {
+   "name": "yay-bin",
+   "protection": "omarchy"
+  },
+  {
+   "name": "yay-debug",
+   "protection": "omarchy"
+  },
+  {
+   "name": "btop",
+   "protection": "omarchy"
+  },
+  {
+   "name": "chromium",
+   "protection": "omarchy"
+  },
+  {
+   "name": "gs-omarchy-app",
+   "protection": "omarchy"
+  },
+  {
+   "name": "alacritty",
+   "protection": "omarchy"
+  },
+  {
+   "name": "grassfield",
+   "protection": "grassfield"
+  },
+  {
+   "name": "grassfield-desktop",
+   "protection": "grassfield"
+  },
+  {
+   "name": "grassfield-store",
+   "protection": "grassfield"
+  },
+  {
+   "name": "grassfield-compositor",
+   "protection": "grassfield"
+  },
+  {
+   "name": "grassfield-keyring",
+   "protection": "grassfield"
+  },
+  {
+   "name": "grassfield-gs",
+   "protection": "grassfield"
+  },
+  {
+   "name": "xterm",
+   "protection": "none"
+  },
+  {
+   "name": "gimp",
+   "protection": "none"
+  },
+  {
+   "name": "gs-app",
+   "protection": "none"
+  },
+  {
+   "name": "gs-app2",
+   "protection": "none"
+  },
+  {
+   "name": "gs-lib",
+   "protection": "none"
+  },
+  {
+   "name": "firefox",
+   "protection": "none"
+  },
+  {
+   "name": "libreoffice-fresh",
+   "protection": "none"
+  },
+  {
+   "name": "linuxconsole",
+   "protection": "none"
+  },
+  {
+   "name": "linux_foo",
+   "protection": "none"
+  },
+  {
+   "name": "systemdgenie",
+   "protection": "none"
+  },
+  {
+   "name": "pacmanfm",
+   "protection": "none"
+  },
+  {
+   "name": "yayo",
+   "protection": "none"
+  },
+  {
+   "name": "omarchyx",
+   "protection": "none"
+  },
+  {
+   "name": "grassfields",
+   "protection": "none"
+  },
+  {
+   "name": "firmware",
+   "protection": "none"
+  },
+  {
+   "name": "firmware-updater",
+   "protection": "none"
+  },
+  {
+   "name": "fw-firmwarex",
+   "protection": "none"
+  },
+  {
+   "name": "gs-firmwares",
+   "protection": "none"
+  },
+  {
+   "name": "bashtop",
+   "protection": "none"
+  },
+  {
+   "name": "sudoku",
+   "protection": "none"
+  },
+  {
+   "name": "polkit-gnome",
+   "protection": "none"
+  },
+  {
+   "name": "dbus-python",
+   "protection": "none"
+  },
+  {
+   "name": "glibc-locales",
+   "protection": "none"
+  },
+  {
+   "name": "base-x",
+   "protection": "none"
+  },
+  {
+   "name": "xfirmware",
+   "protection": "none"
+  }
+ ]
+}

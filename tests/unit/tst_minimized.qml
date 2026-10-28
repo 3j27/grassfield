@@ -245,6 +245,28 @@ TestCase {
         verify(!Minimized.isPluginVerb(7));
     }
 
+    // Window tiling (docs/specs/tiling.md TL6, TL23, TL26): tile, arrange, tile_popover and move_to are built from validated
+    // pieces only; anything else gives "" (never dispatched).
+    function test_tilingCallsAreBuiltFromValidatedPieces() {
+        for (const v of ["tile", "arrange", "tile_popover", "move_to"])
+            verify(Minimized.isPluginVerb(v), v);
+        const guard = verb => "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(";
+        compare(Minimized.tileCall("0x55AB", "top-left"), guard("tile") + "\"0x55ab\", \"top-left\") end end");
+        compare(Minimized.arrangeCall("55ab", "left-quarters"), guard("arrange") + "\"{\\\"layout\\\":\\\"left-quarters\\\",\\\"windows\\\":[\\\"0x55ab\\\"]}\") end end");
+        compare(Minimized.tilePopoverCall("0x55ab"), guard("tile_popover") + "\"0x55ab\") end end");
+        compare(Minimized.moveToCall("55ab", "DP-1"), guard("move_to") + "\"0x55ab\", \"DP-1\") end end");
+        compare(Minimized.moveToCall("55ab", "HDMI-A-1.2_x"), guard("move_to") + "\"0x55ab\", \"HDMI-A-1.2_x\") end end");
+        // Refused: a layout outside the Arrange rows (the Layouts section comes with step 4), a bad address, an output name the
+        // plugin would refuse (and that could break out of the Lua string).
+        for (const layout of ["wide-left", "thirds", "LEFT-RIGHT", "", "left-right\") end os.exit() --", null])
+            compare(Minimized.arrangeCall("55ab", layout), "", String(layout));
+        for (const address of ["", "zz", "0x", "0x12345678901234567", "55ab\"", null])
+            compare(Minimized.arrangeCall(address, "quarters") + Minimized.tilePopoverCall(address) + Minimized.moveToCall(address, "DP-1"), "", String(address));
+        for (const output of ["", "DP 1", "DP-1\"", "DP-1\\", "é", "a".repeat(65), null, 7])
+            compare(Minimized.moveToCall("55ab", output), "", String(output));
+        verify(Minimized.moveToCall("55ab", "a".repeat(64)) !== "");
+    }
+
     function test_addIsIdempotentAndRemove() {
         let list = Minimized.add([], rec("a", "foot"));
         list = Minimized.add(list, rec("a", "foot"));

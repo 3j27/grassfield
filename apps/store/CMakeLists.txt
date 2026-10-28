@@ -9,7 +9,8 @@ set(CMAKE_AUTOMOC ON)
 
 # Grassfield Store (ADR-0037). Step 1: the read-only backend (the catalog's fetch, signature, rules and cache; Arch's
 # AppStream, installed or fetched; pacman's databases; the merged model and search). Step 2: the window's backend
-# (StoreBackend, StoreView) and the app with its QML. Its package comes with step 3, with the helper and its policy.
+# (StoreBackend, StoreView) and the app with its QML. Step 3: the plan check, the removal rule and the queue of operations,
+# with the root helper and its polkit policy (packaging/store/), installed here and packaged as grassfield-store.
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Qml Quick DBus)
 # Qt 6.10+ defines the private module targets (Qt6::GuiPrivate, linked below for windowchrome.h) only when asked for.
 find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
@@ -23,8 +24,12 @@ add_library(grassfield-store-backend STATIC
     src/channel.cpp src/channel.h
     src/childprocess.cpp src/childprocess.h
     src/fetch.cpp src/fetch.h
+    src/operations.cpp src/operations.h
     src/pacman.cpp src/pacman.h
+    src/plancheck.cpp src/plancheck.h
+    src/removal.cpp src/removal.h
     src/signature.cpp src/signature.h
+    src/statefile.cpp src/statefile.h
     src/storebackend.cpp src/storebackend.h
     src/storeenv.h
     src/storemodel.cpp src/storemodel.h
@@ -45,6 +50,11 @@ install(TARGETS grassfield-store RUNTIME DESTINATION bin)
 install(DIRECTORY qml/ DESTINATION share/grassfield/store/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
 install(FILES org.grassfield.Store.desktop DESTINATION share/applications)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../branding/icons/apps/org.grassfield.Store.svg DESTINATION share/icons/hicolor/scalable/apps)
+# The root helper of repository installs and removals and its polkit action (ADR-0037 b.1): the only root code of the Store.
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/grassfield-store-helper DESTINATION lib/grassfield)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/org.grassfield.store.policy DESTINATION share/polkit-1/actions)
+# The script an Omarchy setup runs through in Omarchy's terminal, as the user (ADR-0037 b.2).
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/../../packaging/store/grassfield-store-run DESTINATION lib/grassfield)
 
 # Unit tests (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
 find_package(GTest)
@@ -57,7 +67,10 @@ if(GTest_FOUND)
         ../../tests/unit/store/tst_channel.cpp
         ../../tests/unit/store/tst_childprocess.cpp
         ../../tests/unit/store/tst_fetch.cpp
+        ../../tests/unit/store/tst_operations.cpp
         ../../tests/unit/store/tst_pacman.cpp
+        ../../tests/unit/store/tst_plancheck.cpp
+        ../../tests/unit/store/tst_removal.cpp
         ../../tests/unit/store/tst_signature.cpp
         ../../tests/unit/store/tst_storebackend.cpp
         ../../tests/unit/store/tst_storemodel.cpp

@@ -87,6 +87,10 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty())
         return 1;
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
+    // The last window closed while an operation runs: the Store stays until it ends (ADR-0037 f; it holds Omarchy's update
+    // lock and keeps the result), then quits.
+    app.setQuitOnLastWindowClosed(false);
+    QObject::connect(&app, &QGuiApplication::lastWindowClosed, &backend, &grassfield::store::StoreBackend::quitWhenIdle);
     // The first load starts once the window has its first frame: the window never waits for pacman or AppStream.
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
     if (window) {

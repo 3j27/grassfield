@@ -179,7 +179,8 @@ gestures, screen corners or session helpers (`config/hypr/grassfield/bindings.lu
 **dev** = test hook, refused outside a dev session (the dev rule: the relative `RunMode.dev` call in the security modules,
 `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing, others answer `refused`); **fixtures** = dev
 session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`, `VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
-approves polkit. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
+approves polkit, except `update check`, which starts Grassfield's own update checker (ADR-0033 d: a one-shot child
+of the shell, as the user, read-only towards pacman) and returns nothing it found. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
 one that does not exist, when an action has no real-session caller or is gated, and when a dev or fixtures function
 does not check its gate.
 
@@ -199,6 +200,7 @@ does not check its gate.
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
 | anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
 | anr | status | dev | returns the marked apps' window titles |
+| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
@@ -206,7 +208,7 @@ does not check its gate.
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
-| windows | minimize, tile, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything) |
+| windows | minimize, tile, arrange, tilePopover, nextOutput, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R/U/I/J/K/RETURN/C, SUPER+CTRL+SHIFT+arrows and SUPER+CTRL+ALT+SHIFT+arrows (`arrange`: a layout of the catalogue), SUPER+CTRL+L (`tilePopover`: the tiling popover of the focused window), SUPER+CTRL+ALT+LEFT/RIGHT (`nextOutput`: the focused window onto the next output), SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything); the tiling functions move only the focused window and the next ones of its output, through the plugin's validated verbs (docs/specs/tiling.md TL26) |
 | zoom | toggle, zoomIn, zoomOut | action | SUPER+ALT+8, SUPER+ALT+= and SUPER+ALT+- (`config/hypr/grassfield/bindings.lua`); change `accessibility.zoom` and `zoomLevel` only |
 | notifications | toggleCenter | action | SUPER+N, screen corner (in process) |
 | notifications | dnd, status | dev | `dnd` would let another process silence notices (security notices too) |
@@ -373,16 +375,24 @@ shell no longer relies on that alone:
   `Overview.show` (also its own `locked`), `Notifications.toggleCenter` / `openWidgetGallery`, `Dock.enterKeyboardMode`,
   the desktop's context menu and attribution card (`IconsView.openMenu` / `openAbout`), the widget menu (an Overlay
   layer with the keyboard, `DesktopWidgets` `onMenuRequested`; review of 1d2c856), and the window commands of IPC target
-  `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
+  `windows` (minimize, tile, arrange, tilePopover, nextOutput, hide, cycleApp). The Switcher already refused
   (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
-  Planned, not built (window tiling, ADR-0036, `docs/specs/tiling.md` TL34): the tiling popover (popup kind `tiling`,
-  through `Popups.open`), the suggestions overlay, the shared-edge handle and the `windows` functions `arrange`,
-  `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
+  Built in tiling step 3 (ADR-0036, `docs/specs/tiling.md` TL22-TL26, TL34): the tiling popover is popup kind `tiling`,
+  opened only through `Popups.open` (services/TilingHover, on the plugin's `tile-hover` event or Super+Ctrl+L), and the
+  `windows` functions `arrange`, `tilePopover` and `nextOutput` refuse first; the popover closes with every popup when the
+  lock engages. Planned, not built (steps 4-5): the suggestions overlay and the shared-edge handle join this list, and close
+  when the lock engages, in the step that adds each of them.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
   Super+drag) and the double-click on a resize border are pointer gestures Hyprland does not start on a locked session; the
-  plugin checks the lock again when it would tile after such a release and then moves nothing.
+  plugin checks the lock again when it would tile after such a release and then moves nothing. Tiling step 3:
+  `hl.plugin.grassfield.move_to` refuses while the session is locked (`tiling` notice with `reason:"locked"`, no window
+  moves); the `tile-hover` event and `hl.plugin.grassfield.tile_popover` (which only posts that event) change nothing by
+  themselves: the shell refuses the popover (`TilingHover.show` asks `SessionState.refuses` first, and refuses it over the
+  polkit sheet, a full-attention surface and the Dock's keyboard mode), and the plugin posts no hover while the session is
+  locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
+  review of 4ead6fb).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
@@ -476,7 +486,9 @@ shell no longer relies on that alone:
 - Fail mode: if the shell's `SessionState` wiring were missing, surfaces would open under the lock surface (Hyprland still
   shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
 Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
-control open while unlocked, all close at the lock, 17 popup kinds and every entry point refused while locked, open again
+control open while unlocked, the tiling popover's own guard (refused over Search, Apps, the polkit sheet and the Dock's
+keyboard mode, another window's popover closed first), all close at the lock, 18 popup kinds and every entry point refused
+while locked, open again
 after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
 close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
 `tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
@@ -612,6 +624,19 @@ VERIFIED until run).
   call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
+Grassfield Store's action (ADR-0037 b.1, SD2, SD17): for `org.grassfield.store.manage-packages` only, the sheet reads polkit's
+message, which polkitd expands with the helper's argument vector as pkexec reports it (`$(command_line)`), by one strict
+pattern (`AuthDialogModel.storeRequestOf`: the policy's English or French message, `/usr/lib/grassfield/grassfield-store-helper`,
+`install` or `remove`, a 32-digit operation id, 1 to 64 package names of ADR-0037 e.5, nothing else). It then says
+"Install xterm, gimp" (or "Remove …") in place of the message, and adds "Program: <the helper's path>" under "Action: <id>";
+a message that does not match, or the same message for another action, is shown as polkit gives it, one capped line. The
+names come from polkit, never from the program that asked. Every name is shown, none elided (the password is never asked
+for a package the user cannot see): past `storeLines` (8) the message scrolls inside a bounded area (wheel, drag, its scroll
+bar; Tab reaches it, then the arrow keys, Page Up/Down, Home and End), so the action line and the buttons stay in the sheet;
+the area takes no focus while AuthAgent keeps the keys. Unit-tested (`tst_authdialogmodel` test_storeRequestInPlainWords:
+15 messages that must not be read, the other action; `tst_authdialog` test_12_storeRequestNamesPackagesAndProgram and
+test_13_storeRequestNamesEveryPackage: 64 names of 128 characters, the helper's most).
+
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
 `responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,
