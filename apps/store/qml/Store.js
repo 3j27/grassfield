@@ -67,10 +67,17 @@ function getBlockText(reason) {
         return qsTr("This computer can't install apps from the Store: Omarchy's commands or Grassfield's installer are missing.");
     case "icon":
         return qsTr("This web app's icon hasn't been downloaded yet. Refresh the Store, then try again.");
+    case "omarchyChanged":
+        return omarchyChangedText();
     case "source":
         return qsTr("Installing apps from this source comes in a later version of the Store.");
     }
     return "";
+}
+
+// A setup while the installed Omarchy differs from the release the catalog checked (ADR-0037 b.2, g).
+function omarchyChangedText() {
+    return qsTr("This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
 }
 
 // What an operation is doing (its ring's accessible text and the queue's rows, SR18).
@@ -83,11 +90,15 @@ function operationText(op) {
         return op.blocked ? qsTr("Waiting for another installation or an update to finish") : qsTr("Waiting");
     case "authorizing":
         return qsTr("Waiting for permission…");
+    case "opening":
+        return qsTr("Opening Terminal…");
     case "checking":
         return removing ? qsTr("Finishing the uninstallation…") : qsTr("Finishing the installation…");
     }
     if (op.total > 0 && op.done > 0)
         return removing ? qsTr("Uninstalling: %1 of %2").arg(op.done).arg(op.total) : qsTr("Installing: %1 of %2").arg(op.done).arg(op.total);
+    if (op.path === "terminal")
+        return removing ? qsTr("Uninstalling in Terminal…") : qsTr("Installing in Terminal…");
     return removing ? qsTr("Uninstalling…") : qsTr("Installing…");
 }
 
@@ -120,13 +131,17 @@ function resultText(result) {
         return qsTr("This package isn't an app: the Store installs only apps.");
     case "failed":
         return removing ? qsTr("The uninstallation failed.") : qsTr("The installation failed.");
+    case "omarchyChanged":
+        return omarchyChangedText();
+    case "terminalDidNotOpen":
+        return qsTr("The terminal did not open.");
     }
     return "";
 }
 
 // A result the user can try again (the same plan; --needed completes a partial install).
 function canTryAgain(result) {
-    return !!result && ["interrupted", "notFinished", "timedOut", "didNotStart", "busy", "failed", "lostTrack"].indexOf(result.outcome) >= 0;
+    return !!result && ["interrupted", "notFinished", "timedOut", "didNotStart", "busy", "failed", "lostTrack", "terminalDidNotOpen"].indexOf(result.outcome) >= 0;
 }
 
 // Why "Uninstall…" is not offered (SR22); "" when it is, or when there is nothing to say (not installed).
@@ -150,6 +165,8 @@ function uninstallReasonText(reason) {
         return qsTr("dev: not applied");
     case "missing":
         return qsTr("This computer can't uninstall apps from the Store: Omarchy's commands or Grassfield's installer are missing.");
+    case "omarchyChanged":
+        return omarchyChangedText();
     }
     return "";
 }

@@ -95,13 +95,14 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
   without a launcher. Disabled with a tooltip when offline, while an update or another package manager runs, or when the source
-  is turned off; until step 3b and 3c, a setup's, an AUR app's and a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037
-  SD11). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
+  is turned off; until step 3b2 and 3c, an AUR app's and a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037
+  SD11, SD18); a setup's while the installed Omarchy differs from the catalog's pins, with that reason (ADR-0037 g, SD19). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
   a square in it while the operation waits in the queue, which takes it out.
 - SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »), "Install from the AUR"
   (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
-  --print` as the user), for a setup what it changes, for the AUR the warning (SR16), for a Flatpak what it can reach and the
-  runtimes it pulls. Cancel (Esc) closes it and nothing runs.
+  --print` as the user), for a setup first what it changes (our catalog's text) and that Omarchy's recipe (named, with its
+  arguments) runs in a Terminal window that asks for the password, for the AUR the warning (SR16), for a Flatpak what it
+  can reach and the runtimes it pulls. Cancel (Esc) closes it and nothing runs.
 - SR15. Before the operation runs, the plan check of ADR-0037 e.4, and again right before it starts (the helper and
   `grassfield-store-run` check under Omarchy's lock):
   - `pacman -Qu` lists a package not marked "[ignored]" (the last system update did not finish, S12) → "Finish the system
@@ -131,10 +132,12 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   popover in the toolbar: a button while the queue holds anything, whose menu lists each operation with what it does, and
   "Don't Install “…”" for a waiting one). The next one starts only when the previous one has its exit
   code, Omarchy's update lock is free and `db.lck` is absent. The running one shows progress: indeterminate while
-  downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Installing in Terminal…"
-  « Installation dans le Terminal… »). While an operation runs, the Store holds Omarchy's update lock: `omarchy update` cannot
-  start, and Software Update, which reads the same lock, shows "Update in progress" (ADR-0033 d.5, in its own words) until the
-  operation ends.
+  downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Opening Terminal…" « Ouverture du
+  Terminal… » until the script started, then "Installing in Terminal…" « Installation dans le Terminal… » or "Uninstalling
+  in Terminal…" until pacman's log counts). While an operation runs, Omarchy's update lock is held, by the Store for the
+  helper's and by `grassfield-store-run` for a setup's (ADR-0037 b.2; the Store only checks it is free before it asks for
+  the terminal): `omarchy update` cannot start, and Software Update, which reads the same lock, shows "Update in progress"
+  (ADR-0033 d.5, in its own words) until the operation ends.
 - SR19. Every operation ends with an exit code the Store receives (ADR-0037 b): pkexec's (b.1), the `exit` file of
   `grassfield-store-run` (b.2), the child's (b.3). Success is that code being 0 **and** the system's state matching the plan
   (the packages present at the planned versions, the web app's entry present, the Flatpak listed). Then the button becomes
@@ -142,7 +145,10 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   terminal, and what to do); "Try Again" re-runs the same plan. The helper's exit code says which line (ADR-0037 b.1): 3
   another installation or an update is running, 4 finish the system update first, 5 update your system first, 6 the app
   can't be uninstalled from the Store, 7 the package isn't an app, 1 the installation failed; pkexec's 126 is a dismissed
-  request (nothing said) and 127 a refused one. The same line shows at the bottom of every other page while the result
+  request (nothing said) and 127 a refused one. `grassfield-store-run`'s (b.2): 3 and 4 as the helper's, 5 "This setup
+  hasn't been checked with your version of Omarchy yet" « Cette configuration n'a pas encore été vérifiée avec votre version
+  d'Omarchy… », 6 (too late) "The terminal did not open", 1 the installation failed, 130 (Ctrl+C in the terminal) nothing
+  said when nothing changed. The same line shows at the bottom of every other page while the result
   stands, with Try Again, Details… and Close (the app's own page has it under its button only). Time limits: the polkit dialog 120 s; Omarchy's terminal must
   start the script within 60 s ("The terminal did not open" « Le terminal ne s'est pas ouvert »); a running operation is
   followed up to 2 h (helper) or 3 h (terminal), then the Store says it lost track and reads the state; it never stops one.
@@ -158,7 +164,9 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
   app's item (Open, Show in Store, Uninstall…). Installed's web apps that our catalog does not list (Omarchy's own, the
   user's) open and uninstall too (SD15). Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
-  S10), or the setup's removal recipe and the user data it deletes (our catalog's `removes`), or the web app's launcher and
+  S10), or the setup's removal recipe (named, in a Terminal window that asks for the password), the user data it deletes
+  (our catalog's `removes`, "It also deletes: …" « Elle supprime aussi : … ») and its packages (the same plan; a setup
+  whose package the deny list names offers no "Uninstall…"), or the web app's launcher and
   icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
   need is not removable (S10: "removing glib2 breaks dependency … required by
   accountsservice"): the sheet says which ones need it, and nothing runs. Default button "Uninstall" (« Désinstaller »),
@@ -282,6 +290,8 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A catalog with a bad or missing signature, a key not trusted or revoked, a lower serial, an invalid top level | not used, not cached; the previous catalog stays; one line in the settings window "The catalog could not be verified" |
 | A catalog entry that breaks a rule (unknown repo, bad name, http URL, oversized icon, wrong hash) | that entry is dropped, the rest is used |
 | A recipe the installed Omarchy does not have | the setup is hidden |
+| A file the catalog pins differs or is missing in the installed Omarchy (an Omarchy update the catalog has not checked yet) | every setup's Get and Uninstall… dimmed with "This setup hasn't been checked with your version of Omarchy yet" (SD19); the plan check and `grassfield-store-run` refuse it too (exit 5), naming the file |
+| A catalog without valid Omarchy pins, or a setup whose recipes they do not name | the setup is dropped (ADR-0037 g) |
 | An AUR install while the AUR source is off | not offered |
 | A web app URL that is not https | not offered (the catalog's CI refuses it too) |
 | Offline / metered | Get and Update All disabled with the reason; no automatic fetch on a metered link |
@@ -295,8 +305,8 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A3 | merge: catalog over AppStream over pacman; source precedence; licence fallback | unit with fake AppStream and pacman roots | L0 |
 | A4 | search ranking and the AUR section (fake RPC answers) | unit | L0 |
 | A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman (`tests/unit/store/tst_plancheck.cpp`; the sheet's words: `tests/unit/tst_storeoperations.qml`) | L0 |
-| A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs (`tst_operations.cpp`; b.2's files with step 3b) | L0 |
-| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: deadline, `flock -o` on Omarchy's lock file, re-check, exit file | container tests, fake pacman and the real one (step 3: `tests/integration/store_helper.sh`, the deny list on `tests/fixtures/store/removal-vectors.json` for the helper and `tst_removal.cpp`; `grassfield-store-run` with 3b) | L1 (container) |
+| A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs (`tst_operations.cpp`; b.2's files: its `Terminal*` cases, step 3b1) | L0 |
+| A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: arguments, deadline, Omarchy's lock on its own descriptor (closed for the recipe), re-check, the pins, Ctrl+C, exit file | container tests, fake pacman and the real one (step 3: `tests/integration/store_helper.sh`, the deny list on `tests/fixtures/store/removal-vectors.json` for the helper and `tst_removal.cpp`; `tests/integration/store_run.sh` for `grassfield-store-run`, step 3b1) | L1 (container) |
 | A7 | recovery: each start case of SR20 | unit with recorded `store.json` (`tst_operations.cpp` RecoveryAtStart; the real helper's files: `store_helper.sh`) | L0 |
 | A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
@@ -313,7 +323,7 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
   Software Update's on Settings (ADR-0033 U18).
 - `grassfield-store-helper` (pkexec, polkit action `org.grassfield.store.manage-packages`), `grassfield-store-run` (Omarchy's
   terminal), their status files (`/run/grassfield-store/<op-id>.{started,log,exit}`, `$XDG_RUNTIME_DIR/grassfield/store/
-  <op-id>.{started,exit}`): ADR-0037 b.
+  <op-id>.{pins,started,exit}`, the pins written by the Store): ADR-0037 b.
 - Flatpak 1.18 (when installed): `flatpak install|uninstall|update --user --noninteractive`, `flatpak remote-ls --user
   --updates`, `flatpak list --user --app`, `flatpak remote-info --show-metadata`, `flatpak remote-add --user --if-not-exists`.
 - Omarchy 4.0.4 commands, pinned in `docs/upstream/omarchy.lock` with the step that uses them: `omarchy-install-app`,
@@ -327,8 +337,9 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
   `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
   Step 3a adds `GRASSFIELD_STORE_PKEXEC` (the program run in pkexec's place for the helper's operations) and
   `GRASSFIELD_STORE_INSTALLER` (the program run in place of Omarchy's commands and of Open's launchers: it gets the command's
-  name, then its arguments); without them a dev session runs no operation ("dev: not applied"). With a fixture, the helper's
-  files, pacman's lock and log, Omarchy's package lists and `pacman-conf` are the fixture's too.
+  name, then its arguments; step 3b1: Omarchy's terminal launcher too); without them a dev session runs no operation ("dev:
+  not applied"). With a fixture, the helper's files, pacman's lock and log, Omarchy's folder (its package lists, the setups'
+  recipes and pinned files), `grassfield-store-run`'s folder (`<fixture>/run/store`) and `pacman-conf` are the fixture's too.
 
 ## Dependencies (versions seen in S3, S8 and S14; checked again at step 1)
 `grassfield-desktop` (same version), `kimageformats` (JPEG XL icons), `gnupg` (`gpgv`; AppStream is read by the Store's own reader, ADR-0037 SD5), polkit (`pkexec`,

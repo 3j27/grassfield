@@ -96,6 +96,18 @@ TestCase {
         compare(Logic.runtimeDir("", "/run/user/1000/wayland-1"), "");
     }
 
+    // The clear times given to the helper (--cleared-at, CH <ms>): whole milliseconds, digits only, 0 for anything else.
+    function test_clearTimeArg() {
+        compare(Logic.clearTimeArg(1792832460000), "1792832460000");
+        compare(Logic.clearTimeArg(5000.7), "5000");
+        compare(Logic.clearTimeArg(0), "0");
+        compare(Logic.clearTimeArg(-5), "0");
+        compare(Logic.clearTimeArg(NaN), "0");
+        compare(Logic.clearTimeArg("x"), "0");
+        compare(Logic.clearTimeArg(1e21), "0", "never 1e+21");
+        compare(Logic.clearTimeArg(undefined), "0");
+    }
+
     function test_retention() {
         compare(Logic.retentionMs("30m"), 1800000);
         compare(Logic.retentionMs("8h"), 28800000);
@@ -137,6 +149,7 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
+            ownsItem: true,
             expired: false
         };
         verify(Logic.mayPaste(ok));
@@ -146,6 +159,7 @@ TestCase {
             activeAddress: "0x1",
             closedSinceOpen: true,
             otherSurfaceOpen: true,
+            ownsItem: false,
             expired: true
         };
         for (const k in refuse) {
@@ -169,12 +183,15 @@ TestCase {
             activeAddress: "0x55d0c0ffee",
             closedSinceOpen: false,
             otherSurfaceOpen: false,
+            ownsItem: true,
             expired: false
         };
         compare(Logic.pasteStep(ok), "send");
         const at = changes => Logic.pasteStep(Object.assign({}, ok, changes));
         compare(at({locked: true}), "locked", "this shell's lock, the target active");
         compare(at({helperLocked: true}), "locked", "another program's lock, the target active");
+        compare(at({ownsItem: false}), "the clipboard changed", "a Copy since, or another app took the clipboard");
+        compare(at({ownsItem: undefined}), "the clipboard changed");
         compare(at({closedSinceOpen: true}), "the window closed");
         compare(at({otherSurfaceOpen: true}), "another surface opened", "the target active behind a surface");
         compare(at({expired: true}), "the window did not come back", "the target came back too late");

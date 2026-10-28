@@ -9,10 +9,11 @@
 //   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests)
 //   GRASSFIELD_STORE_PKEXEC       the program run in pkexec's place for the helper's operations (ADR-0037 b.1): a fake one
 //                                 that writes the helper's files under <fixture>/run/grassfield-store
-//   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Open, SR21): it gets the
-//                                 command's name, then its arguments
+//   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Omarchy's terminal, b.2;
+//                                 Open, SR21): it gets the command's name, then its arguments
 // Without the last two a dev session runs no operation and opens nothing ("dev: not applied", SR30). With a fixture, the
-// helper's files, pacman's lock and log, Omarchy's package lists and pacman-conf are the fixture's too.
+// helper's files, pacman's lock and log, Omarchy's folder (its package lists, the setups' recipes and pinned files),
+// grassfield-store-run's folder and pacman-conf are the fixture's too.
 #pragma once
 
 #include "runmode.h"
@@ -153,6 +154,26 @@ inline QString omarchyCommand(const QString &name)
 {
     const QString root = qEnvironmentVariable("OMARCHY_PATH");
     return (root.isEmpty() ? QStringLiteral("/usr/share/omarchy") : root) + QStringLiteral("/bin/") + name;
+}
+
+// The installed Omarchy a setup runs from, the folder its pins are read against (ADR-0037 b.2, g): the one omarchyCommand
+// and grassfield-store-run use, or the fixture's omarchy/.
+inline QString omarchyRoot()
+{
+    const QString root = qEnvironmentVariable("OMARCHY_PATH");
+    return inFixture(QStringLiteral("/omarchy"), root.isEmpty() ? QStringLiteral("/usr/share/omarchy") : root);
+}
+
+// grassfield-store-run (b.2), started in Omarchy's terminal, and the folder of its files: $XDG_RUNTIME_DIR/grassfield/store
+// ("" without XDG_RUNTIME_DIR: no setup runs), or the fixture's run/store.
+inline const QString runPath = QStringLiteral("/usr/lib/grassfield/grassfield-store-run");
+
+inline QString runDir()
+{
+    if (!fixture().isEmpty())
+        return fixture() + QStringLiteral("/run/store");
+    const QString run = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    return run.isEmpty() ? QString() : run + QStringLiteral("/grassfield/store");
 }
 
 inline const QString gpgv = QStringLiteral("/usr/bin/gpgv");

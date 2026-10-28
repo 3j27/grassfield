@@ -48,6 +48,12 @@ QString configFile()
     return apps::runmode::configDir() + QStringLiteral("/grassfield.json");
 }
 
+// The application when it is a QGuiApplication (the window's), else null (the unit tests' QCoreApplication).
+QGuiApplication *guiApp()
+{
+    return qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+}
+
 QByteArray readSmall(const QString &path, qint64 max)
 {
     QFile f(path);
@@ -311,6 +317,18 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.sync = snap->sync;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
+    // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
+    // runs while a pinned file differs.
+    const QString omarchy = env::omarchyRoot();
+    snap->apps.removeIf([&omarchy](const StoreApp &a) {
+        if (a.source != CatalogSource::Kind::OmarchySetup || !a.entry)
+            return false;
+        const QFileInfo install(omarchy + QStringLiteral("/bin/") + a.entry->source.install);
+        const QFileInfo remove(omarchy + QStringLiteral("/bin/") + a.entry->source.remove);
+        return !install.isFile() || !install.isExecutable() || !remove.isFile() || !remove.isExecutable();
+    });
+    if (snap->catalog && snap->catalog->omarchy)
+        snap->omarchyDiffers = omarchyDifference(omarchy, snap->catalog->omarchy->files);
     QSet<QString> webUrls;
     for (const view::WebAppEntry &w : snap->webApps)
         webUrls.insert(w.url);
@@ -318,9 +336,14 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
         StoreApp &a = snap->apps[i];
         if (a.source == CatalogSource::Kind::WebApp && a.entry)
             a.installed = webUrls.contains(a.entry->source.url);
-        // Open's entry when neither our catalog nor AppStream names one: the package's own (the first by name, f).
+        // Open's entry when neither our catalog nor AppStream names one: the package's own (the first by name, f); a
+        // setup's, its first package's that has one.
         if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::Repo && a.installed)
             a.desktopId = snap->entries.value(a.package).value(0);
+        for (const QString &p : a.packages) {
+            if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::OmarchySetup && a.installed)
+                a.desktopId = snap->entries.value(p).value(0);
+        }
         snap->index.insert(a.id, i);
     }
     // The tints of the hero and card artwork: the app's icon decoded here, off the GUI thread.
@@ -349,8 +372,9 @@ StoreBackend::StoreBackend(QObject *parent)
     , m_cancel(std::make_shared<std::atomic_bool>(false))
 {
     m_pool.setMaxThreadCount(2); // one load and one product page's pacman -Si at a time
-    if (qGuiApp)
-        connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &StoreBackend::focusWindowChanged);
+    // qGuiApp casts whatever application there is: the unit tests' is a QCoreApplication.
+    if (auto *gui = guiApp())
+        connect(gui, &QGuiApplication::focusWindowChanged, this, &StoreBackend::focusWindowChanged);
     const QString system = i18n::systemLanguage();
     m_language = system.startsWith(QLatin1String("fr")) ? QStringLiteral("fr") : QStringLiteral("en");
     m_macDevice = apps::macDeviceHere();
@@ -407,6 +431,8 @@ StoreBackend::StoreBackend(QObject *parent)
     ops.pacman = env::pacman();
     ops.stateFile = env::stateFile();
     ops.applications = dataHome() + QStringLiteral("/applications");
+    ops.run = env::runPath;
+    ops.runDir = env::runDir();
     ops.omarchy = [](const QString &command, const QStringList &args) {
         const QString fake = env::installer();
         if (apps::runmode::dev())
@@ -643,7 +669,7 @@ QVariantMap StoreBackend::sources() const
 
 QObject *StoreBackend::focusWindow() const
 {
-    return qGuiApp ? QGuiApplication::focusWindow() : nullptr;
+    return guiApp() ? QGuiApplication::focusWindow() : nullptr;
 }
 
 QVariantList StoreBackend::sections() const
@@ -885,10 +911,39 @@ QString StoreBackend::getBlock(const StoreApp &a) const
         if (a.icon.isEmpty())
             return QStringLiteral("icon"); // its icon is not cached yet (fetched with the catalog)
         break;
+    case CatalogSource::Kind::OmarchySetup:
+        if (const QString block = terminalBlock(); !block.isEmpty())
+            return block;
+        break;
     default:
-        return QStringLiteral("source"); // setups, the AUR and Flathub install with step 3's later parts (3b, 3c)
+        return QStringLiteral("source"); // the AUR and Flathub install with step 3's later parts (3b2, 3c)
     }
     return m_online ? QString() : QStringLiteral("offline");
+}
+
+QString StoreBackend::terminalBlock() const
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    if (apps::runmode::dev() && env::installer().isEmpty())
+        return QStringLiteral("dev");
+    if (!apps::runmode::dev() && (!QFileInfo(env::omarchyCommand(launcher)).isExecutable() || !QFileInfo(env::runPath).isExecutable()))
+        return QStringLiteral("missing");
+    if (env::runDir().isEmpty())
+        return QStringLiteral("missing");
+    if (!m_snapshot || !m_snapshot->catalog || !m_snapshot->catalog->omarchy || !m_snapshot->omarchyDiffers.isEmpty())
+        return QStringLiteral("omarchyChanged");
+    return {};
+}
+
+SetupCheck StoreBackend::setupCheck(const StoreApp &a, bool install) const
+{
+    SetupCheck check;
+    check.root = env::omarchyRoot();
+    if (a.entry)
+        check.recipe = install ? a.entry->source.install : a.entry->source.remove;
+    if (m_snapshot && m_snapshot->catalog && m_snapshot->catalog->omarchy)
+        check.pins = m_snapshot->catalog->omarchy->files;
+    return check;
 }
 
 QString StoreBackend::uninstallBlock(const StoreApp &a) const
@@ -901,6 +956,24 @@ QString StoreBackend::uninstallBlock(const StoreApp &a) const
         if (!apps::runmode::dev() && !QFileInfo(env::omarchyCommand(QStringLiteral("omarchy-webapp-remove"))).isExecutable())
             return QStringLiteral("missing");
         return {};
+    }
+    if (a.source == CatalogSource::Kind::OmarchySetup && m_snapshot) {
+        // The recipe removes its packages (omarchy-pkg-drop, pacman -Rns): never one the deny list names (b.1's list).
+        for (const QString &p : a.packages) {
+            switch (protection(p, m_snapshot->deny)) {
+            case Protection::None:
+                break;
+            case Protection::System:
+                return QStringLiteral("system");
+            case Protection::Omarchy:
+                return QStringLiteral("omarchy");
+            case Protection::Grassfield:
+                return QStringLiteral("grassfield");
+            }
+        }
+        if (!m_snapshot->deny.omarchyRead())
+            return QStringLiteral("listsMissing");
+        return terminalBlock();
     }
     if (a.source != CatalogSource::Kind::Repo || !m_snapshot)
         return QStringLiteral("source");
@@ -997,6 +1070,8 @@ QString refusalName(Refusal r)
         return QStringLiteral("dependency");
     case Refusal::Protected:
         return QStringLiteral("protected");
+    case Refusal::OmarchyChanged:
+        return QStringLiteral("omarchyChanged");
     case Refusal::Failed:
         return QStringLiteral("failed");
     }
@@ -1031,16 +1106,18 @@ void StoreBackend::plan(const QString &id, const QString &kind)
         return;
     }
     const PlanTools tools = planTools();
-    const QStringList packages{a->package};
+    const bool setup = a->source == CatalogSource::Kind::OmarchySetup;
+    const QStringList packages = setup ? a->packages : QStringList{a->package};
+    const SetupCheck check = setup ? setupCheck(*a, install) : SetupCheck{};
     const bool online = m_online;
     const bool own = m_operations->running();
     const DenyList deny = m_snapshot->deny;
     const QLocale locale = m_formats;
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
-    m_pool.start([this, id, kind, install, packages, tools, online, own, deny, locale, cancel] {
+    m_pool.start([this, id, kind, install, setup, packages, check, tools, online, own, deny, locale, cancel] {
         QVariantMap out;
         if (install) {
-            InstallPlan p = checkInstall(packages, tools, online, own);
+            InstallPlan p = setup ? checkSetupInstall(packages, check, tools, online, own) : checkInstall(packages, tools, online, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
                    {QStringLiteral("packages"), packageList(p.packages, locale)},
                    {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
@@ -1058,7 +1135,7 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                 emit planReady(id, kind, out);
             }, Qt::QueuedConnection);
         } else {
-            RemovePlan p = checkRemove(packages, deny, tools, own);
+            RemovePlan p = setup ? checkSetupRemove(packages, check, deny, tools, own) : checkRemove(packages, deny, tools, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
                    {QStringLiteral("packages"), packageList(p.packages, locale)},
                    {QStringLiteral("dependents"), p.dependents},
@@ -1095,12 +1172,21 @@ bool StoreBackend::install(const QString &id)
         if (!isWebAppName(r.webName) || !isHttpsUrl(r.webUrl))
             return false;
     } else {
-        // The plan its sheet showed (planReady); the helper checks it all again.
+        // The plan its sheet showed (planReady); the helper, or grassfield-store-run for a setup, checks it all again.
         const auto it = m_installPlans.constFind(id);
         if (it == m_installPlans.cend() || it->packages.isEmpty())
             return false;
-        r.path = QStringLiteral("helper");
-        r.packages = {a->package};
+        if (a->source == CatalogSource::Kind::OmarchySetup) {
+            const SetupCheck check = setupCheck(*a, true);
+            r.path = QStringLiteral("terminal");
+            r.packages = a->packages;
+            r.recipe = check.recipe;
+            r.args = a->entry->source.args;
+            r.pins = check.pins;
+        } else {
+            r.path = QStringLiteral("helper");
+            r.packages = {a->package};
+        }
         r.plan = it->packages;
     }
     m_installPlans.remove(id);
@@ -1148,8 +1234,17 @@ bool StoreBackend::uninstall(const QString &id)
         const auto it = m_removePlans.constFind(id);
         if (it == m_removePlans.cend() || it->packages.isEmpty())
             return false;
-        r.path = QStringLiteral("helper");
-        r.packages = {a->package};
+        if (a->source == CatalogSource::Kind::OmarchySetup) {
+            const SetupCheck check = setupCheck(*a, false);
+            r.path = QStringLiteral("terminal");
+            r.packages = a->packages;
+            r.recipe = check.recipe;
+            r.args = a->entry->source.removeArgs;
+            r.pins = check.pins;
+        } else {
+            r.path = QStringLiteral("helper");
+            r.packages = {a->package};
+        }
         r.plan = it->packages;
     }
     m_removePlans.remove(id);
@@ -1220,7 +1315,7 @@ void StoreBackend::quitWhenIdle()
             m_operations->removeWaiting(i.record.id);
     }
     m_quitWhenIdle = true;
-    if (qGuiApp) {
+    if (guiApp()) {
         for (QWindow *w : QGuiApplication::topLevelWindows())
             w->close();
     }

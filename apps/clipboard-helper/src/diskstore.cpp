@@ -290,6 +290,46 @@ DiskStore::Loaded DiskStore::load()
     return result;
 }
 
+DiskStore::Clears DiskStore::readClears(const QString &stateDir)
+{
+    Clears clears;
+    const int dirfd = ::open(QFile::encodeName(stateDir).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (dirfd < 0)
+        return clears;
+    struct stat st {};
+    if (::fstat(dirfd, &st) != 0 || st.st_uid != ::getuid()) {
+        ::close(dirfd);
+        return clears;
+    }
+    QByteArray bytes;
+    const Read read = readBounded(dirfd, "clears", 64, &bytes);
+    const QList<QByteArray> f = read == Read::Ok && bytes.endsWith('\n') ? bytes.chopped(1).split(' ') : QList<QByteArray>();
+    bool okHistory = false;
+    bool okPinned = false;
+    const qint64 history = f.size() == 3 ? f.at(1).toLongLong(&okHistory) : -1;
+    const qint64 pinned = f.size() == 3 ? f.at(2).toLongLong(&okPinned) : -1;
+    const bool valid = f.size() == 3 && f.first() == "GFCLEARS1" && okHistory && okPinned && history >= 0 && pinned >= 0;
+    // A record that breaks a rule is deleted and read as missing: the clears asked are then carried out again.
+    if (read == Read::Bad || (read == Read::Ok && !valid))
+        ::unlinkat(dirfd, "clears", 0);
+    ::close(dirfd);
+    if (!valid)
+        return clears;
+    clears.history = history;
+    clears.pinned = pinned;
+    clears.known = true;
+    return clears;
+}
+
+bool DiskStore::writeClears(const QString &stateDir, const Clears &clears)
+{
+    DiskStore dir(stateDir);
+    if (!dir.ensureDir())
+        return false;
+    return dir.writeFile(QStringLiteral("clears"), "GFCLEARS1 " + QByteArray::number(clears.history) + ' '
+                                                       + QByteArray::number(clears.pinned) + '\n');
+}
+
 bool DiskStore::ensureDir()
 {
     const QByteArray path = QFile::encodeName(m_dir);
