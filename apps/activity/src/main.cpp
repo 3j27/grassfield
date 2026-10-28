@@ -11,6 +11,7 @@
 
 #include "activityapp.h"
 #include "globalmenu.h"
+#include "iconprovider.h"
 #include "runmode.h"
 #include "translationloader.h"
 #include "windowchrome.h"
@@ -126,6 +127,7 @@ int main(int argc, char *argv[])
     const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
     for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
         engine.addImportPath(*it);
+    engine.addImageProvider(QStringLiteral("icon"), new activity::IconProvider);
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_ACTIVITY_QML");
     if (qmlDir.isEmpty())

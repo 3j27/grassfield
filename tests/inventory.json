@@ -151,6 +151,7 @@
  {"path": "tests/unit/tst_searchunits.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsstore.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storemain.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_activitymain.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storetext.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storepreferences.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storeoperations.qml", "layer": "headless"},
