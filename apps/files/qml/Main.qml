@@ -135,6 +135,36 @@ QtObject {
         }
     }
 
+    // The window that shows KIO's question on screen (KioSheets.qml): the one the user last worked in when it was asked. It
+    // stays there until it is answered, and moves to another window if that one closes. With no browser window (--info)
+    // the question is answered "stop", which gives every kind its safe answer (src/kioprompts.cpp).
+    property var promptWindow: null
+    property int promptId: -1
+    property Connections promptPlacement: Connections {
+        target: root.app.prompts ?? null
+        function onCurrentChanged(): void {
+            root.placePrompt();
+        }
+    }
+
+    function placePrompt(): void {
+        const current = root.app.prompts ? root.app.prompts.current : null;
+        const id = current && current.id !== undefined ? current.id : -1;
+        if (id < 0) {
+            root.promptId = -1;
+            root.promptWindow = null;
+            return;
+        }
+        if (id === root.promptId && root.promptWindow)
+            return;
+        root.promptId = id;
+        root.promptWindow = root.lastActiveWindow ?? (root.windows.length > 0 ? root.windows[root.windows.length - 1] : null);
+        if (!root.promptWindow)
+            root.app.prompts.reply(id, {
+                button: "stop"
+            });
+    }
+
     function springStarted(tab: var): void {
         if (root.springTabs.indexOf(tab) < 0)
             root.springTabs = root.springTabs.concat([tab]);
@@ -164,6 +194,10 @@ QtObject {
         root.windows = root.windows.filter(w => w !== win);
         if (root.lastActiveWindow === win)
             root.lastActiveWindow = null;
+        if (root.promptWindow === win) {
+            root.promptWindow = null;
+            root.placePrompt();
+        }
     }
 
     function rememberClosedTab(tab: var): void {

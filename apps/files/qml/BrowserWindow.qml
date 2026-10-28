@@ -1120,6 +1120,13 @@ Window {
         destructive: true
     }
 
+    // KIO's questions (a name that exists, a certificate…), in the window Main.qml places them in.
+    KioSheets {
+        prompts: win.app.prompts ?? null
+        shown: win.manager.promptWindow === win
+        focusBack: win.tab ? win.tab.view : null
+    }
+
     MenuLayer {
         id: menuLayer
     }
