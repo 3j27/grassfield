@@ -9999,8 +9999,8 @@
 <context>
     <name>TilingSuggestions</name>
     <message>
-        <source>Windows to place in this zone</source>
-        <translation>Fenêtres à placer dans cette zone</translation>
+        <source>Choose a window for this zone</source>
+        <translation>Choisir une fenêtre pour cette zone</translation>
     </message>
 </context>
 <context>

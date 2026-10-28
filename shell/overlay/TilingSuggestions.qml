@@ -32,7 +32,7 @@ FocusScope {
     height: Math.max(1, (Popups.data.height ?? 0) - 2 * Tokens.spacingSm)
     activeFocusOnTab: true
     Accessible.role: Accessible.List
-    Accessible.name: qsTr("Windows to place in this zone")
+    Accessible.name: qsTr("Choose a window for this zone")
 
     onSuggestionChanged: {
         root.picked = false;
