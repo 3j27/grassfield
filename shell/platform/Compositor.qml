@@ -490,7 +490,53 @@ Singleton {
     function arrange(toplevel: var, layout: string): bool {
         if (!root.canArrange)
             return false;
-        return dispatchRequest(Minimized.arrangeCall(addressOf(toplevel), layout));
+        const address = addressOf(toplevel);
+        const sent = dispatchRequest(Minimized.arrangeCall(address, layout));
+        if (sent)
+            root.askSuggestion(address);
+        return sent;
+    }
+
+    // The Layouts section and the suggestions (TL27, TL28): a window alone into a zone of a layout, a pick of the suggestions,
+    // the plugin's `tiling` notice. False without the capability.
+    readonly property bool canLayouts: Capabilities.has("tiling-layouts")
+
+    // The class of an output for its Layouts section (WindowTiling.outputClass from its logical size), "" for no such output.
+    function outputClassOf(screenName: string): string {
+        const s = Quickshell.screens.find(o => o.name === screenName);
+        return s ? WindowTiling.outputClass(s.width, s.height) : "";
+    }
+
+    // The plugin's `tiling` change notice (WindowTiling.parseNotice): {gen, reason}.
+    signal tilingNotice(var notice)
+
+    // The window whose arrangement the shell asked last, while its suggestion may still come (TL28: only after a layout or an
+    // arrangement chosen from the popover, the Window menu or the keys): {address, until} (ms since the epoch), or null.
+    property var suggestionAsked: null
+
+    function askSuggestion(address: string): void {
+        root.suggestionAsked = root.canLayouts && address !== "" ? {address: address, until: Date.now() + WindowTiling.suggestionWaitMs} : null;
+    }
+
+    // A zone of the Layouts section (TL27): the window alone into zone `zone` of `layout`.
+    function placeInZone(toplevel: var, layout: string, zone: int): bool {
+        if (!root.canLayouts)
+            return false;
+        const address = addressOf(toplevel);
+        const sent = dispatchRequest(Minimized.zoneCall(address, layout, zone));
+        if (sent)
+            root.askSuggestion(address);
+        return sent;
+    }
+
+    // A pick of the suggestions (TL28): the window `address` into zone `zone` of the layout of the window `withAddress`.
+    function pickSuggestion(address: string, layout: string, zone: int, withAddress: string): bool {
+        if (!root.canLayouts)
+            return false;
+        const sent = dispatchRequest(Minimized.zoneCall(address, layout, zone, withAddress));
+        if (sent)
+            root.askSuggestion(Minimized.normalizeAddress(withAddress));
+        return sent;
     }
 
     // The tiling popover of the zoom light (TL22-TL26): the plugin's hover event, its keyboard opening and Move to <display>.
@@ -951,6 +997,9 @@ Singleton {
                 const hover = WindowTiling.parseHover(event.data);
                 if (hover)
                     root.tileHover(hover);
+                const notice = WindowTiling.parseNotice(event.data);
+                if (notice)
+                    root.tilingNotice(notice);
                 return;
             }
             if (event.name === "urgent") {

@@ -9,9 +9,9 @@ be7eb7c and on the open pull requests #33 and #35)
 
 The app is named "Activity Monitor" / « Moniteur d'activité » (owner, AQ1; macOS's own app name in both languages:
 **needs legal review**, element E38 and question 14 of `docs/legal/visual-review.md`, added in this pull request). The
-precedent named in AQ1 holds only in part (review of e3882de): the owner kept "Preview" / « Aperçu » (L1), but Grassfield's
-Preview ships today with the French name « Visionneuse » (`apps/preview/org.grassfield.Preview.desktop:4`), so « Moniteur
-d'activité » would be the first French app name shipped as macOS's. Internal identifiers stay
+precedent named in AQ1 holds only in part (review of e3882de): L1 keeps the English "Preview" with the French name
+« Visionneuse » as shipped (`apps/preview/org.grassfield.Preview.desktop:4`; the 2026-10-27 question had named « Aperçu » by
+mistake, corrected on main in b6763c2), so « Moniteur d'activité » would be the first French app name shipped as macOS's. Internal identifiers stay
 neutral (master-prompt §14): the folder `apps/activity`, the binary `grassfield-activity`, the app id and desktop file
 `org.grassfield.Activity`, the QML module and the code say "activity". In this ADR "the app" means it.
 
@@ -380,7 +380,7 @@ Answer: A (see "Answers").
 ### Answers (2026-10-28, AskUserQuestion; the options as asked in French, in the order above)
 | Question | Answer | Consequence |
 |---|---|---|
-| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the owner's L1 decision only: Preview ships « Visionneuse » in French today (review of e3882de; the owner is told in the reply to the review) |
+| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the English name only: L1 keeps Preview's shipped French name « Visionneuse » (main b6763c2; review of e3882de; the owner is told in the reply to the review) |
 | AQ2 network per process | « TCP seulement, étiqueté » (Recommandé) → A | AM43: the four columns headed "(TCP)" and the line under the table |
 | AQ3 energy per process | « Indice « Impact énergétique » » (Recommandé) → A | AM36 to AM39; weights calibrated by an owner L2 run on the laptop |
 | AQ4 other users' processes | « Visibles en lecture seule » → **B** (not the recommended A) | c above, AD25, AD26; the brief's "sees only the user's processes" is amended by the owner for seeing; stopping stays the user's own processes only |

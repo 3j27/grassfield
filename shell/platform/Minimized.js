@@ -59,6 +59,25 @@ function arrangeCall(address, layout) {
     return guardedPluginCall("arrange", ["\"" + json.replace(/"/g, "\\\"") + "\""]);
 }
 
+// The layouts of the catalogue (the tiling.layout* tokens, compositor core catalogue()): a zone of the Layouts section or a
+// pick of the suggestions names one (TL27, TL28).
+var catalogueLayouts = arrangeLayouts.concat(["wide-left", "thirds", "wide-center", "four-columns", "stacked-thirds"]);
+
+// hl.plugin.grassfield.arrange(json) with a zone (capability "tiling-layouts", TL27, TL28): the window alone into zone `zone`
+// of `layout` (a zone of the Layouts section), or, with `withAddress`, into that zone of the layout of the window
+// `withAddress` (a pick of the suggestions: it joins that window's group). "" when anything is invalid.
+function zoneCall(address, layout, zone, withAddress) {
+    const hex = normalizeAddress(address);
+    const other = withAddress === undefined || withAddress === "" ? null : normalizeAddress(withAddress);
+    if (hex === "" || other === "" || other === hex || typeof layout !== "string" || catalogueLayouts.indexOf(layout) < 0 || !Number.isInteger(zone) || zone < 0 || zone > 3)
+        return "";
+    const request = {layout: layout, windows: ["0x" + hex], zone: zone};
+    if (other !== null)
+        request.with = "0x" + other;
+    // Only validated pieces: the JSON holds no quote or backslash to escape for Lua but the JSON's own quotes.
+    return guardedPluginCall("arrange", ["\"" + JSON.stringify(request).replace(/"/g, "\\\"") + "\""]);
+}
+
 // hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of
 // that window, with its zoom light, and the shell opens the tiling popover with the keyboard. "" when the address is invalid.
 function tilePopoverCall(address) {

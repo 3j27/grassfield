@@ -23,6 +23,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 namespace gf::minimizer {
 
@@ -48,5 +50,9 @@ namespace gf::minimizer {
     // ignored (logged).
     void minimize(uint64_t address, std::optional<gf::minimize::Box> target);
     void restore(uint64_t address, std::optional<gf::minimize::Box> target);
+
+    // The windows the plugin minimized from display `monitor` (their recorded place) that still wait on special:minimized,
+    // the latest first: what the tiling suggestions offer besides the windows on screen (tiling.md TL28). Read only.
+    std::vector<uint64_t> minimizedFrom(std::string_view monitor);
 
 } // namespace gf::minimizer

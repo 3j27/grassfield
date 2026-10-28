@@ -55,4 +55,39 @@ TestCase {
         verify(g.stroke >= 1);
         verify(zonesOf(g)[0].width > 0);
     }
+
+    // TL27 (step 4a): a layout of the Layouts section, its zones targets, none in full at rest, their numbers for the keys.
+    function test_aLayoutsZonesAreTargets() {
+        const g = createTemporaryObject(glyphComponent, testCase, {zones: Tokens.tilingLayoutThirds, own: 3, interactive: true, width: Tokens.tilingLayoutGlyphWidth, color: "#000000",
+            zoneNames: ["a", "b", "c"]});
+        const z = zonesOf(g);
+        compare(z.length, 3);
+        verify(z.every(r => Math.abs(r.color.a - Tokens.tilingGlyphOtherOpacity) < 0.01), "own past the last zone: none in full");
+        compare(g.stroke, Tokens.tilingGlyphStroke, "a larger glyph keeps the popover's line weight");
+        compare(g.gap, Tokens.tilingGlyphGap);
+        compare(z[1].Accessible.name, "b");
+        const hovered = [];
+        const clicked = [];
+        g.zoneHovered.connect(i => hovered.push(i));
+        g.zoneClicked.connect(i => clicked.push(i));
+        const middle = z[2].mapToItem(testCase, z[2].width / 2, z[2].height / 2);
+        mouseMove(testCase, middle.x, middle.y);
+        mouseClick(testCase, middle.x, middle.y);
+        compare(clicked.join(","), "2");
+        verify(hovered.indexOf(2) >= 0);
+        mouseMove(testCase, 199, 199);
+        compare(hovered[hovered.length - 1], -1, "left: -1");
+        // Not interactive (the glyph sections): no click goes through a zone.
+        g.interactive = false;
+        mouseClick(testCase, middle.x, middle.y);
+        compare(clicked.join(","), "2");
+    }
+
+    function test_numberedShowsTheZoneNumbers() {
+        const g = createTemporaryObject(glyphComponent, testCase, {zones: Tokens.tilingLayoutQuarters, own: 4, numbered: true, width: Tokens.tilingLayoutGlyphWidth});
+        const numbers = zonesOf(g).map(r => r.children.find(c => c.text !== undefined)).map(t => t.visible ? t.text : "");
+        compare(numbers.join(","), "1,2,3,4");
+        g.numbered = false;
+        verify(zonesOf(g).every(r => !r.children.find(c => c.text !== undefined).visible));
+    }
 }

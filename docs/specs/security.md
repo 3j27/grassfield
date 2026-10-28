@@ -380,8 +380,12 @@ shell no longer relies on that alone:
   Built in tiling step 3 (ADR-0036, `docs/specs/tiling.md` TL22-TL26, TL34): the tiling popover is popup kind `tiling`,
   opened only through `Popups.open` (services/TilingHover, on the plugin's `tile-hover` event or Super+Ctrl+L), and the
   `windows` functions `arrange`, `tilePopover` and `nextOutput` refuse first; the popover closes with every popup when the
-  lock engages. Planned, not built (steps 4-5): the suggestions overlay and the shared-edge handle join this list, and close
-  when the lock engages, in the step that adds each of them.
+  lock engages. Built in tiling step 4a (TL27, TL28): the Layouts section is part of the popover; the suggestions are popup
+  kind `tilingSuggest`, opened only through `Popups.open` by services/TilingSuggest, whose `show` asks
+  `SessionState.refuses("tiling suggestions")` first, then refuses them over the polkit sheet, a full-attention surface and
+  the Dock's keyboard mode (`TilingHover.refusedBy`) and in place of any popup but the tiling popover; they close with every
+  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Planned, not built
+  (step 4c): the shared-edge handle joins this list, and closes when the lock engages.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
@@ -392,7 +396,9 @@ shell no longer relies on that alone:
   themselves: the shell refuses the popover (`TilingHover.show` asks `SessionState.refuses` first, and refuses it over the
   polkit sheet, a full-attention surface and the Dock's keyboard mode), and the plugin posts no hover while the session is
   locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
-  review of 4ead6fb).
+  review of 4ead6fb). Tiling step 4a: `arrange` with `zone` and `with` (a zone of the Layouts section, a pick of the
+  suggestions) is refused while locked like every `arrange`; the suggestion in the `hyprctl grassfield-tiling` reply is read
+  only by the shell after its own arrangement, and lists window addresses only (no titles, no contents).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
@@ -487,7 +493,8 @@ shell no longer relies on that alone:
   shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
 Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
 control open while unlocked, the tiling popover's own guard (refused over Search, Apps, the polkit sheet and the Dock's
-keyboard mode, another window's popover closed first), all close at the lock, 18 popup kinds and every entry point refused
+keyboard mode, another window's popover closed first) and of the suggestions (refused in place of another popup and over
+the same surfaces), all close at the lock, 19 popup kinds and every entry point refused
 while locked, open again
 after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
 close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
