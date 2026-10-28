@@ -3750,12 +3750,24 @@
         <translation>Le lien web n’a pas été ouvert&#xa0;: aucun navigateur web par défaut n’est défini.</translation>
     </message>
     <message>
+        <source>An application is not a file: it cannot be opened with another application.</source>
+        <translation>Une application n’est pas un fichier&#xa0;: elle ne peut pas être ouverte avec une autre application.</translation>
+    </message>
+    <message>
         <source>The application is no longer installed.</source>
         <translation>L’application n’est plus installée.</translation>
     </message>
     <message>
+        <source>“%1” could not be started.</source>
+        <translation>Impossible de démarrer «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
         <source>Glance could not be started: grassfield-preview was not found.</source>
         <translation>Impossible de lancer le Survol&#xa0;: grassfield-preview est introuvable.</translation>
+    </message>
+    <message>
+        <source>The operation can’t be completed because you don’t have permission to access some of the items.</source>
+        <translation>L’opération ne peut pas être effectuée car vous n’avez pas l’autorisation d’accéder à certains éléments.</translation>
     </message>
     <message>
         <source>Moving 1 item…</source>
@@ -3878,6 +3890,10 @@
         <translation>«&#xa0;%1&#xa0;» ne peut pas être copié ou déplacé ici&#xa0;: le dossier contient «&#xa0;%2&#xa0;», qui a le même nom une fois les accents composés. Renommez l’un des deux d’abord.</translation>
     </message>
     <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
         <source>“%1” couldn’t be turned: %2.</source>
         <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
     </message>
@@ -3928,6 +3944,10 @@
 <context>
     <name>FolderModel</name>
     <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
         <source>Recents</source>
         <translation>Récents</translation>
     </message>
@@ -3938,6 +3958,10 @@
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Application</source>
+        <translation>Application</translation>
     </message>
     <message>
         <source>%1 × %2</source>
@@ -4554,6 +4578,42 @@
     </message>
 </context>
 <context>
+    <name>GrassfieldJobUiDelegate</name>
+    <message>
+        <source>The operation can’t be completed.</source>
+        <translation>L’opération ne peut pas être effectuée.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldOpenWithHandler</name>
+    <message>
+        <source>There is no application set to open the document “%1”.</source>
+        <translation>Aucune app n’est définie pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Choose one with Open With, in the File menu or the document’s menu.</source>
+        <translation>Choisissez-en une avec Ouvrir avec, dans le menu Fichier ou le menu du document.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldUndoUi</name>
+    <message>
+        <source>The copy “%1” was changed after it was made, so Undo stopped and kept it. Move it to the Trash if you no longer need it.</source>
+        <translation>La copie «&#xa0;%1&#xa0;» a été modifiée après sa création&#xa0;: l’annulation s’est arrêtée et l’a conservée. Placez-la dans la corbeille si vous n’en avez plus besoin.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldUntrustedProgramHandler</name>
+    <message>
+        <source>“%1” wasn’t opened.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas été ouvert.</translation>
+    </message>
+    <message>
+        <source>Files doesn’t run programs. Open apps from the Dock or from Apps.</source>
+        <translation>Fichiers n’exécute pas de programmes. Ouvrez les apps depuis le Dock ou depuis Apps.</translation>
+    </message>
+</context>
+<context>
     <name>HeroCarousel</name>
     <message>
         <source>Featured</source>
@@ -4790,6 +4850,14 @@
         <translation>Informations sur %1</translation>
     </message>
     <message>
+        <source>1 item</source>
+        <translation>1 élément</translation>
+    </message>
+    <message>
+        <source>%1 items</source>
+        <translation>%1 éléments</translation>
+    </message>
+    <message>
         <source>Calculating…</source>
         <translation>Calcul en cours…</translation>
     </message>
@@ -4808,6 +4876,26 @@
     <message>
         <source>Kind:</source>
         <translation>Type&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Category:</source>
+        <translation>Catégorie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Comment:</source>
+        <translation>Commentaire&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Desktop entry:</source>
+        <translation>Lanceur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Command:</source>
+        <translation>Commande&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Categories:</source>
+        <translation>Catégories&#xa0;:</translation>
     </message>
     <message>
         <source>Size:</source>
@@ -5016,6 +5104,248 @@
     <message>
         <source>Done</source>
         <translation>OK</translation>
+    </message>
+</context>
+<context>
+    <name>KioSheets</name>
+    <message>
+        <source>Hide Certificate</source>
+        <translation>Masquer le certificat</translation>
+    </message>
+    <message>
+        <source>Hide Details</source>
+        <translation>Masquer les détails</translation>
+    </message>
+    <message>
+        <source>Apply to All</source>
+        <translation>Appliquer à tous</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>inconnue</translation>
+    </message>
+    <message>
+        <source>Always trust “%1”</source>
+        <translation>Toujours faire confiance à «&#xa0;%1&#xa0;»</translation>
+    </message>
+</context>
+<context>
+    <name>KioSheetsLogic</name>
+    <message>
+        <source>A folder named “%1” already exists in this location.</source>
+        <translation>Un dossier nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An older item named “%1” already exists in this location.</source>
+        <translation>Un élément plus ancien nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>A newer item named “%1” already exists in this location.</source>
+        <translation>Un élément plus récent nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An item named “%1” already exists in this location.</source>
+        <translation>Un élément nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>Do you want to keep both items?</source>
+        <translation>Voulez-vous conserver les deux éléments&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to merge it with the one you’re moving? Items with the same name are asked about one by one.</source>
+        <translation>Voulez-vous le fusionner avec celui que vous déplacez&#xa0;? Les éléments de même nom vous seront demandés un par un.</translation>
+    </message>
+    <message>
+        <source>Do you want to merge it with the one you’re copying? Items with the same name are asked about one by one.</source>
+        <translation>Voulez-vous le fusionner avec celui que vous copiez&#xa0;? Les éléments de même nom vous seront demandés un par un.</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the newer one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus récent que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the older one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus ancien que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par celui que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the newer one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus récent que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the older one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus ancien que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par celui que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it?</source>
+        <translation>Voulez-vous le remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Merge</source>
+        <translation>Fusionner</translation>
+    </message>
+    <message>
+        <source>Replace</source>
+        <translation>Remplacer</translation>
+    </message>
+    <message>
+        <source>Keep Both</source>
+        <translation>Conserver les deux</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Ignorer</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
+        <source>Start Over</source>
+        <translation>Recommencer</translation>
+    </message>
+    <message>
+        <source>Part of “%1” is already in this location.</source>
+        <translation>Une partie de «&#xa0;%1&#xa0;» se trouve déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An earlier copy of it stopped before the end. Do you want to resume it where it stopped?</source>
+        <translation>Une copie précédente s’est arrêtée avant la fin. Voulez-vous la reprendre là où elle s’est arrêtée&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renommer</translation>
+    </message>
+    <message>
+        <source>Rename replaces the characters the destination doesn’t allow with “_”.</source>
+        <translation>Renommer remplace par «&#xa0;_&#xa0;» les caractères que la destination n’accepte pas.</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>The operation can’t be completed.</source>
+        <translation>L’opération ne peut pas être effectuée.</translation>
+    </message>
+    <message>
+        <source>You can’t undo this action.</source>
+        <translation>Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to permanently erase the items in the Trash?</source>
+        <translation>Voulez-vous vraiment effacer définitivement les éléments de la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Empty Trash</source>
+        <translation>Vider la corbeille</translation>
+    </message>
+    <message>
+        <source>Do you want to move “%1” to the Trash?</source>
+        <translation>Voulez-vous placer «&#xa0;%1&#xa0;» dans la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to move these %1 items to the Trash?</source>
+        <translation>Voulez-vous placer ces %1 éléments dans la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Move to Trash</source>
+        <translation>Placer dans la corbeille</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be moved to the Trash because the Trash is full.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être placé dans la corbeille, car elle est pleine.</translation>
+    </message>
+    <message>
+        <source>These %1 items can’t be moved to the Trash because the Trash is full.</source>
+        <translation>Ces %1 éléments ne peuvent pas être placés dans la corbeille, car elle est pleine.</translation>
+    </message>
+    <message>
+        <source>Do you want to delete it immediately? You can’t undo this action.</source>
+        <translation>Voulez-vous le supprimer immédiatement&#xa0;? Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Do you want to delete them immediately? You can’t undo this action.</source>
+        <translation>Voulez-vous les supprimer immédiatement&#xa0;? Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be moved to the Trash.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être placé dans la corbeille.</translation>
+    </message>
+    <message>
+        <source>These %1 items can’t be moved to the Trash.</source>
+        <translation>Ces %1 éléments ne peuvent pas être placés dans la corbeille.</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete “%1”?</source>
+        <translation>Voulez-vous vraiment supprimer «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete these %1 items?</source>
+        <translation>Voulez-vous vraiment supprimer ces %1 éléments&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Show Details</source>
+        <translation>Afficher les détails</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Continue</source>
+        <translation>Continuer</translation>
+    </message>
+    <message>
+        <source>Files can’t verify the identity of the server “%1”.</source>
+        <translation>Fichiers ne peut pas vérifier l’identité du serveur «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Its certificate isn’t valid: someone could be pretending to be “%1” to read what you send. Do you want to connect anyway?</source>
+        <translation>Son certificat n’est pas valide&#xa0;: quelqu’un pourrait se faire passer pour «&#xa0;%1&#xa0;» afin de lire ce que vous envoyez. Voulez-vous quand même vous connecter&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Show Certificate</source>
+        <translation>Afficher le certificat</translation>
+    </message>
+    <message>
+        <source>Unnamed certificate</source>
+        <translation>Certificat sans nom</translation>
+    </message>
+    <message>
+        <source>Issued by: %1</source>
+        <translation>Émis par&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Valid from %1 to %2</source>
+        <translation>Valide du %1 au %2</translation>
+    </message>
+    <message>
+        <source>SHA-256: %1</source>
+        <translation>SHA-256&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A certificate that can’t be read</source>
+        <translation>Un certificat illisible</translation>
     </message>
 </context>
 <context>
@@ -6798,6 +7128,10 @@
     <message>
         <source>Videos</source>
         <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
     </message>
     <message>
         <source>Computer</source>

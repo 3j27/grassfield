@@ -1,4 +1,5 @@
 #include "filesapp.h"
+#include "applicationslogic.h"
 #include "appscope.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
@@ -8,6 +9,7 @@
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
+#include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
 #include "taglogic.h"
@@ -49,7 +51,6 @@
 #include <KIO/PasteJob>
 #include <KIO/RestoreJob>
 #include <KIO/SimpleJob>
-#include <KUrlMimeData>
 
 namespace
 {
@@ -60,11 +61,11 @@ FolderModel *asFolder(QObject *object)
     return qobject_cast<FolderModel *>(object);
 }
 
-// KIO's delegate provides its conflict ("file exists") and Open With dialogs; errors are shown by the
-// app itself (operationFailed), so automatic error dialogs stay off.
+// Grassfield's delegate asks KIO's questions (a name that exists, an item to skip, a certificate…) as the window's sheets
+// (ADR-0035 D-12 a, kioprompts.h); errors are shown by the app itself (operationFailed), so automatic error dialogs stay off.
 void attachDelegate(KJob *job)
 {
-    job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingDisabled, nullptr));
+    job->setUiDelegate(KioDialogs::createDelegate(KJobUiDelegate::AutoHandlingDisabled));
 }
 
 QUrl childUrl(const QUrl &directory, const QString &name)
@@ -140,16 +141,15 @@ QString countText(const QString &one, const QString &many, qsizetype n)
     return n == 1 ? one : many.arg(n);
 }
 
-QList<QUrl> clipboardUrls()
-{
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data ? KUrlMimeData::urlsFromMimeData(data) : QList<QUrl>();
-}
 } // namespace
 
 FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     : QObject(parent)
     , m_initialUrls(initialUrls)
+    , m_prompts(KioDialogs::install(new KioPrompts(this),
+                                    [this](const QString &message) {
+                                        emit operationFailed(message);
+                                    }))
     , m_places(new PlacesModel(this))
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
@@ -312,6 +312,11 @@ QObject *FilesApp::places() const
     return m_places;
 }
 
+QObject *FilesApp::prompts() const
+{
+    return m_prompts;
+}
+
 QString FilesApp::homePath() const
 {
     return QDir::homePath();
@@ -339,13 +344,12 @@ QString FilesApp::redoText() const
 
 bool FilesApp::canPaste() const
 {
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data && KIO::canPasteMimeData(data);
+    return !KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).isEmpty();
 }
 
 int FilesApp::clipboardCount() const
 {
-    return int(clipboardUrls().size());
+    return int(KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).size());
 }
 
 QString FilesApp::viewMode() const
@@ -648,6 +652,7 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 {
     auto *model = new FolderModel(parent ? parent : this);
     connect(model, &FolderModel::tagsSeen, this, &FilesApp::noteTags);
+    connect(model, &FolderModel::applicationsListed, this, [this](const QVariantMap &paths) { m_applicationPaths = paths; });
     connect(this, &FilesApp::tagsChanged, model, &FolderModel::tagsChanged);
     model->setStyleStore(&m_folderStyles);
     connect(this, &FilesApp::folderStylesChanged, model, &FolderModel::folderStylesChanged);
@@ -658,6 +663,10 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 QVariantList FilesApp::pathSegments(const QUrl &url) const
 {
     QVariantList out;
+    if (ApplicationsLogic::isLocationUrl(url)) {
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Applications")}, {QStringLiteral("url"), ApplicationsLogic::locationUrl()}});
+        return out;
+    }
     if (Recents::isRecentsUrl(url)) {
         out.append(QVariantMap{{QStringLiteral("label"), tr("Recents")}, {QStringLiteral("url"), url}});
         return out;
@@ -816,6 +825,8 @@ QVariantList FilesApp::applicationsFor(const QList<QUrl> &urls) const
     if (urls.isEmpty())
         return out;
     const QUrl &first = urls.first();
+    if (first.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(first))
+        return out; // an application of the Applications location is no file: nothing opens it "with"
     QMimeDatabase db;
     const QMimeType type = first.isLocalFile() ? db.mimeTypeForFile(first.toLocalFile()) : db.mimeTypeForUrl(first);
     const KService::List services = KApplicationTrader::queryByMimeType(type.name());
@@ -829,6 +840,12 @@ QVariantList FilesApp::applicationsFor(const QList<QUrl> &urls) const
 
 void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
 {
+    for (const QUrl &u : urls) {
+        if (u.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(u)) {
+            emit operationFailed(tr("An application is not a file: it cannot be opened with another application."));
+            return;
+        }
+    }
     const KService::Ptr service = KService::serviceByStorageId(storageId);
     if (!service) {
         emit operationFailed(tr("The application is no longer installed."));
@@ -840,6 +857,65 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
     }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
     job->setUrls(urls);
+    attachDelegate(job);
+    connect(job, &KJob::result, this, [this, job] {
+        if (job->error() && job->error() != KIO::ERR_USER_CANCELED)
+            emit operationFailed(job->errorString());
+    });
+    job->start();
+}
+
+QUrl FilesApp::applicationsUrl() const
+{
+    return ApplicationsLogic::locationUrl();
+}
+
+int FilesApp::applicationsCount() const
+{
+    return int(m_applicationPaths.size()); // the location lists them (FolderModel::applicationsListed); never walked here
+}
+
+bool FilesApp::isApplicationUrl(const QUrl &url) const
+{
+    return !ApplicationsLogic::entryId(url).isEmpty();
+}
+
+void FilesApp::launchApplication(const QUrl &url)
+{
+    const QString id = ApplicationsLogic::entryId(url);
+    if (id.isEmpty())
+        return;
+    KService::Ptr service = KService::serviceByStorageId(id + QStringLiteral(".desktop"));
+    if (!service)
+        service = KService::serviceByDesktopName(id);
+    if (!service) {
+        emit operationFailed(tr("The application is no longer installed."));
+        return;
+    }
+    if (launchingBlocked()) {
+        emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    // The way the shell's Apps grid starts it (Apps.launchNow): the Exec line without its field codes, behind xdg-terminal-exec
+    // for Terminal=true (KIO would ask KDE's terminal setting: konsole, not installed on Omarchy), in the scope uwsm-app gives a
+    // real session. An entry without an Exec line (D-Bus activation only) is left to KIO.
+    const QStringList command = ApplicationsLogic::launchCommand(service->exec(), service->terminal());
+    if (!command.isEmpty()) {
+        const QStringList argv = grassfield::apps::scopedCommand(command.first(), command.mid(1), grassfield::apps::scopedLaunch());
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        if (qEnvironmentVariable("GRASSFIELD_APPS_GTK_USE_PORTAL") == QLatin1String("1"))
+            environment.insert(QStringLiteral("GTK_USE_PORTAL"), QStringLiteral("1")); // shell/services/AppLaunch.js portalEnvironment
+        QProcess process;
+        process.setProgram(argv.first());
+        process.setArguments(argv.mid(1));
+        process.setProcessEnvironment(environment);
+        if (!service->workingDirectory().isEmpty())
+            process.setWorkingDirectory(service->workingDirectory());
+        if (!process.startDetached())
+            emit operationFailed(tr("“%1” could not be started.").arg(service->name()));
+        return;
+    }
+    auto *job = new KIO::ApplicationLauncherJob(service, this);
     attachDelegate(job);
     connect(job, &KJob::result, this, [this, job] {
         if (job->error() && job->error() != KIO::ERR_USER_CANCELED)
@@ -872,8 +948,45 @@ void FilesApp::glance(const QList<QUrl> &urls)
         emit operationFailed(tr("Glance could not be started: grassfield-preview was not found."));
 }
 
-void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
+// The Applications location is read-only (Finder: the apps of /Applications cannot be renamed, moved or deleted by the
+// user): its items are never copied, moved, trashed or renamed, nothing is dropped or pasted into it, and the reason is
+// the one Finder gives (no permission).
+bool FilesApp::refuseApplicationItems(const QList<QUrl> &urls)
 {
+    for (const QUrl &u : urls) {
+        if (u.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(u)) {
+            emit operationFailed(tr("The operation can’t be completed because you don’t have permission to access some of the items."));
+            return true;
+        }
+    }
+    return false;
+}
+
+// Copy of an application: the Finder copies the app, and pasting elsewhere makes a copy of it. Here the application is its desktop
+// entry, so Copy puts the entry's file on the clipboard (a launcher to paste somewhere); Cut is refused like a move.
+QList<QUrl> FilesApp::applicationFiles(const QList<QUrl> &urls) const
+{
+    const QVariantMap &paths = m_applicationPaths; // the rows on show: Copy is only possible from the location
+    QList<QUrl> files;
+    for (const QUrl &u : urls) {
+        const QString id = ApplicationsLogic::entryId(u);
+        if (id.isEmpty() || !paths.contains(id))
+            return {};
+        files << QUrl::fromLocalFile(paths.value(id).toString());
+    }
+    return files;
+}
+
+void FilesApp::copyToClipboard(const QList<QUrl> &urlsIn, bool cut)
+{
+    QList<QUrl> urls = urlsIn;
+    if (!cut && !urls.isEmpty() && ApplicationsLogic::entryId(urls.first()).size() > 0) {
+        urls = applicationFiles(urlsIn);
+        if (urls.isEmpty())
+            return;
+    } else if (refuseApplicationItems(urls)) {
+        return;
+    }
     if (urls.isEmpty())
         return;
     auto *data = new QMimeData;
@@ -889,11 +1002,15 @@ void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
 
 void FilesApp::paste(const QUrl &destination, QObject *folder)
 {
+    if (refuseApplicationItems({destination}))
+        return;
     const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    if (!data || !KIO::canPasteMimeData(data))
+    // Items only, as the Finder: text or an image would go to KIO's own file-name dialogs (KioDialogs::pastableItems).
+    // The checks below and KIO::paste see the same list: KIO's own (local URLs first, valid ones).
+    const QList<QUrl> urls = KioDialogs::pastableItems(data);
+    if (urls.isEmpty())
         return;
     const bool cut = KIO::isClipboardDataCut(data);
-    const QList<QUrl> urls = KUrlMimeData::urlsFromMimeData(data);
     // Copying items into their own folder makes "name copy" duplicates instead of a conflict.
     if (!cut && !urls.isEmpty()) {
         bool sameFolder = true;
@@ -907,9 +1024,17 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
     if (refuseTwin(this, destination, urls))
         return;
     // KIO::paste records the copy or move in FileUndoManager itself.
-    KIO::PasteJob *job = KIO::paste(data, destination, KIO::HideProgressInfo);
-    if (!job)
+    // KIO::paste reads its data when the job starts, after this returns: the items checked above, owned by the job, not
+    // the clipboard's data, which may change or go meanwhile.
+    auto *items = new QMimeData;
+    items->setUrls(urls);
+    KIO::setClipboardDataCut(items, cut);
+    KIO::PasteJob *job = KIO::paste(items, destination, KIO::HideProgressInfo);
+    if (!job) {
+        delete items;
         return;
+    }
+    items->setParent(job);
     attachDelegate(job);
     QPointer<QObject> target = folder;
     // What the job really created: a Rename or Skip answer in the conflict dialog puts a folder elsewhere than
@@ -940,6 +1065,8 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
 
 void FilesApp::trash(const QList<QUrl> &urls)
 {
+    if (refuseApplicationItems(urls))
+        return;
     if (urls.isEmpty())
         return;
     KIO::CopyJob *job = KIO::trash(urls, KIO::HideProgressInfo);
@@ -977,6 +1104,8 @@ void FilesApp::restore(const QList<QUrl> &urls)
 
 void FilesApp::deletePermanently(const QList<QUrl> &urls)
 {
+    if (refuseApplicationItems(urls))
+        return;
     QList<QUrl> trashed;
     for (const QUrl &u : urls) {
         if (u.scheme() == QLatin1String("trash"))
@@ -1001,6 +1130,8 @@ void FilesApp::emptyTrash()
 
 void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 {
+    if (refuseApplicationItems({directory}))
+        return;
     const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return nameTaken(directory, n); });
     const QUrl url = childUrl(directory, name);
     KIO::MkdirJob *job = KIO::mkdir(url);
@@ -1022,6 +1153,8 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 
 void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
 {
+    if (refuseApplicationItems({url}))
+        return;
     if (newName == url.fileName())
         return;
     if (!FileLogic::isValidFileName(newName)) {
@@ -1101,6 +1234,8 @@ void FilesApp::endStyleMoves(const QStringList &paths)
 
 void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
 {
+    if (refuseApplicationItems(urls))
+        return;
     QPointer<QObject> target = folder;
     for (const QUrl &url : urls) {
         if (url.scheme() == QLatin1String("trash"))
@@ -1125,6 +1260,8 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
 void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *folder)
 {
     if (urls.isEmpty() || !destination.isValid())
+        return;
+    if (refuseApplicationItems(urls) || refuseApplicationItems({destination}))
         return;
     if (destination.scheme() == QLatin1String("trash")) {
         trash(urls);

@@ -27,6 +27,7 @@
 class FolderModel;
 class KJob;
 class PlacesModel;
+class KioPrompts;
 
 // Application services for the QML windows. Every file operation is a KIO job (copy, move, trash,
 // restore, mkdir, rename, delete, empty trash, paste), recorded in KIO::FileUndoManager where KIO
@@ -36,6 +37,8 @@ class FilesApp : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QObject *places READ places CONSTANT)
+    // KIO's questions (conflicts, skips, certificates…), shown as sheets by the browser window (ADR-0035 D-12 a).
+    Q_PROPERTY(QObject *prompts READ prompts CONSTANT)
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
@@ -106,6 +109,7 @@ public:
     ~FilesApp() override;
 
     QObject *places() const;
+    QObject *prompts() const;
     QString homePath() const;
     QList<QUrl> initialUrls() const { return m_initialUrls; }
     bool dark() const { return m_dark; }
@@ -204,6 +208,18 @@ public:
     // [{id, name}] of the applications registered for the first item's MIME type, preferred first.
     Q_INVOKABLE QVariantList applicationsFor(const QList<QUrl> &urls) const;
     Q_INVOKABLE void openWith(const QString &storageId, const QList<QUrl> &urls);
+    // The Applications location (grassfield-apps:/): the installed applications as Finder's Applications folder shows them.
+    // launchApplication starts the application of a grassfield-app:/<id> item (nothing else) the way the shell's
+    // Apps grid does (ApplicationsLogic::launchCommand: xdg-terminal-exec for Terminal=true, uwsm-app scope in a session).
+    Q_INVOKABLE QUrl applicationsUrl() const;
+    // True (and operationFailed with the permission message) when `urls` hold an item of the Applications location or the
+    // location itself: nothing can be done to them but opening.
+    bool refuseApplicationItems(const QList<QUrl> &urls);
+    QList<QUrl> applicationFiles(const QList<QUrl> &urls) const;
+    Q_INVOKABLE bool isApplicationUrl(const QUrl &url) const;
+    // How many applications the Applications location lists (Get Info on the location: macOS shows the size of the folder).
+    Q_INVOKABLE int applicationsCount() const;
+    Q_INVOKABLE void launchApplication(const QUrl &url);
     // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.
     Q_INVOKABLE void glance(const QList<QUrl> &urls);
 
@@ -334,6 +350,8 @@ private:
     void folderViewsWritten(FolderViews::WriteResult result, const QString &error);
 
     QList<QUrl> m_initialUrls;
+    // Before m_places: Grassfield's KIO delegate is in place before the first job (the Trash listing) starts.
+    KioPrompts *m_prompts = nullptr;
     PlacesModel *m_places = nullptr;
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
@@ -359,6 +377,9 @@ private:
     // Tag state of the items asked about by the menus (selection), probed once per few seconds.
     mutable TagStore::Cache m_tagCache;
     int m_tagRevision = 0;
+
+    // id -> .desktop path of the rows the Applications location listed last (built by a FolderModel on its thread).
+    QVariantMap m_applicationPaths;
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).
