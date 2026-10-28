@@ -112,6 +112,10 @@ TEST(KioPrompts, MessageBoxesAnswerWithKiosButtonCodes)
     EXPECT_EQ(messageResult(Ask::Information, MessageButton::Ok), KIO::WorkerBase::Ok);
     EXPECT_EQ(messageResult(Ask::Error, MessageButton::Ok), KIO::WorkerBase::Ok);
     EXPECT_EQ(messageResult(Ask::Error, MessageButton::Primary), 0);
+    // OK exists for Information and Error only: a two-action question closed another way falls back to its secondary
+    // action, never to OK (KioPrompts' fallback chain).
+    EXPECT_EQ(messageResult(Ask::QuestionTwoActions, MessageButton::Ok), 0);
+    EXPECT_EQ(messageResult(Ask::WarningTwoActionsCancel, MessageButton::Ok), 0);
 
     EXPECT_TRUE(messageButtons(Ask::Information).okOnly);
     EXPECT_TRUE(messageButtons(Ask::WarningTwoActions).warning);

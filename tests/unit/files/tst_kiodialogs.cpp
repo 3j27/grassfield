@@ -512,6 +512,63 @@ TEST_F(KioDialogsTest, AnAnswerNeverReachesAJobThatEnded)
     running->end();
 }
 
+// A sheet closed without a button of the question ("stop": no window, a kind it does not know) gives the safe answer:
+// Cancel where there is one, else the secondary action of a two-action question, never OK.
+TEST_F(KioDialogsTest, AStoppedMessageGivesTheSafeAnswer)
+{
+    std::unique_ptr<KJobUiDelegate> delegate(KioDialogs::createDelegate());
+    auto *ask = delegate->findChild<GrassfieldAskUserAction *>();
+    ASSERT_NE(ask, nullptr);
+    QList<int> answers;
+    QObject::connect(ask, &KIO::AskUserActionInterface::messageBoxResult, [&answers](int r) {
+        answers << r;
+    });
+    struct Case {
+        KIO::AskUserActionInterface::MessageDialogType type;
+        int expected;
+    };
+    const Case cases[] = {
+        {KIO::AskUserActionInterface::QuestionTwoActions, KIO::WorkerBase::SecondaryAction},
+        {KIO::AskUserActionInterface::WarningTwoActions, KIO::WorkerBase::SecondaryAction},
+        {KIO::AskUserActionInterface::QuestionTwoActionsCancel, KIO::WorkerBase::Cancel},
+        {KIO::AskUserActionInterface::WarningContinueCancel, KIO::WorkerBase::Cancel},
+        {KIO::AskUserActionInterface::Information, KIO::WorkerBase::Ok},
+    };
+    for (const Case &c : cases) {
+        answers.clear();
+        ask->requestUserMessageBox(c.type, QStringLiteral("?"), QString(), QStringLiteral("Yes"), QStringLiteral("No"));
+        ASSERT_FALSE(s_prompts->current().isEmpty());
+        s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("stop")}});
+        ASSERT_TRUE(waitFor([&answers] {
+            return !answers.isEmpty();
+        }));
+        EXPECT_EQ(answers.first(), c.expected) << c.type;
+    }
+}
+
+// Once Files' prompts are gone (Files quitting while a job runs), a question gets the safe answer, not a crash.
+TEST_F(KioDialogsTest, WithoutFilesPromptsTheAnswerIsSafe)
+{
+    auto *gone = new KioPrompts;
+    auto *delegate = new GrassfieldJobUiDelegate(gone);
+    auto *ask = delegate->findChild<GrassfieldAskUserAction *>();
+    ASSERT_NE(ask, nullptr);
+    delete gone;
+    auto *job = new EndingJob;
+    QList<KIO::RenameDialog_Result> results;
+    QObject::connect(ask, &KIO::AskUserActionInterface::askUserRenameResult, [&results](KIO::RenameDialog_Result r, const QUrl &, KJob *) {
+        results << r;
+    });
+    ask->askUserRename(job, QString(), url(QStringLiteral("from/a")), url(QStringLiteral("to/a")), KIO::RenameDialog_Overwrite, 1, 1);
+    ASSERT_TRUE(waitFor([&results] {
+        return !results.isEmpty();
+    }));
+    EXPECT_EQ(results.first(), KIO::Result_Cancel) << "Stop, never Replace";
+    EXPECT_TRUE(s_prompts->current().isEmpty()) << "nothing asked through another window's prompts";
+    job->end();
+    delete delegate;
+}
+
 TEST_F(KioDialogsTest, KiosOwnJobsGetGrassfieldsDelegate)
 {
     // KIO gives the jobs it makes itself (sub-jobs such as DirectCopyJob, src/core/job.cpp:282; undo's jobs) a delegate

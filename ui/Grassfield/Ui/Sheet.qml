@@ -81,6 +81,25 @@ Item {
         root.canceled();
     }
 
+    // The sheet's keys: true when it took the key. A key held down (its auto-repeat) answers nothing: Return held past one
+    // question must not answer the next one (Grassfield's key repeat starts after 250 ms).
+    function handleKey(key: int, autoRepeat: bool): bool {
+        if (root.holdInput || autoRepeat)
+            return key !== Qt.Key_Tab && key !== Qt.Key_Backtab;
+        if (key === Qt.Key_Escape) {
+            root.cancel();
+            return true;
+        }
+        if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+            if (root.returnCancels)
+                root.cancel();
+            else
+                root.confirm();
+            return true;
+        }
+        return false;
+    }
+
     function reclaimKeyboard(): void {
         if (root.visible && root.keepsKeyboard && !panel.activeFocus && root.Window.active)
             panel.forceActiveFocus();
@@ -123,20 +142,7 @@ Item {
                 Qt.callLater(root.reclaimKeyboard);
         }
 
-        Keys.onPressed: event => {
-            if (root.holdInput) {
-                event.accepted = true;
-            } else if (event.key === Qt.Key_Escape) {
-                root.cancel();
-                event.accepted = true;
-            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                if (root.returnCancels)
-                    root.cancel();
-                else
-                    root.confirm();
-                event.accepted = true;
-            }
-        }
+        Keys.onPressed: event => event.accepted = root.handleKey(event.key, event.isAutoRepeat)
 
         // Where the keyboard is when the sheet opens without a field: Return, Esc and the rest reach the panel's handler.
         Item {

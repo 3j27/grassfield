@@ -515,10 +515,53 @@ TestCase {
         compare(sheet.title, "An item named “Other.pdf” already exists in this location.");
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies.length, 1, "Return right after it changed does not answer it");
+        // Still held halfway through the double-click interval.
+        wait(Application.styleHints.mouseDoubleClickInterval / 2);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies.length, 1, "Return halfway through the hold does not answer it either");
         wait(Qt.styleHints.mouseDoubleClickInterval + 50);
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies.length, 2);
         compare(fakePrompts.replies[1].id, 82);
+    }
+
+    // A key held down answers nothing: its auto-repeat is not a press (Return held past one question).
+    function test_heldReturnAnswersNothing(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 111
+        });
+        test.shown(sheet);
+        verify(sheet.handleKey(Qt.Key_Return, true), "the repeat is taken");
+        compare(fakePrompts.replies, [], "and answers nothing");
+        verify(sheet.handleKey(Qt.Key_Escape, true));
+        compare(fakePrompts.replies, []);
+        verify(sheet.handleKey(Qt.Key_Return, false));
+        compare(fakePrompts.replies.length, 1, "a press answers");
+    }
+
+    // A button pressed and released elsewhere (no click) does not take the keyboard: Return stays the default button's.
+    function test_aPressedButtonKeepsNoKeyboard(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 121,
+            skip: true
+        });
+        test.shown(sheet);
+        verify(waitForPolish(sheet.Window.window, 1000));
+        for (const label of ["Stop", "Keep Both"]) {
+            const button = test.find(sheet, label);
+            verify(button !== null, label);
+            mousePress(button);
+            mouseMove(button, -20, -20, -1, Qt.LeftButton);
+            mouseRelease(button, -20, -20);
+            verify(!button.activeFocus, label + " has no keyboard");
+        }
+        compare(fakePrompts.replies, [], "no click");
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].button, "replace");
     }
 
     // Return is the default button's in every new question, also after the user tabbed to another button in the last one
@@ -571,6 +614,22 @@ TestCase {
         verify(ok !== null);
         const bottom = ok.mapToItem(sheets, 0, ok.height).y;
         verify(bottom <= sheets.height, "the OK button is inside the window (" + bottom + " <= " + sheets.height + ")");
+        // The text scrolls: the wheel moves it.
+        const findScroller = item => {
+            if (item instanceof Flickable && item.contentHeight > item.height)
+                return item;
+            for (let i = 0; i < item.children.length; i++) {
+                const found = findScroller(item.children[i]);
+                if (found)
+                    return found;
+            }
+            return null;
+        };
+        const scroller = findScroller(sheet);
+        verify(scroller !== null, "the text is in a scroller");
+        verify(scroller.interactive, "it scrolls");
+        mouseWheel(scroller, scroller.width / 2, scroller.height / 2, 0, -360);
+        tryVerify(() => scroller.contentY > 0, 1000, "the wheel scrolls the text");
         wait(Qt.styleHints.mouseDoubleClickInterval + 50);
         mouseClick(ok);
         compare(fakePrompts.replies[0].button, "ok");
