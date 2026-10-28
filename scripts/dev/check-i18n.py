@@ -361,20 +361,30 @@ CPP_KEY_WORDS = {"reason", "error", "message", "text", "title", "label", "status
                  "detail", "body", "caption", "tooltip", "info", "warning", "subtitle", "information"}
 CPP_LIST_WORDS = {"reason", "error", "message", "text", "title", "label", "status", "note", "hint", "warning", "detail", "line", "subtitle", "information"}
 CPP_TOKEN_FOLLOWERS = {"code", "icon", "id", "ids", "flag", "flags", "type", "kind"}
-CPP_RUN_ON_QUALIFIERS = ("last", "first", "current", "short", "error", "status", "user", "sub")
-CPP_RUN_ON_TAILS = {"msg", "message", "error", "reason", "status", "list", "text", "note", "line", "lines"}
+CPP_RUN_ON_QUALIFIERS = ("last", "first", "current", "short", "long", "error", "err", "status", "user", "sub", "help", "tool", "detail", "info", "fail")
+CPP_RUN_ON_TAILS = {"msg", "message", "error", "reason", "status", "list", "text", "note", "line", "string", "detail", "description", "desc",
+                    "hint", "label", "title", "tip"}  # plurals are stripped before the lookup (errormessages, errordetails)
+# Words Qt and the code base write as one: toolTip / ToolTip / kToolTip are "tool"+"tip" after the split, so a compound key word is
+# also matched against two adjacent segments.
+CPP_COMPOUND_WORDS = {"tooltip"}
+CPP_ARGV_SEGMENTS = {"arg", "args", "argument", "arguments", "cmd", "command", "commands", "argv"}
 # list-building calls and `<<`: the text goes in when the receiver names text; args/argv/cmd lists stay clean. The receiver of append()
 # & co is the word before . or ->; of `<<` the FIRST operand of the statement, reduced to its last member (index, cast, parentheses,
 # * and this->/d-> dropped: list[0].reasons, (*reasons), static_cast<QStringList &>(reasons)), so `args << reasonFlag << "status"` is
 # an argument list. msg and err are receivers of append() only: `msg << "x"` is a QDBusMessage, `err << ..` a QTextStream.
 CPP_LIST_METHODS = {"append", "push_back", "prepend", "emplace_back", "emplaceBack", "push"}
 CPP_LIST_CALLS = re.compile(r"(\w+)\s*(?:\.|->)\s*(?:" + "|".join(sorted(CPP_LIST_METHODS)) + r")\s*\(")
-CPP_NOT_A_RECEIVER = {"static_cast", "const_cast", "reinterpret_cast", "dynamic_cast", "this", "d", "const", "auto"}
+CPP_CONTROL_PREFIX = re.compile(r"^\s*(?:else\s+)?(?:(?:if|for|while|switch)\s*\((?:[^()]|\([^()]*\))*\)|else\b|do\b)\s*")
+
+
+def cpp_segments(name):
+    bare = re.sub(r"^m_", "", name)
+    return [seg.lower() for part in bare.split("_") for seg in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", part)]
 
 
 def cpp_names_text(name, words, exempt=frozenset()):
     bare = re.sub(r"^m_", "", name)
-    segments = [seg.lower() for part in bare.split("_") for seg in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", part)]
+    segments = cpp_segments(name)
     snake = "_" in bare and len(segments) > 1
     for k, seg in enumerate(segments):
         if k + 1 < len(segments) and segments[k + 1] in CPP_TOKEN_FOLLOWERS:
@@ -383,8 +393,11 @@ def cpp_names_text(name, words, exempt=frozenset()):
             continue
         stems = [seg] + ([seg[:-1]] if seg.endswith("s") else []) + ([seg[:-2]] if seg.endswith("es") else [])
         hit = any(stem in words for stem in stems)
+        if not hit and k + 1 < len(segments):
+            hit = any(seg + segments[k + 1] == w for w in CPP_COMPOUND_WORDS if w in words)
         if not hit and seg.isalpha():
-            hit = any(seg.startswith(q) and seg[len(q):] in CPP_RUN_ON_TAILS for q in CPP_RUN_ON_QUALIFIERS)
+            hit = any(seg.startswith(q) and (seg[len(q):] in CPP_RUN_ON_TAILS or seg[len(q):].rstrip("s") in CPP_RUN_ON_TAILS)
+                      for q in CPP_RUN_ON_QUALIFIERS)
         if hit and seg == "description" and snake and (len(segments) > 2 or segments[0] in ("set", "get")):
             hit = False
         if hit:
@@ -396,17 +409,22 @@ def cpp_shift_receiver(before):
     """The name `before` shifts into: the last member of its first `<<` operand (`a.b[0].c << x << y` is c), taken from the left side
     of an assignment when there is one (`const QStringList reasons = QStringList() << x` is reasons)."""
     operand = before.split("<<")[0]
+    while True:  # a control prefix is not part of the receiver: `for (...; ...) errors <<`, `if (n == 0) errors <<`, `else errors <<`
+        stripped = CPP_CONTROL_PREFIX.sub("", operand, count=1)
+        if stripped == operand:
+            break
+        operand = stripped
     operand = re.split(r"(?<![=!<>+\-*/|&^%])\+?=(?!=)", operand)[0]  # `reasons = QStringList() <<`: the left of the assignment
     while True:  # drop indexes and template arguments (casts)
         reduced = re.sub(r"\[[^\[\]]*\]|<[^<>]*>", "", operand)
         if reduced == operand:
             break
         operand = reduced
-    names = [w for w in re.findall(r"[A-Za-z_]\w*", operand) if w not in CPP_NOT_A_RECEIVER]
+    operand = re.sub(r"(?:\.|->)\s*\w+\s*\([^()]*\)", "", operand)  # m_reasons.last() << x: the list is m_reasons
+    names = re.findall(r"[A-Za-z_]\w*", operand)
     return names[-1] if names else ""
 
 
-CPP_ARGV_RECEIVER = re.compile(r"arg|cmd|command|argv", re.I)
 CPP_INSERT_KEY = re.compile(r"insert(?:Multi)?\s*\(\s*([A-Za-z_][\w:.>-]*)\s*,$")
 CPP_DECL_TYPES = {"QString", "QByteArray", "QStringView", "QLatin1String", "QLatin1StringView", "QAnyStringView", "auto"}
 CPP_NOT_A_NAME = {"else", "do", "try", "const", "noexcept", "override", "final", "namespace", "struct", "class", "union", "enum", "mutable", "return"}
@@ -586,7 +604,7 @@ def scan_cpp_text(rel, text):
             list_words = CPP_LIST_WORDS
         else:
             list_words = CPP_LIST_WORDS | {"msg", "err"}
-        listed = bool(receiver) and cpp_names_text(receiver, list_words) and not CPP_ARGV_RECEIVER.search(receiver)
+        listed = bool(receiver) and cpp_names_text(receiver, list_words) and not CPP_ARGV_SEGMENTS & set(cpp_segments(receiver))
         visible = (bool(CPP_VALUE_POSITION.search(tail)) or bool(CPP_ASSIGN.search(tail))
                    or bool(argument_of and CPP_SINK.search(name)) or stored or listed)
         wordlike = bool(CPP_WORDLIKE.match(literal))

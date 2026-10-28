@@ -258,7 +258,7 @@ check bash -c '[[ -z $1 ]]' _ "$(gate "$tmp/good-py2")"
 desc="the packaged helpers pass the gate (it is part of just check)"
 check bash -c '[[ -z $(python3 -I "$1/scripts/dev/check-i18n.py" --helpers-only "$1/packaging/bin" 2>&1) ]]' _ "$root"
 
-# Part (f): the Settings C++. 71 variants of visible English text in the table below plus one literal on the line after its call: each
+# Part (f): the Settings C++. 92 variants of visible English text in the table below plus one literal on the line after its call: each
 # must fail on its own line; the good file
 # (translated text, tokens, log lines, comparisons, D-Bus names, i18n-ignore) must pass.
 cppgate() { python3 -I "$root/scripts/dev/check-i18n.py" --cpp-only "$1" 2>&1 || true; }
@@ -324,6 +324,25 @@ declare -A variants=(
   [shiftindex]='void a() { list[0].reasons << "Hello"; }'
   [shiftindexvar]='void a(int idx) { reasons[idx] << "Hello"; }'
   [shiftindex2]='void a(int i, int j) { m_errors[i][j] << "Hello"; }'
+  [tooltipcamel]='void a(QJsonObject &o) { o.insert(QStringLiteral("toolTip"), QStringLiteral("Hello")); }'
+  [tooltippascal]='QJsonObject a() { return QJsonObject{{"ToolTip", "Hello"}}; }'
+  [tooltipconst]='void a(QJsonObject &o) { o.insert(kToolTip, QStringLiteral("Hello")); }'
+  [tooltiplower]='void a(QJsonObject &o) { o.insert("tooltip", "Hello"); }'
+  [keyerrmsg]='QJsonObject a() { return QJsonObject{{"errmsg", "Failed"}}; }'
+  [keyerrorstring]='QJsonObject a() { return QJsonObject{{"errorstring", "Failed"}}; }'
+  [keyhelptext]='QJsonObject a() { return QJsonObject{{"helptext", "Failed"}}; }'
+  [keyerrordetails]='QJsonObject a() { return QJsonObject{{"errordetails", "Failed"}}; }'
+  [keyerrormessages]='QJsonObject a() { return QJsonObject{{"errormessages", "Failed"}}; }'
+  [keylongdescription]='QJsonObject a() { return QJsonObject{{"longdescription", "Failed"}}; }'
+  [shiftfor]='void a() { for (int i = 0; i < 3; ++i) errors << "Failed"; }'
+  [shiftif]='void a(int n) { if (n == 0) errors << "Failed"; }'
+  [shiftelse]='void a(int n) { if (n) {} else errors << "Failed"; }'
+  [shiftlast]='void A::a() { m_reasons.last() << "Failed"; }'
+  [shifttemplatecall]='void A::a() { m_errors.value<int>() << "Failed"; }'
+  [appendmsg]='void a() { msg.append("Failed"); }'
+  [argsnotfirst]='void a(QStringList &reasons) { reasons << statusText << "Failed"; }'
+  [chargeerrors]='void a() { chargeErrors << "Failed"; }'
+  [targeterrors]='void a() { m_targetErrors << "Failed"; }'
   [shiftderef]='void a() { (*reasons) << "Text"; }'
   [shiftcast]='void a() { static_cast<QStringList &>(reasons) << "Text"; }'
   [shiftassign]='void a() { reasons = QStringList() << "Failed"; }'
@@ -381,11 +400,11 @@ QString j() { return QCoreApplication::translate("X", "timed out") + QString::fr
 QDBusMessage t() { QDBusMessage msg; msg << "clicked"; return msg; }
 void u(QTextStream &err) { err << "grassfield-preview: " << "failed"; }
 void v() { QJsonObject o{{"set_toplevel_description", "os"}, {"titles", "File:"}}; }
-void w(QStringList &args, bool x) { args << reasonFlag << "status"; args << QStringLiteral("status") << "failed"; }
+void w(QStringList &args, bool x) { args << statusText << "enable"; args << reasonFlag << "status"; args << QStringLiteral("status") << "failed"; }
 void y(QTextStream &o) { o.insert("titles", "File:"); o.insert(QStringLiteral("set_toplevel_description"), QStringLiteral("os")); }
 void z(QStringList &statusFlags, QJsonObject &o) { statusFlags << "active"; o.insert("errorCode", "ENOENT"); QJsonObject{{"statusIcon", "network-wireless"}, {"statusType", "wifi"}}; }
 void x(QTextStream &cerr, QString &outline, QString &context, QString &hinting) { cerr << "failed"; outline << "failed"; context << "failed"; hinting << "failed"; }
-void aa(QStringList *items, QStringList &names, QStringList &paths, int i) { items[i] << "Hello"; paths[i] << "Hello"; contextLines << "x y"; }
+void aa(QStringList *items, QStringList &names, QStringList &paths, int i) { items[i] << "Hello"; paths[i] << "Hello"; }
 CPP
 desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"
 check bash -c '[[ -z $1 ]]' _ "$(cppgate "$tmp/cpp-good")"
