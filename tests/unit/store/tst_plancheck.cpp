@@ -247,6 +247,13 @@ case "$1" in
   -T) shift; [ "$1" = -- ] && shift; rc=0
       for d in "$@"; do n=${d%%[<>=]*}; case $have in *" $n "*) ;; *) echo "$d"; rc=127 ;; esac; done
       echo "$*" >>"$here/asked-T"; exit $rc ;;
+  -Sp) n=; for a in "$@"; do n=$a; done
+       case $n in
+         gimp) echo gimp; exit 0 ;;
+         pdf-viewer) echo zathura; exit 0 ;;
+         locked) echo 'error: failed to init transaction (unable to lock database)' >&2; exit 1 ;;
+         *) echo "error: target not found: $n" >&2; exit 1 ;;
+       esac ;;
   -Si) [ "$3" = gimp ] && { echo 'Name            : gimp'; exit 0; }
        [ "$2" = -- ] && [ $# -gt 3 ] && { printf 'Name            : %s\nInstalled Size  : 1.00 MiB\n\n' gtk3 gtk-common; exit 0; }
        exit 1 ;;
@@ -277,11 +284,15 @@ TEST(PlanCheck, AurPlans)
     f.tools.pacman = storetest::script(f.dir.filePath(QStringLiteral("aurpacman")), kAurPacman);
     const QString root = f.dir.filePath(QStringLiteral("omarchy"));
     QDir().mkpath(root + QStringLiteral("/bin"));
-    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-aur-add"), "yay -S --noconfirm --needed \"$@\"");
-    QFile cmd(root + QStringLiteral("/bin/omarchy-pkg-aur-add"));
-    ASSERT_TRUE(cmd.open(QIODevice::ReadOnly));
-    const SetupCheck setup{root, QStringLiteral("omarchy-pkg-aur-add"), {{QStringLiteral("bin/omarchy-pkg-aur-add"),
-                                            QString::fromLatin1(QCryptographicHash::hash(cmd.readAll(), QCryptographicHash::Sha256).toHex())}}};
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-aur-add"), "omarchy-pkg-missing \"$@\" && yay -S --noconfirm --needed \"$@\"");
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-missing"), "exit 0");
+    const auto pin = [&root](const QString &rel) {
+        QFile file(root + QLatin1Char('/') + rel);
+        return std::pair{rel, file.open(QIODevice::ReadOnly) ? QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex())
+                                                             : QString()};
+    };
+    const SetupCheck setup{root, QStringLiteral("omarchy-pkg-aur-add"),
+                           {pin(QStringLiteral("bin/omarchy-pkg-aur-add")), pin(QStringLiteral("bin/omarchy-pkg-missing"))}};
     const AurAnswer all = parseAurAnswer(storetest::readFixture(QStringLiteral("aur/info.json")), QStringLiteral("multiinfo"));
     QList<QStringList> asked;
     const auto info = [&all, &asked](const QStringList &names) {
@@ -313,9 +324,15 @@ TEST(PlanCheck, AurPlans)
     EXPECT_EQ(asked, (QList<QStringList>{{QStringLiteral("example-app-bin")}, {QStringLiteral("example-lib")}}));
     EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst")}) << "the repositories' first file, as any install";
 
-    // A repository has it: from there. The AUR does not know it, or one of its dependencies is on neither.
+    // A repository has it, or a package that provides it (yay installs what pacman resolves): from there; pacman that does
+    // not answer is no answer. The AUR does not know it, or one of its dependencies is on neither.
     p = checkAurInstall(QStringLiteral("gimp"), setup, info, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Repository);
+    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Repository) << "a provider in the repositories";
+    p = checkAurInstall(QStringLiteral("locked"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Failed);
+    EXPECT_TRUE(p.detail.contains(QLatin1String("unable to lock database"))) << p.detail.toStdString();
     p = checkAurInstall(QStringLiteral("nope"), setup, info, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::NotOnAur);
     EXPECT_EQ(p.detail, QStringLiteral("nope"));
@@ -332,6 +349,12 @@ TEST(PlanCheck, AurPlans)
     p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
     EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-aur-add"));
+    // The command's helper (omarchy-pkg-missing) not pinned: the catalog does not vouch for the command.
+    SetupCheck helperless = setup;
+    helperless.pins.removeLast();
+    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-missing"));
     SetupCheck wrong = setup;
     wrong.recipe = QStringLiteral("omarchy-pkg-add");
     EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, f.tools, true, false).refusal, Refusal::OmarchyChanged);

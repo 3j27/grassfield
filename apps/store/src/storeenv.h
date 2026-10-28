@@ -6,7 +6,9 @@
 //   GRASSFIELD_STORE_FIXTURE      a folder with bin/pacman and bin/gpg (fakes), gnupg/ (a pacman keyring to copy),
 //                                 swcatalog/ (fake AppStream data) and grassfield.conf; the Store reads nothing of the
 //                                 system's package manager then
-//   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests)
+//   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests);
+//                                 "metered": online on a metered connection (nothing fetched without being asked); "0":
+//                                 online, unmetered, whatever the network says (the tests that need the network's answer)
 //   GRASSFIELD_STORE_PKEXEC       the program run in pkexec's place for the helper's operations (ADR-0037 b.1): a fake one
 //                                 that writes the helper's files under <fixture>/run/grassfield-store
 //   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Omarchy's terminal, b.2;
@@ -34,6 +36,16 @@ inline QString fixture()
 inline bool offlineForced()
 {
     return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("1");
+}
+
+inline bool meteredForced()
+{
+    return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("metered");
+}
+
+inline bool onlineForced()
+{
+    return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("0");
 }
 
 inline QString cacheDir()

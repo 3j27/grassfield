@@ -6,6 +6,7 @@
 #include "storetest.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -325,11 +326,19 @@ TEST(StoreBackend, SourcesFromGrassfieldJson)
 
 // The AUR (step 3b2) through the dev plumbing's folder of answers (GRASSFIELD_STORE_AUR_URL, tests/fixtures/store/aur), turned
 // on in grassfield.json: a search after Return (the repositories' names left out), an AUR page and its info, the build
-// script, Installed's "AUR" group; nothing of it while the switch is off.
+// script, Installed's "AUR" group; nothing of it while the switch is off, and nothing asked by itself on a metered
+// connection. The Store counts as online here whatever the machine's network (GRASSFIELD_STORE_OFFLINE=0, dev plumbing):
+// the AUR is asked only online.
 TEST(StoreBackend, TheAur)
 {
     Scratch s;
     s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    // Whether the AUR was asked at all: its answers are cached (aur/ in the Store's cache), whoever asked.
+    const auto aurCached = [&s](const QString &kind) {
+        QDirIterator it(s.path(QStringLiteral("cache/grassfield/store/aur/")) + kind, QDir::Files, QDirIterator::Subdirectories);
+        return it.hasNext();
+    };
     // pacman: example-app-bin installed explicitly from outside the repositories; example-lib only as its dependency; gimp a
     // repository's package that is also an AUR result here.
     storetest::script(s.path(QStringLiteral("fixture/bin/pacman")), R"(case "$1" in
@@ -347,14 +356,38 @@ esac)");
         }
         return done();
     };
+    // Long enough for an answer the AUR's folder gives at once (a request that should not have been made) to come.
+    const auto pause = [] {
+        QEventLoop loop;
+        for (int i = 0; i < 40; ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+    };
     {
-        StoreBackend backend; // the AUR off: nothing asked, no AUR page
+        StoreBackend backend; // the AUR off: nothing asked (a search, a page, a build script, the foreign names), no AUR page
+        ASSERT_TRUE(backend.online());
         backend.start();
         ASSERT_TRUE(settle(backend));
         QString problem;
         QObject::connect(&backend, &StoreBackend::aurResults, &backend, [&problem](const QString &, const QVariantList &, const QString &p) { problem = p; });
+        int infos = 0, scripts = 0;
+        bool scriptOk = true;
+        QObject::connect(&backend, &StoreBackend::aurInfo, &backend, [&infos] { ++infos; });
+        QObject::connect(&backend, &StoreBackend::buildScript, &backend, [&](const QString &, const QString &, bool ok) {
+            ++scripts;
+            scriptOk = ok;
+        });
         backend.searchAur(QStringLiteral("example"));
         EXPECT_EQ(problem, QStringLiteral("off"));
+        backend.requestAur(QStringLiteral("aur:example-app-bin"));
+        backend.requestBuildScript(QStringLiteral("aur:example-app-bin"));
+        wait([&scripts] { return scripts > 0; });
+        pause();
+        EXPECT_EQ(scripts, 1);
+        EXPECT_FALSE(scriptOk) << "no build script while the AUR is off";
+        EXPECT_EQ(infos, 0);
+        EXPECT_FALSE(aurCached(QString())) << "the AUR was asked while it is off";
         EXPECT_TRUE(backend.app(QStringLiteral("aur:example-app-bin")).isEmpty());
         for (const QVariant &g : backend.installed())
             EXPECT_NE(g.toMap().value(QStringLiteral("group")), QStringLiteral("aur"));
@@ -362,9 +395,29 @@ esac)");
     storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"aur":true}}})");
     QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/install")));
     storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "btop\n");
+    {
+        // On a metered connection, the AUR on: nothing asked by itself (Installed's foreign names); a search after Return
+        // is the user's and goes.
+        s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("metered"));
+        StoreBackend backend;
+        backend.start();
+        ASSERT_TRUE(settle(backend));
+        pause();
+        EXPECT_FALSE(aurCached(QStringLiteral("info"))) << "the foreign names were asked on a metered connection";
+        for (const QVariant &g : backend.installed())
+            EXPECT_NE(g.toMap().value(QStringLiteral("group")), QStringLiteral("aur"));
+        int answers = 0;
+        QVariantList results;
+        QObject::connect(&backend, &StoreBackend::aurResults, &backend, [&](const QString &, const QVariantList &list, const QString &) {
+            results = list;
+            ++answers;
+        });
+        backend.searchAur(QStringLiteral("example"));
+        ASSERT_TRUE(wait([&answers] { return answers == 1; }));
+        EXPECT_FALSE(results.isEmpty());
+        s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    }
     StoreBackend backend;
-    if (!backend.online())
-        GTEST_SKIP() << "no network reachability here: the AUR is asked only online";
     backend.start();
     ASSERT_TRUE(settle(backend));
 
@@ -443,9 +496,20 @@ esac)");
     ASSERT_TRUE(wait([&infos] { return infos.size() == 2; }));
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("get")), QStringLiteral("repository"));
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("uninstall")), QStringLiteral("notInstalled"));
+    // Installed from outside the repositories but only as another package's dependency (pacman -Qqm, not -Qqe): no
+    // Uninstall… (a dependency), whatever else.
+    EXPECT_EQ(backend.actions(QStringLiteral("aur:example-tool-git")).value(QStringLiteral("uninstall")), QStringLiteral("dependency"));
     // With Omarchy's terminal (the fake program) but no catalog to pin the AUR's commands: refused as unchecked, nothing run.
     s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-app-bin")).value(QStringLiteral("uninstall")), QStringLiteral("omarchyChanged"));
+
+    // The switch turned off while the Store runs: its pages go (an id it remembers is no app any more).
+    int changes = 0;
+    QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&changes] { ++changes; });
+    ASSERT_EQ(backend.writeConfig(QStringLiteral("{\"version\":1,\"store\":{\"sources\":{\"aur\":false}}}\n")), QString());
+    ASSERT_TRUE(wait([&changes] { return changes > 0; }));
+    EXPECT_TRUE(backend.app(QStringLiteral("aur:example-app-bin")).isEmpty());
+    EXPECT_EQ(backend.actions(QStringLiteral("aur:example-app-bin")).value(QStringLiteral("get")), QStringLiteral("source"));
 }
 
 TEST(StoreBackend, FrenchSession)
@@ -516,6 +580,23 @@ TEST(StoreBackend, RealSignedCatalog)
     const QString get = backend.actions(steam).value(QStringLiteral("get")).toString();
     EXPECT_TRUE(get.isEmpty() || get == QLatin1String("offline")) << qPrintable(get);
     EXPECT_EQ(backend.actions(steam).value(QStringLiteral("uninstall")).toString(), QStringLiteral("notInstalled"));
+    // The catalog's AUR app (step 3b2), Omarchy's terminal there and the pins matching: refused while the AUR is off, then,
+    // once it is on, while the catalog does not pin the AUR's command and the omarchy-pkg-missing it calls (this fixture
+    // pins only the Steam setup's files).
+    const QString aurGame = QStringLiteral("aur-game");
+    ASSERT_FALSE(backend.app(aurGame).isEmpty());
+    EXPECT_EQ(backend.actions(aurGame).value(QStringLiteral("get")).toString(), QStringLiteral("aurOff"));
+    s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
+    int changes = 0;
+    QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&changes] { ++changes; });
+    ASSERT_EQ(backend.writeConfig(QStringLiteral("{\"version\":1,\"store\":{\"sources\":{\"aur\":true}}}\n")), QString());
+    QEventLoop loop;
+    for (int i = 0; i < 250 && changes == 0; ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_GT(changes, 0);
+    EXPECT_EQ(backend.actions(aurGame).value(QStringLiteral("get")).toString(), QStringLiteral("aurUnchecked"));
     storetest::script(s.path(QStringLiteral("fixture/omarchy/install/helpers/steam.sh")), "# changed by an Omarchy update");
     backend.refresh();
     ASSERT_TRUE(settle(backend));

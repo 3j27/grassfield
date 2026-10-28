@@ -65,12 +65,22 @@ QString setupDifference(const SetupCheck &setup)
     const QFileInfo program(setup.root + QLatin1Char('/') + path);
     if (!recipe.match(setup.recipe).hasMatch() || !program.isFile() || !program.isExecutable())
         return path;
-    if (std::none_of(setup.pins.cbegin(), setup.pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
-        return path;
+    for (const QString &required : requiredPins(setup.recipe)) {
+        if (std::none_of(setup.pins.cbegin(), setup.pins.cend(), [&required](const auto &pin) { return pin.first == required; }))
+            return required;
+    }
     return omarchyDifference(setup.root, setup.pins);
 }
 
 } // namespace
+
+QStringList requiredPins(const QString &recipe)
+{
+    QStringList out{QStringLiteral("bin/") + recipe};
+    if (recipe == QLatin1String("omarchy-pkg-aur-add"))
+        out.append(QStringLiteral("bin/omarchy-pkg-missing"));
+    return out;
+}
 
 QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins)
 {
@@ -313,11 +323,24 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
     plan.refusal = readiness(tools, ownOperation, &plan.unfinished, &plan.detail);
     if (plan.refusal != Refusal::None)
         return plan;
-    // A repository's package of that name: yay would install it from there.
-    const ChildResult si = runChild(tools.pacman, {QStringLiteral("-Si"), QStringLiteral("--"), name});
-    if (si.started && !si.timedOut && si.exitCode == 0) {
+    // Whatever pacman resolves the name to (the package, a provider of it, a group of that name): yay would install that
+    // from the repositories, not the AUR's. pacman -Sp, as the user (S10): exit 0 resolved; 1 with "target not found"
+    // (LC_ALL=C, childprocess.cpp) not in the repositories; anything else is not an answer.
+    const ChildResult sp = runChild(tools.pacman, {QStringLiteral("-Sp"), QStringLiteral("--print-format"), QStringLiteral("%n"),
+                                                   QStringLiteral("--"), name});
+    if (!sp.started || sp.timedOut || sp.overflow) {
+        plan.refusal = Refusal::Failed;
+        plan.detail = firstLines(sp.err);
+        return plan;
+    }
+    if (sp.exitCode == 0) {
         plan.refusal = Refusal::Repository;
         plan.detail = name;
+        return plan;
+    }
+    if (!sp.err.contains("target not found: " + name.toUtf8())) {
+        plan.refusal = Refusal::Failed;
+        plan.detail = firstLines(sp.err + sp.out);
         return plan;
     }
 

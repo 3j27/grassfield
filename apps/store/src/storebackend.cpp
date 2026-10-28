@@ -547,6 +547,12 @@ void StoreBackend::readNetwork()
         *m_screenshotGate = screenshotsAllowed();
         return;
     }
+    if (env::meteredForced() || env::onlineForced()) { // dev plumbing (ADR-0019): online, metered or not
+        m_online = true;
+        m_metered = env::meteredForced();
+        *m_screenshotGate = screenshotsAllowed();
+        return;
+    }
     // Without a reachability backend (no NetworkManager) the Store counts as online: a fetch that fails says so.
     if (!QNetworkInformation::instance() && !QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability))
         return;
@@ -564,6 +570,7 @@ void StoreBackend::readNetwork()
             if (cameOnline && m_snapshot && !m_metered
                 && ((m_snapshot->catalogConfigured && catalogStale()) || m_snapshot->appstream.origin == AppStreamData::Origin::None))
                 run(Job{m_snapshot->catalogConfigured && catalogStale(), false, true});
+            askAurForForeign(); // what waited for an unmetered connection (it asks nothing otherwise)
         }
     };
     connect(info, &QNetworkInformation::reachabilityChanged, this, update);
@@ -1040,10 +1047,11 @@ QString StoreBackend::aurBlock(const QString &command) const
 {
     if (const QString block = terminalBlock(); !block.isEmpty())
         return block;
-    const QString path = QStringLiteral("bin/") + command;
     const auto &pins = m_snapshot->catalog->omarchy->files;
-    if (std::none_of(pins.cbegin(), pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
-        return QStringLiteral("aurUnchecked"); // the catalog does not vouch for the AUR's command (grassfield-packages pins it)
+    for (const QString &path : requiredPins(command)) {
+        if (std::none_of(pins.cbegin(), pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
+            return QStringLiteral("aurUnchecked"); // the catalog does not vouch for the AUR's command (grassfield-packages pins it)
+    }
     return {};
 }
 
@@ -1099,7 +1107,8 @@ void StoreBackend::rebuildAurApps()
 
 void StoreBackend::askAurForForeign()
 {
-    if (!m_aur || !m_online || !m_snapshot)
+    // Asked by no click of the user's: never on a metered connection (ADR-0037 c), as the catalog's own fetch.
+    if (!m_aur || !m_online || m_metered || !m_snapshot)
         return;
     QStringList names;
     for (const QString &n : m_snapshot->foreign) {
