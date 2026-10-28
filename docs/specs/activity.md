@@ -1,11 +1,13 @@
 # Activity Monitor spec · apps-engineer (app), shell-engineer (projection, IPC, Dock tile) · owner brief 2026-10-28
-Decision record: `docs/decisions/ADR-0038-activity-monitor.md` (owner questions AQ1 to AQ7, decisions AD1 to AD24). Parity
+Decision record: `docs/decisions/ADR-0038-activity-monitor.md` (owner questions AQ1 to AQ7, decisions AD1 to AD28). Parity
 row by row: `docs/audits/activity-2026-10-28/parity.md`. Evidence of the kernel facts: `docs/audits/activity-2026-10-28/`
-(probes A0 to A8). The visible name is AQ1's; this spec says "the app". Internal names: `apps/activity`,
-`grassfield-activity`, `org.grassfield.Activity`.
+(probes A0 to A8). The app is "Activity Monitor" / « Moniteur d'activité » (owner, AQ1; needs legal review); this spec says
+"the app". Internal names: `apps/activity`, `grassfield-activity`, `org.grassfield.Activity`.
 
 Status: step 0 (docs). Requirements are numbered AM1 to AM79, gates AM-P1 to AM-P4; each names the step that builds it
-(ADR-0038 "Delivery order"). A requirement that depends on an owner answer says so.
+(ADR-0038 "Delivery order", owner AQ7: macOS first). The owner's answers of 2026-10-28 are built in: AQ2 TCP only and
+labelled, AQ3 the Energy Impact index, AQ4 other owners' processes shown read-only, AQ5 End Task behind a setting, AQ6
+Ctrl+Shift+Esc.
 
 ## macOS reference behavior (Apple's Activity Monitor User Guide, macOS 27; described in words, no Apple image committed)
 - One window: a toolbar with the Stop button, the Info button and an action menu, five tabs (CPU, Memory, Energy, Disk,
@@ -34,14 +36,16 @@ priority, refused for the system's own); columns from the header; search by name
 Purpose: let the user see what their computer is doing, find what is slow, hot, hung or heavy, and stop it, with macOS 27's
 window and the most useful Windows 11 views, at a cost the user does not notice.
 
-Non-goals: root code or polkit actions; other users' processes beyond AQ4; stack sampling and diagnostics; editing login
+Non-goals: root code or polkit actions; any action on another owner's process (AQ4: read-only); stack sampling and
+diagnostics; editing login
 items (Settings does it); a background collector; any network access.
 
 ## Terms
 - **Sample:** one read of the counters at the update frequency. A **rate** is the change between two samples divided by the
   wall time between them (`CLOCK_MONOTONIC`).
-- **Own process:** real uid equals the app's uid (`/proc/<pid>/status` `Uid:` first field); kernel threads (empty
-  `cmdline` and `PF_KTHREAD` in `stat` flags) are never listed.
+- **Own process:** real uid equals the app's uid (`/proc/<pid>/status` `Uid:` first field). **Other owner's process:** any
+  other uid. **System account:** a uid below `UID_MIN` of `/etc/login.defs` (1000 when the file says nothing). **Kernel
+  thread:** `PF_KTHREAD` (0x00200000) in `stat` field 9; kernel threads are never listed one by one (AM20a).
 - **Row identity:** (pid, start time) where start time is `stat` field 22. A pid with another start time is another process.
 - **App unit:** the systemd unit a process belongs to, from `/proc/<pid>/cgroup` (`0::` line): `app-…​.scope` or
   `app-…​.service` under `app-graphical.slice` (uwsm, ADR-0038 A7), or a user service.
@@ -77,27 +81,28 @@ items (Settings does it); a background collector; any network access.
 
 ### The table (step 2)
 - **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt), the name,
-  then the tab's columns. A click on a header sorts by it; a second click reverses. Defaults: CPU by % CPU, Memory by
+  then the tab's columns; PID and User are default columns on every tab (macOS). Another owner's row is drawn like the
+  others (macOS); only its actions differ (AM50). A click on a header sorts by it; a second click reverses. Defaults: CPU by % CPU, Memory by
   Memory, Energy by Energy Impact, Disk by Bytes Written, Network by Sent Bytes, each descending.
 - **AM11** Selection: one or several rows (Shift, Ctrl). The selection follows its processes (row identity) across samples
   and sorts; a process that ends leaves the selection. The scroll position never jumps on a refresh.
 - **AM12** Views (View menu, one checked; the subtitle names it): All Processes (default); All Processes, Hierarchically
-  (AM13); Processes, by Type (AM65); Processes, by GPU (AM49); Active Processes (CPU share above 0 in the last sample);
-  Inactive Processes (the others); GPU Processes (with a GPU client); Windowed Processes (owning a window per the
-  projection); Selected Processes (the rows selected when chosen, kept until another view). If AQ4 = B: My Processes,
-  System Processes, Other User Processes.
+  (AM13); My Processes (own); System Processes (system accounts and the Kernel row); Other User Processes (other owners
+  that are not system accounts); Active Processes (CPU share above 0 in the last sample); Inactive Processes (the others);
+  GPU Processes (with a GPU client); Windowed Processes (owning a window per the projection); Selected Processes (the rows
+  selected when chosen, kept until another view); Processes, by Type (AM65); Processes, by GPU (AM49).
 - **AM13** Hierarchically: a tree by parent pid (`stat` field 4); a process whose parent is not listed is a root; rows have
   disclosure triangles; expansion is kept across samples.
-- **AM14** Search: a live filter (no Return needed), case-insensitive, matching the process name, the app name, the command
-  (own processes) or a PID that starts with the digits typed. Ctrl+F focuses the field, Esc clears it. In a grouped view a
+- **AM14** Search: a live filter (no Return needed), case-insensitive, matching the process name, the app name, the user's
+  name, the command (own processes only, AD25) or a PID that starts with the digits typed. Ctrl+F focuses the field, Esc clears it. In a grouped view a
   group stays when one of its processes matches.
 - **AM15** Columns: View > Columns lists the current tab's optional columns, checked when shown; the header's context menu
   lists the same. The name column cannot be hidden. Widths are resizable; columns, widths and order are remembered per tab.
 - **AM16** Values: sizes in the session's locale with the unit scale Files uses (kB, MB, GB, decimal), times as `h:mm:ss.ss`,
   shares with one decimal, "—" where Terms say so. A column with no value for any row still shows its header.
 - **AM17** Names and icons: a process owning a window (projection) takes its app's desktop entry name and icon; another
-  process of the same app unit takes the app's icon and its own executable name; any other takes the basename of
-  `cmdline`'s first word, else `comm`. A name is plain text (no markup), elided in the middle.
+  process of the same app unit takes the app's icon and its own executable name; any other, an other owner's included,
+  takes the basename of `cmdline`'s first word, else `comm`. A name is plain text (no markup), elided in the middle.
 - **AM18** Rows of processes that ended go at the next sample; new processes appear at the next sample in sort order.
 - **AM19** Edit > Copy (Ctrl+C) copies the selected rows as text: the visible columns' headers, then one line per row,
   values separated by tabs, as shown.
@@ -105,6 +110,9 @@ items (Settings does it); a background collector; any network access.
 ### CPU (step 1 data, step 2 window)
 - **AM20** % CPU = Δ(utime + stime) of the whole thread group (`stat` fields 14 and 15) ÷ (Δt × `CLK_TCK`) × 100: a share of
   one logical processor (can pass 100, AD4). The first sample of a process shows "—" in rate columns.
+- **AM20a** Kernel row (AD25): one row "Kernel" (fr « Noyau »), user root, PID "—", whose % CPU and CPU Time sum every
+  kernel thread's (`stat` only); Threads = their number; other columns "—". It counts in System (AM29) and System Processes
+  (AM12). It cannot be selected for an action.
 - **AM21** CPU Time = utime + stime since the process started, `h:mm:ss.ss`.
 - **AM22** Threads = `stat` field 20.
 - **AM23** Wake Ups (optional): Δ of `voluntary_ctxt_switches` summed over `/proc/<pid>/task/*/status` ÷ Δt, read only while
@@ -115,7 +123,8 @@ items (Settings does it); a background collector; any network access.
 - **AM27** Status (optional): Not Responding (projection), Efficiency Mode (AM68), Stopped (`stat` state T), Zombie (Z);
   empty otherwise. The name of a process that does not respond carries " (Not Responding)" (fr « (ne répond pas) », the
   string the Force Quit panel uses) in `colors.danger`, in every tab (macOS).
-- **AM28** Command (optional): `cmdline`'s words joined by spaces, elided at the end; "—" for a process that refuses it.
+- **AM28** Command (optional): `cmdline`'s words joined by spaces, elided at the end, for own processes; "—" for another
+  owner's process (AD25) and for a process that refuses it.
 - **AM29** Summary: System, User, Idle (AD5: User = Σ % CPU of own processes ÷ number of logical processors, System =
   non-idle share of `/proc/stat`'s `cpu` line minus User, never below 0, Idle = `idle + iowait` share); the CPU Load graph
   (System and User stacked, `activity.historySamples` samples); Threads = the total of `/proc/loadavg`'s fourth field;
@@ -138,7 +147,7 @@ items (Settings does it); a background collector; any network access.
 - **AM35** Memory figures are bytes; the summary shows them with AM16's unit scale.
 
 ### Energy (step 1 data, step 2 window; AQ3)
-- **AM36** Energy Impact (AQ3 = A): a relative index without unit, `EI = %CPU + %GPU + 0.02 × wake-ups/s + 1.0 × disk MB/s`
+- **AM36** Energy Impact (owner, AQ3): a relative index without unit, `EI = %CPU + %GPU + 0.02 × wake-ups/s + 1.0 × disk MB/s`
   (provisional weights; the step calibrates them against the laptop's `power_now` in an owner L2 run, then fixes and pins
   them). Shown with one decimal; never called watts.
 - **AM37** Average Energy Impact (optional): the mean of EI since the app opened or since the process started, whichever is
@@ -161,12 +170,12 @@ items (Settings does it); a background collector; any network access.
   per second), chosen by a pop-up above it (remembered).
 
 ### Network (step 1 data, step 2 window; AQ2)
-- **AM43** (AQ2 = A) Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets per process, headed "(TCP)": a `NETLINK_SOCK_DIAG`
+- **AM43** (owner, AQ2) Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets per process, headed "(TCP)": a `NETLINK_SOCK_DIAG`
   dump of TCP sockets (IPv4 and IPv6) with `tcp_info` (`tcpi_bytes_acked`, `tcpi_bytes_received`, `tcpi_segs_out`,
   `tcpi_segs_in`), each socket matched to the own process whose `fd/` holds `socket:[inode]` (descriptor lists re-read at
   most every 10 s and for new processes). A process's value = Σ over the sockets seen since the app opened (a socket's last
-  values are kept after it closes). A line under the table: "UDP traffic, such as some video, is counted only in the totals
-  below." (AQ2 = B: the four columns are absent; the tab keeps PID and the summary.)
+  values are kept after it closes). Another owner's process shows "—" (its descriptors cannot be read). A line under the
+  table: "UDP traffic, such as some video, is counted only in the totals below."
 - **AM44** Summary from `/proc/net/dev`, every interface except `lo`: Packets in, Packets out, Data received, Data sent
   (since boot) and per second; the graph shows Packets or Data (a pop-up, remembered).
 
@@ -185,7 +194,10 @@ items (Settings does it); a background collector; any network access.
   are not listed in this view.
 
 ### Quit, Force Quit, signals (step 2; Quit of windowed processes through the shell at step 3)
-- **AM50** The Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the sheet "Are you sure you want
+- **AM50** Actions (Quit, Force Quit, Send Signal, Efficiency Mode) apply to own processes only: with another owner's row
+  or the Kernel row in the selection they are disabled, the tooltip saying "You can only quit your own processes." (no
+  administrator path, AQ4). Otherwise the Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the
+  sheet "Are you sure you want
   to quit this process?" (several rows: "Are you sure you want to quit these %n processes?"), buttons Cancel, Force Quit,
   Quit; Quit is the default (Return), Esc cancels.
 - **AM51** Before the sheet shows, the app opens a pidfd for each selected row and checks the start time again; a row whose
@@ -209,7 +221,10 @@ items (Settings does it); a background collector; any network access.
 
 ### Inspect (step 2)
 - **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
-  request raises it), refreshed at the update frequency while open. Header: Parent Process (name and pid; a click inspects
+  request raises it), refreshed at the update frequency while open. For another owner's process the window shows what
+  `stat` and `status` give (the header, the Memory tab but Proportional Memory, Threads, CPU Time, Context Switches,
+  Faults, Started, Nice) and "—" elsewhere; Open Files and Ports says "The open files of another user's process can't be
+  read." and the Quit button is disabled. Header: Parent Process (name and pid; a click inspects
   it), Process Group (pgid), User, % CPU, Recent hangs (the number of times the projection marked it since the app opened).
 - **AM58** Tabs: **Memory** (Real Memory Size, Virtual Memory Size, Shared Memory Size, Private Memory Size, Proportional
   Memory Size from `smaps_rollup` `Pss` read at most every 5 s, Swapped, Peak); **Statistics** (Threads, CPU Time user and
@@ -241,16 +256,25 @@ items (Settings does it); a background collector; any network access.
   KiB, a `v` other than 1, an unknown kind or a value out of range, and draws the graph over the tile with tokens
   (`dock.tileGraph*`), the running dot and badge unchanged. The app removes the file when the icon is chosen and when it
   quits; the Dock drops a file whose `pid` is not alive.
-- **AM63** Force Quit panel and Dock menu: AQ5 (recorded in ADR-0038 after the answer).
-- **AM64** Keyboard shortcut: AQ6 (a binding in `config/hypr/grassfield/bindings.lua` that starts the app through the shell's
-  launch path, so it gets its own scope; its label in Settings' keyboard shortcuts list).
+- **AM63** End Task (owner, AQ5; AD27): Settings > Desktop & Dock gains the switch "Show End Task in Dock menus" (fr
+  « Afficher Fin de tâche dans les menus du Dock »), key `dock.endTask` in `grassfield.json` (boolean, default false; schema
+  and settings contract). While it is on, the Dock menu of a running app (not the Files tile, a folder or the Trash) shows
+  "End Task" (fr « Fin de tâche ») right after Quit (or after Force Quit when the app does not respond); it runs the menu's
+  existing Option + Force Quit: the confirmation "Force quit “%1”?", then `Power.run("forcequit")` on every process of the
+  app. With Option held, the menu shows Force Quit as today and no End Task (the two would do the same). The Force Quit panel
+  is unchanged.
+- **AM64** Ctrl+Shift+Esc (owner, AQ6; AD28): `bind("CTRL + SHIFT + ESCAPE", "Activity Monitor", launch("activity"))` in
+  `config/hypr/grassfield/bindings.lua`; `packaging/bin/grassfield-launch-key` gains the kind `activity`
+  (`org.grassfield.Activity.desktop`, through `uwsm app`, its own scope; nothing in a nested dev session, as its other kinds);
+  a running app comes to the front (AM1). The shortcut is listed with the others in Settings' keyboard shortcuts.
 
 ### From Windows 11 (step 4)
-- **AM65** Processes, by Type: three groups with a count in their header, Apps, Background Processes, Session Processes. A
-  process is in Apps when its unit is under `app-graphical.slice` or it owns a window (projection), one sub-group per unit
-  (name and icon from the window's app id, else the desktop entry whose `Exec` basename equals the unit's command part,
-  else that part); in Session Processes when its unit is under `session.slice` or `session-graphical.slice` or is the user
-  manager's `init.scope`; otherwise in Background Processes. A group's row sums its processes (CPU, memory, disk, network,
+- **AM65** Processes, by Type (AD26): groups with a count in their header, in this order: Apps, Background Processes,
+  Session Processes (each for own processes), System Processes (system accounts and the Kernel row), Other Users (only
+  when such a process runs). An own process is in Apps when its unit is under `app-graphical.slice` or it owns a window
+  (projection), one sub-group per unit (name and icon from the window's app id, else the desktop entry whose `Exec`
+  basename equals the unit's command part, else that part); in Session Processes when its unit is under `session.slice`
+  or `session-graphical.slice` or is the user manager's `init.scope`; otherwise in Background Processes. A group's row sums its processes (CPU, memory, disk, network,
   energy); groups and sub-groups expand and collapse, kept across samples.
 - **AM66** Performance window (Window > Performance, Ctrl+5): a sidebar with one row per resource (CPU; Memory; each
   physical disk; each network interface but `lo`, Wi-Fi or Ethernet from `/sys/class/net/<if>/wireless` and `type`; each GPU
@@ -321,7 +345,7 @@ items (Settings does it); a background collector; any network access.
 | Up, Down, Home, End, Page Up, Page Down, Shift+arrows | move and extend the selection |
 | Left, Right | collapse and expand a tree row or group |
 | Tab, Shift+Tab | toolbar controls, tabs, search, table, summary pop-ups |
-| AQ6's shortcut | open the app from anywhere |
+| Ctrl+Shift+Esc | open the app from anywhere (AQ6) |
 Shortcuts follow the other Grassfield apps' Ctrl-for-Command mapping and the menu shortcut style of ADR-0024 (symbols on a
 Mac keyboard, text on a PC).
 
@@ -344,7 +368,7 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 ## Refusals (what is refused, and what the user sees)
 | Case | What the user sees |
 |---|---|
-| A process of another user (AQ4 = B) | actions greyed; tooltip "You can only quit your own processes." |
+| A process of another owner, or the Kernel row (AQ4) | actions disabled; tooltip "You can only quit your own processes."; "—" where the kernel refuses a read; no command line |
 | A read the kernel refuses | "—" in that cell |
 | Quit of a windowed process without the shell | AM52's message; Force Quit offered |
 | A session process | AM54's second sheet |
@@ -356,7 +380,8 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | ID | Criterion | Test | Level |
 |---|---|---|---|
 | A-S1 | every formula of AM20 to AM47 on fixture `/proc` and `/sys` trees, including "—" cases and first-sample rates | `tests/unit/activity/tst_sampler.cpp` (gtest) | L0 |
-| A-S2 | own-process filter, kernel threads excluded, row identity across pid reuse | `tst_sampler.cpp` | L0 |
+| A-S2 | owners (own, system account, other user), the Kernel row, the My/System/Other views, other owners' "—" cells and hidden command lines, row identity across pid reuse | `tst_sampler.cpp` (fixture trees with three uids) | L0 |
+| A-S2b | the same against the real kernel: a process of another uid (a test container with two users, as the probes) shows its CPU and memory, "—" for disk, and every action is refused | `tests/apps/activity_owners.sh` (container only) | L1 |
 | A-S3 | AM33's levels at each threshold; AM32's sum; AM34's naming | `tst_memory.cpp` | L0 |
 | A-S4 | AM65's classification of fixture cgroup paths (uwsm scope, uwsm service, session.slice, init.scope, app.slice, a login `session-N.scope`) | `tst_kinds.cpp` | L0 |
 | A-S5 | sock_diag parsing and socket-to-process matching (captured netlink replies) | `tst_netdiag.cpp` | L0 |
@@ -367,6 +392,8 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
 | A-I1 | `ipc_inventory.sh` lists `activity quit` | `tests/security/ipc_inventory.sh` | L0 |
+| A-D1 | End Task: absent while `dock.endTask` is off, after Quit when on, absent with Option held and on the Files tile, folders and the Trash; the same confirmation and pids as Option + Force Quit | `tests/unit/tst_docklaunch.qml` (with `Launch.js`) and a new `tests/unit/tst_dockmenu.qml` for the menu model | L0 |
+| A-K1 | `grassfield-launch-key activity` starts the desktop id through uwsm, nothing in a nested dev session; the binding exists once | `tests/shell/launch_keys.sh`, `tests/shell/session_input.sh` | L0 |
 | A-P | AM-P1 to AM-P4 | `tests/apps/activity_cost.sh` | L1 (and L2 on the owner's machine) |
 | A-E | Efficiency Mode on a test scope (`systemd-run --user --scope --unit=grassfield-test-…`) sets and reverts the weight | `tests/apps/activity_efficiency.sh` (L2: the owner's user manager; refuses to run outside it) | L2 |
 | A-H | App History on a fixture journal export | `tst_history.cpp` | L0 |
@@ -397,10 +424,10 @@ Efficiency Mode on a real app with a CPU load (`stress-ng` once installed by the
 contention.
 
 ## Performance (gates)
-- **AM-P1** Window visible, CPU tab, about 400 processes: the app's CPU (Δ utime + stime of its own `stat` over 10 minutes)
+- **AM-P1** Window visible, CPU tab, about 400 processes and 200 kernel threads: the app's CPU (Δ utime + stime of its own `stat` over 10 minutes)
   ≤ 0.5 % of one core at Normally (5 sec) and ≤ 1.5 % at Very Often (1 sec).
-- **AM-P2** One sample of the sampler (its thread's `CLOCK_THREAD_CPUTIME_ID`) ≤ 5 ms on the reference machine with about 400
-  processes, the CPU tab's columns; the Network tab and GPU columns measured separately and reported.
+- **AM-P2** One sample of the sampler (its thread's `CLOCK_THREAD_CPUTIME_ID`) ≤ 6 ms on the reference machine with about 400
+  processes and 200 kernel threads, the CPU tab's columns; the Network tab and GPU columns measured separately and reported.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
 - The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window
@@ -409,7 +436,9 @@ Method: `tests/apps/activity_cost.sh` spawns N sleeping processes, starts the ap
 `/proc/<pid>/stat` and `smaps_rollup`, and fails over the budget; results recorded in the step's audit file.
 
 ## Known limitations (honest, user-visible gaps vs macOS)
-- Only the user's processes are listed (AQ4); totals include everything, so the rows do not add up to System.
+- Other owners' processes are read-only (AQ4): no administrator path to quit them (macOS asks for an administrator), and
+  their disk, network, GPU, open files and command line are not shown.
+- Time the kernel spends on interrupts belongs to no process: System is a little above the sum of the rows.
 - Network per process is TCP only and starts when the app opens (AQ2); UDP, including QUIC video, is only in the totals.
 - Energy Impact is Grassfield's own estimate (AQ3); no 12 hr Power, App Nap or Graphics Card.
 - No Sample Process, Spindump or System Diagnostics.

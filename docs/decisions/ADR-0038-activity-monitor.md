@@ -1,12 +1,13 @@
-# ADR-0038: Activity Monitor: a native app that shows and stops the user's own processes, on macOS 27's model with the best of Windows 11's Task Manager
-Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner's answers
-to AQ1 to AQ7 are recorded in "Owner decisions". Every other choice follows the owner's rule of 2026-10-28 ("the closest to
-macOS 27, with no technical step for the end user") and is recorded in "Decisions taken under the owner's rule" (AD1 to
-AD24). · Date: 2026-10-28 · Decider: owner (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to
-0037 are merged; 0038 is free on main be7eb7c and on the open pull requests #33 and #35)
+# ADR-0038: Activity Monitor: a native app that shows the computer's processes and stops the user's own, on macOS 27's model with the best of Windows 11's Task Manager
+Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner
+answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
+rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
+under the owner's rule" (AD1 to AD28). · Date: 2026-10-28 · Decider: owner (AQ1 to AQ7), integrator (merge after the
+opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main be7eb7c and on the open pull requests #33 and #35)
 
-The app's visible name is the owner's answer to AQ1 (a legal question). Internal identifiers are neutral whatever the
-answer (master-prompt §14): the folder `apps/activity`, the binary `grassfield-activity`, the app id and desktop file
+The app is named "Activity Monitor" / « Moniteur d'activité » (owner, AQ1; macOS's own app name, on the same footing as
+"Preview" / « Aperçu »: **needs legal review**, added to `docs/legal/visual-review.md` at step 2). Internal identifiers stay
+neutral (master-prompt §14): the folder `apps/activity`, the binary `grassfield-activity`, the app id and desktop file
 `org.grassfield.Activity`, the QML module and the code say "activity". In this ADR "the app" means it.
 
 Parity with macOS 27 and Windows 11, row by row: `docs/audits/activity-2026-10-28/parity.md`. Behaviour, keyboard,
@@ -111,20 +112,31 @@ app's Dock tile graph from numbers the app writes.
 Formulas and edge cases are the spec's (AM20 to AM49); the sources are:
 | Tab | Columns (default first) | Source |
 |---|---|---|
-| CPU | % CPU, CPU Time, Threads, % GPU, GPU Time, PID; optional Wake Ups, Open Files, Status, Command, Kind | `stat` (utime + stime of the whole thread group, `num_threads`), `fdinfo` of the DRM descriptors, `task/*/status` (voluntary switches) |
-| Memory | Memory, Threads, PID; optional Real Memory, Private Memory, Shared Memory, Compressed Memory, Peak Memory, Page Ins | `status` (`RssAnon`, `RssFile`, `RssShmem`, `VmSwap`, `VmHWM`), `stat` (`majflt`) |
-| Energy | Energy Impact, Preventing Sleep, PID; optional Average Energy Impact, Wake Ups, % GPU | the CPU and GPU terms above, logind's inhibitors (system bus), the shell's idle-inhibit flag |
-| Disk | Bytes Written, Bytes Read, PID; optional Read/s, Written/s | `io` (`read_bytes`, `write_bytes`) |
-| Network | Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets, PID (AQ2) | `NETLINK_SOCK_DIAG` (`tcpi_bytes_acked`, `tcpi_bytes_received`, `tcpi_segs_out`, `tcpi_segs_in`) and the own `fd/` |
+| CPU | % CPU, CPU Time, Threads, % GPU, GPU Time, PID, User; optional Wake Ups, Open Files, Status, Command, Kind | `stat` (utime + stime of the whole thread group, `num_threads`), `fdinfo` of the DRM descriptors, `task/*/status` (voluntary switches) |
+| Memory | Memory, Threads, PID, User; optional Real Memory, Private Memory, Shared Memory, Compressed Memory, Peak Memory, Page Ins | `status` (`RssAnon`, `RssFile`, `RssShmem`, `VmSwap`, `VmHWM`), `stat` (`majflt`) |
+| Energy | Energy Impact (AQ3), Preventing Sleep, PID, User; optional Average Energy Impact, Wake Ups, % GPU | the CPU and GPU terms above, logind's inhibitors (system bus), the shell's idle-inhibit flag |
+| Disk | Bytes Written, Bytes Read, PID, User; optional Read/s, Written/s | `io` (`read_bytes`, `write_bytes`) |
+| Network | Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets, all headed "(TCP)" (AQ2), PID, User | `NETLINK_SOCK_DIAG` (`tcpi_bytes_acked`, `tcpi_bytes_received`, `tcpi_segs_out`, `tcpi_segs_in`) and the own `fd/` |
 | Summaries | CPU: System, User, Idle, CPU Load graph, Threads, Processes. Memory: Memory Pressure graph, Physical Memory, Memory Used (App Memory, Wired Memory, Compressed), Cached Files, Swap Used. Energy: Energy Impact graph, and on a laptop Remaining charge, Time remaining or Time until full, Time on battery or on AC, Battery (Last 12 hours). Disk: Reads in, Writes out, Reads in/sec, Writes out/sec, Data read, Data written, Data read/sec, Data written/sec, graph IO or Data. Network: Packets in, Packets out, Packets in/sec, Packets out/sec, Data received, Data sent, Data received/sec, Data sent/sec, graph Packets or Data | `/proc/stat`, `loadavg`, `meminfo`, `pressure/memory`, `swaps`, `/sys/block/zram*/mm_stat`, `diskstats` (whole physical disks), `net/dev` (every interface but `lo`), UPower (system bus) |
 macOS meanings are kept where Linux has them: "User" is the CPU of the user's own processes and "System" everything else
 that is not idle (AD5), "Compressed" is zram's RAM and "Swap Used" the swap on disk (AD7). A figure Linux cannot give is
 not invented (R11): it is absent, or "—" for a process that refuses the read.
 
-### c. Which processes (AQ4)
-The table lists the processes whose real uid is the user's (`status` `Uid:`), kernel threads excluded, as the owner's
-constraint says, unless AQ4 decides otherwise. The summaries and graphs are system-wide (`/proc/stat`, `meminfo`, …), so
-the totals stay true. Actions apply to the user's processes only (the kernel enforces it: A2).
+### c. Which processes (AQ4: other users' processes shown read-only, as macOS)
+- The table lists every process the kernel shows in `/proc`, as macOS's "All Processes": the user's own, those of system
+  accounts (root and the services' users, uid below `UID_MIN` of `/etc/login.defs`, 1000 on Arch) and those of other people
+  (uid from `UID_MIN`). Kernel threads are not listed one by one: one row "Kernel" (user root, no pid) sums their CPU,
+  as macOS's `kernel_task` (AD25).
+- View > My Processes, System Processes and Other User Processes filter by owner, as macOS. A User column (default on every
+  tab, macOS) names the owner.
+- **Read-only for the others.** What the kernel gives every user (A1: `stat`, `status`, `cgroup`, `cmdline`) fills their
+  rows (% CPU, CPU Time, Threads, Memory, User, PID); disk, network, GPU, open files and Inspect's detailed tabs
+  show "—" for them. Their command lines are not displayed (AD25): only the executable's name.
+- **Actions only on the user's own processes** (the kernel enforces it, A2; no polkit action, the brief): Quit, Force Quit,
+  Send Signal and Efficiency Mode are disabled on another owner's row with the reason ("You can only quit your own
+  processes."). macOS asks for an administrator there; Grassfield does not (a known limitation).
+- The summaries and graphs are system-wide (`/proc/stat`, `meminfo`, …) as before. With `/proc` mounted `hidepid`, other
+  users' processes are invisible and only the user's are listed.
 
 ### d. Sampling and its cost
 - One sampler thread, woken by one timer at the update frequency: View > Update Frequency, Very Often (1 sec), Often (2 sec),
@@ -137,10 +149,10 @@ the totals stay true. Actions apply to the user's processes only (the kernel enf
   step measures it against plain opens and keeps the cheaper.
 - The window hidden or minimized: no per-process sampling. With a Dock graph (f), only the system file the graph needs, at
   the update frequency. Nothing else wakes the app.
-- **Budget, measured by `tests/apps/activity_cost.sh` (AM-P1 to AM-P4):** with about 400 processes, the window visible on
-  the CPU tab, the app's own CPU (its `utime + stime` over 10 minutes) stays ≤ 0.5 % of one core at the default 5 s and ≤ 1.5
-  % at 1 s; ≤ 0.1 % minimized with a Dock graph at 5 s; one sample of the sampler costs ≤ 5 ms of CPU; the app's PSS stays ≤
-  120 MB and grows by < 5 MB over one hour. The app lists itself, as macOS does, so the user sees its cost too.
+- **Budget, measured by `tests/apps/activity_cost.sh` (AM-P1 to AM-P4):** with about 400 processes and 200 kernel threads,
+  the window visible on the CPU tab, the app's own CPU (its `utime + stime` over 10 minutes) stays ≤ 0.5 % of one core at the
+  default 5 s and ≤ 1.5 % at 1 s; ≤ 0.1 % minimized with a Dock graph at 5 s; one sample of the sampler costs ≤ 6 ms of
+  CPU; the app's PSS stays ≤ 120 MB and grows by < 5 MB over one hour. The app lists itself, as macOS does, so the user sees its cost too.
 
 ### e. Quit, Force Quit and signals (no root; macOS sheet)
 - The Stop button and View > Quit Process open macOS's sheet: "Are you sure you want to quit this process?", with Cancel,
@@ -152,9 +164,8 @@ the totals stay true. Actions apply to the user's processes only (the kernel enf
   (`stat` field 22) of the row: a process that ended makes the call fail (ESRCH, A2), so a reused pid is never hit. This is a
   stronger check than the Force Quit panel's window class, and it needs no window.
 - View > Send Signal to Process…: macOS's sheet with a pop-up of the usual POSIX signals, then Send; the same pidfd path.
-- Grassfield's own session processes (the compositor, the shell, the menu bridge, the user manager) can be force quit
-  only after a second sheet that names the consequence ("Your session will end" for the compositor); no user loses a
-  session to one click.
+- The user's session processes (the compositor, the shell, the menu bridge, the user manager; AD22) can be quit or force
+  quit only after a second sheet that says the session may end (spec AM54): no user loses a session to one click.
 
 ### f. With the shell: Not Responding, windows, the Dock, Force Quit (AQ5, AQ6)
 - **Projection, not duplication.** While a window with app id `org.grassfield.Activity` is open, the shell writes
@@ -172,13 +183,23 @@ the totals stay true. Actions apply to the user's processes only (the kernel enf
   (`{"v":1,"pid","kind","samples":[…]}`, values 0 to 1 the app has scaled, at most 32 samples, at most 2 KiB); the Dock
   draws it with tokens over the `org.grassfield.Activity` tile while that app runs (it reads no other path and no other app
   id: no app can draw on another app's tile). The image is never written by the app (no pixels to trust, no decode cost).
-- **Force Quit panel and Dock menu:** AQ5. **Keyboard shortcut:** AQ6.
+- **Force Quit panel and Dock menu (AQ5: End Task behind a setting).** The Force Quit panel is unchanged. A new switch in
+  Settings > Desktop & Dock, "Show End Task in Dock menus" (fr « Afficher Fin de tâche dans les menus du Dock »), off by
+  default as Windows' own (setting `dock.endTask` in `grassfield.json`), adds "End Task" (fr « Fin de tâche ») after Quit in
+  the Dock menu of every running app. End Task is the Dock's existing Option + Force Quit (AD27): the same confirmation,
+  then `Power.run("forcequit")` on every process of the app, nothing new in the kill path. The macOS items (Force Quit with
+  Option, at once for a hung app) are unchanged.
+- **Keyboard shortcut (AQ6): Ctrl+Shift+Esc** (Windows'), free in Grassfield's bindings. The binding runs
+  `grassfield-launch-key activity` (`packaging/bin/grassfield-launch-key`, a new kind next to `settings` and `files`), which
+  starts `org.grassfield.Activity.desktop` through `uwsm app` in its own scope, or brings the running app forward (AM1).
 
 ### g. From Windows 11 (in the Grassfield structure)
-- **Processes, by Type** (View menu; Windows' "group by type"): Apps (processes in `app-graphical.slice` scopes or that own a
-  window, one group per scope, named and drawn with its desktop entry), Background Processes (the user's services and
-  everything else), Session Processes (the compositor, the shell and the other units of the session's slices and the
-  user manager). Groups expand to their processes; a group's row sums them. macOS 27's "Processes, by GPU" groups by GPU.
+- **Processes, by Type** (View menu; Windows' "group by type"; AD26): Apps (the user's processes in `app-graphical.slice`
+  scopes or that own a window, one group per scope, named and drawn with its desktop entry), Background Processes (the
+  user's other services and processes), Session Processes (the user's compositor, shell and the other units of the
+  session's slices and the user manager), System Processes (system accounts and the kernel), Other Users (only when
+  another person's processes run). Groups expand to their processes; a group's row sums them. macOS 27's "Processes, by
+  GPU" groups by GPU.
 - **Performance** (Window menu): a sidebar of resources with a small graph each (CPU, Memory, each physical disk, each
   network interface, each GPU) and the selected one's large graph and details (Windows' Performance page in macOS 27's
   window structure). CPU: overall or one graph per logical processor; speed, cores, logical processors, caches, up time,
@@ -194,7 +215,8 @@ the totals stay true. Actions apply to the user's processes only (the kernel enf
   reverted by the same call): reversible, no root, unlike `nice` and `SCHED_IDLE` (A3). It applies to the whole app (Windows
   applies it to a group too) and says so in a first-time sheet ("Don't ask again"). Unavailable, with the reason, for a
   process outside such a unit and for the session's own processes. Status column: "Efficiency Mode".
-- **Columns** (View > Columns and the header's context menu), **search** (process name, app name, command, PID), **Copy**
+- **Columns** (View > Columns and the header's context menu), **search** (process name, app name, user, own command
+  lines, PID), **Copy**
   of the selected rows as text, and the Status column.
 - **Login Items…** (Window menu): opens Settings on General > Login Items (`grassfield-settings --section=login`). Nothing
   of it is copied into the app.
@@ -204,12 +226,15 @@ Sample Process, Run Spindump, Run System Diagnostics (no unprivileged stack samp
 cache), App Nap and Graphics Card (no Linux counterpart), 12 hr Power (no 12-hour record without a background sampler; the
 Energy tab has an average since the app opened instead), Windows' Users, Details (it is the main table), Services (Settings
 has the user's services), Run new task (Search and Apps start apps), Set priority and Set affinity (one-way without root,
-A3), Create dump file, Search online, heat-map cells, Paused update speed, and processes of other users beyond AQ4.
+A3), Create dump file, Search online, heat-map cells, Paused update speed, and any action on another owner's process (no
+administrator path: no root code, no new polkit action).
 
 ### i. Security and privacy
 - Nothing runs as root; no polkit action; nothing is sent anywhere. The kernel refuses every action on another user's
   process (A2).
-- Command lines are shown for the user's own processes only (what `ps` shows); environment variables are never read.
+- Other owners' processes are read-only and show only what the kernel gives every user (A1); their command lines, which the
+  kernel also gives, are not displayed (AD25). The user's own command lines are shown (what `ps` shows); environment
+  variables are never read.
 - The projection holds pids and app ids (any local process of the user reads `hyprctl -j clients` already, ADR-0035
   decision 3-14); the Dock tile file holds numbers. Both live in the 0700 runtime folder and go when their writer stops.
 - Dev sessions (ADR-0019): the app runs in the owner's account and sees the owner's real processes. In a dev session every
@@ -231,7 +256,7 @@ A3), Create dump file, Search online, heat-map cells, Paused update speed, and p
 | B. « Activité » / "Activity" | short, close to macOS, Omarchy already calls btop "Activity" | further from macOS; collides in words with Omarchy's btop entry if both are shown |
 | C. « Moniteur système » / "System Monitor" | the generic Linux name (GNOME, KDE), lowest resemblance | not macOS; two different apps on Linux already carry it |
 | D. « Gestionnaire d'activité Grassfield » / "Grassfield Activity" | own name, like "Grassfield Store" | long in the Dock and the menu bar |
-Answer: _recorded below after the questions_.
+Answer: A (see "Answers").
 
 **AQ2. Network use per process** (no root).
 | Option | For | Against |
@@ -277,8 +302,16 @@ Answer: _recorded below after the questions_.
 | B. Shell links early: 1 sampler; 2 the shell links and the Dock graph; 3 the window; 4 Windows; 5 finish | Not Responding and End Task reach the Dock sooner | the Dock graph before the app the user sees |
 | C. Windows first: 1 sampler; 2 the window with Performance and by Type; 3 macOS's tabs; 4 shell; 5 finish | the Windows graphs early | the macOS model, the owner's rule, comes late |
 
-### Answers
-_Filled after the owner answers (2026-10-28)._
+### Answers (2026-10-28, AskUserQuestion; the options as asked in French, in the order above)
+| Question | Answer | Consequence |
+|---|---|---|
+| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (a visual-review element at step 2) |
+| AQ2 network per process | « TCP seulement, étiqueté » (Recommandé) → A | AM43: the four columns headed "(TCP)" and the line under the table |
+| AQ3 energy per process | « Indice « Impact énergétique » » (Recommandé) → A | AM36 to AM39; weights calibrated by an owner L2 run on the laptop |
+| AQ4 other users' processes | « Visibles en lecture seule » → **B** (not the recommended A) | c above, AD25, AD26; the brief's "sees only the user's processes" is amended by the owner for seeing; stopping stays the user's own processes only |
+| AQ5 the Dock and Force Quit | « « Fin de tâche », réglage » (Recommandé) → B | f above, AD27; Settings > Desktop & Dock gains the switch at step 3 |
+| AQ6 shortcut | « Ctrl+Maj+Échap » (Recommandé) → A | f above, AD28 |
+| AQ7 order | « macOS d'abord » (Recommandé) → A | "Delivery order" |
 
 ## Decisions taken under the owner's rule (2026-10-28: the closest to macOS 27, no technical step for the end user)
 - **AD1. One app, no daemon.** The app samples only while it runs; App History reads systemd's records rather than a
@@ -304,16 +337,18 @@ _Filled after the owner answers (2026-10-28)._
 - **AD9. GPU** from `fdinfo` (`drm-engine-*`): % GPU = the busiest engine of the process, GPU Time = the sum of its engines;
   the system's GPU graphs sum the user's clients (the compositor is one of them). A driver without these keys shows no GPU
   column ("—").
-- **AD10. Read only what is shown** (d). A process the kernel refuses a read for (non-dumpable) shows "—" in that column.
+- **AD10. Read only what is shown** (d). A process the kernel refuses a read for (another owner's or a non-dumpable one)
+  shows "—" in that column.
 - **AD11. Quit through the shell for windowed processes**, `SIGTERM` otherwise; Force Quit `SIGKILL`; pidfd and start time.
 - **AD12. Send Signal to Process…** kept (macOS); its list is the usual POSIX signals with plain names.
 - **AD13. Inspect** (Info button, Ctrl+I): macOS's window "<name> (<pid>)": Parent Process, Process Group, User, % CPU,
   Recent hangs (marks seen since the app opened); tabs Memory, Statistics, Open Files and Ports (files, pipes, sockets with
   their addresses from `/proc/net/*`); Quit. No Sample button (h).
-- **AD14. Views (View menu):** All Processes (default), All Processes, Hierarchically, Processes, by Type (g), Processes,
-  by GPU, Active Processes, Inactive Processes, GPU Processes, Windowed Processes, Selected Processes; My Processes, System
-  Processes and Other User Processes only if AQ4 is B.
-- **AD15. Search** is a live filter, as macOS; matches the process name, the app name, the command and the PID.
+- **AD14. Views (View menu):** All Processes (default), All Processes, Hierarchically, My Processes, System Processes,
+  Other User Processes (AQ4), Active Processes, Inactive Processes, GPU Processes, Windowed Processes, Selected Processes,
+  Processes, by Type (g), Processes, by GPU.
+- **AD15. Search** is a live filter, as macOS; matches the process name, the app name, the user's name, the user's own
+  command lines (AD25) and the PID.
 - **AD16. Dock Icon** offers macOS's five items; "Show Memory Pressure" is not offered (no source confirms it on macOS).
 - **AD17. The app quits when its last window closes** (the Grassfield Dock knows running apps by their windows), so the Dock
   graph shows while the window is open or minimized (macOS keeps the app running without a window: known limitation).
@@ -323,16 +358,42 @@ _Filled after the owner answers (2026-10-28)._
   matches a scope to a desktop entry by its command (uwsm's unit name, A7).
 - **AD21. Projection file and Dock tile file** (f) rather than IPC polls: no process is started per sample, no wake-up
   without a change.
-- **AD22. Session processes** (compositor, shell, menu bridge, user manager): Force Quit asks twice; Efficiency Mode
-  refused.
+- **AD22. Session processes** (the user's processes in `session.slice`, `session-graphical.slice` or the user manager's
+  `init.scope`: the compositor, the shell, the menu bridge, the user manager): Quit and Force Quit ask twice (AM54);
+  Efficiency Mode refused.
 - **AD23. Keep CPU Windows on Top** (macOS Window menu) through a toplevel tag (ADR-0015's `xdg-toplevel-tag` helper) and a
   rule of the Grassfield session's Hyprland config; without the rule, the item is absent.
 - **AD24. Tables and graphs** reuse Grassfield.Ui (tokens, `SegmentedControl`, `SearchField`, `PopupMenu`, `Sheet`) and the
   list header of Files (`apps/files/qml/FileList.qml`); a shared table component moves into Grassfield.Ui only if the
   step's code is the same in both apps (R5).
+- **AD25. Other owners' rows (AQ4 = B).** Read from `stat`, `status`, `cgroup` and the first word of `cmdline` only; their
+  Command cell is "—" and search does not match their command lines (macOS shows no command line at all; Windows only to
+  an administrator). Kernel threads (`PF_KTHREAD`) are summed into one "Kernel" row (user root, PID "—"), as macOS's
+  `kernel_task`; its CPU counts in System.
+- **AD26. Processes, by Type** has five groups (g): Apps, Background Processes and Session Processes for the user's own
+  processes, System Processes (system accounts and the Kernel row) and Other Users. "System Processes" means the same set
+  as macOS's View filter of that name (owner uid below `UID_MIN`, plus the kernel).
+- **AD27. End Task (AQ5)** is a label and a switch, not a new path: the Dock menu's existing Force Quit of all the app's
+  processes (Option + Force Quit, `Launch.forceQuitPids`, `Power.run("forcequit")`), with its confirmation. Shown after
+  Quit only while `dock.endTask` is on and the app runs; never on the Files tile, folders or the Trash.
+- **AD28. Ctrl+Shift+Esc (AQ6)** goes through `grassfield-launch-key activity`, the session's way of opening a default app
+  from a key: the app gets its own scope, and the key does nothing in a nested dev session (as the other launch keys).
 
-## Delivery order
-_Per AQ7; recorded after the answers._
+## Delivery order (owner, AQ7 = A: macOS first)
+Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
+0. **Docs** (this pull request): ADR-0038, `docs/specs/activity.md`, the parity matrix, the probes.
+1. **The sampler, no window**: `apps/activity/src` (process and system samples, rates, row identity, owners, kinds, the
+   Kernel row, GPU clients, TCP sockets, memory pressure), gtest on fixture trees, `tests/apps/activity_cost.sh` with
+   AM-P2 met, the owner-machine read-only checks of "Not verified here". Spec AM20 to AM49 (data), AM79.
+2. **The window**: the five tabs, the table, views, search, columns, summaries and graphs, Quit (SIGTERM path) and Force
+   Quit, Send Signal, Inspect, `activity.json`, menus, icon, desktop entry, translations, the PKGBUILD lines, the legal
+   element; AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM59, AM74 to AM78.
+3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
+   tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
+4. **Windows 11's additions**: Processes, by Type, Performance, Efficiency Mode, App History, the Login Items link, the
+   Status column. Spec AM65 to AM70.
+5. **The small windows and the finish**: CPU Usage, CPU History, GPU History, Keep CPU Windows on Top; F1 against public
+   captures, A2, the budget measured again on the owner's machine (L2). Spec AM71 to AM73.
 
 ## macOS reference (Apple's Activity Monitor User Guide, macOS 27 in its version selector, read 2026-10-28; facts only)
 Five tabs CPU, Memory, Energy, Disk, Network; the bottom of the window summarises each one (System, User and Idle for the
@@ -385,9 +446,12 @@ under Settings > System > For developers (Advanced on 25H2), off by default.
   formula, every refusal), `tests/apps/activity_cost.sh` (the budget), `tests/apps/activity_*.sh` (offscreen), a nested
   scenario (Not Responding, Quit through the shell, the Dock graph), translations, the icon, the PKGBUILD lines.
 - Shell: a projection writer and the IPC action `activity quit` (security.md "IPC surface", `ipc_inventory.sh`), the Dock
-  tile graph in `shell/dock/Dock.qml`, AQ5's items, AQ6's binding in `config/hypr/grassfield/bindings.lua`.
-- Docs: ADR-0020 rows (j); `docs/specs/security.md` (the IPC row); `docs/legal/visual-review.md` (a new element for the
-  app, its name per AQ1, "needs legal review"); `docs/specs/dock.md` (the tile graph); `docs/specs/settings.md` if AQ5 adds a
-  switch.
+  tile graph in `shell/dock/Dock.qml`, End Task in `shell/overlay/DockMenu.qml` (AQ5), Ctrl+Shift+Esc in
+  `config/hypr/grassfield/bindings.lua` and the `activity` kind of `packaging/bin/grassfield-launch-key` (AQ6).
+- Settings and config: the switch in Settings > Desktop & Dock and the key `dock.endTask` (boolean, default false) in the
+  `grassfield.json` schema (`config/schema/`).
+- Docs: ADR-0020 rows (j); `docs/specs/security.md` (the IPC row); `docs/legal/visual-review.md` (a new element: the app's
+  name "Activity Monitor" / « Moniteur d'activité » and its window, "needs legal review"); `docs/specs/dock.md` (the tile
+  graph, End Task); `docs/specs/settings.md` (the switch).
 - Gates: P1 and P2 are the shell's and unchanged except the projection writer (measured); the app's own budget is AM-P1 to
   AM-P4; A1, A2, I1, Q1 to Q3 and F1 apply as for every app.
