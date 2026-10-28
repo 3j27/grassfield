@@ -245,6 +245,21 @@ unlock_session() {
 surfaces_state() {
   say "  hyprctl locked: $(hypr_locked); layers on $out: $(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels // {} | .[][] | .namespace] | join(",")' 2>/dev/null)"
 }
+# A shell popup is open on GF-REF: the shell maps its overlay layer only then (shell/overlay/Overlay.qml), over the whole
+# output, so a press there closes the popup and reaches no window.
+shell_popup_open() {
+  nestctl layers -j 2>/dev/null | jq -e --arg o "$out" '[.[$o].levels // {} | .[][] | select(.namespace == "grassfield-overlay")] | length > 0' >/dev/null 2>&1
+}
+# Closes a shell popup left open on GF-REF (Esc goes to the popup, which holds the keyboard) and says so: a press of the next
+# case would only close it (integrator nested pass of 2765002: the overlay was mapped at each failed C1 check).
+close_shell_popup() { # case name
+  shell_popup_open || return 0
+  say "  $1: a shell popup was open on $out (the overlay is mapped): closed with Esc before the case"
+  "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
+  sleep 0.5
+  shell_popup_open && say "  $1: the popup is still open after Esc"
+  return 0
+}
 # The plugin's last lines naming PATTERN (Hyprland's in-memory log, then its file), for a failed check.
 plugin_lines() { # pattern
   local lines l
@@ -290,6 +305,7 @@ grip_of() { # address: the middle of its titlebar relative to GF-REF, "px py"
 c1_other=""
 run_c1() { # name focused|unfocused moving|still
   local name=$1 focus=$2 motion=$3 px py p
+  close_shell_popup "C1 $name"
   open_xdg "gf-c1-$name"
   if [[ -z $xdg_addr ]] || ! read -r px py < <(grip_of "$xdg_addr"); then
     check "C1 $name: the victim window opened" false
@@ -313,6 +329,7 @@ run_c1() { # name focused|unfocused moving|still
   c1_guarded() { # on a failure, the plugin's own lines for the victim and what may have held the pointer
     plugin_logged "${xdg_addr#0x} closed or unmapped" && return 0
     plugin_lines "${xdg_addr#0x}"
+    plugin_lines "held back" # the request log budget (20 lines, then 1 per second) dropped lines when this names any
     surfaces_state
     return 1
   }
@@ -1123,6 +1140,10 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   tile_ipc "$addr3" previous
   free_foot
   kill "$foot3_pid" 2>/dev/null
+  # The first window is back under the pointer step 3 left on its zoom light: the pointer goes to the wallpaper, left of
+  # every window, and a popover the hover opened meanwhile closes, before the C1 cases.
+  pointer abs 20 $((mh / 2)) sleep 200
+  close_shell_popup "step 4a end"
   sleep 0.5
 else
   say "SKIP: step 4a cases (the plugin does not advertise tiling-layouts, or the second window is missing)"
