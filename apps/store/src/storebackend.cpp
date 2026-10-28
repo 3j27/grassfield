@@ -1128,6 +1128,10 @@ QString refusalName(Refusal r)
         return QStringLiteral("protected");
     case Refusal::OmarchyChanged:
         return QStringLiteral("omarchyChanged");
+    case Refusal::Repository:
+        return QStringLiteral("repository");
+    case Refusal::NotOnAur:
+        return QStringLiteral("notOnAur");
     case Refusal::Failed:
         return QStringLiteral("failed");
     }
