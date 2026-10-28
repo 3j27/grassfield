@@ -520,11 +520,35 @@ TestCase {
         tryCompare(files.windows, "length", 1);
         compare(files.promptWindow, first, "its window closed: the question moves");
         tryVerify(() => test.kioSheet(first).visible, 1000);
+        tryVerify(() => !test.kioSheet(first).holdInput, 2000);
         test.giveKeys(first);
         verify(waitForPolish(first, 1000));
         test.type(Qt.Key_Return, Qt.NoModifier);
         compare(fakePrompts.replies, [{id: 5, button: "ok"}]);
         verify(!test.kioSheet(first).visible);
+        compare(files.promptWindow, null);
+    }
+
+    // With no browser window left, a question gets its safe answer at once ("stop": Stop, Cancel, Don't Delete).
+    function test_kioQuestionWithNoWindow() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        files.windows[0].close();
+        tryCompare(files.windows, "length", 0);
+        fakePrompts.current = {
+            id: 9,
+            kind: "conflict",
+            name: "a.txt",
+            folder: "dest",
+            mode: "copy",
+            merge: false,
+            replace: true,
+            keepBoth: true,
+            skip: false,
+            applyToAll: false
+        };
+        compare(fakePrompts.replies, [{id: 9, button: "stop"}]);
         compare(files.promptWindow, null);
     }
 
@@ -550,6 +574,7 @@ TestCase {
         // Esc closes Go to Folder (the keyboard is still its own), then the question shows.
         test.type(Qt.Key_Escape, Qt.NoModifier);
         tryVerify(() => test.kioSheet(browser).visible, 1000, "Go to Folder closed: the question shows");
+        tryVerify(() => !test.kioSheet(browser).holdInput, 2000);
         verify(waitForPolish(browser, 1000));
         test.type(Qt.Key_Return, Qt.NoModifier);
         compare(fakePrompts.replies, [{id: 6, button: "ok"}]);
@@ -577,6 +602,7 @@ TestCase {
         verify(!browser.menuLayer.visible, "Esc closed the menu");
         compare(fakePrompts.replies, [], "Esc was the menu's");
         tryVerify(() => test.kioSheet(browser).visible, 1000, "the menu closed: the question shows");
+        tryVerify(() => !test.kioSheet(browser).holdInput, 2000);
         // The view takes the keyboard after the sheet opened (BrowserTab.focusView, queued by a navigation): the sheet
         // takes it back.
         browser.tab.focusView();

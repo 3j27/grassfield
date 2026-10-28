@@ -62,10 +62,21 @@ Item {
             return;
         }
         root.shownId = id;
-        if (id >= 0)
+        if (id >= 0) {
+            // A question that follows another one at once (two jobs' conflicts): the second click of a double click, or
+            // a repeated Return, meant for that one must not answer this one unseen.
+            sheet.holdInput = true;
+            inputHold.restart();
             sheet.open();
-        else if (sheet.shown)
+        } else if (sheet.shown) {
             sheet.close();
+        }
+    }
+
+    Timer {
+        id: inputHold
+        interval: Qt.styleHints.mouseDoubleClickInterval
+        onTriggered: sheet.holdInput = false
     }
 
     // Shown again (another sheet or a menu closed): once what closed it has run (a menu's action may take the focus).

@@ -18,10 +18,12 @@ TestCase {
     height: 480
     visible: true
 
-    // FilesApp.prompts: the question on screen, and the replies the sheet sent.
+    // FilesApp.prompts: the question on screen, the ones waiting behind it (shown at once after a reply, as KioPrompts does),
+    // and the replies the sheet sent.
     QtObject {
         id: fakePrompts
         property var current: ({})
+        property var waiting: []
         property var replies: []
         function reply(id: int, answer: var): void {
             fakePrompts.replies = fakePrompts.replies.concat([{
@@ -30,7 +32,9 @@ TestCase {
                     applyToAll: answer.applyToAll,
                     alwaysTrust: answer.alwaysTrust
                 }]);
-            fakePrompts.current = ({});
+            const next = fakePrompts.waiting.length > 0 ? fakePrompts.waiting[0] : ({});
+            fakePrompts.waiting = fakePrompts.waiting.slice(1);
+            fakePrompts.current = next;
         }
     }
 
@@ -50,6 +54,7 @@ TestCase {
 
     function init(): void {
         fakePrompts.current = ({});
+        fakePrompts.waiting = [];
         fakePrompts.replies = [];
     }
 
@@ -83,6 +88,12 @@ TestCase {
         const item = test.find(sheet, text);
         verify(item !== null, text);
         mouseClick(item);
+    }
+
+    // The sheet is shown and takes input (KioSheets holds it for the double-click interval after a question changes).
+    function shown(sheet: var): void {
+        tryVerify(() => sheet.visible, 1000, "the sheet shows");
+        tryVerify(() => !sheet.holdInput, 2000, "the sheet takes input");
     }
 
     function sheetOf(sheets: var): var {
@@ -299,7 +310,7 @@ TestCase {
             skip: true,
             applyToAll: true
         });
-        tryVerify(() => sheet.visible, 1000, "the question opens the sheet");
+        test.shown(sheet);
         compare(sheet.title, "An item named “Report.pdf” already exists in this location.");
         test.click(sheet, "Keep Both");
         compare(fakePrompts.replies.length, 1);
@@ -314,7 +325,7 @@ TestCase {
             skip: true,
             applyToAll: true
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         test.click(sheet, "Apply to All");
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies[1].button, "replace");
@@ -326,7 +337,7 @@ TestCase {
             skip: true,
             applyToAll: true
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         verify(!test.find(sheet, "Apply to All").checked, "Apply to All starts off");
         keyClick(Qt.Key_Escape);
         compare(fakePrompts.replies[2].button, "stop");
@@ -337,7 +348,7 @@ TestCase {
             id: 10,
             skip: true
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         test.click(sheet, "Skip");
         compare(fakePrompts.replies[3].button, "skip");
         compare(fakePrompts.replies.length, 4);
@@ -359,7 +370,7 @@ TestCase {
             resume: true,
             keepBoth: false
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies[0].button, "resume");
     }
@@ -373,22 +384,197 @@ TestCase {
             skip: true,
             applyToAll: true
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         test.click(sheet, "Apply to All");
         sheets.shown = false;
         tryVerify(() => !sheet.visible, 1000);
         sheets.shown = true;
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         verify(test.find(sheet, "Apply to All").checked, "Apply to All kept");
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies[0].applyToAll, true);
+    }
+
+    // A deletion: Delete answers "delete"; Return cancels (a destructive button is never the default, common rule 3).
+    function test_deletion(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        const request = {
+            id: 61,
+            kind: "delete",
+            type: "delete",
+            count: 1,
+            name: "a.txt"
+        };
+        fakePrompts.current = request;
+        test.shown(sheet);
+        test.click(sheet, "Delete");
+        compare(fakePrompts.replies[0].button, "delete");
+        fakePrompts.current = Object.assign({}, request, {
+            id: 62
+        });
+        test.shown(sheet);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[1].button, "cancel");
+    }
+
+    // A worker's warning: Return never takes its action. With a Cancel it cancels; without one it gives the secondary
+    // action (KDE's own box defaults to Cancel; an sftp host key that changed must not be accepted by Return).
+    function test_warningReturnIsSafe(): void {
+        let s = KioSheetsLogic.sheet({
+            id: 70,
+            kind: "message",
+            title: "",
+            text: "The host key changed.",
+            details: "",
+            primary: "Connect Anyway",
+            secondary: "",
+            cancel: true,
+            okOnly: false,
+            warning: true
+        });
+        verify(s.returnCancels, "a warning with Cancel");
+        s = KioSheetsLogic.sheet({
+            id: 71,
+            kind: "message",
+            title: "",
+            text: "Overwrite?",
+            details: "",
+            primary: "Yes",
+            secondary: "No",
+            cancel: false,
+            okOnly: false,
+            warning: false
+        });
+        verify(!s.returnCancels, "a question that is not a warning keeps its primary action as the default");
+
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = {
+            id: 72,
+            kind: "message",
+            title: "Host key",
+            text: "The host key changed.",
+            details: "",
+            primary: "Connect Anyway",
+            secondary: "",
+            cancel: true,
+            okOnly: false,
+            warning: true
+        };
+        test.shown(sheet);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].button, "cancel");
+        fakePrompts.current = {
+            id: 73,
+            kind: "message",
+            title: "",
+            text: "Replace the remote file?",
+            details: "",
+            primary: "Replace",
+            secondary: "Keep",
+            cancel: false,
+            okOnly: false,
+            warning: true
+        };
+        test.shown(sheet);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[1].button, "secondary");
+    }
+
+    // A request without the merge field is never a merge.
+    function test_conflictWithoutMergeField(): void {
+        const request = test.conflict({});
+        delete request.merge;
+        const s = KioSheetsLogic.sheet(request);
+        compare(s.title, "An item named “Report.pdf” already exists in this location.");
+        compare(s.confirmText, "Replace");
+    }
+
+    // Two jobs' conflicts, one after the other: a double click on Replace answers the first one only; the second shows and
+    // takes no input for the double-click interval (Return held down does not answer it either), then answers as usual.
+    function test_secondQuestionIsNotAnsweredUnseen(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.waiting = [test.conflict({
+                id: 82,
+                name: "Other.pdf"
+            })];
+        fakePrompts.current = test.conflict({
+            id: 81
+        });
+        test.shown(sheet);
+        verify(waitForPolish(sheet.Window.window, 1000));
+        const replace = test.find(sheet, "Replace");
+        verify(replace !== null);
+        mouseDoubleClickSequence(replace);
+        compare(fakePrompts.replies.length, 1, "the double click answered one question");
+        compare(fakePrompts.replies[0].id, 81);
+        tryVerify(() => sheet.visible, 1000);
+        verify(sheet.holdInput, "the second question holds its input");
+        compare(sheet.title, "An item named “Other.pdf” already exists in this location.");
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies.length, 1, "Return right after it changed does not answer it");
+        wait(Qt.styleHints.mouseDoubleClickInterval + 50);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies.length, 2);
+        compare(fakePrompts.replies[1].id, 82);
+    }
+
+    // Return is the default button's in every new question, also after the user tabbed to another button in the last one.
+    function test_returnIsTheDefaultAfterTab(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        fakePrompts.current = test.conflict({
+            id: 101
+        });
+        test.shown(sheet);
+        keyClick(Qt.Key_Tab);
+        keyClick(Qt.Key_Escape);
+        compare(fakePrompts.replies[0].button, "stop");
+        fakePrompts.current = test.conflict({
+            id: 102
+        });
+        test.shown(sheet);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[1].button, "replace", "Return is Replace's, not the button tabbed to last time");
+    }
+
+    // A long worker message: the sheet stays within its window, the buttons on screen, the text scrolls.
+    function test_longMessageKeepsTheButtonsOnScreen(): void {
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        const lines = [];
+        for (let i = 0; i < 200; i++)
+            lines.push("Line " + i + " of what the server said.");
+        fakePrompts.current = {
+            id: 91,
+            kind: "message",
+            title: "Server",
+            text: lines.join("\n"),
+            details: "",
+            primary: "",
+            secondary: "",
+            cancel: false,
+            okOnly: true,
+            warning: false
+        };
+        test.shown(sheet);
+        verify(waitForPolish(sheet.Window.window, 1000));
+        const ok = test.find(sheet, "OK");
+        verify(ok !== null);
+        const bottom = ok.mapToItem(sheets, 0, ok.height).y;
+        verify(bottom <= sheets.height, "the OK button is inside the window (" + bottom + " <= " + sheets.height + ")");
+        wait(Qt.styleHints.mouseDoubleClickInterval + 50);
+        mouseClick(ok);
+        compare(fakePrompts.replies[0].button, "ok");
     }
 
     function test_withdrawnQuestion(): void {
         const sheets = test.make();
         const sheet = test.sheetOf(sheets);
         fakePrompts.current = test.conflict({});
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         // The job ended: KioPrompts withdraws the question, unanswered.
         fakePrompts.current = ({});
         tryVerify(() => !sheet.visible, 1000, "the sheet goes with its question");
@@ -414,7 +600,7 @@ TestCase {
                 }]
         };
         fakePrompts.current = request;
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         // Return cancels: connecting is never the default.
         keyClick(Qt.Key_Return);
         compare(fakePrompts.replies[0].button, "cancel");
@@ -422,7 +608,7 @@ TestCase {
         fakePrompts.current = Object.assign({}, request, {
             id: 22
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         verify(test.find(sheet, "Always trust “files.example.org”") === null, "Always trust comes with the certificate");
         test.click(sheet, "Show Certificate");
         verify(sheet.visible, "Show Certificate keeps the sheet");
@@ -436,7 +622,7 @@ TestCase {
         fakePrompts.current = Object.assign({}, request, {
             id: 23
         });
-        tryVerify(() => sheet.visible, 1000);
+        test.shown(sheet);
         verify(test.find(sheet, "Show Certificate") !== null);
         test.click(sheet, "Continue");
         compare(fakePrompts.replies[2].alwaysTrust, false);

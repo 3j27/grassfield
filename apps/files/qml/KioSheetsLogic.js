@@ -176,7 +176,8 @@ function deletion(request) {
         showCancel: true,
         cancelText: qsTr("Cancel"),
         cancelId: "cancel",
-        returnCancels: false,
+        // A deletion is never the default (common rule 3): Return cancels.
+        returnCancels: destructive,
         extras: [],
         applyToAll: false
     };
@@ -211,7 +212,9 @@ function message(request) {
         showCancel: showCancel,
         cancelText: cancelText,
         cancelId: cancelId,
-        returnCancels: false,
+        // A warning's action is never the default (common rule 3; KDE's own box defaults to Cancel): Return gives Cancel,
+        // or the secondary action where there is no Cancel (an sftp host key that changed: "Connect Anyway" is not Return).
+        returnCancels: request.warning === true && !request.okOnly && showCancel,
         extras: extras,
         applyToAll: false
     };
