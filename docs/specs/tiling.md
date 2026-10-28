@@ -129,7 +129,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Window.cpp:2885-2889, while Hyprland's commit clamp still applies the protocol minimum, Window.cpp:2741-2747); for an
   X11 window, the rule or its size hints. The engine applies that minimum itself, so the commit clamp never recentres a
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
-  the protocol maximum too).
+  the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
+  fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
@@ -378,25 +379,36 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   the gap between their facing sides is the margin or less (from -1 to margin + 1 px) and they overlap along it by more
   than 1 px; an edge holds every window of the group on that line, before (left or above) and after it; one handle per
   pair of facing windows, the middle `tiling.handleLength` of the stretch they share, across the gap and at least
-  `tiling.handleBand` wide (without margins half in each window). The pointer resting on a handle (no button held, no
-  modifier, the desktop not covered: not locked, no foreign Exclusive layer, no layer under the point) shows a left-right or
-  up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon); nothing is drawn
-  (D32). A plain left press there, with no button held by any device, is the plugin's: it and its release are cancelled
+  `tiling.handleBand` wide (without margins half in each window). **The frontmost window under the pointer always gets the
+  click** (macOS; integrator review of a6d04df): the handle exists only where nothing is in front of it, that is where
+  Hyprland's own pointer-focus hit test (its reserved extents, so a titlebar, its border grab areas, xdg popups, a
+  full-screen or zoomed window, from the top of the stack) finds no window or one of the edge's own windows, and no popup
+  (core `handleClear`). The pointer resting on a handle (no button held, no modifier, the desktop not covered: not
+  locked, no foreign Exclusive layer, no layer under the point, no other window, titlebar or popup in front) shows a
+  left-right or up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon);
+  nothing is drawn (D32). Hover reads edges kept from the last look, built again when the book's records, a window's box,
+  band or state, the output's Desktop or the margins changed. A plain left press there, with no button held by any device,
+  is the plugin's: it and its release are cancelled
   on the bus (compositor.md FR13, as P6), every window of the edge goes Resizing, and the edge follows the pointer along
   its axis (core `dragEdge`: the before windows' far side and the after windows' near side move together, the gap kept,
   the edge on the grid line nearest the pointer and never past any window's minimum or maximum, heights counting the
   titlebar band), each window's surface set and its animation ended at once (`setTargetGeom`, `warpPositionSize`, as a
   step of Hyprland's own resize), at most once per refresh of the output (the motions in between wait for a timer: P3,
-  the neighbours configured at most once per refresh); the release (or the lock engaging) ends it: Tiled with the new
-  boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions and duration. A window closed meanwhile is
-  left out, the others go on. Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
+  the neighbours configured at most once per refresh); the release, or the lock the moment it engages, ends it: Tiled
+  with the new boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions, duration and the plugin's own
+  time in it (total and longest step; each step is also a work span of the frame probe, compositor.md FR54). A window
+  closed, unmapped or no longer Resizing meanwhile leaves the drag (logged once; its limits no longer hold the edge; Tiled
+  again at its end if its record is still Resizing), the others go on (gate C1). Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
   and group). During the drag DesktopFocus and the titlebars ignore the pointer. Feature `tiling-shared-edge`, with
   `tiling-arrange`. The spike's measurement (D34, amended by the integrator): tests/visual/presented-frames.sh
   `shared-edge` (two live windows, three glides with the button held) kept 64.9 % and 58.6 % of frames within 20 ms in a
   loaded nested instance, every long frame paced by a client and none by the compositor (render CPU p95 6.1 and 5.3 ms):
   the neighbours stay live (macOS's live resize, each app redrawing at its own pace) and Windows' placeholders are not
   built; the shared edge's P3 is no long frame caused by the compositor (frame-attribution.py --gate), the share on time
-  information.
+  information. The compositor's cost counts its render's CPU and, before the render, the time the event loop was held
+  (the frame probe's beats) or ran the plugin's own work: a stall there shows only as a late render, which read as a
+  client's before (integrator review of a6d04df); the gate fails without those records, and when the animation holds no
+  frame.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
@@ -423,7 +435,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (popup kind `tiling`, through `Popups.open`), the suggestions overlay, the Layouts section, the shared-edge handle and
   the new `windows` IPC functions (`arrange`, `tilePopover`, `nextOutput`, beside today's `tile`) ask
   `SessionState.refuses(...)` first; when the lock engages, an open popover or suggestions overlay closes. The plugin's
-  hover event changes nothing by itself (the shell refuses the popover). `docs/specs/security.md` "Nothing opens over the
+  hover event changes nothing by itself (the shell refuses the popover). The shared-edge handle (plugin, step 4c) takes
+  nothing while the session is locked, a foreign Exclusive layer or a layer covers the point, or any window, titlebar or
+  popup other than the edge's own is in front of it (the frontmost window under the pointer gets the click, TL30); the
+  lock ends a drag the moment it engages (its cursor goes too; its release stays cancelled), and no input after the lock
+  moves a window. `docs/specs/security.md` "Nothing opens over the
   lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
   `tests/security/lock_surfaces.sh` when it is a surface. Plugin side (step 1, defence in depth): the verbs `tile` and
   `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves).
