@@ -14,10 +14,14 @@ after each request instead. It also prints the render CPU of the animation's fra
 phases (marks) relative to the animation's start, and one line per interval of 3 periods or more (where, how long, class,
 the wait before its render and that render's CPU): the concrete data for whoever owns that cost.
 
-Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms>
+Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--gate=PREFIX ...]
   frames.txt   "<presented us> <interval us>" (the intervals spanning a request already left out)
   renders.all  "<begin us> <cpu us>"
   marks.all    "<us> <name>"
+  --gate=PREFIX the scenarios whose label starts with PREFIX are judged here: PASS when their animations hold no long frame
+               the compositor caused, FAIL (exit 1) otherwise; the client-paced ones are information (the shared edge's
+               drag, tiling.md TL30, ADR-0036 D34 as amended: each window shows the buffer its app commits, at its pace).
+               Without it the script only reports (exit 0).
 """
 import sys
 from collections import defaultdict
@@ -61,8 +65,11 @@ def new_part():
 
 
 def main(argv):
+    gates = tuple(a.split("=", 1)[1] for a in argv[1:] if a.startswith("--gate="))
+    argv = [a for a in argv if not a.startswith("--gate=")]
     if len(argv) != 7:
-        print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms>", file=sys.stderr)
+        print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--gate=PREFIX ...]",
+              file=sys.stderr)
         return 2
     frames = [(int(a[0]), int(a[1])) for a in rows(argv[1], 2)]
     renders = sorted((int(a[0]), int(a[1])) for a in rows(argv[2], 2))
@@ -116,7 +123,21 @@ def main(argv):
     if details:
         print(f"intervals of {detail_limit / 1000:.0f} ms or more:")
         print("\n".join(details))
-    return 0
+    status = 0
+    for name in sorted(per):
+        if not gates or not name.startswith(gates):
+            continue
+        a = per[name]["animation"]
+        if not renders:
+            print(f"FAIL {name}: no render spans recorded, the compositor's share cannot be judged")
+            status = 1
+            continue
+        verdict = "PASS" if a["compositor"] == 0 else "FAIL"
+        if verdict == "FAIL":
+            status = 1
+        print(f"{verdict} {name}: {a['compositor']} long frame(s) caused by the compositor in the animation (gate: 0); "
+              f"{a['client']} paced by a client and {a['other']} other, information")
+    return status
 
 
 if __name__ == "__main__":

@@ -16,8 +16,10 @@
 #   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
 #   shared-edge                     two of the four windows arranged left and right (one tile group, the plugin's arrange),
 #                                   their shared edge's handle dragged right, left and back with the button held: both windows
-#                                   resized live (tiling.md TL30, P3 with two live neighbours); skipped without the plugin's
-#                                   tiling-shared-edge
+#                                   resized live (tiling.md TL30); skipped without the plugin's tiling-shared-edge. Judged on
+#                                   the long frames the compositor causes (frame-attribution.py --gate: none allowed), its
+#                                   share on time printed as information (ADR-0036 D34 as amended: the apps redraw at their
+#                                   own pace)
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
 # The window measured is the animation itself (ADR-0006 amendment, integrator decision 2026-10-24 under D-5, the macOS
 # model: a static screen owes no frames, so sparse frames once the animation is over are not misses): from the first frame
@@ -33,7 +35,8 @@
 # session started by nested-up loads it). The nested output is paced by Hyprland's own timer: the numbers are an indication
 # of the shell's and the compositor's work per frame; the gate is the owner's L2 run on the real session.
 # Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,*.json}.
-# Exit 1 when a phase is below 95 % in its animation window, 2 on an environment error.
+# Exit 1 when a phase is below 95 % in its animation window (the shared edge: when the compositor caused a long frame in
+# it), 2 on an environment error.
 source "$(dirname "$0")/lib.sh"
 set +e
 
@@ -212,9 +215,13 @@ echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($
 # Each request's animation window (and its tail).
 python3 -I "$VS_HERE/animation-windows.py" "$out/frames.all" "$out/events.txt" "$out/marks.all" "$hz" \
   "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms)),shared-edge=$((900 + fast_ms))" "$window" "$out/events.anim" | tee "$out/windows.txt"
-python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" | tee "$out/stats.txt"
+# The shared edge's drag is judged on the long frames the compositor causes (ADR-0036 D34 as amended by the integrator: the
+# windows show each app's buffer at its own pace, macOS's live resize), its share on time printed as information.
+python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" --info=shared-edge | tee "$out/stats.txt"
 rc=${PIPESTATUS[0]}
 # Whose cost each long interval was (compositor render, a client's late frame, other), in the animation and in its tail.
 python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.anim" "$hz" "$window" \
-  | tee "$out/attribution.txt"
+  --gate=shared-edge | tee "$out/attribution.txt"
+arc=${PIPESTATUS[0]}
+((arc == 1)) && rc=1
 exit "$rc"

@@ -84,7 +84,52 @@ fb = write("%d %d" % f for f in many)
 check("main: a stream with dropped frames exits 1", quiet(["x", fb, ev, "60"]) == 1)
 check("main: no refresh rate exits 2", quiet(["x", fa, ev, "0"]) == 2)
 check("main: too few arguments exits 2", quiet(["x"]) == 2)
-for p in (fa, ev, fb):
+# --info=PREFIX (the shared edge's drag, ADR-0036 D34 as amended): such a phase is reported, never judged, and left out of
+# "all"; the others keep the 95 % gate.
+mixed = stream(1_000_000, 200, round(period)) + stream(3_000_000, 200, round(period), spikes={3, 8, 13, 18, 23, 28})
+fm = write("%d %d" % f for f in mixed)
+em = write(["open %d" % (1_000_000 * 1000), "shared-edge %d" % (3_000_000 * 1000)])
+check("main: a phase with dropped frames fails without --info", quiet(["x", fm, em, "60"]) == 1)
+check("main: the same phase under --info is not judged", quiet(["x", fm, em, "60", "--info=shared-edge"]) == 0)
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    fs.main(["x", fm, em, "60", "--info=shared-edge"])
+check("main: --info prints the phase as INFO and keeps the others judged",
+      "INFO shared-edge:" in out.getvalue() and "PASS open:" in out.getvalue() and "PASS all:" in out.getvalue())
+eb = write(["open %d" % (3_000_000 * 1000), "shared-edge %d" % (1_000_000 * 1000)])
+check("main: --info leaves the other phases' dropped frames judged", quiet(["x", fm, eb, "60", "--info=shared-edge"]) == 1)
+
+# frame-attribution.py --gate=PREFIX: the long frames the compositor caused fail the scenario, client-paced ones do not.
+spec_a = importlib.util.spec_from_file_location("frame_attribution", os.path.join(here, "frame-attribution.py"))
+fa_mod = importlib.util.module_from_spec(spec_a)
+spec_a.loader.exec_module(fa_mod)
+p_us = round(period)
+# Ten frames, the sixth 3 periods long: its render began late (client) or took long (compositor).
+frames_long = [(1_000_000 + i * p_us, p_us) for i in range(1, 6)] + [(1_000_000 + 8 * p_us, 3 * p_us)] + [(1_000_000 + (8 + i) * p_us, p_us) for i in range(1, 5)]
+renders_client = [(1_000_000 + i * p_us - 4000, 3000) for i in range(1, 6)] + [(1_000_000 + 8 * p_us - 4000, 3000)] + [(1_000_000 + (8 + i) * p_us - 4000, 3000) for i in range(1, 5)]
+renders_comp = [(b, 3000) for b, _ in renders_client[:5]] + [(1_000_000 + 5 * p_us + 1000, 40000)] + [(b, 3000) for b, _ in renders_client[6:]]
+f_long = write("%d %d" % f for f in frames_long)
+r_client = write("%d %d" % r for r in renders_client)
+r_comp = write("%d %d" % r for r in renders_comp)
+m_none = write([])
+ev_edge = write(["shared-edge %d 400 0" % (1_000_000 * 1000)])
+
+
+def attribution(argv):
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return fa_mod.main(argv)
+
+
+check("attribution: a client-paced long frame passes the shared edge's gate",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 0)
+check("attribution: a long frame the compositor caused fails it",
+      attribution(["x", f_long, r_comp, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+check("attribution: without --gate it only reports", attribution(["x", f_long, r_comp, m_none, ev_edge, "60", "700"]) == 0)
+check("attribution: no render spans cannot pass the gate",
+      attribution(["x", f_long, m_none, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+check("attribution: too few arguments exits 2", attribution(["x", f_long]) == 2)
+
+for p in (fa, ev, fb, fm, em, eb, f_long, r_client, r_comp, m_none, ev_edge):
     os.unlink(p)
 
 sys.exit(1 if failures else 0)
