@@ -75,7 +75,7 @@ Item {
 
     Timer {
         id: inputHold
-        interval: Qt.styleHints.mouseDoubleClickInterval
+        interval: Application.styleHints.mouseDoubleClickInterval
         onTriggered: sheet.holdInput = false
     }
 

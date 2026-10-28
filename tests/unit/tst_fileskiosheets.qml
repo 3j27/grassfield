@@ -521,7 +521,8 @@ TestCase {
         compare(fakePrompts.replies[1].id, 82);
     }
 
-    // Return is the default button's in every new question, also after the user tabbed to another button in the last one.
+    // Return is the default button's in every new question, also after the user tabbed to another button in the last one
+    // (Stop: a button every conflict sheet keeps).
     function test_returnIsTheDefaultAfterTab(): void {
         const sheets = test.make();
         const sheet = test.sheetOf(sheets);
@@ -529,7 +530,12 @@ TestCase {
             id: 101
         });
         test.shown(sheet);
-        keyClick(Qt.Key_Tab);
+        verify(waitForPolish(sheet.Window.window, 1000));
+        const stop = test.find(sheet, "Stop");
+        verify(stop !== null);
+        for (let i = 0; i < 6 && !stop.activeFocus; i++)
+            keyClick(Qt.Key_Tab);
+        verify(stop.activeFocus, "Tab reaches Stop");
         keyClick(Qt.Key_Escape);
         compare(fakePrompts.replies[0].button, "stop");
         fakePrompts.current = test.conflict({
