@@ -8,7 +8,8 @@ import Grassfield.Ui
 //       windows: [{ref, title, focused, minimized}], focusedWindow: ref | null,
 //       fullscreen: bool, maximized: bool, windowSpaceId: int,
 //       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling"),
-//       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover")}
+//       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover"),
+//       canLayouts?: bool (plugin "tiling-layouts"), outputClass?: string (WindowTiling.outputClass, the popover's Layouts section)}
 // Items: {id, text, shortcut?, glyph?, enabled?, checked?, separator?, header?, alternate?, submenu?, ...payload}; AppMenus.run()
 // performs them. The tiling popover's model (tilingPopover) shares the tiling rows (docs/specs/tiling.md TL23, TL25).
 QtObject {
@@ -54,7 +55,20 @@ QtObject {
             "left-quarters": Tokens.tilingLayoutLeftQuarters,
             "right-quarters": Tokens.tilingLayoutRightQuarters,
             "top-quarters": Tokens.tilingLayoutTopQuarters,
-            "bottom-quarters": Tokens.tilingLayoutBottomQuarters
+            "bottom-quarters": Tokens.tilingLayoutBottomQuarters,
+            "wide-left": Tokens.tilingLayoutWideLeft,
+            "thirds": Tokens.tilingLayoutThirds,
+            "wide-center": Tokens.tilingLayoutWideCenter,
+            "four-columns": Tokens.tilingLayoutFourColumns,
+            "stacked-thirds": Tokens.tilingLayoutStackedThirds
+        })
+
+    // The Layouts section of an output class (owner decision T1f, the tiling.class* tokens; WindowTiling.outputClass).
+    readonly property var classLayouts: ({
+            "small": Tokens.tilingClassSmall,
+            "large": Tokens.tilingClassLarge,
+            "ultrawide": Tokens.tilingClassUltraWide,
+            "portrait": Tokens.tilingClassPortrait
         })
 
     // A place's glyph: its zone alone (the halves and quarters are zones of the catalogue; Fill the whole screen).
@@ -105,7 +119,12 @@ QtObject {
             "left-quarters": qsTr("Left & Quarters"),
             "right-quarters": qsTr("Right & Quarters"),
             "top-quarters": qsTr("Top & Quarters"),
-            "bottom-quarters": qsTr("Bottom & Quarters")
+            "bottom-quarters": qsTr("Bottom & Quarters"),
+            "wide-left": qsTr("Two Thirds & One Third"),
+            "thirds": qsTr("Thirds"),
+            "wide-center": qsTr("Quarter, Half & Quarter"),
+            "four-columns": qsTr("Four Columns"),
+            "stacked-thirds": qsTr("Stacked Thirds")
         })
 
     readonly property var placeShortcuts: ({
@@ -156,14 +175,22 @@ QtObject {
         return (outputs || []).map(o => ({id: "moveToOutput", output: o.name, text: qsTr("Move to %1").arg(root.outputLabel(o)), iconName: "display", enabled: enabled}));
     }
 
-    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, fullscreen, outputs}. {sections: [{title,
-    // items}], rows}: the glyph sections Move & Resize and Fill & Arrange (with Alt: the quarters, Center, Right & Left and Right
-    // & Quarters), then Full Screen and one Move to <display> row per other output; in full screen only Exit Full Screen. The
-    // glyphs of a window that cannot be tiled now are greyed. The Layouts section comes with step 4 and Full Screen's Left
-    // and Right of Screen with step 6 (ADR-0036 D16).
+    // The Layouts section (TL27, owner decisions T1a, T1f): the layouts of an output class, each a miniature screen whose zones
+    // the window can take; greyed when it cannot be tiled now. [{id, text, zones, enabled}]; [] for an unknown class.
+    function layoutsSection(outputClass: string, enabled: bool): var {
+        const ids = root.classLayouts[outputClass] || [];
+        return ids.filter(id => root.layoutZones[id] !== undefined).map(id => ({id: id, text: root.layoutNames[id], zones: root.layoutZones[id], enabled: enabled}));
+    }
+
+    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, outputClass, fullscreen, outputs}.
+    // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with Alt: the quarters,
+    // Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the plugin's
+    // tiling-layouts, layoutsSection), then Full Screen and one Move to <display> row per other output; in full screen only Exit
+    // Full Screen. The glyphs of a window that cannot be tiled now are greyed. Full Screen's Left and Right of Screen come with
+    // step 6 (ADR-0036 D17).
     function tilingPopover(ctx: var): var {
         if (ctx.fullscreen)
-            return {sections: [], rows: [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
+            return {sections: [], layouts: [], rows: [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
         const can = ctx.tileable === true;
         const arrange = can && ctx.canArrange === true;
         const places = ctx.alt ? ["top-left", "top-right", "bottom-left", "bottom-right"] : ["left", "right", "top", "bottom"];
@@ -177,6 +204,7 @@ QtObject {
                         root.arrangeItem("quarters", arrange)
                     ]}
             ],
+            layouts: ctx.canLayouts === true ? root.layoutsSection(ctx.outputClass, can) : [],
             rows: [{id: "fullscreen", text: qsTr("Full Screen"), glyph: {zones: [], own: -1}, enabled: true}].concat(root.moveToOutputItems(ctx.outputs, can))
         };
     }
