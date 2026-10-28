@@ -17,9 +17,10 @@
 #   shared-edge                     two of the four windows arranged left and right (one tile group, the plugin's arrange),
 #                                   their shared edge's handle dragged right, left and back with the button held: both windows
 #                                   resized live (tiling.md TL30); skipped without the plugin's tiling-shared-edge. Judged on
-#                                   the long frames the compositor causes (frame-attribution.py --gate: none allowed), its
+#                                   the long frames the compositor causes (frame-attribution.py --gate: none allowed; its
+#                                   render, or the event loop held before it, a stall or the plugin's own drag work), its
 #                                   share on time printed as information (ADR-0036 D34 as amended: the apps redraw at their
-#                                   own pace)
+#                                   own pace); no frame in its animation fails
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
 # The window measured is the animation itself (ADR-0006 amendment, integrator decision 2026-10-24 under D-5, the macOS
 # model: a static screen owes no frames, so sparse frames once the animation is over are not misses): from the first frame
@@ -34,7 +35,8 @@
 # Run as a BARE command with a relative path; needs this tree's plugin loaded in the nested session (just plugin-build; the
 # session started by nested-up loads it). The nested output is paced by Hyprland's own timer: the numbers are an indication
 # of the shell's and the compositor's work per frame; the gate is the owner's L2 run on the real session.
-# Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,*.json}.
+# Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,renders.all,
+# marks.all,stalls.all,work.all,*.json}.
 # Exit 1 when a phase is below 95 % in its animation window (the shared edge: when the compositor caused a long frame in
 # it), 2 on an environment error.
 source "$(dirname "$0")/lib.sh"
@@ -96,8 +98,10 @@ else
 fi
 
 # The frames presented since the last collection, appended as "<monotonic us> <interval us>"; for the attribution, the
-# render spans of the output ("<begin us> <cpu us>") and the plugin's phase marks ("<us> <name>") since then too.
-last=0 last_render=0 last_mark=0
+# render spans of the output ("<begin us> <cpu us>"), the plugin's phase marks ("<us> <name>"), the event loop's stalls and
+# the plugin's own work ("<begin us> <length us>": a stall before a render reads as a late client without them) since then
+# too, and the most beats the loop probe ran.
+last=0 last_render=0 last_mark=0 last_stall=0 last_work=0 beats=0
 collect() {
   local answer=$out/frames-$(date +%s%N).json
   nestctl -j grassfield-frames >"$answer" 2>/dev/null || return 0
@@ -111,6 +115,13 @@ collect() {
   last_render=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | (.renders // [])[-1][0]][0] // 0' "$answer")
   jq -r --argjson last "$last_mark" '(.marks // [])[] | select(.t > $last) | "\(.t) \(.what)"' "$answer" >>"$out/marks.all"
   last_mark=$(jq -r '[(.marks // [])[-1].t][0] // 0' "$answer")
+  jq -r --argjson last "$last_stall" '(.loop.stalls // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/stalls.all"
+  last_stall=$(jq -r '[(.loop.stalls // [])[-1][0]][0] // 0' "$answer")
+  jq -r --argjson last "$last_work" '(.loop.work // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/work.all"
+  last_work=$(jq -r '[(.loop.work // [])[-1][0]][0] // 0' "$answer")
+  local now
+  now=$(jq -r '.loop.beats // 0' "$answer")
+  if ((now > beats)); then beats=$now; fi
 }
 # The intervals that span a request (the previous frame before it, this one after it) are left out: the wait for the
 # request is not a frame of the animation. <frames.all> <events.txt> -> frames.txt
@@ -219,9 +230,11 @@ python3 -I "$VS_HERE/animation-windows.py" "$out/frames.all" "$out/events.txt" "
 # windows show each app's buffer at its own pace, macOS's live resize), its share on time printed as information.
 python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" --info=shared-edge | tee "$out/stats.txt"
 rc=${PIPESTATUS[0]}
-# Whose cost each long interval was (compositor render, a client's late frame, other), in the animation and in its tail.
+# Whose cost each long interval was (the compositor: its render, or the loop held before it; a client's late frame; other),
+# in the animation and in its tail.
+touch "$out/stalls.all" "$out/work.all"
 python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.anim" "$hz" "$window" \
-  --gate=shared-edge | tee "$out/attribution.txt"
+  --stalls="$out/stalls.all" --work="$out/work.all" --beats="$beats" --gate=shared-edge | tee "$out/attribution.txt"
 arc=${PIPESTATUS[0]}
 ((arc == 1)) && rc=1
 exit "$rc"

@@ -12,7 +12,8 @@ period (default 1.2: 20 ms at 60 Hz; a dropped frame shows as two periods). Exit
 (gate P3: at least 95 % of frames on time) in any phase, 2 on unusable input.
 --info=PREFIX: the phases whose label starts with PREFIX are printed as INFO, never judged here, and left out of "all":
 their gate is another one (the shared edge's drag, tiling.md TL30 and ADR-0036 D34 as amended: no long frame the
-compositor causes, tests/visual/frame-attribution.py --gate; its share on time follows each app's own redraw).
+compositor causes, tests/visual/frame-attribution.py --gate; its share on time follows each app's own redraw). Such a
+phase with no frame in its window still fails: nothing was measured.
 """
 import sys
 
@@ -100,9 +101,6 @@ def main(argv):
         s = stats(phase(frames, events if label is not None else judged, label, window_us), period, tolerance)
         name = label or "all"
         if s is None:
-            if informative:
-                print("INFO %s: no frame arrived in the window" % name)
-                continue
             print("FAIL %s: no frame arrived in the window" % name)
             status = 1
             continue

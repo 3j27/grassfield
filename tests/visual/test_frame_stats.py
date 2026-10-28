@@ -98,6 +98,9 @@ check("main: --info prints the phase as INFO and keeps the others judged",
       "INFO shared-edge:" in out.getvalue() and "PASS open:" in out.getvalue() and "PASS all:" in out.getvalue())
 eb = write(["open %d" % (3_000_000 * 1000), "shared-edge %d" % (1_000_000 * 1000)])
 check("main: --info leaves the other phases' dropped frames judged", quiet(["x", fm, eb, "60", "--info=shared-edge"]) == 1)
+# Integrator review of a6d04df (MINOR 3): an --info phase with no frame in its window was measured by nothing: it fails.
+en = write(["open %d" % (1_000_000 * 1000), "shared-edge %d" % (9_000_000 * 1000)])
+check("main: an --info phase with no frame fails", quiet(["x", fa, en, "60", "--info=shared-edge"]) == 1)
 
 # frame-attribution.py --gate=PREFIX: the long frames the compositor caused fail the scenario, client-paced ones do not.
 spec_a = importlib.util.spec_from_file_location("frame_attribution", os.path.join(here, "frame-attribution.py"))
@@ -120,16 +123,44 @@ def attribution(argv):
         return fa_mod.main(argv)
 
 
+gate = ["--gate=shared-edge", "--beats=250"]
 check("attribution: a client-paced long frame passes the shared edge's gate",
-      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 0)
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700"] + gate) == 0)
 check("attribution: a long frame the compositor caused fails it",
-      attribution(["x", f_long, r_comp, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+      attribution(["x", f_long, r_comp, m_none, ev_edge, "60", "700"] + gate) == 1)
 check("attribution: without --gate it only reports", attribution(["x", f_long, r_comp, m_none, ev_edge, "60", "700"]) == 0)
 check("attribution: no render spans cannot pass the gate",
-      attribution(["x", f_long, m_none, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+      attribution(["x", f_long, m_none, m_none, ev_edge, "60", "700"] + gate) == 1)
 check("attribution: too few arguments exits 2", attribution(["x", f_long]) == 2)
+check("attribution: a bad beat count exits 2", attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--beats=x"]) == 2)
 
-for p in (fa, ev, fb, fm, em, eb, f_long, r_client, r_comp, m_none, ev_edge):
+# Integrator review of a6d04df (MAJOR 2): a main-loop stall before the render shows only as a late render. The long frame
+# above began its render 2 periods late; a 50 ms stall of the loop in that wait (a late beat) is the compositor's, as is
+# the plugin's own work there over the budget. A stall that is the render itself (a beat late because the loop rendered)
+# is not counted twice.
+long_start = 1_000_000 + 5 * p_us
+s_pre = write(["%d %d" % (long_start + 1000, 30000)])
+s_short = write(["%d %d" % (long_start + 1000, 5000)])
+render_late = renders_client[5][0]
+s_render = write(["%d %d" % (render_late - 500, 4000)])
+w_pre = write(["%d %d" % (long_start + 2000, 15000)])
+check("attribution: a stall of the loop before the render fails the gate (the synthetic pre-render stall)",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_pre] + gate) == 1)
+check("attribution: the plugin's own work over the budget before the render fails it",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--work=" + w_pre] + gate) == 1)
+check("attribution: a short stall (under the budget) leaves the late render the client's",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_short] + gate) == 0)
+check("attribution: a beat held by the render itself is not counted again",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_render] + gate) == 0)
+check("attribution: no loop beats cannot pass the gate (a stall could not be seen)",
+      attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
+check("attribution: held time is the union of the spans, outside the renders",
+      fa_mod.held(0, 100, [(10, 30), (20, 30), (80, 40)], [(30, 10)]) == 50)
+ev_far = write(["shared-edge %d 400 0" % (9_000_000 * 1000)])
+check("attribution: a gated scenario with no frame in its animation fails",
+      attribution(["x", f_long, r_client, m_none, ev_far, "60", "700"] + gate) == 1)
+
+for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far):
     os.unlink(p)
 
 sys.exit(1 if failures else 0)
