@@ -3,19 +3,31 @@ import QtQuick
 
 // A tiling glyph (docs/specs/tiling.md TL23, TL25): a miniature screen, an outline with the zones of a place or an arrangement
 // inside it. `zones` are [x, y, w, h] in twelfths of the screen, as in the tiling.layout* tokens; the zone `own` (the window
-// that asks) is drawn in full, the others light (parity row M19); own -1 draws every zone in full. Sizes follow the
-// tiling.glyph* tokens at the popover size and scale with `width` (a menu row draws it at the icon size).
+// that asks) is drawn in full, the others light (parity row M19); own -1 draws every zone in full, a number past the last
+// zone none. Sizes follow the tiling.glyph* tokens at the popover size and scale with `width` (a menu row draws it at the
+// icon size). `interactive` (a layout of the popover's Layouts section, TL27): each zone takes the pointer, zoneHovered
+// (-1 when it leaves) and zoneClicked report it, and each is a button named by `zoneNames`; `numbered` shows each zone's
+// number (the number keys, TL26).
 Item {
     id: root
 
     property var zones: []
     property int own: 0
     property color color: Appearance.colors.text
+    property bool interactive: false
+    property bool numbered: false
+    property var zoneNames: []
+
+    signal zoneHovered(int index)
+    signal zoneClicked(int index)
 
     readonly property real ratio: width / Tokens.tilingGlyphWidth
-    readonly property real stroke: Math.max(1, Tokens.tilingGlyphStroke * root.ratio)
-    readonly property real inset: Tokens.tilingGlyphInset * root.ratio
-    readonly property real gap: Tokens.tilingGlyphGap * root.ratio
+    // The outline, the inset and the gap scale down with a smaller glyph, never up: a larger one (the Layouts section) keeps
+    // the popover's line weight.
+    readonly property real lineRatio: Math.min(1, root.ratio)
+    readonly property real stroke: Math.max(1, Tokens.tilingGlyphStroke * root.lineRatio)
+    readonly property real inset: Tokens.tilingGlyphInset * root.lineRatio
+    readonly property real gap: Tokens.tilingGlyphGap * root.lineRatio
     // The area inside the outline the zones share.
     readonly property real innerX: root.stroke + root.inset
     readonly property real innerW: root.width - 2 * root.innerX
@@ -57,6 +69,32 @@ Item {
             height: Math.max(0, zone.y1 - zone.y0)
             radius: Math.max(0, Tokens.tilingGlyphRadius * root.ratio - root.innerX)
             color: root.own < 0 || zone.index === root.own ? root.color : Appearance.withAlpha(root.color, Tokens.tilingGlyphOtherOpacity)
+            Accessible.role: Accessible.Button
+            Accessible.name: zone.index < root.zoneNames.length ? String(root.zoneNames[zone.index]) : ""
+            Accessible.ignored: !root.interactive
+            Accessible.onPressAction: if (root.interactive)
+                root.zoneClicked(zone.index)
+
+            Text {
+                visible: root.numbered
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: String(zone.index + 1)
+                color: root.color
+                font.family: Appearance.fontFamily
+                font.pixelSize: Math.max(1, Math.min(zone.height, zone.width) * Tokens.tilingGlyphNumberScale)
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.interactive
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                onEntered: root.zoneHovered(zone.index)
+                onExited: root.zoneHovered(-1)
+                onClicked: root.zoneClicked(zone.index)
+            }
         }
     }
 }

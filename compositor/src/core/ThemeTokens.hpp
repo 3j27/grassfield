@@ -113,6 +113,14 @@ namespace gf::theme::tokens {
     inline constexpr int kTilingGlyphCenter[][4] = {{3, 3, 6, 6}};
     // estimate until measured: a row of glyphs in the popover (pt; 251 pt in all for two headed rows, Full Screen and the separators, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr int kTilingGlyphRowHeight = 44;
+    // estimate until measured in nested: a layout of the popover's Layouts section, the miniature screen's width (pt; larger than the 26-pt glyphs so that each zone is a target, a four-column layout keeping zones about 9 pt wide; Windows also draws its snap layouts larger than icons, parity row W02; the height follows glyphHeight / glyphWidth) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingLayoutGlyphWidth = 44;
+    // own value: a zone's number, shown once the number keys picked its layout (TL26, TL27), over the zone's smaller side [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingGlyphNumberScale = 0.6;
+    // estimate until measured in nested: the widest tile of the suggestions (TL28; a live thumbnail with the app's icon and the window's title under it; Windows' Snap Assist, parity rows W04 and W12) (pt) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingSuggestTileWidth = 240;
+    // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingSuggestThumbAspect = 1.6;
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     inline constexpr int kTilingLayoutLeftRight[][4] = {{0, 0, 6, 12}, {6, 0, 6, 12}};
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]

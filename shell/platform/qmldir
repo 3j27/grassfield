@@ -9,6 +9,7 @@ KeyboardRelease 1.0 KeyboardRelease.qml
 UpdateNotice 1.0 UpdateNotice.qml
 ConfigErrors 1.0 ConfigErrors.qml
 singleton StagesLink 1.0 StagesLink.qml
+singleton TilingLink 1.0 TilingLink.qml
 singleton Usable 1.0 Usable.qml
 UsableProbe 1.0 UsableProbe.qml
 singleton InputSource 1.0 InputSource.qml

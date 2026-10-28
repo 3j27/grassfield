@@ -54,4 +54,30 @@ TestCase {
         compare(TilingNav.step(entries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), -1, "down"), -1);
         compare(TilingNav.step(entries(), 3, "escape"), 3);
     }
+
+    // TL26, TL27 (step 4a): a number picks a layout of the Layouts section, a second number a zone of it.
+    function test_numberKeysPickALayoutThenAZone() {
+        const layouts = [{zones: [1, 2]}, {zones: [1, 2, 3]}, {zones: [1, 2, 3, 4], enabled: false}];
+        compare(JSON.stringify(TilingNav.numberPick(layouts, -1, 2)), JSON.stringify({picked: 1, zone: -1}));
+        compare(JSON.stringify(TilingNav.numberPick(layouts, 1, 3)), JSON.stringify({picked: 1, zone: 2}), "the third zone of the second layout");
+        compare(JSON.stringify(TilingNav.numberPick(layouts, 1, 4)), JSON.stringify({picked: 1, zone: -1}), "no fourth zone: nothing changes");
+        compare(JSON.stringify(TilingNav.numberPick(layouts, 0, 1)), JSON.stringify({picked: 0, zone: 0}));
+        compare(JSON.stringify(TilingNav.numberPick(layouts, -1, 3)), JSON.stringify({picked: -1, zone: -1}), "a greyed layout is not picked");
+        compare(JSON.stringify(TilingNav.numberPick(layouts, -1, 4)), JSON.stringify({picked: -1, zone: -1}), "no fourth layout");
+        compare(JSON.stringify(TilingNav.numberPick(layouts, -1, 0)), JSON.stringify({picked: -1, zone: -1}), "0 is no number of the section");
+        compare(JSON.stringify(TilingNav.numberPick(layouts, 1, 10)), JSON.stringify({picked: 1, zone: -1}));
+        compare(JSON.stringify(TilingNav.numberPick([], -1, 1)), JSON.stringify({picked: -1, zone: -1}));
+        compare(JSON.stringify(TilingNav.numberPick(null, -1, 1)), JSON.stringify({picked: -1, zone: -1}));
+    }
+
+    function test_digitOfReadsTheDigitKeysAndTheTopRowByPosition() {
+        compare(TilingNav.digitOf(Qt.Key_1, 0), 1);
+        compare(TilingNav.digitOf(Qt.Key_9, 0), 9);
+        compare(TilingNav.digitOf(Qt.Key_Ampersand, 10), 1, "AZERTY: & on the 1 key");
+        compare(TilingNav.digitOf(Qt.Key_Eacute, 11), 2, "AZERTY: é on the 2 key");
+        compare(TilingNav.digitOf(Qt.Key_Ccedilla, 18), 9);
+        compare(TilingNav.digitOf(Qt.Key_0, 19), 0, "0 picks nothing");
+        compare(TilingNav.digitOf(Qt.Key_A, 38), 0);
+        compare(TilingNav.digitOf(Qt.Key_Escape, 9), 0);
+    }
 }

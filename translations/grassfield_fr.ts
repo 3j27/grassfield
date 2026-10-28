@@ -598,6 +598,26 @@
         <translation>Bas et quarts</translation>
     </message>
     <message>
+        <source>Two Thirds &amp; One Third</source>
+        <translation>Deux tiers et un tiers</translation>
+    </message>
+    <message>
+        <source>Thirds</source>
+        <translation>Tiers</translation>
+    </message>
+    <message>
+        <source>Quarter, Half &amp; Quarter</source>
+        <translation>Quart, moitié et quart</translation>
+    </message>
+    <message>
+        <source>Four Columns</source>
+        <translation>Quatre colonnes</translation>
+    </message>
+    <message>
+        <source>Stacked Thirds</source>
+        <translation>Tiers superposés</translation>
+    </message>
+    <message>
         <source>Built-in Display</source>
         <translation>Écran intégré</translation>
     </message>
@@ -10244,6 +10264,21 @@
     <message>
         <source>Window tiling</source>
         <translation>Disposition de la fenêtre</translation>
+    </message>
+    <message>
+        <source>Layouts</source>
+        <translation>Dispositions</translation>
+    </message>
+    <message>
+        <source>%1, zone %2 of %3</source>
+        <translation>%1, zone %2 sur %3</translation>
+    </message>
+</context>
+<context>
+    <name>TilingSuggestions</name>
+    <message>
+        <source>Choose a window for this zone</source>
+        <translation>Choisir une fenêtre pour cette zone</translation>
     </message>
 </context>
 <context>

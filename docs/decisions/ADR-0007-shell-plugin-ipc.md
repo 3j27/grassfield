@@ -122,6 +122,18 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   output's Desktop. A refused `move_to` posts the `tiling` notice with `reason:"invalid"` (unknown or same output, a window
   that cannot move) or `reason:"locked"`; a move posts `placed` (tiled) or `forgotten` (a record ended). Feature
   `tile-hover`, advertised with `window-tiling` only when both verbs registered.
+- Window tiling, step 4a (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL27-TL28): `arrange` takes `"with":"0x<hex>"`
+  together with `"zone"` and one window: a pick of the suggestions. `with` must be tiled in that layout on the output's
+  current Desktop and the zone must not be held by it or by a member of its group in that layout; the window joins its
+  group (a new one when it had none). A window minimized by the plugin from that output may be picked: it is restored
+  without the Dock animation, then placed. The `hyprctl grassfield-tiling` reply gains `suggestion`, `null` or
+  `{"gen":N,"address":"<hex>","layout":"<id>","output":"<name>","zones":[{"zone":i,"x":…,"y":…,"w":…,"h":…}],
+  "windows":["<hex>",…]}`: after an `arrange` that left zones of its layout empty, the empty zones in zone order with
+  their frames in the work area, and the windows that can fill them (the tileable windows of that output's Desktop in the
+  active stage, top first, then the windows minimized from that output, the latest first; at most 12; never one already
+  in that layout). It is published while the tile records are still those of `gen` (the generation of the `placed`
+  notice that announced it): any later change ends it. Feature `tiling-layouts`, advertised together with
+  `tiling-arrange`.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -153,7 +165,7 @@ event frames: clock marks monitors name presented refreshHz renders t total unit
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
@@ -164,7 +176,7 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tile-hover
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to
 ```
 

@@ -1,7 +1,9 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
-Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 on its
-branch (popover, Window menu and keys, TL22-TL26: plugin, shell, tokens, `config/hypr` bindings). Steps 4-6 are not built. Below, "Today" is the state before step 1. A requirement
+Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
+(PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a on its branch
+(the Layouts section, its number keys and the suggestions, TL27, TL28), 4b (tile groups, TL29) and 4c (the shared edge,
+TL30) not built; steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -305,17 +307,42 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Step 3 as built: `bindings.lua` (the descriptions in Settings > Keyboard, translated; Super+Ctrl+L by key position too,
   keycode 46), IPC `windows arrange <layout>`,
   `windows tilePopover`, `windows nextOutput left|right` (D22: by position, wrapping), each refused while locked first.
-  The popover's arrows move between glyphs and rows (overlay/TilingNav). The number keys come with Layouts (step 4).
+  The popover's arrows move between glyphs and rows (overlay/TilingNav).
+  Step 4a as built (D28): in the Layouts section the arrows also move between the zones of the layouts (a row of layouts is
+  one line); a number 1-9 picks a layout of the section, its zones then show their numbers, and a second number places the
+  window in that zone; Esc lets go of a picked layout first, then closes the popover. The digits are read by character or,
+  for the top row, by key position (`TilingNav.digitOf`), so they work on AZERTY.
 
 ### Windows features (step 4; T1 takes TL27-TL30, refuses TL31)
 - **TL27** Layouts (T1a, T1f): the popover's Layouts section shows the catalogue of the window's output class as miniature
   screens; hovering a zone highlights it; a click places the window in that zone and, with suggestions on, opens TL28 for
   the other zones; the layout's windows form a group.
+  Step 4a as built: AppMenuModel `layoutsSection` (the `tiling.class*` tokens of the class `WindowTiling.outputClass` gives
+  the popover's output, the same rule as the plugin's `classify`), after Fill & Arrange, with the plugin's `tiling-layouts`
+  only; the layouts drawn at `tiling.layoutGlyphWidth`, four per row, every zone light at rest and the zone under the
+  pointer or the keyboard in full (TileGlyph `interactive`, each zone a button named "<layout>, zone <n> of <count>", D28);
+  greyed when the window cannot be tiled. A zone click is `arrange` with `zone` (the window alone in that zone; a group forms
+  when a suggestion joins it).
 - **TL28** Suggestions (T1c, option 2): after a layout or an arrangement chosen from the popover, the Window menu or the
   keys leaves zones empty, the shell shows in each empty zone, one zone at a time, live thumbnails (ScreencopyView) of the
   tileable windows of the same output, Desktop and stage, minimized ones included; a click or Return places the chosen
   window there and moves on to the next empty zone; Esc, a click outside or the window that asked losing its zone ends it.
   Nothing is shown when no window fits. Not after a plain edge drag.
+  Step 4a as built (D26, D27): the plugin keeps the suggestion after an `arrange` that left zones of its layout empty (core
+  `zonesHeld`, `emptyZones`): the empty zones with their frames in the work area and the windows that can fill them (the
+  tileable windows of that output's Desktop in the active stage, top first, then those minimized from that output, the latest
+  first; at most `kMaxSuggested` 12; never one already in that layout); the `hyprctl grassfield-tiling` reply carries it as
+  `suggestion` while the tile records are still at its generation, so any later change, the asker losing its zone included,
+  ends it. The shell (platform/TilingLink) fetches the reply after the `placed` notice of an arrangement it asked itself
+  (`Compositor.suggestionAsked`: a zone of the Layouts section, Window > Move & Resize > Arrange and its keys, a pick) and
+  shows the suggestion when it belongs to that notice and fills that window's layout; services/TilingSuggest opens popup kind
+  `tilingSuggest` (overlay/TilingSuggestions) centred in the first empty zone: menu glass, the windows as live thumbnails
+  (ScreencopyView) with the app's icon and the window's title, as large as the zone allows (`WindowTiling.suggestionGrid`,
+  at most `tiling.suggestTileWidth`), the arrows (`WindowTiling.gridStep`), Return or a click to pick, Esc, any other key
+  (a modifier alone aside) or a click outside to end. A pick is `arrange` with `zone` and `with`: the window joins the asker's group (a new group when it had none); a
+  minimized window is restored without the Dock animation, then placed (D27). A refused pick (a zone held meanwhile) changes
+  nothing and the suggestion stays. The suggestions are refused over the lock, the polkit sheet, a full-attention surface and
+  the Dock's keyboard mode, and never take the place of another popup than the tiling popover.
 - **TL29** Tile groups (T1d, option 1): a window brought forward from the Dock, the app switcher or the Overview brings its
   group forward (back to front in the group's stacking order, the chosen window in front); the Dock's app menu lists the
   app's groups ("Show Tile Group"); the Overview moves a group to another Desktop as one; membership follows TL10: a
