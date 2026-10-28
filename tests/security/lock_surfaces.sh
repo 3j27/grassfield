@@ -295,7 +295,7 @@ expect("polkit sheet: the field is focused only where it may be (the agent: when
        backdrop is not None and len(re.findall(r"\.focusField\(\)", agent)) == 3
        and len(re.findall(r"\bfocusField\(\)", dialog_src)) == 3 and re.search(r"Component\.onCompleted:\s*focusField\(\)", dialog_src) is not None
        and re.search(r"function focusField\(\):\s*void\s*\{\s*if\s*\(root\.inputEnabled\)\s*field\.forceActiveFocus\(\);\s*\}", dialog_src) is not None
-       and len(re.findall(r"enabled:\s*root\.inputEnabled\b", dialog_src)) == 3 and re.search(r"property bool inputEnabled:\s*true\s*\n", dialog_src) is not None
+       and len(re.findall(r"enabled:\s*root\.inputEnabled\b", dialog_src)) == 3 and re.search(r"id:\s*identityList\s*enabled:\s*root\.inputEnabled\b", dialog_src) is not None and re.search(r"property bool inputEnabled:\s*true\s*\n", dialog_src) is not None
        and re.search(r"function onFailed\(\):\s*void\s*\{\s*shakeAnimation\.restart\(\);\s*root\.focusField\(\);\s*\}", dialog_src) is not None)
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
        re.search(r"if\s*\(!dialogModel\.active\)\s*dialogModel\.noteEnded\(\);", arrive) is not None)
@@ -527,6 +527,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#if (typing && !dialogModel.active && !SessionState.locked) {#if (root.lingering) {' \
   'shell/security/polkit/AuthDialog.qml#        if (root.inputEnabled)\n            field.forceActiveFocus();#        field.forceActiveFocus();' \
   'shell/security/polkit/AuthDialog.qml#                id: field\n                enabled: root.inputEnabled#                id: field' \
+  'shell/security/polkit/AuthDialog.qml#            id: identityList\n            enabled: root.inputEnabled#            id: identityList' \
   'shell/security/polkit/AuthDialog.qml#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).\n                enabled: root.inputEnabled#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).' \
   'shell/security/polkit/AuthAgent.qml#        const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());#        let typing = false;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());\n        typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \
   'shell/security/polkit/AuthAgent.qml#const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);#const typing = (follows && win.takesKeys) || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \
