@@ -343,7 +343,7 @@ Variants {
             const info = byKey[key];
             const tile = tiles[index];
             if (info && tile && !tile.plus && !tile.active)
-                Compositor.moveToSpace(info.address, tile.id);
+                Compositor.moveGroupToSpace(info.address, tile.id); // with its tile group (TL29)
         }
 
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).

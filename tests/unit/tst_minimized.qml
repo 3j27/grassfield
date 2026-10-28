@@ -267,6 +267,14 @@ TestCase {
         verify(Minimized.moveToCall("55ab", "a".repeat(64)) !== "");
     }
 
+    // TL29 (step 4b): the tile group of a window comes forward.
+    function test_groupFrontCallIsBuiltFromAValidatedAddress() {
+        verify(Minimized.isPluginVerb("group_front"));
+        compare(Minimized.groupFrontCall("0x55AB"), "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.group_front then p.group_front(\"0x55ab\") end end");
+        for (const address of ["", "zz", "0x", "55ab\"", null])
+            compare(Minimized.groupFrontCall(address), "", String(address));
+    }
+
     // TL27, TL28 (step 4a): a zone of the Layouts section, and a pick of the suggestions into the layout of another window.
     function test_zoneCallsAreBuiltFromValidatedPieces() {
         const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.arrange then p.arrange(";

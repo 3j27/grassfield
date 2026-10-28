@@ -49,8 +49,7 @@ FocusScope {
         target: Compositor
 
         function onTilingNotice(notice: var): void {
-            if (notice.reason === "invalid" || notice.reason === "locked")
-                root.picked = false;
+            root.picked = WindowTiling.pickPending(root.picked, notice.reason);
         }
     }
 

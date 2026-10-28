@@ -10,6 +10,7 @@
 #include "core/Minimize.hpp"
 #include "core/TitlebarLayout.hpp"
 
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -1245,6 +1246,39 @@ namespace gf::tiler {
         }
         if (!tile(window, *place))
             logRequest(Log::INFO, "tile {:x}: not tileable (tiling.md TL9)", address);
+    }
+
+    void groupFrontRequest(std::string_view addressText) {
+        auto& s = st();
+        if (gf::deferredFocus::sessionLocked()) {
+            logRequest(Log::INFO, "group_front: refused: the session is locked");
+            notify(tiling::Reason::Locked);
+            return;
+        }
+        const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
+        const auto     w       = address != 0 ? windowById(address) : nullptr;
+        if (!w) {
+            logRequest(Log::WARN, "group_front: rejected: not a live window");
+            notify(tiling::Reason::Invalid);
+            return;
+        }
+        if (!Desktop::windowState())
+            return;
+        std::vector<uint64_t> stack; // the windows on screen, bottom to top: a minimized or hidden one is on a special workspace
+        for (const auto& o : Desktop::windowState()->windows()) {
+            if (o && o->m_isMapped && !o->isHidden() && o->m_workspace && !o->m_workspace->m_isSpecialWorkspace)
+                stack.push_back(idOf(o));
+        }
+        const auto order = tiling::groupRaiseOrder(s.book.records(), idOf(w), stack);
+        for (const auto id : order) {
+            const auto member = windowById(id);
+            if (!member)
+                continue;
+            if (const auto result = Config::Actions::alterZOrder("top", member); !result)
+                logRequest(Log::WARN, "group_front: raising {:x} failed: {}", id, result.error().message);
+        }
+        if (!order.empty())
+            logRequest(Log::DEBUG, "group_front {:x}: {} member(s) brought forward", idOf(w), order.size());
     }
 
     void arrangeRequest(std::string_view json) {

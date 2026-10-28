@@ -336,7 +336,7 @@ Scope {
             return;
         }
         if (item.kind === "minimized") {
-            Compositor.unminimize(item.toplevel);
+            Compositor.unminimizeWithGroup(item.toplevel); // its tile group comes forward with it (TL29)
             return;
         }
         if (item.kind === "folder") {
@@ -348,10 +348,13 @@ Scope {
             return;
         }
         // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
-        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows.
+        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows. The tile group
+        // of the window that ends focused comes forward with it (TL29).
         const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
         for (const top of plan)
             Compositor.activate(top);
+        if (plan.length > 0)
+            Compositor.groupForward(Compositor.addressOf(plan[plan.length - 1]));
     }
 
     // The newest items of every folder shown as a stack (StackWatch: one watcher per folder for the whole Dock, not one per

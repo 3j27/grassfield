@@ -74,6 +74,15 @@
 #   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
+# Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
+# end in one group):
+#   group-front    the second window (no group) focused above the group; group_front(first): the third window, then the
+#                  first, come above it (Hyprland's stacking order, `clients` bottom first); the focus stays on the second
+#   no-group       group_front of the second window changes nothing in the stacking order
+#   invalid        group_front of an unknown window: the `tiling` notice says "invalid"
+#   zoomed         the first window zoomed, then full screen, and focused (its tile suspended): group_front(first) leaves it
+#                  above the third (integrator review of cd74af2)
+#   locked         while the foreign locker holds the session lock, group_front raises nothing (reason "locked")
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -1136,6 +1145,65 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   }
   check "minimized: the pick brings it back to $out's Desktop" on_desktop
   check "minimized: in the middle third, in the first's group" picked "$addr3" 1
+
+  # Step 4b (TL29): the first and the third windows are one group now; the second has none.
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-groups")' >/dev/null 2>&1; then
+    group_front() { nestctl dispatch "hl.plugin.grassfield.group_front(\"$1\")" >>"$log" 2>&1; sleep 0.8; }
+    order_now() { nestctl clients -j | jq -c 'map(.address)'; }
+    # Each window above the one before it in Hyprland's stacking order (`clients` lists it bottom first).
+    above() { # address...
+      local order a i prev=-1 seen=""
+      order=$(order_now)
+      for a in "$@"; do
+        i=$(jq -r --arg a "$a" 'index($a) // -1' <<<"$order")
+        seen+=" $a:$i"
+        (( i > prev )) || { say "  stack:$seen"; return 1; }
+        prev=$i
+      done
+      say "  stack:$seen"
+    }
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr2' })" >>"$log" 2>&1
+    sleep 0.5
+    group_below() { above "$addr3" "$addr2" && above "$addr" "$addr2"; }
+    check "group-front: the second window (no group) is above the group first" group_below
+    group_front "$addr"
+    check "group-front: the group comes forward, the chosen window in front" above "$addr2" "$addr3" "$addr"
+    check "group-front: the focus stays where it was (no activation)" test "$(nestctl activewindow -j | jq -r '.address')" = "$addr2"
+    before=$(order_now)
+    group_front "$addr2"
+    check "group-front: a window in no group changes nothing" test "$(order_now)" = "$before"
+    mark_events
+    group_front "0x1"
+    check "group-front: an unknown window is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    # Zoomed, then full screen, and focused (integrator review of cd74af2): Suspended but on screen, the chosen window still
+    # ends above its group (the protocol activation does nothing for the focused window).
+    for mode in maximized fullscreen; do
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+      sleep 0.8
+      check "group-front $mode: the first window's tile is suspended" test "$(record_of "$addr" | jq -r '.state')" = suspended
+      group_front "$addr"
+      check "group-front $mode: the chosen window stays above its group" above "$addr3" "$addr"
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      sleep 0.8
+    done
+    check "group-front: the first window is tiled again after zoom and full screen" test "$(record_of "$addr" | jq -r '.state')" = tiled
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr2' })" >>"$log" 2>&1
+    sleep 0.5
+    if lock_session; then
+      before=$(order_now)
+      mark_events
+      group_front "$addr3"
+      check "group-front locked: refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
+      check "group-front locked: nothing is raised" test "$(order_now)" = "$before"
+    else
+      check "group-front locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "group-front locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+  else
+    say "SKIP: step 4b cases (the plugin does not advertise tiling-groups)"
+  fi
 
   tile_ipc "$addr3" previous
   free_foot

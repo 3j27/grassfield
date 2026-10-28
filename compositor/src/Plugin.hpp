@@ -57,6 +57,7 @@ namespace gf {
         bool                               luaArrangeRegistered       = false;
         bool                               luaTilePopoverRegistered   = false;
         bool                               luaMoveToRegistered        = false;
+        bool                               luaGroupFrontRegistered    = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;

@@ -1100,3 +1100,44 @@ TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
     EXPECT_EQ(quotes, 2 + 2 * kMaxSuggested) << json;
     EXPECT_EQ(json.find(R"("zone":1)"), std::string::npos);
 }
+
+// ---- step 4b: tile groups (TL29) ----
+
+TEST(TilingGroups, TheGroupComesForwardInItsStackingOrder) {
+    CTileBook  book;
+    const Rect any{0, 0, 10, 10};
+    const auto group = book.newGroup();
+    book.placed(1, any, any, 0, inLayout("thirds", 0), "A", 1, group);
+    book.placed(2, any, any, 0, inLayout("thirds", 1), "A", 1, group);
+    book.placed(3, any, any, 0, inLayout("thirds", 2), "A", 1, group);
+    book.placed(4, any, any, 0, at(Place::Left), "A", 1, 0);
+    const auto other = book.newGroup();
+    book.placed(5, any, any, 0, inLayout("left-right", 0), "A", 1, other);
+    book.placed(6, any, any, 0, inLayout("left-right", 1), "A", 1, other);
+    book.placed(7, any, any, 0, at(Place::Right), "A", 1, 0);
+    const std::vector<uint64_t> stack{3, 9, 5, 4, 1, 7, 6, 2}; // bottom to top; 9 has no record
+    EXPECT_EQ(groupRaiseOrder(book.records(), 2, stack), (std::vector<uint64_t>{3, 1, 2})) << "the others, bottom first, then the chosen one";
+    EXPECT_EQ(groupRaiseOrder(book.records(), 3, stack), (std::vector<uint64_t>{1, 2, 3}));
+    EXPECT_EQ(groupRaiseOrder(book.records(), 5, stack), (std::vector<uint64_t>{6, 5})) << "only the chosen one's group";
+    EXPECT_TRUE(groupRaiseOrder(book.records(), 7, stack).empty()) << "windows without a group are no group";
+    EXPECT_EQ(groupRaiseOrder(book.records(), 2, std::vector<uint64_t>{3, 1}), (std::vector<uint64_t>{3, 1})) << "the chosen one not on screen";
+    EXPECT_TRUE(groupRaiseOrder(book.records(), 4, stack).empty()) << "no group";
+    EXPECT_TRUE(groupRaiseOrder(book.records(), 9, stack).empty()) << "no record";
+    // A suspended member (minimized) stays where it is; one being resized comes; one on another Desktop does not.
+    ASSERT_TRUE(book.suspend(3));
+    ASSERT_TRUE(book.beginResize(1));
+    EXPECT_EQ(groupRaiseOrder(book.records(), 2, stack), (std::vector<uint64_t>{1, 2}));
+    // A suspended chosen one on screen (zoomed or full screen, focused: the activation changes nothing) still ends in front
+    // of the others (integrator review of cd74af2); minimized or hidden it is in no stack (a special workspace) and its
+    // restore raises it.
+    EXPECT_EQ(groupRaiseOrder(book.records(), 3, stack), (std::vector<uint64_t>{1, 2, 3}));
+    EXPECT_EQ(groupRaiseOrder(book.records(), 3, std::vector<uint64_t>{9, 1, 2}), (std::vector<uint64_t>{1, 2}));
+    book.endResize(1, any);
+    book.setWorkspace(1, 2);
+    EXPECT_TRUE(groupRaiseOrder(book.records(), 2, stack).empty());
+    // A window listed twice in the stack is raised once; a member not in the stack (unmapped) is not raised.
+    book.setWorkspace(1, 1);
+    const std::vector<uint64_t> doubled{1, 1, 2};
+    EXPECT_EQ(groupRaiseOrder(book.records(), 2, doubled), (std::vector<uint64_t>{1, 2}));
+    EXPECT_TRUE(groupRaiseOrder(book.records(), 2, std::vector<uint64_t>{2}).empty()) << "no other member on screen";
+}
