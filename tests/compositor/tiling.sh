@@ -55,6 +55,10 @@
 #                  a layer covers the light, or while the session is locked (the foreign locker); after each, the pointer
 #                  moved off and back gives "enter" again. The layer is a tiny Quickshell config written into the run directory.
 # The locked case above also calls move_to when the plugin has it (TL34): nothing moves.
+# Both locked cases release the fixture through unlock_session, which checks that Hyprland itself reports the session
+# unlocked (`hyprctl locked`) before the next case (integrator nested pass of ab485fb: a locker killed before its unlock landed
+# would leave the session locked for every later case). A failed C1 log check prints the plugin's own lines for the victim,
+# Hyprland's lock state and the layers on GF-REF.
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -187,6 +191,55 @@ pids=()
 locker_pid=""
 foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
 foreign_ipc() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG timeout 5 qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
+# Hyprland's own session-lock state ("true" | "false"): what the plugin reads at each motion (CSessionLockManager).
+hypr_locked() { nestctl locked 2>/dev/null | tr -d '[:space:]'; }
+# The foreign locker fixture (tests/security/foreign_locker) takes the session lock; true once it holds it (secure).
+lock_session() {
+  WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+    setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
+  locker_pid=$!
+  locked=""
+  local _
+  for _ in $(seq 1 60); do
+    locked=$(foreign_ipc status)
+    [[ $locked == "locked secure" ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# Releases it and waits until Hyprland itself reports the session unlocked (integrator nested pass of ab485fb): the unlock
+# is asked again while Hyprland still says locked (a `qs ipc` call can time out under load), and the process is killed only
+# once Hyprland is unlocked or every attempt failed (a locker killed while it holds the lock leaves Hyprland's dead-locker
+# state: the session stays locked and every later case would fail for that reason). True when Hyprland is unlocked.
+unlock_session() {
+  local _ __
+  for _ in $(seq 1 10); do
+    foreign_ipc unlock >/dev/null
+    for __ in $(seq 1 10); do
+      [[ $(hypr_locked) == false ]] && break 2
+      sleep 0.1
+    done
+  done
+  for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
+  kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
+  locker_pid=""
+  say "  hyprctl locked: $(hypr_locked)"
+  [[ $(hypr_locked) == false ]]
+}
+# What may hold the pointer or the keyboard now, for a failed check: Hyprland's session lock and the layers mapped on GF-REF.
+surfaces_state() {
+  say "  hyprctl locked: $(hypr_locked); layers on $out: $(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels // {} | .[][] | .namespace] | join(",")' 2>/dev/null)"
+}
+# The plugin's last lines naming PATTERN (Hyprland's in-memory log, then its file), for a failed check.
+plugin_lines() { # pattern
+  local lines l
+  lines=$( { nestctl rollinglog 2>/dev/null; tail -n 3000 "$hyprlog" 2>/dev/null; } | grep -a '\[grassfield\]' | grep -a -- "$1" | tail -n 5)
+  if [[ -z $lines ]]; then
+    say "  plugin: no line names $1"
+  else
+    while IFS= read -r l; do say "  plugin: $l"; done <<<"$lines"
+  fi
+}
 cleanup() {
   if [[ -n $locker_pid ]] && kill -0 "$locker_pid" 2>/dev/null; then
     foreign_ipc unlock >/dev/null # never leave the nested session locked
@@ -242,7 +295,13 @@ run_c1() { # name focused|unfocused moving|still
   wait "$p"
   sleep 0.8
   check "C1 $name: the dragged window unmapped (alive) during the drag ($focus, $motion): Hyprland alive" alive
-  check "C1 $name: the plugin reached its guarded path (\"${xdg_addr#0x} closed or unmapped\") and moved nothing" plugin_logged "${xdg_addr#0x} closed or unmapped"
+  c1_guarded() { # on a failure, the plugin's own lines for the victim and what may have held the pointer
+    plugin_logged "${xdg_addr#0x} closed or unmapped" && return 0
+    plugin_lines "${xdg_addr#0x}"
+    surfaces_state
+    return 1
+  }
+  check "C1 $name: the plugin reached its guarded path (\"${xdg_addr#0x} closed or unmapped\") and moved nothing" c1_guarded
   kill "$xdg_pid" 2>/dev/null
   sleep 0.3
 }
@@ -547,16 +606,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     check "zone-taken: it is Free" record_is "$addr2" none
     tile_ipc "$addr" previous
 
-    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
-      setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
-    locker_pid=$!
-    locked=""
-    for _ in $(seq 1 60); do
-      locked=$(foreign_ipc status)
-      [[ $locked == "locked secure" ]] && break
-      sleep 0.1
-    done
-    if [[ $locked == "locked secure" ]]; then
+    if lock_session; then
       read -r lx ly lw lh _ < <(geometry_of tiling-foot)
       gen_l0=$(tiling_state | jq -r '.gen')
       tile_ipc "$addr" left
@@ -571,10 +621,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     else
       check "locked: the foreign locker holds the session lock (${locked:-no answer})" false
     fi
-    foreign_ipc unlock >/dev/null
-    for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
-    kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
-    locker_pid=""
+    check "locked: released, Hyprland reports the session unlocked" unlock_session
     sleep 0.5
   fi
 else
@@ -873,6 +920,7 @@ QML
     sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
     local ok=1
     events_since "$(hover_filter enter)" | grep -q . && ok=0
+    ((ok)) && surfaces_state
     close_popover
     return $ok
   }
@@ -889,24 +937,12 @@ QML
     stop_layer
     check "covered: the layer gone, the hover works again" enter_again
     pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
-    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
-      setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
-    locker_pid=$!
-    locked=""
-    for _ in $(seq 1 60); do
-      locked=$(foreign_ipc status)
-      [[ $locked == "locked secure" ]] && break
-      sleep 0.1
-    done
-    if [[ $locked == "locked secure" ]]; then
+    if lock_session; then
       check "covered: no enter while the session is locked" no_enter_for "$wait_s"
     else
       check "covered: the foreign locker holds the session lock (${locked:-no answer})" false
     fi
-    foreign_ipc unlock >/dev/null
-    for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
-    kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
-    locker_pid=""
+    check "covered: released, Hyprland reports the session unlocked" unlock_session
     sleep 0.5
     check "covered: unlocked, the hover works again" enter_again
   fi
@@ -958,6 +994,7 @@ QML
   move_to "$out"
   check "move-invalid: the window's own output is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
   check "move-invalid: nothing moved" is_box "$bx" "$by" "$bw" "$bh"
+  close_popover # nothing of the shell's popover left over the windows of the C1 cases
 else
   say "SKIP: step 3 cases (the plugin does not advertise tile-hover)"
 fi
