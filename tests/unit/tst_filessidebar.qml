@@ -64,6 +64,19 @@ TestCase {
 
         // Last here so the rows above keep their numbers (first in the real sidebar).
         ListElement {
+            section: "favorites"
+            name: "Applications"
+            url: "grassfield-apps:/"
+            iconName: "folder-applications"
+            kind: "applications"
+            mounted: true
+            ejectable: false
+            busy: false
+            tag: ""
+            tagColor: -1
+        }
+
+        ListElement {
             section: "recents"
             name: "Recents"
             url: "grassfield-recents:/"
@@ -108,7 +121,9 @@ TestCase {
                 }
             }
         }
+        property var navigated: []
         function navigate(url, record): void {
+            fakeTab.navigated = fakeTab.navigated.concat([String(url)]);
         }
         property var hovered: []
         function springHover(url): void {
@@ -199,7 +214,7 @@ TestCase {
         const listView = findList(sidebar);
         verify(listView !== null);
         fakeTab.hovered = [];
-        for (const row of [{index: 3, accepted: false}, {index: 0, accepted: true}]) {
+        for (const row of [{index: 4, accepted: false}, {index: 0, accepted: true}]) {
             const item = listView.itemAtIndex(row.index);
             verify(item !== null);
             const p = item.mapToItem(tc, item.width / 2, item.height / 2);
@@ -217,6 +232,20 @@ TestCase {
             incoming.Drag.active = false;
         }
         compare(fakeTab.hovered, ["file:///home/u"], "only Home sprang");
+    }
+
+    // The Applications place (kind "applications") is an ordinary place to the sidebar: a click opens its location in the tab
+    // (a new tab and Back/Forward are the tab's, as for a folder); it has no eject menu.
+    function test_applicationsPlaceOpensItsLocation() {
+        const listView = findList(sidebar);
+        verify(listView !== null);
+        const item = listView.itemAtIndex(3);
+        verify(item !== null);
+        fakeTab.navigated = [];
+        mouseClick(item, 20, item.height / 2);
+        compare(fakeTab.navigated, ["grassfield-apps:/"]);
+        mouseClick(item, 20, item.height / 2, Qt.RightButton);
+        compare(tc.menus.length, 0, "no eject menu on a place that cannot be ejected");
     }
 
     function findList(item: Item): var {

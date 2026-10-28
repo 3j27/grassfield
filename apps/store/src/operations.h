@@ -5,10 +5,11 @@
 //           close-on-exec: neither pkexec nor pacman inherits it); the helper's files in /run/grassfield-store/ say when it
 //           started and how it ended, and pacman's log gives the progress ("[ALPM] installed" lines against the plan)
 //   terminal  an Omarchy setup's recipe: omarchy-launch-floating-terminal-with-presentation "grassfield-store-run <op-id>
-//           <deadline> setup <recipe> [<arg>...]" (b.2), detached; the script runs as the user in Omarchy's terminal, takes
-//           Omarchy's update lock itself (the Store only checks it is free before), checks the pins the Store wrote in
-//           $XDG_RUNTIME_DIR/grassfield/store/<op-id>.pins, and its <op-id>.started and <op-id>.exit there say when it
-//           started and how it ended; pacman's log gives the progress as for the helper
+//           <deadline> setup <recipe> [<arg>...]" (b.2), detached, or an AUR package's install or removal: "... aur
+//           omarchy-pkg-aur-add <name>" or "... aur omarchy-pkg-drop <name>" (step 3b2); the script runs as the user in
+//           Omarchy's terminal, takes Omarchy's update lock itself (the Store only checks it is free before), checks the
+//           pins the Store wrote in $XDG_RUNTIME_DIR/grassfield/store/<op-id>.pins, and its <op-id>.started and
+//           <op-id>.exit there say when it started and how it ended; pacman's log gives the progress as for the helper
 //   webapp  Omarchy's omarchy-webapp-install / -remove as the Store's own child (b.3), 10 minutes at most
 // Before an operation starts, it is written to store.json; on the next start a record still there is compared with what is
 // there (recover): done, still running (followed again), interrupted (a part there), or not finished. The Store never
@@ -43,9 +44,10 @@ struct OperationRecord {
     QString app;     // the app's id
     QString name;    // the app's name, for the messages
     QStringList packages;         // helper: the names given to it; terminal: the setup's packages
-    QList<PlannedPackage> plan;   // helper, terminal: what must be there after an install (name, version), gone after a removal
-    QString recipe;               // terminal: omarchy-install-… or omarchy-remove-…
-    QStringList args;             // terminal: the recipe's arguments
+    // helper, terminal: what must be there after an install (name, version: "" for any, an AUR package's), gone after a removal
+    QList<PlannedPackage> plan;
+    QString recipe;               // terminal: omarchy-install-… or omarchy-remove-…, or the AUR's command (kAurAdd, kAurDrop)
+    QStringList args;             // terminal: the recipe's arguments, or the AUR package's name
     // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
     QList<std::pair<QString, QString>> pins;
     QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
@@ -61,6 +63,13 @@ bool isOperationId(const QString &id);
 // A setup's recipe and its arguments as ADR-0037 e.5 allows them (the terminal's command string is built from them).
 bool isRecipe(const QString &recipe);
 bool isRecipeArgs(const QStringList &args);
+// The AUR's two commands (b.2, step 3b2), run with 1 to 4 package names.
+inline const QString kAurAdd = QStringLiteral("omarchy-pkg-aur-add");
+inline const QString kAurDrop = QStringLiteral("omarchy-pkg-drop");
+bool isAurNames(const QStringList &names);
+// grassfield-store-run's kind for a terminal operation: "setup" (a recipe and its arguments), "aur" (one of the AUR's two
+// commands and package names), "" when neither.
+QString terminalKind(const QString &recipe, const QStringList &args);
 // grassfield-store-run's command string, the one argument of Omarchy's terminal launcher (b.2): "" when a token is invalid.
 QString terminalCommand(const QString &run, const QString &id, qint64 deadline, const QString &recipe, const QStringList &args);
 

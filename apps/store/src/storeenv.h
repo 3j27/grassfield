@@ -6,11 +6,14 @@
 //   GRASSFIELD_STORE_FIXTURE      a folder with bin/pacman and bin/gpg (fakes), gnupg/ (a pacman keyring to copy),
 //                                 swcatalog/ (fake AppStream data) and grassfield.conf; the Store reads nothing of the
 //                                 system's package manager then
-//   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests)
+//   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests);
+//                                 "metered": online on a metered connection (nothing fetched without being asked); "0":
+//                                 online, unmetered, whatever the network says (the tests that need the network's answer)
 //   GRASSFIELD_STORE_PKEXEC       the program run in pkexec's place for the helper's operations (ADR-0037 b.1): a fake one
 //                                 that writes the helper's files under <fixture>/run/grassfield-store
 //   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Omarchy's terminal, b.2;
 //                                 Open, SR21): it gets the command's name, then its arguments
+//   GRASSFIELD_STORE_AUR_URL      the AUR's web service (step 3b2): a file:// folder of answers (aur.h), or another URL
 // Without the last two a dev session runs no operation and opens nothing ("dev: not applied", SR30). With a fixture, the
 // helper's files, pacman's lock and log, Omarchy's folder (its package lists, the setups' recipes and pinned files),
 // grassfield-store-run's folder and pacman-conf are the fixture's too.
@@ -33,6 +36,16 @@ inline QString fixture()
 inline bool offlineForced()
 {
     return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("1");
+}
+
+inline bool meteredForced()
+{
+    return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("metered");
+}
+
+inline bool onlineForced()
+{
+    return apps::runmode::devValue("STORE_OFFLINE") == QLatin1String("0");
 }
 
 inline QString cacheDir()

@@ -107,9 +107,12 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove");
     const bool namesOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
     const bool helperOk = r.path == QLatin1String("helper") && namesOk;
-    // A setup's recipe of the operation's own kind (e.5).
-    const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && isRecipe(r.recipe) && isRecipeArgs(r.args)
-        && r.recipe.startsWith(r.kind == QLatin1String("install") ? QLatin1String("omarchy-install-") : QLatin1String("omarchy-remove-"));
+    // A setup's recipe of the operation's own kind (e.5), or the AUR's command of that kind with the package names (b.2).
+    const bool install = r.kind == QLatin1String("install");
+    const bool setupOk = isRecipe(r.recipe) && isRecipeArgs(r.args)
+        && r.recipe.startsWith(install ? QLatin1String("omarchy-install-") : QLatin1String("omarchy-remove-"));
+    const bool aurOk = r.recipe == (install ? kAurAdd : kAurDrop) && isAurNames(r.args);
+    const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk);
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
     if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk))
         return std::nullopt;
@@ -132,6 +135,20 @@ bool isOperationId(const QString &id)
     return re.match(id).hasMatch();
 }
 
+bool isAurNames(const QStringList &names)
+{
+    return !names.isEmpty() && names.size() <= 4 && std::all_of(names.cbegin(), names.cend(), [](const QString &n) { return isName(n); });
+}
+
+QString terminalKind(const QString &recipe, const QStringList &args)
+{
+    if (isRecipe(recipe) && isRecipeArgs(args))
+        return QStringLiteral("setup");
+    if ((recipe == kAurAdd || recipe == kAurDrop) && isAurNames(args))
+        return QStringLiteral("aur");
+    return {};
+}
+
 bool isRecipe(const QString &recipe)
 {
     static const QRegularExpression re(QStringLiteral(R"(\Aomarchy-(install|remove)-[a-z0-9-]+\z)"));
@@ -149,9 +166,10 @@ QString terminalCommand(const QString &run, const QString &id, qint64 deadline, 
     // The launcher runs it with `bash -c`: every token is one of e.5's patterns, none of them holds a character the shell
     // reads (the script checks them again).
     static const QRegularExpression path(QStringLiteral(R"(\A(/[a-z0-9._-]+)+\z)"));
-    if (!path.match(run).hasMatch() || !isOperationId(id) || deadline <= 0 || !isRecipe(recipe) || !isRecipeArgs(args))
+    const QString kind = terminalKind(recipe, args);
+    if (!path.match(run).hasMatch() || !isOperationId(id) || deadline <= 0 || kind.isEmpty())
         return {};
-    return (QStringList{run, id, QString::number(deadline), QStringLiteral("setup"), recipe} + args).join(QLatin1Char(' '));
+    return (QStringList{run, id, QString::number(deadline), kind, recipe} + args).join(QLatin1Char(' '));
 }
 
 std::optional<int> helperExitCode(const QString &statusDir, const QString &id)
@@ -653,7 +671,8 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
                 }
             }
             for (const PlannedPackage &p : record.plan) {
-                const bool there = versions.value(p.name) == p.version;
+                // An AUR package's version is the one its build makes (a VCS package's pkgver moves): any, then.
+                const bool there = versions.contains(p.name) && (p.version.isEmpty() || versions.value(p.name) == p.version);
                 // An install wants each one there at its version; a removal wants each one gone.
                 if (record.kind == QLatin1String("install") ? there : !versions.contains(p.name))
                     ++present;
@@ -727,6 +746,10 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
                 break;
             case 6:
                 result.outcome = QStringLiteral("terminalDidNotOpen");
+                break;
+            case 7:
+                // The AUR's plan checked again (b.2): a repository has the package now, or it is protected or needed.
+                result.outcome = QStringLiteral("refused");
                 break;
             case 130:
                 result.outcome = QStringLiteral("cancelled"); // Ctrl+C in the terminal: the user's own choice, nothing said
