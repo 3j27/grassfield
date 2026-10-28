@@ -387,10 +387,20 @@ TestCase {
     }
 
     // Refusals: a build without its key or host hides Set Up… and says so.
+    // Without a host or key the pane never contradicts itself: the system's updates are offered under the up-to-date or available
+    // headline, with one line on Grassfield's own (integrator re-review of 5ae52b1, minor 1).
     function test_aBuildWithoutRepositoryHidesSetUp() {
         const t = make(answer("not-set-up"), {repository: testCase.repositoryPlaceholder});
-        verify(row(t.page, "Software Update is not available in this build"));
+        verify(row(t.page, "This computer is up to date"));
+        compare(row(t.page, "This computer is up to date").subtitle, "Grassfield's own updates are not available in this build: it has no package repository or signing key yet.");
         verify(!button(t.page, "Set Up…"));
+        const listing = make(answer("not-set-up", {omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 0, otherPackages: []}),
+            {repository: testCase.repositoryPlaceholder});
+        verify(row(listing.page, "Updates are available"));
+        verify(!row(listing.page, "This computer is up to date"));
+        verify(row(listing.page, "Omarchy 4.0.6"));
+        verify(button(listing.page, "Update Now").enabled);
+        verify(!button(listing.page, "Set Up…"));
         const none = make(answer("not-set-up"), {files: {"/usr/share/grassfield/pacman/repository.conf": undefined}, repository: ""});
         verify(!button(none.page, "Set Up…"), "no repository.conf at all");
     }

@@ -58,7 +58,10 @@ SettingsPage {
         case "repair":
             return qsTr("Grassfield updates need to be repaired");
         case "not-set-up":
-            return root.updates.buildReady ? qsTr("Grassfield updates are not set up") : qsTr("Software Update is not available in this build");
+            // A build without a host or key cannot set Grassfield's updates up; the system's are still offered.
+            if (root.updates.buildReady)
+                return qsTr("Grassfield updates are not set up");
+            return root.hasReleases ? qsTr("Updates are available") : qsTr("This computer is up to date");
         }
         return root.updates.channel === "custom" ? qsTr("Grassfield updates need to be repaired") : qsTr("Software Update has not checked for updates yet");
     }
@@ -85,7 +88,7 @@ SettingsPage {
             return qsTr("Omarchy rewrote the system's package configuration, or it was changed by hand. Repair puts Grassfield's repository back; it asks for an administrator's password.");
         case "not-set-up":
             return root.updates.buildReady ? qsTr("Set Up adds Grassfield's package repository to the system; it asks for an administrator's password.")
-                : qsTr("This build has no package repository or signing key yet.");
+                : qsTr("Grassfield's own updates are not available in this build: it has no package repository or signing key yet.");
         }
         return root.view.repair ? qsTr("The system's package configuration points Grassfield updates elsewhere. Repair puts Grassfield's repository back; it asks for an administrator's password.") : "";
     }

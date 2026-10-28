@@ -8415,10 +8415,6 @@
         <translation>Les mises à jour de Grassfield ne sont pas configurées</translation>
     </message>
     <message>
-        <source>Software Update is not available in this build</source>
-        <translation>Mise à jour de logiciels n’est pas disponible dans cette version</translation>
-    </message>
-    <message>
         <source>Software Update has not checked for updates yet</source>
         <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour</translation>
     </message>
@@ -8453,10 +8449,6 @@
     <message>
         <source>Set Up adds Grassfield&apos;s package repository to the system; it asks for an administrator&apos;s password.</source>
         <translation>Configurer ajoute le dépôt de paquets de Grassfield au système&#xa0;; un mot de passe d’administrateur est demandé.</translation>
-    </message>
-    <message>
-        <source>This build has no package repository or signing key yet.</source>
-        <translation>Cette version n’a pas encore de dépôt de paquets ni de clé de signature.</translation>
     </message>
     <message>
         <source>The system&apos;s package configuration points Grassfield updates elsewhere. Repair puts Grassfield&apos;s repository back; it asks for an administrator&apos;s password.</source>
@@ -8601,6 +8593,10 @@
     <message>
         <source>Update Now needs Omarchy&apos;s update command, which this system does not have.</source>
         <translation>Mettre à jour maintenant nécessite la commande de mise à jour d’Omarchy, absente de ce système.</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s own updates are not available in this build: it has no package repository or signing key yet.</source>
+        <translation>Les mises à jour propres à Grassfield ne sont pas disponibles dans cette version&#xa0;: elle n’a pas encore de dépôt de paquets ni de clé de signature.</translation>
     </message>
     <message>
         <source>It runs in Omarchy&apos;s terminal and asks before it starts.</source>

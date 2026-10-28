@@ -310,7 +310,12 @@ class Checker:
             if conf_text is not None:
                 self.result["state"] = "repair"
                 return self.result
-            # Grassfield's own updates are off: its repository is not checked, the system's updates still are.
+            # Grassfield's own updates are off: its repository is not checked, the system's updates still are. Its failure
+            # count goes: an episode before Turn Off… must not make a later Set Up…'s first failure `blocking`.
+            try:
+                os.unlink(self.path("failures"))
+            except FileNotFoundError:
+                pass
             self.clear_stale_locks()
             return self.system_updates("not-set-up", set())
         if conf_text is None:

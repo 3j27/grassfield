@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.services
+import qs.overlay
 
 // SoftwareUpdate (ADR-0033 d; docs/specs/updates.md U4, U10, U20, A9) as the shell runs it, with a fake checker (run by
 // tests/shell/software_update_service.sh: a dev session, GRASSFIELD_UPDATE_CHECK_CMD=<fake>, the state under the test's
@@ -43,6 +44,22 @@ ShellRoot {
     }
 
     // One writer per file, on a fixed path: a FileView whose path changes just before setText can lose the write.
+    // The real Grassfield menu (shell/overlay/SystemMenu.qml): the detail of its Settings… item.
+    Component {
+        id: menuComponent
+        SystemMenu {}
+    }
+
+    function menuSettingsDetail(): string {
+        const menu = menuComponent.createObject(null);
+        if (menu === null)
+            return "<no menu>";
+        const item = menu.model.find(i => i.id === "settings");
+        const detail = item ? item.detail : "<no Settings item>";
+        menu.destroy();
+        return detail;
+    }
+
     function put(name: string, text: string): void {
         (name === "answer-waiter" ? waiterWriter : writer).setText(text);
     }
@@ -145,6 +162,7 @@ ShellRoot {
                 const f = SoftwareUpdate.file;
                 root.check(f.state === "available" && SoftwareUpdate.count === 2, "a: state " + f.state + ", count " + SoftwareUpdate.count);
                 root.check(SoftwareUpdate.menuDetail === "2 updates", "a: the Grassfield menu says " + JSON.stringify(SoftwareUpdate.menuDetail));
+                root.check(root.menuSettingsDetail() === "2 updates", "a: the Grassfield menu's own Settings… item shows it: " + JSON.stringify(root.menuSettingsDetail()));
                 root.check(root.announced === 0, "a: a user's check announces nothing (" + root.announced + ")");
                 root.check(JSON.stringify(f.announced) === JSON.stringify(["grassfield 1.0.1-1", "omarchy 4.0.6-1"]), "a: both versions marked: " + JSON.stringify(f.announced));
                 const saved = JSON.parse(root.stateText() || "{}");
