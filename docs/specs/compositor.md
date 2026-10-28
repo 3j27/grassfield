@@ -159,9 +159,13 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   the loop free: nothing new to draw until then), `other`. The loop's records (integrator review of a6d04df: a main-loop
   stall before a render shows only as a late render): while recording, an event-loop timer beats every 4 ms
   (`frames::kBeatUs`); a beat more than 2 ms late (`kStallUs`, core `stallOf`) records a stall from its due time to the
-  beat; the plugin records its own work outside a render (the shared edge's drag steps, `frameProbe::work`); both 1024
-  spans, dropped with the other records. The reply gains `"loop":{"beats":N,"stalls":[[beginUs,lengthUs],...],
-  "work":[[beginUs,lengthUs],...]}` after `marks`; `--gate` fails without beats.
+  beat, with the CPU time Hyprland's main thread used since the previous beat (`CLOCK_THREAD_CPUTIME_ID`: little CPU is
+  the thread waiting, descheduled under load or blocked; about the stall's length is the compositor working); the plugin
+  records its own work outside a render (the shared edge's drag steps, `frameProbe::work`); both 1024 spans, dropped with
+  the other records. The reply gains `"loop":{"beats":N,"stalls":[[beginUs,lengthUs,cpuUs],...],
+  "work":[[beginUs,lengthUs],...]}` after `marks`; `--gate` fails without beats. The attribution lists each
+  compositor-caused frame with its render's CPU and the loop's held time before it, split into stalls (with the main
+  thread's CPU share in them) and the plugin's work, and sums them per scenario (integrator nested pass of ce82fd3).
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers

@@ -156,11 +156,26 @@ check("attribution: no loop beats cannot pass the gate (a stall could not be see
       attribution(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--gate=shared-edge"]) == 1)
 check("attribution: held time is the union of the spans, outside the renders",
       fa_mod.held(0, 100, [(10, 30), (20, 30), (80, 40)], [(30, 10)]) == 50)
+# Integrator nested pass of ce82fd3: each compositor-caused frame is listed with the loop's held time split into stalls
+# (with the main thread's CPU share in them: a waiting thread is not the compositor working) and the plugin's work.
+check("attribution: a stall's CPU share is its CPU over its length plus one beat",
+      fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 14_000)]) == 10_000 and fa_mod.stall_cpu(0, 10_000, [(0, 10_000, 700)]) == 500)
+check("attribution: no CPU known, no CPU share", fa_mod.stall_cpu(0, 10_000, [(0, 10_000, None)]) is None)
+s_cpu = write(["%d %d %d" % (long_start + 1000, 30000, 1500)])
+detail = io.StringIO()
+with contextlib.redirect_stdout(detail):
+    fa_mod.main(["x", f_long, r_client, m_none, ev_edge, "60", "700", "--stalls=" + s_cpu, "--work=" + w_pre] + gate)
+text = detail.getvalue()
+check("attribution: the compositor-caused frame is listed with its stalls, their CPU share and the plugin's work",
+      "compositor (render began" in text and "stalls 30.0 ms" in text and "on its CPU for about 1.3 ms" in text
+      and "the plugin's work 15.0 ms" in text)
+check("attribution: the scenario's compositor-caused frames are summed",
+      "its 1 compositor-caused long frame(s) in the animation, in total: loop stalls 30.0 ms" in text)
 ev_far = write(["shared-edge %d 400 0" % (9_000_000 * 1000)])
 check("attribution: a gated scenario with no frame in its animation fails",
       attribution(["x", f_long, r_client, m_none, ev_far, "60", "700"] + gate) == 1)
 
-for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far):
+for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu):
     os.unlink(p)
 
 sys.exit(1 if failures else 0)

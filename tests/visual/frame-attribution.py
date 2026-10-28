@@ -17,15 +17,19 @@ loop's records it would read as a client's late frame, so the gate needs them (`
 The animation window (gate P3) and its tail (information) are attributed apart, from tests/visual/animation-windows.py's
 events ("<label> <start ns> <window ms> <tail ms>"); an events file of "<label> <request ns>" lines takes a fixed window
 after each request instead. It also prints the render CPU of the animation's frames (p50, p95, max), the plugin's animation
-phases (marks) relative to the animation's start, and one line per interval of 3 periods or more (where, how long, class,
-the wait before its render and that render's CPU): the concrete data for whoever owns that cost.
+phases (marks) relative to the animation's start, and one line per compositor-caused interval and per interval of 3
+periods or more (where, how long, class, the wait before its render, that render's CPU, and the loop's held time before
+it split into stalls, with the main thread's CPU share in them, and the plugin's own work): the concrete data for whoever
+owns that cost. A stall with little CPU is the main thread waiting (descheduled under load, or blocked), one with about
+its length in CPU is the compositor working (integrator nested pass of ce82fd3).
 
 Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE]
        [--work=FILE] [--beats=N] [--gate=PREFIX ...]
   frames.txt   "<presented us> <interval us>" (the intervals spanning a request already left out)
   renders.all  "<begin us> <cpu us>"
   marks.all    "<us> <name>"
-  --stalls     "<begin us> <length us>": the event loop held (a late beat, compositor/src/core/FrameLog.hpp stallOf)
+  --stalls     "<begin us> <length us> [<cpu us>]": the event loop held (a late beat, compositor/src/core/FrameLog.hpp
+               stallOf), with the main thread's CPU time from the beat before (the stall and up to one beat period)
   --work       "<begin us> <length us>": the plugin's own work outside a render
   --beats      the beats the loop probe ran (0: the loop was not probed, so a stall could not be seen)
   --gate=PREFIX the scenarios whose label starts with PREFIX are judged here: PASS when their animations hold frames and no
@@ -75,6 +79,24 @@ def held(lo, hi, loop, renders):
     return max(0, total)
 
 
+# compositor/src/core/FrameLog.hpp kBeatUs: a stall's CPU time covers it and at most one beat period before it.
+BEAT_US = 4000
+
+
+def stall_cpu(lo, hi, stalls):
+    """About how much of (lo, hi] the main thread spent on its CPU during the stalls ((begin, length, cpu or None)) there:
+    each stall's overlap times its CPU share (its CPU over its length plus one beat period, at most 1); None when no
+    stall there carries its CPU."""
+    total, known = 0.0, False
+    for b, n, cpu in stalls:
+        overlap = min(hi, b + n) - max(lo, b)
+        if overlap <= 0 or cpu is None:
+            continue
+        known = True
+        total += overlap * min(1.0, cpu / (n + BEAT_US))
+    return total if known else None
+
+
 def classify(start, end, renders, cpu_limit, wait_limit, loop=()):
     """(class, wait us or None, cpu us or None, held us) of the interval (start, end]: `loop` the stalls and work spans."""
     inside = [(b, c) for b, c in renders if start < b <= end]
@@ -113,7 +135,10 @@ def main(argv):
         print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE] "
               "[--work=FILE] [--beats=N] [--gate=PREFIX ...]", file=sys.stderr)
         return 2
-    loop = sorted((int(a[0]), int(a[1])) for path in options["--stalls"] + options["--work"] for a in rows(path, 2))
+    stalls = sorted((int(a[0]), int(a[1]), int(a[2]) if len(a) >= 3 else None) for path in options["--stalls"] for a in rows(path, 2))
+    work = sorted((int(a[0]), int(a[1])) for path in options["--work"] for a in rows(path, 2))
+    loop = sorted([(b, n) for b, n, _ in stalls] + work)
+    stall_spans = [(b, n) for b, n, _ in stalls]
     frames = [(int(a[0]), int(a[1])) for a in rows(argv[1], 2)]
     renders = sorted((int(a[0]), int(a[1])) for a in rows(argv[2], 2))
     marks = [(int(r[0]), r[1]) for r in rows(argv[3], 2)]
@@ -127,7 +152,8 @@ def main(argv):
         events.append((r[0], start, window, tail))
     long_limit, cpu_limit, wait_limit, detail_limit = 1.2 * period, 0.8 * period, 0.5 * period, 3 * period
 
-    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list)})
+    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list),
+                               "held": {"frames": 0, "stalls": 0, "stall_cpu": 0.0, "stall_cpu_known": False, "work": 0, "render": 0}})
     details = []
     for name, start, window, tail in events:
         acc = per[name]
@@ -148,10 +174,25 @@ def main(argv):
             p["long"] += 1
             p[kind] += 1
             p["longest"] = max(p["longest"], interval)
-            if interval >= detail_limit:
+            if kind == "compositor" or interval >= detail_limit:
+                lo = t - interval
+                hi = lo + wait if wait is not None else t
+                by_stalls, by_work = held(lo, hi, stall_spans, renders), held(lo, hi, work, renders)
+                on_cpu = stall_cpu(lo, hi, stalls)
+                if kind == "compositor" and part == "animation":
+                    h = acc["held"]
+                    h["frames"] += 1
+                    h["stalls"] += by_stalls
+                    h["work"] += by_work
+                    h["render"] += cpu or 0
+                    if on_cpu is not None:
+                        h["stall_cpu"] += on_cpu
+                        h["stall_cpu_known"] = True
                 details.append(f"  {name} {part} +{(t - start) / 1000:.0f} ms: {interval / 1000:.1f} ms {kind}"
                                + (f" (render began {wait / 1000:.1f} ms after the previous frame, CPU {cpu / 1000:.1f} ms" if wait is not None else " (no render recorded")
-                               + f"; the loop held {before / 1000:.1f} ms before it)")
+                               + f"; before it the loop was held {before / 1000:.1f} ms: stalls {by_stalls / 1000:.1f} ms"
+                               + (f", the main thread on its CPU for about {on_cpu / 1000:.1f} ms of them" if on_cpu is not None else "")
+                               + f", the plugin's work {by_work / 1000:.1f} ms)")
 
     if not renders:
         print("attribution: no render spans recorded (a plugin without them: rebuild, just plugin-build)")
@@ -170,8 +211,13 @@ def main(argv):
         print(f"{name}: animation {part_text(a['animation'])}; render CPU p50 {pct(cpu, 0.5) / 1000:.1f} ms, p95 {pct(cpu, 0.95) / 1000:.1f} ms, "
               f"max {max(cpu, default=0) / 1000:.1f} ms over {len(cpu)} renders; tail {part_text(a['tail'])}"
               + (f"; plugin phases from the animation's start (mean): {marks_text}" if marks_text else ""))
+        h = a["held"]
+        if h["frames"]:
+            print(f"{name}: its {h['frames']} compositor-caused long frame(s) in the animation, in total: loop stalls {h['stalls'] / 1000:.1f} ms"
+                  + (f" (the main thread on its CPU for about {h['stall_cpu'] / 1000:.1f} ms of them)" if h["stall_cpu_known"] else "")
+                  + f", the plugin's work {h['work'] / 1000:.1f} ms, render CPU {h['render'] / 1000:.1f} ms")
     if details:
-        print(f"intervals of {detail_limit / 1000:.0f} ms or more:")
+        print(f"long intervals caused by the compositor, and any of {detail_limit / 1000:.0f} ms or more:")
         print("\n".join(details))
     status = 0
     for name in sorted(per):
