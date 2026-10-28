@@ -102,6 +102,7 @@ FocusScope {
             width: parent.width
             kind: root.app.kind
             repo: root.app.repo || ""
+            extra: Store.aurLine(root.app)
         }
     }
 

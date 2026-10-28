@@ -76,8 +76,8 @@ case $cmd in
   *) exit 2 ;;
 esac)SH";
 
-// grassfield-store-run's stand-in, `<run> <op> <deadline> setup <recipe> [<arg>...]`: its tmode file says how it goes, its
-// tpackages file which packages the recipe installs or removes.
+// grassfield-store-run's stand-in, `<run> <op> <deadline> setup|aur <recipe> [<arg>...]`: its tmode file says how it goes,
+// its tpackages file which packages the recipe installs or removes (the AUR's at a version of its build's own, 9-1).
 const QByteArray kFakeRun = R"SH(root=$(dirname "$0"); run=$root/runstore
 op=$2; recipe=$5
 mode=$(cat "$root/tmode" 2>/dev/null)
@@ -85,13 +85,14 @@ fin() { echo "$1" >"$run/.$op.exit" && mv "$run/.$op.exit" "$run/$op.exit"; exit
 case $mode in never) exit 0 ;; late) fin 6 ;; busy) fin 3 ;; esac
 start=$(awk '{sub(/.*\) /, ""); print $20}' /proc/$$/stat)
 echo "$$ $start" >"$run/.$op.started" && mv "$run/.$op.started" "$run/$op.started"
-case $mode in slow) sleep 1 ;; changed) fin 5 ;; stopped) fin 130 ;; fail) fin 1 ;; esac
+case $mode in slow) sleep 1 ;; changed) fin 5 ;; stopped) fin 130 ;; fail) fin 1 ;; refused) fin 7 ;; esac
 n=0
 for p in $(cat "$root/tpackages"); do
   n=$((n + 1))
   [ "$mode" = closed ] && [ $n -gt 1 ] && exit 0
   case $recipe in
     omarchy-install-*) echo "[2026-10-28T10:00:00+0000] [ALPM] installed $p (1-1)" >>"$root/pacman.log"; echo "$p 1-1" >>"$root/installed" ;;
+    omarchy-pkg-aur-add) echo "[2026-10-28T10:00:00+0000] [ALPM] installed $p (9-1)" >>"$root/pacman.log"; echo "$p 9-1" >>"$root/installed" ;;
     *) echo "[2026-10-28T10:00:00+0000] [ALPM] removed $p (1-1)" >>"$root/pacman.log"; grep -v "^$p " "$root/installed" >"$root/i2"; mv "$root/i2" "$root/installed" ;;
   esac
 done
@@ -448,6 +449,78 @@ TEST(Operations, TerminalRecordsAndCommand)
     EXPECT_EQ(terminalCommand(run, QStringLiteral("cccc"), 1, QStringLiteral("omarchy-install-browser"), {}), QString());
     EXPECT_EQ(terminalCommand(run, id, 0, QStringLiteral("omarchy-install-browser"), {}), QString());
     EXPECT_EQ(terminalCommand(QStringLiteral("/tmp/a b"), id, 1, QStringLiteral("omarchy-install-browser"), {}), QString());
+}
+
+// The AUR (step 3b2): its two commands through the same terminal path, kind "aur", one package's name; an AUR package is
+// there at whatever version its build made; the script's 7 (its plan refused) is a refusal.
+TEST(Operations, AurThroughTheTerminal)
+{
+    OperationRecord r = terminalRecord(QStringLiteral("aur:example-app-bin"), QStringLiteral("install"), {});
+    r.recipe = kAurAdd;
+    r.args = {QStringLiteral("example-app-bin")};
+    r.packages = {QStringLiteral("example-app-bin")};
+    r.plan.clear();
+    for (const QString &name : {QStringLiteral("example-app-bin"), QStringLiteral("example-lib")}) {
+        PlannedPackage p;
+        p.name = name;
+        p.repo = QStringLiteral("aur"); // no version: whichever the build makes
+        r.plan.append(p);
+    }
+    r.pins = {{QStringLiteral("bin/omarchy-pkg-aur-add"), QString(64, QLatin1Char('a'))}};
+    const auto back = OperationRecord::fromJson(r.toJson());
+    ASSERT_TRUE(back);
+    EXPECT_EQ(back->recipe, kAurAdd);
+    EXPECT_EQ(back->plan.at(1).version, QString());
+    for (const auto &[key, value] : {std::pair{QStringLiteral("recipe"), QJsonValue(kAurDrop)},
+                                     std::pair{QStringLiteral("recipe"), QJsonValue(QStringLiteral("omarchy-pkg-add"))},
+                                     std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{QStringLiteral("-rf")})},
+                                     std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{})},
+                                     std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+                                                                                             QStringLiteral("d"), QStringLiteral("e")})}}) {
+        QJsonObject bad = r.toJson();
+        bad.insert(key, value);
+        EXPECT_FALSE(OperationRecord::fromJson(bad)) << key.toStdString(); // an install runs the AUR's add, with 1 to 4 names
+    }
+
+    const QString run = QStringLiteral("/usr/lib/grassfield/grassfield-store-run");
+    const QString id = QString(32, QLatin1Char('c'));
+    EXPECT_EQ(terminalKind(kAurAdd, {QStringLiteral("example-app-bin")}), QStringLiteral("aur"));
+    EXPECT_EQ(terminalKind(QStringLiteral("omarchy-install-browser"), {QStringLiteral("firefox")}), QStringLiteral("setup"));
+    EXPECT_EQ(terminalCommand(run, id, 1793155826, kAurAdd, {QStringLiteral("example-app-bin")}),
+              run + QStringLiteral(" ") + id + QStringLiteral(" 1793155826 aur omarchy-pkg-aur-add example-app-bin"));
+    EXPECT_EQ(terminalCommand(run, id, 1, kAurDrop, {QStringLiteral("lib32-gcc@x+")}).section(QLatin1Char(' '), 3),
+              QStringLiteral("aur omarchy-pkg-drop lib32-gcc@x+"));
+    for (const QString &bad : {QStringLiteral("-rf"), QStringLiteral("a;id"), QStringLiteral("$(id)"), QStringLiteral("A"), QString()})
+        EXPECT_EQ(terminalCommand(run, id, 1, kAurAdd, {bad}), QString()) << bad.toStdString();
+    EXPECT_EQ(terminalCommand(run, id, 1, kAurAdd, {}), QString());
+    EXPECT_EQ(terminalCommand(run, id, 1, QStringLiteral("omarchy-pkg-add"), {QStringLiteral("gimp")}), QString());
+    EXPECT_EQ(terminalCommand(run, id, 1, QStringLiteral("omarchy-install-browser"), {QStringLiteral("a@b")}), QString())
+        << "a setup's arguments keep their own pattern";
+
+    Fixture f;
+    f.terminalMode("ok");
+    storetest::writeFile(f.dir.filePath(QStringLiteral("tpackages")), "example-app-bin example-lib\n");
+    Operations ops(f.config);
+    Ended finished(ops);
+    ops.enqueue(r);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << "done: exit 0, both there (at 9-1, the build's version)";
+    EXPECT_TRUE(f.read(QStringLiteral("commands")).contains(" aur omarchy-pkg-aur-add example-app-bin\n"));
+
+    OperationRecord drop = r;
+    drop.id = newOperationId();
+    drop.kind = QStringLiteral("remove");
+    drop.recipe = kAurDrop;
+    f.terminalMode("refused");
+    ops.enqueue(drop);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    EXPECT_EQ(ops.results().value(r.app).outcome, QStringLiteral("refused")) << "exit 7: the script refused the plan";
+    f.terminalMode("ok");
+    drop.id = newOperationId();
+    ops.enqueue(drop);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << "removed: exit 0 and both gone";
+    EXPECT_EQ(f.read(QStringLiteral("installed")), "bash 5.3-1\n");
 }
 
 TEST(Operations, TerminalInstallAndRemove)

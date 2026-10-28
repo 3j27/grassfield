@@ -67,8 +67,12 @@ FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &
         }
     });
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    // A guard beside the transfer timeout: the whole exchange never outlives twice its limit.
-    QTimer::singleShot(2 * limits.timeoutMs, &loop, [&] { reply->abort(); });
+    // A guard beside the transfer timeout: the whole exchange never outlives twice its limit. A timer of this call's own,
+    // gone with it: a pending QTimer::singleShot outlived the call in a thread whose loop never ran again (LSan).
+    QTimer guard;
+    guard.setSingleShot(true);
+    QObject::connect(&guard, &QTimer::timeout, reply, [reply] { reply->abort(); });
+    guard.start(2 * limits.timeoutMs);
     if (!reply->isFinished())
         loop.exec();
     if (!tooLarge && !refused)
@@ -118,7 +122,10 @@ int headStatus(const QUrl &url, int timeoutMs, bool devPlumbing)
         }
     });
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QTimer::singleShot(2 * timeoutMs, &loop, [&] { reply->abort(); });
+    QTimer guard; // as fetch()'s
+    guard.setSingleShot(true);
+    QObject::connect(&guard, &QTimer::timeout, reply, [reply] { reply->abort(); });
+    guard.start(2 * timeoutMs);
     if (!reply->isFinished())
         loop.exec();
     const int code = refused ? -1 : reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

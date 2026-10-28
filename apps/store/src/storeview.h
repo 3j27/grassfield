@@ -4,6 +4,7 @@
 #pragma once
 
 #include "appstream.h"
+#include "aur.h"
 #include "catalog.h"
 #include "pacman.h"
 #include "storemodel.h"
@@ -44,6 +45,15 @@ QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, con
 
 // pacman -Si's facts for the Information list: version, the sizes and the build day as `locale` writes them.
 QVariantMap packageFacts(const PackageInfo &info, const QLocale &locale);
+
+// An AUR package as the Store shows it (step 3b2; spec SR7, SR11): its page's id is "aur:<name>", its name the package's,
+// its summary the AUR's description, its licence the AUR's list. `installed`: pacman has it from outside the repositories;
+// `desktopId`: its first application entry, for Open.
+StoreApp aurApp(const AurPackage &package, bool installed, const QString &desktopId);
+// The AUR's facts for the Information list and the search results: version, maintainer ("" and orphaned), votes,
+// popularity (two decimals as `locale` writes them), last updated and first submitted (days), outOfDate (bool) and its day,
+// the package base, keywords, optional dependencies, and the dependencies by name.
+QVariantMap aurFacts(const AurPackage &package, const QLocale &locale);
 
 // The categories used while there is no catalog: the same ids, names and freedesktop lists as grassfield-packages'
 // catalog/categories.json, so an app is placed the same way with or without it.

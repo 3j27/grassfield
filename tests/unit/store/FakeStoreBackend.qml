@@ -46,6 +46,36 @@ QtObject {
     signal networkChanged
     signal packageInfo(string name, var facts)
     signal planReady(string app, string kind, var plan)
+    // The AUR (step 3b2): the tests emit the answers.
+    signal aurResults(string term, var apps, string problem)
+    signal aurInfo(string id)
+    signal buildScript(string id, string text, bool ok)
+    property bool aurRead: false
+
+    function searchAur(term) {
+        calls.push("searchAur:" + term);
+    }
+
+    function requestAur(id) {
+        calls.push("requestAur:" + id);
+    }
+
+    function requestBuildScript(id) {
+        calls.push("buildScript:" + id);
+    }
+
+    // grassfield.json for the settings window (Preferences.js): the text the tests set, and what it wrote last.
+    property var config: ({exists: false, ok: false, text: ""})
+    property string written: ""
+
+    function readConfig() {
+        return config;
+    }
+
+    function writeConfig(text) {
+        written = text;
+        return "";
+    }
 
     function actions(id) {
         const a = find(id);
@@ -112,7 +142,8 @@ QtObject {
         app_("org.example.Photo", "Photo Lab", "repo", true, true),
         app_("org.example.Games", "Game Hub", "setup", false, true),
         app_("org.example.Mail", "Mail Web", "webapp", false, true),
-        app_("org.example.Tool", "Pack Tool", "repo", true, false)
+        app_("org.example.Tool", "Pack Tool", "repo", true, false),
+        app_("aur:example-app-bin", "example-app-bin", "aur", false, false)
     ]
 
     function find(id) {
@@ -149,7 +180,8 @@ QtObject {
     function search(query) {
         calls.push("search:" + query);
         const q = query.trim().toLowerCase();
-        return q === "" ? [] : root.apps.filter(a => a.name.toLowerCase().indexOf(q) >= 0);
+        // The local search never holds an AUR page (the AUR answers after Return, searchAur).
+        return q === "" ? [] : root.apps.filter(a => a.kind !== "aur" && a.name.toLowerCase().indexOf(q) >= 0);
     }
 
     function app(id) {
@@ -162,6 +194,10 @@ QtObject {
             inCatalog: true, screenshots: ["https://example.org/1.png"], captions: ["The main window"], categories: ["Graphics"],
             releases: [{version: "2.0", date: "October 1, 2026", notes: "Faster."}], languages: ["Deutsch", "français"],
             rated: true, rating: {social: 3}, webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: "",
+            aur: a.kind !== "aur" ? ({}) : {version: "2.4.1-1", maintainer: "alice", orphaned: false, votes: 120, popularity: "1.53",
+                lastModified: "September 21, 2026", outOfDate: root.aurRead, outOfDateSince: root.aurRead ? "October 3, 2026" : "",
+                base: "example-app-bin", depends: root.aurRead ? ["gtk3", "example-lib"] : []},
+            aurRead: root.aurRead, aurUnknown: false,
             setup: a.kind !== "setup" ? ({}) : {install: "omarchy-install-gaming-hub", remove: "omarchy-remove-gaming-hub",
                 changes: "Installs Game Hub and the 32-bit graphics drivers for your graphics card.",
                 removes: "Game Hub's folders in your home folder, with the games."}});

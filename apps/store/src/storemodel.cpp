@@ -106,10 +106,12 @@ QList<StoreApp> buildModel(const ModelInputs &in)
                 break;
             }
             case CatalogSource::Kind::Aur:
-                if (!in.aurOn)
+                // A repository's package of that name is not the AUR's (yay would take it): such an entry is hidden.
+                if (!in.aurOn || sync.contains(e.source.package))
                     continue;
                 a.package = e.source.package;
                 a.packages = {a.package};
+                a.installed = in.foreign.contains(a.package);
                 break;
             case CatalogSource::Kind::Flatpak:
                 if (!in.flathubOn)
