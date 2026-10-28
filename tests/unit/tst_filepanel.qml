@@ -23,6 +23,12 @@ TestCase {
             "smb://server/share": [["remote.txt", false]]
         })
 
+    // The tree's entries for a folder URL in either form QML prints it (a typed url parameter prints "My%20Documents", a
+    // url from Qt.url() "My Documents").
+    function entries(folder: string): var {
+        return test.tree[folder] || test.tree[decodeURI(folder)];
+    }
+
     // FolderModel as the panel, BrowserTab and the icon view read it.
     Component {
         id: listingComponent
@@ -71,7 +77,7 @@ TestCase {
             function relist(): void {
                 const keep = listing.selectedUrls().map(String);
                 listing.clear();
-                const entries = test.tree[String(listing.url)] || [];
+                const entries = test.entries(String(listing.url)) || [];
                 for (const e of entries) {
                     const url = String(listing.url) + "/" + e[0];
                     listing.append({name: e[0], url: url, iconName: "", thumbnail: "", largeThumbnail: "", emblem: "", isDir: e[1], canPreview: false,
@@ -191,6 +197,9 @@ TestCase {
         property int folderStyleRevision: 0
         property var colorTagNames: []
         property var hiddenTags: []
+        function tagName(tag: string): string {
+            return tag;
+        }
         property string homePath: "/home/u"
         property var places: places
         property var prompts: null
@@ -287,7 +296,7 @@ TestCase {
             const s = String(target);
             if (!s.startsWith("file:"))
                 return -1;
-            if (test.tree[s])
+            if (test.entries(s))
                 return 2;
             return fakeHost.kinds[s] ?? 0;
         }
@@ -648,9 +657,41 @@ TestCase {
         compare(ids.filter(i => i === "file:///home/u/My Documents").length, 1, ids.join(", "));
         compare(ids.filter(i => i === "file:///home/u").length, 1, ids.join(", "));
         compare(where.value, "file:///home/u/My Documents");
+        // A root keeps its "/" (counter-review of step 4b, NIT-1): "sftp://host" is no folder.
+        compare(where.key("file:///home/u/"), "file:///home/u");
+        compare(where.key("file:///"), "file:///");
+        compare(where.key("sftp://host/"), "sftp://host/");
+        compare(where.key("sftp://host/srv/"), "sftp://host/srv");
+        compare(where.key("network:/"), "network:/");
         panel.pressDefault();
         compare(fakeHost.answers.length, 1);
-        compare(fakeHost.answers[0].map.uris, ["file:///home/u/My Documents/new%20file.txt"]);
+        compare(fakeHost.answers[0].map.uris.length, 1);
+        compare(decodeURIComponent(fakeHost.answers[0].map.uris[0]), "file:///home/u/My Documents/new file.txt");
+    }
+
+    // The panel is a dialog named by its title (spec common rule 4; review of step 4b, MINOR 9), and its sidebar changes no
+    // tag: the Tags menu does not open, where Files would offer Show Hidden Tag (MINOR 4).
+    function test_the_panel_is_an_accessible_dialog_and_its_sidebar_changes_no_tag(): void {
+        const panel = test.openPanel({title: "Import a Picture", currentFolder: "file:///home/u/Documents"});
+        let dialog = null;
+        let sidebar = null;
+        const walk = item => {
+            if (!dialog && item.Accessible.role === Accessible.Dialog)
+                dialog = item;
+            if (!sidebar && item instanceof Sidebar)
+                sidebar = item;
+            for (let i = 0; i < item.children.length; i++)
+                walk(item.children[i]);
+        };
+        walk(panel.contentItem);
+        verify(dialog !== null, "an item with the Dialog role");
+        compare(dialog.Accessible.name, "Import a Picture");
+        verify(sidebar !== null, "the sidebar");
+        verify(sidebar.choosing);
+        fakeApp.hiddenTags = ["red"];
+        sidebar.openTagMenu("", 10, 10);
+        verify(!panel.menuLayer.visible, "no Tags menu in a panel");
+        fakeApp.hiddenTags = [];
     }
 
     function test_a_drop_shows_the_item_and_moves_nothing(): void {

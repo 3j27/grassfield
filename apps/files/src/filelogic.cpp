@@ -438,24 +438,31 @@ namespace
 
 // The bracket expression opening at pattern[open] ('[' there): whether `c` is in it, with `end` set past its ']'; end = -1
 // when it closes nowhere (that '[' is then a plain character). "[!...]" and "[^...]" negate; a ']' right after the opening
-// is a member; "a-z" is a range.
+// is a member; "a-z" is a range; '\' takes the next character as it is, as GTK's fnmatch does.
 bool inBracket(const QList<uint> &pattern, qsizetype open, uint c, qsizetype &end)
 {
     qsizetype i = open + 1;
     const bool negate = i < pattern.size() && (pattern[i] == U'!' || pattern[i] == U'^');
     if (negate)
         ++i;
+    const auto literal = [&pattern](qsizetype &at) {
+        if (pattern[at] == U'\\' && at + 1 < pattern.size())
+            ++at;
+        return pattern[at];
+    };
     bool found = false;
     for (const qsizetype first = i; i < pattern.size(); ++i) {
         if (pattern[i] == U']' && i > first) {
             end = i + 1;
             return found != negate;
         }
+        const uint low = literal(i);
         if (i + 2 < pattern.size() && pattern[i + 1] == U'-' && pattern[i + 2] != U']') {
-            found = found || (pattern[i] <= c && c <= pattern[i + 2]);
             i += 2;
+            const uint high = literal(i);
+            found = found || (low <= c && c <= high);
         } else {
-            found = found || pattern[i] == c;
+            found = found || low == c;
         }
     }
     end = -1;

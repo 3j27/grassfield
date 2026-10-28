@@ -555,13 +555,14 @@ Window {
                 }
 
                 // Where: the shown folder and the folders enclosing it, then the standard places. One entry per folder: a
-                // folder's URL as QML prints it, without a trailing "/" (the places come encoded and with one, the tab's URL
-                // without either).
+                // folder's URL as QML prints it (a URL may come encoded or decoded) without a trailing "/", except a root's
+                // ("file:///", "sftp://host/", "network:/").
                 ComboBox {
                     id: whereBox
                     function key(url: var): string {
                         const text = String(Qt.url(url));
-                        return text.length > "file:///".length ? text.replace(/\/+$/, "") : text;
+                        const bare = text.replace(/\/+$/, "");
+                        return /^[^:/]+:(\/\/[^/]*)?$/.test(bare) ? text : bare;
                     }
                     visible: !panel.expanded
                     width: Tokens.filesPanelFieldWidth

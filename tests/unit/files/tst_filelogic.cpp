@@ -485,6 +485,11 @@ TEST(PanelFilter, Globs)
     EXPECT_TRUE(matches("img[0-9].png", "img7.png"));
     EXPECT_FALSE(matches("img[0-9].png", "imgx.png"));
     EXPECT_TRUE(matches("[]]x", "]x"));
+    // '\' in a bracket takes the next character as it is (GTK's fnmatch).
+    EXPECT_TRUE(matches("[\\]]x", "]x"));
+    EXPECT_FALSE(matches("[\\]]x", "\\]x"));
+    EXPECT_TRUE(matches("[a\\-z]", "-"));
+    EXPECT_FALSE(matches("[a\\-z]", "m"));
     EXPECT_TRUE(matches("a[b", "A[B"));
     EXPECT_TRUE(matches("\\*.txt", "*.txt"));
     EXPECT_FALSE(matches("\\*.txt", "a.txt"));
