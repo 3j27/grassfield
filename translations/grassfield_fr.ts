@@ -2733,10 +2733,6 @@
         <translation>Écran</translation>
     </message>
     <message>
-        <source>Night Shift</source>
-        <translation>Night Shift</translation>
-    </message>
-    <message>
         <source>Display brightness</source>
         <translation>Luminosité de l’écran</translation>
     </message>
@@ -2759,6 +2755,10 @@
     <message>
         <source>Sound</source>
         <translation>Son</translation>
+    </message>
+    <message>
+        <source>Night Light</source>
+        <translation>Éclairage nocturne</translation>
     </message>
     <message>
         <source>Unmute</source>
@@ -6259,10 +6259,6 @@
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
     </message>
     <message>
         <source>Clear All</source>

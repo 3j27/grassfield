@@ -1,5 +1,5 @@
 # ADR-0005: License of Grassfield code and assets
-Status: Accepted by the owner 2026-10-18 (MIT for Grassfield's own code; root LICENSE) · Date: 2026-10-17 · Decider: owner · Asset/trade-dress questions still need legal review (§14)
+Status: Accepted by the owner 2026-10-18 (MIT for Grassfield's own code; root LICENSE); art licence CC-BY-SA-4.0 decided 2026-10-27 · Date: 2026-10-17 · Decider: owner · The overall trade dress (D5) is kept without a lawyer's review: owner-accepted risk, 2026-10-27
 
 ## Context
 Grassfield reuses or links: Omarchy (MIT), Hyprland headers (BSD-3-Clause), Quickshell (LGPL-3.0-only,
@@ -16,16 +16,18 @@ licence file, so the upstream copyright line is unverified.
 2. GPL-3.0 — copyleft; compatible with everything above, but blocks reuse in MIT Omarchy upstream.
 3. MPL-2.0 — file-level copyleft; less common in this ecosystem.
 
-## Decision (proposed)
+## Decision (accepted)
 - Code (shell QML, plugin C++, bridge, apps, scripts, config): **MIT**, `LICENSE` at the root,
   SPDX headers `SPDX-License-Identifier: MIT` in new source files.
 - Code adapted from Omarchy keeps its MIT notice and attribution in the file header.
-- Assets in `branding/`: **CC-BY-SA-4.0** unless a file states otherwise; provenance per file in
-  `branding/LICENSES.md`. Fonts: SIL OFL only, shipped unmodified.
+- Grassfield-made art (symbolic icons, cursors, wallpaper; `branding/`): **CC-BY-SA-4.0**, decided by the owner on
+  2026-10-27; provenance per file in `branding/LICENSES.md`. The Grassfield logo is excluded: all rights reserved, the
+  owner's mark. (Earlier text attributed the art licence to D-9, which concerned the icon pack, not the licence.)
+  Fonts: SIL OFL only, shipped unmodified.
 - Third-party notices collected in `THIRD_PARTY.md` (Omarchy MIT, Hyprland BSD-3 headers, Quickshell LGPL
   runtime, Qt, KF6).
 
 ## Consequences
 - LGPL obligations for Qt/Quickshell/KIO are met by dynamic linking and unmodified distribution; GPL source
   obligations apply to the ISO (M6) and are flagged there.
-- Not a legal conclusion: needs legal review before any public release.
+- Not a legal conclusion. The owner's legal decisions of 2026-10-27 are in `docs/legal/visual-review.md`; the trade-dress and icon-pack risks are the owner's.

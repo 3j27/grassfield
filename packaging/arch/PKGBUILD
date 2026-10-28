@@ -179,9 +179,10 @@ package_grassfield-desktop() {
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
-  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0; the
+  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo.svg:
+  # all rights reserved, the owner's mark, owner decision 2026-10-27: LicenseRef-Grassfield-logo-all-rights-reserved); Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
-  license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause)
+  license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause LicenseRef-Grassfield-logo-all-rights-reserved)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -190,7 +191,7 @@ package_grassfield-desktop() {
     'kio-extras: network locations and image thumbnails in Files'
     'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
     'udiskie: mounts removable media when they are connected'
-    'hyprsunset: Night Shift (grassfield-nightshift)'
+    'hyprsunset: Night Light (grassfield-nightshift)'
     'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
   )
   # Login screen entry and a login-path check after install and upgrade (GF-015); the SDDM drop-in is a config file.
