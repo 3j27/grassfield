@@ -1121,10 +1121,11 @@ Window {
     }
 
     // KIO's questions (a name that exists, a certificate…), in the window Main.qml places them in. One sheet at a time, as
-    // AppKit queues a window's sheets: a question waits while Go to Folder or a confirmation is open, and comes back after.
+    // AppKit queues a window's sheets and holds them while a menu is open: a question waits while Go to Folder, a
+    // confirmation or a menu is open, and comes after.
     KioSheets {
         prompts: win.app.prompts ?? null
-        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown
+        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
     }
 

@@ -32,6 +32,9 @@ Item {
     // Return cancels and the cancel button is the default one: for a choice the user should not take by habit (connect
     // to a server whose identity can't be verified).
     property bool returnCancels: false
+    // While shown, the keyboard stays in the sheet: whatever takes it elsewhere in the window (a view that focuses itself a
+    // moment later) gives it back. For a sheet with no pop-up of its own (Files' KIO questions).
+    property bool keepsKeyboard: false
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -72,6 +75,11 @@ Item {
         root.canceled();
     }
 
+    function reclaimKeyboard(): void {
+        if (root.visible && root.keepsKeyboard && !panel.activeFocus && root.Window.active)
+            panel.forceActiveFocus();
+    }
+
     function confirm(): void {
         const cb = root.confirmHandler;
         const error = cb ? cb(field.text) : "";
@@ -102,6 +110,10 @@ Item {
         y: Tokens.spacingLg
         Accessible.role: Accessible.Dialog
         Accessible.name: root.title
+        onActiveFocusChanged: {
+            if (!panel.activeFocus && root.keepsKeyboard && root.visible)
+                Qt.callLater(root.reclaimKeyboard);
+        }
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {

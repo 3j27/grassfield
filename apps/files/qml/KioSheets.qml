@@ -21,6 +21,8 @@ Item {
     property var request: ({})
     readonly property var spec: KioSheetsLogic.sheet(root.request)
     property int shownId: -1
+    // The question the choices below belong to: a question hidden a moment (another sheet, a menu) keeps them.
+    property int choicesFor: -1
     property bool applyToAll: false
     property bool alwaysTrust: false
     property bool detailsShown: false
@@ -45,10 +47,13 @@ Item {
         const id = current && current.id !== undefined ? current.id : -1;
         if (id >= 0 && id === root.shownId)
             return;
-        // Another question, or none: the choices made on the last one don't carry over.
-        root.applyToAll = false;
-        root.alwaysTrust = false;
-        root.detailsShown = false;
+        // Another question: the choices made on the last one don't carry over.
+        if (id >= 0 && id !== root.choicesFor) {
+            root.applyToAll = false;
+            root.alwaysTrust = false;
+            root.detailsShown = false;
+            root.choicesFor = id;
+        }
         root.request = current;
         if (id >= 0 && root.spec === null) {
             // A kind this version doesn't know: stop the operation rather than leave it waiting.
@@ -63,7 +68,8 @@ Item {
             sheet.close();
     }
 
-    onShownChanged: root.refresh()
+    // Shown again (another sheet or a menu closed): once what closed it has run (a menu's action may take the focus).
+    onShownChanged: Qt.callLater(root.refresh)
     onPromptsChanged: root.refresh()
     Component.onCompleted: root.refresh()
 
@@ -76,6 +82,7 @@ Item {
 
     Sheet {
         id: sheet
+        keepsKeyboard: true
         title: root.spec ? root.spec.title : ""
         message: root.spec ? root.spec.message : ""
         confirmText: root.spec ? root.spec.confirmText : ""

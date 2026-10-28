@@ -555,6 +555,38 @@ TestCase {
         compare(fakePrompts.replies, [{id: 6, button: "ok"}]);
     }
 
+    // A menu open by the keyboard holds the question too (AppKit holds sheets during menu tracking): Return and Esc stay
+    // the menu's. Once the question shows, a view that takes the keyboard a moment later gives it back to the sheet.
+    function test_kioQuestionWaitsForTheMenu() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        let chosen = "";
+        browser.menuLayer.open([{id: "one", text: "One"}, {id: "two", text: "Two"}], 20, 20, id => chosen = id, browser.tab.view, true);
+        verify(browser.menuLayer.visible);
+        fakePrompts.current = {
+            id: 7,
+            kind: "notice",
+            title: "“Tool” wasn’t opened.",
+            text: "Files doesn’t run programs."
+        };
+        wait(50);
+        verify(!test.kioSheet(browser).visible, "behind the menu: not shown");
+        test.type(Qt.Key_Escape, Qt.NoModifier);
+        verify(!browser.menuLayer.visible, "Esc closed the menu");
+        compare(fakePrompts.replies, [], "Esc was the menu's");
+        tryVerify(() => test.kioSheet(browser).visible, 1000, "the menu closed: the question shows");
+        // The view takes the keyboard after the sheet opened (BrowserTab.focusView, queued by a navigation): the sheet
+        // takes it back.
+        browser.tab.focusView();
+        wait(50);
+        verify(waitForPolish(browser, 1000));
+        test.type(Qt.Key_Return, Qt.NoModifier);
+        compare(fakePrompts.replies, [{id: 7, button: "ok"}]);
+        compare(chosen, "");
+    }
+
     // BrowserTab.dragView: while a system drag started from the tab's view runs, that view stays (Qt Quick uses the item
     // that started the drag after QDrag::exec returns); a view chosen meanwhile applies once the drag has ended and its
     // own handlers have returned (Qt.callLater from dragFinished).
