@@ -397,18 +397,24 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   the neighbours configured at most once per refresh); the release, or the lock the moment it engages, ends it: Tiled
   with the new boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions, duration and the plugin's own
   time in it (total and longest step; each step is also a work span of the frame probe, compositor.md FR54). A window
-  closed, unmapped or no longer Resizing meanwhile leaves the drag (logged once; its limits no longer hold the edge; Tiled
-  again at its end if its record is still Resizing), the others go on (gate C1). Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
+  closed, unmapped or no longer Resizing meanwhile leaves the drag (logged once, no longer set), but its frame from the
+  press and its limits still bound the edge (integrator re-review of ce82fd3: else the other side followed the pointer off
+  the work area; core `dragEdge` does not move an edge with no window left on one side); Tiled again at its end if its
+  record is still Resizing; the others go on (gate C1). Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
   and group). During the drag DesktopFocus and the titlebars ignore the pointer. Feature `tiling-shared-edge`, with
   `tiling-arrange`. The spike's measurement (D34, amended by the integrator): tests/visual/presented-frames.sh
   `shared-edge` (two live windows, three glides with the button held) kept 64.9 % and 58.6 % of frames within 20 ms in a
   loaded nested instance, every long frame paced by a client and none by the compositor (render CPU p95 6.1 and 5.3 ms):
   the neighbours stay live (macOS's live resize, each app redrawing at its own pace) and Windows' placeholders are not
-  built; the shared edge's P3 is no long frame caused by the compositor (frame-attribution.py --gate), the share on time
-  information. The compositor's cost counts its render's CPU and, before the render, the time the event loop was held
-  (the frame probe's beats) or ran the plugin's own work: a stall there shows only as a late render, which read as a
-  client's before (integrator review of a6d04df); the gate fails without those records, and when the animation holds no
-  frame.
+  built. The compositor's cost counts its render's CPU and, before the render, the time the event loop was held (the
+  frame probe's beats, every 1 ms) or ran the plugin's own work: a stall there shows only as a late render, which read as a
+  client's before (integrator review of a6d04df). Measured so, the drag still had compositor-caused long frames at idle (30
+  and 43 in two runs), with the plugin's own work at 0.1-0.2 ms per frame: the loop is held 10-18 ms before a late render
+  by Hyprland's own handling of the resize. The gate, restated by the integrator (D34): the shared edge's P3 passes when
+  (a) the plugin's own work is at most 1 ms in every frame of the drag and (b) its compositor-caused long frames per second
+  are at most 1.25 times those of Hyprland's own resize_on_border drag of one of the same windows with the same glide
+  (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline`, which fails without the loop's or the
+  plugin's records, without the baseline, and when the animation holds no frame; the share on time is information.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
@@ -535,9 +541,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **Owner (L2):** trackpad drags, a HiDPI or portrait output, the real Dock and switcher.
 
 ## Performance (gates affected)
-- P3: popover and suggestions open within one frame budget; the shared-edge drag causes no long frame in the compositor
-  with two live neighbours (ADR-0036 D34 as amended: its share of frames on time follows the apps' redraw and is reported
-  as information); the neighbours are configured at most once per output refresh.
+- P3: popover and suggestions open within one frame budget; the shared-edge drag with two live neighbours costs the plugin
+  at most 1 ms per frame and causes no more compositor long frames per second than 1.25 times Hyprland's own resize of one
+  window (ADR-0036 D34 as amended: its share of frames on time follows the apps' redraw and is reported as information);
+  the neighbours are configured at most once per output refresh.
 - C1: the soak gains tiling actions (arrange, drag to edges, popover open and close, shared-edge drags).
 
 ## Accessibility
