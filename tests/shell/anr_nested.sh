@@ -6,7 +6,9 @@
 # GRASSFIELD_SHELL_DIR, dev plumbing). Checks:
 #   1 within 12 s the shell marks the window's process (`anr status`, a dev hook) and no stock dialog runs (no
 #     /usr/bin/hyprland-dialog process);
-#   2 the stand-in waits, with the pid it reported, as the repository's packaging/session-bin/hyprland-dialog;
+#   2 the stand-in waits with the pid it reported, as `sleep infinity` (its exec), started by this nested Hyprland from
+#     the repository's packaging/session-bin (its environment: this instance's signature, that directory first in PATH;
+#     Hyprland double-forks its dialogs, so it is not the stand-in's parent);
 #   3 SIGCONT (the app answers again): within 4 s Hyprland killed the stand-in and the mark is gone;
 #   4 stopped again until marked, then killed (what Force Quit does): within 4 s the mark is gone.
 # The test closes the windows it opened (EXIT trap, and at the start those of an earlier run). Only this tree's nested
@@ -75,10 +77,12 @@ kill -STOP "$WIN"
 if wait_for 12 marked "$WIN"; then pass "1 a stopped app is marked as not responding (pid $WIN)"; else fail "1 no mark for pid $WIN within 12 s: $(status)"; fi
 [[ $(stock_dialogs) == 0 ]] && pass "1 no stock dialog window opened" || fail "1 a stock \"not responding\" dialog opened"
 standin=$(standin_of "$WIN")
-if [[ -n $standin && $(tr '\0' ' ' <"/proc/$standin/cmdline" 2>/dev/null) == *"$root/packaging/session-bin/hyprland-dialog "* ]]; then
-  pass "2 the stand-in ($standin) waits"
+standin_env() { tr '\0' '\n' <"/proc/$standin/environ" 2>/dev/null; }
+if [[ -n $standin && $(tr '\0' ' ' <"/proc/$standin/cmdline" 2>/dev/null) == "sleep infinity " ]] &&
+  standin_env | grep -qx "HYPRLAND_INSTANCE_SIGNATURE=$sig" && standin_env | grep -q "^PATH=$root/packaging/session-bin:"; then
+  pass "2 the stand-in ($standin) waits as sleep infinity, started by this nested Hyprland from the repository's session-bin"
 else
-  fail "2 the stand-in '$standin' is not the repository's waiting hyprland-dialog"
+  fail "2 the stand-in '$standin' is not this instance's waiting stand-in ($(tr '\0' ' ' <"/proc/$standin/cmdline" 2>/dev/null || echo gone))"
 fi
 kill -CONT "$WIN"
 if wait_for 4 not_marked "$WIN"; then pass "3 the app answers again: the mark is gone"; else fail "3 still marked 4 s after SIGCONT: $(status)"; fi
