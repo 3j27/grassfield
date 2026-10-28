@@ -108,6 +108,8 @@ first_decision("shell/platform/Compositor.qml", "runPendingActivation", R, text=
 def calls(path, name, pattern, text=None):
     body = function(text if text is not None else read(path), name) if name else (text if text is not None else read(path))
     expect(f"{path}: {name or 'the file'} goes through {pattern}", body is not None and re.search(pattern, code(body)) is not None)
+# Only a window in a group of the last reply sends group_front (integrator NIT on PR #38).
+calls("shell/platform/Compositor.qml", "groupForward", r"WindowTiling\.membersOf\(TilingLink\.groups, address\)\.length === 0", compositor)
 calls("shell/platform/Compositor.qml", "activateWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
 calls("shell/platform/Compositor.qml", "unminimizeWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
 calls("shell/platform/Compositor.qml", "showTileGroup", r"groupForward\(step\.address\)", compositor)
@@ -521,6 +523,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/services/TilingHover.qml#SessionState.refuses("tiling popover")#false' \
   'shell/services/TilingSuggest.qml#SessionState.refuses("tiling suggestions")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("tile group forward")#false' \
+  'shell/platform/Compositor.qml# || WindowTiling.membersOf(TilingLink.groups, address).length === 0)#)' \
   'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \
   'shell/overview/Overview.qml#if (target.kind === "window" && !locked)#if (target.kind === "window")' \
   'shell/overview/Overview.qml#if (restore && !locked)\n            Compositor.unminimizeWithGroup(restore);#if (restore)\n            Compositor.unminimizeWithGroup(restore);' \
