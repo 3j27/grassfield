@@ -635,7 +635,8 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   KIO's progress window (4a-12).
 - KD5 Paste is offered for items only: text or an image on the clipboard is not pasted (4a-14).
 - KD6 Return never takes a warning's action or a deletion (Cancel, or the secondary action where there is no Cancel,
-  4a-17); a question takes no input for the double-click interval after it shows, and opens with the keyboard on the sheet,
+  4a-17); a question takes no input for the double-click interval after it shows, a key's auto-repeat answers nothing,
+  and a question opens with the keyboard on the sheet,
   not on a button clicked before (4a-18); a long text scrolls inside the sheet, the buttons stay on screen (4a-19); names
   inside KIO's texts show their direction controls (4a-20).
 

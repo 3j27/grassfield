@@ -1218,7 +1218,9 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
 - **4a-18. One answer, one question** (integrator review of c0dd590, MAJOR 2). The next question shows in the same sheet the
   moment one is answered, so the second click of a double click on Replace, or a Return held down, answered a second job's
   question unseen. **Choice:** a question takes no click and no key for the double-click interval after it shows
-  (`Sheet.holdInput`, `Qt.styleHints.mouseDoubleClickInterval`). Found while testing it: a button the user clicked kept
+  (`Sheet.holdInput`, `Application.styleHints.mouseDoubleClickInterval`), and a sheet answers nothing on a key's
+  auto-repeat, so Return held past the hold does not answer the next question either (integrator re-review: Grassfield's
+  key repeat starts after 250 ms, `config/hypr/grassfield/omarchy.lua:113-114`). Found while testing it: a button the user clicked kept
   the keyboard, so in the next question Return pressed that button (Delete, Keep Both) instead of the default. A sheet
   without a field now opens with the keyboard on itself, and its buttons take the keyboard only by Tab.
 - **4a-19. A long message** (integrator review, MINOR 4). A 200-line worker message made the sheet taller than its window,
