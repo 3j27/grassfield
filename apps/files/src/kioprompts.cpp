@@ -74,8 +74,9 @@ QVariantList describeChain(const QVariantMap &sslErrorData)
             continue;
         }
         out << QVariantMap{{QStringLiteral("readable"), true},
-                           {QStringLiteral("subject"), cert.subjectDisplayName()},
-                           {QStringLiteral("issuer"), cert.issuerDisplayName()},
+                           // A certificate names what its maker chose: shown as a name is (no bidi override, no line break).
+                           {QStringLiteral("subject"), FileLogic::displayName(cert.subjectDisplayName())},
+                           {QStringLiteral("issuer"), FileLogic::displayName(cert.issuerDisplayName())},
                            {QStringLiteral("validFrom"), cert.effectiveDate()},
                            {QStringLiteral("validUntil"), cert.expiryDate()},
                            {QStringLiteral("sha256"), QString::fromLatin1(cert.digest(QCryptographicHash::Sha256).toHex(':').toUpper())},
@@ -143,17 +144,18 @@ int KioPrompts::ask(const QVariantMap &request, QObject *owner, const Answer &an
         });
         return id;
     }
-    m_queue.append({id, r, answer});
+    Pending pending{id, r, answer, owner, owner != nullptr, {}};
     if (owner) {
-        connect(owner, &QObject::destroyed, this, [this, id] {
+        pending.connections << connect(owner, &QObject::destroyed, this, [this, id] {
             withdraw(id);
         });
     }
     if (job) {
-        connect(job, &KJob::finished, this, [this, id] {
+        pending.connections << connect(job, &KJob::finished, this, [this, id] {
             withdraw(id);
         });
     }
+    m_queue.append(pending);
     if (m_queue.size() == 1)
         emit currentChanged();
     return id;
@@ -170,9 +172,15 @@ void KioPrompts::reply(int id, const QVariantMap &reply)
         if (m_queue.at(i).id != id)
             continue;
         const Pending p = m_queue.takeAt(i);
+        forget(p);
         if (i == 0)
             emit currentChanged();
-        p.answer(reply);
+        // After the caller returns: KIO connects to some answers only once it has asked (the certificate's,
+        // usernotificationhandler.cpp:136-140), and a sheet may answer as it opens (a kind it does not know).
+        QTimer::singleShot(0, this, [p, reply] {
+            if (!p.owned || p.owner)
+                p.answer(reply);
+        });
         return;
     }
 }
@@ -182,11 +190,17 @@ void KioPrompts::withdraw(int id)
     for (qsizetype i = 0; i < m_queue.size(); ++i) {
         if (m_queue.at(i).id != id)
             continue;
-        m_queue.removeAt(i);
+        forget(m_queue.takeAt(i));
         if (i == 0)
             emit currentChanged();
         return;
     }
+}
+
+void KioPrompts::forget(const Pending &pending)
+{
+    for (const QMetaObject::Connection &c : pending.connections)
+        disconnect(c);
 }
 
 QVariantMap KioPrompts::current() const
@@ -217,6 +231,7 @@ void GrassfieldAskUserAction::askUserRename(KJob *job,
                                             const QDateTime &mtimeSrc,
                                             const QDateTime &mtimeDest)
 {
+    m_alwaysTrust.reset();
     const ConflictButtons b = conflictButtons(options);
     QString mode;
     if (auto *copyJob = qobject_cast<KIO::CopyJob *>(job)) {
@@ -293,6 +308,7 @@ void GrassfieldAskUserAction::askUserSkip(KJob *job, KIO::SkipDialog_Options opt
 
 void GrassfieldAskUserAction::askUserDelete(const QList<QUrl> &urls, DeletionType deletionType, ConfirmationType confirmationType, QWidget *parent)
 {
+    m_alwaysTrust.reset();
     if (!deleteNeedsAsking(deletionType, confirmationType)) {
         Q_EMIT askUserDeleteResult(true, urls, deletionType, parent);
         return;
@@ -338,8 +354,9 @@ void GrassfieldAskUserAction::requestUserMessageBox(MessageDialogType type,
                                                     const QString &details,
                                                     QWidget *)
 {
-    // The question KIO's http worker asks right after "Continue" on the certificate sheet, on the same job.
-    const bool followUp = m_alwaysTrust.has_value() && QDateTime::currentMSecsSinceEpoch() <= m_alwaysTrustUntil && type == WarningTwoActionsCancel;
+    // The question KIO's http worker asks next after "Continue" on the certificate sheet, on the same job (it may wait
+    // behind another worker's message box: KIO asks them one at a time).
+    const bool followUp = m_alwaysTrust.has_value() && type == WarningTwoActionsCancel;
     if (followUp) {
         const int answer = certificateFollowUpAnswer(*m_alwaysTrust);
         m_alwaysTrust.reset();
@@ -381,16 +398,16 @@ void GrassfieldAskUserAction::requestUserMessageBox(MessageDialogType type,
 
 void GrassfieldAskUserAction::askIgnoreSslErrors(const QVariantMap &sslErrorData, QWidget *)
 {
+    m_alwaysTrust.reset();
     const QVariantMap request{
         {kKind, QStringLiteral("certificate")},
-        {QStringLiteral("host"), sslErrorData.value(QStringLiteral("hostname")).toString()},
-        {QStringLiteral("error"), sslErrorData.value(QStringLiteral("sslError")).toString()},
+        {QStringLiteral("host"), FileLogic::displayName(sslErrorData.value(QStringLiteral("hostname")).toString())},
+        {QStringLiteral("error"), plainText(sslErrorData.value(QStringLiteral("sslError")).toString())},
         {QStringLiteral("chain"), describeChain(sslErrorData)},
     };
     m_prompts->ask(request, this, [this](const QVariantMap &reply) {
         if (reply.value(kButton).toString() == QLatin1String("continue")) {
             m_alwaysTrust = reply.value(QStringLiteral("alwaysTrust")).toBool();
-            m_alwaysTrustUntil = QDateTime::currentMSecsSinceEpoch() + 10000;
             Q_EMIT askIgnoreSslErrorsResult(1);
         } else {
             m_alwaysTrust.reset();

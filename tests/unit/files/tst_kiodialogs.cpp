@@ -338,6 +338,11 @@ TEST_F(KioDialogsTest, TheCertificateSheetAnswersKiosFollowUp)
         EXPECT_EQ(s_prompts->current().value(QStringLiteral("host")).toString(), QStringLiteral("files.example.org"));
         s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(),
                          {{QStringLiteral("button"), QStringLiteral("continue")}, {QStringLiteral("alwaysTrust"), trust}});
+        // The answer comes after the call that gave it (KIO connects to it only once it has asked).
+        EXPECT_TRUE(sslAnswers.isEmpty());
+        ASSERT_TRUE(waitFor([&sslAnswers] {
+            return !sslAnswers.isEmpty();
+        }));
         EXPECT_EQ(sslAnswers, QList<int>{1});
         followUp();
         EXPECT_TRUE(s_prompts->current().isEmpty()) << "the follow-up is not a sheet";
@@ -352,6 +357,9 @@ TEST_F(KioDialogsTest, TheCertificateSheetAnswersKiosFollowUp)
     boxAnswers.clear();
     ask->askIgnoreSslErrors(ssl, nullptr);
     s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("cancel")}});
+    ASSERT_TRUE(waitFor([&sslAnswers] {
+        return !sslAnswers.isEmpty();
+    }));
     EXPECT_EQ(sslAnswers, QList<int>{0});
     followUp();
     ASSERT_EQ(s_prompts->current().value(QStringLiteral("kind")).toString(), QStringLiteral("message"));
@@ -362,11 +370,34 @@ TEST_F(KioDialogsTest, TheCertificateSheetAnswersKiosFollowUp)
     }));
     EXPECT_EQ(boxAnswers, QList<int>{KIO::WorkerBase::Cancel});
 
+    // The follow-up may come late (KIO asks worker message boxes one at a time): still answered, with no time limit.
+    sslAnswers.clear();
+    boxAnswers.clear();
+    ask->askIgnoreSslErrors(ssl, nullptr);
+    s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(),
+                     {{QStringLiteral("button"), QStringLiteral("continue")}, {QStringLiteral("alwaysTrust"), false}});
+    ASSERT_TRUE(waitFor([&sslAnswers] {
+        return !sslAnswers.isEmpty();
+    }));
+    QEventLoop late;
+    QTimer::singleShot(1500, &late, &QEventLoop::quit);
+    late.exec();
+    followUp();
+    EXPECT_TRUE(s_prompts->current().isEmpty());
+    ASSERT_TRUE(waitFor([&boxAnswers] {
+        return !boxAnswers.isEmpty();
+    }));
+    EXPECT_EQ(boxAnswers, QList<int>{KIO::WorkerBase::SecondaryAction});
+
     // Continue, then another kind of question first: it is a sheet, and "Always trust" answers nothing after it.
+    sslAnswers.clear();
     boxAnswers.clear();
     ask->askIgnoreSslErrors(ssl, nullptr);
     s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(),
                      {{QStringLiteral("button"), QStringLiteral("continue")}, {QStringLiteral("alwaysTrust"), true}});
+    ASSERT_TRUE(waitFor([&sslAnswers] {
+        return !sslAnswers.isEmpty();
+    }));
     ask->requestUserMessageBox(KIO::AskUserActionInterface::Information, QStringLiteral("Note"), QString(), QString(), QString());
     ASSERT_EQ(s_prompts->current().value(QStringLiteral("kind")).toString(), QStringLiteral("message"));
     s_prompts->reply(s_prompts->current().value(QStringLiteral("id")).toInt(), {{QStringLiteral("button"), QStringLiteral("ok")}});

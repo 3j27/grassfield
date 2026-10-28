@@ -126,7 +126,7 @@ Item {
                     return "";
                 const lines = root.request.error ? [root.request.error, ""] : [];
                 // The locale's long date without the weekday ("1 January 2026", "January 1, 2026").
-                const format = Qt.locale().dateFormat(Locale.LongFormat).replace(/d{4}[,\s]*/g, "").trim();
+                const format = Qt.locale().dateFormat(Locale.LongFormat).replace(/d{4}[,\s]*/g, "").replace(/[,\s]+$/, "").trim();
                 return lines.concat(KioSheetsLogic.chainLines(root.request.chain, d => {
                     const date = new Date(d);
                     return isNaN(date.getTime()) ? qsTr("unknown") : date.toLocaleDateString(Qt.locale(), format);

@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QVariantMap>
 
 #include <functional>
@@ -55,7 +56,12 @@ private:
         int id = 0;
         QVariantMap request;
         Answer answer;
+        // The owner, if there was one when it was asked (an answer never reaches one that is gone).
+        QPointer<QObject> owner;
+        bool owned = false;
+        QList<QMetaObject::Connection> connections;
     };
+    void forget(const Pending &pending);
     void withdraw(int id);
     QList<Pending> m_queue;
     int m_next = 1;
@@ -97,10 +103,10 @@ public:
 
 private:
     KioPrompts *m_prompts;
-    // After "Continue" on the certificate sheet: KIO's http worker asks at once, on this job, whether to accept the
-    // certificate forever or for 30 minutes; the sheet's "Always trust" box answers (KioPromptLogic::certificateFollowUpAnswer).
+    // After "Continue" on the certificate sheet: KIO's http worker's next question on this job is whether to accept the
+    // certificate forever or for 30 minutes (http.cpp:310-327, the only sslError caller in KIO 6.31); the sheet's "Always
+    // trust" box answers it (KioPromptLogic::certificateFollowUpAnswer). Any other question first clears it.
     std::optional<bool> m_alwaysTrust;
-    qint64 m_alwaysTrustUntil = 0;
 };
 
 // KIO asks for an application when none is set for a document's type: Files says so (Open With lists the applications).
