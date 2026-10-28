@@ -279,7 +279,9 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
   and checks their signatures as an install does, the plan names each one's file, and `pacman -Qlpq -- <that file>` must
   list an application entry (`/usr/share/applications/<id>.desktop`); an installed name is read from pacman's database
   (`pacman -Qlq`). A name that owns none is refused before anything is installed.
-- Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12); every name
+- Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12), and an
+  install names nothing it lists at all: a name IgnorePkg holds back is refused by name (5), whatever pacman would answer
+  about it, since `pacman -S --noconfirm` would update it (re-review of 64cdaa9); every name
   matches the pattern of e.5 and is a package a repository has by that exact name (`pacman -Slq`; a name only provided by
   another package, such as `sh`, is refused). One run at a time: a lock only root can open (`/run/grassfield-store/helper.lock`,
   0600), refused at once when held. Its descriptor is closed for every program the helper starts (`9<&-`), so neither pacman
@@ -935,3 +937,14 @@ merge, each answered here:
 - **The lock's descriptor reached pacman:** every program the helper starts gets `9<&-`; the test checks that only the
   helper holds the lock while pacman and a scriptlet run, and that a process a scriptlet leaves running neither holds it nor
   makes the next run busy.
+
+Opus security re-review of 19d2e9e..64cdaa9 (integrator, 2026-10-28): PASS, one MINOR left before merge, answered here:
+- **An app IgnorePkg holds back, asked for by name** (a direct pkexec call with the admin password): its "[ignored]" line
+  passes the `-Qu` check, and `pacman -S --noconfirm` would update it past the hold. The review read from pacman's source
+  that `pacman -S --print` skips such a target with an empty plan. Measured on archlinux:base (pacman 7.1), with the
+  question reading `/dev/null` the plan lists the target at the new version, so 64cdaa9's installed-package check already
+  refused it (exit 5, "would replace the installed gs-app with 2-1 alone", `gs-app` unchanged). The helper now refuses an
+  install of any name `pacman -Qu` lists, "[ignored]" included, by name and before the plan (b.1, exit 5), so the refusal
+  no longer depends on how pacman answers; `store_helper.sh` installs `gs-app` by name while IgnorePkg holds it at 1 with 2
+  in the repository and expects exit 5, `gs-app` unchanged and that reason in the log. The sheet's scroll reset on a new
+  request, the one mutant the re-review saw survive, has its check in `tst_authdialog` test_13.
