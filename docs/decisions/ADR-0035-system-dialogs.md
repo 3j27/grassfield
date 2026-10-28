@@ -372,7 +372,8 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
 - **4b-2. One QML code base.** The panels live in Files' QML directory and the portal loads them from there, so a panel is the
   browser itself, not a copy: the views, the sidebar, Glance, Files' KIO sheets (D-12 a). A tab learns it browses for a panel
   (`BrowserTab.chooser`) and then has no file operation (no Trash, Rename, Copy, Paste, tags or quick actions; the
-  application does what it wants with what it gets), a double-click on a file, Return and Esc are the panel's, a drop shows
+  application does what it wants with what it gets; a sidebar tag takes no drop and has no menu, review of step 4b, MINOR 4),
+  a double-click on a file, Return and Esc are the panel's, a drop shows
   the item instead of moving it, "/" and "~" open Go to Folder; the view is the panel's own for its application (macOS keeps
   a panel's view apart from Finder's), the arrangement of a folder stays Files'.
 - **4b-3. Whose window a panel is.** Question: which Wayland app id does a panel carry? Options: (a) its own
@@ -381,14 +382,19 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   panel is a window of its application (Dock, menu bar, Force Quit count it there). Qt reads the app id when it makes the
   window, so the portal sets it just before (`FileChooser::present`). A panel's class is then any application's, so the
   session's rule that removes the compositor plugin's titlebar from a window that draws its own frame matches the panel's xdg
-  tag (`file-panel`) whatever its class (`gf-client-chrome-panel`, a `config/hypr` change).
+  tag (`file-panel`) whatever its class (`gf-client-chrome-panel`, a `config/hypr` change). This departs from the class list
+  of the 2026-10-23 review (review of step 4b, NIT 13): any client that sets that xdg tag on its own window loses the plugin's
+  titlebar on that window. It changes nothing else (no other window, no privilege; a client already draws what it wants in
+  its own window), and the class list could not name a panel whose class is its application's.
 - **4b-4. Modal to what.** The panel is xdg-dialog's modal (Hyprland dims and blocks the parent) when the application asked
   (`modal`, true by default) and gave a Wayland parent, imported with xdg-foreign v2 through KWindowSystem
   (`setMainWindow`, which waits for the toplevel; 4b-13). Qt's window modality without a transient parent blocks no other
   window of the process: two applications' panels open at once stay usable. With no usable parent, the panel is a free
   window: every window floats in the session, and Hyprland centres it.
 - **4b-5. Filters.** Items a filter refuses are dimmed (at the disabled opacity) and cannot be selected, not hidden (macOS); a
-  glob matches the whole name without regard to case (a "*.PDF" is a PDF); a MIME rule matches the type, a type it inherits
+  glob matches the whole name without regard to case (a "*.PDF" is a PDF), in one pass with no regular expression, a filter's
+  patterns at most 4096 characters together, so no filter can stall the panels that share one thread (review of step 4b,
+  MINOR 8); a MIME rule matches the type, a type it inherits
   from, or "major/*". One filter shows no pop-up (nothing to choose); several show one, "Show:" in an Open panel and
   "Format:" in a Save panel, where the name's extension follows the format chosen (macOS).
 - **4b-6. The Save panel.** Compact by default (Save As, Where), expanded to the browser by the disclosure button, as the
@@ -415,11 +421,22 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   panels' QML loads at the first request, not at start: an idle start costs no QML and owns its name at once. The process
   quits only when idle (60 s): Qt's quit at the last window closed and KIO's quit locks are off (found by the integration
   test: it quit as its first panel closed). No `Restart=`: D-Bus activation starts it again at the next call, after a crash
-  too, and the call in flight ends with response 2.
-- **4b-12. The unit's hardening.** `ProtectSystem=strict` with the home, the runtime directory (KIO's sockets, Wayland),
-  `/tmp`, `/var/tmp` and the removable media writable (New Folder anywhere the user may write); no `PrivateTmp` (a panel must
-  show the real `/tmp`); no `MemoryDenyWriteExecute` (the QML engine's JIT) and no `SystemCallFilter` (KIO's workers,
-  unverified under systemd in this environment); the network stays open for KIO's network places.
+  too, and the call in flight ends with response 2. Idle, it gives up its bus name before it quits, so a call on its way
+  starts a new process instead of reaching one that is quitting (review of step 4b, MINOR 6); a call that reached it before
+  is served and the name taken back, except under systemd, which stops a `Type=dbus` unit once its name goes: that call ends
+  with response 2, a window of microseconds at the end of each idle period. A Close of a forwarded request reaches x-d-p-gtk
+  after the forwarded call (one connection, D-Bus keeps its order), and x-d-p-gtk exports its Request object while it
+  handles that call, so the Close finds it (review of step 4b, NIT 11).
+- **4b-12. The unit's hardening.** Question: what may the panels write? Options: (a) `ProtectSystem=strict` with a list of
+  writable places (the home, the runtime directory, `/tmp`, `/var/tmp`, the removable media) and `UMask=0077`, the first draft;
+  (b) `ProtectSystem=full` (`/usr`, `/boot`, `/efi` and `/etc` read-only) and the user's own umask. **Choice: (b)** (review of
+  step 4b, MINOR 5): a Save panel saves, and its New Folder works, wherever the user may write, a disk mounted under `/srv`
+  or `/data` too, and a folder it makes gets the mode one made in Files gets, as an application's panel writes anywhere the
+  user can on macOS; (a) made such a disk read-only and New Folder's folders private. Kept: `NoNewPrivileges`,
+  `RestrictSUIDSGID`, `RestrictRealtime`, `LockPersonality`, `SystemCallArchitectures=native`, `MemoryMax`, `TasksMax`. No
+  `PrivateTmp` (a panel must show the real `/tmp`); no `MemoryDenyWriteExecute` (the QML engine's JIT) and no
+  `SystemCallFilter` (KIO's workers, unverified under systemd in this environment); the network stays open for KIO's
+  network places.
 - **4b-13. The parent window.** Options: (a) KWindowSystem's `setMainWindow` (KDE Frameworks 6.31, LGPL-2.1-or-later, already
   installed as a dependency of KIO; its Wayland plugin imports the handle with xdg-foreign v2 once the toplevel exists); (b)
   xdg-foreign written by hand on libwayland-client, as `apps/windowchrome.h` writes xdg-toplevel-tag. **Choice: (a)**: no
@@ -429,8 +446,14 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   the title is the panel's message line (one line of plain text) and its window title.
 - **4b-15. What an application may pass.** Its texts are one line of plain text, GTK's mnemonic marker ("_Open") and the bidi
   embedding, override and isolate controls removed, capped at 1024 characters; at most 64 filters, 16 choices and 4096 file
-  names; at most 16 requests open at once (one more ends with response 2). A suggested name is a name (the part after the
-  last "/"), a folder is an absolute path.
+  names (more ends the request with response 2, never a part of them: review of step 4b, NIT 10); at most 16 requests open
+  at once (one more ends with response 2). A suggested name is a name (the part after the last "/"), a folder is an absolute
+  path. What comes back is the application's own: the filter returned is the one it gave, byte for byte, and a choice or
+  option id too long to return whole is dropped, never cut (only the panel's copy of a name is made plain; review of step
+  4b, MINOR 7). An option of the wrong D-Bus type is no option: any process on the bus can call the backend directly,
+  without the frontend's type checks, and reading it as its type would crash the process (review of step 4b, MINOR 3). A
+  panel's answer is read as QML prints a URL, a space as it is (review of step 4b, BLOCKER 1: a strict reading refused any
+  path with a space).
 
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.

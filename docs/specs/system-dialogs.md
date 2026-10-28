@@ -103,7 +103,7 @@ Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decis
   window (Dock, menu bar, Force Quit), else Files'; modal (xdg-dialog) when the application asked and gave a Wayland parent,
   imported with xdg-foreign v2 through KWindowSystem (4b-3, 4b-4, 4b-13).
 - FC5: the views, sidebar, path pop-up (the toolbar's folder button), search, Glance on Space, Go to Folder, hidden files and,
-  per application in `portal-filechooser.json`, the last folder, the view and the Save panel's size. Items a filter refuses
+  per application in `portal-filechooser.json`, the last folder, the view and whether the Save panel was expanded. Items a filter refuses
   are dimmed and cannot be selected (4b-5); a panel changes no file but New Folder (Save, folder Open, SaveFiles; 4b-7).
 - FC6: one filter shows no pop-up; several show "Show:" (Open) or "Format:" (Save, where the extension follows); each choice is
   a pop-up or a check box.
