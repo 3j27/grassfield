@@ -1,4 +1,8 @@
 {"version": 1, "channel": "stable", "serial": 1793095200, "generated": "2026-10-27T10:00:00Z",
+ "omarchy": {"tag": "v4.0.4", "commit": "c668141e9c42b13c80c9ca4ea108e11708c5e8a5",
+             "files": {"bin/omarchy-install-gaming-steam": "6f55dc362151216a781d5fcf08c2244cec732389daf2021c9a1cf796ba25a5a6",
+                       "bin/omarchy-remove-gaming-steam": "ebeb0cb770a0d5f441732dd88ca9c05a1e9a95b7ff637d1110371e9f9c6d8880",
+                       "install/helpers/steam.sh": "e6664d747400f0be64ace8052a650b11a201656927ee14d70efcaabcbca29458"}},
  "sections": [
   {"id": "discover", "title": {"en": "Discover", "fr": "Découvrir"}, "symbol": "discover", "blocks": [
     {"kind": "hero", "items": [{"app": "org.gimp.GIMP", "eyebrow": {"en": "Image editing", "fr": "Retouche d'images"},

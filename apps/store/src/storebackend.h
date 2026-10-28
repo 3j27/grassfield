@@ -50,6 +50,9 @@ struct Snapshot {
     QHash<QString, QStringList> entries; // package -> the desktop ids of its entries in /usr/share/applications
     DenyList deny;                       // what is never removed (removal.h)
     QList<view::WebAppEntry> webApps;
+    // The catalog's first pinned Omarchy file that differs in the installed Omarchy ("" when they all match, ADR-0037 g):
+    // no setup runs then (b.2).
+    QString omarchyDiffers;
     QList<StoreApp> apps;
     QHash<QString, int> index; // app id -> apps
     QHash<QString, QString> tints; // app id -> hero tint (#rrggbb)
@@ -205,11 +208,16 @@ private:
     // A web app of Installed that our catalog does not list ("webapp:<its launcher's file name>"): opened and removed too.
     std::optional<view::WebAppEntry> otherWebApp(const QString &id) const;
     // Why `a` cannot be installed now, or "": dev (no fake program in a dev session), missing (Omarchy's commands or the
-    // helper are not there), offline, icon (a web app's icon not cached yet), source (its source cannot install yet).
+    // helper are not there), offline, icon (a web app's icon not cached yet), omarchyChanged (a setup: the installed
+    // Omarchy differs from the catalog's pins), source (its source cannot install yet).
     QString getBlock(const StoreApp &a) const;
     // "" when "Uninstall…" is offered for `a`, else why not (SR22): system, omarchy, grassfield, dependency, notApp,
-    // notFromRepository, listsMissing, notInstalled, source, dev, missing.
+    // notFromRepository, listsMissing, notInstalled, source, dev, missing, omarchyChanged.
     QString uninstallBlock(const StoreApp &a) const;
+    // A setup's path (b.2): "" when Omarchy's terminal and grassfield-store-run can run it now, else dev, missing or
+    // omarchyChanged.
+    QString terminalBlock() const;
+    SetupCheck setupCheck(const StoreApp &a, bool install) const;
     QVariantMap withActions(QVariantMap map, const StoreApp &a) const;
     PlanTools planTools() const;
     void checkStaleLock();

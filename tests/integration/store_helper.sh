@@ -16,7 +16,12 @@
 # pkexec run the helper; most cases run it as root directly, the way pkexec leaves it (an environment of its own, which
 # the helper drops). One real app from Arch's mirror (xterm) is installed and removed through pkexec. Last, the Store's own
 # plan check and queue (apps/store/src) drive it all as a user (`carol`), with Omarchy's own web app commands
-# (tests/integration/store_e2e.cpp, built here against the repository's sources).
+# (tests/integration/store_e2e.cpp, built here against the repository's sources), and an Omarchy setup of the catalog
+# (`omarchy-install-browser firefox` and `omarchy-remove-browser firefox` from the mounted tree, unchanged) through the
+# Store's terminal path and the real grassfield-store-run (step 3b1, ADR-0037 b.2): a container has no terminal, so a
+# stand-in runs the launcher's command with `bash -c`, detached; carol's sudo asks no password here (the prompt in Omarchy's
+# terminal is the owner's check, A12); the `firefox` it installs is a small test package of a local repository listed
+# before Arch's.
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
@@ -369,7 +374,7 @@ say "A8 the Store's own plan check and queue end to end (apps/store/src, tests/i
 # The real pkexec, helper, polkit and pacman, and Omarchy's own web app commands (from the mounted tree), driven by the
 # Store's code as a user would through its window. carol may run the action without a password (a test rule): what is
 # tested here is the Store's side, the password path is the section above.
-quiet pacman -S --noconfirm --needed qt6-base gcc pkgconf desktop-file-utils gtk-update-icon-cache ||
+quiet pacman -S --noconfirm --needed qt6-base gcc pkgconf desktop-file-utils gtk-update-icon-cache sudo ||
   { echo "FAIL: build tools"; tail -5 "$W/log"; exit 1; }
 src=/src/apps/store/src
 /usr/lib/qt6/moc "$src/operations.h" -o "$W/moc_operations.cpp"
@@ -458,6 +463,44 @@ out=$(e2e recover)
 expect "recovery: no exit file, no helper running, one of two there -> interrupted, 1 of 2" \
   eval 'has "$out" "recovered=interrupted" && has "$out" "present=1/2"'
 expect "  the record is gone once read" eval '! grep -q operation /home/carol/.local/state/grassfield/store.json'
+
+say "A8 an Omarchy setup through the Store's terminal path and grassfield-store-run (step 3b1), as carol"
+install -Dm755 /src/packaging/store/grassfield-store-run /usr/lib/grassfield/grassfield-store-run
+# The test `firefox`, from a repository listed before Arch's own (the recipe asks pacman for that name).
+mkpkg firefox 1 "" yes
+mkdir -p /srv/gssetup && cp /home/builder/pkg/firefox-1/*.pkg.tar.zst /srv/gssetup/
+quiet repo-add /srv/gssetup/gssetup.db.tar.gz /srv/gssetup/*.pkg.tar.zst
+sed -i '/^\[core\]/i [gssetup]\nSigLevel = Optional TrustAll\nServer = file:///srv/gssetup\n' /etc/pacman.conf
+quiet pacman -Sy
+expect "pacman would take firefox from the test repository" test "$(pacman -Sp --print-format %r firefox 2>/dev/null)" == gssetup
+printf 'carol ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/90-store-e2e && chmod 440 /etc/sudoers.d/90-store-e2e
+# Omarchy's terminal, without a terminal: its command as its own bash -c, detached (the launcher's `setsid`), its output
+# kept for the log.
+printf '%s\n' '#!/bin/bash' 'setsid bash -c "$1" </dev/null >>/work/terminal.log 2>&1 &' >"$W/terminal" && chmod 755 "$W/terminal"
+# The pins the catalog would carry: here every file of the tree's bin/ and install/helpers/ (the catalog pins only what its
+# setups reach), as the Store writes them for the script.
+(cd /omarchy && find bin install/helpers -type f -print0 | sort -z | xargs -0 sha256sum) >"$W/pins" && chmod 644 "$W/pins"
+sed '1s/^[0-9a-f]\{8\}/00000000/' "$W/pins" >"$W/pins-changed"
+setup() { runuser -u carol -- env -i HOME=/home/carol USER=carol PATH=/omarchy/bin:/usr/bin XDG_RUNTIME_DIR="/run/user/$cuid" \
+  OMARCHY_PATH=/omarchy STORE_E2E_TERMINAL="$W/terminal" QT_QPA_PLATFORM=offscreen "$W/store_e2e" "$@" 2>>"$W/e2e.err"; }
+out=$(setup setup-install org.mozilla.firefox omarchy-install-browser firefox firefox "$W/pins-changed")
+sed 's/^/    /' <<<"$out"
+expect "pins that differ from the installed Omarchy: refused by the plan, naming the file, nothing run" \
+  eval 'grep -q "^plan=omarchyChanged packages= detail=$(head -1 "$W/pins" | cut -c67-)\$" <<<"$out" && ! pacman -Q firefox >/dev/null 2>&1'
+out=$(setup setup-install org.mozilla.firefox omarchy-install-browser firefox firefox "$W/pins")
+sed 's/^/    /' <<<"$out"
+expect "omarchy-install-browser firefox: the plan names it, the recipe ran in the terminal's place, done (exit 0 and the state)" \
+  eval 'has "$out" "plan=none packages=firefox detail=" && has "$out" "result=done" && test "$(pacman -Q firefox)" == "firefox 1-1"'
+expect "  the recipe's own changes: Omarchy's Firefox policy as root, the Wayland setting in carol's files" \
+  eval 'test -f /usr/lib/firefox/distribution/policies.json && grep -qx MOZ_ENABLE_WAYLAND=1 /home/carol/.config/environment.d/omarchy-firefox-wayland.conf'
+expect "  Omarchy's update lock was held while it ran (by the script), and free after" \
+  eval 'has "$out" "lock-while-running=1" && has "$out" "lock-after=0"'
+expect "  the script's files are gone once the Store read them" eval 'test -z "$(ls -A /run/user/$cuid/grassfield/store)"'
+out=$(setup setup-remove org.mozilla.firefox omarchy-remove-browser firefox firefox "$W/pins")
+sed 's/^/    /' <<<"$out"
+expect "omarchy-remove-browser firefox: the plan names it, done, firefox gone" \
+  eval 'has "$out" "plan=none packages=firefox detail=" && has "$out" "result=done" && ! pacman -Q firefox >/dev/null 2>&1'
+[[ -s $W/terminal.log ]] && { echo "  the terminal's last lines:"; tail -4 "$W/terminal.log" | sed 's/^/    /'; }
 [[ -s $W/e2e.err ]] && { echo "  the driver's messages:"; head -5 "$W/e2e.err" | sed 's/^/    /'; }
 
 say "result"

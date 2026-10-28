@@ -411,11 +411,12 @@ package_grassfield-compositor() {
 }
 
 package_grassfield-store() {
-  pkgdesc="Grassfield Store: find, install, open and uninstall apps from Arch's repositories, Omarchy's and its web apps"
+  pkgdesc="Grassfield Store: find, install, open and uninstall apps from Arch's repositories, Omarchy's, its setups and web apps"
   # ADR-0037 f: grassfield-desktop of the same build (design system, translations, menu bridge); polkit (pkexec, the helper's
   # action, ADR-0037 b.1); gnupg (gpgv: the catalog's signature); kimageformats (the JPEG XL icons of Arch's app data, S3).
-  # Omarchy's commands (web apps) and pacman come with the system. The Store's own helper is its only root code: the
-  # security review of step 3 covers it and its policy.
+  # Omarchy's commands (web apps, its terminal and setups' recipes, b.2), pacman, flock and sha256sum (grassfield-store-run)
+  # come with the system. The Store's own helper is its only root code: the security review of step 3 covers it and its
+  # policy, and grassfield-store-run (run as the user).
   depends=("grassfield-desktop=$pkgver-$pkgrel" polkit gnupg kimageformats qt6-declarative qt6-wayland zlib)
   optdepends=(
     "archlinux-appstream-data: Arch's app data on this computer (else the Store fetches it from your package mirror and checks it)"

@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -323,6 +324,28 @@ TEST(StoreBackend, RealSignedCatalog)
     for (const QVariant &c : backend.categories())
         ids.append(c.toMap().value(QStringLiteral("id")).toString());
     EXPECT_TRUE(ids.contains(QStringLiteral("graphics")));
+
+    // A setup (b.2): no recipe in the installed Omarchy, hidden; with the files the catalog pins, offered (offline aside);
+    // once one of them differs, refused until the catalog has checked the new one.
+    const QString steam = QStringLiteral("com.valvesoftware.Steam.desktop");
+    EXPECT_TRUE(backend.app(steam).isEmpty()) << "Omarchy has no such recipe here";
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    for (const QString &rel : {QStringLiteral("bin/omarchy-install-gaming-steam"), QStringLiteral("bin/omarchy-remove-gaming-steam"),
+                               QStringLiteral("install/helpers/steam.sh")}) {
+        const QString file = s.path(QStringLiteral("fixture/omarchy/")) + rel;
+        QDir().mkpath(QFileInfo(file).path());
+        storetest::script(file, "# made up for the Store's tests: " + rel.toUtf8());
+    }
+    backend.refresh();
+    ASSERT_TRUE(settle(backend));
+    ASSERT_FALSE(backend.app(steam).isEmpty());
+    const QString get = backend.actions(steam).value(QStringLiteral("get")).toString();
+    EXPECT_TRUE(get.isEmpty() || get == QLatin1String("offline")) << qPrintable(get);
+    EXPECT_EQ(backend.actions(steam).value(QStringLiteral("uninstall")).toString(), QStringLiteral("notInstalled"));
+    storetest::script(s.path(QStringLiteral("fixture/omarchy/install/helpers/steam.sh")), "# changed by an Omarchy update");
+    backend.refresh();
+    ASSERT_TRUE(settle(backend));
+    EXPECT_EQ(backend.actions(steam).value(QStringLiteral("get")).toString(), QStringLiteral("omarchyChanged"));
 
     QFile::remove(served + QStringLiteral(".sig"));
     QFile::copy(keys + QStringLiteral("/revoked.sig"), served + QStringLiteral(".sig"));
