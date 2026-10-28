@@ -15,7 +15,8 @@ PopupMenu {
     model: [
         {id: "about", text: qsTr("About This Computer")},
         {separator: true},
-        {id: "settings", text: qsTr("Settings…")},
+        // Software Update's releases after the label (ADR-0033 U19).
+        {id: "settings", text: qsTr("Settings…"), detail: SoftwareUpdate.menuDetail},
         {separator: true},
         // Settings > Menu Bar > Recent items "None" hides the submenu.
         ...(Settings.menubarRecentItems > 0 ? [{id: "recentMenu", text: qsTr("Recent Items"), submenu: RecentItems.menu()}, {separator: true}] : []),

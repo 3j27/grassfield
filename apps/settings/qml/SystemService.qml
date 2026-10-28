@@ -50,6 +50,17 @@ QtObject {
         return root.backend.act(what, spec, tag);
     }
 
+    // A program started and left running (Backend.launch: Software Update's Update Now, Log Out…, Restart…). Returns true when
+    // it started.
+    function launch(what: string, argv: var): bool {
+        if (root.dev) {
+            console.info("dev guard: " + what + " suppressed");
+            root.suppressedNote = true;
+            return false;
+        }
+        return root.backend.launch(what, argv);
+    }
+
     readonly property Connections results: Connections {
         target: root.backend
 
