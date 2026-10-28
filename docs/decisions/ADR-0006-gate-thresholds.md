@@ -45,9 +45,9 @@ D-1 to D-13 (D-5 covers the acceptance of ADRs only), so they are not recorded a
 3. **`docs/specs/alpha.md` waiver (PROPOSED, owner sign-off pending).** The M2 alpha acceptance list was replaced in
    practice by the per-surface specs in docs/specs/, their nested scenarios and the final audit (docs/audits/final-1.0/).
    Proposal: judge the 1.0 release candidate against those specs and the gate table, with no separate alpha list.
-4. **M5 defect threshold, Q-18 (PROPOSED, owner sign-off pending).** Zero open P0 and zero open P1 defects in
-   docs/audits/final-1.0/13-defects-and-risks.md unless the owner waives the item in writing; P2 defects listed with an
-   owner-visible workaround. This is the conservative reading the audit proposed.
+4. **M5 defect threshold, Q-18 (decided by the owner on 2026-10-27).** 0 blocker, 0 high-severity defect in security
+   or data loss, and at most 5 other high-severity defects. (Same wording as master-prompt §1.1 and the M5 exit; it
+   replaces the earlier proposal of zero open P0 and P1.)
 5. **Milestone approvals (PROPOSED, owner sign-off pending).** M0 to M2 (with item 3), then M3 and M4 once the remediation
    programme (docs/audits/final-1.0/15-remediation-plan.md) closes and F1 is signed per surface; M5 and M6 keep the
    owner-only items (L2 gates, R2, R3, C1 7 days, 30-day dogfood, hardware matrix, legal review). No milestone is approved

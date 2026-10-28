@@ -4,6 +4,8 @@
 //   grassfield-clipboard-helper --display <absolute socket> --state <dir> --runtime <dir> [--retention <ms>] [--history-store 0|1]
 //   grassfield-clipboard-helper --clear-pinned --state <dir>          deletes the pinned store (the history being off), then exits
 //   grassfield-clipboard-helper --clear-history --state <dir>         deletes the history store (the history being off), then exits
+//   grassfield-clipboard-helper --apply-clears --state <dir> [--cleared-at <ms>] [--pinned-cleared-at <ms>]
+//                                      carries out the settings' clears not carried out yet (the history being off), then exits
 //   grassfield-clipboard-helper --thumbnail <png|jpeg|webp> <max px>  the image worker: one image on stdin, a PNG on stdout
 //
 // The display is only ever the socket named by --display: WAYLAND_DISPLAY and WAYLAND_SOCKET are removed from the environment
@@ -29,6 +31,7 @@
 #include <QFile>
 #include <QSocketNotifier>
 
+#include <algorithm>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
@@ -96,6 +99,7 @@ int usage()
                          "[--retention <ms>] [--history-store 0|1]\n"
                          "       grassfield-clipboard-helper --clear-pinned --state <dir>\n"
                          "       grassfield-clipboard-helper --clear-history --state <dir>\n"
+                         "       grassfield-clipboard-helper --apply-clears --state <dir> [--cleared-at <ms>] [--pinned-cleared-at <ms>]\n"
                          "       grassfield-clipboard-helper --thumbnail <png|jpeg|webp> <max px>\n");
     return 2;
 }
@@ -117,6 +121,14 @@ int main(int argc, char **argv)
     Helper::Options options;
     bool clearPinned = false;
     bool clearHistory = false;
+    bool applyClears = false;
+    // A clear time: digits only, 0 or more (the settings' milliseconds).
+    const auto clearTime = [](const char *text, qint64 *out) {
+        const QByteArray value(text);
+        bool ok = !value.isEmpty() && std::all_of(value.cbegin(), value.cend(), [](char c) { return c >= '0' && c <= '9'; });
+        *out = ok ? value.toLongLong(&ok) : -1;
+        return ok;
+    };
     for (int i = 1; i < argc; ++i) {
         const QByteArray arg(argv[i]);
         const bool hasValue = i + 1 < argc;
@@ -124,6 +136,15 @@ int main(int argc, char **argv)
             clearPinned = true;
         else if (arg == "--clear-history")
             clearHistory = true;
+        else if (arg == "--apply-clears")
+            applyClears = true;
+        else if (arg == "--cleared-at" && hasValue) {
+            if (!clearTime(argv[++i], &options.clearedAtMs))
+                return usage();
+        } else if (arg == "--pinned-cleared-at" && hasValue) {
+            if (!clearTime(argv[++i], &options.pinnedClearedAtMs))
+                return usage();
+        }
         else if (arg == "--display" && hasValue)
             options.display = QByteArray(argv[++i]);
         else if (arg == "--state" && hasValue)
@@ -143,6 +164,10 @@ int main(int argc, char **argv)
         return Helper::clearPinned(options.stateDir);
     if (clearHistory)
         return Helper::clearHistoryStore(options.stateDir);
+    if (applyClears) {
+        Helper::applyClears(options.stateDir, options.clearedAtMs, options.pinnedClearedAtMs);
+        return 0;
+    }
     if (!options.runtimeDir.startsWith(QLatin1Char('/')))
         return usage();
     if (options.display.isEmpty() || options.display.at(0) != '/') {

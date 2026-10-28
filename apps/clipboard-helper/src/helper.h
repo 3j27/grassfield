@@ -28,6 +28,10 @@ public:
         QString runtimeDir;   // tmpfs directory of thumbnails and previews (--runtime)
         qint64 retentionMs = ClipLogic::kDefaultRetentionMs;
         bool historyStore = false;
+        // The settings' clears (search.clipboard.clearedAt, .pinnedClearedAt; ms) as the shell read them: carried out at start
+        // when they differ from the ones recorded beside the stores (applyClears). -1: not given.
+        qint64 clearedAtMs = -1;
+        qint64 pinnedClearedAtMs = -1;
         QString program;      // this binary, for the thumbnail worker
     };
     using Output = std::function<void(const QByteArray &line)>;
@@ -46,6 +50,10 @@ public:
 
     static int clearPinned(const QString &stateDir);
     static int clearHistoryStore(const QString &stateDir);
+    // Carries out the clears asked in the settings that were not carried out yet (written while no helper ran), then records
+    // them beside the stores (<stateDir>/clears). Run at start before anything is loaded, and alone (--apply-clears) by the
+    // shell while the history is off. Returns the record as it now stands.
+    static DiskStore::Clears applyClears(const QString &stateDir, qint64 clearedAtMs, qint64 pinnedClearedAtMs);
 
 private:
     struct Pending;
@@ -103,6 +111,8 @@ private:
     ClipLogic::Store m_store;
     DiskStore m_pinnedDisk;
     DiskStore m_historyDisk;
+    // The clears carried out (applyClears at start, then the shell's CH and CP with the setting's time).
+    DiskStore::Clears m_clears;
     QByteArray m_bootId;
     bool m_shellResumed = false;
     quint64 m_seq = 0;

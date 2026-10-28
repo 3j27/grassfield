@@ -65,6 +65,8 @@ check-shell:
     scripts/dev/qmllint.sh
     python3 -I tests/ci/qmldir_types.py --selftest
     python3 -I tests/ci/qmldir_types.py
+    python3 -I tests/ci/ui_names.py --selftest
+    python3 -I tests/ci/ui_names.py
     python3 -I tests/ci/import_graph.py --selftest
     python3 -I tests/ci/import_graph.py
     python3 -I tests/ci/run_mode.py --selftest

@@ -2733,10 +2733,6 @@
         <translation>Écran</translation>
     </message>
     <message>
-        <source>Night Shift</source>
-        <translation>Night Shift</translation>
-    </message>
-    <message>
         <source>Display brightness</source>
         <translation>Luminosité de l’écran</translation>
     </message>
@@ -2759,6 +2755,10 @@
     <message>
         <source>Sound</source>
         <translation>Son</translation>
+    </message>
+    <message>
+        <source>Night Light</source>
+        <translation>Éclairage nocturne</translation>
     </message>
     <message>
         <source>Unmute</source>
@@ -5381,6 +5381,10 @@
         <translation>barre des menus horloge date heure secondes 24 heures masquer éléments d’état batterie pourcentage wifi son concentration en cours de lecture arrière-plan transparent</translation>
     </message>
     <message>
+        <source>search results history calculator conversions documents commands clipboard copy paste</source>
+        <translation>recherche résultats historique calculatrice conversions documents commandes presse-papiers copier coller</translation>
+    </message>
+    <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
     </message>
@@ -5435,10 +5439,6 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
-    </message>
-    <message>
-        <source>search results history calculator conversions documents commands</source>
-        <translation>recherche résultats historique calculatrice conversions documents commandes</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -5651,6 +5651,22 @@
     <message>
         <source>Delete</source>
         <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Clear your clipboard history?</source>
+        <translation>Effacer votre historique du presse-papiers&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The items you copied are deleted from Search. Pinned items stay unless you delete them too.</source>
+        <translation>Les éléments que vous avez copiés sont supprimés de la Recherche. Les éléments épinglés restent, sauf si vous les supprimez aussi.</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
+    </message>
+    <message>
+        <source>Also delete pinned items</source>
+        <translation>Supprimer aussi les éléments épinglés</translation>
     </message>
     <message>
         <source>Search</source>
@@ -6259,10 +6275,6 @@
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
     </message>
     <message>
         <source>Clear All</source>
@@ -8220,6 +8232,46 @@
     <message>
         <source>System Commands</source>
         <translation>Commandes système</translation>
+    </message>
+    <message>
+        <source>Results from Clipboard</source>
+        <translation>Résultats du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Allows Search to find and show items you copied. Personal and sensitive information may appear in the results. Turning it off deletes the items you did not pin.</source>
+        <translation>Permet à la Recherche de trouver et d’afficher les éléments que vous avez copiés. Des informations personnelles et sensibles peuvent apparaître dans les résultats. La désactivation supprime les éléments que vous n’avez pas épinglés.</translation>
+    </message>
+    <message>
+        <source>Clipboard history is available in Search for</source>
+        <translation>L’historique du presse-papiers est disponible dans la Recherche pendant</translation>
+    </message>
+    <message>
+        <source>30 minutes</source>
+        <translation>30 minutes</translation>
+    </message>
+    <message>
+        <source>8 hours</source>
+        <translation>8 heures</translation>
+    </message>
+    <message>
+        <source>7 days</source>
+        <translation>7 jours</translation>
+    </message>
+    <message>
+        <source>Keep clipboard history after logging out</source>
+        <translation>Conserver l’historique après la déconnexion</translation>
+    </message>
+    <message>
+        <source>The items you did not pin are kept on this computer, readable only by you, until they are no longer available.</source>
+        <translation>Les éléments que vous n’avez pas épinglés sont conservés sur cet ordinateur, lisibles par vous seul, jusqu’à ce qu’ils ne soient plus disponibles.</translation>
+    </message>
+    <message>
+        <source>Clipboard History</source>
+        <translation>Historique du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Clear Clipboard History…</source>
+        <translation>Effacer l’historique du presse-papiers…</translation>
     </message>
     <message>
         <source>Results for “%1”</source>
