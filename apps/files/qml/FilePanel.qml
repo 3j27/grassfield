@@ -121,7 +121,7 @@ Window {
     }
 
     // The default button (and Return, and a double-click on a file).
-    function accept(): void {
+    function pressDefault(): void {
         if (!panel.acceptEnabled)
             return;
         if (panel.saving)
@@ -257,11 +257,11 @@ Window {
     function fileActivated(model: var, row: int): void {
         if (panel.saving) {
             nameField.text = model.nameAt(row);
-            panel.accept();
+            panel.pressDefault();
         } else if (panel.kind === "open" && !panel.foldersOnly) {
             model.select(row, 0);
             if (model.isSelected(row))
-                panel.accept();
+                panel.pressDefault();
         }
     }
 
@@ -343,7 +343,7 @@ Window {
         const answer = panel.manager.testAnswer;
         Qt.callLater(() => {
             if (answer === "accept")
-                panel.accept();
+                panel.pressDefault();
             else
                 panel.cancel();
         });
@@ -523,11 +523,11 @@ Window {
                     width: Tokens.filesPanelFieldWidth
                     accessibleName: qsTr("Save As")
                     Keys.onReturnPressed: event => {
-                        panel.accept();
+                        panel.pressDefault();
                         event.accepted = true;
                     }
                     Keys.onEnterPressed: event => {
-                        panel.accept();
+                        panel.pressDefault();
                         event.accepted = true;
                     }
                 }
@@ -889,7 +889,7 @@ Window {
                     text: panel.acceptText
                     primary: true
                     enabled: panel.acceptEnabled
-                    onClicked: panel.accept()
+                    onClicked: panel.pressDefault()
                 }
             }
         }

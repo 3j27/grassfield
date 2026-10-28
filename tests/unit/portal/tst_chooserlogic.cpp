@@ -212,7 +212,7 @@ TEST_F(ChooserLogic, ChoicesAreChecked)
 
 TEST_F(ChooserLogic, AnApplicationsTextIsOneLineOfPlainText)
 {
-    const Request r = parse(Kind::Open, {}, {}, QStringLiteral("Open\nthe‮fdp.exe <b>file</b>"),
+    const Request r = parse(Kind::Open, {}, {}, QStringLiteral("Open\nthe") + QChar(0x202E) + QStringLiteral("fdp.exe <b>file</b>"),
                             {{QStringLiteral("accept_label"), QStringLiteral("__Odd_ label")}});
     EXPECT_EQ(r.title, QStringLiteral("Open thefdp.exe <b>file</b>")); // the override goes, the markup stays text
     EXPECT_EQ(r.acceptLabel, QStringLiteral("_Odd label"));

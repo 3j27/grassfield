@@ -30,6 +30,7 @@ if(GTest_FOUND)
     add_executable(portal-unit-tests ../../tests/unit/portal/tst_chooserlogic.cpp ../../tests/unit/portal/tst_panelstate.cpp
         ../../tests/unit/portal/tst_filechooser.cpp src/filechooser.cpp src/chooserlogic.cpp src/panelstate.cpp)
     target_include_directories(portal-unit-tests PRIVATE src)
-    target_link_libraries(portal-unit-tests PRIVATE grassfield-files-core KF6::WindowSystem GTest::gtest)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    target_link_libraries(portal-unit-tests PRIVATE grassfield-files-core KF6::WindowSystem Qt6::Test GTest::gtest)
     add_test(NAME portal-unit-tests COMMAND portal-unit-tests)
 endif()

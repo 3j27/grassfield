@@ -314,7 +314,7 @@ FocusScope {
             if (rows.length === 1 && m.isDirAt(rows[0]))
                 root.navigate(m.urlAt(rows[0]), true);
             else
-                root.chooser.accept();
+                root.chooser.pressDefault();
             return;
         }
         if (rows.length === 0)
@@ -629,7 +629,7 @@ FocusScope {
         case Qt.Key_Enter:
             if (!ctrl) {
                 if (root.chooser)
-                    root.chooser.accept();
+                    root.chooser.pressDefault();
                 else
                     root.renameSelection();
                 event.accepted = true;

@@ -429,7 +429,7 @@ TestCase {
         compare(m.selectedCount, 0);
         m.select(test.rowOf(m, "a.txt"), 0);
         verify(panel.acceptEnabled);
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers.length, 1);
         compare(fakeHost.answers[0].response, 0);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/a.txt"]);
@@ -439,7 +439,7 @@ TestCase {
         compare(fakeHost.remembered[0].entry.folder, "file:///home/u/Documents");
         compare(fakeHost.remembered[0].entry.view, "icons");
         // Answered once.
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers.length, 1);
     }
 
@@ -457,7 +457,7 @@ TestCase {
         const panel = test.openPanel({currentFolder: "file:///home/u/Documents"});
         const tab = test.findTab(panel.contentItem);
         tab.folder.select(test.rowOf(tab.folder, "Sub"), 0);
-        panel.accept();
+        panel.pressDefault();
         compare(String(tab.url), "file:///home/u/Documents/Sub");
         compare(fakeHost.answers.length, 0);
     }
@@ -467,13 +467,13 @@ TestCase {
         let tab = test.findTab(panel.contentItem);
         verify(tab.folder.get(test.rowOf(tab.folder, "a.txt")).dimmed, "files are dimmed");
         verify(panel.acceptEnabled);
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents"]);
         panel.destroy();
         panel = test.openPanel({directory: true, currentFolder: "file:///home/u/Documents"});
         tab = test.findTab(panel.contentItem);
         tab.folder.select(test.rowOf(tab.folder, "Sub"), 0);
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/Sub"]);
     }
 
@@ -512,7 +512,7 @@ TestCase {
         const panel = test.openPanel({directory: true, currentFolder: "file:///home/u/Documents"});
         const tab = test.findTab(panel.contentItem);
         tab.navigate("smb://server/share", true);
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers.length, 0);
         verify(panel.sheetShown, "the refusal is a sheet");
         keyClick(Qt.Key_Return);
@@ -541,7 +541,7 @@ TestCase {
         verify(name !== null);
         compare(name.text, "Report.txt");
         name.text = PanelLogic.nameForFormat(name.text, ["*.md"]);
-        panel.accept();
+        panel.pressDefault();
         compare(fakeHost.answers.length, 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/Report.md"]);
         compare(fakeHost.answers[0].map.filter, 1);
@@ -564,14 +564,14 @@ TestCase {
     function test_save_over_a_file_asks_first(): void {
         const panel = test.openPanel({kind: "save", currentName: "a.txt", currentFolder: "file:///home/u/Documents"});
         fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1};
-        panel.accept();
+        panel.pressDefault();
         verify(panel.sheetShown, "the replace question");
         compare(fakeHost.answers.length, 0);
         // Return is Cancel (macOS: Replace is never the default here).
         keyClick(Qt.Key_Return);
         tryVerify(() => !panel.sheetShown);
         compare(fakeHost.answers.length, 0);
-        panel.accept();
+        panel.pressDefault();
         verify(panel.sheetShown);
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet !== null);
@@ -582,7 +582,7 @@ TestCase {
 
     function test_save_with_a_folders_name_is_refused(): void {
         const panel = test.openPanel({kind: "save", currentName: "Sub", currentFolder: "file:///home/u/Documents"});
-        panel.accept();
+        panel.pressDefault();
         verify(panel.sheetShown);
         compare(fakeHost.answers.length, 0);
     }
@@ -592,7 +592,7 @@ TestCase {
         const tab = test.findTab(panel.contentItem);
         verify(tab.folder.get(test.rowOf(tab.folder, "a.txt")).dimmed, "a folder panel");
         fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1};
-        panel.accept();
+        panel.pressDefault();
         verify(panel.sheetShown);
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet.title.indexOf("a.txt") >= 0);
