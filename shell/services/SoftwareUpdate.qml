@@ -4,7 +4,6 @@ import Quickshell
 import Quickshell.Io
 import qs.lib
 import Grassfield.Ui
-import "SoftwareUpdateLogic.js" as Logic
 
 // Software Update's checks (ADR-0033 d; docs/specs/updates.md U4, U7-U10, U18, U20, U22). The shell is the only checker:
 // it runs grassfield-update-check as a one-shot child (no daemon) and keeps the last answer in
@@ -22,12 +21,12 @@ import "SoftwareUpdateLogic.js" as Logic
 Singleton {
     id: root
 
-    // software-update.json as last written (Logic.normalize).
-    property var file: Logic.normalize(null)
+    // software-update.json as last written (SoftwareUpdateLogic.normalize).
+    property var file: SoftwareUpdateLogic.normalize(null)
     property bool loaded: false
     // Releases available (owner decision O3: Grassfield's and Omarchy's, 0 to 2): the Dock's Settings tile and the
     // Grassfield menu's "Settings…" show it (U18, U19).
-    readonly property int count: Logic.releases(file)
+    readonly property int count: SoftwareUpdateLogic.releases(file)
     readonly property bool checking: checkProc.running
     readonly property bool waiting: waitProc.running
     // GF-083's updatePending, bound by shell.qml: written to the file for the pane's "Log out to finish updating" (U14).
@@ -59,7 +58,7 @@ Singleton {
 
     // The release in a sentence: "1.0.1", or "1.0.1-4" for a rebuild of the installed version (owner decision O7).
     function releaseName(version: string, installed: string): string {
-        return Logic.releaseName(version, installed);
+        return SoftwareUpdateLogic.releaseName(version, installed);
     }
 
     // A check (U8, U9): joins the one running, or the waiter's. "user": Settings or the Store; "omarchy": the shim, from
@@ -75,7 +74,7 @@ Singleton {
     function command(waiter: bool): var {
         if (fixture !== "")
             return ["cat", fixture];
-        return Logic.checkerArgs(program, !Connectivity.fullyConnected, waiter);
+        return SoftwareUpdateLogic.checkerArgs(program, !Connectivity.fullyConnected, waiter);
     }
 
     function run(proc: var, waiter: bool, timeoutMs: int): void {
@@ -99,11 +98,11 @@ Singleton {
         proc.gotExit = false;
         (waiter ? waitTimeout : checkTimeout).stop();
         (waiter ? waitKill : checkKill).stop();
-        let answer = Logic.parse(proc.text);
+        let answer = SoftwareUpdateLogic.parse(proc.text);
         if (answer === null) {
             const why = proc.stopped ? "the check took too long" : !proc.didStart ? "the checker could not start" : "the checker gave no answer";
             console.warn("software update: " + why);
-            answer = Logic.noAnswer(Date.now(), why);
+            answer = SoftwareUpdateLogic.noAnswer(Date.now(), why);
         }
         // A user who asked while the waiter ran waits for its answer too.
         const user = userAsked;
@@ -118,8 +117,8 @@ Singleton {
                 busyTimer.restart();
             return;
         }
-        const items = Logic.news(file, answer);
-        save(Logic.withAnnounced(Logic.combine(file, answer), items));
+        const items = SoftwareUpdateLogic.news(file, answer);
+        save(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items));
         console.info("software update: " + answer.state + (answer.error ? " (" + answer.error + ")" : "") + (items.length > 0 ? ", new: " + items.map(n => n.id).join(", ") : ""));
         if (!user) {
             for (const n of items)
@@ -138,14 +137,14 @@ Singleton {
 
     onLogoutPendingChanged: {
         if (loaded && (file.logoutPending === true) !== logoutPending)
-            save(Logic.withLogoutPending(file, logoutPending));
+            save(SoftwareUpdateLogic.withLogoutPending(file, logoutPending));
     }
 
     // ---- automatic checks (U7) ----
     function reschedule(): void {
         if (!loaded)
             return;
-        const at = Logic.nextAutomatic(startedAt, Logic.timeOf(file.checkedAt), Logic.timeOf(file.retryAt), Tokens.softwareUpdateFirstCheckMs, Tokens.softwareUpdateIntervalMs);
+        const at = SoftwareUpdateLogic.nextAutomatic(startedAt, SoftwareUpdateLogic.timeOf(file.checkedAt), SoftwareUpdateLogic.timeOf(file.retryAt), Tokens.softwareUpdateFirstCheckMs, Tokens.softwareUpdateIntervalMs);
         autoTimer.interval = Math.max(1000, Math.min(at - Date.now(), 2147483647));
         autoTimer.restart();
     }
@@ -235,7 +234,7 @@ Singleton {
                 root.meteredResolved(false);
         }
         // qmllint disable signal-handler-parameters
-        onExited: exitCode => root.meteredResolved(exitCode === 0 && Logic.metered(meteredOut.text))
+        onExited: exitCode => root.meteredResolved(exitCode === 0 && SoftwareUpdateLogic.metered(meteredOut.text))
         // qmllint enable signal-handler-parameters
     }
 
@@ -397,14 +396,14 @@ Singleton {
             } catch (e) {
                 f = null;
             }
-            root.file = Logic.withLogoutPending(Logic.normalize(f), root.logoutPending);
+            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(f), root.logoutPending);
             root.loaded = true;
             root.reschedule();
         }
         onLoadFailed: {
             if (root.loaded)
                 return;
-            root.file = Logic.withLogoutPending(Logic.normalize(null), root.logoutPending);
+            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(null), root.logoutPending);
             root.loaded = true;
             root.reschedule();
         }

@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../shell/services/SoftwareUpdateLogic.js" as Logic
+import "../../ui/Grassfield/Ui/SoftwareUpdateLogic.js" as Logic
 
 // Software Update step 2 (ADR-0033 d; docs/specs/updates.md A9): the checker's answers read, the last success kept through a
 // failure, the releases counted for the badge, each new version and `blocking` episode announced once, versions as people
