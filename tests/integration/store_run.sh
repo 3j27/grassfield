@@ -347,6 +347,10 @@ drop_refused() { # description name... : exit 7, the command not run, the messag
 drop_refused "yay (the system's AUR helper)" yay
 drop_refused "btop (in Omarchy's package list)" btop
 drop_refused "glibc (pacman's HoldPkg)" glibc
+# A package the user holds (HoldPkg in pacman.conf) is refused even when it came from the AUR and was installed explicitly.
+sed -i 's/^HoldPkg *=.*/& example-held/' /etc/pacman.conf
+printf 'example-held\n' >>"$T/qe"; printf 'example-held\n' >>"$T/qm"
+drop_refused "example-held (in pacman's HoldPkg, from the AUR, installed explicitly)" example-held
 drop_refused "example-lib (not installed explicitly: another package needs it)" example-lib
 drop_refused "gimp (a repository has it: the helper removes it)" gimp
 drop_refused "two names, one of them denied" example-tool linux-zen
