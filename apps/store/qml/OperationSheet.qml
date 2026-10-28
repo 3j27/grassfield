@@ -177,6 +177,7 @@ Sheet {
                     width: Math.round(infoRow.width / 3)
                     textFormat: Text.PlainText
                     text: infoRow.modelData[0]
+                    wrapMode: Text.Wrap // a long label ("Download from the repositories") takes a second line
                     color: Appearance.colors.textSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize

@@ -452,13 +452,21 @@ ScrollPage {
             }
         }
 
-        // The AUR: the package's build script, as the AUR has it, read before installing (SR11).
-        Button {
-            push: true
+        // The AUR: the package's build script, as the AUR has it, read before installing (SR11); as far below the facts as
+        // their rows are from each other.
+        Item {
             visible: root.app.kind === "aur"
-            text: qsTr("View Build Script")
-            enabled: root.backend.online
-            onClicked: root.buildScriptRequested(root.app)
+            implicitWidth: buildScript.implicitWidth
+            implicitHeight: buildScript.implicitHeight + Tokens.storeInfoRowGap - Tokens.storeProductLineGap
+
+            Button {
+                id: buildScript
+                anchors.bottom: parent.bottom
+                push: true
+                text: qsTr("View Build Script")
+                enabled: root.backend.online
+                onClicked: root.buildScriptRequested(root.app)
+            }
         }
 
         Text {

@@ -239,7 +239,10 @@ TestCase {
         tryVerify(() => list.itemAtIndex(0) !== null && list.itemAtIndex(2) !== null);
         compare(list.itemAtIndex(0).Accessible.name, "example-app-bin, 2.4.1-1, AUR");
         compare(list.itemAtIndex(2).Accessible.name, "gtk3, 1:3.24.50-1, 7 MB");
-        verify(find(s, i => i.text === "Download from the repositories") !== null);
+        // Its long label takes a second line rather than running into its value (seen in the step-3b2 captures).
+        const label = find(s, i => i.text === "Download from the repositories");
+        verify(label !== null);
+        verify(label.contentWidth <= label.width, "the label stays in its column: " + label.contentWidth + " > " + label.width);
         s.confirm();
         verify(t.backend.calls.indexOf("install:aur:example-app-bin") >= 0);
 
