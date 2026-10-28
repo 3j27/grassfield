@@ -95,6 +95,9 @@ struct ProcessRow {
     // No cgroup path: another owner's is never read (AD25), and an action on one of the user's units reads it again at the
     // time of the action (step 4). What the table needs of it is below.
     Kind kind = Kind::Background;
+    // Own processes in a launch's unit (A7): its app, a desktop id without ".desktop" or a command's basename; the window
+    // takes the app's icon from it (AM10, AM17). "" otherwise.
+    std::string appId;
     bool session = false;            // AM54
     bool efficiencyEligible = false; // AM68
     // CPU (AM20 to AM22): ticks since start; the share of one core since the previous sample, -1 at the first.
@@ -223,6 +226,10 @@ public:
     // AM9's Update Frequency, in seconds: a gap of more than two intervals is a pause (AD32).
     void setInterval(double seconds) { opt_.interval = seconds; }
 
+    // AM8: the window comes back after a time hidden. No rate is drawn across the gap: the next sample is the new start of
+    // every rate (the processes' CPU, io, wake-ups and GPU; the system's CPU, disks and interfaces), which shows "—".
+    void forgetRates();
+
     size_t keptFiles() const { return kept_; }
 
 private:
@@ -246,6 +253,7 @@ private:
         std::string name, command;
         bool haveCommand = false;
         std::string cgroup; // own processes only (AD25)
+        std::string appId;  // parseAppUnit's name, own processes only
         Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
         bool sessionUnit = false, eligible = false;
         bool haveTicks = false;

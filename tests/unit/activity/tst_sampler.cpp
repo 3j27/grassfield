@@ -557,6 +557,66 @@ TEST(Sampler, ADrmClientIsReadThroughOneOfItsDescriptors)
     EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0); // 10 % + 20 % + 10 % + 10 %
 }
 
+// AM8: back on screen after a time hidden, no rate is drawn across the gap; the next sample starts every rate again.
+TEST(Sampler, NoRateIsDrawnAcrossAGap)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    auto io = [&](unsigned long long read) {
+        f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: " + std::to_string(read)
+                                   + "\nwrite_bytes: 0\ncancelled_write_bytes: 0\n");
+    };
+    io(0);
+    f.write("proc/stat", "cpu  1000 0 1000 8000 0 0 0 0 0 0\ncpu0 1000 0 1000 8000 0 0 0 0 0 0\n");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadIo | ReadSystemCpu;
+    s.sample(reads, 1.0);
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 200, 0, 1, 1));
+    f.write("proc/stat", "cpu  1100 0 1000 8900 0 0 0 0 0 0\ncpu0 1100 0 1000 8900 0 0 0 0 0 0\n");
+    io(1000);
+    Snapshot snap = s.sample(reads, 2.0);
+    EXPECT_DOUBLE_EQ(row(snap, 100)->cpuPercent, 100.0);
+    EXPECT_DOUBLE_EQ(row(snap, 100)->readRate, 1000.0);
+    EXPECT_GE(snap.system.userShare, 0);
+
+    // Hidden for an hour: whatever happened meanwhile draws no rate.
+    s.forgetRates();
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 90000, 0, 1, 1));
+    f.write("proc/stat", "cpu  91000 0 1000 360000 0 0 0 0 0 0\ncpu0 91000 0 1000 360000 0 0 0 0 0 0\n");
+    io(500000);
+    snap = s.sample(reads, 3602.0);
+    EXPECT_LT(row(snap, 100)->cpuPercent, 0);
+    EXPECT_LT(row(snap, 100)->readRate, 0);
+    EXPECT_EQ(row(snap, 100)->bytesRead, 500000u); // totals are no rates: they show
+    EXPECT_LT(snap.system.userShare, 0);
+
+    // The next sample's rates are over the interval since that one.
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 90050, 0, 1, 1));
+    f.write("proc/stat", "cpu  91050 0 1000 360050 0 0 0 0 0 0\ncpu0 91050 0 1000 360050 0 0 0 0 0 0\n");
+    io(502000);
+    snap = s.sample(reads, 3603.0);
+    EXPECT_DOUBLE_EQ(row(snap, 100)->cpuPercent, 50.0);
+    EXPECT_DOUBLE_EQ(row(snap, 100)->readRate, 2000.0);
+    EXPECT_GE(snap.system.userShare, 0);
+}
+
+// AM10, AM17: an own process in a launch's unit (A7) names its app, from which the window takes the app's icon.
+TEST(Sampler, AnAppUnitNamesTheRowsApp)
+{
+    Fixture f;
+    f.process(100, "firefox", kMe, 1, 1, nul({"firefox"}), user + "/app.slice/app-Hyprland-org.mozilla.firefox-1a2b3c4d.scope");
+    f.process(101, "foot", kMe, 1, 1, nul({"foot"}), user + "/app.slice/app-Hyprland-foot@0a1b2c3d.service");
+    f.process(102, "agent", kMe, 1, 1, nul({"agent"}), user + "/app.slice/ssh-agent.service");
+    f.process(200, "theirs", 1001, 1, 1, nul({"theirs"}), "/user.slice/user-1001.slice/user@1001.service/app.slice/app-Hyprland-x-1a2b3c4d.scope");
+    Sampler s(options(f));
+    // ReadStatus: a fixture's directories are all the test user's, so status's real uid tells the other owner.
+    const Snapshot snap = s.sample(readsForTab(Tab::Cpu) | ReadStatus, 1.0);
+    EXPECT_EQ(row(snap, 100)->appId, "org.mozilla.firefox");
+    EXPECT_EQ(row(snap, 101)->appId, "foot");
+    EXPECT_EQ(row(snap, 102)->appId, "");
+    EXPECT_EQ(row(snap, 200)->appId, ""); // another owner's cgroup is never read (AD25)
+}
+
 TEST(Sampler, UserAndSystemAsMacOSMeansThem)
 {
     Fixture f;

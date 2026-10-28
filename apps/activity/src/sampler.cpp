@@ -326,6 +326,26 @@ void Sampler::readCgroup(int pid, Proc &p, Counters &c)
     p.kindWithWindow = classify(p.cgroup, true, false, true);
     p.sessionUnit = isSessionProcess(p.cgroup);
     p.eligible = efficiencyEligible(p.cgroup);
+    const std::optional<AppUnit> unit = parseAppUnit(unitOf(p.cgroup));
+    p.appId = unit ? unit->name : std::string();
+}
+
+void Sampler::forgetRates()
+{
+    for (auto &[pid, p] : procs_) {
+        p.haveTicks = false;
+        p.haveIo = false;
+        p.readRate = p.writeRate = -1;
+        p.haveCtx = false;
+        p.wakeRate = -1;
+        p.haveGpu = false;
+        p.gpuPercent = -1;
+        p.engineNs.clear();
+        p.enginePercent.clear();
+    }
+    haveCpu_ = false;
+    lastProcessIndex_ = lastCpuIndex_ = UINT64_MAX - 1;
+    lastDiskTime_ = lastNetTime_ = -1;
 }
 
 void Sampler::readThreads(int pid, Proc &p, double now, Counters &c)
@@ -717,6 +737,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             row.name = p.name;
             if (own) {
                 row.command = p.command;
+                row.appId = p.appId;
                 const bool ownsWindow = !windowOwners_.empty() && windowOwners_.count(pid) != 0;
                 row.kind = ownsWindow ? p.kindWithWindow : p.kindAlone;
                 row.session = p.sessionUnit;
