@@ -2,14 +2,19 @@
 
 #include "panelstate.h"
 
+#include <KService>
 #include <KWindowSystem>
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQuickWindow>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QUrl>
 #include <QWindow>
 
 #include <limits>
@@ -210,6 +215,37 @@ void FileChooser::remember(const QString &appId, const QVariantMap &entry)
     e.view = entry.value(QStringLiteral("view")).toString();
     e.expanded = entry.value(QStringLiteral("expanded")).toBool();
     m_options.state->remember(appId, e);
+}
+
+QVariantMap FileChooser::places() const
+{
+    const auto folder = [](QStandardPaths::StandardLocation location) {
+        const QString path = QStandardPaths::writableLocation(location);
+        return !path.isEmpty() && QFileInfo(path).isDir() ? QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded) : QString();
+    };
+    return {{QStringLiteral("home"), QUrl::fromLocalFile(QDir::homePath()).toString(QUrl::FullyEncoded)},
+            {QStringLiteral("desktop"), folder(QStandardPaths::DesktopLocation)},
+            {QStringLiteral("documents"), folder(QStandardPaths::DocumentsLocation)},
+            {QStringLiteral("downloads"), folder(QStandardPaths::DownloadLocation)}};
+}
+
+int FileChooser::pathKind(const QUrl &url) const
+{
+    if (!url.isLocalFile() || !url.host().isEmpty())
+        return -1;
+    const QFileInfo info(url.toLocalFile());
+    if (!info.exists() && !info.isSymLink())
+        return 0;
+    return info.isDir() ? 2 : 1;
+}
+
+QString FileChooser::appName(const QString &appId) const
+{
+    const QString id = windowAppId(appId);
+    if (appId.isEmpty() || id == QLatin1String("org.grassfield.Files"))
+        return {};
+    const KService::Ptr service = KService::serviceByDesktopName(id);
+    return service ? service->name() : QString();
 }
 
 void FileChooser::finish(int id, uint response, const QVariantMap &results)

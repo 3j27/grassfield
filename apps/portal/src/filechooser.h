@@ -75,6 +75,13 @@ public:
     // The panels' memory of an application: {folder, view, expanded} ("" fields when nothing is kept).
     Q_INVOKABLE QVariantMap memory(const QString &appId) const;
     Q_INVOKABLE void remember(const QString &appId, const QVariantMap &entry);
+    // The standard folders (file URLs, "" for one that does not exist): {home, desktop, documents, downloads}.
+    Q_INVOKABLE QVariantMap places() const;
+    // What a local URL names now: 0 nothing, 1 a file (or anything but a folder), 2 a folder; -1 not a local URL.
+    Q_INVOKABLE int pathKind(const QUrl &url) const;
+    // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
+    // has no entry.
+    Q_INVOKABLE QString appName(const QString &appId) const;
 
     // The Wayland app id a panel of `appId` gets (exposed for the tests): the application's own when the frontend named it
     // (a desktop id), so the panel counts as that application's window (Dock, menu bar, Force Quit), as a macOS sheet does;

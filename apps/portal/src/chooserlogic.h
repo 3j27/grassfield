@@ -77,7 +77,8 @@ void registerTypes();
 
 Request parse(Kind kind, const QString &appId, const QString &parentWindow, const QString &title, const QVariantMap &options);
 
-// The request as the panel's QML reads it: {kind: "open"|"save"|"saveFiles", appId, title, acceptLabel, modal, multiple,
+// The request as the panel's QML reads it: {kind: "open"|"save"|"saveFiles", appId, title, acceptLabel, modal, parented (a
+// Wayland parent the panel attaches to), multiple,
 // directory, filters: [{name, globs, mimeTypes}], currentFilter, choices: [{id, label, options: [{id, label}], initial}],
 // currentName, files, currentFolder (file URL or ""), currentFile (file URL or "")}.
 QVariantMap toQml(const Request &request);

@@ -303,6 +303,7 @@ QVariantMap toQml(const Request &r)
         {QStringLiteral("title"), r.title},
         {QStringLiteral("acceptLabel"), r.acceptLabel},
         {QStringLiteral("modal"), r.modal},
+        {QStringLiteral("parented"), r.parentWindow.startsWith(QLatin1String("wayland:")) && r.parentWindow.size() > 8},
         {QStringLiteral("multiple"), r.multiple},
         {QStringLiteral("directory"), r.directory},
         {QStringLiteral("filters"), filters},

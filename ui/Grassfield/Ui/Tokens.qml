@@ -2256,6 +2256,22 @@ QtObject {
     readonly property int filesPreviewThumbGap: 11
     // macOS 27 Finder: the kind and size line right under the name's last line box [ref: docs/specs/files.md § Preview pane]
     readonly property int filesPreviewNameGap: 0
+    // estimate: the Open and Save panels' width, a little narrower than a Finder window as macOS panels are [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelWidth: 780
+    // estimate: the Open and Save panels' height, the browser and the footer [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelHeight: 480
+    // estimate: the smallest panel that keeps the sidebar, the browser and the footer's buttons [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelMinWidth: 560
+    // estimate: the smallest expanded panel that keeps a few rows of the browser [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelMinHeight: 340
+    // estimate: the compact Save panel's width (Save As and Where) [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelCompactWidth: 520
+    // estimate: the column of the Save panel's right-aligned labels (Save As, Where, Format) [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelLabelWidth: 96
+    // estimate: the Save As field and the Where pop-up of the Save panel [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelFieldWidth: 300
+    // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
