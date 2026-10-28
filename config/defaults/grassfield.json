@@ -129,6 +129,13 @@
     "kind": "artwork",
     "folder": ""
   },
+  "store": {
+    "sources": {
+      "aur": false,
+      "flathub": false
+    },
+    "screenshots": true
+  },
   "updates": {
     "automaticCheck": true
   },

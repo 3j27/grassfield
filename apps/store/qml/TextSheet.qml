@@ -2,7 +2,8 @@ import QtQuick
 import Grassfield.Ui
 
 // A sheet that shows text to read or copy (spec SR19's Details: pacman's message and what to do; SR20's recovery of a
-// lock pacman left): a title, a message, then the text in a read-only, selectable box that scrolls. One button, OK.
+// lock pacman left; SR11's build script of an AUR package): a title, a message, then the text in a read-only, selectable
+// box that scrolls, in the monospaced face (machine text: a program's output, commands, a script). One button, OK.
 Sheet {
     id: root
 
@@ -46,7 +47,7 @@ Sheet {
                 color: Appearance.colors.text
                 selectionColor: Appearance.highlight
                 selectedTextColor: Appearance.highlightText
-                font.family: Appearance.fontFamily
+                font.family: Tokens.typographyMonoFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.EditableText
                 Accessible.name: root.title

@@ -58,13 +58,29 @@ selection").
    browsing; its own sort key and order, else the default `view/sortKey`/`view/sortDescending`. Keep Folders on Top,
    Show Hidden Files and the preview pane of each view stay global (QSettings `Grassfield/Files`); each folder keeps its
    view, sort and grouping (F-3). Tag search results (F16) in the column mode show as a list.
-5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists; Tags
-   (F16);
+5. F5 Sidebar: Favorites = Home, Applications, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists
+   (Applications always; Go > Applications, Ctrl+Shift+A); Tags (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
    (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
    `FileLogic::hiddenNetworkEntry`),
    Trash (`trash:/`, full/empty icon from a KIO listing). Items accept drops.
+   **Applications** (`grassfield-apps:/`, macOS: Finder's Applications): a virtual, read-only location listing the desktop
+   applications the shell's Apps grid lists, by the grid's own behaviour (`ApplicationsLogic`: Quickshell 0.3.1's
+   DesktopEntries as measured, `shell/launchpad/hidden-entries.sh`, `Model.disambiguate`; the header of
+   `applicationslogic.h` lists the rules). Not the desktop entry specification: Quickshell does not read TryExec, so an entry
+   whose program is missing is listed here as in the grid, and it reads the file as written (a CRLF file, `Name = x` and a
+   `Categories` list that ends without `;` behave as in the grid). Two apps of one name are told apart as in the grid
+   ("Files" and "Files (GNOME)"). `tests/shell/apps_grid_vs_files.sh` runs the real Quickshell DesktopEntries, the script
+   and Model.js and the Files logic on ~130 fixture entries and requires equal lists, in English and French; localized names,
+   theme icons through the same provider as the rest of Files, sorted by name. Search filters it by name. Double-click, Ctrl+O (File > Open) and
+   Ctrl+Down start the application (`FilesApp::launchApplication`, the way the Apps grid starts it: the Exec line without its
+   field codes, behind `xdg-terminal-exec` for Terminal=true entries, in the uwsm-app scope of a real session; Return renames
+   in Finder and here, so in this read-only location it is refused like F2); Get Info shows what the desktop entry says. Nothing can be renamed, copied, moved, trashed or created in it,
+   nothing can be dropped into it or dragged out of it; the refusal reads as Finder's (no permission to access some of the
+   items) and the menu items are dimmed, not hidden. An absolute `Icon=` file is decoded by `appicons.h` (PNG, and SVG that
+   names nothing outside itself; sizes capped; on a worker thread; see security.md GF-070); anything else shows the generic
+   application icon. Known differences from the grid (symbolic link loops, the icon decoder) are listed in `applicationslogic.h`.
 6. F6 Operations, all KIO jobs: copy/cut/paste (`KIO::paste`, `text/uri-list` + KDE cut flag + GNOME format),
    Move to Trash (`KIO::trash`), Put Back (`KIO::restoreFromTrash`), Delete Immediately (only in `trash:/`,
    confirmed), Empty Trash (`KIO::emptyTrash`, confirmed), New Folder (`KIO::mkdir`, "untitled folder", inline
@@ -185,11 +201,12 @@ selection").
 | F3/F10 keyboard moves (also grouped), history, type-to-select, header sort, rubber band (also grouped: list spans, icon cells with sideways scroll), grouped icon layout, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row; a drag keeps its view (`Nav.shownView`) | `tests/unit/tst_filesnav.qml` (20 cases) | L0 |
 | F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, preview pane preference, the pane's Tags field; Recents refuses a drag, a strip drag is bracketed by the tab's dragStarted/dragFinished | `tests/unit/tst_filesgallery.qml` (8 cases) | L0 |
 | Grouped icon view on a stand-in listing: a view made before its size makes the cells it shows, only the sections near the view are made (600 groups), Show All and reveal | `tests/unit/tst_filesgrouped.qml` (3 cases) | L0 |
-| Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
+| Sidebar: Eject target and menu; Recents takes no drop and does not spring; the Applications place opens its location | `tests/unit/tst_filessidebar.qml` (8 cases) | L0 |
 | Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
 | Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed (for the file or a folder above it; at the end of the path only where openat2 answers ENOSYS or EPERM), network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 10 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
 | Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after; with Get Info or Customize Folder open and the browser the key window, Ctrl+T, Ctrl+W (every press) and Escape act on the browser only. A drag keeps its view on a real tab until its handlers have returned | `tests/unit/tst_filesbrowser.qml` (9 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
 | Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Applications location (FP-26): the list of what the Apps grid lists, entry ids, Copy of the entries, refusals; icon decoding in a child (PNG and SVG by their bytes, hostile SVGs refused, a big icon written in pieces is read to EOF: without the fix `TheDecoderChildReadsAnIconWrittenInPiecesToTheEnd` and `ABigIconFileGoesThroughLoadIsolated` fail, 0 of 3) | `tests/unit/files/tst_applications.cpp`, `tst_appicons.cpp`, `tst_imageproviders.cpp` (gtest); `tests/unit/tst_filesinfoapp.qml` (Get Info), `tst_filesnav.qml` (history with the location, the icon source routing), `tst_filessidebar.qml`, `tst_filesbrowser.qml` (double-click and File > Open launch, at most ten), `tst_filesglobalmenu.qml` (no Open With, no Glance), `tst_filesgrouped.qml` (no drag out of it); the launch command (`execArguments`, `launchCommand`: xdg-terminal-exec for Terminal=true), a FIFO named .desktop and a folder link to a huge tree (folder limit 5000) in `tst_applications.cpp` | L0 |
 | Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
 | Global menu: bar items (Path Bar, Status Bar, Sidebar, Preview), Group By follows the tab | `tests/unit/tst_filesglobalmenu.qml` (6 cases) | L0 |
 | F16 tag parse/serialize, colour keys, selection states, search locations; byte-for-byte edits (`applyTag`, the reviewer's foreign value), sidebar hiding, `user.xdg.tags` write/read/remove, raw round trip, foreign tags, long values, links, FIFOs, read-only files, the probe cache, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest) | L0 |
@@ -417,7 +434,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | done (PR 2) except Hide Toolbar (the toolbar holds the window controls when the sidebar is hidden) | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
 | FP-24 | View > Customize Toolbar… | missing | none | — | — | later |
 | FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | done (PR 1) | none | `pathSegments` | — | 1 |
-| FP-26 | Sidebar macOS 27: Recents at the top without a header; Favorites (Applications, Desktop, Documents, Downloads); Locations (the home folder by user name, the system disk, volumes, Network, Trash); Tags | partial: Recents at the top without a header (PR 2); Favorites lists Home, Desktop, Documents, Downloads, Pictures, Music, Videos; Locations has Computer, volumes, Network, Trash; Applications is on the files-applications branch (in review) | Finder-Home, Finder-Gallery | KIO places, Solid | iCloud Drive, Shared and AirDrop: no equivalent (never) | 2 |
+| FP-26 | Sidebar macOS 27: Recents at the top without a header; Favorites (Applications, Desktop, Documents, Downloads); Locations (the home folder by user name, the system disk, volumes, Network, Trash); Tags | done: Recents at the top without a header (PR 2); Favorites lists Home, Applications (the virtual `grassfield-apps:/` location), Desktop, Documents, Downloads, Pictures, Music, Videos; Locations has Computer, volumes, Network, Trash | Finder-Home, Finder-Gallery | KIO places, Solid | iCloud Drive, Shared and AirDrop: no equivalent (never) | 2 |
 | FP-27 | Sidebar editing: drag a folder in to add it, Remove from Sidebar, reorder, Add to Sidebar ⌃⌘T; collapse a section on hover; Settings > Sidebar choices | partial: tags only (Remove from Sidebar, Show Hidden Tag) | none | KFilePlacesModel bookmarks (`user-places.xbel`) | — | later |
 | FP-28 | Sidebar icons in the accent colour, neutral selection with a bold label | done (lot 2) | Finder-Home | — | — | — |
 | FP-29 | Eject button on volumes, Eject ⌘E | done, never exercised | Finder-Eject-Warning | Solid `StorageAccess::teardown` | — | 5 (tests) |
@@ -483,7 +500,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 ### Go menu and Linux power, the macOS way
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | partial: places, Recents ⇧⌘F (PR 2) and Home ⇧⌘H; the other shortcuts and Recent Folders missing | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
+| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | partial: places, Recents ⇧⌘F (PR 2), Home ⇧⌘H and Applications ⇧⌘A (FP-26); the other shortcuts and Recent Folders missing | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
 | FP-76 | Go to Folder ⇧⌘G: inline completion and a "Go to:" list of matching paths | partial: a plain field | Finder-Go-To-Folder | `KUrlCompletion`-like listing (own, async) | — | 4 |
 | FP-77 | Connect to Server ⌘K: address field with history, Favorite Servers (+, −), Browse, Connect | missing | Finder-Connect-to-Server | KIO `smb`, `sftp` (kio-extras), `ftp`, `webdav(s)` (KIO) | the password prompt is kiod's own dialog (decision F-9); other applications see the share through kio-fuse when installed, otherwise KIO hands them a temporary copy | 4 |
 | FP-78 | Show hidden files ⇧⌘. | partial: Ctrl+H | none | KDirLister | — | 4 |

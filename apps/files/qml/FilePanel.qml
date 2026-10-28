@@ -54,6 +54,9 @@ Window {
     readonly property bool acceptEnabled: {
         if (panel.answered)
             return false;
+        // The Applications location holds launchers, not files: nothing there to choose or to save into.
+        if (tab.isApplications)
+            return false;
         if (panel.saving)
             return nameField.text !== "";
         if (panel.kind === "saveFiles")

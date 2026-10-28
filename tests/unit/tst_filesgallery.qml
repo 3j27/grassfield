@@ -24,6 +24,7 @@ TestCase {
         property string error: ""
         property url url: "file:///sandbox"
         property var largeLive: ({})
+        property bool isApplications: false
 
         signal revealRequested(int row, bool rename)
 
@@ -313,5 +314,32 @@ TestCase {
         verify(!gallery.showInfo);
         tab.app.galleryInfo = true;
         verify(gallery.showInfo);
+    }
+
+    // Every MouseArea of the strip that can drag (left and right buttons).
+    function dragAreas(item: Item): var {
+        const found = [];
+        const stack = [item];
+        while (stack.length) {
+            const it = stack.pop();
+            if (it.drag !== undefined && it.acceptedButtons === (Qt.LeftButton | Qt.RightButton))
+                found.push(it);
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        return found;
+    }
+
+    // Nothing is dragged out of the Applications location (read-only); in a folder of files the strip's items drag.
+    function test_nothingIsDraggedOutOfApplications() {
+        waitForRendering(gallery);
+        const files = dragAreas(gallery);
+        verify(files.length > 0, "items that can drag were found");
+        verify(files.some(a => a.drag.target !== null), "a folder of files drags");
+        listing.isApplications = true;
+        tryVerify(() => dragAreas(gallery).every(a => a.drag.target === null), 2000, "no item of Applications drags");
+        verify(dragAreas(gallery).length > 0);
+        listing.isApplications = false;
+        tryVerify(() => dragAreas(gallery).some(a => a.drag.target !== null), 2000, "dragging is back");
     }
 }

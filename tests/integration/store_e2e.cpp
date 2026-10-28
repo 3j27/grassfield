@@ -10,7 +10,14 @@
 //                                    an Omarchy setup (b.2): the plan with the pins (`<sha256>  <path>` lines, the catalog's in
 //                                    the Store), then the recipe through Omarchy's terminal launcher and grassfield-store-run;
 //                                    the launcher is $STORE_E2E_TERMINAL (a container has no terminal)
+//   store_e2e aur-install <name> <pins-file> <aur-folder>
+//   store_e2e aur-remove <name> <pins-file>
+//                                    an AUR package (b.2, step 3b2): its plan (the AUR's answers from <aur-folder>/info.json, as
+//                                    the dev plumbing reads them; for a removal Omarchy's lists, the deny list and the whole
+//                                    plan), then omarchy-pkg-aur-add or omarchy-pkg-drop through Omarchy's terminal launcher and
+//                                    grassfield-store-run
 //   store_e2e recover                what store.json's record says against the system (SR20)
+#include "aur.h"
 #include "operations.h"
 #include "plancheck.h"
 #include "removal.h"
@@ -45,7 +52,8 @@ QString names(const QList<PlannedPackage> &plan)
 
 QString refusalName(Refusal r)
 {
-    static const char *n[] = {"none", "busy", "unfinished", "outdated", "offline", "dependency", "protected", "omarchyChanged", "failed"};
+    static const char *n[] = {"none", "busy", "unfinished", "outdated", "offline", "dependency", "protected", "omarchyChanged", "repository",
+                              "notOnAur", "failed"};
     static_assert(sizeof(n) / sizeof(n[0]) == int(Refusal::Failed) + 1, "one name per Refusal");
     return QString::fromLatin1(n[int(r)]);
 }
@@ -219,6 +227,61 @@ int main(int argc, char **argv)
         r.plan = planned;
         r.recipe = args.at(2);
         r.args = {args.at(3)};
+        r.pins = check.pins;
+        return run(ops, r, tools.updateLock);
+    }
+    if ((command == QLatin1String("aur-install") && args.size() == 4) || (command == QLatin1String("aur-remove") && args.size() == 3)) {
+        const bool install = command == QLatin1String("aur-install");
+        const QString name = args.at(1);
+        SetupCheck check;
+        check.root = omarchy;
+        check.recipe = install ? kAurAdd : kAurDrop;
+        QFile pins(args.at(2));
+        if (!pins.open(QIODevice::ReadOnly))
+            return 2;
+        for (const QByteArray &line : pins.readAll().split('\n')) {
+            if (line.indexOf("  ") == 64)
+                check.pins.append({QString::fromUtf8(line.mid(66)), QString::fromLatin1(line.left(64))});
+        }
+        QList<PlannedPackage> planned;
+        Refusal refusal;
+        if (install) {
+            AurConfig aur;
+            aur.base = QUrl::fromLocalFile(args.at(3));
+            aur.devPlumbing = true;
+            const auto info = [&aur](const QStringList &asked) { return aurInfo(aur, asked); };
+            const InstallPlan plan = checkAurInstall(name, check, info, tools, true, false);
+            refusal = plan.refusal;
+            for (PlannedPackage p : plan.built) {
+                p.version.clear(); // whatever its build makes (as the Store's install())
+                planned.append(p);
+            }
+            planned += plan.packages;
+            say(QStringLiteral("plan=%1 built=%2 packages=%3 detail=%4").arg(refusalName(plan.refusal), names(plan.built), names(plan.packages), plan.detail));
+        } else {
+            DenyList deny;
+            for (const QString &list : {QStringLiteral("omarchy-base.packages"), QStringLiteral("omarchy-other.packages")}) {
+                QFile f(omarchy + QStringLiteral("/install/") + list);
+                if (f.open(QIODevice::ReadOnly))
+                    deny.omarchy.unite(parsePackageList(f.readAll()));
+            }
+            deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
+            const RemovePlan plan = checkSetupRemove({name}, check, deny, tools, false);
+            refusal = plan.refusal;
+            planned = plan.packages;
+            say(QStringLiteral("plan=%1 packages=%2 dependents=%3 detail=%4").arg(refusalName(plan.refusal), names(plan.packages),
+                                                                                plan.dependents.join(QLatin1Char(',')), plan.detail));
+        }
+        if (refusal != Refusal::None)
+            return 0;
+        r.kind = install ? QStringLiteral("install") : QStringLiteral("remove");
+        r.path = QStringLiteral("terminal");
+        r.app = QStringLiteral("aur:") + name;
+        r.name = name;
+        r.packages = {name};
+        r.plan = planned;
+        r.recipe = check.recipe;
+        r.args = {name};
         r.pins = check.pins;
         return run(ops, r, tools.updateLock);
     }

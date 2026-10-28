@@ -13,6 +13,7 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include "applicationslogic.h"
 #include "filelogic.h"
 #include "folderstylelogic.h"
 #include "previewqueue.h"
@@ -43,6 +44,10 @@ class PreviewJob;
 // Adds flat roles for QML delegates, Finder-style sorting (FileLogic::compareEntries), a name filter,
 // a URL-keyed selection that survives re-sorting, thumbnails through KIO::PreviewJob, tags (user.xdg.tags,
 // TagStore) and free space through KIO::fileSystemFreeSpace. It never touches files: operations live in FilesApp.
+//
+// The Applications location (grassfield-apps:/) lists the installed applications the same way (the rows of the search
+// list; one item per desktop entry, url grassfield-app:/<id>, never a file): read-only, nothing can be created, renamed,
+// moved or deleted in it, and opening a row starts the application (FilesApp::launchApplication).
 //
 // A tag search location (grassfield-tag:/<tag>?in=<folder>, TagLogic) lists the matches of a TagSearch instead of a
 // folder: the same roles, selection and thumbnails, over a flat list of items from several folders, kept up to date
@@ -80,8 +85,10 @@ class FolderModel : public QSortFilterProxyModel
     // The Open and Save panels (grassfield-portal, ADR-0035 D-4): {globs, mimeTypes, foldersOnly, single}, empty in Files.
     // Files the panel cannot take (a folder panel: every file; else those its filter, FileLogic::passesFilter, refuses) are
     // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
-    // never dimmed: they open.
+    // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file).
     Q_PROPERTY(QVariantMap chooser READ chooser WRITE setChooser NOTIFY chooserChanged)
+    // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
+    Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
 
 public:
     enum Roles {
@@ -151,6 +158,7 @@ public:
     bool searchLimited() const { return m_searchLimited; }
     QVariantMap chooser() const { return m_chooser; }
     void setChooser(const QVariantMap &chooser);
+    bool isApplications() const { return ApplicationsLogic::isLocationUrl(m_url); }
 
     // Where folder looks are read from (FilesApp's store; null: no folder is customised).
     void setStyleStore(const FolderStyleStore *store) { m_styleStore = store; }
@@ -202,6 +210,8 @@ public:
     KFileItem rootItem() const;
 
 signals:
+    // The Applications location was built (id -> .desktop path of every row): FilesApp keeps it for Copy and Get Info.
+    void applicationsListed(const QVariantMap &paths);
     void urlChanged();
     void sortChanged();
     void showHiddenChanged();
@@ -285,6 +295,10 @@ private:
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
+
+    // The Applications location: the rows are rebuilt from the desktop entries (and again when an applications directory changes).
+    void loadApplications();
+    void watchApplications();
 
     // Picture sizes by local path, for the file as it was listed (modification time and size): answers of the reader, or
     // pending. At most kMaxDimensions kept (all dropped beyond, and with the folder).
@@ -376,6 +390,14 @@ private:
 
     // Tag search: the matches (source model while searching), the running search and KIO's change notifications.
     ItemListModel *m_results = nullptr;
+    // The shown applications by item url (Get Info, Kind) and the watch on the applications directories.
+    QHash<QUrl, ApplicationsLogic::Entry> m_apps;
+    // The list is built on a thread of its own (a slow or hostile applications folder never freezes the window); only the
+    // newest build is applied.
+    quint64 m_appsGeneration = 0;
+    void applyApplications(const QList<ApplicationsLogic::Entry> &entries);
+    QFileSystemWatcher m_appsWatcher;
+    QTimer m_appsTimer;
     SearchRunner *m_search = nullptr;
     OrgKdeKDirNotifyInterface *m_notify = nullptr;
     bool m_searchLimited = false;

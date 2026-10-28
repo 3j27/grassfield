@@ -98,6 +98,44 @@ QString dayText(const QDate &date, const QLocale &locale, bool year)
     return locale.toString(date, format.trimmed());
 }
 
+StoreApp aurApp(const AurPackage &package, bool installed, const QString &desktopId)
+{
+    StoreApp a;
+    a.id = QStringLiteral("aur:") + package.name;
+    a.source = CatalogSource::Kind::Aur;
+    a.package = package.name;
+    a.packages = {package.name};
+    a.name.en = package.name;
+    a.summary.en = package.description;
+    a.description.en = package.description;
+    a.license = package.licenses.join(QStringLiteral(", "));
+    a.homepage = package.url;
+    a.keywords = package.keywords;
+    a.installed = installed;
+    a.desktopId = installed ? desktopId : QString();
+    return a;
+}
+
+QVariantMap aurFacts(const AurPackage &package, const QLocale &locale)
+{
+    QStringList depends;
+    for (const QString &d : package.depends)
+        depends.append(dependencyName(d));
+    return {{QStringLiteral("version"), package.version},
+            {QStringLiteral("maintainer"), package.maintainer},
+            {QStringLiteral("orphaned"), package.orphaned},
+            {QStringLiteral("votes"), package.votes},
+            {QStringLiteral("popularity"), locale.toString(package.popularity, 'f', 2)},
+            {QStringLiteral("lastModified"), dayText(package.lastModified.date(), locale)},
+            {QStringLiteral("firstSubmitted"), dayText(package.firstSubmitted.date(), locale)},
+            {QStringLiteral("outOfDate"), package.outOfDate.isValid()},
+            {QStringLiteral("outOfDateSince"), dayText(package.outOfDate.date(), locale)},
+            {QStringLiteral("base"), package.base},
+            {QStringLiteral("keywords"), package.keywords},
+            {QStringLiteral("optDepends"), package.optDepends},
+            {QStringLiteral("depends"), depends}};
+}
+
 QString sizeText(qint64 bytes, const QLocale &locale)
 {
     return bytes < 0 ? QString() : locale.formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);

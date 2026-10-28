@@ -25,6 +25,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkInformation>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -42,6 +43,7 @@ constexpr int kFetchMs = 15000;      // ADR-0037 c
 constexpr qint64 kAppStreamPackageMax = 64 * 1024 * 1024;
 constexpr int kAppStreamDownloadMs = 120000;
 constexpr int kMaxWebApps = 500;
+constexpr qint64 kConfigMax = 1024 * 1024; // grassfield.json (ADR-0020: a real one is a few KiB)
 
 QString configFile()
 {
@@ -212,6 +214,7 @@ struct JobInput {
     bool fetchCatalog = false;
     bool fetchAppData = false;
     bool online = true;
+    bool aur = false; // the AUR source is on: the catalog's AUR apps are offered
 };
 
 std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::atomic_bool &cancel)
@@ -226,7 +229,11 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     snap->explicitPackages = pacman.explicitlyInstalled();
     if (cancel)
         return snap;
-    snap->foreignWithEntry = foreignWithEntry(env::pacman(), pacman.foreign());
+    for (const QString &n : pacman.foreign()) {
+        if (isPackageName(n))
+            snap->foreign.insert(n);
+    }
+    snap->foreignWithEntry = foreignWithEntry(env::pacman(), snap->foreign);
     snap->entries = readEntries(env::pacman(), env::systemApplications());
     snap->deny = readDenyList();
 
@@ -315,6 +322,8 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.appstream = snap->appstream.components;
     model.appstreamRoot = snap->appstream.root;
     model.sync = snap->sync;
+    model.aurOn = in.aur;
+    model.foreign = snap->foreign;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
     // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
@@ -338,7 +347,7 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
             a.installed = webUrls.contains(a.entry->source.url);
         // Open's entry when neither our catalog nor AppStream names one: the package's own (the first by name, f); a
         // setup's, its first package's that has one.
-        if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::Repo && a.installed)
+        if (a.desktopId.isEmpty() && (a.source == CatalogSource::Kind::Repo || a.source == CatalogSource::Kind::Aur) && a.installed)
             a.desktopId = snap->entries.value(a.package).value(0);
         for (const QString &p : a.packages) {
             if (a.desktopId.isEmpty() && a.source == CatalogSource::Kind::OmarchySetup && a.installed)
@@ -469,6 +478,7 @@ void StoreBackend::readAppearance()
     qreal scale = 1;
     QString accent = QStringLiteral("multicolor"), highlight = QStringLiteral("automatic"), doubleClick = QStringLiteral("zoom");
     QString shortcutSetting, formats = QStringLiteral("auto");
+    bool aur = false, flathub = false, screenshots = true; // the schema's defaults (store.*)
     const QByteArray bytes = readSmall(configFile(), 1024 * 1024);
     if (!bytes.isEmpty()) {
         const QJsonObject root = QJsonDocument::fromJson(bytes).object();
@@ -493,10 +503,26 @@ void StoreBackend::readAppearance()
         const QString f = root.value(QStringLiteral("region")).toObject().value(QStringLiteral("formats")).toString();
         if (!f.isEmpty())
             formats = f;
+        // The Store's own keys (SD20): a value that is not a boolean reads as the default, as every reader of the contract.
+        const QJsonObject store = root.value(QStringLiteral("store")).toObject();
+        const QJsonObject sources = store.value(QStringLiteral("sources")).toObject();
+        aur = sources.value(QStringLiteral("aur")).toBool(false);
+        flathub = sources.value(QStringLiteral("flathub")).toBool(false);
+        screenshots = store.value(QStringLiteral("screenshots")).toBool(true);
     } else {
         m_autoAppearance = false;
     }
     m_formats = i18n::formatsLocale(i18n::systemLanguage(), formats);
+    if (aur != m_aur || flathub != m_flathub || screenshots != m_screenshots) {
+        const bool sourcesMoved = aur != m_aur || flathub != m_flathub;
+        m_aur = aur;
+        m_flathub = flathub;
+        m_screenshots = screenshots;
+        *m_screenshotGate = screenshotsAllowed();
+        emit sourcesChanged();
+        if (sourcesMoved && m_snapshot)
+            run(Job{}); // the sources' apps come or go: the model is built again
+    }
     const QString shortcuts = apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = apps::minimizeAvailableInFile();
     if (dark != m_dark || reduce != m_reduceMotion || contrast != m_increaseContrast || scale != m_textScale || accent != m_accentColor
@@ -521,6 +547,12 @@ void StoreBackend::readNetwork()
         *m_screenshotGate = screenshotsAllowed();
         return;
     }
+    if (env::meteredForced() || env::onlineForced()) { // dev plumbing (ADR-0019): online, metered or not
+        m_online = true;
+        m_metered = env::meteredForced();
+        *m_screenshotGate = screenshotsAllowed();
+        return;
+    }
     // Without a reachability backend (no NetworkManager) the Store counts as online: a fetch that fails says so.
     if (!QNetworkInformation::instance() && !QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability))
         return;
@@ -538,6 +570,7 @@ void StoreBackend::readNetwork()
             if (cameOnline && m_snapshot && !m_metered
                 && ((m_snapshot->catalogConfigured && catalogStale()) || m_snapshot->appstream.origin == AppStreamData::Origin::None))
                 run(Job{m_snapshot->catalogConfigured && catalogStale(), false, true});
+            askAurForForeign(); // what waited for an unmetered connection (it asks nothing otherwise)
         }
     };
     connect(info, &QNetworkInformation::reachabilityChanged, this, update);
@@ -584,7 +617,7 @@ void StoreBackend::run(Job job)
         emit loadingChanged();
     }
     // SR26: never on a metered connection unless asked (Ctrl+R), never offline.
-    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online};
+    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online, m_aur};
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     m_pool.start([this, in, cancel] {
         std::shared_ptr<const Snapshot> snapshot = buildSnapshot(in, *cancel);
@@ -599,6 +632,8 @@ void StoreBackend::apply(std::shared_ptr<const Snapshot> snapshot)
     const bool first = !m_snapshot;
     m_snapshot = std::move(snapshot);
     m_jobRunning = false;
+    rebuildAurApps();
+    askAurForForeign();
     ++m_revision;
     const bool wasLoading = m_loading, wasRefreshing = m_refreshing;
     m_loading = false;
@@ -661,10 +696,45 @@ QVariantMap StoreBackend::appDataStatus() const
 
 QVariantMap StoreBackend::sources() const
 {
-    return {{QStringLiteral("aur"), false},
-            {QStringLiteral("flathub"), false},
+    return {{QStringLiteral("aur"), m_aur},
+            {QStringLiteral("flathub"), m_flathub},
             {QStringLiteral("flatpak"), !QStandardPaths::findExecutable(QStringLiteral("flatpak")).isEmpty()},
             {QStringLiteral("screenshots"), m_screenshots}};
+}
+
+QVariantMap StoreBackend::readConfig() const
+{
+    QVariantMap out{{QStringLiteral("exists"), false}, {QStringLiteral("ok"), false}, {QStringLiteral("text"), QString()}};
+    const QFileInfo info(configFile());
+    if (!info.exists())
+        return out;
+    out.insert(QStringLiteral("exists"), true);
+    // A regular file (a link to one is followed) of at most 1 MiB, read whole; anything else is not used, nothing written.
+    if (!info.isFile() || info.size() > kConfigMax)
+        return out;
+    QFile f(info.filePath());
+    if (!f.open(QIODevice::ReadOnly))
+        return out;
+    const QByteArray text = f.read(kConfigMax + 1);
+    if (text.size() != info.size())
+        return out;
+    out.insert(QStringLiteral("text"), QString::fromUtf8(text));
+    out.insert(QStringLiteral("ok"), true);
+    return out;
+}
+
+QString StoreBackend::writeConfig(const QString &text) const
+{
+    const QByteArray bytes = text.toUtf8();
+    if (bytes.size() > kConfigMax)
+        return QStringLiteral("too large");
+    const QString file = configFile();
+    if (!QDir().mkpath(QFileInfo(file).absolutePath()))
+        return QStringLiteral("cannot create its folder");
+    QSaveFile f(file);
+    if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size())
+        return f.errorString();
+    return f.commit() ? QString() : f.errorString();
 }
 
 QObject *StoreBackend::focusWindow() const
@@ -726,12 +796,20 @@ QVariantList StoreBackend::search(const QString &query) const
 
 QVariantMap StoreBackend::app(const QString &id) const
 {
-    if (!m_snapshot || !m_snapshot->index.contains(id))
+    const StoreApp *a = storeApp(id);
+    if (!m_snapshot || !a)
         return {};
-    const StoreApp &a = m_snapshot->apps.at(m_snapshot->index.value(id));
-    const AppStreamComponent *c = a.component >= 0 && a.component < m_snapshot->appstream.components.size()
-        ? &m_snapshot->appstream.components.at(a.component) : nullptr;
-    return view::detail(a, c, m_snapshot->categories(), m_language, m_formats);
+    const AppStreamComponent *c = a->component >= 0 && a->component < m_snapshot->appstream.components.size()
+        ? &m_snapshot->appstream.components.at(a->component) : nullptr;
+    QVariantMap out = view::detail(*a, c, m_snapshot->categories(), m_language, m_formats);
+    // The AUR's facts (SR11): those of its info answer once asked (requestAur), a search's until then.
+    if (a->source == CatalogSource::Kind::Aur) {
+        const auto it = m_aurPackages.constFind(a->package);
+        out.insert(QStringLiteral("aur"), it == m_aurPackages.cend() ? QVariantMap() : view::aurFacts(*it, m_formats));
+        out.insert(QStringLiteral("aurRead"), m_aurFull.contains(a->package));
+        out.insert(QStringLiteral("aurUnknown"), m_aurUnknown.contains(a->package));
+    }
+    return out;
 }
 
 void StoreBackend::requestPackageInfo(const QString &package)
@@ -784,7 +862,22 @@ QVariantList StoreBackend::installed() const
                                    {QStringLiteral("launcher"), true},
                                    {QStringLiteral("page"), false}});
     }
+    // Installed explicitly from outside the repositories and known to the AUR (asked once it is on): "AUR", with their page.
+    QVariantList aur;
+    QSet<QString> shown;
+    if (m_aur) {
+        for (const QString &n : s.foreign) {
+            const auto it = m_aurApps.constFind(QStringLiteral("aur:") + n);
+            if (it == m_aurApps.cend() || !s.explicitPackages.contains(n) || n.startsWith(QLatin1String("grassfield")))
+                continue;
+            QVariantMap m = view::summary(*it, m_language);
+            m.insert(QStringLiteral("page"), true);
+            aur.append(m);
+            shown.insert(n);
+        }
+    }
     QStringList names(s.foreignWithEntry.cbegin(), s.foreignWithEntry.cend());
+    names.removeIf([&shown](const QString &n) { return shown.contains(n); });
     names.sort();
     for (const QString &n : names) {
         foreign.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("package:") + n},
@@ -805,7 +898,7 @@ QVariantList StoreBackend::installed() const
     };
     for (auto [group, list] : {std::pair{QStringLiteral("arch"), &arch}, std::pair{QStringLiteral("omarchy"), &omarchy},
                                std::pair{QStringLiteral("setup"), &setups}, std::pair{QStringLiteral("webapp"), &webApps},
-                               std::pair{QStringLiteral("foreign"), &foreign}}) {
+                               std::pair{QStringLiteral("aur"), &aur}, std::pair{QStringLiteral("foreign"), &foreign}}) {
         if (list->isEmpty())
             continue;
         byName(*list);
@@ -850,7 +943,10 @@ QVariantMap StoreBackend::results() const
                                          {QStringLiteral("outcome"), it->outcome},
                                          {QStringLiteral("present"), it->present},
                                          {QStringLiteral("total"), it->total},
-                                         {QStringLiteral("details"), it->details}});
+                                         {QStringLiteral("details"), it->details},
+                                         // "aur" for the AUR's commands: their messages say so (Store.js).
+                                         {QStringLiteral("source"), it->record.recipe == kAurAdd || it->record.recipe == kAurDrop
+                                                                        ? QStringLiteral("aur") : QString()}});
     }
     return out;
 }
@@ -887,6 +983,10 @@ std::optional<view::WebAppEntry> StoreBackend::otherWebApp(const QString &id) co
 
 const StoreApp *StoreBackend::storeApp(const QString &id) const
 {
+    if (id.startsWith(QLatin1String("aur:"))) {
+        const auto it = m_aurApps.constFind(id);
+        return m_aur && it != m_aurApps.cend() ? &*it : nullptr;
+    }
     if (!m_snapshot || !m_snapshot->index.contains(id))
         return nullptr;
     return &m_snapshot->apps.at(m_snapshot->index.value(id));
@@ -915,8 +1015,16 @@ QString StoreBackend::getBlock(const StoreApp &a) const
         if (const QString block = terminalBlock(); !block.isEmpty())
             return block;
         break;
+    case CatalogSource::Kind::Aur:
+        if (!m_aur)
+            return QStringLiteral("aurOff");
+        if (m_snapshot && std::any_of(m_snapshot->sync.cbegin(), m_snapshot->sync.cend(), [&a](const SyncPackage &p) { return p.name == a.package; }))
+            return QStringLiteral("repository"); // yay would install the repository's: the Store does, from its page
+        if (const QString block = aurBlock(kAurAdd); !block.isEmpty())
+            return block;
+        break;
     default:
-        return QStringLiteral("source"); // the AUR and Flathub install with step 3's later parts (3b2, 3c)
+        return QStringLiteral("source"); // Flathub installs with step 3c
     }
     return m_online ? QString() : QStringLiteral("offline");
 }
@@ -933,6 +1041,181 @@ QString StoreBackend::terminalBlock() const
     if (!m_snapshot || !m_snapshot->catalog || !m_snapshot->catalog->omarchy || !m_snapshot->omarchyDiffers.isEmpty())
         return QStringLiteral("omarchyChanged");
     return {};
+}
+
+QString StoreBackend::aurBlock(const QString &command) const
+{
+    if (const QString block = terminalBlock(); !block.isEmpty())
+        return block;
+    const auto &pins = m_snapshot->catalog->omarchy->files;
+    for (const QString &path : requiredPins(command)) {
+        if (std::none_of(pins.cbegin(), pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
+            return QStringLiteral("aurUnchecked"); // the catalog does not vouch for the AUR's command (grassfield-packages pins it)
+    }
+    return {};
+}
+
+SetupCheck StoreBackend::aurCheck(const QString &command) const
+{
+    SetupCheck check;
+    check.root = env::omarchyRoot();
+    check.recipe = command;
+    if (m_snapshot && m_snapshot->catalog && m_snapshot->catalog->omarchy)
+        check.pins = m_snapshot->catalog->omarchy->files;
+    return check;
+}
+
+QString StoreBackend::aurName(const QString &id) const
+{
+    if (id.startsWith(QLatin1String("aur:")))
+        return isPackageName(id.mid(4)) ? id.mid(4) : QString();
+    const StoreApp *a = storeApp(id);
+    return a && a->source == CatalogSource::Kind::Aur ? a->package : QString();
+}
+
+AurConfig StoreBackend::aurConfig() const
+{
+    return grassfield::store::aurConfig(env::cacheDir());
+}
+
+void StoreBackend::rememberAur(const QList<AurPackage> &packages, bool full)
+{
+    for (const AurPackage &p : packages) {
+        // A search's answer has no dependencies: it never replaces an info answer.
+        if (!full && m_aurFull.contains(p.name))
+            continue;
+        if (m_aurPackages.size() >= 2000 && !m_aurPackages.contains(p.name))
+            break;
+        m_aurPackages.insert(p.name, p);
+        if (full) {
+            m_aurFull.insert(p.name);
+            m_aurUnknown.remove(p.name);
+        }
+    }
+    rebuildAurApps();
+}
+
+void StoreBackend::rebuildAurApps()
+{
+    m_aurApps.clear();
+    for (auto it = m_aurPackages.cbegin(); it != m_aurPackages.cend(); ++it) {
+        const bool installed = m_snapshot && m_snapshot->foreign.contains(it.key());
+        const QString entry = m_snapshot ? m_snapshot->entries.value(it.key()).value(0) : QString();
+        m_aurApps.insert(QStringLiteral("aur:") + it.key(), view::aurApp(*it, installed, entry));
+    }
+}
+
+void StoreBackend::askAurForForeign()
+{
+    // Asked by no click of the user's: never on a metered connection (ADR-0037 c), as the catalog's own fetch.
+    if (!m_aur || !m_online || m_metered || !m_snapshot)
+        return;
+    QStringList names;
+    for (const QString &n : m_snapshot->foreign) {
+        if (!m_aurAsked.contains(n) && !n.startsWith(QLatin1String("grassfield")) && m_snapshot->explicitPackages.contains(n))
+            names.append(n);
+    }
+    if (names.isEmpty())
+        return;
+    names.sort();
+    names = names.mid(0, 150);
+    for (const QString &n : names)
+        m_aurAsked.insert(n);
+    const AurConfig config = aurConfig();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, config, names, cancel] {
+        const AurAnswer answer = grassfield::store::aurInfo(config, names);
+        if (*cancel)
+            return;
+        QMetaObject::invokeMethod(this, [this, answer] {
+            rememberAur(answer.packages, true);
+            ++m_revision;
+            emit dataChanged(); // Installed's "AUR" group
+        }, Qt::QueuedConnection);
+    });
+}
+
+void StoreBackend::searchAur(const QString &term)
+{
+    if (!m_aur) {
+        emit aurResults(term, {}, QStringLiteral("off"));
+        return;
+    }
+    if (!m_online) {
+        emit aurResults(term, {}, QStringLiteral("offline"));
+        return;
+    }
+    if (!isAurSearchTerm(term)) {
+        emit aurResults(term, {}, QStringLiteral("short"));
+        return;
+    }
+    const AurConfig config = aurConfig();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, config, term, cancel] {
+        const AurAnswer answer = aurSearch(config, term);
+        if (*cancel)
+            return;
+        QMetaObject::invokeMethod(this, [this, term, answer] {
+            rememberAur(answer.packages, false);
+            QSet<QString> repository;
+            if (m_snapshot) {
+                for (const SyncPackage &p : m_snapshot->sync)
+                    repository.insert(p.name);
+            }
+            QVariantList list;
+            for (const AurPackage &p : answer.packages) {
+                if (repository.contains(p.name))
+                    continue; // a repository's package of that name is the one the Store offers
+                QVariantMap m = view::summary(m_aurApps.value(QStringLiteral("aur:") + p.name), m_language);
+                m.insert(QStringLiteral("votes"), p.votes);
+                m.insert(QStringLiteral("outOfDate"), p.outOfDate.isValid());
+                list.append(m);
+            }
+            QString problem;
+            if (!answer.ok)
+                problem = answer.error.startsWith(QLatin1String("Too many")) ? QStringLiteral("tooMany") : QStringLiteral("unavailable");
+            emit aurResults(term, list, problem);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void StoreBackend::requestAur(const QString &id)
+{
+    const QString name = aurName(id);
+    if (name.isEmpty() || !m_aur || !m_online)
+        return;
+    const AurConfig config = aurConfig();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, config, id, name, cancel] {
+        const AurAnswer answer = grassfield::store::aurInfo(config, {name});
+        if (*cancel)
+            return;
+        QMetaObject::invokeMethod(this, [this, id, name, answer] {
+            if (answer.ok && answer.packages.isEmpty())
+                m_aurUnknown.insert(name);
+            rememberAur(answer.packages, true);
+            emit aurInfo(id);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void StoreBackend::requestBuildScript(const QString &id)
+{
+    const QString name = aurName(id);
+    if (name.isEmpty() || !m_aur || !m_online) {
+        emit buildScript(id, QString(), false);
+        return;
+    }
+    const QString base = m_aurPackages.contains(name) ? m_aurPackages.value(name).base : name;
+    const AurConfig config = aurConfig();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, config, id, base, cancel] {
+        const std::optional<QString> text = aurPkgbuild(config, base);
+        if (*cancel)
+            return;
+        QMetaObject::invokeMethod(this, [this, id, text] { emit buildScript(id, text.value_or(QString()), text.has_value()); },
+                                  Qt::QueuedConnection);
+    });
 }
 
 SetupCheck StoreBackend::setupCheck(const StoreApp &a, bool install) const
@@ -974,6 +1257,27 @@ QString StoreBackend::uninstallBlock(const StoreApp &a) const
         if (!m_snapshot->deny.omarchyRead())
             return QStringLiteral("listsMissing");
         return terminalBlock();
+    }
+    if (a.source == CatalogSource::Kind::Aur && m_snapshot) {
+        // Installed explicitly from outside the repositories (no application entry needed: the user installed it from the
+        // AUR, b.2), never a package of the deny list; removed through the AUR's omarchy-pkg-drop in Omarchy's terminal.
+        if (!m_aur)
+            return QStringLiteral("aurOff");
+        if (!m_snapshot->explicitPackages.contains(a.package))
+            return QStringLiteral("dependency");
+        switch (protection(a.package, m_snapshot->deny)) {
+        case Protection::None:
+            break;
+        case Protection::System:
+            return QStringLiteral("system");
+        case Protection::Omarchy:
+            return QStringLiteral("omarchy");
+        case Protection::Grassfield:
+            return QStringLiteral("grassfield");
+        }
+        if (!m_snapshot->deny.omarchyRead())
+            return QStringLiteral("listsMissing");
+        return aurBlock(kAurDrop);
     }
     if (a.source != CatalogSource::Kind::Repo || !m_snapshot)
         return QStringLiteral("source");
@@ -1072,6 +1376,10 @@ QString refusalName(Refusal r)
         return QStringLiteral("protected");
     case Refusal::OmarchyChanged:
         return QStringLiteral("omarchyChanged");
+    case Refusal::Repository:
+        return QStringLiteral("repository");
+    case Refusal::NotOnAur:
+        return QStringLiteral("notOnAur");
     case Refusal::Failed:
         return QStringLiteral("failed");
     }
@@ -1106,19 +1414,26 @@ void StoreBackend::plan(const QString &id, const QString &kind)
         return;
     }
     const PlanTools tools = planTools();
+    const bool aur = a->source == CatalogSource::Kind::Aur;
     const bool setup = a->source == CatalogSource::Kind::OmarchySetup;
     const QStringList packages = setup ? a->packages : QStringList{a->package};
-    const SetupCheck check = setup ? setupCheck(*a, install) : SetupCheck{};
+    const SetupCheck check = setup ? setupCheck(*a, install) : aur ? aurCheck(install ? kAurAdd : kAurDrop) : SetupCheck{};
+    const AurConfig aurService = aurConfig();
     const bool online = m_online;
     const bool own = m_operations->running();
     const DenyList deny = m_snapshot->deny;
     const QLocale locale = m_formats;
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
-    m_pool.start([this, id, kind, install, setup, packages, check, tools, online, own, deny, locale, cancel] {
+    m_pool.start([this, id, kind, install, aur, setup, packages, check, aurService, tools, online, own, deny, locale, cancel] {
         QVariantMap out;
         if (install) {
-            InstallPlan p = setup ? checkSetupInstall(packages, check, tools, online, own) : checkInstall(packages, tools, online, own);
+            const auto info = [&aurService](const QStringList &names) { return grassfield::store::aurInfo(aurService, names); };
+            InstallPlan p = aur     ? checkAurInstall(packages.value(0), check, info, tools, online, own)
+                            : setup ? checkSetupInstall(packages, check, tools, online, own)
+                                    : checkInstall(packages, tools, online, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
+                   {QStringLiteral("built"), packageList(p.built, locale)},
+                   {QStringLiteral("incomplete"), p.incomplete},
                    {QStringLiteral("packages"), packageList(p.packages, locale)},
                    {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
                    {QStringLiteral("installed"), view::sizeText(p.installedSize, locale)},
@@ -1135,7 +1450,7 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                 emit planReady(id, kind, out);
             }, Qt::QueuedConnection);
         } else {
-            RemovePlan p = setup ? checkSetupRemove(packages, check, deny, tools, own) : checkRemove(packages, deny, tools, own);
+            RemovePlan p = setup || aur ? checkSetupRemove(packages, check, deny, tools, own) : checkRemove(packages, deny, tools, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
                    {QStringLiteral("packages"), packageList(p.packages, locale)},
                    {QStringLiteral("dependents"), p.dependents},
@@ -1174,7 +1489,7 @@ bool StoreBackend::install(const QString &id)
     } else {
         // The plan its sheet showed (planReady); the helper, or grassfield-store-run for a setup, checks it all again.
         const auto it = m_installPlans.constFind(id);
-        if (it == m_installPlans.cend() || it->packages.isEmpty())
+        if (it == m_installPlans.cend() || (it->packages.isEmpty() && it->built.isEmpty()))
             return false;
         if (a->source == CatalogSource::Kind::OmarchySetup) {
             const SetupCheck check = setupCheck(*a, true);
@@ -1183,11 +1498,25 @@ bool StoreBackend::install(const QString &id)
             r.recipe = check.recipe;
             r.args = a->entry->source.args;
             r.pins = check.pins;
+            r.plan = it->packages;
+        } else if (a->source == CatalogSource::Kind::Aur) {
+            // yay builds the AUR's (whatever version its build makes: none asked) and pacman adds the repositories'.
+            const SetupCheck check = aurCheck(kAurAdd);
+            r.path = QStringLiteral("terminal");
+            r.packages = {a->package};
+            r.recipe = kAurAdd;
+            r.args = {a->package};
+            r.pins = check.pins;
+            for (PlannedPackage p : it->built) {
+                p.version.clear();
+                r.plan.append(p);
+            }
+            r.plan += it->packages;
         } else {
             r.path = QStringLiteral("helper");
             r.packages = {a->package};
+            r.plan = it->packages;
         }
-        r.plan = it->packages;
     }
     m_installPlans.remove(id);
     m_operations->enqueue(r);
@@ -1240,6 +1569,13 @@ bool StoreBackend::uninstall(const QString &id)
             r.packages = a->packages;
             r.recipe = check.recipe;
             r.args = a->entry->source.removeArgs;
+            r.pins = check.pins;
+        } else if (a->source == CatalogSource::Kind::Aur) {
+            const SetupCheck check = aurCheck(kAurDrop);
+            r.path = QStringLiteral("terminal");
+            r.packages = {a->package};
+            r.recipe = kAurDrop;
+            r.args = {a->package};
             r.pins = check.pins;
         } else {
             r.path = QStringLiteral("helper");

@@ -3,6 +3,7 @@
 # Output: .dev/build/grassfield-files. The dev binary reads the repository QML directory.
 # Usage: apps/files/build-direct.sh [--install-paths]   (--install-paths bakes /usr/share paths)
 #        apps/files/build-direct.sh --tests             (only the unit tests: .dev/build/files-unit-tests, files-kio-tests)
+#        apps/files/build-direct.sh --tests --asan      (the unit tests with -fsanitize=address,undefined: .dev/build/files-unit-tests-asan)
 #        apps/files/build-direct.sh --core              (only the Files library: .dev/build/libgrassfield-files-core.a,
 #                                                        linked by grassfield-files and apps/portal/build-direct.sh)
 set -euo pipefail
@@ -30,18 +31,26 @@ if [[ ${1:-} == "--tests" ]]; then
   [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
   "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
   "$moc" "$here/src/recents.h" -o "$out/moc_tests_recents.cpp"
+  extra=()
+  suffix=""
+  if [[ ${2:-} == "--asan" ]]; then
+    extra=(-g -fsanitize=address,undefined -fno-omit-frame-pointer)
+    suffix="-asan"
+  fi
   # tst_menushortcuts runs Qt.labs.platform menus offscreen (Qml, Widgets, Test) and includes globalmenu.h (DBus).
-  g++ "${cxxflags[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6Qml Qt6DBus Qt6Test) \
+  g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags Qt6Core Qt6Gui Qt6Quick Qt6Widgets Qt6Qml Qt6DBus Qt6Test) \
     "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
     "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" "$root/tests/unit/files/tst_folderviews.cpp" "$root/tests/unit/files/tst_imagerotate.cpp" "$root/tests/unit/files/tst_imagesize.cpp" "$root/tests/unit/files/tst_recents.cpp" "$root/tests/unit/files/tst_folderprune.cpp" \
-    "$root/tests/unit/files/tst_appscope.cpp" "$root/tests/unit/files/tst_runmode.cpp" "$root/tests/unit/files/tst_autoappearance.cpp" "$root/tests/unit/files/tst_launchguard.cpp" \
+    "$root/tests/unit/files/tst_appscope.cpp" "$root/tests/unit/files/tst_runmode.cpp" "$root/tests/unit/files/tst_applications.cpp" "$root/tests/unit/files/tst_autoappearance.cpp" "$root/tests/unit/files/tst_launchguard.cpp" "$root/tests/unit/files/tst_appicons.cpp" "$root/tests/unit/files/tst_imageproviders.cpp" \
     "$root/tests/unit/files/tst_menushortcuts.cpp" \
-    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" "$out/moc_tests_tagsearch.cpp" "$out/moc_tests_recents.cpp" \
-    $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6Qml Qt6DBus Qt6Test) -lgtest -lgtest_main -pthread \
-    -o "$out/files-unit-tests"
-  echo "built $out/files-unit-tests"
+    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/imageproviders.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" "$out/moc_tests_tagsearch.cpp" "$out/moc_tests_recents.cpp" \
+    $(pkg-config --libs Qt6Core Qt6Gui Qt6Quick Qt6Widgets Qt6Qml Qt6DBus Qt6Test) -lgtest -lgtest_main -pthread \
+    -o "$out/files-unit-tests$suffix"
+  echo "built $out/files-unit-tests$suffix"
   # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): the logic and real KIO
-  # jobs and listings, against the Files library; its own main (a scratch home, offscreen).
+  # jobs and listings, against the Files library; its own main (a scratch home, offscreen). Not built in the sanitized run:
+  # the KIO jobs and the scratch home are its subject, not memory safety.
+  if [[ -z $suffix ]]; then
   "$0" --core >/dev/null
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${kfdefs[@]}" "-DFILES_SOURCE_DIR=\"$here/src\"" -I"$here/src" -I"$root/apps" "${kf_includes[@]}" \
@@ -50,6 +59,7 @@ if [[ ${1:-} == "--tests" ]]; then
     "$out/libgrassfield-files-core.a" \
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick wayland-client) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
   echo "built $out/files-kio-tests"
+  fi
   exit 0
 fi
 
@@ -84,7 +94,7 @@ for h in foldermodel placesmodel filesapp tagsearch recents kioprompts; do
 done
 compile "$out/files-core-obj" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp" \
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
-  "$here/src/tagsearch.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
+  "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
   "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "${mocs[@]}"
 core=$out/libgrassfield-files-core.a
 rm -f "$core"

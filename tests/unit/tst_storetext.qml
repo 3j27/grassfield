@@ -20,6 +20,25 @@ TestCase {
         compare(Store.sourceLabel("other", ""), "");
     }
 
+    // The AUR (step 3b2): why Get or Uninstall… is not offered, its own wording for an unchecked Omarchy, a result's line, its
+    // Installed group, a refused install, the warning.
+    function test_aurTexts() {
+        compare(Store.getBlockText("aurOff", "aur"), "Turn on the AUR in the Store's settings to install from it.");
+        compare(Store.getBlockText("repository", "aur"), "A repository has this package: the Store installs it from there, from its own page.");
+        compare(Store.getBlockText("aurUnchecked", "aur"), "Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+        compare(Store.getBlockText("omarchyChanged", "aur"), Store.getBlockText("aurUnchecked", "aur"));
+        compare(Store.getBlockText("omarchyChanged", "setup"), "This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+        compare(Store.uninstallReasonText("aurOff", "aur"), "Turn on the AUR in the Store's settings to uninstall it from the Store.");
+        compare(Store.aurLine({votes: 1, outOfDate: false}), "1 vote");
+        compare(Store.aurLine({votes: 120, outOfDate: true}), "120 votes · Flagged out of date");
+        compare(Store.aurLine({name: "x"}), "");
+        compare(Store.groupTitle("aur"), "AUR");
+        compare(Store.resultText({kind: "install", outcome: "refused"}), "The installation was refused: the system changed since the Store checked it. Try again from its page.");
+        compare(Store.resultText({kind: "remove", outcome: "refused"}), "This app can't be uninstalled from the Store.");
+        compare(Store.resultText({kind: "install", outcome: "omarchyChanged", source: "aur"}), Store.omarchyChangedText("aur"));
+        verify(Store.aurWarning().startsWith("AUR packages are made by users and reviewed by no one"));
+    }
+
     function test_symbols() {
         compare(Store.symbolIcon("discover"), "sparkle");
         compare(Store.symbolIcon("category-internet"), "globe");

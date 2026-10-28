@@ -846,6 +846,35 @@
         }
       }
     },
+    "store": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Grassfield Store (its settings window, Ctrl+,; ADR-0037 a, c, SD20). The Store writes these keys itself, with these rules, as the Settings app writes its own, until the shell is the single writer (ADR-0020 decision 4).",
+      "properties": {
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The optional sources (owner ST2): both off until the user turns them on.",
+          "properties": {
+            "aur": {
+              "type": "boolean",
+              "default": false,
+              "description": "The AUR (ADR-0037 a, step 3b2): its search results after Return, its pages, and installs through Omarchy's terminal with the warning (spec SR16). Off: nothing is asked of aur.archlinux.org."
+            },
+            "flathub": {
+              "type": "boolean",
+              "default": false,
+              "description": "Flathub (ADR-0037 a, step 3c), offered only when flatpak is installed. Read only until step 3c."
+            }
+          }
+        },
+        "screenshots": {
+          "type": "boolean",
+          "default": true,
+          "description": "Screenshots on product pages (owner ST6), fetched when a page opens from the addresses AppStream gives."
+        }
+      }
+    },
     "updates": {
       "type": "object",
       "additionalProperties": false,

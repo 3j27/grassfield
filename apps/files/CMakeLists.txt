@@ -25,12 +25,13 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_folderviews.cpp ../../tests/unit/files/tst_imagerotate.cpp ../../tests/unit/files/tst_imagesize.cpp ../../tests/unit/files/tst_recents.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_runmode.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp ../../tests/unit/files/tst_menushortcuts.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
-        src/folderstylelogic.cpp src/folderstylestore.cpp src/folderviews.cpp src/imagerotate.cpp src/imagesize.cpp src/recents.cpp src/recents.h)
+        ../../tests/unit/files/tst_appicons.cpp ../../tests/unit/files/tst_imageproviders.cpp ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_folderviews.cpp ../../tests/unit/files/tst_imagerotate.cpp ../../tests/unit/files/tst_imagesize.cpp ../../tests/unit/files/tst_recents.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_runmode.cpp ../../tests/unit/files/tst_applications.cpp ../../tests/unit/files/tst_autoappearance.cpp ../../tests/unit/files/tst_launchguard.cpp ../../tests/unit/files/tst_menushortcuts.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp src/launchguard.cpp
+        src/applicationslogic.cpp src/appicons.cpp src/imageproviders.cpp src/folderstylelogic.cpp src/folderstylestore.cpp src/folderviews.cpp src/imagerotate.cpp src/imagesize.cpp src/recents.cpp src/recents.h)
     target_include_directories(files-unit-tests PRIVATE src ..)
     # tst_menushortcuts runs Qt.labs.platform menus offscreen (Qml, Widgets, Test) and includes globalmenu.h (DBus).
     find_package(Qt6 REQUIRED COMPONENTS Test)
-    target_link_libraries(files-unit-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus Qt6::Test GTest::gtest GTest::gtest_main)
+    # tst_appicons and tst_imageproviders: the icon providers (Qt Quick); the decoder child is the test binary itself.
+    target_link_libraries(files-unit-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test GTest::gtest GTest::gtest_main)
     add_test(NAME files-unit-tests COMMAND files-unit-tests)
     # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): real KIO jobs and
     # listings against the Files library; its own main (a scratch home, offscreen).

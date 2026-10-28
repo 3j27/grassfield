@@ -21,7 +21,10 @@
 # Store's terminal path and the real grassfield-store-run (step 3b1, ADR-0037 b.2): a container has no terminal, so a
 # stand-in runs the launcher's command with `bash -c`, detached; carol's sudo asks no password here (the prompt in Omarchy's
 # terminal is the owner's check, A12); the `firefox` it installs is a small test package of a local repository listed
-# before Arch's.
+# before Arch's. Then an AUR package the same way (step 3b2): Omarchy's own omarchy-pkg-aur-add and omarchy-pkg-drop, the
+# Store's AUR plan from a folder of answers in the AUR's format; yay is a stand-in here (yay's binary comes from GitHub, which
+# this network refuses) that does what yay does for `-S --noconfirm --needed`: makepkg as the user from a folder of
+# PKGBUILDs, its AUR dependencies first, then sudo pacman -U (the dependencies --asdeps).
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
@@ -502,6 +505,84 @@ expect "omarchy-remove-browser firefox: the plan names it, done, firefox gone" \
   eval 'has "$out" "plan=none packages=firefox detail=" && has "$out" "result=done" && ! pacman -Q firefox >/dev/null 2>&1'
 [[ -s $W/terminal.log ]] && { echo "  the terminal's last lines:"; tail -4 "$W/terminal.log" | sed 's/^/    /'; }
 [[ -s $W/e2e.err ]] && { echo "  the driver's messages:"; head -5 "$W/e2e.err" | sed 's/^/    /'; }
+
+say "A8 an AUR package through the Store's terminal path and grassfield-store-run (step 3b2), as carol"
+# Two made-up AUR packages: gs-aur-app (an app; it needs gs-aur-lib from the AUR and gs-lib from [gstest]) and gs-aur-lib.
+aurpkg() { # name deps entry(yes|no)
+  local dir=/srv/gsaur/$1
+  mkdir -p "$dir"
+  {
+    echo "pkgname=$1"; echo "pkgver=1.0"; echo "pkgrel=1"; echo "pkgdesc='Store AUR test package'"; echo "arch=(any)"
+    echo "license=(MIT)"; echo "depends=($2)"; echo "options=(!strip !debug)"
+    echo "package() {"
+    echo "  install -Dm644 /dev/null \"\$pkgdir/usr/share/doc/$1/README\""
+    [[ $3 == yes ]] && printf '  printf "[Desktop Entry]\\nType=Application\\nName=%s\\nExec=true\\n" >"$srcdir/%s.desktop"\n  install -Dm644 "$srcdir/%s.desktop" "$pkgdir/usr/share/applications/%s.desktop"\n' "$1" "$1" "$1" "$1"
+    echo "}"
+  } >"$dir/PKGBUILD"
+}
+aurpkg gs-aur-app "gs-aur-lib gs-lib" yes
+aurpkg gs-aur-lib "" no
+chmod -R a+rX /srv/gsaur
+# The AUR's answers for them (RPC v5 multiinfo), as the dev plumbing's folder holds them.
+mkdir -p /srv/gsaur-rpc
+printf '%s' '{"version":5,"type":"multiinfo","resultcount":2,"results":[
+  {"Name":"gs-aur-app","PackageBase":"gs-aur-app","Version":"1.0-1","Description":"A test app","Maintainer":"tester","NumVotes":3,
+   "Popularity":0.1,"OutOfDate":null,"LastModified":1790000000,"FirstSubmitted":1700000000,"License":["MIT"],"Depends":["gs-aur-lib","gs-lib"]},
+  {"Name":"gs-aur-lib","PackageBase":"gs-aur-lib","Version":"1.0-1","Description":"Its library","Maintainer":null,"NumVotes":0,
+   "Popularity":0,"OutOfDate":null,"LastModified":1790000000,"FirstSubmitted":1700000000,"License":["MIT"]}]}' >/srv/gsaur-rpc/info.json
+chmod -R a+rX /srv/gsaur-rpc
+# yay's stand-in (above): only `-S --noconfirm --needed <names>`.
+cat >/usr/bin/yay <<'YAY'
+#!/bin/bash
+set -euo pipefail
+[[ ${1-} == -S ]] || { echo "yay (stand-in): only -S" >&2; exit 2; }
+shift
+names=()
+for a in "$@"; do
+  case $a in --noconfirm | --needed) ;; -*) echo "yay (stand-in): $a" >&2; exit 2 ;; *) names+=("$a") ;; esac
+done
+build() { # name asdeps
+  local n=$1 dir d
+  pacman -Q "$n" >/dev/null 2>&1 && return 0
+  [[ -d /srv/gsaur/$n ]] || { echo "yay (stand-in): no AUR package $n" >&2; return 1; }
+  # shellcheck disable=SC1090,SC1091
+  for d in $(source "/srv/gsaur/$n/PKGBUILD" && echo "${depends[@]-}"); do
+    [[ -d /srv/gsaur/$d ]] && build "$d" yes
+  done
+  dir=$(mktemp -d)
+  cp -r "/srv/gsaur/$n/." "$dir/"
+  (cd "$dir" && makepkg -s --noconfirm --needed)
+  if [[ $2 == yes ]]; then sudo pacman -U --noconfirm --asdeps "$dir"/*.pkg.tar.zst; else sudo pacman -U --noconfirm "$dir"/*.pkg.tar.zst; fi
+}
+for n in "${names[@]}"; do build "$n" no; done
+YAY
+chmod 755 /usr/bin/yay
+quiet pacman -Rns --noconfirm gs-lib 2>/dev/null
+aur() { runuser -u carol -- env -i HOME=/home/carol USER=carol PATH=/omarchy/bin:/usr/bin XDG_RUNTIME_DIR="/run/user/$cuid" \
+  OMARCHY_PATH=/omarchy STORE_E2E_TERMINAL="$W/terminal" QT_QPA_PLATFORM=offscreen "$W/store_e2e" "$@" 2>>"$W/e2e.err"; }
+out=$(aur aur-install gs-aur-app "$W/pins-changed" /srv/gsaur-rpc)
+expect "pins that differ: refused by the plan, nothing built" eval 'grep -q "^plan=omarchyChanged " <<<"$out" && ! pacman -Q gs-aur-app >/dev/null 2>&1'
+out=$(aur aur-install gs-lib "$W/pins" /srv/gsaur-rpc)
+expect "a name a repository has (gs-lib, [gstest]): refused by the plan (repository)" eval 'grep -q "^plan=repository " <<<"$out"'
+out=$(aur aur-install gs-aur-gone "$W/pins" /srv/gsaur-rpc)
+expect "a name the AUR does not know: refused by the plan (notOnAur)" eval 'grep -q "^plan=notOnAur .*detail=gs-aur-gone$" <<<"$out"'
+out=$(aur aur-install gs-aur-app "$W/pins" /srv/gsaur-rpc)
+sed 's/^/    /' <<<"$out"
+expect "aur-install gs-aur-app: built gs-aur-app and gs-aur-lib, gs-lib from the repository, done (exit 0 and the state)" \
+  eval 'has "$out" "plan=none built=gs-aur-app,gs-aur-lib packages=gs-lib detail=" && has "$out" "result=done" && pacman -Q gs-aur-app gs-aur-lib gs-lib >/dev/null'
+expect "  gs-aur-app installed explicitly from outside the repositories, its library and gs-lib as dependencies" \
+  eval 'pacman -Qqem | grep -qx gs-aur-app && pacman -Qqdm | grep -qx gs-aur-lib && pacman -Qqd | grep -qx gs-lib'
+expect "  Omarchy's update lock was held while it ran (by the script), and free after" \
+  eval 'has "$out" "lock-while-running=1" && has "$out" "lock-after=0"'
+expect "  Omarchy's own omarchy-pkg-aur-add ran (the terminal's output)" grep -q "Grassfield Store runs Omarchy's omarchy-pkg-aur-add gs-aur-app" "$W/terminal.log"
+out=$(aur aur-remove gs-aur-lib "$W/pins")
+expect "aur-remove gs-aur-lib while gs-aur-app needs it: the plan names it, nothing runs" \
+  eval 'grep -q "^plan=dependency packages= dependents=gs-aur-app" <<<"$out" && pacman -Q gs-aur-lib >/dev/null'
+out=$(aur aur-remove gs-aur-app "$W/pins")
+sed 's/^/    /' <<<"$out"
+expect "aur-remove gs-aur-app: the whole plan (the app, its library, gs-lib), done through omarchy-pkg-drop, all gone" \
+  eval 'has "$out" "result=done" && grep -qE "^plan=none packages=gs-aur-app,(gs-lib,gs-aur-lib|gs-aur-lib,gs-lib) " <<<"$out" && ! pacman -Q gs-aur-app >/dev/null 2>&1 && ! pacman -Q gs-aur-lib >/dev/null 2>&1'
+[[ -s $W/terminal.log ]] && { echo "  the terminal's last lines:"; tail -4 "$W/terminal.log" | sed 's/^/    /'; }
 
 say "result"
 if ((fails)); then echo "$fails FAIL"; exit 1; fi

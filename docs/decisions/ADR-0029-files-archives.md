@@ -8,8 +8,8 @@ Status: Proposed (integrator, under owner delegation D-5); applied with Files PR
   go into a folder named after the archive; a name in use gets " 2".
 - `libarchive` (and its `bsdtar`) is in Arch's core repository and a dependency of pacman, so it is on every Omarchy
   machine; 7-Zip is optional. KArchive (KDE Frameworks, a dependency of KIO) reads and writes zip, tar.* and 7z in-process.
-- Archives are untrusted input (path traversal, links pointing out, huge expansions). The Files Applications branch
-  (in review) moves icon decoding into a killable child process for the same reason.
+- Archives are untrusted input (path traversal, links pointing out, huge expansions). The Files Applications location
+  (FP-26, merged) moves icon decoding into a killable child process for the same reason.
 
 ## Options
 1. **`bsdtar` in a child process**: one tool for zip, tar, tar.gz/bz2/xz/zst, 7z, cpio, iso and rar (read); killable;

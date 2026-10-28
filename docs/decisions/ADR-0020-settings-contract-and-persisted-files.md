@@ -25,7 +25,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 
 | File | Directory now | Writer / reader | `version` | Target |
 |---|---|---|---|---|
-| `grassfield.json` | config | shell and Settings / all | 1 | stays (GF-084) |
+| `grassfield.json` | config | shell and Settings, Grassfield Store for its `store` keys (ADR-0037 SD20) / all | 1 | stays (GF-084) |
 | `folder-styles.json` | config | Files / Files, shell | 1 | stays (user data) |
 | `mouse-trackpad.lua` | config | Settings (`MousePage.qml:16`) / Hyprland | n/a (Lua) | stays |
 | Files QSettings | config | Files / Files, Preview | n/a | stays |
@@ -48,7 +48,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `clipboard/history/` (same layout; ADR-0034, only when `search.clipboard.keepOnDisk` is on) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; at most 100 items and 64 MiB, expired at the chosen retention, deleted when the switch or the history is turned off and by Clear History) |
 | `clipboard/` thumbnails and previews (ADR-0034) | runtime (`$XDG_RUNTIME_DIR/grassfield`, tmpfs; 0700, files 0600) | the clipboard helper / the shell | n/a (PNG) | none (never on disk; removed with their item and when the helper starts or exits) |
 | `store.json` (ADR-0037 c) | state | Grassfield Store / the Store | 1 | none (versioned from the start): the accepted catalog serial and fetch time per channel; from step 3, `operation`: the one in flight (id, kind, path, app, name, packages, plan, a setup's recipe and its arguments, the web app's name and URL, start time), written before it starts and removed once its outcome is read (ADR-0037 f); other keys kept on rewrite (one writer at a time, `apps/store/src/statefile.cpp`) |
-| `store/` (ADR-0037 c) | cache (`$XDG_CACHE_HOME/grassfield/store`) | Grassfield Store / the Store | n/a | none (regenerable): `<channel>/grassfield-catalog.v1.json`, its `.sig` and `etag`, checked again at each use; `icons/<sha256>.png` (32 MiB, checked against the signed hash); `appstream/<version>/` and `appstream/current` (the fetched AppStream, one version) |
+| `store/` (ADR-0037 c) | cache (`$XDG_CACHE_HOME/grassfield/store`) | Grassfield Store / the Store | n/a | none (regenerable): `<channel>/grassfield-catalog.v1.json`, its `.sig` and `etag`, checked again at each use; `icons/<sha256>.png` (32 MiB, checked against the signed hash); `appstream/<version>/` and `appstream/current` (the fetched AppStream, one version); `aur/` (step 3b2: the AUR's answers, `info/<name>.json`, `search/<key>`, `pkgbuild/<package base>`, fresh for an hour, 4 MiB in all, the oldest dropped first) |
 
 Every existing reader of files versioned in place ignores unknown top-level keys (`RecentItemsLogic.normalize`,
 `Airplane.parse`, `WallpaperConfig.onlineStateOf`, `WallpaperState`'s `.displays`, the Settings status readers), so

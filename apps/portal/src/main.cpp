@@ -3,6 +3,8 @@
 // by D-Bus activation (grassfield-portal.service), it quits 60 s after its last request. The panels are the Files browser:
 // this binary links the Files library (apps/files/files-core.cmake) and loads Files' QML (FilePanels.qml), so a panel has
 // the sidebar, views, path pop-up, search, Quick Look and KIO sheets of Grassfield Files.
+#include "appicons.h"
+#include "applicationslogic.h"
 #include "filechooser.h"
 #include "filesapp.h"
 #include "imageproviders.h"
@@ -53,6 +55,10 @@ bool guiAvailable()
 int main(int argc, char *argv[])
 {
     namespace runmode = grassfield::apps::runmode;
+    // The icon decoder child (AppIcons::loadIsolated runs this binary, as in Files): decode stdin to a PNG on stdout and
+    // nothing else, never a second backend.
+    if (AppIcons::isDecodeChildInvocation(argc, argv))
+        return AppIcons::decodeChildMain(argc, argv);
     // D-4's start-up loop: a platform theme that reads the portal (gtk3 with GTK_USE_PORTAL=1) could wait on the frontend that
     // waits on this process. The panels draw with Grassfield.Ui and need none (the unit clears it too).
     qunsetenv("QT_QPA_PLATFORMTHEME");
@@ -126,6 +132,12 @@ int main(int argc, char *argv[])
             for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
                 engine->addImportPath(*it);
             engine->addImageProvider(QStringLiteral("icon"), new IconProvider);
+            engine->addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
+            // As in Files: the icon decoders and the walks of the applications end before Qt's shutdown.
+            QObject::connect(app.get(), &QCoreApplication::aboutToQuit, app.get(), [] {
+                AppIconProvider::shutdown();
+                ApplicationsLogic::waitForListings(3500);
+            });
             engine->addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
             QString qmlDir = runmode::devValue("FILES_QML");
             if (qmlDir.isEmpty())

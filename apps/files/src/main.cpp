@@ -5,9 +5,11 @@
 #include <QUrl>
 
 #include "translationloader.h"
+#include "applicationslogic.h"
 #include "filesapp.h"
 #include "globalmenu.h"
 #include "windowchrome.h"
+#include "appicons.h"
 #include "imageproviders.h"
 
 #ifndef GRASSFIELD_FILES_QML_DIR
@@ -19,6 +21,9 @@
 
 int main(int argc, char *argv[])
 {
+    // The icon decoder child (AppIcons::loadIsolated runs this binary): decode stdin to a PNG on stdout and nothing else.
+    if (AppIcons::isDecodeChildInvocation(argc, argv))
+        return AppIcons::decodeChildMain(argc, argv);
     // QApplication (not QGuiApplication): KIO's widgets library (KDirLister, its job delegate class) expects one; its
     // dialogs are not used (Grassfield's sheets, ADR-0035 D-12 a, src/kioprompts.h).
     QApplication app(argc, argv);
@@ -70,6 +75,12 @@ int main(int argc, char *argv[])
     for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
         engine.addImportPath(*it);
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
+    engine.addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] {
+        AppIconProvider::shutdown();
+        // A walk of the applications (a link to / can take seconds) must not overlap Qt's shutdown: waited for, bounded like the decoders.
+        ApplicationsLogic::waitForListings(3500);
+    });
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_FILES_QML");

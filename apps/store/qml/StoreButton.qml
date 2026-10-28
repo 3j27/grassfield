@@ -27,7 +27,7 @@ Item {
         if (!root.backend)
             return qsTr("Installing and opening apps work in the Store's window.");
         if (root.state_ === "get")
-            return Store.getBlockText(root.actions ? root.actions.get : "source");
+            return Store.getBlockText(root.actions ? root.actions.get : "source", root.app ? root.app.kind : "");
         if (root.state_ === "installed")
             return qsTr("This app has no window of its own.");
         return "";

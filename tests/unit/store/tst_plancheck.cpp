@@ -231,3 +231,141 @@ TEST(PlanCheck, Setups)
     storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
     EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false).refusal, Refusal::Unfinished);
 }
+
+namespace {
+
+// A fake pacman for the AUR's plan: -Si answers for a repository's package (gimp), -T lists the dependencies the system
+// lacks (it has glibc, cmake, bash), -S --print resolves the repositories' names (gtk3 and gtk-common, python, git) and says
+// "target not found" for any other; -S --needed --print (the repositories' part, as any install) and -Si of several give
+// their lines and sizes.
+const QByteArray kAurPacman = R"SH(here=$(dirname "$0")
+have=" glibc cmake bash "
+repo=" gtk3 python git "
+case "$1" in
+  -Qu) [ -s "$here/qu" ] && cat "$here/qu" && exit 0; exit 1 ;;
+  -Qq) printf '%s\n' glibc cmake bash ;;
+  -T) shift; [ "$1" = -- ] && shift; rc=0
+      for d in "$@"; do n=${d%%[<>=]*}; case $have in *" $n "*) ;; *) echo "$d"; rc=127 ;; esac; done
+      echo "$*" >>"$here/asked-T"; exit $rc ;;
+  -Sp) n=; for a in "$@"; do n=$a; done
+       case $n in
+         gimp) echo gimp; exit 0 ;;
+         pdf-viewer) echo zathura; exit 0 ;;
+         locked) echo 'error: failed to init transaction (unable to lock database)' >&2; exit 1 ;;
+         *) echo "error: target not found: $n" >&2; exit 1 ;;
+       esac ;;
+  -Si) [ "$3" = gimp ] && { echo 'Name            : gimp'; exit 0; }
+       [ "$2" = -- ] && [ $# -gt 3 ] && { printf 'Name            : %s\nInstalled Size  : 1.00 MiB\n\n' gtk3 gtk-common; exit 0; }
+       exit 1 ;;
+  -S) names=no; for a in "$@"; do [ "$a" = "%n" ] && names=yes; done
+      case $names in
+        yes) rc=0; past=no
+           for a in "$@"; do [ $past = yes ] && { case $repo in *" $a "*) echo "$a" ;; *) echo "error: target not found: $a" >&2; rc=1 ;; esac; }
+             [ "$a" = -- ] && past=yes; done; exit $rc ;;
+        *) past=no
+           for a in "$@"; do [ $past = yes ] && case $a in
+               gtk3) echo 'gtk3 1:3.24.50-1 extra 7000000 https://mirror.example/extra/gtk3.pkg.tar.zst'
+                     echo 'gtk-common 1:3.24.50-1 extra 300000 https://mirror.example/extra/gtk-common.pkg.tar.zst' ;;
+               python) echo 'python 3.14.0-1 core 20000000 https://mirror.example/core/python.pkg.tar.zst' ;;
+               git) echo 'git 2.52.0-1 extra 6000000 https://mirror.example/extra/git.pkg.tar.zst' ;;
+             esac; [ "$a" = -- ] && past=yes; done; exit 0 ;;
+      esac ;;
+  *) exit 1 ;;
+esac)SH";
+
+} // namespace
+
+// An AUR package's plan (step 3b2): the AUR's command and pins as a setup's, then a repository's name refused, an unknown
+// one refused, and what yay would build (the AUR's, read in rounds) and what pacman adds (the repositories', checked as any
+// install).
+TEST(PlanCheck, AurPlans)
+{
+    Fixture f;
+    f.tools.pacman = storetest::script(f.dir.filePath(QStringLiteral("aurpacman")), kAurPacman);
+    const QString root = f.dir.filePath(QStringLiteral("omarchy"));
+    QDir().mkpath(root + QStringLiteral("/bin"));
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-aur-add"), "omarchy-pkg-missing \"$@\" && yay -S --noconfirm --needed \"$@\"");
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-missing"), "exit 0");
+    const auto pin = [&root](const QString &rel) {
+        QFile file(root + QLatin1Char('/') + rel);
+        return std::pair{rel, file.open(QIODevice::ReadOnly) ? QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex())
+                                                             : QString()};
+    };
+    const SetupCheck setup{root, QStringLiteral("omarchy-pkg-aur-add"),
+                           {pin(QStringLiteral("bin/omarchy-pkg-aur-add")), pin(QStringLiteral("bin/omarchy-pkg-missing"))}};
+    const AurAnswer all = parseAurAnswer(storetest::readFixture(QStringLiteral("aur/info.json")), QStringLiteral("multiinfo"));
+    QList<QStringList> asked;
+    const auto info = [&all, &asked](const QStringList &names) {
+        asked.append(names);
+        AurAnswer out{true, {}, {}};
+        for (const AurPackage &p : all.packages) {
+            if (names.contains(p.name))
+                out.packages.append(p);
+        }
+        return out;
+    };
+    const auto names = [](const QList<PlannedPackage> &list) {
+        QStringList out;
+        for (const PlannedPackage &p : list)
+            out.append(p.name + QLatin1Char(' ') + p.version);
+        return out;
+    };
+
+    // example-app-bin: it and example-lib (an AUR dependency) built; gtk3 (and what it needs) from the repositories; cmake
+    // and glibc are there.
+    InstallPlan p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::None) << p.detail.toStdString();
+    EXPECT_EQ(names(p.built), (QStringList{QStringLiteral("example-app-bin 2.4.1-1"), QStringLiteral("example-lib 1.3-2")}));
+    EXPECT_EQ(p.built.at(0).repo, QStringLiteral("aur"));
+    EXPECT_EQ(names(p.packages), (QStringList{QStringLiteral("gtk3 1:3.24.50-1"), QStringLiteral("gtk-common 1:3.24.50-1")}));
+    EXPECT_EQ(p.downloadSize, 7300000);
+    EXPECT_EQ(p.installedSize, 2 * 1024 * 1024);
+    EXPECT_FALSE(p.incomplete);
+    EXPECT_EQ(asked, (QList<QStringList>{{QStringLiteral("example-app-bin")}, {QStringLiteral("example-lib")}}));
+    EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst")}) << "the repositories' first file, as any install";
+
+    // A repository has it, or a package that provides it (yay installs what pacman resolves): from there; pacman that does
+    // not answer is no answer. The AUR does not know it, or one of its dependencies is on neither.
+    p = checkAurInstall(QStringLiteral("gimp"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Repository);
+    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Repository) << "a provider in the repositories";
+    p = checkAurInstall(QStringLiteral("locked"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Failed);
+    EXPECT_TRUE(p.detail.contains(QLatin1String("unable to lock database"))) << p.detail.toStdString();
+    p = checkAurInstall(QStringLiteral("nope"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::NotOnAur);
+    EXPECT_EQ(p.detail, QStringLiteral("nope"));
+    p = checkAurInstall(QStringLiteral("example-tool-git"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::NotOnAur) << "its checkdepends python-pytest is on neither";
+    EXPECT_EQ(p.detail, QStringLiteral("python-pytest"));
+
+    // The AUR does not answer; offline; the pins; the last update unfinished; an unread dependency marks the plan.
+    const auto silent = [](const QStringList &) { return AurAnswer{false, {}, QStringLiteral("unavailable")}; };
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, silent, f.tools, true, false).refusal, Refusal::Failed);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, false, false).refusal, Refusal::Offline);
+    SetupCheck changed = setup;
+    changed.pins.first().second = QString(64, QLatin1Char('0'));
+    p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-aur-add"));
+    // The command's helper (omarchy-pkg-missing) not pinned: the catalog does not vouch for the command.
+    SetupCheck helperless = setup;
+    helperless.pins.removeLast();
+    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-missing"));
+    SetupCheck wrong = setup;
+    wrong.recipe = QStringLiteral("omarchy-pkg-add");
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("-rf"), setup, info, f.tools, true, false).refusal, Refusal::Failed);
+    const auto unread = [&info](const QStringList &n) {
+        AurAnswer a = info(n);
+        for (AurPackage &p : a.packages)
+            p.dependenciesUnread = true;
+        return a;
+    };
+    EXPECT_TRUE(checkAurInstall(QStringLiteral("example-lib"), setup, unread, f.tools, true, false).incomplete);
+    storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false).refusal, Refusal::Unfinished);
+}

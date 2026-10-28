@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // List view: Name, Date Modified, Size and Kind columns; clicking a header sorts by it (again: reverses).
@@ -436,7 +437,7 @@ FocusScope {
                 anchors.fill: parent
                 enabled: !row.renaming
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                drag.target: mouse.bandStart ? null : dragProxy
+                drag.target: (root.model.isApplications || mouse.bandStart) ? null : dragProxy
                 drag.threshold: Tokens.filesDragThreshold
                 property bool collapseOnRelease: false
                 // Pressed outside the icon and the name: a drag draws a rubber band, a click selects the row.
@@ -495,7 +496,7 @@ FocusScope {
                     if (drag.active) {
                         collapseOnRelease = false;
                         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
-                        dragProxy.Drag.imageSource = "image://icon/" + row.iconName;
+                        dragProxy.Drag.imageSource = IconSource.url(row.iconName);
                         root.tab.dragStarted();
                         dragProxy.Drag.active = true;
                     }

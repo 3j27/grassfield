@@ -6,7 +6,9 @@ import "Store.js" as Store
 
 // An app's page (spec SR9-SR12): its icon, name, summary and developer, the button, the source and the licence, always;
 // the screenshots (when AppStream has them and they are on, owner ST6: fetched when the page opens); the description;
-// What's New (AppStream's releases, else the package's version and build date); and the Information list.
+// What's New (AppStream's releases, else the package's version and build date); and the Information list. An AUR app's
+// page asks for the AUR's facts when it opens (maintainer or orphaned, votes, popularity, last update, the out-of-date
+// flag; SR11) and offers its build script, fetched on click (ADR-0037 e.6: plain text, never run by the Store).
 ScrollPage {
     id: root
 
@@ -20,6 +22,7 @@ ScrollPage {
     signal uninstallRequested(var app)
     signal detailsRequested(string id)
     signal tryAgainRequested(var app, string kind)
+    signal buildScriptRequested(var app)
 
     // What the buttons may do (StoreBackend::actions), the app's operation and how its last one ended (spec SR13, SR19, SR22).
     readonly property var actions: root.app.id && root.backend.revision >= 0 ? root.backend.actions(root.app.id) : ({})
@@ -31,9 +34,13 @@ ScrollPage {
     Accessible.role: Accessible.Pane
     Accessible.name: root.app.name || ""
 
+    readonly property var aur: root.app.aur || ({})
+
     Component.onCompleted: {
         if (root.factsPackage !== "" && (root.app.kind === "repo" || root.app.kind === "setup"))
             root.backend.requestPackageInfo(root.factsPackage);
+        if (root.app.kind === "aur")
+            root.backend.requestAur(root.app.id);
     }
 
     Connections {
@@ -41,6 +48,10 @@ ScrollPage {
         function onPackageInfo(name: string, facts: var): void {
             if (name === root.factsPackage)
                 root.facts = facts;
+        }
+        function onAurInfo(id: string): void {
+            if (id === root.app.id)
+                root.app = root.backend.app(id);
         }
     }
 
@@ -228,7 +239,7 @@ ScrollPage {
                 width: parent.width
                 visible: root.actions.installed === true && text !== ""
                 textFormat: Text.PlainText
-                text: Store.uninstallReasonText(root.actions.uninstall || "")
+                text: Store.uninstallReasonText(root.actions.uninstall || "", root.app.kind)
                 wrapMode: Text.Wrap
                 color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
@@ -273,7 +284,7 @@ ScrollPage {
                 required property int index
                 readonly property string caption: (root.app.captions || [])[index] || ""
                 // Read again when the Store goes offline or comes back (the provider refuses offline anyway).
-                readonly property string source: root.backend.online ? root.backend.screenshotSource(modelData) : ""
+                readonly property string source: root.backend.online && root.backend.sources.screenshots ? root.backend.screenshotSource(modelData) : ""
                 height: shots.height
                 width: picture.status === Image.Ready && picture.implicitHeight > 0
                     ? Math.min(shots.width, Math.round(picture.implicitWidth * height / picture.implicitHeight))
@@ -408,7 +419,12 @@ ScrollPage {
                 {label: qsTr("Developer"), value: root.app.developer || ""},
                 {label: root.app.kind === "setup" ? qsTr("Packages") : qsTr("Package"),
                  value: root.app.kind === "setup" ? (root.app.packages || []).join(", ") : (root.app.package || "")},
-                {label: qsTr("Version"), value: root.facts.version || ""},
+                {label: qsTr("Version"), value: root.facts.version || root.aur.version || ""},
+                {label: qsTr("Maintainer"), value: root.app.kind !== "aur" ? "" : root.aur.orphaned ? qsTr("Orphaned") : (root.aur.maintainer || "")},
+                {label: qsTr("Votes"), value: root.aur.votes !== undefined ? String(root.aur.votes) : ""},
+                {label: qsTr("Popularity"), value: root.aur.popularity || ""},
+                {label: qsTr("Last Updated"), value: root.aur.lastModified || ""},
+                {label: qsTr("Flagged Out of Date"), value: root.aur.outOfDate ? (root.aur.outOfDateSince || qsTr("Yes")) : ""},
                 {label: qsTr("Download Size"), value: root.facts.downloadSize || ""},
                 {label: qsTr("Installed Size"), value: root.facts.installedSize || ""},
                 {label: qsTr("Category"), value: (root.app.categories || []).join(", ")},
@@ -434,6 +450,34 @@ ScrollPage {
                     onLinkActivated: url => root.linkRequested(url)
                 }
             }
+        }
+
+        // The AUR: the package's build script, as the AUR has it, read before installing (SR11); as far below the facts as
+        // their rows are from each other.
+        Item {
+            visible: root.app.kind === "aur"
+            implicitWidth: buildScript.implicitWidth
+            implicitHeight: buildScript.implicitHeight + Tokens.storeInfoRowGap - Tokens.storeProductLineGap
+
+            Button {
+                id: buildScript
+                anchors.bottom: parent.bottom
+                push: true
+                text: qsTr("View Build Script")
+                enabled: root.backend.online
+                onClicked: root.buildScriptRequested(root.app)
+            }
+        }
+
+        Text {
+            width: parent.width
+            visible: root.app.kind === "aur" && root.app.aurUnknown === true
+            textFormat: Text.PlainText
+            text: qsTr("The AUR doesn't have this package anymore.")
+            wrapMode: Text.Wrap
+            color: Appearance.windowSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.storeBadgeSize
         }
     }
 }

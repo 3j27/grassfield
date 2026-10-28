@@ -49,7 +49,11 @@ Window {
     onClosing: Qt.callLater(root.destroy)
 
     Component.onCompleted: {
-        if (root.info.isDir) {
+        if (root.info.isDir && String(root.info.url).startsWith("grassfield-apps:")) {
+            // The Applications location is no folder on disk: its size is the number of applications (the grid's list).
+            const n = root.app.applicationsCount();
+            root.folderSize = n === 1 ? qsTr("1 item") : qsTr("%1 items").arg(n);
+        } else if (root.info.isDir) {
             root.folderSize = qsTr("Calculating…");
             root.app.directorySize(root.info.url, (bytes, files, folders) => {
                 const n = files + folders;
@@ -75,7 +79,22 @@ Window {
         onActivated: root.close()
     }
 
-    readonly property var rows: [
+    // An application of the Applications location: what its desktop entry says, read-only.
+    readonly property bool isApplication: root.info.isApplication === true
+
+    readonly property var applicationRows: [
+        {label: qsTr("Kind:"), value: root.info.kind},
+        {label: qsTr("Category:"), value: root.info.genericName},
+        {label: qsTr("Comment:"), value: root.info.comment},
+        {label: qsTr("Where:"), value: root.info.where},
+        {label: qsTr("Desktop entry:"), value: root.info.desktopEntry},
+        {label: qsTr("Command:"), value: root.info.command},
+        {label: qsTr("Categories:"), value: root.info.categories},
+        {header: qsTr("Sharing & Permissions")},
+        {label: qsTr("You can:"), value: qsTr("Read only")}
+    ]
+
+    readonly property var rows: root.isApplication ? root.applicationRows : [
         {label: qsTr("Kind:"), value: root.info.kind},
         {label: qsTr("Size:"), value: root.info.isDir ? root.folderSize : qsTr("%1 (%2 bytes)").arg(root.info.sizeText).arg(root.info.bytes)},
         {label: qsTr("Where:"), value: root.info.where},
@@ -129,7 +148,7 @@ Window {
                     isDir: root.info.isDir
                     folderColor: root.folderStyle.color
                     folderGlyph: root.folderStyle.glyph
-                    thumbnail: root.info.thumbnail
+                    thumbnail: root.info.thumbnail || ""
                 }
 
                 Column {
@@ -153,7 +172,7 @@ Window {
                     Text {
                         textFormat: Text.PlainText
                         width: parent.width
-                        text: root.info.isDir ? root.folderSize : root.info.sizeText
+                        text: root.isApplication ? root.info.kind : root.info.isDir ? root.folderSize : root.info.sizeText
                         color: Appearance.colors.textSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
@@ -182,6 +201,7 @@ Window {
             // in a tooltip.
             Item {
                 id: tagLine
+                visible: !root.isApplication
                 width: content.width
                 height: tagSwatches.implicitHeight
                 Accessible.role: Accessible.Grouping
@@ -257,7 +277,7 @@ Window {
                         visible: !line.isHeader
                         x: Tokens.filesInfoLabelWidth + Tokens.spacingSm
                         width: parent.width - x
-                        text: line.isHeader ? "" : line.modelData.value
+                        text: line.isHeader ? "" : (line.modelData.value ?? "")
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily

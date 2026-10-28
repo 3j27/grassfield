@@ -8,6 +8,7 @@
 #pragma once
 
 #include "appstreamsource.h"
+#include "aur.h"
 #include "catalogstore.h"
 #include "channel.h"
 #include "operations.h"
@@ -46,7 +47,8 @@ struct Snapshot {
     QString appstreamProblem; // "" or unverified, unavailable
     QList<SyncPackage> sync;
     QSet<QString> explicitPackages;
-    QSet<QString> foreignWithEntry; // packages no repository has that own an application entry
+    QSet<QString> foreign;          // packages no repository has (pacman -Qm)
+    QSet<QString> foreignWithEntry; // those of them that own an application entry
     QHash<QString, QStringList> entries; // package -> the desktop ids of its entries in /usr/share/applications
     DenyList deny;                       // what is never removed (removal.h)
     QList<view::WebAppEntry> webApps;
@@ -88,9 +90,9 @@ class StoreBackend : public QObject
     Q_PROPERTY(QVariantMap appData READ appDataStatus NOTIFY dataChanged)
     // {name, initials, picture}: the local user (passwd, AccountsService's picture).
     Q_PROPERTY(QVariantMap user READ user CONSTANT)
-    // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on, step 3 writes them) and the switch of
-    // the screenshots (owner ST6: on).
-    Q_PROPERTY(QVariantMap sources READ sources CONSTANT)
+    // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on) and the switch of the screenshots
+    // (owner ST6: on), read from grassfield.json's "store" keys (the settings window writes aur and screenshots, SD20).
+    Q_PROPERTY(QVariantMap sources READ sources NOTIFY sourcesChanged)
     // The key window (QGuiApplication::focusWindow), null while no window of the Store has the keyboard. Qt matches a
     // window's Shortcuts and its global menu's keys while one of its transient children has the keyboard too, so a key
     // belongs to the key window alone (as Files' FilesApp.focusWindow).
@@ -98,7 +100,7 @@ class StoreBackend : public QObject
     // The queue (spec SR18): [{id, app, name, kind, state, blocked, done, total}], the running one first.
     Q_PROPERTY(QVariantList operations READ operations NOTIFY operationsChanged)
     // How the last operation of an app ended, while it says something: app id -> {kind, name, outcome, present, total,
-    // details}.
+    // details, source ("aur" for the AUR's commands)}.
     Q_PROPERTY(QVariantMap results READ results NOTIFY operationsChanged)
     // pacman stopped mid-way and left its lock (db.lck there, no pacman running): SR20's explanation, then Arch's recovery.
     Q_PROPERTY(bool staleLock READ staleLock NOTIFY operationsChanged)
@@ -143,12 +145,25 @@ public:
     Q_INVOKABLE QVariantMap app(const QString &id) const;
     // pacman -Si for the Information list, answered by packageInfo().
     Q_INVOKABLE void requestPackageInfo(const QString &package);
-    // Installed (SR23, read only): [{group, apps}], groups in a fixed order, apps by name.
+    // Installed (SR23): [{group, apps}], groups in a fixed order, apps by name; "aur" holds the packages installed explicitly
+    // from outside the repositories that the AUR knows (asked once the AUR is on), "foreign" the others that own an entry.
     Q_INVOKABLE QVariantList installed() const;
+    // The AUR (step 3b2; spec SR7, SR11), each asked only while the AUR is on and the Store online, answered by a signal:
+    // a search by name after Return (aurResults: the results' summaries with votes and outOfDate, the most voted first, a
+    // repository's names left out; problem "" | off | offline | short | tooMany | unavailable), the AUR's facts of an AUR
+    // page (aurInfo: read app(id) again), and its build script (buildScript: the PKGBUILD as plain text). `id` is an AUR
+    // page's ("aur:<name>") or a catalog app whose source is the AUR.
+    Q_INVOKABLE void searchAur(const QString &term);
+    Q_INVOKABLE void requestAur(const QString &id);
+    Q_INVOKABLE void requestBuildScript(const QString &id);
     // Updates (SR24, read only): software-update.json read again.
     Q_INVOKABLE QVariantMap updates() const;
     // Ctrl+R: everything read again and the catalog fetched, metered or not.
     Q_INVOKABLE void refresh();
+    // grassfield.json for the settings window's switches (SD20, as the Settings app writes its keys, ADR-0020): {exists, ok,
+    // text}, at most 1 MiB of a regular file; and its text written back whole (QSaveFile), "" or why it was not.
+    Q_INVOKABLE QVariantMap readConfig() const;
+    Q_INVOKABLE QString writeConfig(const QString &text) const;
     // A product page's Homepage or Bug tracker: https only, never in a dev session; false when not opened.
     Q_INVOKABLE bool openLink(const QString &url);
     // The image source of a screenshot ("" while screenshots are off or the Store is offline).
@@ -184,6 +199,7 @@ public:
 
 signals:
     void appearanceChanged();
+    void sourcesChanged();
     void dataChanged();
     void loadingChanged();
     void networkChanged();
@@ -191,6 +207,9 @@ signals:
     void packageInfo(const QString &name, const QVariantMap &facts); // "package" is a reserved word in QML
     void planReady(const QString &app, const QString &kind, const QVariantMap &plan);
     void operationsChanged();
+    void aurResults(const QString &term, const QVariantList &apps, const QString &problem);
+    void aurInfo(const QString &id);
+    void buildScript(const QString &id, const QString &text, bool ok);
 
 private:
     struct Job {
@@ -218,6 +237,19 @@ private:
     // omarchyChanged.
     QString terminalBlock() const;
     SetupCheck setupCheck(const StoreApp &a, bool install) const;
+    // The AUR's command (kAurAdd, kAurDrop) with the catalog's pins, checked as a setup's recipe.
+    SetupCheck aurCheck(const QString &command) const;
+    // An AUR operation's path (b.2): terminalBlock(), then aurUnchecked when the catalog's pins do not name the command.
+    QString aurBlock(const QString &command) const;
+    // The AUR package an id names: an AUR page's, or a catalog app's whose source is the AUR ("" otherwise).
+    QString aurName(const QString &id) const;
+    AurConfig aurConfig() const;
+    // What the AUR answered, kept for this run (full: an info answer, with its dependencies; a search's has none).
+    void rememberAur(const QList<AurPackage> &packages, bool full);
+    // The AUR pages' apps again, from what the AUR answered and what pacman says is installed.
+    void rebuildAurApps();
+    // The packages installed from outside the repositories, asked of the AUR once (Installed's "AUR" group).
+    void askAurForForeign();
     QVariantMap withActions(QVariantMap map, const StoreApp &a) const;
     PlanTools planTools() const;
     void checkStaleLock();
@@ -244,6 +276,8 @@ private:
     bool m_online = true;
     bool m_metered = false;
     bool m_screenshots = true;
+    bool m_aur = false;
+    bool m_flathub = false;
     QVariantMap m_user;
     std::shared_ptr<const Snapshot> m_snapshot;
     bool m_jobRunning = false;
@@ -253,6 +287,11 @@ private:
     std::unique_ptr<Operations> m_operations;
     QHash<QString, InstallPlan> m_installPlans; // app id -> the plan its sheet showed
     QHash<QString, RemovePlan> m_removePlans;
+    QHash<QString, AurPackage> m_aurPackages; // name -> what the AUR answered this run
+    QSet<QString> m_aurFull;                  // the names an info answer gave (with their dependencies)
+    QSet<QString> m_aurUnknown;               // the names an info answer did not know
+    QSet<QString> m_aurAsked;                 // the installed foreign names asked of the AUR already
+    QHash<QString, StoreApp> m_aurApps;       // "aur:<name>" -> its app
     bool m_staleLock = false;
     bool m_quitWhenIdle = false;
     QThreadPool m_pool; // last member: waits for the jobs while the rest is still there

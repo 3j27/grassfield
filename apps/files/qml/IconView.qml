@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQml.Models
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // Icon view: a grid of thumbnails or type icons with names below. Click selects (Shift extends,
@@ -163,7 +164,7 @@ FocusScope {
 
     function startDrag(iconName: string, thumbnail: string): void {
         dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(root.model.selectedUrls())};
-        dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : "image://icon/" + iconName;
+        dragProxy.Drag.imageSource = thumbnail !== "" ? thumbnail : IconSource.url(iconName);
         root.tab.dragStarted();
         dragProxy.Drag.active = true;
     }
@@ -703,7 +704,7 @@ FocusScope {
             height: nameBox.y + nameBox.height - y
             enabled: !cell.renaming
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            drag.target: dragProxy
+            drag.target: root.model.isApplications ? null : dragProxy
             drag.threshold: Tokens.filesDragThreshold
             property bool collapseOnRelease: false
 
