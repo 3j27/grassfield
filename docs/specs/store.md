@@ -121,7 +121,8 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   (Grassfield's polkit sheet; "Waiting for permission…" « En attente de l'autorisation… » meanwhile, 120 s at most, then the
   Store ends pkexec and says the request timed out, SD16), at every
   operation, never kept (`auth_admin`: a queue of three operations asks three times), the sheet saying "Install xterm, gimp"
-  or "Remove …" with the package names polkit reports, then "Action: org.grassfield.store.manage-packages" and "Program:
+  or "Remove …" with every package name polkit reports (past eight lines the list scrolls), then "Action:
+  org.grassfield.store.manage-packages" and "Program:
   /usr/lib/grassfield/grassfield-store-helper" (ADR-0037 b.1, SD2, SD17; the line as polkit gives it when it does not
   match); the AUR and
   Omarchy setups, sudo's prompt in Omarchy's terminal; web apps and Flatpaks, the sheet alone, its default button being the

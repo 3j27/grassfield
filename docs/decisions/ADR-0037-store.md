@@ -269,18 +269,25 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
   unless its effective uid is 0. An operation id is used once (its log is created exclusively).
 - It runs exactly `pacman -S --needed --noconfirm --noprogressbar -- <names>` or `pacman -Rns --noconfirm --noprogressbar --
   <names>`. Never `-y`, `--overwrite`, `-dd`, `-U`, a file path, a hook, or anything else. It installs from the repositories
-  only (names, not files). Before an install it applies SD1 itself (SD12): `pacman -Sw --noconfirm --noprogressbar --
-  <names not installed>` downloads them into pacman's cache and checks their signatures as an install does, `pacman -Sp
-  --print-format '%n %l'` names each one's file, and `pacman -Qlpq -- <that file>` must list an application entry
-  (`/usr/share/applications/<id>.desktop`); an installed name is read from pacman's database (`pacman -Qlq`). A name that owns
-  none is refused before anything is installed.
+  only (names, not files). Before an install it reads the whole plan first, `pacman -S --needed --print --print-format
+  '%n %v %l' -- <names>`: every line must be a package, and no installed package may change in it, which would be a partial
+  upgrade or downgrade (5). A package IgnorePkg holds back (`pacman -Qu` shows it "[ignored]") is one pacman asks about,
+  and under `--noconfirm` installs anyway: the plan is read without `--noconfirm`, the question reads `/dev/null` and the
+  plan fails ("could not satisfy dependencies"); an older version a dependency asks for comes with no question, and the
+  plan names an installed package (integrator's review of 19d2e9e; the Store refuses the same plans, e.4). It then applies
+  SD1 itself (SD12): `pacman -Sw --noconfirm --noprogressbar -- <names not installed>` downloads them into pacman's cache
+  and checks their signatures as an install does, the plan names each one's file, and `pacman -Qlpq -- <that file>` must
+  list an application entry (`/usr/share/applications/<id>.desktop`); an installed name is read from pacman's database
+  (`pacman -Qlq`). A name that owns none is refused before anything is installed.
 - Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12); every name
   matches the pattern of e.5 and is a package a repository has by that exact name (`pacman -Slq`; a name only provided by
   another package, such as `sh`, is refused). One run at a time: a lock only root can open (`/run/grassfield-store/helper.lock`,
-  0600), refused at once when held.
+  0600), refused at once when held. Its descriptor is closed for every program the helper starts (`9<&-`), so neither pacman
+  nor a process a package's scriptlet leaves running holds it after the helper ends.
 - Its exit code says what happened (the Store's words for each, spec SR19): 0 done; 1 pacman failed (its message in the
   log); 2 usage, or an operation id used before; 3 busy (another run, or `db.lck`); 4 the last system update did not finish;
-  5 a name no repository has, or a plan pacman cannot resolve; 6 a removal the rule refuses; 7 an install of a package that
+  5 a name no repository has, a plan pacman cannot resolve, or one that would change an installed package; 6 a removal the
+  rule refuses; 7 an install of a package that
   owns no application entry. pkexec's own are 126 (not authorized, or the dialog dismissed) and 127 (authentication failed).
 - **`remove` takes apps only (counter-review MAJOR; S16).** Every name must be a package of a repository (`pacman -Si`; a
   package no repository has is removed through b.2), installed explicitly (`pacman -Qqe`), the owner of an application entry
@@ -703,7 +710,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD14 | Where "Open Software Update" (a plan refused until the system is updated, SR15) goes while Settings has no Software Update pane of its own | Settings at General, where ADR-0033 puts Software Update · the shell's update indicator · nothing (the sheet's text alone) | Settings at General | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS sends there; (b) one click to where the update is, never a terminal |
 | SD15 | The web apps in Installed that our catalog does not list (Omarchy's own, the user's) | Open and Uninstall… like the catalog's (the user's own launchers, b.3) · Open only | Open and Uninstall… | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) Omarchy's menu already removes any web app; a launcher in the user's files is the user's to remove, with the sheet alone (ST3) |
 | SD16 | The polkit dialog left unanswered (the 120 s of b.1) | the Store ends pkexec (still the user's process until it starts the helper, a root process no user can signal) and says the request timed out · it keeps waiting | ends pkexec | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the queue does not stay stuck behind a dialog the user may not see; nothing is ever signalled after the helper started |
-| SD17 | The form of SD2's sheet for the Store's action (the integrator's note at step 0's PASS: "keeps Action: <id> and the helper path") | "Install xterm, gimp" (or "Remove …") in place of polkit's message, then "Enter your password to allow this.", "Action: org.grassfield.store.manage-packages" and "Program: /usr/lib/grassfield/grassfield-store-helper" · the message as polkit gives it | the plain words, then the action and the program | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet says what is asked in plain words; the action and the program stay for whoever checks; the names come from polkit's own message, read by a strict pattern for this action id only (a message that does not match is shown as polkit gives it) |
+| SD17 | The form of SD2's sheet for the Store's action (the integrator's note at step 0's PASS: "keeps Action: <id> and the helper path") | "Install xterm, gimp" (or "Remove …") in place of polkit's message, every name shown (past eight lines the list scrolls: wheel, drag, its scroll bar, Tab then the arrow keys), then "Enter your password to allow this.", "Action: org.grassfield.store.manage-packages" and "Program: /usr/lib/grassfield/grassfield-store-helper" · the message as polkit gives it | the plain words, then the action and the program | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet says what is asked in plain words; the action and the program stay for whoever checks; the names come from polkit's own message, read by a strict pattern for this action id only (a message that does not match is shown as polkit gives it) |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -912,3 +919,19 @@ Counter-review of f978601 (integrator, 2026-10-27): PASS; the integrator's neste
   own (two lines of fcc9a30's screenshot gate went into it); the history is not rewritten (CLAUDE.md), so a bisect skips
   it (`git bisect skip be35a43`): be35a43 and fcc9a30 build together.
 
+
+Opus security review of step 3a at 19d2e9e (integrator, 2026-10-28): PASS, no BLOCKER or MAJOR; four fixes asked before
+merge, each answered here:
+- **The explicit-only rule had no test of its own** (a mutant without it survived): `tests/integration/store_helper.sh`
+  removes `gs-orphan`, an app with an application entry installed as a dependency that nothing needs, and expects exit 6.
+- **IgnorePkg and a partial upgrade:** the helper reads the whole plan before anything is downloaded, without
+  `--noconfirm`, and refuses one that fails or that would change an installed package (b.1, exit 5). The test installs
+  `gs-newer`, which needs a `gs-app` IgnorePkg holds back (pacman's question gets no answer: the plan fails), and
+  `gs-wants-old`, which needs a `gs-pinned` older than the installed one (no question: the plan names it); both exit 5 with
+  nothing changed.
+- **The polkit sheet could hide names** past its eight lines while the helper takes 64 names of 128 characters: the Store's
+  request now shows every name, scrolling past eight lines (SD17, the security spec's "Polkit details";
+  `tst_authdialog` test_13_storeRequestNamesEveryPackage).
+- **The lock's descriptor reached pacman:** every program the helper starts gets `9<&-`; the test checks that only the
+  helper holds the lock while pacman and a scriptlet run, and that a process a scriptlet leaves running neither holds it nor
+  makes the next run busy.
