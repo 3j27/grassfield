@@ -6,8 +6,9 @@ import qs.security
 // Authorization sheet for one polkit request: lock icon, the request message, action ID,
 // identity, password field, Cancel / Allow (default). Every string that comes from the
 // requester or polkit is rendered as plain text (no rich text, no remote images), flattened to
-// one line by the model and capped in rendered lines here, so the sheet has a bounded height and
-// the action ID and the buttons always stay visible. Esc cancels.
+// one line by the model and capped in rendered lines here (Grassfield Store's request scrolls past
+// its cap instead), so the sheet has a bounded height and the action ID and the buttons always
+// stay visible. Esc cancels.
 FocusScope {
     id: root
 
@@ -22,8 +23,10 @@ FocusScope {
 
     readonly property real cornerRadius: Tokens.radiusDialog
     readonly property Item surface: material
-    // Rendered line caps of untrusted text (elided past them) and visible identity rows.
+    // Rendered line caps of untrusted text (elided past them; the Store's request scrolls past storeLines) and visible
+    // identity rows.
     readonly property int messageLines: 4
+    readonly property int storeLines: 8
     readonly property int detailLines: 2
     readonly property int identityRows: 4
 
@@ -100,20 +103,86 @@ FocusScope {
             }
         }
 
-        Text {
+        // The request. Any message is capped at messageLines and elided, except Grassfield Store's, which names every
+        // package it will install or remove (SD2, the macOS model; the helper takes up to 64 names): past storeLines it
+        // scrolls, by the wheel, a drag, its scroll bar, and the arrow keys, Page Up/Down, Home and End once Tab reaches it.
+        // Assistive technologies read it whole.
+        Item {
             width: parent.width
-            textFormat: Text.PlainText
-            text: root.model.message !== "" ? root.model.message : qsTr("An application wants to make changes.")
-            horizontalAlignment: Text.AlignHCenter
-            color: Appearance.colors.text
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyTitleSize
-            font.weight: Tokens.typographyMenuBoldWeight
-            wrapMode: Text.Wrap
-            maximumLineCount: root.messageLines
-            elide: Text.ElideRight
-            Accessible.role: Accessible.StaticText
-            Accessible.name: text
+            height: messageView.height
+
+            Flickable {
+                id: messageView
+                objectName: "polkitMessageView"
+
+                readonly property real lineStep: message.lineCount > 0 ? message.implicitHeight / message.lineCount : 0
+                readonly property bool scrolls: contentHeight > height
+
+                function scrollTo(y: real): void {
+                    contentY = Math.max(0, Math.min(y, contentHeight - height));
+                }
+
+                width: parent.width
+                height: root.model.storeRequest && message.lineCount > root.storeLines ? root.storeLines * lineStep : message.implicitHeight
+                contentWidth: width
+                contentHeight: message.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: scrolls
+                activeFocusOnTab: scrolls
+                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).
+                enabled: root.inputEnabled
+
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Down)
+                        scrollTo(contentY + lineStep);
+                    else if (event.key === Qt.Key_Up)
+                        scrollTo(contentY - lineStep);
+                    else if (event.key === Qt.Key_PageDown)
+                        scrollTo(contentY + height);
+                    else if (event.key === Qt.Key_PageUp)
+                        scrollTo(contentY - height);
+                    else if (event.key === Qt.Key_Home)
+                        scrollTo(0);
+                    else if (event.key === Qt.Key_End)
+                        scrollTo(contentHeight);
+                    else
+                        return;
+                    event.accepted = true;
+                }
+
+                Text {
+                    id: message
+                    objectName: "polkitMessage"
+                    width: messageView.width
+                    textFormat: Text.PlainText
+                    text: root.model.message !== "" ? root.model.message : qsTr("An application wants to make changes.")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyTitleSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                    wrapMode: Text.Wrap
+                    // Every line of the Store's request (at most 64 names of 128 characters: fewer lines than characters).
+                    maximumLineCount: root.model.storeRequest ? text.length : root.messageLines
+                    elide: Text.ElideRight
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                    // A new request starts at its first line.
+                    onTextChanged: messageView.contentY = 0
+                }
+            }
+
+            ScrollBar {
+                flickable: messageView
+                anchors.right: parent.right
+                height: messageView.height
+            }
+
+            FocusRing {
+                shapeRadius: Tokens.radiusControl
+                visible: messageView.activeFocus
+            }
         }
 
         Text {
@@ -150,6 +219,25 @@ FocusScope {
             textFormat: Text.PlainText
             text: qsTr("Action: %1").arg(root.model.actionId)
             visible: root.model.actionId !== ""
+            horizontalAlignment: Text.AlignHCenter
+            color: Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: root.detailLines
+            elide: Text.ElideRight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        // The program polkit will run, when the model reads it from the request (Grassfield Store's helper, SD2): the plain
+        // words above name what it does, this line what does it.
+        Text {
+            objectName: "polkitProgram"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: qsTr("Program: %1").arg(root.model.program)
+            visible: root.model.program !== ""
             horizontalAlignment: Text.AlignHCenter
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily

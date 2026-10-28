@@ -1,16 +1,22 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Grassfield.Ui
 
 // A one-line notice above the page (spec SR29): offline ("You're offline. The catalog is from 27 October."), or a catalog
-// older than 30 days. Read by assistive technologies when it appears.
+// older than 30 days; and how an operation ended or a lock pacman left (SR19, SR20), with its actions as links after the
+// text ([{id, text}]: Try Again, Details…, Close). Read by assistive technologies when it appears.
 Rectangle {
     id: root
 
     property string text: ""
+    property var actions: []
+
+    signal acted(string id)
 
     visible: root.text !== ""
-    implicitWidth: glyph.width + label.implicitWidth + 3 * Tokens.storeNoticePadding
-    implicitHeight: visible ? label.implicitHeight + 2 * Tokens.storeNoticePadding : 0
+    implicitWidth: glyph.width + label.implicitWidth + links.width + (root.actions.length > 0 ? 4 : 3) * Tokens.storeNoticePadding
+    implicitHeight: visible ? Math.max(label.implicitHeight, links.height) + 2 * Tokens.storeNoticePadding : 0
     radius: Tokens.storeNoticeRadius
     // Over the page: the window's colour with a hairline rim, so that it stands out from cards and tiles alike.
     color: Appearance.colors.windowBackground
@@ -32,7 +38,7 @@ Rectangle {
         id: label
         anchors.left: glyph.right
         anchors.leftMargin: Tokens.storeNoticePadding
-        anchors.right: parent.right
+        anchors.right: links.left
         anchors.rightMargin: Tokens.storeNoticePadding
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
@@ -42,5 +48,25 @@ Rectangle {
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.storeBadgeSize
+    }
+
+    Row {
+        id: links
+        anchors.right: parent.right
+        anchors.rightMargin: root.actions.length > 0 ? Tokens.storeNoticePadding : 0
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Tokens.storeNoticePadding
+
+        Repeater {
+            model: root.actions
+
+            delegate: LinkText {
+                id: link
+                required property var modelData
+                text: link.modelData.text
+                maximumLineCount: 1
+                onActivated: root.acted(link.modelData.id)
+            }
+        }
     }
 }

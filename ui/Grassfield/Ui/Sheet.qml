@@ -35,6 +35,8 @@ Item {
     // While shown, the keyboard stays in the sheet: whatever takes it elsewhere in the window (a view that focuses itself a
     // moment later) gives it back. For a sheet with no pop-up of its own (Files' KIO questions).
     property bool keepsKeyboard: false
+    // False while the confirm button may not act yet (the Store's sheet while it checks a plan): Return does nothing either.
+    property bool confirmEnabled: true
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -81,6 +83,8 @@ Item {
     }
 
     function confirm(): void {
+        if (!root.confirmEnabled)
+            return;
         const cb = root.confirmHandler;
         const error = cb ? cb(field.text) : "";
         if (error && error !== "") {
@@ -237,6 +241,7 @@ Item {
                             text: root.confirmText
                             primary: !root.destructive && !root.returnCancels
                             destructive: root.destructive
+                            enabled: root.confirmEnabled
                             onClicked: root.confirm()
                         }
                     }
