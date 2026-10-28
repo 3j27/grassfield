@@ -62,6 +62,18 @@
 # unlocked (`hyprctl locked`) before the next case (integrator nested pass of ab485fb: a locker killed before its unlock landed
 # would leave the session locked for every later case). A failed C1 log check prints the plugin's own lines for the victim,
 # Hyprland's lock state and the layers on GF-REF.
+# Step 4a (docs/specs/tiling.md TL27, TL28; only with tiling-layouts and tile-hover; the second foot window and a third,
+# closed after the cases). The plugin is driven directly: no shell surface is involved (the shell only shows a suggestion
+# after its own arrangement):
+#   zone           arrange({layout:"thirds", windows:[first], zone:2}): the first window alone in the right third, no group;
+#                  the reply's suggestion belongs to that `placed` notice and offers zones 0 and 1 (frames inside the
+#                  work area) with the other windows, never the first
+#   pick           arrange({…, windows:[second], zone:0, with:first}): the left third, in the first's group; the suggestion
+#                  now offers zone 1
+#   pick-held      a pick into a zone the layout holds is refused (reason invalid): nothing moves, the suggestion stays
+#   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
+#   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
+#                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -1016,6 +1028,104 @@ QML
   close_popover # nothing of the shell's popover left over the windows of the C1 cases
 else
   say "SKIP: step 3 cases (the plugin does not advertise tile-hover)"
+fi
+
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts") != null and index("tile-hover") != null)' >/dev/null 2>&1 && [[ -n ${addr2:-} ]]; then
+  env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+    foot -T tiling-foot3 -w 600x400 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
+  foot3_pid=$!
+  pids+=("$foot3_pid")
+  for _ in $(seq 1 100); do [[ -n $(geometry_of tiling-foot3) ]] && break; sleep 0.2; done
+  sleep 1
+  read -r _ _ _ _ addr3 < <(geometry_of tiling-foot3)
+  free_foot
+  nestctl dispatch "hl.plugin.grassfield.tile(\"$addr2\", \"previous\")" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.window.move({ x = $((mx + 500)), y = $((my + 300)), window = 'address:$addr2' })" >>"$log" 2>&1
+  [[ -n ${addr3:-} ]] && nestctl dispatch "hl.dsp.window.move({ x = $((mx + 700)), y = $((my + 350)), window = 'address:$addr3' })" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 0.8
+  suggestion() { tiling_state | jq -c '.suggestion'; }
+  record_of() { tiling_state | jq -c --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0] // null'; }
+  check "step 4a: the third foot window opened" test -n "${addr3:-}"
+
+  area_now
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "zone: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
+  zone_gen=$(jq -r '.gen' <<<"${last_event:-null}")
+  zone_alone() {
+    local r
+    r=$(record_of "$addr")
+    say "  record: $r"
+    jq -e '.state == "tiled" and .layout == "thirds" and .zone == 2 and .group == 0' <<<"$r" >/dev/null
+  }
+  check "zone: the first window alone in the right third, no group" zone_alone
+  first_suggestion() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg a "${addr#0x}" --arg b "${addr2#0x}" --arg o "$out" --argjson gen "${zone_gen:-null}" --argjson ax "$ax" --argjson aw "$aw" \
+      '.gen == $gen and .address == $a and .layout == "thirds" and .output == $o and ([.zones[].zone] == [0, 1])
+       and all(.zones[]; .w > 0 and .h > 0 and .x >= $ax and .x + .w <= $ax + $aw) and (.windows | index($b) != null) and (.windows | index($a) == null)' <<<"$sg" >/dev/null
+  }
+  check "zone: the suggestion of that notice offers zones 0 and 1 with the other windows, not the first" first_suggestion
+
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr2\"],\"zone\":0,\"with\":\"$addr\"}"
+  picked() { # address zone
+    local a b
+    a=$(record_of "$addr")
+    b=$(record_of "$1")
+    say "  first: $a; picked: $b"
+    jq -e -n --argjson a "$a" --argjson b "$b" --argjson z "$2" '$b.state == "tiled" and $b.layout == "thirds" and $b.zone == $z and $b.group > 0 and $b.group == $a.group and $a.zone == 2' >/dev/null
+  }
+  check "pick: the second window takes the left third, in the first's group" picked "$addr2" 0
+  zone_one() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg c "${addr3#0x}" '[.zones[].zone] == [1] and (.windows | index($c) != null)' <<<"$sg" >/dev/null
+  }
+  check "pick: the suggestion now offers zone 1" zone_one
+
+  read -r b3x b3y b3w b3h _ < <(geometry_of tiling-foot3)
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr3\"],\"zone\":2,\"with\":\"$addr\"}"
+  check "pick-held: a pick into a held zone is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  check "pick-held: nothing moved" box_of tiling-foot3 "$b3x" "$b3y" "$b3w" "$b3h"
+  check "pick-held: the suggestion stays" zone_one
+
+  tile_ipc "$addr2" previous
+  check "stale: another change ends the suggestion" test "$(suggestion)" = null
+
+  nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr3\")" >>"$log" 2>&1
+  sleep 1
+  workspace_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .workspace.name'; }
+  check "minimized: the third window waits on special:minimized" test "$(workspace_of "$addr3")" = special:minimized
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  offers_minimized() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg c "${addr3#0x}" '.windows | index($c) != null' <<<"$sg" >/dev/null
+  }
+  check "minimized: the suggestion offers it" offers_minimized
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr3\"],\"zone\":1,\"with\":\"$addr\"}"
+  on_desktop() {
+    local ws want
+    ws=$(workspace_of "$addr3")
+    want=$(nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | .activeWorkspace.name')
+    say "  Desktop $ws (want $want)"
+    [[ -n $ws && $ws == "$want" ]]
+  }
+  check "minimized: the pick brings it back to $out's Desktop" on_desktop
+  check "minimized: in the middle third, in the first's group" picked "$addr3" 1
+
+  tile_ipc "$addr3" previous
+  free_foot
+  kill "$foot3_pid" 2>/dev/null
+  sleep 0.5
+else
+  say "SKIP: step 4a cases (the plugin does not advertise tiling-layouts, or the second window is missing)"
 fi
 
 c1_cases
