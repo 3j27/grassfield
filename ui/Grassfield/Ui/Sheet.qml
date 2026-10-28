@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Templates as T
 
-// Modal sheet over its window: a title, a message, an optional text field and Cancel / confirm buttons. Return confirms,
-// Esc cancels, a click outside the panel is swallowed. Used for Go to Folder and for irreversible actions (Empty Trash).
+// Modal sheet over its window: a title, a message, an optional text field and Cancel / confirm buttons. Return confirms
+// (or cancels: returnCancels), Esc cancels, a click outside the panel is swallowed. Used for Go to Folder and for irreversible actions (Empty Trash).
 // Declare it as a child of the window's content; it fills it. The panel is a QtQuick.Templates Pane on the frosted material.
 Item {
     id: root
@@ -23,6 +23,9 @@ Item {
     property bool showCancel: true
     // The cancel button's text (Displays' countdown sheet says "Revert").
     property string cancelText: qsTr("Cancel")
+    // Return cancels and the cancel button is the default one: for a choice the user should not take by habit (connect
+    // to a server whose identity can't be verified; build and install an AUR package).
+    property bool returnCancels: false
     // False while the confirm button may not act yet (the Store's sheet while it checks a plan): Return does nothing either.
     property bool confirmEnabled: true
     // Content between the text and the buttons.
@@ -101,7 +104,10 @@ Item {
                 root.cancel();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.confirm();
+                if (root.returnCancels)
+                    root.cancel();
+                else
+                    root.confirm();
                 event.accepted = true;
             }
         }
@@ -181,12 +187,13 @@ Item {
                     Button {
                         visible: root.showCancel
                         text: root.cancelText
+                        primary: root.returnCancels
                         onClicked: root.cancel()
                     }
 
                     Button {
                         text: root.confirmText
-                        primary: !root.destructive
+                        primary: !root.destructive && !root.returnCancels
                         destructive: root.destructive
                         enabled: root.confirmEnabled
                         onClicked: root.confirm()

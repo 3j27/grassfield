@@ -106,6 +106,7 @@ TestCase {
         compare(s.message, "These packages will be installed:");
         compare(s.confirmText, "Install");
         verify(!s.destructive);
+        verify(!s.returnCancels, "Return installs a repository's package, as before");
         const list = find(s, i => i.Accessible.role === Accessible.List);
         tryCompare(list, "count", 2);
         compare(list.itemAtIndex(0).Accessible.name, "paint, 1-1, 1.2 MB");
@@ -243,7 +244,19 @@ TestCase {
         const label = find(s, i => i.text === "Download from the repositories");
         verify(label !== null);
         verify(label.contentWidth <= label.width, "the label stays in its column: " + label.contentWidth + " > " + label.width);
-        s.confirm();
+        // Cancel is the default (common rule 3: the build runs the package's script before any password): Return closes the
+        // sheet and nothing is queued; "Install from the AUR" takes a click, or Tab and Space.
+        verify(s.returnCancels);
+        keyClick(Qt.Key_Return);
+        verify(!s.visible);
+        verify(t.backend.calls.indexOf("install:aur:example-app-bin") < 0, "Return installed nothing");
+        t.win.requestGet(app);
+        t.backend.planReady("aur:example-app-bin", "install", {refusal: "", built: [{name: "example-app-bin", version: "2.4.1-1", repo: "aur", size: ""}],
+            packages: [], download: "", installed: "", incomplete: false, detail: ""});
+        const install = find(s, i => i.text === "Install from the AUR" && i.visible);
+        verify(install !== null);
+        install.clicked();
+        verify(!s.visible);
         verify(t.backend.calls.indexOf("install:aur:example-app-bin") >= 0);
 
         t.win.requestGet(app);
@@ -251,7 +264,7 @@ TestCase {
             packages: [], incomplete: true});
         verify(s.message.indexOf("Some of what the AUR lists for it could not be read: the build may install more than this.") >= 0);
         s.close();
-        for (const c of [["repository", "", "“example-app-bin” is in a repository", "A repository has this package: the Store installs it from there, from its own page, without building it."],
+        for (const c of [["repository", "", "“example-app-bin” is in a repository", "A repository has this package, or one that provides it: the Store installs it from there, without building it."],
                          ["notOnAur", "python-pytest", "“example-app-bin” can't be installed now", "It needs python-pytest, which neither the repositories nor the AUR have."],
                          ["omarchyChanged", "bin/omarchy-pkg-aur-add", "“example-app-bin” can't be installed now",
                           "Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been."]]) {

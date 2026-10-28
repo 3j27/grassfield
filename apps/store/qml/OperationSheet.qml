@@ -8,8 +8,9 @@ import "Store.js" as Store
 // then the sheet lists the source, the licence, the sizes and every package the operation adds or removes (pacman's plan),
 // or, for a web app, the launcher it adds or removes; for an Omarchy setup, first what it changes (our catalog's text), the
 // recipe Omarchy's terminal runs and, for a removal, the files it deletes (ADR-0037 e.1, b.2); for the AUR, its warning every
-// time (SR16), then what yay builds from the AUR and what pacman adds from the repositories, its default button "Install from
-// the AUR". A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
+// time (SR16), then what yay builds from the AUR and what pacman adds from the repositories, with "Install from the AUR"
+// beside Cancel, which is the default (Return cancels: the build runs the package's script before any password; common
+// rule 3). A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
 // or Cancel close it and nothing runs.
 Sheet {
     id: root
@@ -116,7 +117,7 @@ Sheet {
         case "omarchyChanged":
             return Store.omarchyChangedText(root.app.kind);
         case "repository":
-            return qsTr("A repository has this package: the Store installs it from there, from its own page, without building it.");
+            return qsTr("A repository has this package, or one that provides it: the Store installs it from there, without building it.");
         case "notOnAur":
             return root.plan.detail === root.app.package ? qsTr("The AUR doesn't have this package (anymore).")
                                                        : qsTr("It needs %1, which neither the repositories nor the AUR have.").arg(root.plan.detail || "");
@@ -131,6 +132,8 @@ Sheet {
         return root.updateFirst ? qsTr("Open Software Update") : qsTr("OK");
     }
     destructive: root.removing && root.refusal === ""
+    // An AUR install is never the default: a click, or Tab and Space, on "Install from the AUR".
+    returnCancels: root.aur && !root.removing && root.refusal === ""
     showCancel: root.refusal === "" || root.updateFirst
     confirmEnabled: root.plan !== null
 

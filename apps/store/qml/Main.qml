@@ -184,7 +184,8 @@ Window {
     function showBuildScript(app: var): void {
         root.buildScriptFor = app.id;
         textSheet.show(qsTr("Build Script of “%1”").arg(app.name),
-                       qsTr("The script yay runs to build this package, as the AUR has it. Read it before you install it."), qsTr("Loading…"));
+                       qsTr("The script yay runs to build this package, as the AUR has it now. Read it before you install it: yay fetches it again when it builds, and the package's other files, such as a script run with administrator rights when it is installed, are not shown here."),
+                       qsTr("Loading…"));
         root.backend.requestBuildScript(app.id);
     }
 

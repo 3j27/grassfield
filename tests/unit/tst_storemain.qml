@@ -399,6 +399,16 @@ TestCase {
         t.win.openSettings();
         verify(t.win.settingsWindow, "the settings window is created");
         tryVerify(() => t.win.settingsWindow.visible);
+        // What the AUR would be sent is read before it is turned on; while it is on, the closing line says what leaves.
+        const sw = t.win.settingsWindow;
+        const shown = text => find(sw.contentItem, i => i.text === text && i.visible) !== null;
+        verify(shown("From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, "
+                     + "the names of the packages installed from outside the repositories, and a build script when you ask to see it."));
+        verify(shown("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer."));
+        t.backend.sources = {aur: true, flathub: false, flatpak: false, screenshots: true};
+        verify(shown("Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. "
+                     + "What you search for stays on this computer until you press Return, which sends it to the AUR."));
+        verify(!shown("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer."));
         t.win.settingsWindow.close();
     }
 

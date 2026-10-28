@@ -164,13 +164,15 @@ Window {
                     text: qsTr("Screenshots, from the addresses in each app's description, when its page opens.")
                 }
 
+                // Shown whether the AUR is on or off: what turning it on sends is read before turning it on.
                 SettingsLine {
-                    visible: root.sources.aur
                     text: qsTr("From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, the names of the packages installed from outside the repositories, and a build script when you ask to see it.")
                 }
 
                 SettingsLine {
-                    text: qsTr("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.")
+                    text: root.sources.aur
+                          ? qsTr("Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. What you search for stays on this computer until you press Return, which sends it to the AUR.")
+                          : qsTr("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.")
                 }
             }
 

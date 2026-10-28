@@ -415,4 +415,37 @@ TestCase {
         keyClick(Qt.Key_Escape);
         verify(!sheet.visible);
     }
+
+    // returnCancels: Return cancels (nothing accepted), the cancel button is the default one and the confirm one is not.
+    function test_sheetReturnCancels() {
+        let accepted = 0, canceled = 0;
+        const onAccepted = () => accepted++;
+        const onCanceled = () => canceled++;
+        sheet.accepted.connect(onAccepted);
+        sheet.canceled.connect(onCanceled);
+        sheet.returnCancels = true;
+        sheet.open();
+        sheet.setField("good");
+        keyClick(Qt.Key_Return);
+        verify(!sheet.visible);
+        compare([accepted, canceled], [0, 1]);
+        const buttons = [];
+        const walk = item => {
+            for (let i = 0; i < item.children.length; ++i) {
+                const c = item.children[i];
+                if (c.text === "Cancel" || c.text === "OK")
+                    buttons.push(c);
+                walk(c);
+            }
+        };
+        walk(sheet);
+        compare(buttons.find(b => b.text === "Cancel").primary, true);
+        compare(buttons.find(b => b.text === "OK").primary, false);
+        sheet.returnCancels = false;
+        sheet.open();
+        keyClick(Qt.Key_Return);
+        compare([accepted, canceled], [1, 1]);
+        sheet.accepted.disconnect(onAccepted);
+        sheet.canceled.disconnect(onCanceled);
+    }
 }

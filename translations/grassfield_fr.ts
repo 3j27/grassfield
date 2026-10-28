@@ -5717,8 +5717,8 @@
         <translation>Script de construction de « %1 »</translation>
     </message>
     <message>
-        <source>The script yay runs to build this package, as the AUR has it. Read it before you install it.</source>
-        <translation>Le script que yay exécute pour construire ce paquet, tel que l&apos;AUR le fournit. Lisez-le avant de l&apos;installer.</translation>
+        <source>The script yay runs to build this package, as the AUR has it now. Read it before you install it: yay fetches it again when it builds, and the package&apos;s other files, such as a script run with administrator rights when it is installed, are not shown here.</source>
+        <translation>Le script que yay exécute pour construire ce paquet, tel que l&apos;AUR le fournit maintenant. Lisez-le avant de l&apos;installer : yay le télécharge de nouveau au moment de construire, et les autres fichiers du paquet, comme un script exécuté avec les droits d&apos;administrateur lors de son installation, ne sont pas montrés ici.</translation>
     </message>
     <message>
         <source>Loading…</source>
@@ -6578,8 +6578,8 @@
         <translation>Désinstaller «&#xa0;%1&#xa0;» retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
     </message>
     <message>
-        <source>A repository has this package: the Store installs it from there, from its own page, without building it.</source>
-        <translation>Un dépôt propose ce paquet : le Store l&apos;installe depuis ce dépôt, à partir de sa propre page, sans le construire.</translation>
+        <source>A repository has this package, or one that provides it: the Store installs it from there, without building it.</source>
+        <translation>Un dépôt propose ce paquet, ou un autre qui le fournit : le Store l&apos;installe depuis ce dépôt, sans le construire.</translation>
     </message>
     <message>
         <source>The AUR doesn&apos;t have this package (anymore).</source>
@@ -8659,6 +8659,10 @@
     <message>
         <source>From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, the names of the packages installed from outside the repositories, and a build script when you ask to see it.</source>
         <translation>Depuis l&apos;AUR (aur.archlinux.org), tant qu&apos;il est activé : ce que vous cherchez après avoir appuyé sur Entrée, les pages que vous ouvrez, les noms des paquets installés hors des dépôts, et un script de construction lorsque vous demandez à le voir.</translation>
+    </message>
+    <message>
+        <source>Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. What you search for stays on this computer until you press Return, which sends it to the AUR.</source>
+        <translation>Rien sur une connexion limitée, sauf si vous choisissez Actualiser, appuyez sur Entrée dans le champ de recherche ou ouvrez une page de l&apos;AUR. Ce que vous recherchez reste sur cet ordinateur jusqu&apos;à ce que vous appuyiez sur Entrée, qui l&apos;envoie à l&apos;AUR.</translation>
     </message>
     <message>
         <source>Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.</source>
