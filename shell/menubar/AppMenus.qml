@@ -77,7 +77,9 @@ Singleton {
             hiddenCount: Compositor.hiddenWindows(rev).length,
             spaces: Compositor.spacesOn(Compositor.focusedScreenName, rev).map(s => ({id: s.id})),
             newSpaceId: Compositor.nextSpaceId(),
-            canTile: Compositor.canTile
+            canTile: Compositor.canTile,
+            canArrange: Compositor.canArrange,
+            outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }
 
@@ -123,6 +125,12 @@ Singleton {
             break;
         case "tile":
             Compositor.tile(ctx.focusedWindow, item.place);
+            break;
+        case "arrange":
+            Compositor.arrange(ctx.focusedWindow, item.layout);
+            break;
+        case "moveToOutput":
+            Compositor.moveToOutput(ctx.focusedWindow, item.output);
             break;
         case "moveTo":
         case "moveToNew":

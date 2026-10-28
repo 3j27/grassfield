@@ -91,7 +91,7 @@ opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
 compositor = read("shell/platform/Compositor.qml")
 windows = ipc(compositor, "windows")
-for name in ("minimize", "tile", "hide", "cycleApp"):
+for name in ("minimize", "tile", "arrange", "tilePopover", "nextOutput", "hide", "cycleApp"):
     first_decision("shell/platform/Compositor.qml", f"windows.{name}", R) if windows is None else first_decision("shell/platform/Compositor.qml", name, R, text=windows, lines=2)
 # The plugin's minimize-request event (the titlebar button and, since GF-056 P8, a tagged window's own minimize button)
 # moves nothing behind the lock either.
@@ -490,6 +490,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
   'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows arrange")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows tilePopover")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows nextOutput")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows minimize request")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \

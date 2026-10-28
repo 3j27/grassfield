@@ -19,6 +19,9 @@ const NAMES = {
     "code:49": QT_TRANSLATE_NOOP("Bindings", "Key above Tab"),
     // The 8, = and - keys of the zoom shortcuts, also by keycode.
     "code:17": QT_TRANSLATE_NOOP("Bindings", "8"), "code:21": QT_TRANSLATE_NOOP("Bindings", "="), "code:20": QT_TRANSLATE_NOOP("Bindings", "-"),
+    // The U, I, J and K keys of the tiling quarters, by keycode (the same place on QWERTY and AZERTY).
+    "code:30": QT_TRANSLATE_NOOP("Bindings", "U"), "code:31": QT_TRANSLATE_NOOP("Bindings", "I"),
+    "code:44": QT_TRANSLATE_NOOP("Bindings", "J"), "code:45": QT_TRANSLATE_NOOP("Bindings", "K"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
@@ -37,6 +40,23 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Tile the window to the top half"),
     QT_TRANSLATE_NOOP("Bindings", "Tile the window to the bottom half"),
     QT_TRANSLATE_NOOP("Bindings", "Return the window to its previous size"),
+    QT_TRANSLATE_NOOP("Bindings", "Tile the window to the top-left quarter"),
+    QT_TRANSLATE_NOOP("Bindings", "Tile the window to the top-right quarter"),
+    QT_TRANSLATE_NOOP("Bindings", "Tile the window to the bottom-left quarter"),
+    QT_TRANSLATE_NOOP("Bindings", "Tile the window to the bottom-right quarter"),
+    QT_TRANSLATE_NOOP("Bindings", "Fill the screen with the window"),
+    QT_TRANSLATE_NOOP("Bindings", "Center the window"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows left and right"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows right and left"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows top and bottom"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows bottom and top"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows left and in quarters"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows right and in quarters"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows top and in quarters"),
+    QT_TRANSLATE_NOOP("Bindings", "Arrange the windows bottom and in quarters"),
+    QT_TRANSLATE_NOOP("Bindings", "Move the window to the display on the left"),
+    QT_TRANSLATE_NOOP("Bindings", "Move the window to the display on the right"),
+    QT_TRANSLATE_NOOP("Bindings", "Show the tiling options of the window"),
     QT_TRANSLATE_NOOP("Bindings", "Minimize window"),
     QT_TRANSLATE_NOOP("Bindings", "Hide app"),
     QT_TRANSLATE_NOOP("Bindings", "Next window"),

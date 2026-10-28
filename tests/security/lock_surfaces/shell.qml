@@ -134,7 +134,7 @@ ShellRoot {
         check("locked: overview.show stays closed", !overview.open);
         overview.toggle();
         check("locked: overview.toggle stays closed", !overview.open);
-        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "about", "forcequit", "appabout", "notice", "confirm"];
+        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "about", "forcequit", "appabout", "notice", "confirm", "tiling"];
         const opened = [];
         for (const k of kinds) {
             Popups.open(k, "", 0, 0, "left", {});

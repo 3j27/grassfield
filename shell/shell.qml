@@ -424,6 +424,7 @@ ShellRoot {
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
-    // every launch from the start (it would otherwise exist only once the Grassfield menu opened).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state)
+    // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing TilingHover makes
+    // it listen to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "tiling popover", TilingHover.address === "" ? "closed" : "open")
 }

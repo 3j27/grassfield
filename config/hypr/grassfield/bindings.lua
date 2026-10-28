@@ -78,12 +78,33 @@ bind("SUPER + W", "Close window", hl.dsp.window.close())
 bind("SUPER + CTRL + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mode = "maximized" }))
 -- Window tiling (macOS 15+ Globe+Ctrl+arrows; Super plays Command here): halves, and back to the size from before. The
--- compositor plugin places the window (window-tiling); the Window menu's Move & Resize shows the same keys.
+-- compositor plugin places the window (window-tiling); the Window menu's Move & Resize shows the same keys
+-- (docs/specs/tiling.md TL26). The quarters are bound by key position (code: keycodes 30, 31, 44 and 45: U, I, J and K, in
+-- the same place on QWERTY and AZERTY), the arrangements take the window and the next ones of its output (tiling-arrange),
+-- Super+Ctrl+Alt+Left/Right move it to the next display and Super+Ctrl+L opens its tiling popover with the keyboard
+-- (tile-hover).
 bind("SUPER + CTRL + LEFT", "Tile the window to the left half", shell("windows", "tile left"))
 bind("SUPER + CTRL + RIGHT", "Tile the window to the right half", shell("windows", "tile right"))
 bind("SUPER + CTRL + UP", "Tile the window to the top half", shell("windows", "tile top"))
 bind("SUPER + CTRL + DOWN", "Tile the window to the bottom half", shell("windows", "tile bottom"))
 bind("SUPER + CTRL + R", "Return the window to its previous size", shell("windows", "tile previous"))
+bind("SUPER + CTRL + code:30", "Tile the window to the top-left quarter", shell("windows", "tile top-left"))
+bind("SUPER + CTRL + code:31", "Tile the window to the top-right quarter", shell("windows", "tile top-right"))
+bind("SUPER + CTRL + code:44", "Tile the window to the bottom-left quarter", shell("windows", "tile bottom-left"))
+bind("SUPER + CTRL + code:45", "Tile the window to the bottom-right quarter", shell("windows", "tile bottom-right"))
+bind("SUPER + CTRL + RETURN", "Fill the screen with the window", shell("windows", "tile fill"))
+bind("SUPER + CTRL + C", "Center the window", shell("windows", "tile center"))
+bind("SUPER + CTRL + SHIFT + LEFT", "Arrange the windows left and right", shell("windows", "arrange left-right"))
+bind("SUPER + CTRL + SHIFT + RIGHT", "Arrange the windows right and left", shell("windows", "arrange right-left"))
+bind("SUPER + CTRL + SHIFT + UP", "Arrange the windows top and bottom", shell("windows", "arrange top-bottom"))
+bind("SUPER + CTRL + SHIFT + DOWN", "Arrange the windows bottom and top", shell("windows", "arrange bottom-top"))
+bind("SUPER + CTRL + ALT + SHIFT + LEFT", "Arrange the windows left and in quarters", shell("windows", "arrange left-quarters"))
+bind("SUPER + CTRL + ALT + SHIFT + RIGHT", "Arrange the windows right and in quarters", shell("windows", "arrange right-quarters"))
+bind("SUPER + CTRL + ALT + SHIFT + UP", "Arrange the windows top and in quarters", shell("windows", "arrange top-quarters"))
+bind("SUPER + CTRL + ALT + SHIFT + DOWN", "Arrange the windows bottom and in quarters", shell("windows", "arrange bottom-quarters"))
+bind("SUPER + CTRL + ALT + LEFT", "Move the window to the display on the left", shell("windows", "nextOutput left"))
+bind("SUPER + CTRL + ALT + RIGHT", "Move the window to the display on the right", shell("windows", "nextOutput right"))
+bind("SUPER + CTRL + L", "Show the tiling options of the window", shell("windows", "tilePopover"))
 bind("SUPER + T", "Toggle floating/tiling", hl.dsp.window.float({ action = "toggle" }))
 bind("SUPER + M", "Minimize window", shell("windows", "minimize"))
 bind("SUPER + H", "Hide app", in_switcher_else("hide", shell("windows", "hide")))
