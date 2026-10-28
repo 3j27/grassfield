@@ -555,9 +555,9 @@ Singleton {
     // the capability.
     readonly property bool canGroups: Capabilities.has("tiling-groups")
 
-    // The tile group of the window `address` (with or without 0x) comes forward: its members on screen on its Desktop in their stacking order,
-    // the window last (the plugin knows the groups). Called after the window's activation, through the dispatch channel
-    // that comes after the requests that activation sent. Nothing for a window in no group.
+    // The tile group of the window `address` (with or without 0x) comes forward: its members on screen on its Desktop in
+    // their stacking order, the window last (the plugin knows the groups). Called after the window's activation, through the
+    // dispatch channel that comes after the requests that activation sent. Nothing for a window in no group.
     function groupForward(address: string): bool {
         return root.canGroups && dispatchRequest(Minimized.groupFrontCall(address));
     }
@@ -570,21 +570,27 @@ Singleton {
         groupForward(addressOf(toplevel));
     }
 
-    // The Dock menu's Show Tile Group (TL29): the app's window `toplevel` of the group comes forward with its Desktop, the
-    // group's minimized members come back there (a restore lands on the Desktop its display shows), then the window takes
-    // the focus and the group comes forward, the window in front. Every step goes through the dispatch channel, in this
-    // order; the restores focus their window, the focus request after them gives it back to `toplevel`.
+    // The Dock menu's Show Tile Group (TL29): the group's Desktop is shown (the Desktop of the app's window `toplevel`, else
+    // of a member on one: minimized and hidden windows are on special workspaces), that window and the group's minimized
+    // members come back there (a restore lands on the Desktop its display shows), then the window takes the focus and the
+    // group comes forward, the window in front. Every step goes through the dispatch channel, in this order; the restores
+    // focus their window, the focus request after them gives it back to `toplevel`.
     function showTileGroup(toplevel: var, members: var): void {
         const own = hyprlandToplevel(toplevel);
         if (!own)
             return;
         root.endShowDesktop();
+        const onDesktop = t => !!(t && t.workspace && t.workspace.id > 0);
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const anchor = onDesktop(own) ? own : all.find(t => onDesktop(t) && members.indexOf(Minimized.normalizeAddress(t.address)) >= 0);
+        if (anchor && !anchor.workspace.active)
+            focusSpace(anchor.workspace.id);
         if (isMinimized(toplevel))
             unminimize(toplevel);
-        else if (own.workspace && (own.workspace.name === hiddenWorkspace || own.workspace.name === minimizedWorkspace))
+        else if (!onDesktop(own) && anchor)
+            dispatchRequest(moveRequest(own.address, String(anchor.workspace.id))); // hidden with its app: back with the group
+        else if (!onDesktop(own))
             activate(toplevel);
-        else if (own.workspace && own.workspace.id > 0 && !own.workspace.active)
-            focusSpace(own.workspace.id);
         for (const address of members) {
             const top = toplevelByAddress(address);
             if (top && top !== toplevel && isMinimized(top))

@@ -143,8 +143,11 @@ PopupMenu {
             return items;
         items.push({separator: true});
         items.push({id: "showall", text: qsTr("Show All Windows")});
-        for (const g of tileGroupRows)
-            items.push({id: "tileGroup", ref: Compositor.toplevelByAddress(g.own), members: g.members, text: root.tileGroupText(g)});
+        for (const g of tileGroupRows) {
+            const ref = Compositor.toplevelByAddress(g.own);
+            if (ref)
+                items.push({id: "tileGroup", ref: ref, members: g.members, text: root.tileGroupText(g)});
+        }
         // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
         // An app that does not respond offers Force Quit without Option.
         if (altHeld) {

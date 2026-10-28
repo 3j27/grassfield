@@ -357,9 +357,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   The groups are the `group` of each window in the `hyprctl grassfield-tiling` reply (`WindowTiling.parseGroups`, a
   suspended member included), read again by platform/TilingLink after every change of the tile records. The Dock menu
   lists the app's groups after Show All Windows (`WindowTiling.tileGroupRows`): "Show Tile Group", or "Show Tile Group
-  with <the other members' apps>" when the app has several; the row (Compositor `showTileGroup`) shows the window's
-  Desktop, restores the group's minimized members there, focuses the window and brings the group forward, all through the
-  dispatch channel in that order. An Overview drop (Compositor `moveGroupToSpace`) moves the window and the members on its
+  with <the other members' apps>" when the app has several; the row (Compositor `showTileGroup`) shows the group's
+  Desktop (the window's, else a member's that is on one), brings the window and the group's minimized members back there,
+  focuses the window and brings the group forward, all through the dispatch channel in that order. An Overview drop (Compositor `moveGroupToSpace`) moves the window and the members on its
   Desktop to the target Desktop, where they stay tiled and grouped (TL14). Feature `tiling-groups`, with `tiling-arrange`.
 - **TL30** Shared edge (T1e, option 1, M43, W18): between two windows of a group whose frames share an edge (margin
   between them included), the pointer over the middle `tiling.handleLength` of that edge shows a handle (resize cursor);
