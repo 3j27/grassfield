@@ -1,0 +1,106 @@
+{
+ "version": 5,
+ "type": "multiinfo",
+ "resultcount": 6,
+ "results": [
+  {
+   "ID": 1001,
+   "Name": "example-app-bin",
+   "PackageBaseID": 501,
+   "PackageBase": "example-app-bin",
+   "Version": "2.4.1-1",
+   "Description": "An example app, packaged from its release archive.",
+   "URL": "https://example.org/app",
+   "NumVotes": 120,
+   "Popularity": 1.53,
+   "OutOfDate": null,
+   "Maintainer": "alice",
+   "Submitter": "alice",
+   "FirstSubmitted": 1600000000,
+   "LastModified": 1790000000,
+   "URLPath": "/cgit/aur.git/snapshot/example-app-bin.tar.gz",
+   "Depends": [
+    "gtk3",
+    "example-lib>=1.2"
+   ],
+   "MakeDepends": [
+    "cmake"
+   ],
+   "OptDepends": [
+    "libnotify: desktop notifications"
+   ],
+   "License": [
+    "MIT"
+   ],
+   "Keywords": [
+    "editor",
+    "notes"
+   ]
+  },
+  {
+   "ID": 1002,
+   "Name": "example-lib",
+   "PackageBaseID": 502,
+   "PackageBase": "example-lib",
+   "Version": "1.3-2",
+   "Description": "The library example-app-bin needs.",
+   "URL": "https://example.org/lib",
+   "NumVotes": 3,
+   "Popularity": 0.0,
+   "OutOfDate": null,
+   "Maintainer": null,
+   "FirstSubmitted": 1610000000,
+   "LastModified": 1780000000,
+   "URLPath": "/cgit/aur.git/snapshot/example-lib.tar.gz",
+   "Depends": [
+    "glibc"
+   ],
+   "License": [
+    "LGPL-2.1-or-later"
+   ]
+  },
+  {
+   "ID": 1003,
+   "Name": "example-tool-git",
+   "PackageBaseID": 503,
+   "PackageBase": "example-tool-git",
+   "Version": "1:r12.gabc1234-1",
+   "Description": "\u0007A tool\u202e from the development branch\u0000",
+   "URL": "http://insecure.example.org/",
+   "NumVotes": 7,
+   "Popularity": 0.25,
+   "OutOfDate": 1791000000,
+   "Maintainer": "bob",
+   "FirstSubmitted": 1620000000,
+   "LastModified": 1791000000,
+   "URLPath": "/cgit/aur.git/snapshot/example-tool-git.tar.gz",
+   "Depends": [
+    "example-app-bin",
+    "python>=3.13"
+   ],
+   "MakeDepends": [
+    "git"
+   ],
+   "CheckDepends": [
+    "python-pytest"
+   ],
+   "License": [
+    "GPL-3.0-or-later"
+   ]
+  },
+  {
+   "Name": "Bad Name",
+   "PackageBase": "bad",
+   "Version": "1-1"
+  },
+  {
+   "Name": "bad-version",
+   "PackageBase": "bad-version",
+   "Version": "1 2-1"
+  },
+  {
+   "Name": "no-base",
+   "Version": "1-1"
+  }
+ ]
+}

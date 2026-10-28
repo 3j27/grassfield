@@ -19,6 +19,7 @@ find_package(ZLIB REQUIRED)
 add_library(grassfield-store-backend STATIC
     src/appstream.cpp src/appstream.h
     src/appstreamsource.cpp src/appstreamsource.h
+    src/aur.cpp src/aur.h
     src/catalog.cpp src/catalog.h
     src/catalogstore.cpp src/catalogstore.h
     src/channel.cpp src/channel.h
@@ -62,6 +63,7 @@ if(GTest_FOUND)
     enable_testing()
     add_executable(store-unit-tests
         ../../tests/unit/store/tst_appstream.cpp
+        ../../tests/unit/store/tst_aur.cpp
         ../../tests/unit/store/tst_catalog.cpp
         ../../tests/unit/store/tst_catalogstore.cpp
         ../../tests/unit/store/tst_channel.cpp

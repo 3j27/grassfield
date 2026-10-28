@@ -11,6 +11,7 @@
 //                                 that writes the helper's files under <fixture>/run/grassfield-store
 //   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Omarchy's terminal, b.2;
 //                                 Open, SR21): it gets the command's name, then its arguments
+//   GRASSFIELD_STORE_AUR_URL      the AUR's web service (step 3b2): a file:// folder of answers (aur.h), or another URL
 // Without the last two a dev session runs no operation and opens nothing ("dev: not applied", SR30). With a fixture, the
 // helper's files, pacman's lock and log, Omarchy's folder (its package lists, the setups' recipes and pinned files),
 // grassfield-store-run's folder and pacman-conf are the fixture's too.
