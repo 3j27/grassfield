@@ -20,6 +20,7 @@ TestCase {
             "file:///home/u/Documents": [["a.txt", false], ["b.png", false], ["Sub", true]],
             "file:///home/u/Documents/Sub": [["x.txt", false]],
             "file:///home/u/My Documents": [["c.txt", false]],
+            "grassfield-apps:/": [["Text Editor", false]],
             "smb://server/share": [["remote.txt", false]]
         })
 
@@ -42,6 +43,7 @@ TestCase {
             property bool writable: true
             property bool isSearch: false
             property bool isRecents: false
+            readonly property bool isApplications: String(listing.url).startsWith("grassfield-apps:")
             property bool searchLimited: false
             property string filterText: ""
             property int groupBy: 0
@@ -197,6 +199,10 @@ TestCase {
         property int folderStyleRevision: 0
         property var colorTagNames: []
         property var hiddenTags: []
+        property var launched: []
+        function launchApplication(target: url): void {
+            fakeApp.launched = fakeApp.launched.concat([String(target)]);
+        }
         function tagName(tag: string): string {
             return tag;
         }
@@ -497,6 +503,23 @@ TestCase {
         tab.activate(test.rowOf(tab.folder, "x.txt"), tab.folder, 0);
         compare(fakeHost.answers.length, 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/Sub/x.txt"]);
+    }
+
+    // The Applications location (Files' launchers) in a panel: a double-click starts nothing, and there is nothing to choose
+    // or to save there.
+    function test_the_applications_location_starts_nothing_in_a_panel(): void {
+        const panel = test.openPanel({currentFolder: "file:///home/u/Documents", directory: true});
+        const tab = test.findTab(panel.contentItem);
+        verify(panel.acceptEnabled, "a folder panel can choose a folder");
+        tab.navigate(Qt.url("grassfield-apps:/"), true);
+        verify(tab.isApplications);
+        fakeApp.launched = [];
+        tab.activate(test.rowOf(tab.folder, "Text Editor"), tab.folder, 0);
+        compare(fakeApp.launched.length, 0, "no application started");
+        compare(fakeHost.answers.length, 0);
+        verify(!panel.acceptEnabled, "nothing to choose in Applications");
+        panel.pressDefault();
+        compare(fakeHost.answers.length, 0);
     }
 
     function test_return_in_the_listing_is_the_default_button(): void {

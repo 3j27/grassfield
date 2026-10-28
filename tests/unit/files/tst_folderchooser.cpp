@@ -1,12 +1,14 @@
 // The listings of grassfield-portal's Open and Save panels (FolderModel.chooser; ADR-0035 D-4, docs/specs/system-dialogs.md
 // section 1): over a real KIO listing of a scratch folder, the files a panel cannot take are dimmed and never selected, a
-// panel that takes one item keeps one, and a folder panel dims every file. Part of files-kio-tests (a scratch home).
+// panel that takes one item keeps one, a folder panel dims every file, and the Applications location dims every application.
+// Part of files-kio-tests (a scratch home).
 #include "foldermodel.h"
 
 #include <QCoreApplication>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -103,4 +105,40 @@ TEST_F(FolderChooserTest, AFolderPanelDimsEveryFile)
     EXPECT_FALSE(dimmed("sub"));
     m_model.select(row("sub"), Qt::NoModifier);
     EXPECT_EQ(m_model.selectedCount(), 1);
+}
+
+// The Applications location (grassfield-apps:/, Files' launchers) in a panel: every application is dimmed and never selected,
+// whatever the filter (an application is a launcher, not a file an application can open). Its entry in the scratch home.
+TEST(FolderChooserApplications, EveryApplicationIsDimmedInAPanel)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    QFile entry(dir + QStringLiteral("/org.example.PanelEditor.desktop"));
+    ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+    entry.write("[Desktop Entry]\nType=Application\nName=Panel Editor\nExec=true\n");
+    entry.close();
+    FolderModel model;
+    model.setUrl(QUrl(QStringLiteral("grassfield-apps:/")));
+    const auto rowOf = [&model] {
+        for (int r = 0; r < model.count(); ++r)
+            if (model.nameAt(r) == QLatin1String("Panel Editor"))
+                return r;
+        return -1;
+    };
+    QDeadlineTimer deadline(10000);
+    while (rowOf() < 0 && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+    }
+    const int row = rowOf();
+    ASSERT_GE(row, 0);
+    EXPECT_TRUE(model.isApplications());
+    EXPECT_FALSE(model.data(model.index(row, 0), FolderModel::DimmedRole).toBool()); // Files: an application opens
+    model.setChooser({{QStringLiteral("globs"), QStringList{QStringLiteral("*")}}});
+    EXPECT_TRUE(model.data(model.index(row, 0), FolderModel::DimmedRole).toBool());
+    model.select(row, Qt::NoModifier);
+    EXPECT_EQ(model.selectedCount(), 0);
+    model.setChooser({{QStringLiteral("foldersOnly"), true}});
+    EXPECT_TRUE(model.data(model.index(row, 0), FolderModel::DimmedRole).toBool());
+    QFile::remove(entry.fileName());
 }
