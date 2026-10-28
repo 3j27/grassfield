@@ -83,6 +83,14 @@
 #   zoomed         the first window zoomed, then full screen, and focused (its tile suspended): group_front(first) leaves it
 #                  above the third (integrator review of cd74af2)
 #   locked         while the foreign locker holds the session lock, group_front raises nothing (reason "locked")
+# Step 4c (docs/specs/tiling.md TL30; only with tiling-shared-edge; right after the step 4b cases, the third and first
+# windows still one group in the middle and right thirds):
+#   shared-edge    the pointer on the middle of their shared edge (in the margin), pressed and dragged 60 px right: the
+#                  third window grows, the first follows with the gap kept, both stay tiled in one group, the plugin posts
+#                  `resized`; dragged back, both are where they were
+#   locked         while the foreign locker holds the session lock the same drag moves nothing
+#   outside        near the top of the edge (outside the handle) the drag is Hyprland's resize of one window: only one of
+#                  the two boxes changes
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -1203,6 +1211,56 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     sleep 0.5
   else
     say "SKIP: step 4b cases (the plugin does not advertise tiling-groups)"
+  fi
+
+  # Step 4c (TL30): the third and the first windows, the middle and right thirds, are one group side by side.
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+    read -r lx ly lw lh _ < <(geometry_of tiling-foot3)
+    read -r rx0 ry0 rw0 rh0 _ < <(geometry_of tiling-foot)
+    gap=$((rx0 - lx - lw))
+    # The handle: the middle of the stretch the two frames share (titlebars included), in the gap; GF-REF coordinates.
+    hx=$((lx + lw + gap / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+    say "  shared edge: ${gap} px between the third window (right side $((lx + lw))) and the first ($rx0), handle at $hx,$hy"
+    edge_group() {
+      local a b
+      a=$(record_of "$addr")
+      b=$(record_of "$addr3")
+      say "  first: $a; third: $b"
+      jq -e -n --argjson a "$a" --argjson b "$b" '$a.state == "tiled" and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
+    }
+    mark_events
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+    check "shared-edge: the plugin posts resized" event_came '.type == "tiling" and .reason == "resized"'
+    check "shared-edge: the left window grew with the drag" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
+    check "shared-edge: the right window followed, the gap kept" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
+    check "shared-edge: both still tiled, in one group" edge_group
+    pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
+    check "shared-edge: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    check "shared-edge: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    # While the foreign locker holds the session lock the handle takes nothing (TL34): no window moves.
+    if lock_session; then
+      pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+      check "shared-edge locked: the left window did not move" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+      check "shared-edge locked: nor the right one" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    else
+      check "shared-edge locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "shared-edge locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+    # Outside the handle (near the top of the edge) the edge resizes one window as usual (Hyprland's resize_on_border).
+    pointer abs "$hx" $((ly - tb + 20 - my)) sleep 300 down drag $((hx + 40)) $((ly - tb + 20 - my)) sleep 200 up sleep 600
+    only_one() {
+      local l r moved=0
+      read -r l < <(geometry_of tiling-foot3 | cut -d' ' -f1-4)
+      read -r r < <(geometry_of tiling-foot | cut -d' ' -f1-4)
+      [[ $l != "$lx $ly $lw $lh" ]] && moved=$((moved + 1))
+      [[ $r != "$rx0 $ry0 $rw0 $rh0" ]] && moved=$((moved + 1))
+      say "  third window $l, first window $r: $moved changed"
+      ((moved == 1))
+    }
+    check "shared-edge: outside the handle one window is resized, the other stays" only_one
+  else
+    say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
   fi
 
   tile_ipc "$addr3" previous

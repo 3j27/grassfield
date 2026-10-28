@@ -14,6 +14,10 @@
 #                                   (integrator run 2026-10-24: the first frame 2.2 s after each request, 0 in the window)
 #   overview-open-4w, -close-4w     the Overview with four windows (the plugin's live window transforms, docs/specs/overview.md)
 #   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
+#   shared-edge                     two of the four windows arranged left and right (one tile group, the plugin's arrange),
+#                                   their shared edge's handle dragged right, left and back with the button held: both windows
+#                                   resized live (tiling.md TL30, P3 with two live neighbours); skipped without the plugin's
+#                                   tiling-shared-edge
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
 # The window measured is the animation itself (ADR-0006 amendment, integrator decision 2026-10-24 under D-5, the macOS
 # model: a static screen owes no frames, so sparse frames once the animation is over are not misses): from the first frame
@@ -171,12 +175,43 @@ sleep 1
 for ((c = 1; c <= cycles; c++)); do overview_round -flat; done
 vs_ipc controlcenter reduceTransparency false >/dev/null
 
+# The shared edge (TL30): Terminal 1 on the left half, the next window in stacking order on the right half (one group);
+# the handle in the middle of the margin between them; three glides of 20 motions 15 ms apart, the button held.
+edge_measured=0
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+  first=$(nestctl clients -j | jq -r '[.[] | select(.title == "Terminal 1")][0].address // ""')
+  if [[ -n $first ]]; then
+    nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$first\"]}')" >/dev/null 2>&1
+    sleep 1
+    read -r ox oy < <(nestctl monitors -j | jq -r --arg o "$VS_OUTPUT" '.[] | select(.name == $o) | "\(.x) \(.y)"')
+    read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$first" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+    rx=$(nestctl clients -j | jq -r --argjson e "$((lx + lw))" '[.[] | select(.at[0] >= $e) | .at[0]] | min // empty')
+    if [[ ${rx:-} =~ ^[0-9]+$ && ${ox:-} =~ ^-?[0-9]+$ ]]; then
+      hx=$(((lx + lw + rx) / 2 - ox)) hy=$((ly + lh / 2 - oy))
+      for ((c = 1; c <= cycles; c++)); do
+        vs_pointer abs "$hx" "$hy" sleep 300 >/dev/null
+        frames_start
+        t0=$(mono_ns)
+        vs_pointer down drag $((hx + 200)) "$hy" drag $((hx - 200)) "$hy" drag "$hx" "$hy" up >/dev/null
+        t1=$(mono_ns)
+        echo "shared-edge $t0 $(((t1 - t0) / 1000000 + fast_ms))" >>"$out/events.txt"
+        sleep 0.6
+        vs_park
+        sleep 0.6
+        collect
+      done
+      edge_measured=1
+    fi
+  fi
+fi
+((edge_measured)) || echo "NOTE shared-edge not measured: no tiling-shared-edge, or the two windows were not arranged"
+
 [[ -n $gx0 ]] || echo "NOTE dock-magnification not measured: no Dock tile centres"
 drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
 echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, tail to $window ms"
 # Each request's animation window (and its tail).
 python3 -I "$VS_HERE/animation-windows.py" "$out/frames.all" "$out/events.txt" "$out/marks.all" "$hz" \
-  "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms))" "$window" "$out/events.anim" | tee "$out/windows.txt"
+  "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms)),shared-edge=$((900 + fast_ms))" "$window" "$out/events.anim" | tee "$out/windows.txt"
 python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" | tee "$out/stats.txt"
 rc=${PIPESTATUS[0]}
 # Whose cost each long interval was (compositor render, a client's late frame, other), in the animation and in its tail.
