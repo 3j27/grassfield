@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Grassfield Store, step 3b1: grassfield-store-run, the script the Store starts in Omarchy's terminal (ADR-0037 b.2; spec
-# A6b's grassfield-store-run part). Never on a real machine: inside, it refuses to run unless it is root in a container with
+# Grassfield Store, steps 3b1 and 3b2: grassfield-store-run, the script the Store starts in Omarchy's terminal (ADR-0037
+# b.2; spec A6b's grassfield-store-run part): Omarchy's setups, and the AUR's two commands with their plan checked again. Never on a real machine: inside, it refuses to run unless it is root in a container with
 # the repository mounted at /src.
 #
 #   tests/integration/store_run.sh
@@ -10,7 +10,8 @@
 # Inside the container: a user (`carol`) with an XDG_RUNTIME_DIR, a made-up Omarchy folder (recipes that write a marker,
 # fail, sleep or leave a process running) and the Store's pins for it, the real pacman-conf and pacman (no sync database:
 # pacman -Qu lists nothing) behind a wrapper at /usr/bin/pacman whose -Qu answers as /run/test/qu says (lines, a failure,
-# a pause), and pacman's real db.lck. The script fixes its own PATH, so a program first in carol's PATH is never used (a
+# a pause) and whose -Slq, -Qqe, -Qqm and -Rs plan answer the AUR cases from /run/test (the repositories' names, the
+# explicit and foreign packages, a removal plan), and pacman's real db.lck. The script fixes its own PATH, so a program first in carol's PATH is never used (a
 # case checks it). The script runs as carol through setpriv (one process: no watching parent between it and the test),
 # with no terminal (stdin /dev/null).
 set -uo pipefail
@@ -60,6 +61,12 @@ if [[ ${1-} == -Qu && -s /run/test/qu ]]; then
     slow) : >/run/test/qu-asked; sleep 20; exit 1 ;;
   esac
 fi
+case ${1-} in
+  -Slq) [[ -e /run/test/sl ]] && { cat /run/test/sl; exit 0; } ;;
+  -Qqe) [[ -e /run/test/qe ]] && { cat /run/test/qe; exit 0; } ;;
+  -Qqm) [[ -e /run/test/qm ]] && { cat /run/test/qm; exit 0; } ;;
+  -Rs) [[ -e /run/test/rs ]] && { cat /run/test/rs; [[ ! -e /run/test/rs-fail ]]; exit; } ;;
+esac
 exec /usr/bin/pacman.real "$@"
 PACMAN
 chmod 755 /usr/bin/pacman
@@ -271,6 +278,130 @@ op=$(newop)
 run "$op" "$(soon)" setup omarchy-install-game; rc=$?
 expect "its folder a link -> exit 2, the linked folder's mode unchanged" test "$rc:$(stat -c %a /home/carol/elsewhere)" == "2:755"
 rm "$D" && mv "$D.kept" "$D"
+
+say "the AUR (step 3b2): its two commands, their names and their plan checked again"
+recipe omarchy-pkg-aur-add 'echo "aur-add $*" >>"$HOME/marks/aur"'
+recipe omarchy-pkg-drop 'echo "aur-drop $*" >>"$HOME/marks/aur"'
+printf 'btop\nchromium\ngs-omarchy-app # a comment\n' >"$O/install/omarchy-base.packages"
+chown carol: "$O/install/omarchy-base.packages"
+aurpins() { # op [extra lines]
+  (cd "$O" && sha256sum bin/omarchy-pkg-aur-add bin/omarchy-pkg-drop) >"$D/$1.pins"
+  (($# > 1)) && printf '%s\n' "${@:2}" >>"$D/$1.pins"
+  chown carol: "$D/$1.pins" && chmod 600 "$D/$1.pins"
+}
+printf 'gimp\nfirefox\nbtop\n' >"$T/sl"
+for args in "aur omarchy-pkg-aur-add" "aur omarchy-pkg-aur-add -rf" "aur omarchy-pkg-aur-add Foo" "aur omarchy-pkg-aur-add a b c d e" \
+  "aur omarchy-install-game x" "aur yay x" "aur omarchy-pkg-drop ../x" "setup omarchy-pkg-aur-add x"; do
+  # shellcheck disable=SC2086 # the cases are word lists
+  run "$(newop)" "$(soon)" $args; rc=$?
+  expect "refused: '$args' -> exit 2" test "$rc" == 2
+done
+run "$(newop)" "$(soon)" aur omarchy-pkg-aur-add "a b"; rc=$?
+expect "a name with a space -> exit 2" test "$rc" == 2
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "aur omarchy-pkg-aur-add example-app-bin -> exit 0, the command ran with the name" \
+  bash -c "test $rc:$(exitfile "$op") == 0:0 && grep -qx 'aur-add example-app-bin' $M/aur"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin gimp; rc=$?
+expect "a name a repository has (gimp) -> exit 7, not run, says why" \
+  bash -c "test $rc:$(exitfile "$op") == 7:7 && test \$(wc -l <$M/aur) == 1 && grep -q 'A repository has gimp' /tmp/run.out"
+mv "$T/sl" "$T/sl.kept" && : >"$T/sl"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "pacman lists no repository at all -> exit 1, not run" bash -c "test $rc == 1 && test \$(wc -l <$M/aur) == 1"
+mv "$T/sl.kept" "$T/sl"
+op=$(newop); pins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "the pins do not name the AUR's command -> exit 5, says so" \
+  bash -c "test $rc == 5 && test \$(wc -l <$M/aur) == 1 && grep -q 'do not name omarchy-pkg-aur-add' /tmp/run.out"
+op=$(newop); aurpins "$op"
+echo '# changed' >>"$O/bin/omarchy-pkg-aur-add"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "the AUR's command differs from its pin -> exit 5, the AUR named" \
+  bash -c "test $rc == 5 && grep -q 'Installing from the AUR was checked against another version of Omarchy (bin/omarchy-pkg-aur-add differs)' /tmp/run.out"
+sed -i '$d' "$O/bin/omarchy-pkg-aur-add"
+qu list
+printf 'linux 6.17.1-1 -> 6.17.4-1\n' >"$T/qu-lines"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "pacman -Qu lists linux -> exit 4 for the AUR too" test "$rc:$(exitfile "$op")" == "4:4"
+rm -f "$T/qu"
+
+# Removal: installed explicitly, from outside the repositories, not denied, and a whole plan with nothing denied.
+printf 'example-app-bin\nexample-tool\nbtop\nyay\ngimp\n' >"$T/qe"
+printf 'example-app-bin\nexample-lib\nexample-tool\nbtop\nyay\n' >"$T/qm"
+printf 'example-app-bin\nexample-lib\n' >"$T/rs"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-drop example-app-bin; rc=$?
+expect "aur omarchy-pkg-drop example-app-bin -> exit 0, the command ran" \
+  bash -c "test $rc == 0 && tail -1 $M/aur | grep -qx 'aur-drop example-app-bin'"
+drop_refused() { # description name... : exit 7, the command not run, the message
+  local desc=$1 before op rc
+  shift
+  before=$(wc -l <"$M/aur")
+  op=$(newop); aurpins "$op"
+  run "$op" "$(soon)" aur omarchy-pkg-drop "$@"; rc=$?
+  expect "$desc -> exit 7, not run" bash -c "test $rc:$(exitfile "$op") == 7:7 && test \$(wc -l <$M/aur) == $before"
+}
+drop_refused "yay (the system's AUR helper)" yay
+drop_refused "btop (in Omarchy's package list)" btop
+drop_refused "glibc (pacman's HoldPkg)" glibc
+drop_refused "example-lib (not installed explicitly: another package needs it)" example-lib
+drop_refused "gimp (a repository has it: the helper removes it)" gimp
+drop_refused "two names, one of them denied" example-tool linux-zen
+printf 'example-tool\ngs-omarchy-app\n' >"$T/rs"
+drop_refused "a plan that also removes gs-omarchy-app (in Omarchy's list)" example-tool
+expect "  the message names it" grep -q 'would also remove gs-omarchy-app' /tmp/run.out
+printf 'error: failed to prepare transaction (could not satisfy dependencies)\n:: removing example-tool breaks dependency' >"$T/rs"
+touch "$T/rs-fail"
+drop_refused "a plan pacman refuses (another package needs it)" example-tool
+rm -f "$T/rs-fail"
+# A plan line read as a pattern would name the files it matches: "glib?" with a file glibc where the script runs would become
+# glibc (HoldPkg) and refuse; read as the word it is, it is no package of the deny list.
+printf 'example-tool\nglib?\n' >"$T/rs"
+touch "$PWD/glibc"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-drop example-tool; rc=$?
+rm -f "$PWD/glibc"
+expect "a plan line is a word, never a file name pattern (glib? beside a file glibc) -> exit 0" test "$rc" == 0
+printf 'example-tool\n' >"$T/rs"
+mv "$O/install/omarchy-base.packages" "$O/install/base.away"
+drop_refused "Omarchy's package lists missing" example-tool
+mv "$O/install/base.away" "$O/install/omarchy-base.packages"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-drop example-tool; rc=$?
+expect "  and once they are back, example-tool -> exit 0" test "$rc" == 0
+
+# The deny list: the helper's case list as it is (only the array of Omarchy's lists named otherwise), and the same answers
+# on the vectors the helper and the Store's C++ rule are held to.
+sed -n '/^denied() {/,/^}/p' /src/packaging/store/grassfield-store-helper | sed 's/omarchy\[/omarchy_lists[/' >"$T/helper-denied"
+sed -n '/^denied() {/,/^}/p' "$R" >"$T/run-denied"
+expect "denied() is the helper's" bash -c "test -s $T/run-denied && test \"\$(cat $T/helper-denied)\" == \"\$(cat $T/run-denied)\""
+# The vectors file read with grep and sed (this image has no python): Omarchy's lists, HoldPkg, then each case's name and
+# protection, in order.
+V=/src/tests/fixtures/store/removal-vectors.json
+array() { sed -n "/\"$1\": \[/,/\]/p" "$V" | grep -o '"[^"]*"' | tr -d '"' | grep -vx "$1"; }
+mapfile -t vnames < <(sed -n '/"cases"/,$p' "$V" | grep -o '"name": "[^"]*"' | sed 's/.*: "//; s/"$//')
+mapfile -t vwants < <(sed -n '/"cases"/,$p' "$V" | grep -o '"protection": "[^"]*"' | sed 's/.*: "//; s/"$//')
+{
+  echo 'declare -A omarchy_lists=() hold=()'
+  for n in $(array omarchyLists); do echo "omarchy_lists[$n]=1"; done
+  for n in $(array holdPkg); do echo "hold[$n]=1"; done
+  cat "$T/run-denied"
+} >"$T/denied-vectors.sh"
+# shellcheck disable=SC1091 # made just above
+source "$T/denied-vectors.sh"
+mismatches=0
+for i in "${!vnames[@]}"; do
+  want=denied
+  [[ ${vwants[$i]} == none ]] && want=allowed
+  if denied "${vnames[$i]}"; then got=denied; else got=allowed; fi
+  [[ $got == "$want" ]] || { echo "MISMATCH ${vnames[$i]}: $got, the vectors say ${vwants[$i]}"; mismatches=$((mismatches + 1)); }
+done
+expect "the vectors (${#vnames[@]} of them, ${#vwants[@]} answers): $mismatches mismatches" \
+  test "${#vnames[@]}:${#vwants[@]}:$mismatches" == "${#vwants[@]}:${#vnames[@]}:0"
+expect "  every one read (more than 40)" test "${#vnames[@]}" -gt 40
 
 say "result"
 if ((fails)); then echo "$fails FAIL"; tail -20 /tmp/run.out; exit 1; fi

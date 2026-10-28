@@ -3,6 +3,7 @@
 # REQUIRED (ADR-0037 e.9). It runs as the user, never as root: Omarchy's recipes call sudo themselves, in this terminal,
 # as in Omarchy's own menu. Started only by the Store, as
 #   omarchy-launch-floating-terminal-with-presentation "/usr/lib/grassfield/grassfield-store-run <op-id> <deadline> setup <recipe> [<arg>...]"
+#   omarchy-launch-floating-terminal-with-presentation "/usr/lib/grassfield/grassfield-store-run <op-id> <deadline> aur <command> <package>..."
 # the command string built from the validated tokens of ADR-0037 e.5 only, and watched through
 # $XDG_RUNTIME_DIR/grassfield/store/<op-id>.started and <op-id>.exit (the terminal is detached: no exit code comes back).
 # It never runs as root, and runs every program with PATH=<Omarchy's folder>/bin:/usr/bin, without BASH_ENV or the
@@ -15,14 +16,20 @@
 #   3. writes <op-id>.started (its pid and start time: the Store knows it still runs);
 #   4. checks again: no db.lck, pacman -Qu answers (exit 0 or 1) and lists nothing but "[ignored]" (S12), the recipe is
 #      Omarchy's, and every file the catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is
-#      unchanged in the installed Omarchy;
+#      unchanged in the installed Omarchy; for the AUR (step 3b2), its plan again: an install only of names no repository
+#      has (yay would take a repository's), a removal only of packages installed explicitly from outside the
+#      repositories, that the deny list (the helper's, ADR-0037 b.1) does not name, and whose whole plan (-Rs) names no
+#      denied package;
 #   5. runs the recipe, ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<recipe>, with its arguments, as an argument vector;
 #   6. writes <op-id>.exit with the code (by rename, the Store never reads half a file) and exits with it.
-# <recipe> is omarchy-install-<name> or omarchy-remove-<name>; at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
+# setup: <recipe> is omarchy-install-<name> or omarchy-remove-<name>, with at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
+# aur: <command> is omarchy-pkg-aur-add (yay builds the packages, sudo installs them) or omarchy-pkg-drop (sudo pacman
+# -Rns), with 1 to 4 package names.
 # Exit: 0 done; 1 the recipe failed; 2 usage; 3 busy (Omarchy's update lock, or pacman's db.lck); 4 the last system update
 # did not finish; 5 the installed Omarchy differs from the catalog's pins (or the recipe is missing); 6 too late (the
-# terminal opened after the deadline); 130 stopped with Ctrl+C (before the recipe: nothing was run). A closed terminal
-# ends it without an exit file (SIGHUP): the Store reads the system then.
+# terminal opened after the deadline); 7 the AUR's plan refused (a repository has the name; a package protected, needed,
+# not installed as an app or from a repository); 130 stopped with Ctrl+C (before the recipe: nothing was run). A closed
+# terminal ends it without an exit file (SIGHUP): the Store reads the system then.
 set -uo pipefail
 umask 077
 # Ctrl+C from the start is answered with 130 (below). A handler, not an ignored signal: an ignored SIGINT would be ignored
@@ -47,11 +54,23 @@ usage() {
 (($# >= 4 && $# <= 8)) || usage
 op=$1 deadline=$2 kind=$3 recipe=$4
 shift 4
-[[ $op =~ ^[0-9a-f]{32}$ && $deadline =~ ^[0-9]{1,12}$ && $kind == setup ]] || usage
-[[ $recipe =~ ^omarchy-(install|remove)-[a-z0-9-]+$ ]] || usage
-for arg in "$@"; do
-  [[ $arg =~ ^[a-z0-9][a-z0-9.-]{0,63}$ ]] || usage
-done
+[[ $op =~ ^[0-9a-f]{32}$ && $deadline =~ ^[0-9]{1,12}$ ]] || usage
+case $kind in
+  setup)
+    [[ $recipe =~ ^omarchy-(install|remove)-[a-z0-9-]+$ ]] || usage
+    for arg in "$@"; do
+      [[ $arg =~ ^[a-z0-9][a-z0-9.-]{0,63}$ ]] || usage
+    done
+    ;;
+  aur)
+    [[ $recipe == omarchy-pkg-aur-add || $recipe == omarchy-pkg-drop ]] || usage
+    (($# >= 1)) || usage
+    for arg in "$@"; do
+      [[ $arg =~ ^[a-z0-9@_+][a-z0-9@._+-]{0,127}$ ]] || usage
+    done
+    ;;
+  *) usage ;;
+esac
 omarchy=${OMARCHY_PATH:-/usr/share/omarchy}
 omarchy=${omarchy%/}
 [[ $omarchy == /* && $omarchy != *:* ]] || usage
@@ -112,6 +131,8 @@ program=$omarchy/bin/$recipe
 pins=$dir/$op.pins
 [[ -f $pins && ! -L $pins && -O $pins ]] || finish 5 "The Store's pins for this setup are missing: nothing was run."
 count=0 recipe_pinned=0
+checked="This setup was checked"
+[[ $kind == aur ]] && checked="Installing from the AUR was checked"
 while IFS= read -r line; do
   [[ $line =~ ^([0-9a-f]{64})\ \ ([A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+){0,7})$ ]] || finish 5 "The Store's pins cannot be read: nothing was run."
   want=${BASH_REMATCH[1]} rel=${BASH_REMATCH[2]}
@@ -120,10 +141,69 @@ while IFS= read -r line; do
   have=$(sha256sum -- "$omarchy/$rel" 2>/dev/null 9>&-) || have=missing
   stop
   [[ ${have%% *} == "$want" ]] ||
-    finish 5 "This setup was checked against another version of Omarchy ($rel differs): nothing was run. The Store offers it again once its catalog has checked your Omarchy."
+    finish 5 "$checked against another version of Omarchy ($rel differs): nothing was run. The Store offers it again once its catalog has checked your Omarchy."
   count=$((count + 1))
 done <"$pins"
 ((count > 0 && recipe_pinned)) || finish 5 "The Store's pins do not name $recipe: nothing was run."
+stop
+
+# The deny list of grassfield-store-helper's remove (ADR-0037 b.1, S16), its case list copied as it is (Omarchy's lists in
+# omarchy_lists here: $omarchy is Omarchy's folder): tests/integration/store_run.sh holds it to the vectors the helper and
+# the Store's C++ rule answer (tests/fixtures/store/removal-vectors.json).
+denied() { # name: 0 when the system, Omarchy or Grassfield needs it
+  case $1 in
+    base | base-devel | filesystem | glibc | bash | coreutils | util-linux | shadow | pam | sudo | polkit | dbus | dbus-broker | \
+      dbus-broker-units | kmod | mkinitcpio | dracut | grub | efibootmgr | refind | syslinux | snapper | btrfs-progs | \
+      cryptsetup | lvm2 | plymouth | archlinux-keyring | intel-ucode | amd-ucode) return 0 ;;
+    linux | linux-* | systemd | systemd-* | limine | limine-* | pacman | pacman-* | yay | yay-* | omarchy | omarchy-* | \
+      grassfield | grassfield-*) return 0 ;;
+    *-firmware | *-firmware-*) return 0 ;;
+  esac
+  [[ -n ${omarchy_lists[$1]-} || -n ${hold[$1]-} ]]
+}
+
+# 4b. The AUR's plan, checked again (the Store checked it before; the system may have changed since).
+if [[ $kind == aur ]]; then
+  refuse() { finish 7 "$1: nothing was run."; }
+  if [[ $recipe == omarchy-pkg-aur-add ]]; then
+    # yay installs a name a repository has from that repository: only names no repository has (exact names, as the helper).
+    declare -A sync=()
+    while IFS= read -r line; do [[ -n $line ]] && sync[$line]=1; done < <(pacman -Slq 2>/dev/null 9>&-)
+    stop
+    ((${#sync[@]})) || finish 1 "pacman -Slq failed: nothing was run."
+    for name in "$@"; do
+      [[ -z ${sync[$name]-} ]] || refuse "A repository has $name: Grassfield Store installs it from there"
+    done
+  else
+    # What denied() reads: Omarchy's two package lists (in the installed Omarchy), pacman's HoldPkg.
+    declare -A omarchy_lists=() hold=() explicit=() foreign=()
+    for list in "$omarchy/install/omarchy-base.packages" "$omarchy/install/omarchy-other.packages"; do
+      [[ -f $list ]] || continue
+      while IFS= read -r line; do
+        line=${line%%#*}
+        for word in $line; do omarchy_lists[$word]=1; done
+      done <"$list"
+    done
+    ((${#omarchy_lists[@]})) || refuse "Omarchy's package lists are missing or empty"
+    while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9>&-)
+    while IFS= read -r line; do [[ -n $line ]] && explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null 9>&-)
+    while IFS= read -r line; do [[ -n $line ]] && foreign[$line]=1; done < <(pacman -Qqm 2>/dev/null 9>&-)
+    stop
+    for name in "$@"; do
+      denied "$name" && refuse "$name is part of the system, Omarchy or Grassfield"
+      [[ -n ${explicit[$name]-} ]] || refuse "$name was not installed as an app (it is not installed, or another package needs it)"
+      [[ -n ${foreign[$name]-} ]] || refuse "A repository has $name: Grassfield Store removes it from there"
+    done
+    # The whole plan: -Rns removes what -Rs --print lists (pacman refuses --print with -n), as the user (S10).
+    plan=$(pacman -Rs --print --print-format '%n' -- "$@" 2>&1 9>&-)
+    code=$?
+    stop
+    ((code == 0)) || { printf '%s\n' "$plan"; refuse "pacman cannot remove $*"; }
+    while IFS= read -r name; do # one name a line: never split into words, never a file name pattern
+      denied "$name" && refuse "Removing $* would also remove $name, part of the system, Omarchy or Grassfield"
+    done <<<"$plan"
+  fi
+fi
 stop
 
 # 5. The recipe, without the lock's descriptor.
