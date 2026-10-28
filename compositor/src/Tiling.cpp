@@ -1317,15 +1317,23 @@ namespace gf::tiler {
                 return;
             }
         }
+        // The records first (a tile moved by other means is freed, a deferred one placed), so that a pick is checked against
+        // them before anything of this request moves: its minimized window is restored only once the pick passed (ADR-0007).
+        catchUp();
         if (request->with) {
-            const auto* r    = s.book.find(*request->with);
-            const auto  held = tiling::zonesHeld(s.book.records(), *r);
+            const auto* r = s.book.find(*request->with);
+            if (!r || r->state != tiling::TileState::Tiled || r->where.layout != request->layout) {
+                refuse("with is not a window tiled in that layout any more");
+                return;
+            }
             if (r->output != m->m_name || r->workspace != m->m_activeWorkspace->m_id) {
                 refuse("the asking window's tile is not on that output's Desktop");
                 return;
             }
-            if (std::ranges::find(held, *request->zone) != held.end()) {
-                refuse(std::format("zone {} of {} is held", *request->zone, request->layout));
+            const int  zone = request->zone.value_or(-1); // parseArrange: with comes with a zone
+            const auto held = tiling::zonesHeld(s.book.records(), *r);
+            if (std::ranges::find(held, zone) != held.end()) {
+                refuse(std::format("zone {} of {} is held", zone, request->layout));
                 return;
             }
         }
@@ -1335,7 +1343,7 @@ namespace gf::tiler {
         if (restoring) {
             gf::minimizer::restore(idOf(windows.front()), std::nullopt);
             if (!placeable(windows.front()) || monitorOf(windows.front()) != m) {
-                refuse("the minimized window did not come back on that output");
+                refuse("the minimized window did not come back on that output (its restore failed)");
                 return;
             }
         }
@@ -1345,14 +1353,6 @@ namespace gf::tiler {
         for (const auto& w : windows) {
             if (w->m_workspace != workspace) { // followOutput gives every placeable window that Desktop: never expected
                 refuse(std::format("{} shows Desktop {}, a window stayed on Desktop {}", m->m_name, workspace->m_name, w->m_workspace ? w->m_workspace->m_name : "none"));
-                return;
-            }
-        }
-        catchUp();
-        if (request->with) {
-            const auto* r = s.book.find(*request->with);
-            if (!r || r->state != tiling::TileState::Tiled || r->where.layout != request->layout) { // catchUp freed it (moved by other means)
-                refuse("with is not a window tiled in that layout any more");
                 return;
             }
         }
