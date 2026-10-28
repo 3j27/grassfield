@@ -349,18 +349,23 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   window leaves its group when it is dragged away (Moving), tiled elsewhere or becomes Free; a resize keeps it; minimized
   windows stay members; a group of one dissolves.
   Step 4b as built (D29-D31): verb `group_front(address)` (core `groupRaiseOrder`): the members of the window's group that
-  are Tiled or being resized on its Desktop are raised in their stacking order, bottom first, then the window itself when
-  it is on screen (`alterZOrder("top")`, the same raise as a restore); a minimized, full-screen or hidden member stays; no
-  tile record changes. The shell (Compositor `groupForward`, `activateWithGroup`) sends it after the window's own
-  activation for a Dock click (the window that ends focused), the Dock menu's and the menu bar's window rows, the app
-  switcher and the Overview's choice of a window; the window ends in front whichever request the compositor takes first.
-  The groups are the `group` of each window in the `hyprctl grassfield-tiling` reply (`WindowTiling.parseGroups`, a
-  suspended member included), read again by platform/TilingLink after every change of the tile records. The Dock menu
-  lists the app's groups after Show All Windows (`WindowTiling.tileGroupRows`): "Show Tile Group", or "Show Tile Group
-  with <the other members' apps>" when the app has several; the row (Compositor `showTileGroup`) shows the group's
-  Desktop (the window's, else a member's that is on one), brings the window and the group's minimized members back there,
-  focuses the window and brings the group forward, all through the dispatch channel in that order. An Overview drop (Compositor `moveGroupToSpace`) moves the window and the members on its
-  Desktop to the target Desktop, where they stay tiled and grouped (TL14). Feature `tiling-groups`, with `tiling-arrange`.
+  are Tiled or being resized on its Desktop are raised in their stacking order, bottom first, then the window itself
+  whenever it is on screen, zoomed or full screen included (`alterZOrder("top")`, the same raise as a restore; integrator
+  review of cd74af2); a minimized, full-screen, zoomed or hidden member stays; no tile record changes. The shell
+  (Compositor `groupForward`, `activateWithGroup`, `unminimizeWithGroup`) sends it after the window's own activation or
+  restore, only for a window in a group of the last reply (`WindowTiling.membersOf`) and never while locked, for a Dock
+  click (the window that ends focused), a Dock tile of a minimized window, the Dock menu's and the menu bar's window rows,
+  the app switcher and the Overview's choice of a window or of a minimized one; the window ends in front whichever request
+  the compositor takes first (on a special workspace it is not raised, and its restore raises it). The groups are the
+  `group` of each window in the `hyprctl grassfield-tiling` reply (`WindowTiling.parseGroups`, a suspended member
+  included), read again by platform/TilingLink after every change of the tile records. The Dock menu lists the app's
+  groups after Show All Windows (`WindowTiling.tileGroupRows`): "Show Tile Group", or "Show Tile Group with <the other
+  members' apps>" when the app has several; the row (Compositor `showTileGroup`, the steps of
+  `WindowTiling.tileGroupSteps`) shows the group's Desktop (the window's, else a member's that is on one), brings the
+  window and the group's minimized members back there, focuses the window and brings the group forward, all through the
+  dispatch channel in that order, nothing if the lock engaged while the menu closed. An Overview drop (Compositor
+  `moveGroupToSpace`, `WindowTiling.groupMovers`) moves the window and the members on its Desktop to the target Desktop,
+  where they stay tiled and grouped (TL14). Feature `tiling-groups`, with `tiling-arrange`.
 - **TL30** Shared edge (T1e, option 1, M43, W18): between two windows of a group whose frames share an edge (margin
   between them included), the pointer over the middle `tiling.handleLength` of that edge shows a handle (resize cursor);
   dragging it moves the edge for every window of the group along it, within their minimum and maximum; outside the handle

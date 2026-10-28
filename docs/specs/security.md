@@ -401,9 +401,13 @@ shell no longer relies on that alone:
   only by the shell after its own arrangement, and lists window addresses only (no titles, no contents). Tiling step 4b
   (TL29): `hl.plugin.grassfield.group_front` refuses while the session is locked (`tiling` notice with
   `reason:"locked"`, no window is raised) and for an unknown window (`reason:"invalid"`); it only changes the stacking
-  order of windows already on screen (no move, no focus, no tile record). The shell sends it only from entry points the
-  lock already refuses (a Dock click or Dock menu row, the app switcher, the Overview's choice, the menu bar's Window menu)
-  and adds no IPC function or popup kind; the groups it reads from the `hyprctl grassfield-tiling` reply are window
+  order of windows already on screen (no move, no focus, no tile record). The shell sends it only through
+  `Compositor.groupForward`, which asks `SessionState.refuses` first, from entry points the lock already refuses (a Dock
+  click or tile, a Dock menu row, the app switcher, the Overview's choice, the menu bar's Window menu); a Dock menu row or
+  Show Tile Group runs once the menu's surface is gone (`Compositor.runPendingActivation`), which refuses too when the lock
+  engaged meanwhile (no Desktop switch, no restore: a restore is not refused while locked, GF-116; integrator review of
+  cd74af2). lock_surfaces.sh checks these refusals and that every entry point goes through them, each with a mutation.
+  No IPC function or popup kind is added; the groups the shell reads from the `hyprctl grassfield-tiling` reply are window
   addresses and group numbers only.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
