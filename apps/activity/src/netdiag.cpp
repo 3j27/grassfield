@@ -42,7 +42,11 @@ bool dumpFamily(int family, std::vector<TcpCounters> &out)
     msg.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
     msg.req.sdiag_family = static_cast<unsigned char>(family);
     msg.req.sdiag_protocol = IPPROTO_TCP;
-    msg.req.idiag_states = ~0U;
+    // Every state but LISTEN, TIME_WAIT and CLOSE: a listener carries no bytes, a TIME_WAIT socket no owner, and a socket that
+    // closed left the dump with its last counters kept by the sampler (AM43). A busy machine has many of them, and the dump
+    // is most of the Network tab's cost (review of f68789c).
+    constexpr unsigned stateTimeWait = 6, stateClose = 7, stateListen = 10; // include/net/tcp_states.h
+    msg.req.idiag_states = ~0U & ~((1U << stateTimeWait) | (1U << stateClose) | (1U << stateListen));
     msg.req.idiag_ext = 1 << (INET_DIAG_INFO - 1);
     if (send(s, &msg, sizeof msg, 0) != static_cast<ssize_t>(sizeof msg)) {
         close(s);

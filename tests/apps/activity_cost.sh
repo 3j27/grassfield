@@ -8,7 +8,8 @@
 #     defaults: 400 processes of 4 threads and 9 extra descriptors each, 100 TCP connections, 101 samples (A10's fixture;
 #     the other owners' processes are whatever this machine runs). --report-only prints the numbers and exits 0. --model
 #     also builds probe A10 (docs/audits/activity-2026-10-28/sampcost.c) and runs it on the same fixture right after, and
-#     prints each tab's product/model ratio (the review of 949fc98 asks for about 1.1); the gate stays the thresholds.
+#     prints each tab's ratio to A10 reading what the sampler reads (its "step 1" plan; the review of 949fc98 asks for
+#     about 1.1); the gate stays the thresholds.
 #   Exit 0 every tab within its threshold (or SKIP without g++), 1 a tab over, 2 usage or a refused run.
 #
 # Run as the user the app will run as, never as root: root reads every process's io and descriptors, which is not the
@@ -80,13 +81,15 @@ done <<<"$out"
 if ((model)); then
   modelOut=$("$probe" measure "$samples") || { echo "FAIL: probe A10 failed"; exit 1; }
   echo "probe A10 on the same fixture:"
-  grep -E "raised|listed|could not be opened|^    (CPU|Memory|Disk|Energy|Network)" <<<"$modelOut"
+  grep -E "raised|listed|could not be opened|per tab|^    (CPU|Memory|Disk|Energy|Network|step 1)" <<<"$modelOut"
+  # The ratios compare the same reads: the product against A10's step-1 plan (review of f68789c); the step-0 lines above
+  # are the limits' source.
   declare -A modelMs=(
-    [cpu]=$(sed -n 's/^    CPU  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
-    [memory]=$(sed -n 's/^    Memory (+ statm[^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
-    [disk]=$(sed -n 's/^    Disk (+ io)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
-    [energy]=$(sed -n 's/^    Energy ([^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
-    [network]=$(sed -n 's/^    Network ([^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [cpu]=$(sed -n 's/^    step 1 CPU  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [memory]=$(sed -n 's/^    step 1 Memory  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [disk]=$(sed -n 's/^    step 1 Disk  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [energy]=$(sed -n 's/^    step 1 Energy  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [network]=$(sed -n 's/^    step 1 Network  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
   )
   while read -r line; do
     tab=$(sed -n 's/^tab \([a-z]*\):.*/\1/p' <<<"$line")

@@ -56,6 +56,8 @@ struct Options {
     int descriptorTurns = 10;     // AM43, AM45
     // The TCP dump (AM43); tests put a function of their own here (a failed dump, the review of 949fc98).
     bool (*tcpDump)(std::vector<TcpCounters> &out) = dumpTcpSockets;
+    // The owner of /proc/<name> under the directory `dir` (fstatat when null); tests give a root-owned directory here.
+    bool (*dirOwner)(int dir, const char *name, uint32_t &uid) = nullptr;
 };
 
 // Options for this machine: getuid(), /etc/login.defs, the clock tick, and a kept-descriptor budget from the soft
@@ -301,6 +303,9 @@ private:
     std::vector<CpuTimes> lastPerCpu_;
     uint64_t cpuDeltaTicks_ = 0;                        // /proc/stat's total ticks between its last two reads
     uint64_t lastProcessIndex_ = UINT64_MAX - 1, lastCpuIndex_ = UINT64_MAX - 1;
+    // The Memory tab's last samples (AD32): coming back to it after another tab or a pause reads every status once.
+    uint64_t lastMemoryIndex_ = UINT64_MAX - 1;
+    double lastMemoryTime_ = -1, memoryInterval_ = 0;
     std::map<std::string, DiskStat> lastDisks_;
     std::map<std::string, NetDev> lastNet_;
     double lastDiskTime_ = -1, lastNetTime_ = -1;

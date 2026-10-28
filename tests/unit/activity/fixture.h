@@ -70,13 +70,13 @@ public:
     // /proc/<pid>/stat with the fields the sampler reads; every other field 0.
     static std::string statLine(int pid, const std::string &comm, char state, int ppid, unsigned long flags, unsigned long utime,
                                 unsigned long stime, int threads, unsigned long long start, long nice = 0,
-                                unsigned long long code = 0)
+                                unsigned long long code = 0, unsigned long long codeEnd = 0)
     {
         char buf[512];
         std::snprintf(buf, sizeof buf,
                       "%d (%s) %c %d %d %d 0 -1 %lu 10 0 2 0 %lu %lu 0 0 20 %ld %d 0 %llu 104857600 2560 18446744073709551615 %llu %llu 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0\n",
                       pid, comm.c_str(), state, ppid, pid, pid, flags, utime, stime, nice, threads, start, code,
-                      code ? code + 4096 : 0);
+                      codeEnd ? codeEnd : code ? code + 4096 : 0);
         return buf;
     }
 

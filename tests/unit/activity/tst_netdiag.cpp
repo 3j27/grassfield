@@ -149,9 +149,10 @@ TEST(NetDiag, TheKernelGivesTheCountersOfThisProcessSockets)
     Loopback lo(200000);
     std::vector<TcpCounters> dump;
     ASSERT_TRUE(dumpTcpSockets(dump));
-    const uint64_t client = inodeOf(lo.client), peer = inodeOf(lo.peer);
+    const uint64_t client = inodeOf(lo.client), peer = inodeOf(lo.peer), listener = inodeOf(lo.server);
     bool sawClient = false, sawPeer = false;
     for (const TcpCounters &c : dump) {
+        EXPECT_NE(c.inode, listener); // listeners, TIME_WAIT and closed sockets are left out of the dump (review of f68789c)
         if (c.inode == client) {
             sawClient = true;
             EXPECT_GE(c.bytesAcked, 200000u);

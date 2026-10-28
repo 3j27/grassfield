@@ -11,7 +11,7 @@ Ctrl+Shift+Esc. Revised after the integrator's opus review of e3882de (ADR-0038 
 say "review of e3882de". Step 0 is merged (pull request #37). Step 1, the sampler without a window (AM20 to AM49's data,
 AM79's fixture roots as test options; AM-P2 measured), is built in its own pull request: its results are in
 `docs/audits/activity-2026-10-28/step1.md`, and the places it changed say "step 1"; those the integrator's opus review of
-949fc98 changed say "review of 949fc98".
+949fc98 changed say "review of 949fc98", and those of its re-review "review of f68789c".
 
 ## macOS reference behavior (Apple's Activity Monitor User Guide, macOS 27; described in words, no Apple image committed)
 - One window: a toolbar with the Stop button, the Info button and an action menu, five tabs (CPU, Memory, Energy, Disk,
@@ -116,9 +116,10 @@ items (Settings does it); a background collector; any network access.
   of `cmdline`'s first word when that word has no space and is the executable's name (the `exe` link) or the invoked one
   (`stat`'s short name, the start of it when cut at 15 bytes), else the executable's basename (" (deleted)" removed), else
   `stat`'s short name: a title written over argv[0] (Chromium's and Electron's helpers, setproctitle, a login shell's
-  "-bash") never names a process (review of 949fc98). After an exec (the same pid and start time, another image: `stat`'s
-  short name changed, or, for the user's own processes, the code addresses of `stat` fields 26 and 27) the name and the
-  command line are read again. Another owner's process always takes `stat`'s short name: its
+  "-bash") never names a process (review of 949fc98). After an exec (the same pid and start time, another image: for the
+  user's own processes the code addresses of `stat` fields 26 and 27 changed; for another owner's, whose addresses read 0,
+  `stat`'s short name changed) the name and the command line are read again. A new short name with the same addresses is a
+  `prctl(PR_SET_NAME)` rename: the user's process keeps its name and command, as on macOS (review of f68789c). Another owner's process always takes `stat`'s short name: its
   `cmdline` is never read (a process can rewrite its `argv[0]` into a title such as "sshd: bob@pts/0", review of e3882de).
   Every name and command line shown has its control characters (Unicode Cc) and format characters (Cf: the bidirectional
   embeddings, overrides and isolates U+202A–U+202E and U+2066–U+2069, the marks U+200E and U+200F, zero-width characters)
@@ -157,7 +158,9 @@ items (Settings does it); a background collector; any network access.
 - **AM30** Memory = `RssAnon + VmSwap` (AD6). The Memory tab reads `statm` of every process at each sample (resident less
   file and shared memory is `RssAnon`; A10: 0.6 µs per process) and `status` of one fifth of them in turn, a new process at
   once, for `VmSwap` and `VmHWM`, which therefore show at most five samples late (AD32, review of 949fc98; step 0 read
-  `status` of every process at 6.7–7.6 µs each); the other tabs read neither.
+  `status` of every process at 6.7–7.6 µs each); the other tabs read neither. The tab's first sample after another tab, or
+  after a pause of more than two intervals, reads every process's `status` once, so the bound holds when the user comes
+  back to it (review of f68789c).
 - **AM31** Optional: Real Memory (`VmRSS`, `statm`'s resident), Private Memory (`RssAnon`), Shared Memory (`RssFile +
   RssShmem`, `statm`'s shared), Compressed Memory (`VmSwap`; titled Swapped Memory under AM34), Peak Memory (`VmHWM`, never
   shown below Real Memory), Page Ins (`stat` field 12, major faults), Threads, PID.
@@ -212,7 +215,9 @@ items (Settings does it); a background collector; any network access.
   yet is counted once it is. A dump that fails (out of descriptors, say) changes no total: the last ones show again (review
   of 949fc98: read as "every socket closed", it doubled them). Another owner's
   process shows "—" (its descriptors cannot be read). A line under the
-  table: "UDP traffic, such as some video, is counted only in the totals below."
+  table: "UDP traffic, such as some video, is counted only in the totals below." The dump leaves out listening, TIME_WAIT
+  and closed sockets: a listener carries no bytes, a TIME_WAIT socket no owner, and a closed one's counters were kept when
+  it left the dump (review of f68789c).
 - **AM44** Summary from `/proc/net/dev`, every interface except `lo`: Packets in, Packets out, Data received, Data sent
   (since boot) and per second; the graph shows Packets or Data (a pop-up, remembered).
 
@@ -512,7 +517,8 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   16 384 (the session's soft limit is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is
   opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). After the review of 949fc98 the
   product is also held to its model: `activity_cost.sh --model` runs probe A10 on the same fixture in the same run and
-  prints each tab's ratio (about 1.1 asked; 0.7 to 1.1 measured here), and the bench prints each sample's user and kernel
+  prints each tab's ratio to A10 reading the same as the sampler (its "step 1" plan, review of f68789c: 1.1 to 1.4
+  measured here; 0.7 to 1.1 against step 0's plan, the limits' source), and the bench prints each sample's user and kernel
   time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
@@ -531,6 +537,9 @@ at step 5 (L2), with its own number of processes, threads and descriptors noted 
 - Other owners' processes are read-only (AQ4): no administrator path to quit them (macOS asks for an administrator), and
   their disk, network, GPU, open files and command line are not shown.
 - Time the kernel spends on interrupts belongs to no process: System is a little above the sum of the rows.
+- An exec into the same program at the same addresses (a program that is not position-independent, or address
+  randomization turned off) is not seen: the Command column keeps the old arguments until the process ends (review of
+  f68789c).
 - Network per process is TCP only and starts when the app opens (AQ2); UDP, including QUIC video, is only in the totals.
 - Energy Impact is Grassfield's own estimate (AQ3); no 12 hr Power, App Nap or Graphics Card.
 - No Sample Process, Spindump or System Diagnostics.

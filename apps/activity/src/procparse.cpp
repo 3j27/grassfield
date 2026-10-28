@@ -289,30 +289,44 @@ bool parseStatm(std::string_view text, Statm &out)
 
 bool parseIo(std::string_view text, IoFields &out)
 {
-    size_t pos = 0;
-    std::string_view line, key, value;
+    // One pass, the key told by its length and first letter: the Disk and Energy tabs read this file of every own process
+    // at every sample (review of f68789c).
+    const char *p = text.data();
+    const char *const end = p + text.size();
     int seen = 0;
-    while (nextLine(text, pos, line)) {
-        if (!keyValue(line, key, value))
-            continue;
-        const uint64_t n = firstNumber(value);
-        if (key == "rchar") {
-            out.rchar = n;
-        } else if (key == "wchar") {
-            out.wchar = n;
-        } else if (key == "syscr") {
-            out.syscr = n;
-        } else if (key == "syscw") {
-            out.syscw = n;
-        } else if (key == "read_bytes") {
-            out.readBytes = n;
-            ++seen;
-        } else if (key == "write_bytes") {
-            out.writeBytes = n;
-            ++seen;
-        } else if (key == "cancelled_write_bytes") {
-            out.cancelledWriteBytes = n;
+    while (p < end) {
+        const char *key = p;
+        while (p < end && *p != ':' && *p != '\n')
+            ++p;
+        if (p < end && *p == ':') {
+            const std::string_view k(key, static_cast<size_t>(p - key));
+            ++p;
+            while (p < end && (*p == ' ' || *p == '\t'))
+                ++p;
+            uint64_t v = 0;
+            if (statNumber(p, end, v)) {
+                if (k == "read_bytes") {
+                    out.readBytes = v;
+                    ++seen;
+                } else if (k == "write_bytes") {
+                    out.writeBytes = v;
+                    ++seen;
+                } else if (k == "rchar") {
+                    out.rchar = v;
+                } else if (k == "wchar") {
+                    out.wchar = v;
+                } else if (k == "syscr") {
+                    out.syscr = v;
+                } else if (k == "syscw") {
+                    out.syscw = v;
+                } else if (k == "cancelled_write_bytes") {
+                    out.cancelledWriteBytes = v;
+                }
+            }
         }
+        while (p < end && *p != '\n')
+            ++p;
+        ++p;
     }
     return seen == 2;
 }

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <gtest/gtest.h>
@@ -612,6 +613,109 @@ TEST(Sampler, TheMemoryTabReadsStatmAndStatusInTurns)
         s.sample(reads, static_cast<double>(i));
     for (const ProcessRow &x : s.sample(reads, 12.0).rows)
         EXPECT_EQ(x.swapped, 900u * 1024) << x.pid;
+}
+
+TEST(Sampler, TheMemoryTabReadsEveryStatusAfterAnotherTabOrAPause)
+{
+    // Review of f68789c: back on the Memory tab after an hour on another, four fifths of the rows showed the old swap.
+    Fixture f;
+    for (int pid = 100; pid < 110; ++pid) {
+        f.process(pid, "m", kMe, 0, 1, nul({"m"}), "/");
+        f.write("proc/" + std::to_string(pid) + "/statm", "50000 2000 750 10 0 900 0\n");
+    }
+    auto swap = [&](unsigned long kb) {
+        for (int pid = 100; pid < 110; ++pid)
+            f.write("proc/" + std::to_string(pid) + "/status", Fixture::statusText("m", kMe, 3000, kb));
+    };
+    swap(0);
+    Sampler s(options(f));
+    const unsigned memory = readsForTab(Tab::Memory);
+    for (int i = 1; i <= 3; ++i)
+        s.sample(memory, static_cast<double>(i));
+    swap(4000);
+    for (int i = 1; i <= 7; ++i)
+        s.sample(ReadProcesses, 3.0 + 0.1 * i); // another tab, briefly: no pause to tell it by
+    const Snapshot back = s.sample(memory, 4.0);
+    EXPECT_EQ(back.counters.statusReads, 10u); // every process once
+    for (const ProcessRow &r : back.rows)
+        EXPECT_EQ(r.swapped, 4000u * 1024) << r.pid;
+    EXPECT_EQ(s.sample(memory, 5.0).counters.statusReads, 2u); // then the turns again
+    swap(8000);
+    const Snapshot later = s.sample(memory, 100.0); // the window was hidden: a pause of many intervals
+    EXPECT_EQ(later.counters.statusReads, 10u);
+    for (const ProcessRow &r : later.rows)
+        EXPECT_EQ(r.swapped, 8000u * 1024) << r.pid;
+}
+
+TEST(Sampler, ThePeakIsNeverBelowTheResidentSet)
+{
+    Fixture f;
+    f.process(100, "m", kMe, 0, 1, nul({"m"}), "/"); // status: VmHWM 7000 kB
+    f.write("proc/100/statm", "50000 5000 750 10 0 900 0\n"); // resident 5000 pages, 20000 kB: grown since status was read
+    Sampler s(options(f));
+    const ProcessRow r = *row(s.sample(readsForTab(Tab::Memory), 1.0), 100);
+    EXPECT_EQ(r.realMemory, 5000u * 4096);
+    EXPECT_EQ(r.peakMemory, 5000u * 4096);
+}
+
+TEST(Sampler, AProcessThatRenamesItselfKeepsItsName)
+{
+    // prctl(PR_SET_NAME) changes stat's name without an exec: the user's own process keeps its name and command, as on
+    // macOS (review of f68789c: python3 became python3.13).
+    Fixture f;
+    f.process(100, "python3", kMe, 1, 5000, nul({"/usr/bin/python3", "tool.py"}), "/");
+    f.write("proc/100/stat", Fixture::statLine(100, "python3", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x55550000));
+    f.link("/usr/bin/python3.13", "proc/100/exe");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand;
+    EXPECT_EQ(row(s.sample(reads, 1.0), 100)->name, "python3");
+    f.write("proc/100/stat", Fixture::statLine(100, "worker", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x55550000));
+    const Snapshot snap = s.sample(reads, 2.0);
+    EXPECT_EQ(row(snap, 100)->name, "python3");
+    EXPECT_EQ(snap.counters.cmdlineReads, 0u);
+}
+
+TEST(Sampler, AnExecIsSeenByItsCodeEndAlone)
+{
+    // A non-position-independent executable loads at the same address: another one is told by where its code ends.
+    Fixture f;
+    f.process(100, "app", kMe, 1, 5000, nul({"/opt/a/app"}), "/");
+    f.write("proc/100/stat", Fixture::statLine(100, "app", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x400000, 0x480000));
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand;
+    s.sample(reads, 1.0);
+    f.write("proc/100/stat", Fixture::statLine(100, "app", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x400000, 0x4a0000));
+    f.write("proc/100/cmdline", nul({"/opt/b/app", "--b"}));
+    EXPECT_EQ(row(s.sample(reads, 2.0), 100)->command, "/opt/b/app --b");
+}
+
+namespace
+{
+bool rootOwnsPid100(int dir, const char *name, uint32_t &uid)
+{
+    struct stat st{};
+    if (fstatat(dir, name, &st, 0) != 0)
+        return false;
+    uid = std::string(name) == "100" ? 0 : static_cast<uint32_t>(st.st_uid);
+    return true;
+}
+} // namespace
+
+TEST(Sampler, TheRealUidBehindARootDirectoryIsReadAgainInItsTurn)
+{
+    // A non-dumpable process's directory is root's: its owner is status's real uid, which can change without an exec
+    // (setuid). Read again in the owner's turn (review of f68789c, mutant N10).
+    Fixture f;
+    f.process(100, "agent", kMe, 0, 1, nul({"agent"}), "/");
+    Options o = options(f);
+    o.dirOwner = rootOwnsPid100;
+    o.descriptorTurns = 1; // every sample is the owner's turn
+    Sampler s(o);
+    EXPECT_TRUE(row(s.sample(ReadProcesses, 1.0), 100)->own);
+    f.write("proc/100/status", Fixture::statusText("agent", 1001, 1000, 0));
+    const ProcessRow r = *row(s.sample(ReadProcesses, 2.0), 100);
+    EXPECT_FALSE(r.own);
+    EXPECT_EQ(r.uid, 1001u);
 }
 
 TEST(Sampler, ACounterThatWentBackGivesNoRate)

@@ -499,6 +499,12 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
         }
     }
 
+    // The Memory tab's turns hold while it is shown sample after sample; its first sample after another tab, or after a
+    // pause longer than two intervals (a hidden window), reads every process's status, so no swap shows older than five
+    // samples (AD32; review of f68789c).
+    const bool memoryAll = (reads & ReadMemory)
+        && (lastMemoryIndex_ + 1 != index_ || lastMemoryTime_ < 0 || (memoryInterval_ > 0 && now - lastMemoryTime_ > 2 * memoryInterval_));
+
     if (listed) {
         const uint64_t mark = index_ + 1;
         c.listed = listing_.size();
@@ -549,8 +555,14 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                 p.turn = nextTurn_++;
             p.kthread = (st.flags & kPfKthread) != 0;
             // A kernel thread's name changes with its work ("kworker/0:1-events"): never an exec, and its owner is root.
+            // An exec: for the user's own processes, whose code addresses stat gives, those addresses changed (a new image);
+            // a new stat name alone is then a prctl(PR_SET_NAME) rename, and the process keeps its name as on macOS
+            // (review of f68789c: python3 became python3.13). For the others, whose addresses read 0, the name is all there is.
+            const bool haveCode = st.startCode != 0 && p.startCode != 0;
             const bool exec = !fresh && !p.kthread
-                && (st.comm != p.comm || (st.startCode && (st.startCode != p.startCode || st.endCode != p.endCode)));
+                && (haveCode ? (st.startCode != p.startCode || st.endCode != p.endCode) : st.comm != p.comm);
+            if (!exec && haveCode)
+                p.comm = st.comm;
             // The owner from the directory: read when the process is first seen, after an exec and in its turn (a tenth
             // per sample, for a process that changed its uid without one), not at every sample (review of 949fc98: six
             // hundred fstatat a sample, a fifth of the CPU tab's cost).
@@ -558,16 +570,26 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                 && (fresh || exec || index_ % static_cast<uint64_t>(opt_.descriptorTurns) == p.turn % static_cast<uint64_t>(opt_.descriptorTurns))) {
                 char name[16];
                 std::snprintf(name, sizeof name, "%d", pid);
-                struct stat dirStat{};
                 ++c.ownerStats;
-                if (fstatat(procFd_, name, &dirStat, 0) != 0) {
+                uint32_t owner = 0;
+                bool ownerOk = false;
+                if (opt_.dirOwner) {
+                    ownerOk = opt_.dirOwner(procFd_, name, owner);
+                } else {
+                    struct stat dirStat{};
+                    ownerOk = fstatat(procFd_, name, &dirStat, 0) == 0;
+                    owner = static_cast<uint32_t>(dirStat.st_uid);
+                }
+                if (!ownerOk) {
                     closeProc(p);
                     procs_.erase(it);
                     continue;
                 }
-                if (!fresh && p.dirUid != static_cast<uint32_t>(dirStat.st_uid))
-                    p.uidKnown = false; // read the real uid again (status) when the directory says root
-                p.dirUid = static_cast<uint32_t>(dirStat.st_uid);
+                // Behind a directory owned by root (a non-dumpable process) the owner is status's real uid, which can change
+                // without an exec: read again in the turn, as when the directory's owner changed (review of f68789c).
+                if (!fresh && (p.dirUid != owner || owner == 0))
+                    p.uidKnown = false;
+                p.dirUid = owner;
             }
             const uint32_t dirUid = p.dirUid;
             p.seen = mark;
@@ -597,7 +619,8 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             StatusFields status;
             bool haveStatus = false;
             const bool memoryTurn = (reads & ReadMemory)
-                && (!p.haveSwap || index_ % static_cast<uint64_t>(opt_.statusTurns) == p.turn % static_cast<uint64_t>(opt_.statusTurns));
+                && (!p.haveSwap || memoryAll
+                    || index_ % static_cast<uint64_t>(opt_.statusTurns) == p.turn % static_cast<uint64_t>(opt_.statusTurns));
             if ((reads & ReadStatus) || memoryTurn || (dirUid == 0 && !p.uidKnown)) {
                 std::string_view statusText;
                 if (readKept(p.statusFd, pid, "status", statusText, c.statusReads))
@@ -853,6 +876,11 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
     }
     if (listed)
         lastProcessIndex_ = index_;
+    if (listed && (reads & ReadMemory)) {
+        memoryInterval_ = memoryAll ? 0 : now - lastMemoryTime_;
+        lastMemoryTime_ = now;
+        lastMemoryIndex_ = index_;
+    }
     if ((reads & ReadSystemCpu) && s.system.cpuOk)
         lastCpuIndex_ = index_;
 

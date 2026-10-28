@@ -7,7 +7,8 @@ MINORs, all answered in "Review history"; each changed place says "review of e38
 PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
 "step 1" here. Revised after the integrator's opus review of 949fc98 (FAIL: four MAJORs, five MINORs, five surviving
-mutants), answered in "Review history"; each changed place says "review of 949fc98". · Date: 2026-10-28 · Decider: owner
+mutants), answered in "Review history"; each changed place says "review of 949fc98". Revised again after the re-review of
+f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". · Date: 2026-10-28 · Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
 
@@ -188,16 +189,21 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
     processes in turn (each process every fifth sample; its rate is taken over those five samples);
   - Network: one TCP `sock_diag` dump, and the descriptor lists (`fd/`) of one tenth of the user's processes in turn, each new
     process at its first sample; a socket counted once its process is known (its counters are cumulative, so nothing is lost
-    while the socket lives);
+    while the socket lives); the dump leaves out listeners, TIME_WAIT and closed sockets, which carry no bytes or no owner
+    (review of f68789c: the dump is most of this tab's cost);
   - the GPU columns: the descriptor lists in the same turn (one tenth per sample, new processes at once), then each sample
     only the `fdinfo` of the DRM descriptors found;
   - `smaps_rollup` never in the table (6.6 ms for a 1 GiB process, A8), only in Inspect.
   - The turns (a fifth, a tenth) go by each process's order of arrival, not by its pid, so each sample reads as many lists
     whatever the pids are (review of 949fc98). An own process's `cgroup` is read when it is first seen and again in its
     first two descriptor turns (a launcher moves a process into its unit before it runs it), then no more.
-  - An exec is seen from `stat` alone: its name (field 2) or, for the user's own processes, its code addresses (fields 26
-    and 27, new at every exec) changed; the process is then named again (AM17) from its command line and its `exe` link
-    (review of 949fc98).
+  - An exec is seen from `stat` alone (review of 949fc98): for the user's own processes, whose code addresses `stat` gives
+    (fields 26 and 27), a change of either address, so a new image even under the same name; a new name with the same
+    addresses is a `prctl(PR_SET_NAME)` rename, and the process keeps its name and command as on macOS (review of
+    f68789c). For other owners, whose addresses read 0, a new name (field 2) is all there is. The process is then named
+    again (AM17) from its command line and its `exe` link. Known limit: an exec into the same non-position-independent
+    program (or with address randomization turned off) maps it at the same addresses and is not seen; its Command keeps the
+    old arguments until the process ends.
   - Nothing a sample reads is cleared or copied first (step 0's code cleared a 64 KiB buffer at every read, most of a
     sample's cost on the reference machine; review of 949fc98); a per-process file is read in one call.
 - Kept descriptors (step 1, the integrator's note on the merge of step 0): `stat` of every process, `statm` and `status` on
@@ -226,8 +232,11 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   container on this cloud machine, 608 processes of which 404 own, 1 600 threads, 100 TCP connections; median of 101
   samples, then probe A10 on the same fixture in the same run): after the review of 949fc98, CPU 2.6–2.8 ms, Memory
   2.8–2.9, Energy 5.9–6.0, Disk 2.1, Network 3.2–3.4; against A10 0.9–1.1 × on CPU, Memory, Energy and Network and 0.7–0.8
-  × on Disk (three runs; `docs/audits/activity-2026-10-28/step1.md`). The reference machine's figures are the integrator's
-  run of the same script at idle (the review of 949fc98 measured 1.6 to 2.3 × A10 there before these changes). A10 itself
+  × on Disk (three runs; `docs/audits/activity-2026-10-28/step1.md`). Against A10 reading the same as the sampler (its
+  "step 1" plan: owners a tenth per sample, `statm` and a fifth of `status`, `io` kept; review of f68789c), 1.1–1.2 × on
+  CPU, Energy and Network and 1.3–1.4 × on Disk and Memory, whose reads cost least in the kernel: the rest is the sampler's
+  parsing and its 368-byte rows. The reference machine's figures are the integrator's run of the same script at idle
+  (the review of 949fc98 measured 1.6 to 2.3 × A10 there before these changes; the re-review of f68789c 0.73 to 1.10 ×). A10 itself
   now raises its soft `RLIMIT_NOFILE` as the app does: at 1 024 its kept `stat`, `status` and `statm` (three per process)
   used up the descriptors and its later phases opened nothing (no thread, no descriptor list, no socket read), so its
   figures came out too low; it prints the files it could not open.
@@ -514,11 +523,14 @@ Answer: A (see "Answers").
 - **AD32. The Memory tab reads `statm` at every sample and `status` in turns** (d; review of 949fc98). `statm`'s resident
   set less its file and shared-memory part is `RssAnon` exactly, at a sixth of `status`'s cost (A10); `VmSwap` and
   `VmHWM` come from `status`, a fifth of the processes per sample and every new one at once, so they show at most five
-  samples late (25 s at Normally), and the peak never shows below the resident set. Swap changes slowly: the column stays
-  macOS's, at the cost of the CPU tab.
+  samples late (25 s at Normally), and the peak never shows below the resident set. The tab's first sample after another
+  tab, or after a pause of more than two intervals (a hidden window), reads every process's `status` once, so the bound
+  holds when the user comes back to it (review of f68789c). Swap changes slowly: the column stays macOS's, at the cost of
+  the CPU tab.
 - **AD33. A process's owner from its directory on arrival, after an exec and in its turn** (c, d; review of 949fc98): six
   hundred `fstatat` a sample bought nothing a running process changes without an exec but its uid, which the turn (a
-  tenth per sample) catches; an action reads its process's identity again anyway (AD30).
+  tenth per sample) catches; behind a directory owned by root (a non-dumpable process) the turn reads `status`'s real uid
+  again too (review of f68789c); an action reads its process's identity again anyway (AD30).
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
@@ -655,3 +667,16 @@ execs nothing, has no thread, timer or install rule). Each finding and its answe
 | MINOR 8: turns by pid residue can be unbalanced | turns by order of arrival (`TheTurnsAreAsFullWhateverThePids`) |
 | MINOR 9: AM47's GPU name and AM49's per-row device not built; AM38 and AM39 deferred without a record | AM49's devices are in the rows (`gpuDevices`); AM47's name, AM38 and AM39 (D-Bus) recorded in the spec as step 2 |
 | Mutants M03, M06, M07, M09, M10 survive | each killed by a test (`TheClockTickIsTheMachines`, `MemoryColumnsFromStatus`, `TheMemoryTabReadsStatmAndStatusInTurns`, `ACounterThatWentBackGivesNoRate`, `TheUserShareIsNeverAboveTheBusyShare`) |
+
+**Integrator's opus re-review of f68789c (step 1, 2026-10-28): FAIL, one MAJOR from this round's AD32, four MINORs.**
+What held: every claim of 568d5c8 (cost 0.73–1.10 × A10 against its step-0 plan; exec and argv[0] titles on the real
+kernel; the fixture; every MINOR; the limits of f68789c across the script, the spec, d, step1.md and STATE). Each finding
+and its answer:
+| Finding | Answer |
+|---|---|
+| MAJOR: AD32's swap goes stale after a tab switch: back on Memory, four fifths of the rows show the old swap | the tab's first sample after another tab or a pause of more than two intervals reads every `status` (AD32; spec AM30; `TheMemoryTabReadsEveryStatusAfterAnotherTabOrAPause`) |
+| MINOR: the `--model` ratios compare different read plans | A10 prints a "step 1" plan, the sampler's reads (owners a tenth per sample, `statm` and a fifth of `status`, `io` kept, the TCP dump without listeners), beside step 0's (the limits' source); `--model` takes its ratios from the step-1 plan: 1.1–1.4 × (d; step1.md) |
+| MINOR: `sampcost` warns "out of descriptors?" on the kernel's refusals | EMFILE and ENFILE counted apart from refusals (pid 1's `fd/`, non-dumpable agents), which are expected |
+| MINOR: two exec-detection gaps | a `prctl(PR_SET_NAME)` rename is no exec for the user's processes (their code addresses decide; `AProcessThatRenamesItselfKeepsItsName`); an exec into the same program at the same addresses (non-PIE, or randomization off) stays a known limit (d; spec Known limitations) |
+| MINOR: surviving mutants N06, N10, N13 (N03 without effect) | `AnExecIsSeenByItsCodeEndAlone` (N06); the real uid behind a root-owned directory read again in the owner's turn, `TheRealUidBehindARootDirectoryIsReadAgainInItsTurn` (N10); `ThePeakIsNeverBelowTheResidentSet` (N13) |
+| Network has no headroom (45.2–46.6 ms in a loaded sandbox) | the dump leaves out listeners, TIME_WAIT and closed sockets (fewer sockets on a real machine; none on the fixture, whose 200 sockets are established); the verdict waits on the integrator's idle run |
