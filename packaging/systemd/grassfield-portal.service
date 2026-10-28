@@ -22,18 +22,17 @@ Slice=app.slice
 # D-4's start-up loop: a Qt process with the gtk3 platform theme and GTK_USE_PORTAL could wait on the portal that waits on it.
 # The panels draw with Grassfield.Ui (the program clears QT_QPA_PLATFORMTHEME as well).
 UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME
-# Hardened (ADR-0035 D-4, the section 5.8 checklist): it runs as the user and returns only what the user picked; it never opens
-# or runs a file. The home, the runtime directory, /tmp and the removable media stay writable (New Folder in a Save panel,
-# KIO's caches and sockets); the network stays open for KIO's network places. No MemoryDenyWriteExecute: the QML engine's JIT
-# needs it.
+# Hardened (ADR-0035 D-4, the section 5.8 checklist, decision 4b-12): it runs as the user and returns only what the user
+# picked; it never opens or runs a file. /usr, /boot, /efi and /etc are read-only; every other place the user may write stays
+# writable, as for any application (a Save panel's New Folder on a disk mounted under /srv or /data too, KIO's caches and
+# sockets). No UMask=: a folder made with New Folder gets the user's usual mode, as one made in Files does. The network stays
+# open for KIO's network places. No MemoryDenyWriteExecute: the QML engine's JIT needs it.
 NoNewPrivileges=yes
-ProtectSystem=strict
-ReadWritePaths=-%h -%t -/tmp -/var/tmp -/run/media -/media -/mnt
+ProtectSystem=full
 RestrictSUIDSGID=yes
 RestrictRealtime=yes
 LockPersonality=yes
 SystemCallArchitectures=native
-UMask=0077
 # Its budget (ADR-0035 D-4): 80 MB while a panel is open, nothing when idle (it quits); the limit is far above it.
 MemoryMax=1G
 TasksMax=128
