@@ -117,14 +117,20 @@ mkpkg gs-held 1 "" yes
 mkpkg gs-slow 1 "" yes "  sleep 8"
 mkpkg gs-loud 1 "" yes "  head -c 10485760 /dev/zero | tr '\\0' x | fold -w 100"
 mkpkg gs-local 1 "" yes
+mkpkg gs-orphan 1 "" yes
+mkpkg gs-newer 1 "'gs-app>=2'" yes
+mkpkg gs-pinned 1 "" no
+mkpkg gs-pinned 2 "" no
+mkpkg gs-wants-old 1 "'gs-pinned<2'" yes
+mkpkg gs-daemon 1 "" yes "  setsid sleep 30 </dev/null >/dev/null 2>&1 &"
 mkdir -p /srv/gstest
 for f in /home/builder/pkg/*/*.pkg.tar.zst; do
-  [[ $f == */gs-local-* ]] || cp "$f" /srv/gstest/
+  [[ $f == */gs-local-* || $f == */gs-pinned-2/* ]] || cp "$f" /srv/gstest/
 done
 quiet repo-add /srv/gstest/gstest.db.tar.gz /srv/gstest/*.pkg.tar.zst
 printf '\n[gstest]\nSigLevel = Optional TrustAll\nServer = file:///srv/gstest\n' >>/etc/pacman.conf
 quiet pacman -Sy
-expect "[gstest] lists the test packages" test "$(pacman -Slq gstest | wc -l)" -ge 12
+expect "[gstest] lists the test packages" test "$(pacman -Slq gstest | wc -l)" -ge 17
 
 say "A6b policy: auth_admin for an active session, nothing for any other; the message names the command line"
 pk=$(pkaction --verbose --action-id org.grassfield.store.manage-packages 2>&1)
@@ -189,12 +195,31 @@ expect "pacman -Qu lists gs-app 1 -> 2 -> exit 4, nothing installed" bash -c "te
 sed -i 's/^\[options\]$/[options]\nIgnorePkg = gs-app/' /etc/pacman.conf
 op=$(newop); helper install "$op" gs-lib gs-app2 >/dev/null; rc=$?
 expect "the same with gs-app held by IgnorePkg ([ignored]) -> install gs-lib gs-app2 exit 0" bash -c "test $rc == 0 && pacman -Q gs-lib gs-app2 >/dev/null"
+# gs-newer needs gs-app 2, which IgnorePkg holds back: under --noconfirm pacman would update gs-app alone (a partial
+# upgrade). The plan is read first, without --noconfirm: pacman's question gets no answer and the plan fails.
+op=$(newop); helper install "$op" gs-newer >/dev/null; rc=$?
+expect "install gs-newer, whose plan updates the held gs-app -> exit 5, gs-app stays 1, gs-newer not installed" \
+  bash -c "test $rc == 5 && test \"\$(pacman -Q gs-app)\" == 'gs-app 1-1' && ! pacman -Q gs-newer >/dev/null 2>&1"
+tail -n 2 "$D/$op.log" | sed 's/^/    /'
+# gs-wants-old needs a gs-pinned older than the one installed (2, from a file; the repository has 1): pacman would put 1
+# back, with no question. The plan names gs-pinned, which is installed: refused before anything is downloaded.
+quiet pacman -U --noconfirm /home/builder/pkg/gs-pinned-2/gs-pinned-2-1-any.pkg.tar.zst
+op=$(newop); helper install "$op" gs-wants-old >/dev/null; rc=$?
+expect "install gs-wants-old, whose plan puts gs-pinned 1 back over 2 -> exit 5, gs-pinned stays 2" \
+  bash -c "test $rc == 5 && test \"\$(pacman -Q gs-pinned)\" == 'gs-pinned 2-1' && ! pacman -Q gs-wants-old >/dev/null 2>&1"
+tail -n 1 "$D/$op.log" | sed 's/^/    /'
+expect "  the log names the installed package" grep -q 'would replace the installed gs-pinned with 1-1 alone' "$D/$op.log"
 
 say "A6b remove: apps the user installed, never the system's (S16)"
 quiet pacman -S --noconfirm gs-app-fw grassfield-gs gs-omarchy-app gs-held
 quiet pacman -U --noconfirm /home/builder/pkg/gs-local-1/gs-local-1-1-any.pkg.tar.zst
 op=$(newop); helper remove "$op" gs-dep >/dev/null; rc=$?
 expect "remove gs-dep (installed as a dependency) -> exit 6" bash -c "test $rc == 6 && pacman -Q gs-dep >/dev/null"
+# The explicit-only rule alone: gs-orphan owns an application entry, nothing needs it, its plan is itself.
+quiet pacman -S --noconfirm --asdeps gs-orphan
+op=$(newop); helper remove "$op" gs-orphan >/dev/null; rc=$?
+expect "remove gs-orphan (an app installed as a dependency, needed by nothing) -> exit 6, stays" \
+  bash -c "test $rc == 6 && pacman -Q gs-orphan >/dev/null && grep -q 'was not installed as an app' $D/$op.log"
 op=$(newop); helper remove "$op" grassfield-gs >/dev/null; rc=$?
 expect "remove grassfield-gs (Grassfield's name) -> exit 6" bash -c "test $rc == 6 && pacman -Q grassfield-gs >/dev/null"
 op=$(newop); helper remove "$op" gs-omarchy-app >/dev/null; rc=$?
@@ -252,6 +277,8 @@ caller=$!
 for _ in $(seq 40); do [[ -f $D/$op.started ]] && grep -q 'gs-slow' "$D/$op.log" 2>/dev/null && break; sleep 0.25; done
 sleep 2
 hpid=$(cut -d' ' -f1 "$D/$op.started")
+holders=$(find /proc/[0-9]*/fd -lname "$D/helper.lock" 2>/dev/null | cut -d/ -f3 | sort -u | tr '\n' ' ')
+expect "while pacman and gs-slow's scriptlet run, only the helper holds its lock ($holders)" test "$holders" == "$hpid "
 fds=$(for fd in 0 1 2; do readlink "/proc/$hpid/fd/$fd"; done | tr '\n' ' ')
 expect "its stdin is /dev/null, stdout and stderr the log ($fds)" test "$fds" == "/dev/null $D/$op.log $D/$op.log "
 ign=$(awk '/^SigIgn:/{print $2}' "/proc/$hpid/status")
@@ -262,6 +289,14 @@ kill "$caller" 2>/dev/null; pkill -P "$caller" cat 2>/dev/null
 for _ in $(seq 60); do [[ -f $D/$op.exit ]] && break; sleep 0.5; done
 expect "after SIGHUP and its caller gone: exit file 0, gs-slow installed" bash -c "test '$(exitfile "$op")' == 0 && pacman -Q gs-slow >/dev/null"
 expect "nothing was written to the caller's pipe" test ! -s "$W/slow.pipe"
+# A scriptlet that leaves a process running (a daemon started at install): it must not keep the helper's lock.
+op=$(newop); helper install "$op" gs-daemon >/dev/null; rc=$?
+holders=$(find /proc/[0-9]*/fd -lname "$D/helper.lock" 2>/dev/null | cut -d/ -f3 | sort -u | tr '\n' ' ')
+expect "install gs-daemon (its scriptlet leaves sleep running) -> exit 0, nothing holds the lock after ($holders)" \
+  bash -c "test $rc == 0 && test -z '$holders' && pgrep -x sleep >/dev/null"
+op=$(newop); helper remove "$op" gs-daemon >/dev/null; rc=$?
+expect "  the next run is not busy: remove gs-daemon -> exit 0" test "$rc" == 0
+pkill -x sleep 2>/dev/null
 
 say "A6b the log's cap (8 MiB), the environment dropped, the 16 newest operations kept"
 op=$(newop); helper install "$op" gs-loud >/dev/null; rc=$?

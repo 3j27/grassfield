@@ -5,17 +5,20 @@
 # which waits for it:
 #   install <op-id> <package>...  pacman -S --needed --noconfirm --noprogressbar -- <packages>: names a repository has,
 #                                 each an app (it owns an application entry, /usr/share/applications/<id>.desktop: SD1,
-#                                 read from the package file pacman downloaded and checked, before anything is installed)
+#                                 read from the package file pacman downloaded and checked, before anything is installed),
+#                                 and a plan that changes no installed package (never a partial upgrade)
 #   remove <op-id> <package>...   pacman -Rns --noconfirm --noprogressbar -- <packages>: apps the user installed from a
 #                                 repository only (installed explicitly, owning an application entry, not denied), and a
 #                                 whole plan (-s takes unneeded dependencies along) that names no denied package (S16)
 # 1 to 64 package names; the operation id is 32 lowercase hexadecimal digits the Store made. Both verbs refuse while
 # another run of this helper or pacman (db.lck) is running, and while pacman -Qu lists a package not "[ignored]" (an
 # update that did not finish: the databases are newer than the system, S12). Never -y, --overwrite, -dd, -U, a file.
+# The lock's descriptor (9) is closed for every program it starts: pacman, its scriptlets and hooks never hold the lock.
 # Exit: 0 done; 1 failed (pacman's message is in the log); 2 usage, or an operation id used before; 3 busy (another run
-# of this helper, or pacman's db.lck); 4 the last system update did not finish; 5 a name no repository has, or a plan
-# pacman cannot resolve; 6 a removal the rule refuses; 7 an install of a package that owns no application entry. pkexec
-# itself exits 126 (not authorized, or the dialog dismissed) and 127 (authentication failed).
+# of this helper, or pacman's db.lck); 4 the last system update did not finish; 5 a name no repository has, a plan
+# pacman cannot resolve, or one that would change an installed package; 6 a removal the rule refuses; 7 an install of a
+# package that owns no application entry. pkexec itself exits 126 (not authorized, or the dialog dismissed) and 127
+# (authentication failed).
 #
 # Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
 # environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it starts
@@ -97,7 +100,8 @@ for old in "${olds[@]}"; do
 done
 
 # One run at a time: a lock only root can open (flock needs no write access, so a lock others could read could be held
-# by any user and block every install).
+# by any user and block every install). Every program started below gets `9<&-`: a process a package's scriptlet leaves
+# running would otherwise keep the lock, and every later run would say "busy".
 lock=$GS_DIR/helper.lock
 (umask 077 && : >>"$lock") || finish 1 "cannot create $lock"
 [[ -f $lock && ! -L $lock && $(stat -c %u:%a -- "$lock") == 0:600 ]] || finish 1 "$lock is not root's own (0600): refused"
@@ -105,7 +109,7 @@ exec 9<"$lock" || finish 1 "cannot open $lock"
 flock -n 9 || finish 3 "another installation is running: try again when it has finished"
 
 # pacman's database folder, from pacman's own configuration.
-dbpath=$(pacman-conf DBPath) || finish 1 "pacman-conf DBPath failed"
+dbpath=$(pacman-conf DBPath 9<&-) || finish 1 "pacman-conf DBPath failed"
 dbpath=${dbpath%/}
 [[ -n $dbpath ]] || finish 1 "pacman's database folder is unknown"
 [[ ! -e $dbpath/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left $dbpath/db.lck)"
@@ -114,11 +118,11 @@ dbpath=${dbpath%/}
 while IFS= read -r line; do
   [[ -z $line || $line == *' [ignored]' ]] && continue
   finish 4 "the last system update did not finish ($line): update the system first"
-done < <(pacman -Qu 2>/dev/null)
+done < <(pacman -Qu 2>/dev/null 9<&-)
 
 # Every name a repository has (pacman -Slq: exact names, never what a package provides).
 declare -A sync=()
-while IFS= read -r line; do sync[$line]=1; done < <(pacman -Slq 2>/dev/null)
+while IFS= read -r line; do sync[$line]=1; done < <(pacman -Slq 2>/dev/null 9<&-)
 for name in "$@"; do
   [[ -n ${sync[$name]-} ]] || finish 5 "$name: no repository has this package"
 done
@@ -130,20 +134,34 @@ pacman_logged() {
   used=$(stat -c %s -- "$log" 2>/dev/null || echo "$GS_LOG_MAX")
   budget=$((GS_LOG_MAX - 65536 - used))
   ((budget > 0)) || budget=0
-  pacman "$@" 2>&1 | { head -c "$budget"; cat >/dev/null; }
+  pacman "$@" 2>&1 9<&- | { head -c "$budget"; cat >/dev/null; } 9<&-
   return "${PIPESTATUS[0]}"
 }
 
 if [[ $verb == install ]]; then
+  # The whole plan first, what pacman -S --needed would install (S10), before anything is downloaded: no installed
+  # package may change in it, which would be a partial upgrade (or downgrade) that only a whole system update may bring.
+  # A package IgnorePkg holds back (pacman -Qu shows it "[ignored]", above) is one pacman asks about, and under
+  # --noconfirm installs anyway: here, without --noconfirm, its question reads /dev/null and the plan fails (S10's
+  # "could not satisfy dependencies"). An older version a dependency asks for comes with no question: the plan names an
+  # installed package. The Store refuses the same plans (plancheck.cpp); this holds for any caller. Every line must be a
+  # package, or nothing installs.
+  plan=$(pacman -S --needed --print --print-format '%n %v %l' -- "$@" 9<&-) || finish 5 "pacman cannot install $*: update the system first"
+  declare -A installed=() url=()
+  while IFS= read -r line; do installed[$line]=1; done < <(pacman -Qq 2>/dev/null 9<&-)
+  while read -r pkg version location extra; do
+    [[ -z $pkg ]] && continue
+    [[ $pkg =~ ^[a-z0-9@_+][a-z0-9@._+-]*$ && -n $location && -z $extra ]] || finish 5 "pacman's plan cannot be read: nothing installed"
+    [[ -n ${installed[$pkg]-} ]] && finish 5 "installing $* would replace the installed $pkg with $version alone: update the system first"
+    url[$pkg]=$location
+  done <<<"$plan"
   # SD1: each name owns an application entry, so the Store can remove whatever it installed. An installed name is read
   # from pacman's database; any other from its package file, which pacman -Sw downloads into its cache and checks (its
   # signature, as for an install) before pacman -Qlp reads the file list. Nothing is installed before every name passed.
-  declare -A installed=()
-  while IFS= read -r line; do installed[$line]=1; done < <(pacman -Qq 2>/dev/null)
   wanted=()
   for name in "$@"; do
     if [[ -n ${installed[$name]-} ]]; then
-      pacman -Qlq -- "$name" 2>/dev/null | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
+      pacman -Qlq -- "$name" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
     else
       wanted+=("$name")
     fi
@@ -151,9 +169,7 @@ if [[ $verb == install ]]; then
   if ((${#wanted[@]})); then
     say "downloading ${wanted[*]} to check what each one holds"
     pacman_logged -Sw --noconfirm --noprogressbar -- "${wanted[@]}" || finish 1 "pacman could not download the packages"
-    declare -A url=()
-    while read -r pkg location; do url[$pkg]=$location; done < <(pacman -Sp --print-format '%n %l' -- "${wanted[@]}" 2>/dev/null)
-    mapfile -t caches < <(pacman-conf CacheDir)
+    mapfile -t caches < <(pacman-conf CacheDir 9<&-)
     for name in "${wanted[@]}"; do
       file=${url[$name]-}
       file=${file##*/}
@@ -163,7 +179,7 @@ if [[ $verb == install ]]; then
         [[ -f ${cache%/}/$file && ! -L ${cache%/}/$file ]] && { path=${cache%/}/$file; break; }
       done
       [[ -n $path ]] || finish 1 "$name: $file is not in pacman's cache"
-      pacman -Qlpq -- "$path" 2>/dev/null | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
+      pacman -Qlpq -- "$path" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 7 "$name owns no application entry: not an app"
     done
   fi
   say "pacman -S --needed --noconfirm --noprogressbar -- $*"
@@ -183,8 +199,8 @@ for list in "${GS_OMARCHY_LISTS[@]}"; do
   done <"$list"
 done
 ((${#omarchy[@]})) || finish 6 "Omarchy's package lists are missing or empty: nothing can be removed"
-while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null)
-while IFS= read -r line; do explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null)
+while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9<&-)
+while IFS= read -r line; do explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null 9<&-)
 
 denied() { # name: 0 when the system, Omarchy or Grassfield needs it
   case $1 in
@@ -201,10 +217,10 @@ denied() { # name: 0 when the system, Omarchy or Grassfield needs it
 for name in "$@"; do
   denied "$name" && finish 6 "$name is part of the system, Omarchy or Grassfield: not removed"
   [[ -n ${explicit[$name]-} ]] || finish 6 "$name was not installed as an app (it is not installed, or another package needs it)"
-  pacman -Qlq -- "$name" 2>/dev/null | grep -Eq "$GS_ENTRY" || finish 6 "$name owns no application entry: not an app"
+  pacman -Qlq -- "$name" 2>/dev/null 9<&- | grep -Eq "$GS_ENTRY" || finish 6 "$name owns no application entry: not an app"
 done
 # The whole plan: -Rns removes what -Rs --print lists (pacman refuses --print with -n).
-plan=$(pacman -Rs --print --print-format '%n' -- "$@" 2>&1) || { echo "$plan"; finish 5 "pacman cannot remove these packages"; }
+plan=$(pacman -Rs --print --print-format '%n' -- "$@" 2>&1 9<&-) || { echo "$plan"; finish 5 "pacman cannot remove these packages"; }
 for name in $plan; do
   denied "$name" && finish 6 "removing $* would also remove $name, part of the system, Omarchy or Grassfield: not removed"
 done
