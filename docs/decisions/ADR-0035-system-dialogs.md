@@ -349,6 +349,89 @@ patching any upstream package (D1).
 - Cost: large (the biggest step): a new binary, a library split of Files, the panel QML, tests with a fake frontend on a
   private bus. Risk: medium (Qt Quick + KIO startup time: the first panel must open in ≤ 300 ms warm; Wayland parent import).
 
+**Delivered in step 4b (the Files library and the Open and Save panels).** `apps/files/files-core.cmake`: Files' sources but
+`main.cpp` as a static library, `grassfield-files-core`, linked by `grassfield-files` and by `grassfield-portal` (one CMake source
+list; `apps/files/build-direct.sh --core`). `apps/portal/src/`: `chooserlogic.{h,cpp}` (every FileChooser option of
+xdg-desktop-portal 1.22.1 checked and mapped for the panels, and the results out), `filechooser.{h,cpp}` (the backend
+interface: a Request object per call, the panel's answer as a delayed reply, the 3-s forward to x-d-p-gtk, the idle quit),
+`panelstate.{h,cpp}` (`portal-filechooser.json`, ADR-0020), `main.cpp`. `apps/files/qml/FilePanels.qml` and `FilePanel.qml`
+(the panels), `PanelLogic.js` (their rules); `BrowserTab.chooser` (a tab that browses for a panel), `FolderModel.chooser` (what
+a panel cannot take is dimmed and never selected), `FileLogic::passesFilter`; the toolbar's capsules and the appearance as
+components shared with the browser window (`NavCapsule`, `ViewSwitcher`, `SearchCapsule`, `FilesAppearance`). Packaging:
+`grassfield.portal`, `grassfield-portal.service`, its D-Bus service file, the session's `hyprland-portals.conf`
+(`FileChooser=grassfield;gtk`), the PKGBUILD; `config/hypr/grassfield/windows.lua` (4b-3). Tests:
+`tests/unit/portal/tst_chooserlogic.cpp`, `tst_panelstate.cpp`, `tst_filechooser.cpp` (the backend on a private dbus-daemon
+with a fake frontend and a fake x-d-p-gtk), `tests/unit/files/tst_folderchooser.cpp` (a real KIO listing),
+`tests/unit/tst_filepanel.qml` (the panel over stand-ins), `tests/integration/portal_filechooser.sh` (the real binary and the
+real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
+
+**Decisions of step 4b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **4b-1. The Files library.** Options: (a) a shared library installed under `/usr/lib/grassfield`; (b) a static library
+  compiled into both programs; (c) the panels as a mode of `grassfield-files`. **Choice: (b)**: one source list and no library
+  ABI to install; D-4's two processes stay two (a crash of Files never takes an open panel along, and the reverse).
+- **4b-2. One QML code base.** The panels live in Files' QML directory and the portal loads them from there, so a panel is the
+  browser itself, not a copy: the views, the sidebar, Glance, Files' KIO sheets (D-12 a). A tab learns it browses for a panel
+  (`BrowserTab.chooser`) and then has no file operation (no Trash, Rename, Copy, Paste, tags or quick actions; the
+  application does what it wants with what it gets), a double-click on a file, Return and Esc are the panel's, a drop shows
+  the item instead of moving it, "/" and "~" open Go to Folder; the view is the panel's own for its application (macOS keeps
+  a panel's view apart from Finder's), the arrangement of a folder stays Files'.
+- **4b-3. Whose window a panel is.** Question: which Wayland app id does a panel carry? Options: (a) its own
+  (`org.grassfield.Portal`: a Dock tile with no app behind it); (b) Files' (Files shows as running while an application's
+  panel is open); (c) the application's when the frontend names it (a desktop id), else Files'. **Choice: (c)**: on macOS a
+  panel is a window of its application (Dock, menu bar, Force Quit count it there). Qt reads the app id when it makes the
+  window, so the portal sets it just before (`FileChooser::present`). A panel's class is then any application's, so the
+  session's rule that removes the compositor plugin's titlebar from a window that draws its own frame matches the panel's xdg
+  tag (`file-panel`) whatever its class (`gf-client-chrome-panel`, a `config/hypr` change).
+- **4b-4. Modal to what.** The panel is xdg-dialog's modal (Hyprland dims and blocks the parent) when the application asked
+  (`modal`, true by default) and gave a Wayland parent, imported with xdg-foreign v2 through KWindowSystem
+  (`setMainWindow`, which waits for the toplevel; 4b-13). Qt's window modality without a transient parent blocks no other
+  window of the process: two applications' panels open at once stay usable. With no usable parent, the panel is a free
+  window: every window floats in the session, and Hyprland centres it.
+- **4b-5. Filters.** Items a filter refuses are dimmed (at the disabled opacity) and cannot be selected, not hidden (macOS); a
+  glob matches the whole name without regard to case (a "*.PDF" is a PDF); a MIME rule matches the type, a type it inherits
+  from, or "major/*". One filter shows no pop-up (nothing to choose); several show one, "Show:" in an Open panel and
+  "Format:" in a Save panel, where the name's extension follows the format chosen (macOS).
+- **4b-6. The Save panel.** Compact by default (Save As, Where), expanded to the browser by the disclosure button, as the
+  application's last panel was left. A file selected in the browser gives its name. Saving over a file asks with the
+  macOS replace alert, Cancel the default; a folder's name is refused with a message (replacing a folder by a file would
+  lose its content); SaveFiles asks about every name that exists in the folder in one alert. Left out, written as known
+  limitations: the Tags field (the panel would have to tag a file the application has not written yet) and "Hide extension"
+  (a Linux file has no hidden-extension attribute, and Files shows every extension).
+- **4b-7. New Folder.** In the panels whose answer is a folder or the place of a new file (Save, a folder Open panel,
+  SaveFiles), and not in a file Open panel (macOS offers it only where the application allows it). macOS's sheet: "Name of new
+  folder:" with "untitled folder", Create; the panel then opens the new folder.
+- **4b-8. Nothing over the lock** (common rule 6). Options: (a) the panel reads the shell's lock state (its crash-recovery
+  marker or its IPC: a security module's internals); (b) the compositor's session lock already covers every output and takes
+  every input (ext-session-lock), so a panel that opens while locked is out of sight and of the keyboard's reach until the
+  unlock; a panel that first gets the keyboard later than `files.panelLateFocusMs` (1.5 s) after it opened (it waited behind
+  the lock, or under another window) takes keys only after a click in it, the polkit hold rule. **Choice: (b)**.
+- **4b-9. The memory budget's measure.** D-4 says 80 MB while a panel is open, without the measure. As decision 2b-11 for the
+  Settings backend: 80 MB of private memory (`RssAnon`); the resident size, which counts the shared Qt Quick and KIO
+  libraries, is reported. Offscreen in the integration test: 28 MB private, 97 MB resident. The nested measure (A-FC3) is
+  the integrator's.
+- **4b-10. A network location.** D-4's known limitation: only `file://` results. A panel refuses one with a message naming
+  the application ("“App” can only use items on this computer. Choose an item in a folder on this computer."), and stays open.
+- **4b-11. Life of the process.** The frontend starts every backend when it starts itself (its proxy auto-starts it), so the
+  panels' QML loads at the first request, not at start: an idle start costs no QML and owns its name at once. The process
+  quits only when idle (60 s): Qt's quit at the last window closed and KIO's quit locks are off (found by the integration
+  test: it quit as its first panel closed). No `Restart=`: D-Bus activation starts it again at the next call, after a crash
+  too, and the call in flight ends with response 2.
+- **4b-12. The unit's hardening.** `ProtectSystem=strict` with the home, the runtime directory (KIO's sockets, Wayland),
+  `/tmp`, `/var/tmp` and the removable media writable (New Folder anywhere the user may write); no `PrivateTmp` (a panel must
+  show the real `/tmp`); no `MemoryDenyWriteExecute` (the QML engine's JIT) and no `SystemCallFilter` (KIO's workers,
+  unverified under systemd in this environment); the network stays open for KIO's network places.
+- **4b-13. The parent window.** Options: (a) KWindowSystem's `setMainWindow` (KDE Frameworks 6.31, LGPL-2.1-or-later, already
+  installed as a dependency of KIO; its Wayland plugin imports the handle with xdg-foreign v2 once the toplevel exists); (b)
+  xdg-foreign written by hand on libwayland-client, as `apps/windowchrome.h` writes xdg-toplevel-tag. **Choice: (a)**: no
+  protocol code of Grassfield's own; a direct dependency of the package now (`kwindowsystem`, `THIRD_PARTY.md`).
+- **4b-14. The application's title.** A sheet shows no title on macOS; NSSavePanel shows the application's message above the
+  browser. The portal has no message, and applications put there what macOS apps put in it ("Select a folder to import"):
+  the title is the panel's message line (one line of plain text) and its window title.
+- **4b-15. What an application may pass.** Its texts are one line of plain text, GTK's mnemonic marker ("_Open") and the bidi
+  embedding, override and isolate controls removed, capped at 1024 characters; at most 64 filters, 16 choices and 4096 file
+  names; at most 16 requests open at once (one more ends with response 2). A suggested name is a name (the part after the
+  last "/"), a folder is an absolute path.
+
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.
   - Open With: the macOS "Choose Application" sheet: the recommended apps for the type first (the candidates the frontend

@@ -1,8 +1,8 @@
 # System dialogs spec · shell-engineer, platform-engineer, apps-engineer, security-engineer · 1.0 (ADR-0035)
 
 Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
-(steps 2b and 2c) and §4 (step 3); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not
-built yet. Decisions and delivery order:
+(steps 2b and 2c), §4 (step 3), §9 (step 4a in Files, step 4b in the panels) and §1 (step 4b); §4b's notice is built but not
+active on Hyprland 0.56.2; the other sections are not built yet. Decisions and delivery order:
 `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
 `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
 owner's decisions recorded in the ADR.
@@ -49,7 +49,7 @@ measurements.
    secrets. Every new IPC function is listed in `docs/specs/security.md` § IPC surface (`tests/security/ipc_inventory.sh`).
 9. **No Apple names or assets.** No Apple trademark in any string (master-prompt §14); own glyphs from `branding/`.
 
-## 1. Open and Save panels (FileChooser; inventory P1–P3; ADR-0035 D-4)
+## 1. Open and Save panels (FileChooser; inventory P1–P3; ADR-0035 D-4; built in step 4b)
 
 ### macOS reference behavior (described in words)
 - Attached to the requesting window as a sheet: a card centred over the parent, the parent dimmed and inert; with no parent
@@ -95,18 +95,47 @@ LibreOffice (ADR-0035 D-8); remote (KIO network) results; Tags editing in the Sa
   portal that waits on it.
 - FC8 over the lock: no panel while locked (common rule 6); a request that arrives then waits for the unlock.
 
+Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decisions are ADR-0035 4b-1 to 4b-15):
+- FC1–FC3 as written; an Open panel's default button chooses the selection, opens a selected folder in a file panel, and
+  chooses the shown folder in a folder panel; SaveFiles asks about every name that exists in the chosen folder in one alert;
+  a Save name that is a folder's is refused with a message (4b-6).
+- FC4: the panel carries the application's Wayland app id when the frontend names it, so it counts as that application's
+  window (Dock, menu bar, Force Quit), else Files'; modal (xdg-dialog) when the application asked and gave a Wayland parent,
+  imported with xdg-foreign v2 through KWindowSystem (4b-3, 4b-4, 4b-13).
+- FC5: the views, sidebar, path pop-up (the toolbar's folder button), search, Glance on Space, Go to Folder, hidden files and,
+  per application in `portal-filechooser.json`, the last folder, the view and the Save panel's size. Items a filter refuses
+  are dimmed and cannot be selected (4b-5); a panel changes no file but New Folder (Save, folder Open, SaveFiles; 4b-7).
+- FC6: one filter shows no pop-up; several show "Show:" (Open) or "Format:" (Save, where the extension follows); each choice is
+  a pop-up or a check box.
+- FC7: the UI loads at the first request; no first frame in 3 s, a QML that does not load, or no display: the call goes to
+  x-d-p-gtk; the process quits 60 s after its last request (4b-11).
+- FC8: the compositor's session lock hides the panel and keeps the keyboard from it; a panel that first gets the keyboard
+  1.5 s or more after it opened takes keys only after a click, and its footer says so (4b-8).
+- FC9: Files' KIO sheets, in the panel the user last worked in.
+- Keys: Return (default button; Cancel in a replace alert), Esc and Cmd-. (Cancel), Cmd-Shift-G, Cmd-L, "/" and "~" (Go to
+  Folder), Cmd-[ and Cmd-] (back, forward), Cmd-Up, Cmd-Down and Cmd-O, Cmd-Shift-H, Cmd-Shift-D, Cmd-Shift-O, Cmd-Option-L,
+  Cmd-1 to Cmd-4, Cmd-Shift-. and Cmd-H (hidden files), Cmd-F, Cmd-A (several items), Cmd-Shift-N, Cmd-Y and Space (Glance),
+  Cmd-Shift-P (preview), typing to select (Ctrl stands for Cmd, as in Files).
+
 ### Acceptance criteria (L0 unit, L1 nested)
 - A-FC1 (L0) option mapping table tested on a fake frontend (private bus): every option of FC1–FC3 in, the exact `a{sv}` out.
 - A-FC2 (L1) Chromium "Open File…" and "Save Page As…" in a nested session show the Grassfield panel attached to the window
   (screenshot), Return opens, Esc cancels and the app receives the answer.
-- A-FC3 (L1) the panel's first show ≤ 300 ms warm (P4-like log line), ≤ 80 MB RSS while open, and the `grassfield-portal`
-  process gone 60 s after the last panel closed (Settings lives in the other process, `grassfield-portal-settings`: ≤ 4 MB
-  private, ≤ 20 MB resident with the shared libraries, AP1, ADR-0035 decision 2b-11).
+- A-FC3 (L1) the panel's first show ≤ 300 ms warm (P4-like log line: "grassfield-portal: panel shown in N ms"), ≤ 80 MB
+  private memory while open (ADR-0035 decision 4b-9; the resident size reported), and the `grassfield-portal` process gone
+  60 s after the last panel closed (Settings lives in the other process, `grassfield-portal-settings`: ≤ 4 MB private,
+  ≤ 20 MB resident with the shared libraries, AP1, ADR-0035 decision 2b-11).
 - A-FC4 (L0) fallback: a backend whose QML fails to load forwards to a fake gtk backend and relays its answer.
 - A-FC6 (L0) crash: the backend killed during `OpenFile` gives the fake frontend an error within the D-Bus timeout, and the next
   `OpenFile` is answered by a newly activated process.
 - A-FC7 (L0) start-up: the backend starts and answers with a frontend that never answers its `ReadAll` (no wait on itself).
 - A-FC5 F1 side by side with the reference captures (open, save compact, save expanded, replace alert) in both appearances.
+
+Step 4b: A-FC1, A-FC4, A-FC6 and A-FC7 by `tests/unit/portal/` (a fake frontend and a fake x-d-p-gtk on a private
+dbus-daemon) and `tests/integration/portal_filechooser.sh` (the real binary, offscreen, and the real frontend 1.22.1 on a
+private bus); the offscreen part of A-FC3 there (a warm panel shows in about 50 ms, 28 MB private, the process quits once
+idle); the panel's behaviour by `tests/unit/tst_filepanel.qml`. A-FC2, the nested part of A-FC3 and A-FC5 wait for the
+integrator's nested pass.
 
 ### Interfaces / contracts
 - `org.freedesktop.impl.portal.FileChooser` (version as the frontend 1.22.1 expects), bus name
@@ -128,8 +157,12 @@ P4-like budget above; common rules 3–5; the panel's strings in the Grassfield 
 given.
 
 ### Known limitations
-Not a true sheet (a modal child window dimming its parent, not a card inside it); remote locations refused; apps that draw
-their own dialog in-process are not covered (D-8); the Tags field waits for Files' tags.
+Not a true sheet (a modal child window dimming its parent, not a card inside it); remote locations refused (4b-10); apps that
+draw their own dialog in-process are not covered (D-8). Step 4b also leaves out: the Save panel's Tags field (the panel would
+tag a file the application has not written yet) and "Hide extension" (4b-6); Tab completion in Go to Folder; Cmd-Shift-A (Files
+has no Applications place); a drop on a panel answers Copy to its source though nothing is copied (the item is only shown);
+the keyboard moves over dimmed items (they are passed, never selected). Verified offscreen and on a private bus only: the
+parent attachment, the dimming of the parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pass.
 
 ## 2. Open With and permission alerts (AppChooser, Access; P4–P7; ADR-0035 D-5)
 
