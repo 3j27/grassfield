@@ -24,8 +24,13 @@ QtObject {
 
     // Every binding tests `flow` itself: the flow object can disappear between two updates.
     readonly property bool active: !!flow
-    readonly property string message: flow ? plainLine(flow.message, maxMessageLength) : ""
+    // Grassfield Store's request (ADR-0037 b.1, SD2), {verb: "install" | "remove", packages: [names]}, else null: the message
+    // says it in plain words ("Install …", "Remove …") and the sheet adds the program's path under the action ID.
+    readonly property var storeRequest: flow ? storeRequestOf(flow.actionId, flow.message) : null
+    readonly property string message: storeRequest ? storeMessage(storeRequest) : flow ? plainLine(flow.message, maxMessageLength) : ""
     readonly property string actionId: flow ? plainLine(flow.actionId, maxDetailLength) : ""
+    // The program polkit will run, when the request names it in a form this sheet reads (Grassfield Store's helper), else "".
+    readonly property string program: storeRequest ? storeHelper : ""
     // The action's theme icon (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName), shown with a lock
     // badge (D-4: macOS shows an icon for the request). It describes the action, not the program that asked: Quickshell
     // 0.3.1's AuthFlow exposes no subject, process or command line; the message (pkexec names the program there), the
@@ -44,6 +49,11 @@ QtObject {
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted
+    // The user answered the request in the sheet (sent a password or cancelled it) and polkit has not asked again since: a
+    // request that ends now ends on the user's answer, not under the user's typing (AuthAgent lingers only for the latter;
+    // security counter-review of f9e24e1, LOW-1). Set by submit() and cancel(), cleared when polkit asks again (a failure, a
+    // new prompt) and when another request comes; never when the request ends, so it still reads true when the agent asks.
+    readonly property bool answered: priv.answered
 
     // A request held behind the lock (review of 1d2c856, macOS model: the authorization sheet appears once the user is
     // back, and nothing typed before the user turns to it reaches it). After the unlock the sheet is shown WITHOUT the
@@ -61,6 +71,15 @@ QtObject {
     readonly property Timer clickGuard: Timer {
         interval: root.heldGuardMs
     }
+    // A request that arrives this soon after the previous one ended is held too (re-check of b5d7657, MEDIUM-1: `pkexec a;
+    // pkexec b` passes through no request between the two): keys typed after answering the first, or a password typed
+    // again, must not land in the next one's field.
+    readonly property Timer afterRequest: Timer {
+        interval: root.heldAfterUnlockMs
+    }
+    // The longest the agent keeps the keyboard on its key sink after a request ended while the user typed (AuthAgent
+    // `lingering`): their keys go nowhere meanwhile, then to the window underneath again.
+    readonly property int sinkLingerMaxMs: 3000
 
     // The session was unlocked: requests arriving in the next heldAfterUnlockMs are held.
     function noteUnlock(): void {
@@ -78,17 +97,41 @@ QtObject {
         return priv.shown && !clickGuard.running;
     }
 
-    // A request is held when it arrives while the session is locked, or within heldAfterUnlockMs of the last unlock.
+    // The screen saver that covered a held sheet ended: a click counts only heldGuardMs from now, so the click that woke the
+    // screen never answers the sheet (ADR-0032).
+    function noteUncovered(): void {
+        clickGuard.restart();
+    }
+
+    // The request in the sheet ended (answered, cancelled or replaced by none): one arriving in the next heldAfterUnlockMs is
+    // held.
+    function noteEnded(): void {
+        afterRequest.restart();
+    }
+
+    // Whether a request arriving now comes right after another one ended.
+    function followsAnother(): bool {
+        return afterRequest.running;
+    }
+
+    // A request is held when it arrives while the session is locked or the screen saver shows (`locked`), within
+    // heldAfterUnlockMs of the last unlock, or within as long after the previous request ended.
     function arrivesHeld(locked: bool): bool {
-        return locked || unlockHold.running;
+        return locked || unlockHold.running || afterRequest.running;
     }
 
     // What the held sheet says, with the time the request arrived (the message names the program for pkexec).
-    // `arrivedAt`: a Date (or milliseconds), only formatted.
-    function heldNotice(arrivedAt: var, whileLocked: bool): string {
+    // `arrivedAt`: a Date (or milliseconds), only formatted. `why`: "locked", "saver" (the screen saver showed), "queued" (it
+    // followed another request in the same sheet) or "unlock".
+    function heldNotice(arrivedAt: var, why: string): string {
         const at = Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat));
-        return whileLocked ? qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at)
-                           : qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
+        if (why === "locked")
+            return qsTr("This request arrived at %1, while the screen was locked. Click the sheet to answer it.").arg(at);
+        if (why === "saver")
+            return qsTr("This request arrived at %1 and waited while the screen saver was on. Click the sheet to answer it.").arg(at);
+        if (why === "queued")
+            return qsTr("This request arrived at %1, right after another one. Click the sheet to answer it.").arg(at);
+        return qsTr("This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.").arg(at);
     }
 
     // The dialog must empty its password field (after every attempt and outcome).
@@ -100,6 +143,7 @@ QtObject {
         property bool submitted: false
         property string error: ""
         property bool shown: false
+        property bool answered: false
     }
 
     readonly property Private priv: Private {}
@@ -124,6 +168,29 @@ QtObject {
         return t;
     }
 
+    // Grassfield Store's action (ADR-0037 b.1, SD2). Its policy's message ends with $(command_line), which polkitd expands
+    // with the helper's argument vector as pkexec reports it, so the package names come from polkit, not from the program
+    // that asked. Read only for this action id, and only when the whole message is one of the policy's two messages
+    // (English, French) followed by the helper's path, install or remove, an operation id and 1 to 64 package names of
+    // ADR-0037 e.5: anything else (another language, a character more) is shown as polkit gives it.
+    readonly property string storeActionId: "org.grassfield.store.manage-packages"
+    readonly property string storeHelper: "/usr/lib/grassfield/grassfield-store-helper"
+    readonly property var storePattern: /^(?:Authentication is required to install or remove apps:|Une authentification est nécessaire pour installer ou supprimer des apps :) \/usr\/lib\/grassfield\/grassfield-store-helper (install|remove) [0-9a-f]{32}((?: [a-z0-9@_+][a-z0-9@._+-]{0,127}){1,64})$/
+
+    function storeRequestOf(actionId: var, message: var): var {
+        if (actionId !== root.storeActionId || typeof message !== "string")
+            return null;
+        const m = root.storePattern.exec(message);
+        if (!m)
+            return null;
+        return {verb: m[1], packages: m[2].slice(1).split(" ")};
+    }
+
+    function storeMessage(request: var): string {
+        const names = request.packages.join(", ");
+        return request.verb === "install" ? qsTr("Install %1").arg(names) : qsTr("Remove %1").arg(names);
+    }
+
     // "Password: " → "Password"
     function cleanPrompt(text: string): string {
         return text.replace(/[:\s]+$/, "");
@@ -135,6 +202,7 @@ QtObject {
             return false;
         }
         priv.submitted = true;
+        priv.answered = true;
         priv.error = "";
         clearRequested();
         flow.submit(password);
@@ -144,6 +212,7 @@ QtObject {
     function cancel(): void {
         clearRequested();
         priv.submitted = false;
+        priv.answered = true;
         priv.error = "";
         if (active)
             flow.cancelAuthenticationRequest();
@@ -154,9 +223,13 @@ QtObject {
             flow.selectedIdentity = identity;
     }
 
+    // `answered` is cleared only for a new request, never when the flow goes (the agent reads it at the end, in whichever order
+    // the end reaches this handler and the agent).
     onFlowChanged: {
         priv.submitted = false;
         priv.error = "";
+        if (flow)
+            priv.answered = false;
         clearRequested();
     }
 
@@ -165,12 +238,15 @@ QtObject {
         ignoreUnknownSignals: true
 
         function onIsResponseRequiredChanged(): void {
-            if (root.flow && root.flow.isResponseRequired)
+            if (root.flow && root.flow.isResponseRequired) {
                 root.priv.submitted = false;
+                root.priv.answered = false;
+            }
         }
 
         function onAuthenticationFailed(): void {
             root.priv.submitted = false;
+            root.priv.answered = false;
             root.priv.error = qsTr("Incorrect password. Try again.");
             root.clearRequested();
             root.failed();

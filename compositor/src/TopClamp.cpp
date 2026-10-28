@@ -174,4 +174,10 @@ namespace gf::topClamp {
         s.later.schedule([] { gf::guarded("top clamp after a drag", [] { afterHyprlandDrag(); }); });
     }
 
+    void skip(const PHLWINDOW& w) {
+        auto& s = st();
+        if (w && s.pending && s.pending->window.lock() == w)
+            s.pending.reset(); // its scheduled callback finds nothing to do
+    }
+
 } // namespace gf::topClamp

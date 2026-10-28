@@ -1,0 +1,553 @@
+#!/usr/bin/python3 -I
+"""Grassfield's Software Update checker (ADR-0033 d; docs/specs/updates.md U1-U6).
+
+  grassfield-update-check [--offline] [--after-update-lock]
+
+A one-shot child of grassfield-shell (or of Settings when no shell runs). It runs as the user, never as root, and never
+touches pacman's own databases: it prints one JSON object (version 1, at most 256 KiB) on stdout and exits 0; 2 on a
+usage error or when started as root.
+
+  --offline            the shell's connectivity says offline: a failure is reported as `offline` and is not counted
+                       towards `blocking`
+  --after-update-lock  the waiter (U4): block until Omarchy's update releases its lock (flock, at most 2 h), release
+                       it at once, then check. Without it a check finds the lock held and answers `update-running`.
+
+What it does, in order (its own lock first: a second run answers `busy`):
+  1. `pacman-conf --repo-list`: no [grassfield] -> `repair` when /etc/pacman.d/grassfield.conf exists, else `not-set-up`;
+     the [grassfield] lines without that file, or twice (pacman cannot run then) -> `repair` too. `not-set-up` (never set
+     up, or turned off) still lists the system's updates: steps 4 and 5 run without [grassfield] (macOS always offers its
+     system updates; ADR-0033 "Step 2 as built", the integrator's decision of 2026-10-28);
+  2. the channel: the file's first Server is <base>/stable/$arch or <base>/beta/$arch for this build's base, else `custom`;
+  3. a sync of [grassfield] alone, under fakeroot, in its own database ($XDG_CACHE_HOME/grassfield/health-db) with
+     checkupdates' --disable-sandbox-filesystem. A failure while online is counted: a second failure at least 15
+     minutes after the first one is `blocking` (every `omarchy update` fails then, ADR-0033 a2); the first one answers
+     `failed` with `retryAt`, when the shell checks again;
+  4. `checkupdates --nocolor` with CHECKUPDATES_DB=$XDG_CACHE_HOME/grassfield/checkup-db (Omarchy's own checker,
+     omarchy-update-available, uses checkupdates' default folder, so neither locks the other out);
+  5. the result: the grassfield-desktop release (the packages [grassfield] lists are not counted as others), the
+     omarchy (or omarchy-dev) release, the other updates (their number, and their list sorted by name with the installed
+     and available versions, which the pane and Grassfield Store read); and, for a Grassfield release, its notes:
+     grassfield-notes.json and its .sig next to the database, fetched with curl (https only; file only when this build's
+     base is file://, the container tests), checked with gpgv against grassfield-keyring's private folder (the signer is
+     VALIDSIG's argument 10, the primary key: listed in grassfield-trusted, absent from grassfield-revoked).
+A stale db.lck in its own database folders is removed first (only one checker runs). Every child has stdin from
+/dev/null and runs in its own process group; the whole check is stopped after 180 s (SIGTERM, SIGKILL 5 s later).
+
+Output: {"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,"error":…,"message":…,
+         "grassfield":{"installed":…,"available":…,"notes":[{"version","date","notes":{"en","fr"}}],"notesError":…},
+         "omarchy":{"installed":…,"available":…},"others":N,"otherPackages":[{"name","installed","available"}],
+         "otherPackagesTruncated":true (only when cut),"retryAt":…,"episode":…}
+At the 256 KiB cap the list of other updates is cut first, then the notes (notesError "unavailable"); the counts stay
+(ADR-0033 d.3.5).
+States: not-set-up, repair, blocking, up-to-date, available, failed (error offline|unavailable), update-running, busy.
+"""
+import argparse
+import fcntl
+import functools
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+PACMAN_CONF = "/etc/pacman.conf"
+GRASSFIELD_CONF = "/etc/pacman.d/grassfield.conf"
+REPOSITORY_CONF = "/usr/share/grassfield/pacman/repository.conf"
+KEYRING_DIR = "/usr/share/grassfield/pacman-keyring"
+CHECK_SECONDS = 180
+KILL_GRACE = 5
+WAIT_SECONDS = 7200
+BLOCKING_GAP = 15 * 60
+OUTPUT_CAP = 256 * 1024
+NOTES_CAP = 65536
+NOTES_SECONDS = 15
+NOTES_MAX = 20
+NOTE_CHARS = 8000
+VERSION = re.compile(r"^[0-9][0-9A-Za-z.+_]*-[1-9][0-9]*(\.[0-9]+)?$")
+DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+UPDATE_LINE = re.compile(r"^(\S+) (\S+) -> (\S+)$")
+# Control characters except the line feed, and the bidirectional formatting characters: notes are plain text.
+UNSAFE = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
+
+
+class Timeout(Exception):
+    pass
+
+
+class Missing(Exception):
+    """A required program is not installed."""
+
+
+def iso(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)) if t is not None else None
+
+
+class Children:
+    """Runs children with stdin from /dev/null, each in its own process group, within one deadline."""
+
+    def __init__(self, seconds):
+        self.deadline = time.monotonic() + seconds
+        self.current = None
+
+    def stop(self):
+        p = self.current
+        if p is None or p.poll() is not None:
+            return
+        for sig, grace in ((signal.SIGTERM, KILL_GRACE), (signal.SIGKILL, None)):
+            try:
+                os.killpg(p.pid, sig)
+            except ProcessLookupError:
+                return
+            try:
+                p.wait(timeout=grace)
+                return
+            except subprocess.TimeoutExpired:
+                continue
+
+    def run(self, argv, env=None, timeout=None):
+        remaining = self.deadline - time.monotonic()
+        if timeout is not None:
+            remaining = min(remaining, timeout)
+        if remaining <= 0:
+            raise Timeout()
+        try:
+            p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 env=env, start_new_session=True)
+        except FileNotFoundError:
+            raise Missing(argv[0])
+        self.current = p
+        try:
+            out, err = p.communicate(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            self.stop()
+            p.communicate()
+            raise Timeout()
+        finally:
+            self.current = None
+        return p.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
+
+
+def child_env(**extra):
+    env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    env.update(extra)
+    return env
+
+
+def read_text(path, limit=65536):
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit).decode("utf-8", "replace")
+    except OSError:
+        return None
+
+
+def write_text(path, text):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def repository_value(key):
+    text = read_text(REPOSITORY_CONF) or ""
+    for line in text.splitlines():
+        if line.startswith(key + "="):
+            return line[len(key) + 1:]
+    return ""
+
+
+def servers(conf_text):
+    """The Server values of the included file, in order (comments removed)."""
+    out = []
+    for line in conf_text.splitlines():
+        line = line.split("#", 1)[0]
+        m = re.match(r"^\s*Server\s*=\s*(.*?)\s*$", line)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
+def sections(conf_text):
+    """The number of [grassfield] sections of pacman.conf (comments and blanks removed, as pacman reads it)."""
+    return sum(1 for line in conf_text.splitlines() if line.split("#", 1)[0].strip() == "[grassfield]")
+
+
+def channel_of(primary, base):
+    for name in ("stable", "beta"):
+        if base and primary == f"{base}/{name}/$arch":
+            return name
+    return "custom"
+
+
+def update_lock_path():
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "omarchy-update.lock")
+
+
+def update_running(path):
+    """Omarchy's update holds its lock (omarchy-update-lock): tested with a non-blocking flock, released at once."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def wait_update_lock(path, seconds):
+    """The waiter: block until the lock is free (at most `seconds`), release it at once. False on timeout."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    except OSError:
+        return True
+
+    def expired(signum, frame):
+        raise Timeout()
+
+    old = signal.signal(signal.SIGALRM, expired)
+    signal.alarm(seconds)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    except Timeout:
+        return False
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+        os.close(fd)
+
+
+class Checker:
+    def __init__(self, cache, offline, now=None, children=None):
+        self.cache = cache
+        self.offline = offline
+        self.now = time.time() if now is None else now
+        self.children = children or Children(CHECK_SECONDS)
+        self.checkup = os.path.join(cache, "checkup-db")
+        self.health = os.path.join(cache, "health-db")
+        self.result = {"version": 1, "state": None, "channel": None, "checkedAt": iso(self.now),
+                       "lastSuccessAt": None, "error": None, "message": None,
+                       "grassfield": {"installed": None, "available": None, "notes": [], "notesError": None},
+                       "omarchy": {"installed": None, "available": None}, "others": 0,
+                       "retryAt": None, "episode": None}
+
+    # -- helpers
+    def path(self, *parts):
+        return os.path.join(self.health, *parts)
+
+    def last_success(self):
+        text = read_text(self.path("last-success"))
+        try:
+            return int(text.strip()) if text else None
+        except ValueError:
+            return None
+
+    def failed(self, error, message):
+        self.result.update(state="failed", error=error, message=message, lastSuccessAt=iso(self.last_success()))
+        return self.result
+
+    def drop_grassfield(self):
+        for db in (self.checkup, self.health):
+            for name in ("grassfield.db", "grassfield.db.sig", "grassfield.files", "grassfield.files.sig"):
+                try:
+                    os.unlink(os.path.join(db, "sync", name))
+                except FileNotFoundError:
+                    pass
+
+    def installed(self, name):
+        rc, out, _ = self.children.run(["pacman", "-Q", name], env=child_env())
+        parts = out.split()
+        return parts[1] if rc == 0 and len(parts) == 2 else None
+
+    def vercmp(self, a, b):
+        rc, out, _ = self.children.run(["vercmp", a, b], env=child_env())
+        try:
+            return int(out.strip())
+        except ValueError:
+            return 0
+
+    # -- steps
+    def run(self):
+        try:
+            return self._run()
+        except Timeout:
+            return self.failed("unavailable", f"the check took more than {CHECK_SECONDS} s")
+        except Missing as e:
+            name = str(e)
+            hint = "pacman-contrib is not installed" if name == "checkupdates" else f"{name} is not installed"
+            return self.failed("unavailable", hint)
+
+    def _run(self):
+        for d in (self.checkup, os.path.join(self.health, "local")):
+            os.makedirs(d, mode=0o700, exist_ok=True)
+        rc, out, _ = self.children.run(["pacman-conf", "--repo-list"], env=child_env())
+        conf_text = read_text(GRASSFIELD_CONF)
+        base = repository_value("GRASSFIELD_REPO_BASE")
+        if conf_text is not None:
+            listed = servers(conf_text)
+            self.result["channel"] = channel_of(listed[0] if listed else "", base)
+        # The [grassfield] lines without their file, or twice: every pacman command fails, and "Repair…" (the helper's
+        # restore, or set when the file is gone) is the way out (review of 0338116, minor 3).
+        count = sections(read_text(PACMAN_CONF, 1 << 20) or "")
+        if count > 1 or (count == 1 and conf_text is None):
+            self.result["state"] = "repair"
+            return self.result
+        if rc != 0:
+            return self.failed("unavailable", "pacman's configuration cannot be read")
+        if "grassfield" not in out.split():
+            if conf_text is not None:
+                self.result["state"] = "repair"
+                return self.result
+            # Grassfield's own updates are off: its repository is not checked, the system's updates still are. Its failure
+            # count goes: an episode before Turn Off… must not make a later Set Up…'s first failure `blocking`.
+            try:
+                os.unlink(self.path("failures"))
+            except FileNotFoundError:
+                pass
+            self.clear_stale_locks()
+            return self.system_updates("not-set-up", set())
+        if conf_text is None:
+            return self.failed("unavailable", f"{GRASSFIELD_CONF} cannot be read")
+
+        # U5: the Server lines changed since the last sync -> this checker's [grassfield] files go (P7).
+        signature = "\n".join(servers(conf_text))
+        if read_text(self.path("servers")) != signature:
+            self.drop_grassfield()
+            write_text(self.path("servers"), signature)
+        self.clear_stale_locks()
+
+        if not self.health_sync():
+            return self.health_failed()
+        try:
+            os.unlink(self.path("failures"))
+        except FileNotFoundError:
+            pass
+
+        rc, names, _ = self.children.run(["pacman", "--config", self.path("health.conf"), "--dbpath", self.health,
+                                          "-Sql", "grassfield"], env=child_env())
+        return self.system_updates(None, set(names.split()) if rc == 0 else set())
+
+    def clear_stale_locks(self):
+        """Only one checker runs (its lock): a db.lck left in its own folders is stale (Q8)."""
+        for db in (self.checkup, self.health):
+            try:
+                os.unlink(os.path.join(db, "db.lck"))
+            except FileNotFoundError:
+                pass
+
+    def system_updates(self, state, grassfield):
+        """Steps 4 and 5: checkupdates, split into Grassfield's release, Omarchy's and the rest. `state`: the state of a
+        success (None: `available` or `up-to-date`); `grassfield`: the names [grassfield] lists."""
+        rc, out, err = self.children.run(["checkupdates", "--nocolor"], env=child_env(CHECKUPDATES_DB=self.checkup))
+        if rc not in (0, 2):
+            return self.failed("offline" if self.offline else "unavailable",
+                               (err.strip().splitlines() or ["checkupdates failed"])[-1][:200])
+        updates = {}
+        for line in out.splitlines():
+            m = UPDATE_LINE.match(line.strip())
+            if m:
+                updates[m.group(1)] = (m.group(2), m.group(3))
+        omarchy = "omarchy-dev" if self.installed("omarchy-dev") else "omarchy"
+
+        gf = self.result["grassfield"]
+        gf["installed"] = self.installed("grassfield-desktop")
+        # Not set up: no Grassfield release is offered (its repository is not configured; another source's would not be ours).
+        if "grassfield-desktop" in updates and state != "not-set-up":
+            gf["installed"], gf["available"] = updates["grassfield-desktop"]
+        om = self.result["omarchy"]
+        om["installed"] = self.installed(omarchy)
+        if omarchy in updates:
+            om["installed"], om["available"] = updates[omarchy]
+        others = sorted(n for n in updates if n not in grassfield and n != omarchy and not n.startswith("grassfield-"))
+        self.result["others"] = len(others)
+        self.result["otherPackages"] = [{"name": n, "installed": updates[n][0], "available": updates[n][1]} for n in others]
+        self.result["state"] = state or ("available" if gf["available"] or om["available"] else "up-to-date")
+        write_text(self.path("last-success"), str(int(self.now)))
+        self.result["lastSuccessAt"] = iso(int(self.now))
+        if gf["available"]:
+            self.notes(gf)
+        return self.result
+
+    def health_sync(self):
+        """[grassfield] alone, as checkupdates syncs (ADR-0033 a2.4, Q3, R5)."""
+        rc, gpgdir, _ = self.children.run(["pacman-conf", "GPGDir"], env=child_env())
+        gpgdir = gpgdir.strip() if rc == 0 else "/etc/pacman.d/gnupg/"
+        write_text(self.path("health.conf"),
+                   f"[options]\nArchitecture = auto\nGPGDir = {gpgdir}\n[grassfield]\nInclude = {GRASSFIELD_CONF}\n")
+        rc, _, err = self.children.run(
+            ["fakeroot", "--", "pacman", "-Sy", "--disable-sandbox-filesystem", "--config", self.path("health.conf"),
+             "--dbpath", self.health, "--logfile", "/dev/null"], env=child_env())
+        self.health_error = (err.strip().splitlines() or [""])[-1][:200]
+        return rc == 0
+
+    def health_failed(self):
+        if self.offline:
+            return self.failed("offline", self.health_error)
+        first = None
+        text = read_text(self.path("failures"))
+        try:
+            first = int(json.loads(text)["first"]) if text else None
+        except (ValueError, KeyError, TypeError):
+            first = None
+        if first is not None and self.now - first >= BLOCKING_GAP:
+            self.failed("unavailable", self.health_error)
+            self.result.update(state="blocking", error=None, episode=first)
+            return self.result
+        if first is None:
+            first = int(self.now)
+            write_text(self.path("failures"), json.dumps({"first": first}))
+        self.failed("unavailable", self.health_error)
+        self.result["retryAt"] = iso(first + BLOCKING_GAP)
+        return self.result
+
+    def notes(self, gf):
+        try:
+            gf["notes"] = self.fetch_notes(gf["installed"], gf["available"])
+        except (Timeout, Missing, OSError, ValueError, UnicodeDecodeError) as e:
+            gf["notes"], gf["notesError"] = [], "unavailable"
+            self.result["message"] = f"release notes: {e}"[:200] if str(e) else "release notes are not available"
+
+    def fetch_notes(self, installed, available):
+        rc, out, _ = self.children.run(["pacman-conf", "--repo", "grassfield", "Server"], env=child_env())
+        urls = [u.strip().rstrip("/") for u in out.splitlines() if u.strip()] if rc == 0 else []
+        protocols = "=https,file" if repository_value("GRASSFIELD_REPO_BASE").startswith("file://") else "=https"
+        with tempfile.TemporaryDirectory(dir=self.health) as tmp:
+            data, sig = os.path.join(tmp, "notes.json"), os.path.join(tmp, "notes.json.sig")
+            for url in urls:
+                if all(self.download(f"{url}/grassfield-notes.json{suffix}", path, protocols)
+                       for suffix, path in (("", data), (".sig", sig))):
+                    break
+            else:
+                raise ValueError("not published")
+            self.verify(sig, data)
+            with open(data, "rb") as f:
+                raw = f.read(NOTES_CAP + 1)
+        return self.parse_notes(raw, installed, available)
+
+    def download(self, url, path, protocols):
+        rc, _, _ = self.children.run(
+            ["curl", "-fsSL", "--proto", protocols, "--proto-redir", protocols, "--max-redirs", "5",
+             "--max-filesize", str(NOTES_CAP), "--max-time", str(NOTES_SECONDS), "-o", path, "--", url],
+            env=child_env(), timeout=NOTES_SECONDS + 5)
+        return rc == 0 and os.path.getsize(path) <= NOTES_CAP
+
+    def verify(self, sig, data):
+        keyring = os.path.join(KEYRING_DIR, "grassfield.gpg")
+        rc, out, _ = self.children.run(["gpgv", "--homedir", self.health, "--keyring", keyring, "--status-fd", "1",
+                                        sig, data], env=child_env())
+        primaries = [line.split()[11] for line in out.splitlines()
+                     if line.startswith("[GNUPG:] VALIDSIG ") and len(line.split()) >= 12]
+        trusted = {line.split(":", 1)[0].upper() for line in (read_text(os.path.join(KEYRING_DIR, "grassfield-trusted"))
+                                                              or "").splitlines() if line.strip()}
+        revoked = {line.strip().upper() for line in (read_text(os.path.join(KEYRING_DIR, "grassfield-revoked"))
+                                                     or "").splitlines() if line.strip()}
+        if rc != 0 or not primaries or any(p.upper() not in trusted or p.upper() in revoked for p in primaries):
+            raise ValueError("the notes' signature is not a trusted Grassfield key's")
+
+    def parse_notes(self, raw, installed, available):
+        if len(raw) > NOTES_CAP:
+            raise ValueError("notes larger than 64 KiB")
+        doc = json.loads(raw.decode("utf-8"))
+        if not isinstance(doc, dict) or doc.get("version") != 1 or not isinstance(doc.get("releases"), list):
+            raise ValueError("notes: not version 1")
+        if self.result["channel"] in ("stable", "beta") and doc.get("channel") != self.result["channel"]:
+            raise ValueError("notes of another channel")
+        releases = doc["releases"]
+        if len(releases) > NOTES_MAX:
+            raise ValueError(f"notes: more than {NOTES_MAX} releases")
+        out = []
+        for r in releases:
+            if not isinstance(r, dict) or not isinstance(r.get("version"), str) or not VERSION.match(r["version"]) \
+                    or not isinstance(r.get("date"), str) or not DATE.match(r["date"]) or not isinstance(r.get("notes"), dict):
+                raise ValueError("notes: a release is malformed")
+            texts = {}
+            for lang in ("en", "fr"):
+                value = r["notes"].get(lang)
+                if value is None and lang == "fr":
+                    continue
+                if not isinstance(value, str) or len(value) > NOTE_CHARS:
+                    raise ValueError(f"notes: '{lang}' text missing or longer than {NOTE_CHARS} characters")
+                texts[lang] = UNSAFE.sub("", value)
+            if (installed is None or self.vercmp(r["version"], installed) > 0) and self.vercmp(r["version"], available) <= 0:
+                out.append({"version": r["version"], "date": r["date"], "notes": texts})
+        return sorted(out, key=functools.cmp_to_key(lambda a, b: self.vercmp(b["version"], a["version"])))
+
+
+def dump(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def emit(result):
+    """One line of at most OUTPUT_CAP bytes: the list of other updates is cut first, then the notes; the counts stay."""
+    def size(r):
+        return len(dump(r).encode("utf-8")) + 1
+    if size(result) > OUTPUT_CAP:
+        packages = result.pop("otherPackages", None)
+        if packages is not None:
+            result["otherPackages"], result["otherPackagesTruncated"] = [], True
+        if size(result) > OUTPUT_CAP and isinstance(result.get("grassfield"), dict):
+            result["grassfield"]["notes"], result["grassfield"]["notesError"] = [], "unavailable"
+        room, kept = OUTPUT_CAP - size(result), []
+        for p in packages or []:
+            n = len(dump(p).encode("utf-8")) + (1 if kept else 0)
+            if n > room:
+                break
+            kept.append(p)
+            room -= n
+        if packages is not None:
+            result["otherPackages"] = kept
+            if len(kept) == len(packages):
+                del result["otherPackagesTruncated"]
+    sys.stdout.write(dump(result) + "\n")
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="grassfield-update-check", description="Grassfield's Software Update checker")
+    ap.add_argument("--offline", action="store_true")
+    ap.add_argument("--after-update-lock", action="store_true")
+    args = ap.parse_args(argv)
+    if os.geteuid() == 0:
+        print("grassfield-update-check: refused: it runs as the user, never as root", file=sys.stderr)
+        return 2
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
+                         "grassfield")
+    os.makedirs(cache, mode=0o700, exist_ok=True)
+    lock = update_lock_path()
+    if args.after_update_lock:
+        if not wait_update_lock(lock, WAIT_SECONDS):
+            emit({"version": 1, "state": "update-running", "checkedAt": iso(time.time())})
+            return 0
+    elif update_running(lock):
+        emit({"version": 1, "state": "update-running", "checkedAt": iso(time.time())})
+        return 0
+    fd = os.open(os.path.join(cache, "checkup.lock"), os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        emit({"version": 1, "state": "busy", "checkedAt": iso(time.time())})
+        return 0
+    checker = Checker(cache, args.offline)
+
+    def terminated(signum, frame):
+        checker.children.stop()
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, terminated)
+    emit(checker.run())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

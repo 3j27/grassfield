@@ -33,6 +33,8 @@ namespace gf::events {
         Stages,          // id 0 (one Stages state)
         OverviewFocus,   // id 0 (the state of the latest overview focus request)
         KeyboardFocus,   // id 0 (only the window that has the keyboard now matters)
+        Tiling,          // id 0 (a change notice: the latest generation wins)
+        TileHover,       // id 0 (one zoom light hovered at a time: the latest state wins)
     };
 
     struct Key {

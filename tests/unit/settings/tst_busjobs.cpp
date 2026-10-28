@@ -20,8 +20,11 @@ using namespace grassfield::settings;
 
 namespace {
 
+// One application object per process: tst_backend.cpp, in the same binary, may have made it first.
 QCoreApplication &app()
 {
+    if (QCoreApplication *existing = QCoreApplication::instance())
+        return *existing;
     static int argc = 1;
     static char name[] = "tst_busjobs";
     static char *argv[] = {name, nullptr};
@@ -265,4 +268,37 @@ TEST_F(BusJobsTest, TheDefaultAbandonExitsWithTheApplicationsCode)
 TEST_F(BusJobsTest, TheDefaultAbandonExitsWithZeroWhenTheAppSucceeded)
 {
     EXPECT_EQ(runChild("code0").first, 0);
+}
+
+// ---- InFlight (integrator review of PR #6): the waiting state lives in the Backend, one action per tag ----
+
+TEST(InFlight, OneActionPerTagUntilItEnds)
+{
+    InFlight actions;
+    EXPECT_TRUE(actions.begin(QStringLiteral("host.act"), QStringLiteral("computer name")));
+    // The page shown again sends the same change while the polkit dialog is up: refused, the first one stays.
+    EXPECT_FALSE(actions.begin(QStringLiteral("host.act"), QStringLiteral("computer name")));
+    EXPECT_FALSE(actions.begin(QStringLiteral("host.act"), QStringLiteral("other")));
+    // Another tag is another action.
+    EXPECT_TRUE(actions.begin(QStringLiteral("time.act"), QStringLiteral("time zone")));
+    EXPECT_EQ(actions.map(), (QVariantMap{{QStringLiteral("host.act"), QStringLiteral("computer name")}, {QStringLiteral("time.act"), QStringLiteral("time zone")}}));
+    actions.end(QStringLiteral("host.act"));
+    EXPECT_EQ(actions.map(), (QVariantMap{{QStringLiteral("time.act"), QStringLiteral("time zone")}}));
+    EXPECT_TRUE(actions.begin(QStringLiteral("host.act"), QStringLiteral("computer name")));
+    actions.end(QStringLiteral("unknown.act")); // nothing to end: no change
+    EXPECT_EQ(actions.map().size(), 2);
+}
+
+TEST(InFlight, AQueryRunningUnderItsTagIsReused)
+{
+    InFlight queries;
+    const QString du = QStringLiteral("du\x1f-s\x1f/home/u/Documents");
+    EXPECT_FALSE(queries.runs(QStringLiteral("storage.du"), du));
+    EXPECT_TRUE(queries.begin(QStringLiteral("storage.du"), du));
+    // Storage shown again: the same command under the same tag runs already; it is not started again.
+    EXPECT_TRUE(queries.runs(QStringLiteral("storage.du"), du));
+    EXPECT_FALSE(queries.runs(QStringLiteral("storage.du"), QStringLiteral("du\x1f-s\x1f/elsewhere")));
+    EXPECT_FALSE(queries.runs(QStringLiteral("storage.packages"), du));
+    queries.end(QStringLiteral("storage.du"));
+    EXPECT_FALSE(queries.runs(QStringLiteral("storage.du"), du));
 }

@@ -144,65 +144,16 @@ FocusScope {
                 delegate: FileColumn {}
             }
 
-            // Preview column for a selected file.
-            Item {
-                width: root.previewInfo ? Tokens.filesPreviewWidth : 0
+            // Preview column for a selected file (View > Show Preview, the column view's own setting): the preview pane on the
+            // window's white.
+            Loader {
+                active: root.previewInfo !== null && root.tab.app.columnPreview
+                width: active ? Tokens.filesPreviewPaneWidth : 0
                 height: strip.height
-                visible: root.previewInfo !== null
-
-                Column {
-                    anchors.centerIn: parent
-                    width: parent.width - 2 * Tokens.spacingLg
-                    spacing: Tokens.spacingSm
-
-                    FileIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        size: Tokens.filesPreviewIconSize
-                        iconName: root.previewInfo ? root.previewInfo.iconName : ""
-                        isDir: root.previewInfo ? root.previewInfo.isDir : false
-                        folderColor: root.previewInfo ? root.previewInfo.folderColor : ""
-                        folderGlyph: root.previewInfo ? root.previewInfo.folderGlyph : ""
-                        thumbnail: root.previewInfo ? root.previewInfo.thumbnail : ""
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? DisplayName.text(root.previewInfo.name) : ""
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                        color: Appearance.colors.text
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyBodySize
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
-
-                    TagDots {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        colors: root.previewInfo && root.previewInfo.tagColors ? root.previewInfo.tagColors : []
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? qsTr("%1 · %2").arg(root.previewInfo.kind).arg(root.previewInfo.sizeText) : ""
-                        wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                    }
-
-                    Text {
-                        textFormat: Text.PlainText
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.previewInfo ? qsTr("Modified %1").arg(root.previewInfo.modified) : ""
-                        wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyCaptionSize
-                    }
+                sourceComponent: PreviewPane {
+                    tab: root.tab
+                    model: root.activeModel
+                    filled: false
                 }
             }
         }
@@ -224,6 +175,13 @@ FocusScope {
         function focusList(): void {
             lv.forceActiveFocus();
         }
+
+        // Rubber band from the column's empty space (Finder): the rows it covers, added to the selection with Shift or
+        // Cmd. Points in lv.contentItem coordinates.
+        property bool banding: false
+        property point bandOrigin
+        property point bandEnd
+        property var bandBase: []
 
         function rowPosition(row: int): point {
             return lv.mapToItem(null, Tokens.spacingLg, (Math.max(0, row) + 1) * Tokens.filesColumnRowHeight - lv.contentY + lv.originY);
@@ -270,16 +228,49 @@ FocusScope {
         }
 
         MouseArea {
+            id: colBackground
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            // The band keeps the pointer: the strip of columns would take a sideways drag for its own scroll.
+            preventStealing: true
             onPressed: mouse => {
                 root.activeColumn = col.index;
                 lv.forceActiveFocus();
                 if (mouse.button === Qt.RightButton) {
                     const p = mapToItem(null, mouse.x, mouse.y);
                     root.tab.contextMenu(col.model, -1, p.x, p.y, false);
+                    return;
                 }
+                col.bandOrigin = colBackground.mapToItem(lv.contentItem, mouse.x, mouse.y);
+                col.bandEnd = col.bandOrigin;
+                col.bandBase = (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) ? col.model.selectedUrls() : [];
+                col.banding = false;
             }
+            onPositionChanged: mouse => {
+                if (!pressed || mouse.buttons !== Qt.LeftButton)
+                    return;
+                const p = colBackground.mapToItem(lv.contentItem, mouse.x, mouse.y);
+                if (!col.banding && Math.abs(p.x - col.bandOrigin.x) + Math.abs(p.y - col.bandOrigin.y) < Tokens.filesDragThreshold)
+                    return;
+                col.banding = true;
+                col.bandEnd = p;
+                const rows = Nav.cellsInRect(0, col.bandOrigin.y, 0, p.y, 1, Tokens.filesColumnRowHeight, 1, lv.count);
+                const urls = col.bandBase.slice();
+                for (let i = 0; i < rows.length; i++)
+                    urls.push(col.model.urlAt(rows[i]));
+                col.model.selectUrls(urls);
+                if (mouse.y > lv.y + lv.height)
+                    lv.contentY = Math.min(lv.contentY + Tokens.spacingSm, Math.max(lv.originY, lv.contentHeight - lv.height + lv.originY));
+                else if (mouse.y < lv.y)
+                    lv.contentY = Math.max(lv.originY, lv.contentY - Tokens.spacingSm);
+            }
+            onReleased: {
+                // A band changed the selection: the columns after this one follow it; a plain click keeps them.
+                if (col.banding)
+                    root.userSelected(col.index);
+                col.banding = false;
+            }
+            onCanceled: col.banding = false
         }
 
         ListView {
@@ -423,6 +414,8 @@ FocusScope {
                     anchors.fill: parent
                     enabled: entry.isDir && !entry.selected
                     keys: ["text/uri-list"]
+                    onEntered: root.tab.springHover(entry.url)
+                    onExited: root.tab.springLeave(entry.url)
                     onDropped: event => {
                         if (event.hasUrls) {
                             root.tab.dropUrls(event.urls, entry.url, col.model);
@@ -447,11 +440,24 @@ FocusScope {
                         root.userSelected(col.index);
                     }
                     onDoubleClicked: event => {
-                        if (event.button === Qt.LeftButton && !entry.isDir)
-                            root.tab.activate(entry.index, col.model);
+                        if (event.button === Qt.LeftButton && Nav.columnDoubleClickOpens(entry.isDir, (event.modifiers & Qt.ControlModifier) !== 0))
+                            root.tab.activate(entry.index, col.model, event.modifiers);
                     }
                 }
             }
+        }
+
+        Rectangle {
+            parent: lv.contentItem
+            z: 1
+            visible: col.banding
+            x: Math.min(col.bandOrigin.x, col.bandEnd.x)
+            y: Math.min(col.bandOrigin.y, col.bandEnd.y)
+            width: Math.abs(col.bandEnd.x - col.bandOrigin.x)
+            height: Math.abs(col.bandEnd.y - col.bandOrigin.y)
+            color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
+            border.width: Tokens.appsBorderWidth
+            border.color: Appearance.colors.accent
         }
 
         ScrollBar {

@@ -48,6 +48,15 @@ TestCase {
             verify(!RunMode.appsTrace(x), JSON.stringify(x));
     }
 
+    function test_portalVectors() {
+        const rows = vectors().portal;
+        verify(rows.length >= 5, "vectors read: " + rows.length);
+        for (const p of rows)
+            compare(RunMode.appsGtkPortal(p.env.GRASSFIELD_APPS_GTK_USE_PORTAL), p.appsGtkPortal, p.name + " (appsGtkPortal)");
+        for (const x of [undefined, null, "", "true", "yes", " 1", 1, true])
+            verify(!RunMode.appsGtkPortal(x), JSON.stringify(x));
+    }
+
     function test_plumbingVectors() {
         const rows = vectors().plumbing;
         verify(rows.length >= 4, "vectors read: " + rows.length);

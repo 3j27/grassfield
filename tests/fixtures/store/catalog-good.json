@@ -1,0 +1,35 @@
+{"version": 1, "channel": "stable", "serial": 1793095200, "generated": "2026-10-27T10:00:00Z",
+ "omarchy": {"tag": "v4.0.4", "commit": "c668141e9c42b13c80c9ca4ea108e11708c5e8a5",
+             "files": {"bin/omarchy-install-gaming-steam": "6f55dc362151216a781d5fcf08c2244cec732389daf2021c9a1cf796ba25a5a6",
+                       "bin/omarchy-remove-gaming-steam": "ebeb0cb770a0d5f441732dd88ca9c05a1e9a95b7ff637d1110371e9f9c6d8880",
+                       "install/helpers/steam.sh": "e6664d747400f0be64ace8052a650b11a201656927ee14d70efcaabcbca29458"}},
+ "sections": [
+  {"id": "discover", "title": {"en": "Discover", "fr": "Découvrir"}, "symbol": "discover", "blocks": [
+    {"kind": "hero", "items": [{"app": "org.gimp.GIMP", "eyebrow": {"en": "Image editing", "fr": "Retouche d'images"},
+                                "title": {"en": "Retouch, paint and compose"}, "text": {"en": "Layers, masks and filters.\nFree."}}]},
+    {"kind": "cards", "items": [{"app": "com.valvesoftware.Steam.desktop", "title": {"en": "Your game library"}},
+                                {"app": "com.spotify.Client", "title": {"en": "Music"}}]},
+    {"kind": "row", "title": {"en": "Make something", "fr": "Créer"}, "apps": ["org.gimp.GIMP", "org.example.Mail", "org.example.Flat"]}]},
+  {"id": "play", "title": {"en": "Play", "fr": "Jouer"}, "symbol": "play", "blocks": [
+    {"kind": "row", "title": {"en": "Games"}, "apps": ["com.valvesoftware.Steam.desktop", "aur-game"]}]}],
+ "categories": [
+  {"id": "graphics", "title": {"en": "Graphics", "fr": "Graphisme"}, "symbol": "category-graphics",
+   "freedesktop": ["Graphics", "2DGraphics", "RasterGraphics"]},
+  {"id": "games", "title": {"en": "Games", "fr": "Jeux"}, "symbol": "category-games", "freedesktop": ["Game"]},
+  {"id": "music-audio", "title": {"en": "Music and Audio"}, "symbol": "category-music-audio", "freedesktop": ["Audio", "Music"]}],
+ "apps": [
+  {"id": "org.gimp.GIMP", "source": {"kind": "repo", "repo": "extra", "package": "gimp"}, "categories": ["graphics"]},
+  {"id": "com.valvesoftware.Steam.desktop", "source": {"kind": "omarchy-setup", "install": "omarchy-install-gaming-steam",
+     "remove": "omarchy-remove-gaming-steam", "packages": ["steam"],
+     "changes": {"en": "Installs Steam and its drivers.", "fr": "Installe Steam et ses pilotes."},
+     "removes": {"en": "Your Steam folders."}}, "categories": ["games"]},
+  {"id": "com.spotify.Client", "source": {"kind": "repo", "repo": "omarchy", "package": "spotify"},
+   "name": {"en": "Spotify"}, "summary": {"en": "Stream music.", "fr": "Écoutez de la musique."}, "developer": {"en": "Spotify AB"},
+   "license": "LicenseRef-proprietary", "homepage": "https://www.spotify.com/", "desktopId": "spotify.desktop",
+   "icon": {"sha256": "6a1f5f1c0c5b7ecfba5b2a56b2ea3cb8a8bf4a1c0d1a9cc2f3f1b0e7d6c5b4a3", "bytes": 120, "license": "LicenseRef-trademark-of-its-owner", "origin": "https://example.com/spotify.png"},
+   "categories": ["music-audio"]},
+  {"id": "org.example.Mail", "source": {"kind": "webapp", "url": "https://mail.example.com/"}, "name": {"en": "Example Mail"},
+   "license": "LicenseRef-web-service",
+   "icon": {"sha256": "1111111111111111111111111111111111111111111111111111111111111111", "bytes": 100, "license": "LicenseRef-trademark-of-its-owner", "origin": "https://example.com/mail.png"}},
+  {"id": "org.example.Flat", "source": {"kind": "flatpak", "remote": "flathub", "app": "org.example.Flat"}, "name": {"en": "Flat"}},
+  {"id": "aur-game", "source": {"kind": "aur", "package": "aur-game"}, "name": {"en": "AUR Game"}, "categories": ["games"]}]}

@@ -67,6 +67,10 @@ ShellRoot {
         ["menubar.clockShowSeconds", true, () => Settings.menubarClockShowSeconds === true],
         ["keyboard.shortcutStyle", "mac", () => Settings.keyboardShortcutStyle === "mac" && Appearance.shortcutStyle === "mac"],
         ["keyboard.shortcutStyle", "bogus", () => Settings.keyboardShortcutStyle === "automatic"],
+        ["region.formats", "fr_CH", () => Settings.regionFormats === "fr_CH"],
+        ["region.formats", "fr_CH; rm", () => Settings.regionFormats === "auto"],
+        ["region.firstDayOfWeek", "sunday", () => Settings.regionFirstDayOfWeek === "sunday"],
+        ["region.firstDayOfWeek", "bogus", () => Settings.regionFirstDayOfWeek === "auto"],
         ["windows.titlebarDoubleClick", "minimize", () => Settings.titlebarDoubleClick === "minimize"],
         ["windows.tilingEdges", false, () => Settings.windowsTilingEdges === false],
         ["windows.tilingMenuBar", false, () => Settings.windowsTilingMenuBar === false],
@@ -75,6 +79,23 @@ ShellRoot {
         ["notifications.dnd", true, () => Settings.notificationsDnd === true],
         ["notifications.previews", "never", () => Settings.notificationsPreviews === "never"],
         ["lock.idleMinutes", 17, () => Settings.lockIdleMinutes === 17],
+        ["lock.displayOffBattery", 3, () => Settings.lockDisplayOffBattery === 3],
+        ["lock.displayOffPower", 0, () => Settings.lockDisplayOffPower === 0],
+        ["lock.showUser", false, () => Settings.lockShowUser === false],
+        ["lock.showMessage", true, () => Settings.lockShowMessage === true],
+        ["lock.message", "Back at 3", () => Settings.lockMessage === "Back at 3"],
+        ["lock.message", "two\nlines", () => Settings.lockMessage === ""],
+        ["search.showApps", false, () => Settings.searchShowApps === false],
+        ["search.showDocuments", false, () => Settings.searchShowDocuments === false],
+        ["search.showRecents", false, () => Settings.searchShowRecents === false],
+        ["search.showCalculator", false, () => Settings.searchShowCalculator === false],
+        ["search.showConversions", false, () => Settings.searchShowConversions === false],
+        ["search.showSettings", false, () => Settings.searchShowSettings === false],
+        ["search.showCommands", false, () => Settings.searchShowCommands === false],
+        ["search.historyResetAt", 1792832460000, () => Settings.searchHistoryResetAt === 1792832460000],
+        ["screensaver.idleMinutes", 10, () => Settings.screenSaverIdleMinutes === 10],
+        ["screensaver.kind", "slideshow", () => Settings.screenSaverKind === "slideshow"],
+        ["screensaver.folder", "/home/u/Photos", () => Settings.screenSaverFolder === "/home/u/Photos"],
         ["hotCorners.topLeft", "overview", () => Settings.hotCornerTopLeft === "overview"],
         ["hotCorners.topRight", "notifications", () => Settings.hotCornerTopRight === "notifications"],
         ["hotCorners.bottomLeft", "apps", () => Settings.hotCornerBottomLeft === "apps"],
@@ -84,6 +105,8 @@ ShellRoot {
         ["accent.color", "orange", () => Settings.accentColor === "orange" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.orange).toLowerCase() && Appearance.colors.accentText.toString().toLowerCase() === String(Tokens.colorAccentLight.orangeText).toLowerCase()],
         ["accent.color", "neon", () => Settings.accentColor === "multicolor" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorLight.accent).toLowerCase()],
         ["accent.color", "graphite", () => Settings.accentColor === "graphite" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.graphite).toLowerCase()],
+        ["accent.highlight", "pink", () => Settings.accentHighlight === "pink" && Appearance.highlight.toString().toLowerCase() === String(Tokens.colorAccentLight.pink).toLowerCase()],
+        ["accent.highlight", "neon", () => Settings.accentHighlight === "automatic" && Appearance.highlight.toString().toLowerCase() === String(Appearance.colors.accent).toLowerCase()],
         ["icons.mode", "tinted", () => Settings.iconMode === "tinted"],
         ["icons.tint", "#8e5bea", () => Settings.iconTint === "#8e5bea"],
         ["icons.folderColor", "#8e5bea", () => Settings.folderColor === "#8e5bea"],
@@ -97,6 +120,12 @@ ShellRoot {
         target: Appearance
         property: "accentSetting"
         value: Settings.accentColor
+    }
+
+    Binding {
+        target: Appearance
+        property: "highlightSetting"
+        value: Settings.accentHighlight
     }
 
     Binding {

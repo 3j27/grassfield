@@ -29,7 +29,9 @@ the plugin is built against the Hyprland you have and is rebuilt after a Hyprlan
 cd packaging/arch && makepkg -si
 ```
 
-This builds and installs `grassfield-desktop`, `grassfield-compositor` and `grassfield-icons`. Then log out and choose
+This builds and installs `grassfield-desktop`, `grassfield-compositor` and `grassfield-icons`. `grassfield-desktop` depends
+on `grassfield-keyring` (the keys of Grassfield's package repository, ADR-0033), built by `grassfieldhq/grassfield-packages`:
+until that repository is published, install it first from there (`cd keyring && makepkg -si`). Then log out and choose
 Grassfield (the login drop-in starts it; `grassfield-login set omarchy` goes back). The step-by-step guide with
 checks and recovery is [`docs/owner-setup/real-session.md`](docs/owner-setup/real-session.md); take a snapshot first.
 Nothing runs as root, no service starts by itself, no file is written under `$HOME` by the install.
@@ -68,7 +70,8 @@ Wayland session lock held by the compositor, so killing the shell never unlocks 
 - After an update, a running session keeps the old compositor plugin until you log out. The shell has a "Log out to finish
   updating" notice for that, but it works only once the release build ships `/usr/share/grassfield/VERSION` and the plugin
   reports its version (not merged yet): until then nothing is announced.
-- Settings > Mouse & Trackpad applies at the next login.
+- Settings > Mouse, Trackpad and Keyboard apply a choice through a reload of the session configuration (ADR-0031
+  amendment); not yet verified on real hardware.
 - Fonts requested by name that are not installed fall back to Liberation Sans, not Inter.
 - Omarchy's own shell (bar, launcher, lock) does not run inside Grassfield, by design.
 - The visual identity is close to macOS and carries trade-dress risk; the repository stays private until the legal

@@ -9,9 +9,9 @@ Grassfield's own code is MIT (root `LICENSE`, ADR-0005 accepted by the owner 202
 
 | Package | `license=` | Why |
 |---|---|---|
-| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a) |
+| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0`, `BSD-3-Clause`, `LicenseRef-Grassfield-logo-all-rights-reserved` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`), the Grassfield logo excepted: all rights reserved, the owner's mark, installed in the same package (owner decision 2026-10-27); the Unicode-derived grapheme tables (section 5a); the clipboard helper's code generated from `hyprland-lock-notify-v1.xml` (section 2a) |
 | `grassfield-compositor` | `MIT`, `LGPL-2.1-or-later`, `BSD-3-Clause` | own code; server code generated from the KDE appmenu protocol XML; Hyprland headers compiled in |
-| `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23) |
+| `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23; the composed pack accepted for publication at the owner's risk, amendment of 2026-10-27) |
 
 Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 
@@ -23,6 +23,7 @@ Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 | `BRANDING.md` | grassfield-desktop | `branding/LICENSES.md`, provenance of icons and wallpaper |
 | `omarchy-MIT.txt` | grassfield-desktop | Omarchy's LICENSE, verbatim (v4.0.4: "Copyright (c) David Heinemeier Hansson"), for Omarchy-derived QML |
 | `unicode-license-v3.txt` | grassfield-desktop | Unicode License v3 notice for the derived grapheme tables (section 5a) |
+| `clipboard-protocols-notices.txt` | grassfield-desktop | the `<copyright>` blocks of `ext-data-control-v1.xml` (MIT) and `hyprland-lock-notify-v1.xml` (BSD-3-Clause), whose generated code is in `grassfield-clipboard-helper` (section 2a) |
 
 ## 1. Built against, linked or generated from (grassfield-compositor)
 
@@ -77,6 +78,16 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 
 Grassfield patches none of these. **Needs legal review:** obligations for MIT code and plugins running inside or
 linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview and, through QtMultimedia, by the shell (video wallpapers).
+
+## 2a. Protocol definitions vendored for the clipboard helper (grassfield-desktop, ADR-0034)
+
+| File | Source | Licence per the file | Use |
+|---|---|---|---|
+| `apps/clipboard-helper/protocols/ext-data-control-v1.xml` | wayland-protocols 1.49, `staging/ext-data-control/` (copied from the Arch package's `/usr/share/wayland-protocols`) | MIT (its `<copyright>`: Simon Ser, Ivan Molodetskikh, Neal Gompa) | `wayland-scanner` client code compiled into `grassfield-clipboard-helper` |
+| `apps/clipboard-helper/protocols/hyprland-lock-notify-v1.xml` | hyprwm/hyprland-protocols (copied from the Arch package's `/usr/share/hyprland-protocols`) | BSD-3-Clause (its `<copyright>`: Maximilian Seidler; the project's LICENSE: Hypr Development) | the same |
+
+Both notices ship as `clipboard-protocols-notices.txt`. Test only, never shipped: `tests/fixtures/fake-clipboard-server` compiles their
+server code.
 
 ## 3. Omarchy-derived code (MIT)
 
@@ -133,9 +144,14 @@ no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
-Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG icons are Grassfield's own
-(CC-BY-SA-4.0, owner decision D-9, 2026-10-23); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
-No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 96 (95 symbolic icons and the logo))
+(CC-BY-SA-4.0); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
+No Apple asset is used. Licence of Grassfield-made art (symbolic icons, cursors, wallpaper): CC-BY-SA-4.0, decided by the
+owner on 2026-10-27 (an earlier text attributed this to decision D-9, which concerned the icon pack). The Grassfield
+logo (`branding/icons/symbolic/grassfield-logo.svg`) is excluded: all rights reserved, the owner's mark.
+
+AI assistance: parts of the artwork and of the code were produced with AI assistance under the owner's direction, and
+are published by the owner under the licences stated in this file and in `branding/LICENSES.md`.
 
 Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XCursor fallback, installed under
 `/usr/share/icons/grassfield-cursors`) is generated at package build time from Grassfield's own templates in
@@ -171,7 +187,7 @@ pack with the pinned upstream sources. The same notice is in `/usr/share/license
   ship in `/usr/share/licenses/grassfield-icons/`. Only the base variant, default colour; no upstream script runs.
 - Pebble icon theme, `https://github.com/a-shewale/Pebble-Icon-Theme` at commit
   `185da58c2f4caf3c2a038aa0869fd2772acc0933`, only its main `Pebble/` variant. **Pebble: no licence file at the pin; its
-  README states GPL-3.0 (and links a LICENSE file that does not exist); owner accepted the risk 2026-10-23.** It credits
+  README states GPL-3.0 (and links a LICENSE file that does not exist); owner accepted the risk 2026-10-23 and kept it on 2026-10-27.** It credits
   MacTahoe, Hatter (`https://github.com/Mibea/Hatter`, the base of its folders and structure; its licence was not verified
   here) and Adwaita (pacman licence field CC-BY-SA-3.0 OR LGPL-3.0-only) as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
   two sources and commits as `SOURCE`.
@@ -228,4 +244,9 @@ The notice ships as `unicode-license-v3.txt` in the grassfield-desktop package (
 - `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`: reconstructed from the generated Hyprland header
   `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`, which carries MIT, "Copyright © 2019 Josef
   Gajdusek". Test tool, not packaged; the file itself has no notice yet (audit gap G11).
+- `docs/audits/finder-parity-2026-10-26/tools/virtual-keyboard-unstable-v1.xml`: the `zwp_virtual_keyboard_v1` protocol
+  (wlroots / Purism), reduced to its requests and arguments, MIT: "Copyright © 2008-2011 Kristian Høgsberg, © 2010-2013
+  Intel Corporation, © 2012-2013 Collabora, Ltd., © 2018 Purism SPC". The file carries the full notice verbatim (as
+  reproduced in Hyprland's generated `/usr/include/hyprland/protocols/virtual-keyboard-unstable-v1.hpp`). Audit tooling
+  of the Finder parity work (`vinput.py`), not packaged.
 - Lua 5.5.1 headers (MIT) at build time; CMake, Ninja, Qt tools (build tools).

@@ -3,12 +3,14 @@
 #
 # Private D-Bus session bus (the default; --session-bus or GRASSFIELD_PRIVATE_BUS=0 keeps the owner's session bus for
 # the rare test that needs it): the shell owns org.freedesktop.Notifications without touching the owner's session, and
-# anything the bus activates (a D-Bus activatable handler, gvfs, portals) runs isolated: the bus daemon starts with the
-# XDG_* homes under .dev/apps-home and GRASSFIELD_DEV=1 (ADR-0011). One dbus-daemon per nested
-# session (session configuration, socket in /tmp as with dbus-run-session: libdbus caps socket paths at
-# 99 bytes, too short for .dev/ in a worktree), started by the first shell start and reused by shell restarts, so
-# applications on it keep their connection as on a real session bus; nested-down.sh stops it. The
-# address is in .dev/bus.address for test clients (notify-send, busctl --address, test apps).
+# the bus starts nothing of the machine: scripts/dev/dev-bus.conf has no service folder, so no D-Bus activatable handler,
+# gvfs, keyring, dconf or portal can run on it with the owner's XDG_RUNTIME_DIR (security counter-review of f9e24e1, LOW-2;
+# ADR-0011). The bus daemon still starts with the XDG_* homes under .dev/apps-home and GRASSFIELD_DEV=1. One dbus-daemon per
+# nested session (socket in /tmp as with dbus-run-session: libdbus caps socket paths at 99 bytes, too short for .dev/ in a
+# worktree), started by the first shell start and reused by shell restarts, so applications on it keep their connection as
+# on a real session bus; nested-down.sh stops it. A bus that can start anything (one kept from a run before this
+# configuration) is refused (scripts/dev/dev-bus-check.sh). The address is in .dev/bus.address for test clients
+# (notify-send, busctl --address, test apps).
 #
 # Global menus (ADR-0008): with the private bus, grassfield-menu-bridge (.dev/build/grassfield-menu-bridge
 # from bridges/menu-bridge/build-direct.sh, or GRASSFIELD_MENU_BRIDGE) is (re)started on that bus before
@@ -70,14 +72,13 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
   if ! { [[ -s $dev/bus.address ]] && dev_live_pid "$dev/bus.pid" >/dev/null; }; then
     dev_stop "$dev/bus.pid" "private D-Bus bus" >/dev/null || exit 1
     rm -f "$dev/bus.address" "$dev/bus.address.new"
-    # Same configuration as dbus-run-session (session bus, service activation, unix:tmpdir=/tmp); activated
-    # services inherit the nested Wayland socket, never the owner's.
-    # The isolated homes make every activated service isolated too (ADR-0011).
+    # The session bus's configuration without any service folder (scripts/dev/dev-bus.conf: nothing is activatable but the
+    # bus itself). The nested Wayland socket and the isolated homes stay in its environment (ADR-0011).
     mkdir -p "$apps_home"/{config,cache,state,data,home}
     env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 HOME="$apps_home/home" \
       XDG_CONFIG_HOME="$apps_home/config" XDG_CACHE_HOME="$apps_home/cache" XDG_STATE_HOME="$apps_home/state" \
       XDG_DATA_HOME="$apps_home/data" \
-      setsid dbus-daemon --session --nofork --print-address=1 \
+      setsid dbus-daemon --config-file="$root/scripts/dev/dev-bus.conf" --nofork --print-address=1 \
       >"$dev/bus.address.new" 2>"$dev/bus.log" </dev/null &
     dev_record_pid "$dev/bus.pid" "$!"
     for _ in $(seq 1 50); do [[ -s $dev/bus.address.new ]] && break; sleep 0.1; done
@@ -90,6 +91,13 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
     unix:path=/tmp/dbus-*) ;;
     *) echo "shell-run: refusing: unexpected private bus address $bus" >&2; exit 1 ;;
   esac
+  # Nothing but the bus itself is activatable on it, also on a bus kept from an earlier run (one started with the standard
+  # session folders before dev-bus.conf is refused: it would start gvfs, the keyring, dconf or a portal on demand), else the
+  # shell does not start. A service such a bus already started cannot be stopped from here: restart the nested session.
+  if ! unexpected=$("$root/scripts/dev/dev-bus-check.sh" "$bus"); then
+    echo "shell-run: refusing: the private bus can start services of the machine or could not be checked (${unexpected//$'\n'/, }): just nested-down, then just nested-up" >&2
+    exit 1
+  fi
   bus_env=(DBUS_SESSION_BUS_ADDRESS="$bus")
   private=1
 
@@ -181,6 +189,18 @@ if [[ ! -x $stack_helper || -n $(find "$root/apps/stack-helper/src" "$root/apps/
   fi
 fi
 
+# grassfield-clipboard-helper (ADR-0034, the clipboard history): built the same way, in the background, when missing or older
+# than its sources. The dev shell gives it the nested compositor's socket only (GRASSFIELD_CLIPBOARD_DISPLAY below, an absolute
+# path): it never watches the owner's display, and the shell starts no helper without that variable.
+clipboard_helper=$dev/build/grassfield-clipboard-helper
+if [[ ! -x $clipboard_helper || -n $(find "$root/apps/clipboard-helper/src" "$root/apps/clipboard-helper/protocols" "$root/apps/clipboard-helper/build-direct.sh" -newer "$clipboard_helper" -print -quit 2>/dev/null) ]]; then
+  (
+    "$root/apps/clipboard-helper/build-direct.sh" >"$dev/clipboard-helper-build.log" 2>&1 ||
+      echo "shell-run: the clipboard helper did not build (see $dev/clipboard-helper-build.log): no clipboard history" >>"$dev/clipboard-helper-build.log"
+  ) </dev/null >/dev/null 2>&1 &
+fi
+if [[ $sock == /* ]]; then clipboard_display=$sock; else clipboard_display=${XDG_RUNTIME_DIR:?}/$sock; fi
+
 # The isolated trash of the dev session (shell/services/Trash.qml watches it; ADR-0011): the shell's "Move to Trash"
 # and the Dock's Trash drop put files here, never in the owner's ~/.local/share/Trash.
 mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info" "$dev/apps-home/home"
@@ -217,7 +237,7 @@ env "${unit_unset[@]}" "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/op
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
   GRASSFIELD_FILES_CMD="$files_cmd" GRASSFIELD_OPEN_POLICY="$open_policy" GRASSFIELD_OPEN_LOG="$open_log" \
   GRASSFIELD_SEARCH_PLOCATE_DB="$plocate_db" GRASSFIELD_CURSORS_BUILD="$root/branding/cursors/build.sh" \
-  GRASSFIELD_CURSORS_ICONS="$dev/share/icons" \
+  GRASSFIELD_CURSORS_ICONS="$dev/share/icons" GRASSFIELD_CLIPBOARD_DISPLAY="$clipboard_display" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 shell_pid=$!

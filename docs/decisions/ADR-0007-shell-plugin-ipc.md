@@ -91,6 +91,49 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   capabilities event (the plugin re-posts its capabilities when the flag changes; a push then would undo a flag set by
   another caller). `Compositor.stages(request)` sends one operation while `stages` is advertised. Until the shell's strip
   exists nothing sends `op:on`, so the flag alone changes nothing on screen (docs/specs/stages.md "Shell contract" item 1).
+- Window tiling, step 1 (2026-10-27, additive, ADR-0036, docs/specs/tiling.md TL1-TL15): `tile` places gain
+  left-third|middle-third|right-third|left-two-thirds|right-two-thirds; verb `arrange(json)`
+  `{"layout":"<catalogue id>","windows":["0x…",…],"fill":bool?,"zone":int?,"output":"<name>"?}` (at most 4 KiB, 4
+  distinct windows, at most the layout's zone count; `zone` 0-based with exactly one window and `fill` false or absent; ids of the
+  token catalogue `tiling.layout*`), windows[i] takes zone i and, with `fill` (default true), the next tileable windows in
+  stacking order on that output and Desktop (and active stage) fill the rest; the windows placed form a tile group.
+  Event `tiling`, a change notice `{"v":"gfc/1","type":"tiling","gen":N}` plus `reason` (at most 79 bytes: a 20-digit
+  `gen` and `unavailable`); the state is the reply of `hyprctl grassfield-tiling` (per output: work area, class, grid
+  step, tiled windows with state, place or layout and zone, group, box). The reply moves no window (it only drops the
+  records of closed windows and of windows moved by other means). Feature `tiling-arrange`, advertised with `window-tiling` only when the verb, the command
+  and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
+  step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
+  refused while the session is locked (`reason:"locked"`, TL34).
+- Window tiling, step 2 (2026-10-27, additive, ADR-0036, docs/specs/tiling.md TL16-TL20): no new event, verb or feature.
+  The `config` allowlist gains `tilingOptionDrag` ∈ true|false (true at load: with Alt held a drag tiles into the nearest
+  half, quarter or fill, TL18). Each window of the `hyprctl grassfield-tiling` reply gains `sides`: the sides a double-click
+  on its resize border extended ("top", "bottom", "left", "right" joined by "-" in that order, e.g. "top-left"; "" for a
+  place or a layout zone, TL20). Drags by Hyprland's own move (an app's toolbar, Super+drag) post the same notices as the
+  plugin's titlebar drag (`moved` when a tiled window leaves its tile, `placed` at a release that tiles).
+- Window tiling, step 3 (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL22-TL26): event `tile-hover`
+  `{"v":"gfc/1","type":"tile-hover","address":"<hex>","state":"enter|leave|open"}`; `enter` (the pointer rested
+  `tiling.hoverDelay` on a window's zoom light, no button held) and `open` (verb `tile_popover`) add the light's rect
+  `x y w h` (global layout coordinates, one decimal) and `tileable` (the window can be tiled now: the popover greys its
+  tiles otherwise); `leave` follows an `enter` when the pointer leaves the light or a button is pressed. One zoom light at
+  a time (throttle channel `TileHover`, the latest state wins). Verb `tile_popover(address)` posts `open` for that window
+  (the zoom light of its titlebar, or of a Grassfield app's own chrome, else the top-left corner of its frame). Verb
+  `move_to(address, output)` moves a window onto another output: a tiled one into the same place, layout zone or extended
+  sides there, any other to the same relative place with its size (capped at that output's work area); it takes that
+  output's Desktop. A refused `move_to` posts the `tiling` notice with `reason:"invalid"` (unknown or same output, a window
+  that cannot move) or `reason:"locked"`; a move posts `placed` (tiled) or `forgotten` (a record ended). Feature
+  `tile-hover`, advertised with `window-tiling` only when both verbs registered.
+- Window tiling, step 4a (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL27-TL28): `arrange` takes `"with":"0x<hex>"`
+  together with `"zone"` and one window: a pick of the suggestions. `with` must be tiled in that layout on the output's
+  current Desktop and the zone must not be held by it or by a member of its group in that layout; the window joins its
+  group (a new one when it had none). A window minimized by the plugin from that output may be picked: it is restored
+  without the Dock animation, then placed. The `hyprctl grassfield-tiling` reply gains `suggestion`, `null` or
+  `{"gen":N,"address":"<hex>","layout":"<id>","output":"<name>","zones":[{"zone":i,"x":…,"y":…,"w":…,"h":…}],
+  "windows":["<hex>",…]}`: after an `arrange` that left zones of its layout empty, the empty zones in zone order with
+  their frames in the work area, and the windows that can fill them (the tileable windows of that output's Desktop in the
+  active stage, top first, then the windows minimized from that output, the latest first; at most 12; never one already
+  in that layout). It is published while the tile records are still those of `gen` (the generation of the `placed`
+  notice that announced it): any later change ends it. Feature `tiling-layouts`, advertised together with
+  `tiling-arrange`.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -116,20 +159,25 @@ event keyboard-focus: address
 event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
+event tiling: gen reason
+event tile-hover: address state x y w h tileable
 event frames: clock marks monitors name presented refreshHz renders t total unit what
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
 enum overview-focus.target: window workspace remembered none press
 enum overview-focus.reason: gone hidden minimized not-shown no-workspace none no-window locked exclusive-layer press user-focus unloading invalid refused-by-hyprland
 enum stages.reason: invalid disabled no-strip unknown unavailable interrupted
+enum tiling.reason: placed moved resized suspended restored forgotten relaid invalid locked unavailable
+enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to
 ```
 
 ## Evidence

@@ -2,8 +2,9 @@
 # GF-009 functional flow: the Files app, used the way a user does. Nested session only.
 #
 # Proves, with the windows the compositor reports and the files on disk:
-#   1. Files opens a folder; opening a sub-folder (type to select, Return) and going up (Ctrl+Up) follows in the title;
-#   2. Get Info (Ctrl+I) opens an info window for the selected file;
+#   1. Files opens a folder; opening a sub-folder (type to select, Ctrl+Down: Return renames, as in the Finder) and going
+#      up (Ctrl+Up) follows in the title;
+#   2. Get Info (Ctrl+I) opens an info window for the selected file, and Ctrl+W there closes it alone;
 #   3. New Folder (Ctrl+Shift+N) creates a folder named in place; Rename (F2) renames a file;
 #   4. a file is moved into the new folder (Cut, open the folder, Paste);
 #   5. Move to Trash (Ctrl+Backspace) moves it to the SANDBOX Trash (never the owner's: counted before and after);
@@ -96,8 +97,8 @@ fl_shot top >/dev/null
 # 1. open a folder and go back up
 settle
 fl_type Documents
-fl_key -k Return
-fl_check_wait "Return opens the Documents folder (title)" 10 title_is 'Documents'
+fl_appkey ctrl Down
+fl_check_wait "Ctrl+Down opens the Documents folder (title)" 10 title_is 'Documents'
 fl_shot documents >/dev/null
 fl_appkey ctrl Up
 fl_check_wait "Ctrl+Up goes back to the parent folder" 10 title_is '(^|[^a-z])top'
@@ -111,8 +112,11 @@ fl_check_wait "Ctrl+I opens an info window for report.txt" 10 more_windows "$bef
 fl_check_wait "the info window is named after the file" 5 title_is 'report'
 fl_shot info >/dev/null
 fl_appkey ctrl w
-windows_le() { [[ $(files_windows) -le $1 ]]; }
-fl_check_wait "Ctrl+W closes the info window" 10 windows_le "$before"
+# Ctrl+W closes the key window only (macOS): one window fewer, and that one was the info window. The browser window (its
+# title names 'top') is still there and the app still runs; a count that merely dropped would also pass when the browser
+# closed and took the info window with it.
+info_closed_alone() { kill -0 "$app" 2>/dev/null && [[ $(files_windows) -eq $1 ]] && title_is '(^|[^a-z])top'; }
+fl_check_wait "Ctrl+W closes the info window alone (the browser window stays open)" 10 info_closed_alone "$before"
 settle
 
 # 3. New Folder, Rename
@@ -137,7 +141,7 @@ fl_type summary
 fl_appkey ctrl x
 settle
 fl_type Projects
-fl_key -k Return
+fl_appkey ctrl Down
 fl_check_wait "Projects is open" 10 title_is 'Projects'
 fl_appkey ctrl v
 fl_check_wait "Cut and Paste moved summary.txt into Projects" 8 test -f "$top/Projects/summary.txt"

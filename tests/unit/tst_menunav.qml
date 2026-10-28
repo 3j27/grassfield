@@ -19,6 +19,17 @@ TestCase {
         compare(MenuNav.handleKey(items, 3, "down", false).index, 4);
     }
 
+    // A section header (Window > Move & Resize: Halves, Quarters, Arrange) is never selected nor run.
+    function test_headersAreSkipped() {
+        const headed = [{header: true, text: "Halves"}, {text: "Left"}, {separator: true}, {header: true, text: "Quarters"}, {text: "Top Left"}];
+        verify(!MenuNav.selectable(headed[0]));
+        compare(MenuNav.first(headed), 1);
+        compare(MenuNav.handleKey(headed, 1, "down", true).index, 4);
+        compare(MenuNav.handleKey(headed, 4, "down", true).index, 1);
+        compare(MenuNav.handleKey(headed, 1, "up", true).index, 4);
+        compare(MenuNav.handleKey(headed, 0, "return", true).action, "");
+    }
+
     function test_wrapAround() {
         compare(MenuNav.handleKey(items, 4, "down", false).index, 0);
         compare(MenuNav.handleKey(items, 0, "up", false).index, 4);

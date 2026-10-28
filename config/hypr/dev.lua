@@ -7,7 +7,29 @@ if not config_dir or config_dir == "" then
 end
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- A parse starts with none of Grassfield's modules loaded, so edits are picked up on a reload (should Hyprland keep
+-- package.loaded), as in session.lua.
+for module in pairs(package.loaded) do
+  if module == "grassfield" or module:sub(1, 11) == "grassfield." then
+    package.loaded[module] = nil
+  end
+end
+
 _G.grassfield_dev = true
+
+-- ADR-0035 D-3: Hyprland's "not responding" dialog goes through the repository's stand-in, as in the real session; it
+-- reports to the shell run from GRASSFIELD_SHELL_DIR (dev plumbing, honoured in a dev session only).
+local repo = config_dir:match("^(.*)/config/hypr/?$")
+local session_bin = repo and repo .. "/packaging/session-bin"
+local dialog = session_bin and io.open(session_bin .. "/hyprland-dialog", "r")
+if dialog then
+  dialog:close()
+  local parts = { session_bin }
+  for entry in (os.getenv("PATH") or "/usr/local/bin:/usr/bin"):gmatch("[^:]+") do
+    if entry ~= session_bin then parts[#parts + 1] = entry end
+  end
+  hl.env("PATH", table.concat(parts, ":"))
+end
 
 -- The nested output is a window inside the owner's session; keep it smaller than the 1080p panel.
 hl.monitor({ output = "", mode = "1440x900", position = "auto", scale = 1 })
@@ -33,6 +55,11 @@ end
 -- Reference output for deterministic screenshots: 1920x1080 @ scale 1, like the reference machine panel.
 -- The visible WAYLAND-1 window is sized by the owner's session layout, so it can't be relied on.
 hl.monitor({ output = "GF-REF", mode = "1920x1080@60", position = "auto-right", scale = 1 })
+-- ADR-0031: Settings > Displays' choices, from the dev paths (GRASSFIELD_CONFIG_HOME, GRASSFIELD_STATE_HOME) only.
+local displays_ok, displays_err = pcall(require, "grassfield.displays")
+if not displays_ok then
+  print("grassfield: displays: " .. tostring(displays_err))
+end
 hl.on("hyprland.start", function()
   -- Runs as a child of the nested compositor, so it can only reach the nested instance.
   hl.exec_cmd("hyprctl output create headless GF-REF")
@@ -41,7 +68,8 @@ end)
 hl.config({
   -- Nested sessions don't need the watchdog warning (no start-hyprland in dev).
   misc = { disable_watchdog_warning = true },
-  ecosystem = { no_update_news = true, no_donation_nag = true },
+  -- No `ecosystem` keys here: looknfeel.lua (through core.lua) sets them for both sessions, so a nested run shows what the
+  -- real session gets (ADR-0035 D-1).
   debug = { disable_logs = false },
   -- Never write the cursor theme/size into gsettings: the owner's dconf database is shared with the nested session.
   cursor = { sync_gsettings_theme = false },

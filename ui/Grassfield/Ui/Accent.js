@@ -37,6 +37,23 @@ function apply(base, setting, dark, tokens) {
     return c;
 }
 
+// Text highlight colour (`accent.highlight`, macOS 27 Appearance > Text highlight colour): the fill of selected text in fields
+// and editors and the text on it. "automatic" follows the accent (`palette`, with the accent applied); a name uses that accent
+// colour and its text colour in this appearance, whatever the accent is; anything else reads as "automatic".
+const HIGHLIGHTS = ["automatic", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite"];
+
+function normalizeHighlight(setting) {
+    return typeof setting === "string" && HIGHLIGHTS.indexOf(setting) >= 0 ? setting : "automatic";
+}
+
+function highlight(setting, dark, palette, tokens) {
+    const name = normalizeHighlight(setting);
+    if (name === "automatic")
+        return {highlight: palette.accent, highlightText: palette.accentText};
+    const group = dark ? tokens.colorAccentDark : tokens.colorAccentLight;
+    return {highlight: group[name], highlightText: group[name + "Text"]};
+}
+
 // Selection: macOS draws white text on its accent fill in both appearances (a selected row, a default button, a checked box).
 // The dark palette's accent is bright for glyphs, rings and indicators and holds 4.5:1 only with dark text, so a fill that
 // carries text or a mark has its own pair (ADR-0024 section 1): the light appearance's accent and text colour in the light

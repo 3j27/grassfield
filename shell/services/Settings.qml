@@ -47,6 +47,12 @@ Singleton {
     readonly property real dockMagnification: store.dockMagnification
     readonly property bool dockMagnificationEnabled: store.dockMagnificationEnabled
     readonly property bool dockAutohide: store.dockAutohide
+    readonly property bool clipboardEnabled: store.clipboardEnabled
+    readonly property string clipboardRetention: store.clipboardRetention
+    readonly property bool clipboardKeepOnDisk: store.clipboardKeepOnDisk
+    readonly property real clipboardClearedAt: store.clipboardClearedAt
+    readonly property real clipboardPinnedClearedAt: store.clipboardPinnedClearedAt
+    readonly property bool updatesAutomaticCheck: store.updatesAutomaticCheck
     readonly property var dockRecent: store.dockRecent
     readonly property var dockFolders: store.dockFolders
     readonly property var dockStackOptions: store.dockStackOptions
@@ -57,7 +63,10 @@ Singleton {
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
+    readonly property string accentHighlight: store.accentHighlight
     readonly property string keyboardShortcutStyle: store.keyboardShortcutStyle
+    readonly property string regionFormats: store.regionFormats
+    readonly property string regionFirstDayOfWeek: store.regionFirstDayOfWeek
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor
@@ -66,6 +75,8 @@ Singleton {
     readonly property bool loaded: store.loaded
     // ... and is valid (false while it is malformed): the pointer theme acts on defaults only then.
     readonly property bool validRead: store.validRead
+    // ... and was empty (every key at its default): the clipboard history deletes nothing on it.
+    readonly property bool emptyFile: store.emptyFile
     readonly property bool writeBlocked: store.writeBlocked
     readonly property int pointerSize: store.pointerSize
     readonly property string pointerOutlineColor: store.pointerOutlineColor
@@ -87,6 +98,22 @@ Singleton {
     // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
     readonly property bool windowsRebuildExtension: store.windowsRebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
+    readonly property int lockDisplayOffBattery: store.lockDisplayOffBattery
+    readonly property int lockDisplayOffPower: store.lockDisplayOffPower
+    readonly property bool lockShowUser: store.lockShowUser
+    readonly property bool lockShowMessage: store.lockShowMessage
+    readonly property string lockMessage: store.lockMessage
+    readonly property bool searchShowApps: store.searchShowApps
+    readonly property bool searchShowDocuments: store.searchShowDocuments
+    readonly property bool searchShowRecents: store.searchShowRecents
+    readonly property bool searchShowCalculator: store.searchShowCalculator
+    readonly property bool searchShowConversions: store.searchShowConversions
+    readonly property bool searchShowSettings: store.searchShowSettings
+    readonly property bool searchShowCommands: store.searchShowCommands
+    readonly property real searchHistoryResetAt: store.searchHistoryResetAt
+    readonly property int screenSaverIdleMinutes: store.screenSaverIdleMinutes
+    readonly property string screenSaverKind: store.screenSaverKind
+    readonly property string screenSaverFolder: store.screenSaverFolder
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     readonly property bool menubarShowBackground: store.menubarShowBackground
@@ -117,6 +144,10 @@ Singleton {
 
     function setStagesEnabled(value: bool): void {
         store.setStagesEnabled(value);
+    }
+
+    function setClipboardEnabled(value: bool): void {
+        store.setClipboardEnabled(value);
     }
 
     function setDesktopShowIcons(value: bool): void {

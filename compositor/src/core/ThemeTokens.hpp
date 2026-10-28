@@ -4,6 +4,7 @@
 // The design tokens the compositor plugin draws with (read by core/Theme.hpp; no Hyprland include).
 
 #include <cstdint>
+#include <string_view>
 
 namespace gf::theme::tokens {
     // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -76,4 +77,84 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
+    inline constexpr int kTilingEdge = 4;
+    // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingCornerBand = 96;
+    // logical px around and between tiled windows while Tiled windows have margins is on (macOS 8 ± 1) [ref: docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingMargin = 8;
+    // Center keeps the window's size, at most this fraction of the work area (kCenterMaxFraction before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr double kTilingCenterMaxFraction = 0.9;
+    // estimate until measured in nested against the owner's captures: a drag's tiling preview shows after the pointer rests this long on a place (ms); Alt shows it at once (parity row M08: macOS shows a short delay, U) [ref: docs/specs/tiling.md § Drags; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingPreviewDelay = 250;
+    // estimate until measured in nested against the owner's captures: the pointer rests this long on the zoom light before the tiling popover opens (ms; about a second on macOS, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingHoverDelay = 1000;
+    // the tiling popover's width (pt; owner's captures gs-068-161 and gs-069-175, parity row M19: 230 x 251) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingPopoverWidth = 230;
+    // estimate until measured in nested against the owner's captures: the zoom light's centre from the popover's left edge (pt; about 25 of 230 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingPopoverLightInset = 25;
+    // a tiling glyph of the popover, the miniature screen's width (pt; parity row M19: 26-pt glyphs) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphWidth = 26;
+    // estimate until measured in nested against the owner's captures: the miniature screen's height (pt; about 26 x 20 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphHeight = 20;
+    // between the centres of two glyphs of a popover row (pt; parity row M19: 52 pitch) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphPitch = 52;
+    // estimate until measured: the miniature screen's outline at the popover size (pt; thinner glyphs scale it down, never under 1 px) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingGlyphStroke = 1.5;
+    // estimate until measured: the space between the outline and the zones inside it (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingGlyphInset = 1.5;
+    // estimate until measured: the space between two zones of an arrangement glyph (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphGap = 1;
+    // estimate until measured: the miniature screen's corner radius (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphRadius = 4;
+    // the zones of an arrangement glyph other than the window's own (the window's own area dark, the others light: parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingGlyphOtherOpacity = 0.35;
+    // the Center glyph's window, in twelfths of the miniature screen, one zone [x, y, w, h] (a window smaller than the screen, in its middle) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphCenter[][4] = {{3, 3, 6, 6}};
+    // estimate until measured: a row of glyphs in the popover (pt; 251 pt in all for two headed rows, Full Screen and the separators, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingGlyphRowHeight = 44;
+    // estimate until measured in nested: a layout of the popover's Layouts section, the miniature screen's width (pt; larger than the 26-pt glyphs so that each zone is a target, a four-column layout keeping zones about 9 pt wide; Windows also draws its snap layouts larger than icons, parity row W02; the height follows glyphHeight / glyphWidth) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingLayoutGlyphWidth = 44;
+    // own value: a zone's number, shown once the number keys picked its layout (TL26, TL27), over the zone's smaller side [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingGlyphNumberScale = 0.6;
+    // estimate until measured in nested: the widest tile of the suggestions (TL28; a live thumbnail with the app's icon and the window's title under it; Windows' Snap Assist, parity rows W04 and W12) (pt) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingSuggestTileWidth = 240;
+    // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr double kTilingSuggestThumbAspect = 1.6;
+    // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutLeftRight[][4] = {{0, 0, 6, 12}, {6, 0, 6, 12}};
+    // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutRightLeft[][4] = {{6, 0, 6, 12}, {0, 0, 6, 12}};
+    // Top & Bottom (macOS Arrange; the stacked halves of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutTopBottom[][4] = {{0, 0, 12, 6}, {0, 6, 12, 6}};
+    // Bottom & Top (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutBottomTop[][4] = {{0, 6, 12, 6}, {0, 0, 12, 6}};
+    // Quarters (macOS Arrange and the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutQuarters[][4] = {{0, 0, 6, 6}, {6, 0, 6, 6}, {0, 6, 6, 6}, {6, 6, 6, 6}};
+    // Left & Quarters (macOS Fill & Arrange, Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutLeftQuarters[][4] = {{0, 0, 6, 12}, {6, 0, 6, 6}, {6, 6, 6, 6}};
+    // Right & Quarters (macOS, with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutRightQuarters[][4] = {{6, 0, 6, 12}, {0, 0, 6, 6}, {0, 6, 6, 6}};
+    // Top & Quarters (macOS Arrange with Option; the 2 + 1 of portrait outputs): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutTopQuarters[][4] = {{0, 0, 12, 6}, {0, 6, 6, 6}, {6, 6, 6, 6}};
+    // Bottom & Quarters (macOS Arrange with Option): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutBottomQuarters[][4] = {{0, 6, 12, 6}, {0, 0, 6, 6}, {6, 0, 6, 6}};
+    // two thirds and one third (Layouts section, owner decision T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutWideLeft[][4] = {{0, 0, 8, 12}, {8, 0, 4, 12}};
+    // three equal columns (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutThirds[][4] = {{0, 0, 4, 12}, {4, 0, 4, 12}, {8, 0, 4, 12}};
+    // a quarter, a half and a quarter (Layouts section of large outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutWideCenter[][4] = {{0, 0, 3, 12}, {3, 0, 6, 12}, {9, 0, 3, 12}};
+    // four equal columns (Layouts section of ultra-wide outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutFourColumns[][4] = {{0, 0, 3, 12}, {3, 0, 3, 12}, {6, 0, 3, 12}, {9, 0, 3, 12}};
+    // three stacked rows (Layouts section of portrait outputs, T1f): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingLayoutStackedThirds[][4] = {{0, 0, 12, 4}, {0, 4, 12, 4}, {0, 8, 12, 4}};
+    // the Layouts section of an output under 1920 logical px wide (owner decision T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassSmall[] = {"left-right", "wide-left", "left-quarters", "quarters"};
+    // the Layouts section of an output 1920 logical px wide or more (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassLarge[] = {"left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center"};
+    // the Layouts section of an output of aspect 21:9 or wider (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassUltraWide[] = {"left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"};
+    // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
+    inline constexpr std::string_view kTilingClassPortrait[] = {"top-bottom", "stacked-thirds", "top-quarters"};
 } // namespace gf::theme::tokens

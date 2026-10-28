@@ -111,6 +111,20 @@ TEST(TagColors, SevenKeysInPaletteOrderMatchedCaseInsensitively)
     EXPECT_EQ(TagLogic::displayName(QStringLiteral("Work")), QStringLiteral("Work"));
 }
 
+TEST(TagColors, TypedNamesResolveToStoredNames)
+{
+    // A colour typed in any case (its shown name: the key without a translator) is that colour tag.
+    for (int i = 0; i < TagLogic::kColorCount; ++i) {
+        EXPECT_EQ(TagLogic::typedTag(kKeys[i].toLower()), kKeys[i]);
+        EXPECT_EQ(TagLogic::typedTag(QStringLiteral("  ") + kKeys[i].toUpper()), kKeys[i]);
+    }
+    // Anything else is a tag of its own, as typed, trimmed.
+    EXPECT_EQ(TagLogic::typedTag(QStringLiteral(" Work ")), QStringLiteral("Work"));
+    EXPECT_EQ(TagLogic::typedTag(QStringLiteral("Grey")), QStringLiteral("Grey"));
+    EXPECT_EQ(TagLogic::typedTag(QStringLiteral("Redder")), QStringLiteral("Redder"));
+    EXPECT_TRUE(TagLogic::typedTag(QStringLiteral("   ")).isEmpty());
+}
+
 TEST(TagColors, AddAndRemoveKeepOtherTags)
 {
     const QStringList tags = {QStringLiteral("Work"), QStringLiteral("red")};

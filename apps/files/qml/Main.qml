@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TabsLogic.js" as TabsLogic
 
 // Grassfield Files: owns the browser windows (Ctrl+N opens another) and feeds the shared appearance.
 // The app quits when its last window closes.
@@ -19,6 +20,20 @@ QtObject {
     property int infoShown: 0
     // The browser window that was active last (operation errors show there).
     property var lastActiveWindow: null
+    // Open browser windows, oldest first (Merge All Windows takes their tabs in this order).
+    property var windows: []
+    // Tabs closed in this session, newest first: snapshots for File > Reopen Closed Tab (TabsLogic.pushClosed).
+    property var closedTabs: []
+    // The drop areas of Files windows that a dragged tab is over (a drop outside all of them makes it a window: TabBar).
+    // A count, not a flag: Qt may enter the next area before it leaves the previous one.
+    property int tabDragAreas: 0
+    property int lastTabId: 0
+    // The tab being dragged (TabBar), null when none. The platform drag runs a nested event loop inside the source tab's
+    // mouse handler, and the drop is delivered inside that loop: moving the tab then would rebuild the source bar's tabs
+    // and, for a window's only tab, close and destroy the window, under the running drag. A drop is therefore only
+    // recorded here, and applied once the drag has ended and its handlers have returned (tabDragFinished).
+    property var draggedTab: null
+    property var pendingTabDrop: null
 
     property list<QtObject> resources: [
         Binding {
@@ -49,6 +64,12 @@ QtObject {
             property: "accentSetting"
             value: root.app.accentColor
         },
+        // Text highlight colour (accent.highlight).
+        Binding {
+            target: Appearance
+            property: "highlightSetting"
+            value: root.app.accentHighlight
+        },
         // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26).
         Binding {
             target: Appearance
@@ -77,10 +98,173 @@ QtObject {
         BrowserWindow {}
     }
 
-    function newWindow(url: url): void {
-        const w = root.windowComponent.createObject(root, {app: root.app, manager: root, startUrl: url});
+    // Tabs are made here, not in their window: a tab outlives the window it was opened in when it moves to another one
+    // (a QML object's functions belong to the context it was created in, which dies with that window).
+    property Component tabComponent: Component {
+        BrowserTab {}
+    }
+
+    // A browser window at `url`, or holding `tab` (a tab of another window) when given. It opens at the size of the
+    // last window resized or closed (ADR-0026 part 1).
+    function newWindow(url: url, tab: var): var {
+        const props = {app: root.app, manager: root, startUrl: url, adoptTab: tab ? tab : null};
+        if (root.app.windowWidth > 0 && root.app.windowHeight > 0) {
+            props.width = Math.max(root.app.windowWidth, Tokens.filesWindowMinWidth);
+            props.height = Math.max(root.app.windowHeight, Tokens.filesWindowMinHeight);
+        }
+        const w = root.windowComponent.createObject(root, props);
         if (!w)
             console.warn("grassfield-files: cannot create a window:", root.windowComponent.errorString());
+        return w;
+    }
+
+    // Tabs a drag spring-loaded into a folder (BrowserTab.springHover): when a drag Files started ends, they stay where
+    // the drop happened or, without a drop, go back (Finder). A drag from another application has no end Files hears of
+    // by itself: the window it leaves or is dropped on reports it (FilesApp.outsideDragEnded).
+    property var springTabs: []
+
+    property Connections outsideDrags: Connections {
+        target: root.app
+        function onOutsideDragEnded(window: var, dropped: bool): void {
+            const tabs = root.springTabs;
+            root.springTabs = tabs.filter(tab => !tab || tab.win !== window);
+            for (let i = 0; i < tabs.length; i++) {
+                if (tabs[i] && tabs[i].win === window && tabs[i].springEnd)
+                    tabs[i].springEnd(dropped);
+            }
+        }
+    }
+
+    function springStarted(tab: var): void {
+        if (root.springTabs.indexOf(tab) < 0)
+            root.springTabs = root.springTabs.concat([tab]);
+    }
+
+    function dragEnded(dropped: bool): void {
+        const tabs = root.springTabs;
+        root.springTabs = [];
+        for (let i = 0; i < tabs.length; i++) {
+            // A tab closed during the drag has no functions left.
+            if (tabs[i] && tabs[i].springEnd)
+                tabs[i].springEnd(dropped);
+        }
+    }
+
+    function nextTabId(): int {
+        root.lastTabId += 1;
+        return root.lastTabId;
+    }
+
+    function registerWindow(win: var): void {
+        if (root.windows.indexOf(win) < 0)
+            root.windows = root.windows.concat([win]);
+    }
+
+    function forgetWindow(win: var): void {
+        root.windows = root.windows.filter(w => w !== win);
+        if (root.lastActiveWindow === win)
+            root.lastActiveWindow = null;
+    }
+
+    function rememberClosedTab(tab: var): void {
+        root.closedTabs = TabsLogic.pushClosed(root.closedTabs, tab.snapshot());
+    }
+
+    // File > Reopen Closed Tab: the newest closed tab comes back in `win` (or a new window when none is open).
+    function reopenClosedTab(win: var): void {
+        if (root.closedTabs.length === 0)
+            return;
+        const snapshot = root.closedTabs[0];
+        root.closedTabs = root.closedTabs.slice(1);
+        if (win)
+            win.newTab(snapshot.url, snapshot);
+        else
+            root.newWindow(snapshot.url, null);
+    }
+
+    function tabById(id: int): var {
+        for (let i = 0; i < root.windows.length; i++) {
+            const tabs = root.windows[i].tabs;
+            for (let j = 0; j < tabs.length; j++) {
+                if (tabs[j].tabId === id)
+                    return tabs[j];
+            }
+        }
+        return null;
+    }
+
+    // Window > Move Tab to New Window, or a tab dragged out of every window: the tab keeps its state (location,
+    // history, view, selection) in a window of its own. A window's only tab stays where it is.
+    function moveTabToNewWindow(tab: var): void {
+        if (!tab || !tab.win || tab.win.tabs.length <= 1)
+            return;
+        tab.win.detach(tab);
+        root.newWindow(tab.url, tab);
+    }
+
+    // A tab bar starts dragging `tab`.
+    function tabDragStarted(tab: var): void {
+        root.draggedTab = tab;
+        root.pendingTabDrop = null;
+    }
+
+    // The drag of the tab bar's tab ended (TabBar's Drag.onDragFinished, after the platform's drag loop returned).
+    // `tornOff`: nothing took it and it ended outside every Files window, so the tab becomes a window (Finder). The move
+    // waits for the event loop (Qt.callLater), when no handler of the drag is on the stack any more.
+    function tabDragFinished(tornOff: bool): void {
+        const tab = root.draggedTab;
+        const drop = root.pendingTabDrop;
+        root.draggedTab = null;
+        root.pendingTabDrop = null;
+        root.tabDragAreas = 0;
+        if (drop)
+            Qt.callLater(() => root.moveDroppedTab(drop.id, drop.target, drop.slot));
+        else if (tornOff && tab)
+            Qt.callLater(() => root.moveTabToNewWindow(tab));
+    }
+
+    // A dragged tab dropped on `target` at `slot` (-1: anywhere but its tab bar, or past the last tab): recorded while the
+    // drag runs (see draggedTab), else moved at once.
+    function dropTab(id: int, target: var, slot: int): void {
+        if (root.draggedTab !== null) {
+            root.pendingTabDrop = {id: id, target: target, slot: slot};
+            return;
+        }
+        root.moveDroppedTab(id, target, slot);
+    }
+
+    function moveDroppedTab(id: int, target: var, slot: int): void {
+        const tab = root.tabById(id);
+        // The target window may have closed since the drop.
+        if (!tab || !target || root.windows.indexOf(target) < 0)
+            return;
+        if (tab.win === target) {
+            if (slot >= 0)
+                target.moveTab(target.tabs.indexOf(tab), Math.min(slot, target.tabs.length - 1));
+            return;
+        }
+        tab.win.detach(tab);
+        target.adopt(tab, slot);
+        target.requestActivate();
+    }
+
+    // Window > Merge All Windows: every other window's tabs join `target`'s, window by window, and those windows close.
+    function mergeAllWindows(target: var): void {
+        const others = root.windows.filter(w => w !== target);
+        for (let i = 0; i < others.length; i++) {
+            const tabs = others[i].tabs.slice();
+            for (let j = 0; j < tabs.length; j++) {
+                others[i].detach(tabs[j]);
+                target.adopt(tabs[j], -1);
+            }
+        }
+    }
+
+    // File > Close All (Option-Cmd-W).
+    function closeAllWindows(): void {
+        const all = root.windows.slice();
+        for (let i = 0; i < all.length; i++)
+            all[i].close();
     }
 
     property Component infoComponent: Component {
@@ -165,8 +349,8 @@ QtObject {
             return;
         }
         if (urls.length === 0)
-            root.newWindow(Qt.url("file://" + root.app.homePath));
+            root.newWindow(root.app.newWindowUrl, null);
         for (let i = 0; i < urls.length; i++)
-            root.newWindow(urls[i]);
+            root.newWindow(urls[i], null);
     }
 }

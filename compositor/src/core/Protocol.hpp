@@ -43,6 +43,13 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaCursorRefresh = "cursor_refresh"; // hl.plugin.grassfield.cursor_refresh(): redraw the pointer at its size
     inline constexpr std::string_view kLuaOverviewFocus = "overview_focus"; // hl.plugin.grassfield.overview_focus(json): focus after the Overview closes
     inline constexpr std::string_view kLuaTile = "tile"; // hl.plugin.grassfield.tile(address, place): Window > Move & Resize (core/Tiling.hpp)
+    inline constexpr std::string_view kLuaArrange = "arrange"; // hl.plugin.grassfield.arrange(json): a layout of several windows (core/Tiling.hpp)
+    // hl.plugin.grassfield.tile_popover(address): the tiling popover with the keyboard (a tile-hover "open" event, tiling.md TL26)
+    inline constexpr std::string_view kLuaTilePopover = "tile_popover";
+    // hl.plugin.grassfield.move_to(address, output): the window onto another output (Move to <display>, tiling.md TL23, TL26)
+    inline constexpr std::string_view kLuaMoveTo = "move_to";
+    // `hyprctl grassfield-tiling`: the tiling state (the `tiling` event is only a change notice, ADR-0036).
+    inline constexpr std::string_view kHyprctlTilingCommand = "grassfield-tiling";
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -95,15 +102,27 @@ namespace gf::gfc {
     // menu bar sends a chosen item's action once the window it belongs to has the keyboard back (an Electron click handler
     // runs for its focused window only; docs/specs/menu-bridge.md MB12). Advertised with appmenu.
     inline constexpr std::string_view kFeatureKeyboardFocus = "keyboard-focus";
+    // ADR-0036 step 1: hl.plugin.grassfield.arrange(json) (a layout of the catalogue filled with several windows), the
+    // `tiling` notice and `hyprctl grassfield-tiling` (the tile records), the thirds as tile() places and
+    // config("titlebarDoubleClick", "fill"). Advertised when the verb, the command and the listeners registered.
+    inline constexpr std::string_view kFeatureTilingArrange = "tiling-arrange";
+    // ADR-0036 step 4a (tiling.md TL27, TL28): arrange takes "with" (a pick of the suggestions joins the group of the window
+    // that asked) and the grassfield-tiling reply carries the pending "suggestion". Advertised together with tiling-arrange
+    // (the same verb, command and listeners).
+    inline constexpr std::string_view kFeatureTilingLayouts = "tiling-layouts";
+    // tile-hover events, hl.plugin.grassfield.tile_popover and hl.plugin.grassfield.move_to (tiling.md TL22-TL26): the tiling
+    // popover. Only together with window-tiling.
+    inline constexpr std::string_view kFeatureTileHover = "tile-hover";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus.
+    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
+    // tiling-arrange with tiling-layouts, and tile-hover (each only together with window-tiling).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,
-                                           bool frameTimes = false, bool keyboardFocus = false);
+                                           bool frameTimes = false, bool keyboardFocus = false, bool tilingArrange = false, bool tileHover = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
     // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).
@@ -120,9 +139,10 @@ namespace gf::gfc {
         Zoom,     // the zoom button's toggle (default)
         Minimize, // the minimize button's path (minimize-request)
         None,     // nothing: the second press is handled like a single press
+        Fill,     // the window fills the work area as a tile (macOS 26/27 "Fill", Window > Fill; feature tiling-arrange)
     };
 
-    // nullopt unless key is kConfigTitlebarDoubleClick and value is exactly "zoom", "minimize" or "none".
+    // nullopt unless key is kConfigTitlebarDoubleClick and value is exactly "zoom", "minimize", "none" or "fill".
     std::optional<DoubleClickAction> parseDoubleClickAction(std::string_view key, std::string_view value);
 
     // JSON string escaping (RFC 8259): quotes, backslash and control characters.

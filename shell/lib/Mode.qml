@@ -30,6 +30,8 @@ Singleton {
     readonly property string stateHome: RunMode.homeOverride(Quickshell.env("GRASSFIELD_STATE_HOME"))
     // GRASSFIELD_APPS_TRACE "1" (always honoured).
     readonly property bool appsTrace: RunMode.appsTrace(Quickshell.env("GRASSFIELD_APPS_TRACE"))
+    // GRASSFIELD_APPS_GTK_USE_PORTAL "1" (always honoured): the apps the shell starts get GTK_USE_PORTAL=1 (ADR-0035 D-8).
+    readonly property bool appsGtkPortal: RunMode.appsGtkPortal(Quickshell.env("GRASSFIELD_APPS_GTK_USE_PORTAL"))
 
     // A dev-plumbing variable GRASSFIELD_<name> (ADR-0019 table): its value in dev, "" otherwise.
     function devValue(name) {

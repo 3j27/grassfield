@@ -89,6 +89,8 @@ Item {
                             id: drop
                             anchors.fill: parent
                             keys: ["text/uri-list"]
+                            // Recents takes no drop (Finder).
+                            onEntered: event => event.accepted = !root.tab.app.isRecents(segment.modelData.url)
                             onDropped: event => {
                                 if (event.hasUrls) {
                                     root.tab.dropUrls(event.urls, segment.modelData.url, null);

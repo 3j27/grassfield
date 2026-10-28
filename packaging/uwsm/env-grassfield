@@ -42,6 +42,41 @@ if [ -r /usr/share/grassfield/fontconfig/fonts.conf ]; then
     export FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf
 fi
 
+# Secret Service (ADR-0035 D-12, owner decision Q17-b): nobody holds org.freedesktop.secrets at login, and KWallet's ksecretd
+# takes it whenever a KWallet client starts before gnome-keyring (Files on an sftp: or smb: location is enough); Chromium's
+# saved passwords and every libsecret client then go to KWallet. The session's kwalletrc turns that off; it is read through
+# this directory, first in XDG_CONFIG_DIRS and below the user's own ~/.config (the user's kwalletrc wins). /etc/xdg stays in
+# the list. Only when the file is readable, and only once.
+if [ -r /usr/share/grassfield/xdg-config/kwalletrc ]; then
+    case ":${XDG_CONFIG_DIRS:-}:" in
+        *:/usr/share/grassfield/xdg-config:*) ;;
+        *) export XDG_CONFIG_DIRS="/usr/share/grassfield/xdg-config:${XDG_CONFIG_DIRS:-/etc/xdg}" ;;
+    esac
+fi
+
+# Portals (ADR-0035 D-4, D-8): the session's portal routing and the Grassfield backends' .portal files are in
+# /usr/share/grassfield/xdg/xdg-desktop-portal, read by xdg-desktop-portal through XDG_DATA_DIRS: first, so that the session's
+# hyprland-portals.conf is found before the stock one, which still answers every interface the session's file does not list.
+# GTK_USE_PORTAL=1 then makes GTK 3 apps read their theme, colour scheme and animations from the portal (the Grassfield
+# Settings backend, live) and use the portal's file chooser and print dialog; GDK_DEBUG=portals does the same for GTK 4 apps
+# outside a sandbox, which otherwise read the user's dconf (libadwaita reads the portal without it). Only when the routing
+# file is readable, and the directory only once; XDG_DATA_DIRS keeps its value, or the default /usr/local/share:/usr/share,
+# and GDK_DEBUG keeps the flags it has.
+if [ -r /usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf ]; then
+    case ":${XDG_DATA_DIRS:-}:" in
+        *:/usr/share/grassfield/xdg:*) ;;
+        *) export XDG_DATA_DIRS="/usr/share/grassfield/xdg:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
+    esac
+    export GTK_USE_PORTAL=1
+    # The shell's unit clears GTK_USE_PORTAL for the shell itself (gate P5); the shell gives it back to the apps it starts
+    # from this one (shell/services/Apps.qml launchEnvironment).
+    export GRASSFIELD_APPS_GTK_USE_PORTAL=1
+    case ",${GDK_DEBUG:-}," in
+        *,portals,*) ;;
+        *) export GDK_DEBUG="${GDK_DEBUG:+$GDK_DEBUG,}portals" ;;
+    esac
+fi
+
 # Text antialiasing of QtQuick (the shell and every Qt Quick app): distance-field text, the default renderer, picks its mode in
 # QSGDefaultContext (qtdeclarative 6.11, qsgdefaultcontext.cpp) as HighQualitySubPixelAntialiasing and never reads fontconfig
 # or the GTK setting, which gave orange/blue fringes (visual audit 2026-10-25, section 2). QSG_DISTANCEFIELD_ANTIALIASING=gray

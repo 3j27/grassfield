@@ -48,6 +48,7 @@ check "prepare dies on SIGTERM (143)" test "$rc" = 143
 check "prepare dies promptly (under 1 s)" test "$ms" -lt 1000
 check "no prepared picture was written" test -z "$(ls "$tmp/cache/wallpapers/prepared"/*.jpg 2>/dev/null)"
 
+# (GRASSFIELD_SESSION is unset: run from a packaged session the --base-url door is closed, apps/runmode.h.)
 # fetch against a loopback server that never answers: curl is running when the signal comes. The helper dies at once and curl
 # dies with it (parent-death signal), not after its 60 s --max-time.
 python3 -I "$root/tests/unit/wallpaper-tool/fixtures/slow_server.py" "$tmp/port" >/dev/null 2>&1 </dev/null &
@@ -55,7 +56,7 @@ slow=$!
 trap 'kill "$slow" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 for _ in $(seq 1 50); do [[ -s $tmp/port ]] && break; sleep 0.1; done
 port=$(<"$tmp/port")
-out=$(term_after 1 env GRASSFIELD_DEV=1 "$helper" fetch commons --date 2026-10-20 --out "$tmp/cache/wallpapers/online/commons" --base-url "http://127.0.0.1:$port")
+out=$(term_after 1 env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 "$helper" fetch commons --date 2026-10-20 --out "$tmp/cache/wallpapers/online/commons" --base-url "http://127.0.0.1:$port")
 read -r rc ms <<<"$out"
 echo "fetch: exit $rc after $ms ms (server on port $port)"
 check "fetch dies on SIGTERM (143) while curl waits for the server" test "$rc" = 143

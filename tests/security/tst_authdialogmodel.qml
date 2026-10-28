@@ -165,6 +165,66 @@ TestCase {
         compare(model.identityName, "root eve");
     }
 
+    // Grassfield Store's action (ADR-0037 b.1, SD2): the message polkit expands with the helper's argument vector is read by a
+    // strict pattern, for this action id only, into "Install …" or "Remove …" and the program's path; anything else is shown
+    // as polkit gives it.
+    function test_storeRequestInPlainWords() {
+        const helper = "/usr/lib/grassfield/grassfield-store-helper";
+        const op = "0123456789abcdef0123456789abcdef";
+        const en = "Authentication is required to install or remove apps: ";
+        const fr = "Une authentification est n\u00e9cessaire pour installer ou supprimer des apps : ";
+        flow.actionId = "org.grassfield.store.manage-packages";
+        flow.message = en + helper + " install " + op + " xterm gimp";
+        compare(model.storeRequest.verb, "install");
+        compare(model.storeRequest.packages, ["xterm", "gimp"]);
+        compare(model.message, "Install xterm, gimp");
+        compare(model.program, helper);
+        compare(model.actionId, "org.grassfield.store.manage-packages");
+
+        flow.message = fr + helper + " remove " + op + " lib32-foo@1.2_x+y";
+        compare(model.storeRequest.verb, "remove");
+        compare(model.message, "Remove lib32-foo@1.2_x+y");
+
+        const names = [];
+        for (let i = 0; i < 64; i++)
+            names.push("app" + i);
+        flow.message = en + helper + " install " + op + " " + names.join(" ");
+        compare(model.storeRequest.packages.length, 64);
+        verify(model.message.length > model.maxMessageLength, "the names are not cut to the generic cap");
+
+        // Not read: shown as polkit gives it, one capped line, and no program line.
+        const refused = [
+            en + helper + " install " + op + " " + names.concat(["app64"]).join(" "), // 65 names
+            en + helper + " install " + op, // no name
+            en + helper + " upgrade " + op + " xterm",
+            en + helper + " install " + op.toUpperCase() + " xterm",
+            en + helper + " install " + op + "0 xterm",
+            en + helper + " install " + op + " xterm\nAction: org.example.fake",
+            en + helper + " install " + op + " xterm ",
+            en + helper + " install " + op + " -xterm",
+            en + helper + " install " + op + " Xterm",
+            en + "/usr/lib/grassfield/grassfield-store-helper2 install " + op + " xterm",
+            en + "/tmp/grassfield-store-helper install " + op + " xterm",
+            "Authentication is required: " + helper + " install " + op + " xterm",
+            "x" + en + helper + " install " + op + " xterm",
+            en + helper + " install " + op + " xterm\u202e",
+            en + " " + helper + " install " + op + " xterm"
+        ];
+        for (const message of refused) {
+            flow.message = message;
+            compare(model.storeRequest, null, message);
+            compare(model.program, "", message);
+            compare(model.message, model.plainLine(message, model.maxMessageLength), message);
+        }
+
+        // Another action with the same message: not read.
+        flow.actionId = "org.freedesktop.policykit.exec";
+        flow.message = en + helper + " install " + op + " xterm";
+        compare(model.storeRequest, null);
+        compare(model.program, "");
+        verify(model.message.indexOf(helper) !== -1);
+    }
+
     // Review of 1d2c856: a held request takes the keyboard only through a click, and only heldGuardMs after it appeared.
     // Review of 6e24d36: both delays are timed by Timers (monotonic), not by the wall clock. The QML engine ignores writes
     // to Date.now, so a clock step cannot be faked here: tests/security/lock_surfaces.sh checks that the holds never read
@@ -181,12 +241,21 @@ TestCase {
         verify(Date.now() - start >= 450, "not before about heldGuardMs (Qt coarse timers: 5%)");
         model.noteShown();
         verify(!model.heldClickAccepted(), "shown again: the guard starts over");
-        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), true);
+        const notice = model.heldNotice(new Date(2026, 9, 24, 14, 5).getTime(), "locked");
         verify(notice.indexOf("while the screen was locked") !== -1, notice);
         verify(notice.indexOf(Qt.formatTime(new Date(2026, 9, 24, 14, 5), Qt.locale().timeFormat(Locale.ShortFormat))) !== -1, notice);
-        verify(model.heldNotice(Date.now(), false).indexOf("just as the screen was unlocked") !== -1);
+        verify(model.heldNotice(Date.now(), "unlock").indexOf("just as the screen was unlocked") !== -1);
+        // ADR-0032: held while the screen saver showed.
+        verify(model.heldNotice(Date.now(), "saver").indexOf("while the screen saver was on") !== -1);
+        // Review of f513b3b: a queued request that follows another in the same sheet is held too.
+        verify(model.heldNotice(Date.now(), "queued").indexOf("right after another one") !== -1);
         // AuthAgent passes the arrival time as a Date (display only; shell/security reads no Date.now).
-        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), true), notice);
+        compare(model.heldNotice(new Date(2026, 9, 24, 14, 5), "locked"), notice);
+        // The screen saver ended over a held sheet: the guard starts over, so the click that woke the screen never counts.
+        tryVerify(() => model.heldClickAccepted(), 3000, "the guard ended");
+        model.noteUncovered();
+        verify(!model.heldClickAccepted(), "uncovered: the guard starts over");
+        tryVerify(() => model.heldClickAccepted(), 3000, "and ends again");
     }
 
     // Review of d8e654c: a request arriving within heldAfterUnlockMs after an unlock is held like one that arrived while locked.
@@ -205,6 +274,22 @@ TestCase {
         verify(model.arrivesHeld(true), "locked again: held");
     }
 
+    // Re-check of b5d7657 (MEDIUM-1): a request that arrives right after the previous one ended (`pkexec a; pkexec b`) is held
+    // like one after an unlock, for heldAfterUnlockMs, timed by a Timer.
+    function test_heldJustAfterAnotherRequest() {
+        tryVerify(() => !model.arrivesHeld(false), 4000, "no hold left from an earlier test");
+        verify(!model.followsAnother());
+        const start = Date.now();
+        model.noteEnded();
+        verify(model.arrivesHeld(false), "the instant the previous one ended");
+        verify(model.followsAnother());
+        wait(500);
+        verify(model.arrivesHeld(false), "half a second later");
+        tryVerify(() => !model.arrivesHeld(false), 4000, "the hold ends");
+        verify(!model.followsAnother());
+        verify(Date.now() - start >= 900, "not before about heldAfterUnlockMs (Qt coarse timers: 5%)");
+    }
+
     function test_newFlowResetsState() {
         flow.isResponseRequired = true;
         model.submit("pw");
@@ -212,5 +297,36 @@ TestCase {
         model.flow = other;
         verify(!model.submitted);
         compare(model.feedback, "");
+        verify(!model.answered);
+    }
+
+    // Security counter-review of f9e24e1 (LOW-1): `answered` says the user sent or cancelled since polkit last asked. It
+    // stays set when the request ends (the agent reads it then), and a refused submit (not asked, empty) is no answer.
+    function test_answeredUntilAskedAgain() {
+        verify(!model.answered);
+        verify(!model.submit("pw"));
+        verify(!model.answered, "a submit polkit did not ask for is no answer");
+        flow.isResponseRequired = true;
+        verify(!model.submit(""));
+        verify(!model.answered, "nor an empty one");
+        verify(model.submit("pw"));
+        verify(model.answered);
+        flow.isResponseRequired = false;
+        verify(model.answered);
+        flow.authenticationFailed();
+        verify(!model.answered, "a failure asks again");
+        flow.isResponseRequired = true;
+        verify(model.submit("pw2"));
+        verify(model.answered);
+        flow.isResponseRequired = false;
+        verify(model.answered);
+        flow.isResponseRequired = true;
+        verify(!model.answered, "a new prompt asks again");
+        model.cancel();
+        verify(model.answered);
+        model.flow = null;
+        verify(model.answered, "kept when the request ends");
+        model.flow = createTemporaryObject(flowComponent, test);
+        verify(!model.answered, "cleared for the next request");
     }
 }

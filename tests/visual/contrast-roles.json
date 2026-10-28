@@ -94,13 +94,17 @@
     {"file": "shell/osd/OsdWindow.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/overlay/StackPopup.qml", "class": "opacity-dynamic", "count": 5},
     {"file": "shell/overview/OverviewWindow.qml", "class": "opacity-dynamic", "count": 3},
+    {"file": "shell/saver/Saver.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 7},
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1}
   ]},
-  {"id": "lock text on the scrim (date, clock, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
-   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 5},
+  {"id": "lock text on the scrim (date, clock, the user's message, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 6},
    {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 2},
    {"file": "shell/security/lock/Lock.qml", "class": "backdrop", "count": 1}
+  ]},
+  {"id": "screen saver date and time over the dimmed wallpaper (ADR-0032: saver.wallpaperDimOpacity is lock.dimOpacity; the clock alone is the same text at saver.clockOnlyOpacity on black, far above 4.5:1)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
+   {"file": "shell/saver/SaverView.qml", "class": "opacity-dynamic", "count": 2}
   ]},
   {"id": "lock avatar initials on the disc", "fg": "darkColors.text", "backdrop": "lock-avatar", "kind": "large", "sites": [
    {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 1},
@@ -145,6 +149,9 @@
     {"file": "ui/Grassfield/Ui/SpinBox.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "ui/Grassfield/Ui/TextField.qml", "class": "opacity-dynamic", "count": 1}
   ]},
+  {"id": "inline pop-up disc (text colour at the disc opacity)", "fg": "colors.text", "opacity": ["settings.popupIndicatorOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the background of the pop-up's two-chevron glyph, which is drawn in the full text colour; the control is named by its value text (docs/specs/settings.md, macOS 27 pop-up in a row)", "sites": [{"file": "ui/Grassfield/Ui/ComboBox.qml", "class": "alpha", "count": 1}]},
+  {"id": "stepped slider stops (text colour at the stop opacity)", "fg": "colors.text", "opacity": ["control.sliderStopOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration under a stepped slider's track, as macOS 27 draws it (183 on 247): the knob's position and the slider's accessible value give the stop; its contrast is listed, not asserted", "sites": [{"file": "ui/Grassfield/Ui/Slider.qml", "class": "alpha", "count": 1}]},
+  {"id": "segmented control hairline (text colour at the divider opacity)", "fg": "colors.text", "opacity": ["control.segmentDividerOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration between two unselected tabs, as macOS 27 draws it (181 on 236): each tab's label and the control's accessible value tell them apart; its contrast is listed, not asserted", "sites": [{"file": "ui/Grassfield/Ui/SegmentedControl.qml", "class": "alpha", "count": 1}]},
   {"id": "scroll bar thumb (text colour at the thumb opacity)", "fg": "colors.text", "opacity": ["control.scrollbarThumbOpacity"], "backdrop": "material", "kind": "icon", "exempt": "overlay scroll bar thumb: a redundant, transient position indicator (the view also scrolls by wheel, keys and touch); its contrast is listed, not asserted", "sites": [
     {"file": "ui/Grassfield/Ui/ScrollBar.qml", "class": "alpha", "count": 1}
   ]}

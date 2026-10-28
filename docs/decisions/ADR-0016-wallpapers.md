@@ -358,7 +358,7 @@ Option A2 (helper process), V1b for video, C1 for the lock and D1 for the menu b
   - the desktop context menu gets "Change Wallpaper…" (opens this pane);
   - Files and Preview get "Set as Wallpaper" in a later slice.
 - **Keyboard and accessibility.**
-  - Each grid is one focus stop: arrows move, Home/End, Return/Space apply (the `IconModePicker` pattern).
+  - Each grid is one focus stop: arrows move, Home/End, Return/Space apply (the `IconModePicker` pattern, now `ChoicePicker`).
   - Tiles are `Accessible` radio buttons named after the picture.
   - All text is `qsTr`, en and fr. Untrusted names are `Text.PlainText`.
 - **Escape / Reset.**

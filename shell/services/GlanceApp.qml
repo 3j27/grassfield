@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import qs.lib
 import Quickshell.Io
-import qs.platform
 
 // Glance (`grassfield-preview --glance <files>`) for the surfaces of the shell. Lives in a singleton so the
 // process outlives the surface that asked for it, and so Space can toggle it: a layer surface keeps the
@@ -72,8 +71,8 @@ Singleton {
             // In a real session Glance gets a scope of its own (Apps.scoped). uwsm-app execs systemd-run --scope, so the
             // process the shell holds is the application: close() still signals it.
             launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; shift; exec \"$@\"", "sh", cmd[0]].concat(Apps.scoped(cmd.concat(["--glance", "--"], files)));
-            // The pointer size and colour theme the user chose (Pointer.launchEnvironment), like every app the shell starts.
-            launcher.environment = Pointer.launchEnvironment();
+            // The pointer size and colour theme the user chose, and GTK_USE_PORTAL, like every app the shell starts.
+            launcher.environment = Apps.ownAppEnvironment();
             root.starting = false;
             launcher.running = true;
         });

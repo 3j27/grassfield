@@ -1861,6 +1861,25 @@ namespace gf::stager {
         return S().ready;
     }
 
+    std::optional<double> stripColumnRight(const PHLMONITOR& monitor) {
+        const auto& s = S();
+        if (!s.ready || !s.on || !monitor)
+            return std::nullopt;
+        for (const auto& strip : s.strips) {
+            if (strip.mon.lock() != monitor || strip.tiles.empty())
+                continue;
+            double right = strip.tiles.front().x + strip.tiles.front().w;
+            for (const auto& t : strip.tiles)
+                right = std::max(right, t.x + t.w);
+            return right + st::kStripDropMargin;
+        }
+        return std::nullopt;
+    }
+
+    bool inStripStage(const PHLWINDOW& w) {
+        return S().ready && inStrip(w);
+    }
+
     void beforePointerButton(bool pressed) {
         if (pressed)
             recordPress(true); // which CLICK focus Hyprland reports next is this press (R13 counter-review #4 of 0.6.3-stages)

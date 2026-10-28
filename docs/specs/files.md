@@ -1,6 +1,6 @@
 # Files spec · apps-engineer · M4
 
-## macOS reference behavior (described in words — no reference images in design/reference yet)
+## macOS reference behavior (described in words; macOS 27 captures and the parity matrix: "Finder parity matrix" below)
 - The file manager is one opaque window: a sidebar on the left (Favorites with the standard user folders,
   Locations with volumes and the network, Tags), a unified toolbar (back/forward, folder title, view switcher for
   icons/list/columns/gallery, action menu, search field), the folder contents, and optional path and status bars
@@ -20,7 +20,8 @@
 - Colour tags: the item menu ends with a row of seven colour dots; clicking one tags the selection (or removes the tag
   when every item has it). Tagged items show small coloured dots next to their names in every view; the sidebar's
   Tags section lists the tags in use, and clicking one shows the tagged items.
-- Tabs appear only from the second tab (Cmd+T). Get Info opens a small separate window per item. Space opens
+- Tabs appear from the second tab (Cmd+T), or always with View > Show Tab Bar (Shift+Cmd+T); a tab drags to reorder,
+  onto another window or out to become a window (section "Tabs and windows"). Get Info opens a small separate window per item. Space opens
   Glance. Type-to-select jumps to the first matching name. Drag and drop moves on the same volume and copies
   across volumes.
 
@@ -29,8 +30,9 @@ Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature i
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
 are KIO/Solid's, never reimplemented. Non-goals for v1: an indexed search (the shell Search covers files; the tag
 search walks one folder tree, F16), named tags created in Files (only the colour tags are set here; tags of other
-applications are shown, kept and searchable), Recents, sharing, Group By, a built-in viewer (Space
-starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
+applications are shown, kept and searchable), sharing, a built-in viewer (Space
+starts Glance of `grassfield-preview`, see `docs/specs/preview.md`). Recents and Group By arrived with PR 2 ("Views and
+selection").
 
 ## Functional requirements
 1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's conflict/Open With/undo dialogs are widgets),
@@ -38,15 +40,20 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    (default: home). QML from `GRASSFIELD_FILES_QML` or the baked-in directory (installed
    `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`.
 2. F2 Listing: `FolderModel` = KIO `KDirModel` (+`KDirLister`) behind a `QSortFilterProxyModel` with flat QML roles
-   (name, url, iconName, isDir, size(Text), modified(Text), kind, thumbnail, selected, hidden, canPreview, emblem).
-   Sort by name (natural, case-insensitive), kind, date or size; Keep Folders on Top; ascending/descending (name and
-   kind default ascending, date and size descending); show hidden files; name filter (search field).
-3. F3 Selection: click, Shift (range), Ctrl (toggle), Ctrl+A, rubber band (icon view), keyboard arrows, Home/End,
+   (name, url, iconName, isDir, size(Text), modified(Text), kind, thumbnail, largeThumbnail, selected, hidden, canPreview,
+   emblem, tags, tagColors, folderColor, folderGlyph, group).
+   Sort By the eight keys of "Views and selection" (Name natural and case-insensitive, Kind, Application, Date Last Opened,
+   Date Modified, Date Created, Size, Tags) and Group By; Keep Folders on Top; ascending/descending (the dates and Size
+   default descending, the others ascending: `FileLogic::defaultDescending`); show hidden files; name filter (search field).
+3. F3 Selection: click, Shift (range), Ctrl (toggle), Ctrl+A, rubber band (icon, list and column views), keyboard arrows, Home/End,
    PageUp/PageDown, type-to-select (1 s reset). The selection is keyed by URL and survives re-sorting.
 4. F4 Views: Icon (thumbnails), List (sortable headers), Columns (miller columns + preview column), Gallery (F15);
-   Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher; the view, sort,
-   hidden-files and gallery info panel choices persist (QSettings `Grassfield/Files`; view settings are global, there
-   is no per-folder view memory). Tag search results (F16) in the column mode show as a list.
+   Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher. The view and the
+   sort chosen in a folder are that folder's (decision F-3, `files-views.json`): a folder opens in its own view, a folder
+   without one in the view the tab already shows (a new tab: the default `view/mode`), and column view sticks while
+   browsing; its own sort key and order, else the default `view/sortKey`/`view/sortDescending`. Keep Folders on Top,
+   Show Hidden Files and the preview pane of each view stay global (QSettings `Grassfield/Files`); each folder keeps its
+   view, sort and grouping (F-3). Tag search results (F16) in the column mode show as a list.
 5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists; Tags
    (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
@@ -71,14 +78,17 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    Sort By) open to the left of the menu, or move up, when they would leave the window (`PopupMenu.bounds`).
 9. F9 Get Info window: icon/thumbnail, name, kind, size (folders: `KIO::directorySize`), where, created, modified,
    opened, link target, owner, group, permissions, access (read only).
-10. F10 Window: tabs (Ctrl+T, Ctrl+W, Ctrl+Tab, middle click), new window (Ctrl+N), back/forward (Ctrl+[ / ],
-    Alt+Left/Right), enclosing folder (Ctrl+Up), open (Return, Ctrl+Down), Go to Folder (Ctrl+Shift+G / Ctrl+L:
+10. F10 Window: tabs (section "Tabs and windows": Ctrl+T, Ctrl+W, Ctrl+Shift+W, Ctrl+Alt+W, Ctrl+Tab, Ctrl+Shift+[ ],
+    Ctrl+Shift+T, Ctrl+Alt+Shift+T, middle click, drag), new window (Ctrl+N), back/forward (Ctrl+[ / ],
+    Alt+Left/Right), enclosing folder (Ctrl+Up), open (Ctrl+O, Ctrl+Down), rename (Return, F2), Go to Folder (Ctrl+Shift+G / Ctrl+L:
     `~`, paths, `trash:/`), Home (Ctrl+Shift+H), reload (Ctrl+R/F5), hidden files (Ctrl+H), search (Ctrl+F),
     context menu (Menu, Shift+F10). Path bar (clickable, drop targets) and status bar ("N items, X available",
-    "K of N selected", job progress).
+    "K of N selected", job progress), both hidden by default (View > Show Path Bar, Show Status Bar; "Views and
+    selection").
 11. F11 Drag and drop: items drag out as `text/uri-list` (Drag.Automatic, works with other apps); drops on the
-    background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Ctrl/Alt forces
-    a copy.
+    background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Option (Alt) copies,
+    Cmd (Ctrl) moves, Cmd+Option makes a symbolic link (`FileLogic::dropAction`, "Views and selection" Drop modifiers);
+    Recents refuses every drop (no target, the drag shows it); spring-loaded folders open under a resting drag.
 12. F12 Glance: Space and the menu item "Glance at “name”" call `FilesApp.glance(urls)`, which starts
     `grassfield-preview --glance -- <paths>` detached for the local regular files of the selection (folders and remote
     items are skipped, at most 50 files). The Glance window takes the focus; Space or Esc there closes it. Blocked by
@@ -93,15 +103,16 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     New Folder, New Tab, Open, Open With for the selection, Close Tab/Window, Get Info, Rename, Duplicate, Glance,
     Tags (the seven colours, checked when every selected item has one), Move to Trash or Put Back, Delete Immediately…
     and Empty Trash… in the Trash, Find), Edit (Undo, Redo, Cut, Copy, Paste, Select All), View (as
-    Icons/List/Columns/Gallery, Show Info Panel, Sort By, Show Hidden Files, Show Previous/Next Tab, Reload), Go (Back,
-    Forward, Enclosing Folder, the sidebar places without the tags, Go to Folder…). The app menu and Window are the shell's
+    Icons/List/Columns/Gallery, Use Groups, Group By, Sort By, Show/Hide Sidebar, Show/Hide Preview, Show Path Bar, Show
+    Status Bar, Show Hidden Files, Show Previous/Next Tab, Reload), Go (Back, Forward, Enclosing Folder, Recents, the
+    sidebar places without the tags, Go to Folder…). The app menu and Window are the shell's
     T0 menus. Items run the same BrowserTab actions as the window and show the window's shortcuts; a key registered
     by both a menu item and an in-window Shortcut runs once (the Shortcut also acts on `activatedAmbiguously`). An
     operation error shows in the window that was active last (a global menu action runs while the shell's menu holds
     the keyboard).
 15. F15 Gallery view (`qml/GalleryView.qml`): a large preview of the current item above a horizontal strip of
-    thumbnails, and an info panel on the right (name, kind and size, colour dots, Created, Modified, Last opened,
-    Where, Tags) shown or hidden with View > Show Info Panel (Ctrl+Shift+P, `view/galleryInfo`, on by default). The
+    thumbnails, and the preview pane on the right ("Preview pane") shown or hidden with View > Show Preview
+    (Ctrl+Shift+P, `view/galleryInfo`, on by default). The
     preview is a KIO thumbnail at `files.galleryPreviewSize` x `files.thumbnailOversample` px (at most the 1024 px
     xx-large cache size) from the same pipeline as the icon thumbnails: FolderModel runs two channels (icon size, role
     `thumbnail`; gallery size, role `largeThumbnail`), each with its LIFO request queue, 32-item PreviewJobs and an LRU
@@ -109,7 +120,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     neighbours kept around the current page are ready before the arrows reach them; until then the icon-size
     thumbnail, then the type icon, is shown (never enlarged past its pixels). The first item is selected once the
     folder is listed. Keyboard: Left/Right move along the strip, Home/End, PageUp/PageDown by the visible thumbnails
-    (`Nav.stripMove`), Space opens Glance, Return opens, Ctrl+Up/Down as everywhere. In the strip a click selects (Shift
+    (`Nav.stripMove`), Space opens Glance, Return renames, Ctrl+O and Ctrl+Down open, Ctrl+Up as everywhere. In the strip a click selects (Shift
     extends, Ctrl toggles), a double click opens, items drag out and folders accept drops; a right click opens the item
     menu, on the empty area the folder menu. The name under the preview is also the inline rename field (F2).
 16. F16 Tags (`src/taglogic.*`, `src/tagstore.*`, `src/tagsearch.*`):
@@ -140,7 +151,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
       names the tags with the reason in brackets (the tooltip carries the reason). Files' own writes refresh every window at once.
     - Showing: coloured dots (at most `files.tagDotsMax`, overlapping) before the name in the icon view, after it in the
       list view, before the chevron in the column view and in its preview column, on the gallery strip thumbnails and
-      in the gallery info panel (roles `tags`, `tagColors`; one attribute read per shown item, cached).
+      in the preview pane (roles `tags`, `tagColors`; one attribute read per shown item, cached).
     - Sidebar Tags section: the tags in use, colour tags first (a hollow ring for a tag without a colour). "In use"
       means seen on an item Files has shown, or set in Files; the list is kept across sessions (QSettings
       `tags/known`, at most 64). Remove from Sidebar (right click) hides the tag for good, as in the macOS Finder: the
@@ -166,9 +177,17 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
-| F2 sort keys, sizes, dates, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 18 tests, run by `scripts/dev/test.sh`) | L0 |
-| F3/F10 keyboard moves, history, type-to-select, header sort, rubber band, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row | `tests/unit/tst_filesnav.qml` (15 cases) | L0 |
-| F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, info panel preference | `tests/unit/tst_filesgallery.qml` (5 cases) | L0 |
+| F2 sort keys (the eight of Sort By, missing values last), sizes, dates, groups (dates newest first, kind, name, size, tags, application), drop modifiers, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 27 tests, run by `scripts/dev/test.sh`) | L0 |
+| F3/F10 keyboard moves (also grouped), history, type-to-select, header sort, rubber band (also grouped: list spans, icon cells with sideways scroll), grouped icon layout, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row; a drag keeps its view (`Nav.shownView`) | `tests/unit/tst_filesnav.qml` (20 cases) | L0 |
+| F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, preview pane preference, the pane's Tags field; Recents refuses a drag, a strip drag is bracketed by the tab's dragStarted/dragFinished | `tests/unit/tst_filesgallery.qml` (8 cases) | L0 |
+| Grouped icon view on a stand-in listing: a view made before its size makes the cells it shows, only the sections near the view are made (600 groups), Show All and reveal | `tests/unit/tst_filesgrouped.qml` (3 cases) | L0 |
+| Sidebar: Eject target and menu; Recents takes no drop and does not spring | `tests/unit/tst_filessidebar.qml` (5 cases) | L0 |
+| Preview pane quick actions: EXIF orientation table, kinds, minimal EXIF segment, little-endian tags, broken files, tags and mode kept, inode kept in place, PNG turned pixel by pixel; links, other kinds, animated PNGs and hard-linked files refused; the content decides (a JPEG named .png turns by its tag, a PNG named .bmp stays a PNG, a GIF, TIFF or WebP named .png is left byte for byte); a file over 128 MiB refused unread | `tests/unit/files/tst_imagerotate.cpp` (gtest, 13 tests) | L0 |
+| Preview pane Dimensions: a FIFO and a link to /dev/zero named .png refused without being opened, a 4 GiB file read up to the budget, a header that never ends (a PBM comment running through 4 GiB) stopped by the budget, a link swapped in after the check never followed (for the file or a folder above it; at the end of the path only where openat2 answers ENOSYS or EPERM), network and FUSE mounts never looked at (links into them included), sizes by content and EXIF orientation, the reader never blocks its caller and calls nobody after its owner | `tests/unit/files/tst_imagesize.cpp` (gtest, 10 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Key window: Get Info (opened with Ctrl+I) and Customize Folder take the keys; Ctrl+W (Escape in Get Info) closes them alone and the browser window stays with its tab, with and without the global menu; none of the browser's Shortcuts or keyed global menu items is live meanwhile, all are again after; with Get Info or Customize Folder open and the browser the key window, Ctrl+T, Ctrl+W (every press) and Escape act on the browser only. A drag keeps its view on a real tab until its handlers have returned | `tests/unit/tst_filesbrowser.qml` (9 cases: the real windows offscreen over a stand-in FilesApp) | L0 |
+| Recents: the xbel parse (local files, newest first, once), broken documents, location and file, the loader (existing regular files only), renames followed; only a regular list is read, bounded and whole (a link to /dev/zero, a FIFO, a folder, over 32 MiB refused), the loader ends on them | `tests/unit/files/tst_recents.cpp` (gtest, 8 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Per-folder views (F-3) with grouping and the new sort keys; hostile files and lock paths | `tests/unit/files/tst_folderviews.cpp` (gtest, 23 tests) | L0 |
+| Global menu: bar items (Path Bar, Status Bar, Sidebar, Preview), Group By follows the tab | `tests/unit/tst_filesglobalmenu.qml` (6 cases) | L0 |
 | F16 tag parse/serialize, colour keys, selection states, search locations; byte-for-byte edits (`applyTag`, the reviewer's foreign value), sidebar hiding, `user.xdg.tags` write/read/remove, raw round trip, foreign tags, long values, links, FIFOs, read-only files, the probe cache, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest) | L0 |
 | F16 a superseded search's queued batches and done never arrive (switch, stop); done once | `tests/unit/files/tst_tagsearch.cpp` (gtest, 3 tests) | L0 |
 | F16 tag dots and swatch marks reach 3:1 (fill or darker edge) on the window colour | `tests/visual/test_contrast_tokens.py` | L0 |
@@ -186,14 +205,33 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 ## Interfaces / contracts
 - `grassfield.json` version 1 (read only): `appearance`, `accessibility.reduceMotion`; location like the shell
   (`GRASSFIELD_CONFIG_HOME` → `$XDG_CONFIG_HOME/grassfield` → `~/.config/grassfield`).
-- QSettings `~/.config/Grassfield/Files.conf`: `view/mode` (icons|list|columns|gallery, anything else reads as icons),
-  `view/sortKey` (0 name, 1 kind, 2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`,
-  `view/galleryInfo` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64),
+- `files-views.json` in the Grassfield state directory (`GRASSFIELD_STATE_HOME`, else `$XDG_STATE_HOME/grassfield`), 0600,
+  written atomically: `{"version":1,"folders":[{"url":…,"mode":…,"sortKey":0-7,"descending":bool,"groupBy":0-8}, …]}`
+  (`FileLogic::SortKey` and `FileLogic::GroupBy`; an out-of-range value reads as unset), the folders in the
+  order they were last set (at most 2000; the first goes when full); a missing version reads as 1. It is read like
+  `grassfield.json` by the shell's store: never opened unless the path leads to a regular file (a FIFO, a device, a
+  directory is refused without blocking), at most 2 MiB + 1 bytes read and used only when the read returned the file's
+  whole size; a change is noticed by device, inode, size, mode and modification time. A file it cannot use (not a
+  regular file, over 2 MiB, unreadable, malformed, a newer version) is left exactly as it is; the views chosen meanwhile
+  hold in the running Files and are written with the next choice once the file is usable again. Writes take
+  `files-views.json.lock` without waiting: when another Files process holds it, the write stays pending and is tried
+  again on a timer (50 ms doubling up to 5 s; a lock left by a dead process is taken over at once), and at exit Files
+  waits at most 0.5 s for it (`folderviews.h`). A lock path that is not a regular file (a directory, a FIFO, a link) is
+  not another Files writing: the write is refused at once without opening it, never retried by the timer, and the reason
+  is logged once until a write succeeds; the choice stays pending for the next one.
+- QSettings `~/.config/Grassfield/Files.conf`: `view/tabBar` (Show Tab Bar), `window/width` and `window/height` (the
+  last browser window's normal size, 200-16384, ADR-0026 part 1), `view/mode` (the default view: icons|list|columns|gallery, anything else reads as icons),
+  `view/sortKey` (0 name, 1 kind, 2 date modified, 3 size, 4 date created, 5 date last opened, 6 tags, 7 application),
+  `view/sortDescending`, `view/foldersFirst`, `view/showHidden`, `view/galleryInfo` (default true), `view/preview` (the
+  preview pane beside the icon and list views, default false), `view/columnPreview` (default true), `view/pathBar` and
+  `view/statusBar` (default false), `view/sidebar` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64),
   `tags/hidden` (tags removed from the sidebar, at most 256).
 - Extended attribute `user.xdg.tags` (F16): UTF-8 tag names separated by commas, no escaping (a comma inside a tag
   becomes a space when Files writes it); colour tags under the keys Red, Orange, Yellow, Green, Blue, Purple, Gray.
 - Tag search location `grassfield-tag:/<tag>?in=<percent-encoded folder URL>` (Files-internal: history, tabs, the
   path bar and Go to Folder; never passed to KIO).
+- Recents location `grassfield-recents:/` (Files-internal, like a tag search); it reads `$XDG_DATA_HOME/recently-used.xbel`
+  (`~/.local/share` without it) and never writes it (decision F-5; KIO's open jobs add the files Files opens).
 - Desktop entry `org.grassfield.Files.desktop`: `Exec=grassfield-files %U`, `Icon=org.grassfield.Files` (own icon, branding/icons/apps, hicolor),
   `MimeType=inode/directory;`.
 - Environment: `GRASSFIELD_FILES_QML` (dev QML dir), `GRASSFIELD_FILES_NO_LAUNCH=1` (scripted tests: opening
@@ -240,13 +278,20 @@ installed (not built here).
   known, and rows a view displays refine their type from content once (never the whole folder on the GUI thread).
   Kind sort of 2000 extension-less files: 529 ms (was ~3100 ms).
 - Tags cost one `lgetxattr` per shown item (cached per URL; 8-17 us each measured, so a screenful costs about 1 ms);
-  sorting and filtering never read them. The menus ask the tag state of the whole selection on every selection change:
+  filtering never reads them, and sorting or grouping reads them only by Tags (one read per item, the same cache; not
+  measured on a large folder). The menus ask the tag state of the whole selection on every selection change:
   measured with 1000 selected files, 41 ms (untagged) and 66 ms (tagged) per change before; now one probe pass
   (lstat, access, one lgetxattr per file, 19-28 ms) the first time and 2-3 ms from the 3 s cache (`TagStore::Cache`,
   dropped for the files Files writes; another application's change shows on the next lookup (one `lstat`, the ctime moves; two changes inside one kernel clock tick may be missed until the 3 s expire); a write always reads afresh). The tag search runs
   off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
   matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
   4 MB each at 1024 px). Not measured on the reference hardware (L2).
+- Per-folder view settings (`files-views.json`, F-3): opening a folder costs one `stat` of the store when nothing changed;
+  the load is linear (68,000 short entries in a 2 MiB file: about 0.2 s, `FolderViews.ManyShortEntriesLoadInLinearTime`;
+  it was 41 s). A view or sort choice writes the whole store on the UI thread (serialised, synced, renamed) and reads
+  it again first only when another process changed it; the bound is the 2 MiB limit: about 50 ms per choice at the
+  limit (`FolderViews.OldFoldersMakeRoomUnderTheSizeLimit`, 50 choices in 2.6 s on the dev machine, was 7.9 s), a few ms
+  for a store of a few hundred folders. A store reaches the limit only with about 2000 folders of 1 KB paths.
 - Names with line breaks show on one line with `⏎` in place of each break (display only).
 - Accessibility: `Accessible.role/name` on every control, list item, header, banner and dialog; full keyboard
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
@@ -261,7 +306,10 @@ installed (not built here).
 - Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
   a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the
   "Apple Devices" entry is hidden (§14).
-- No Recents, Group By, sharing; search filters the current folder by name only.
+- No sharing; search filters the current folder by name only. Recents lists what `recently-used.xbel` holds (files
+  opened by applications that write it), not every file opened; a recent file renamed while no Recents view is open
+  leaves it (the list keeps the old path). Group By has no Date Added (no such time on Linux files); the grouped layouts
+  have no reference capture (visual NOT verified).
 - Tags: only the seven colour tags can be set in Files (no "Tags…" editor for named tags; tags of other applications
   are shown in Get Info and the gallery panel, kept, searchable from the sidebar and droppable onto). Tag changes are
   not part of Undo. The sidebar lists the tags seen in use, not an index of the disk: a tag no longer used stays until
@@ -270,8 +318,8 @@ installed (not built here).
   application shows once the folder is listed again (KIO's refresh does not always report attribute changes).
   Symbolic links, items in the Trash, remote items and filesystems without user extended attributes cannot be tagged
   (the row says why). Copies keep their tags (KIO copies extended attributes); a copy made by another tool may not.
-- Gallery view: the info panel exists in the gallery view only (macOS shows a preview pane in every view); no quick
-  actions (rotate, markup) in the panel; the preview changes in place without the macOS slide.
+- Preview pane: no Markup (Grassfield has no annotation editor); rotation covers JPEG, PNG and BMP only and is not part
+  of Undo; the gallery's preview changes in place without the macOS slide.
 - Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
 - KIO's own dialogs are QWidget dialogs, not Grassfield-styled: file-exists conflicts (paste/drop), the Open With
   chooser when no application is associated, and the undo confirmation for deleting copied files.
@@ -284,19 +332,423 @@ installed (not built here).
   never emptied); Put Back cannot be undone (KIO keeps no undo record for restores).
 - The global menu has no Help menu (there is no help content) and no Window menu of its own: tab switching is under
   View, the window actions are the shell's T0 Window menu. Info windows export no menu (the bar shows T0 there).
-- Return opens (as specified), unlike macOS where Return renames; F2 renames.
-- View settings are global, not per folder; window size/position are not remembered; a new window opens exactly over
-  the previous one (the compositor centres floating windows).
-- Rubber band selection only in the icon view; no spring-loaded folders; no link-on-drop.
+- Window position: a Wayland client cannot place its window, so a new window (New Window, a dragged-out tab) opens
+  where the compositor puts it, today exactly over the previous one (centred); the size is remembered. Position memory and
+  cascading belong to the compositor's placement rules (ADR-0026 part 2, not done: it needs the nested session).
+- View Options (Cmd+J) do not exist yet, so the defaults cannot be changed: the view and sort of folders without their own
+  are `view/mode`, `view/sortKey`, `view/sortDescending` as written before PR 1 (else icons by name), and a choice made
+  in a folder is that folder's only (F-3). "Use as Defaults" comes with View Options, which PR 2 moved to later (FP-47,
+  FP-86, open).
+- A tab dragged out and dropped while the pointer is outside every Files window becomes a window, also when the drag was
+  cancelled there with Esc (the platform reports a cancel and a drop nobody took the same way).
+- Reopen Closed Tab remembers the tabs closed in this session only (not across launches), at most 10.
+- Spring-loaded folders: Space does not open the folder at once (Qt's platform drag takes the keys). Drop modifiers
+  follow the Finder with Cmd as Ctrl; Cmd+Option makes a symbolic link, which, unlike an alias, does not follow a moved
+  original.
 - The path bar shows home-relative paths inside home, otherwise from `/` ("Computer"); long paths are clipped on the left.
 - The sidebar shows "Trash full" only if the icon theme has `user-trash-full-symbolic`.
 - Accessibility tree not verified with a screen reader (no AT-SPI bus in the nested session).
 - French catalog: `translations/grassfield_fr.ts` (gate I1, `just check-i18n`).
 
+## Finder parity matrix (step 0, 2026-10-26)
+
+Owner goal (2026-10-26): Grassfield Files is the macOS 27 Finder on Linux: same layout, behaviours, shortcuts and finish,
+with the power of Linux shown the macOS way, never as a "Linux-style" extra interface. This matrix lists every Finder
+function, what Files does today (main c687708), the reference capture, the Linux backend (KIO first) and what cannot be
+done. It starts from "Known limitations" above; each later PR updates its rows and the limitations. UI target: F1 strict
+(ADR-0024): no visible difference on a careful look, outside the accepted limits by name (Inter for SF Pro, own symbols,
+no lensing before phase 4, 1x displays, own colours). Geometry ±1 pt (±0.5 pt on a 2x source), tints ±0.1, hover,
+selection and keyboard focus measured, A2 in both appearances.
+
+**State**: **done** (behaves like the Finder), **partial** (exists, differs), **missing**, **n/a** (no meaning on this system).
+**PR**: 1 windows and tabs, 2 views and selection, 3 search, 4 Linux power, 5 finish and debts, "later" (not in the five
+PRs, kept here so the list is complete), "never" (impossible or excluded, with the reason).
+
+**References** (512 Pixels "Aqua Screenshot Library", macOS 27 Golden Gate release, 2 px per pt, listed in
+`docs/audits/ui-finesse-2026-10-25/tools/webref-urls.txt` and the library index; downloaded into the git-ignored
+`design/reference/macos27/`, never committed; only numbers measured on them enter the repository). Short names below are
+the file names without the `27-Golden-Gate-` prefix: Finder-Home, Finder-Menu, Go-Menu, Finder-Gallery, Finder-Search,
+Finder-Get-Info, Finder-Network (column view), Finder-Go-To-Folder, Finder-Connect-to-Server, Finder-Replace (conflict),
+Finder-Copy (progress), Finder-Customize, Finder-Empty-Trash, Finder-Eject-Warning, Finder-Quick-Look,
+Finder-Quick-Look-Markup, Applications, Applications-Utilities. "none": the library has no capture of it; the behaviour
+comes from the macOS 26/27 Finder, the geometry from the macOS 26 guides in `design/reference/macos/` when the owner's
+copy is present, otherwise the row says "visual NOT verified" in its PR.
+
+**Command key.** As today (BrowserWindow.qml, `config/hypr/grassfield/forwarding.lua`): ⌘ is Ctrl, ⌥ is Alt, ⇧ is Shift,
+⌃ is Super. A chord the compositor binds (`bindings.lua`) is reached through the forwarded form (⌘1…⌘4 and ⌘↑/⌘↓ are
+sent by Super). Menus show the device's style (`keyboard.shortcutStyle`: symbols on a Mac keyboard, key names on a PC).
+Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR.
+
+### Windows and tabs
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-1 | New Finder Window ⌘N | done (PR 1: opens at the home folder, at the kept size) | Finder-Home | — | a new window opens over the previous one: placement is the compositor's (ADR-0026) | 1 |
+| FP-2 | New Tab ⌘T; the tab bar appears with the second tab | done (PR 1: at the new-window location, last) | none | — | — | 1 |
+| FP-3 | View > Show/Hide Tab Bar ⇧⌘T (bar shown with one tab) | done (PR 1) | none | — | — | 1 |
+| FP-4 | Tab bar look (equal-width tabs, close × on hover, + at the end, selected tab) | done (PR 1, measured on the AppKit tab bar of a macOS 26 capture; hover not measured) | none (visual NOT verified until a capture is supplied) | — | — | 1 |
+| FP-5 | Close Tab ⌘W, Close Window ⇧⌘W, Close All ⌥⌘W | done (PR 1) | Finder-Menu (File) | — | — | 1 |
+| FP-6 | Show Previous/Next Tab ⇧⌘[ ⇧⌘], ⌃⇥ ⌃⇧⇥ | done | none | — | — | 1 |
+| FP-7 | Window > Move Tab to New Window | done (PR 1, in View: F-10) | none | — | — | 1 |
+| FP-8 | Window > Merge All Windows | done (PR 1, in View: F-10) | none | — | — | 1 |
+| FP-9 | Drag a tab out of the window → new window; drag tabs to reorder; drop a tab on another window's tab bar | done (PR 1) | none | Qt drag with an app-internal MIME type | the new window's position is the compositor's (ADR-0026) | 1 |
+| FP-10 | Drop files on a tab: copy or move into its folder; hovering a tab during a drag switches to it (spring-loaded) | done (PR 1) | none | KIO copy/move (`FilesApp.drop`) | — | 1 |
+| FP-11 | Reopen the last closed tab | done (PR 1, this session's tabs) | none (no Finder item; Safari's ⇧⌘T) | in-app stack | ⇧⌘T is Finder's Show Tab Bar, so File > Reopen Closed Tab takes ⌥⇧⌘T (decision F-2) | 1 |
+| FP-12 | ⌘-double-click a folder opens it in a new tab; Open in New Tab in the menu | done (PR 1) | none | — | — | 1 |
+| FP-13 | The window remembers its size and position; new windows cascade | partial (PR 1: the size; position and cascade wait for ADR-0026 part 2) | none | size: Files (QSettings); position and cascade: compositor `placement.lua` (ADR-0026) | a Wayland client cannot place its own window | 1 (size), compositor lane (position) |
+| FP-14 | Each folder remembers its view settings (view, sort, grouping, icon size; View Options "Always open in…", "Use as Defaults") | partial (PR 1: view and sort per folder; PR 2: grouping; View Options later, FP-47; the defaults cannot be changed until then: FP-86) | none | per-user store keyed by URL (decision F-3) | macOS keeps them in `.DS_Store` inside the folder; Files writes nothing into folders | 1 (view, sort), 2 (grouping), later (View Options) |
+| FP-15 | Window menu: Minimize ⌘M, Zoom, Fill, Center, Move & Resize, Full Screen, Cycle Through Windows ⌘\`, Bring All to Front, window list | partial: the shell's T0 Window menu (menubar.md); the tab items in View (PR 1) | Finder-Menu | compositor | the window list and tab items of Finder's Window menu need the app's own Window menu: Move Tab to New Window and Merge All Windows go into the exported View menu until then (decision F-10) | 1 |
+| FP-16 | Windows and tabs restored at the next launch | missing | none | QSettings | — | later |
+
+### Toolbar, sidebar and chrome
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-17 | Back/forward capsule, title, ••• Action menu, search circle | done (lot 5, F1 match) | Finder-Home | — | — | — |
+| FP-18 | View switcher group (4 views; a single view popup ⌃ when the window is narrow) | done (PR 2: measured, 161 x 36; the pop-up while searching or where the title has no room) | Finder-Home, Finder-Search | — | — | 2 |
+| FP-19 | Group By toolbar button (grid ⌃) | done (PR 2) | Finder-Home | FolderModel sections | — | 2 |
+| FP-20 | Share button | missing | Finder-Home | — | no AirDrop or system share sheet on this system: not shown (non-goal "sharing") | never |
+| FP-21 | Tags toolbar button (tag the selection) | missing | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
+| FP-22 | Search field expands to the full width while searching | partial: expands to 200 | Finder-Gallery, Finder-Search | — | — | 3 |
+| FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | done (PR 2) except Hide Toolbar (the toolbar holds the window controls when the sidebar is hidden) | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
+| FP-24 | View > Customize Toolbar… | missing | none | — | — | later |
+| FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | done (PR 1) | none | `pathSegments` | — | 1 |
+| FP-26 | Sidebar macOS 27: Recents at the top without a header; Favorites (Applications, Desktop, Documents, Downloads); Locations (the home folder by user name, the system disk, volumes, Network, Trash); Tags | partial: Recents at the top without a header (PR 2); Favorites lists Home, Desktop, Documents, Downloads, Pictures, Music, Videos; Locations has Computer, volumes, Network, Trash; Applications is on the files-applications branch (in review) | Finder-Home, Finder-Gallery | KIO places, Solid | iCloud Drive, Shared and AirDrop: no equivalent (never) | 2 |
+| FP-27 | Sidebar editing: drag a folder in to add it, Remove from Sidebar, reorder, Add to Sidebar ⌃⌘T; collapse a section on hover; Settings > Sidebar choices | partial: tags only (Remove from Sidebar, Show Hidden Tag) | none | KFilePlacesModel bookmarks (`user-places.xbel`) | — | later |
+| FP-28 | Sidebar icons in the accent colour, neutral selection with a bold label | done (lot 2) | Finder-Home | — | — | — |
+| FP-29 | Eject button on volumes, Eject ⌘E | done, never exercised | Finder-Eject-Warning | Solid `StorageAccess::teardown` | — | 5 (tests) |
+| FP-30 | Folder banner ("Folder shared with File Sharing") | n/a | Finder-Home | — | no File Sharing state to show | never |
+| FP-31 | Finder Settings ⌘, (new windows show, open folders in tabs, sidebar items, show all extensions, warn before emptying the Trash, remove items from the Trash after 30 days, keep folders on top, default search scope) | missing (some exist as menu toggles) | Finder-Menu | QSettings; KIO trash `ktrashrc` limits | the app menu is the shell's T0 menu: Settings… needs a menubar change (decision F-10) | later |
+
+### Views and selection
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-32 | Icon view with thumbnails, selection backdrop and name pill | done | Finder-Home | KIO thumbnails | — | — |
+| FP-33 | List view: Name, Date Modified, Size, Kind; relative dates; sortable headers | done | none | — | — | — |
+| FP-34 | List view: disclosure triangles (expand folders in place, ⌘→ ⌘←), resizable and reorderable columns, more columns (Date Created, Last Opened, Date Added, Tags, Comments) | missing (PR 2 moved it: a tree model under the sorted, grouped listing is its own change) | none | KDirModel children; KFileItem times | Date Added: no such time on Linux files (never; shown for the Trash's deletion date only) | later |
+| FP-35 | Column view with a preview column; resizable columns | partial: the preview column (PR 2); fixed widths (moved: no reference for the column handles) | Finder-Network | — | — | later (resizing) |
+| FP-36 | Gallery view with the strip and an info panel | done (F15) | Finder-Gallery | — | — | — |
+| FP-37 | Preview pane in every view, View > Show Preview ⇧⌘P (name, kind, size, Information with Show More, Tags) | done (PR 2) | Finder-Gallery | — | — | 2 |
+| FP-38 | Quick actions in the pane: Rotate Left, Markup, More… | partial (PR 2): Rotate Left, More… > Rotate Right; no Markup | Finder-Gallery | JPEG: the EXIF orientation tag; PNG, BMP: Qt image I/O, lossless | Markup: no annotation editor (preview.md non-goals); WebP, HEIF, GIF, TIFF: no lossless turn here, no action | 2 |
+| FP-39 | Group By (None, Name, Kind, Application, Date Last Opened, Date Added, Date Modified, Date Created, Size, Tags) and Use Groups ⌃⌘0 | done (PR 2) except Date Added | Finder-Home (button) | FolderModel sections | Date Added: see FP-34 | 2 |
+| FP-40 | Sort By (Name, Kind, Date Last Opened, Date Added, Date Modified, Date Created, Size, Tags) within groups | done (PR 2, with Application) except Date Added | none | KFileItem times, tags | — | 2 |
+| FP-41 | Rubber band (lasso) selection in every view | done (PR 2: icon, grouped icon, list and column views; the gallery has none, as in the Finder) | none | — | — | 2 |
+| FP-42 | Spring-loaded folders during a drag (hover opens, Space opens at once) | done (PR 2) except Space | none | — | — | 2 |
+| FP-43 | Return renames, ⌘O and ⌘↓ open | done (PR 2; F2 renames too) | none | — | — | 2 |
+| FP-44 | Type-to-select | done | — | — | — | — |
+| FP-45 | Quick Look: Space, ⌘Y, ⌥Space full screen, arrows walk the selection | partial: Space and ⌘Y (PR 2) start Glance (Preview) | Finder-Quick-Look, Finder-Quick-Look-Markup | `grassfield-preview --glance` | — | 2 (⌘Y), Preview spec (the rest) |
+| FP-46 | Recents (Go ⇧⌘F, sidebar) | done (PR 2) | Finder-Home, Go-Menu | `$XDG_DATA_HOME/recently-used.xbel` (decision F-5) | KIO's `recentlyused:/` needs the activity manager daemon, absent on Omarchy | 2 |
+| FP-47 | View Options ⌘J (always open in, browse in, group/sort, icon size, grid spacing, text size, label position, show item info, show icon preview, calculate all sizes, list columns, Use as Defaults) | missing (PR 2 moved it: no reference capture of the panel, and most of its options need FP-34's columns) | none | per-folder store (F-3) | — | later |
+| FP-86 | View Options "Use as Defaults": the shown folder's view and arrangement become those of every folder without its own | missing, **open since PR 1**: since a view or sort chosen in a folder is that folder's (F-3), nothing changes the defaults (`view/mode`, `view/sortKey`, `view/sortDescending` keep the values written before PR 1, else icons by name); the Finder sets them only with this button, so no menu item stands in for it (opus review of PR #5) | none | QSettings `view/*` | — | later (with FP-47) |
+| FP-48 | Icon view free arrangement, Clean Up, Clean Up By, Snap to Grid | missing: always a sorted grid | none | — | free positions need a per-folder position store; not planned | later |
+
+### File operations
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-49 | Copy, Paste, Undo/Redo, Select All | done | — | KIO, FileUndoManager | — | — |
+| FP-50 | Move: Copy then ⌥⌘V (Move Item Here); no Cut for files | partial: Files has Cut ⌘X (KDE/GNOME cut flag) | none | `KIO::paste` | decision F-6 | 5 |
+| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | partial: Empty Trash only while the Trash is shown (Finder: Finder > Empty Trash and ⇧⌘⌫ anywhere); never run by tests | Finder-Empty-Trash | KIO trash | — | 5 |
+| FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | partial: in the Trash only | none | `KIO::del` | — | 5 |
+| FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
+| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | missing | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
+| FP-55 | Show Original ⌘R | missing | none | KFileItem link target | — | 4 |
+| FP-56 | Inline rename | done (Return, F2) | — | `KIO::moveAs` | — | 2 |
+| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | missing | none | `KIO::batchRename` / moveAs per item | — | 4 |
+| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | partial: New Folder | none | `KIO::mkdir` + move | — | 4 |
+| FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
+| FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial: read-only General and permissions; tags; Customize Folder | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
+| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | missing | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |
+| FP-62 | Inspector ⌥⌘I (one Info window that follows the selection) | missing | none | — | — | later |
+| FP-63 | Tags… editor: named tags, Add Tags field in Info and the preview pane | partial: the seven colour tags | Finder-Gallery, Finder-Get-Info | `user.xdg.tags` | — | 5 |
+| FP-64 | Copy as Pathname ⌥⌘C | missing | none | clipboard | — | 4 |
+| FP-65 | Open With: the list, Other…, Change All… | partial: the list | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
+| FP-66 | Drag modifiers: ⌥ copies, ⌘ moves, ⌥⌘ makes an alias | done (PR 2) | none | `FilesApp.drop` | ⌘ is Ctrl: Ctrl-drag moves, Alt-drag copies, Ctrl+Alt makes a link (PR 2) | 2 |
+| FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | missing: KIO's widget dialog | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
+| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | partial: status-bar text | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
+| FP-69 | Print ⌘P | missing | none | the default application's print | — | later |
+| FP-70 | Show Package Contents, Burn to Disc | n/a | — | — | no bundles or optical burning in scope | never |
+
+### Search
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | partial: filters the shown folder by name | Finder-Search | ADR-0027 | — | 3 |
+| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | missing | Finder-Search (+) | ADR-0027 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
+| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | missing | Finder-Search (Save) | JSON saved searches (ADR-0027) | — | 3 |
+| FP-74 | The path bar shows the selected result's path | missing (path bar shows the folder) | Finder-Search | — | — | 3 |
+
+### Go menu and Linux power, the macOS way
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | partial: places, Recents ⇧⌘F (PR 2) and Home ⇧⌘H; the other shortcuts and Recent Folders missing | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
+| FP-76 | Go to Folder ⇧⌘G: inline completion and a "Go to:" list of matching paths | partial: a plain field | Finder-Go-To-Folder | `KUrlCompletion`-like listing (own, async) | — | 4 |
+| FP-77 | Connect to Server ⌘K: address field with history, Favorite Servers (+, −), Browse, Connect | missing | Finder-Connect-to-Server | KIO `smb`, `sftp` (kio-extras), `ftp`, `webdav(s)` (KIO) | the password prompt is kiod's own dialog (decision F-9); other applications see the share through kio-fuse when installed, otherwise KIO hands them a temporary copy | 4 |
+| FP-78 | Show hidden files ⇧⌘. | partial: Ctrl+H | none | KDirLister | — | 4 |
+| FP-79 | Services > New Terminal at Folder | missing | Finder-Menu (Services) | `xdg-terminal-exec` (decision F-7) | the app menu's Services submenu is the shell's (F-10): the item sits in the context menu's Services submenu | 4 |
+| FP-80 | Terminal applications open (Open With nvim) | missing: KIO looks for konsole | none | `xdg-terminal-exec` (F-7) | — | 5 |
+| FP-81 | KIO's widget dialogs replaced by Grassfield sheets: file exists, Open With chooser, undo confirmation | missing | Finder-Replace | `AskUserActionInterface`, `OpenWithHandlerInterface`, `FileUndoManager::UiInterface` | kiod's password dialog stays (F-9) | 5 |
+| FP-82 | Network browsing | partial: `remote:/` (smb, sftp) | Finder-Network | kio-extras, avahi | SMB discovery needs wsdd or avahi on the network | 4 |
+
+### Desktop, accessibility and look
+| # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
+|---|---|---|---|---|---|---|
+| FP-83 | Desktop items, stacks | shell desktop module (desktop.md) | Finder-Desktop-Stacks | — | outside this matrix | — |
+| FP-84 | VoiceOver | Accessible roles and names set | — | AT-SPI | screen reader not verified (no AT-SPI bus in nested) | later |
+| FP-85 | Window corner, shadow, traffic lights | compositor (C-1, C-3) and grassfield-ui (ADR-0015) | Finder-Home | Hyprland, plugin | — | — |
+
+### Decisions (integrator, owner delegation D-5; macOS model first)
+- **F-1 Command key**: the mapping above; Finder's ⌃⌘ chords become Ctrl+Super chords when `bindings.lua` leaves them free
+  (⌃⌘A, ⌃⌘N, ⌃⌘S, ⌃⌘0 are free on main c687708).
+- **F-2 Tabs**: ⇧⌘T shows or hides the tab bar (Finder). Reopen Closed Tab (no Finder equivalent, asked by the owner) is
+  in the File menu with ⌥⇧⌘T; it reopens the location, history and view of the last tabs closed in this session (at most
+  10, newest first).
+- **F-3 Per-folder view settings**: a per-user store (`$XDG_STATE_HOME/grassfield/files-views.json`, 0600, at most 2000
+  folders, least recently used dropped), keyed by the cleaned URL, holding the view, sort key and order, grouping and
+  View Options; a folder without an entry uses the defaults (View Options "Use as Defaults"). Files never writes into the
+  folder (macOS's `.DS_Store`, KDE's `.directory`): it works on read-only, remote and Trash locations alike, and other
+  applications never see stray files. A tag search or saved search keeps its own entry. The file joins ADR-0020's table
+  of Grassfield's files with the code that writes it (PR 1, #5).
+- **F-4 Return renames** (macOS), ⌘O and ⌘↓ open; F2 keeps renaming (PC keyboards).
+- **F-5 Recents**: the files listed in `recently-used.xbel` (written by GTK and KDE applications and read by the shell's
+  Search and Recent Items), newest first, existing local files only, at most 500; Files adds the files it opens there
+  through KIO (KRecentDocument).
+- **F-6 Move**: Finder has no Cut for files. Edit shows Copy and, while ⌥ is held, Paste becomes Move Item Here ⌥⌘V.
+  ⌘X does nothing to files (as in the Finder; no hidden shortcut, opus review of ADR-0028). A cut made in another file
+  manager still pastes as a move (interop: the clipboard says so; Files shows the move in the paste's progress).
+- **F-7 Terminal**: the session's terminal is `xdg-terminal-exec` (Omarchy; the shell uses it for `Terminal=true` entries,
+  ADR-0011). Files starts terminal applications and "New Terminal at Folder" through it, never through KIO's konsole
+  lookup; the working directory is the folder. Launches keep `launchguard.cpp`'s rules (Files never runs a program from a
+  folder; the terminal itself is an application the user chose).
+- **F-8 Archives**: Compress makes a `.zip` (Finder's Archive Utility default) and Expand reads zip, tar, tar.gz, tar.bz2,
+  tar.xz, tar.zst and 7z with `bsdtar` in a child process (ADR-0029).
+- **F-9 Connect to Server**: Files asks for nothing itself; KIO's worker asks kiod's password server, whose dialog is KDE's
+  (a QWidget). Restyling it needs a replacement of the password server (a new service): not done; listed as a limit.
+  Recent and favourite servers are stored in Files' QSettings (no password ever).
+- **F-10 App menu and Window menu**: the app menu (About, Settings…, Empty Trash…, Services, Hide) and the Window menu are
+  the shell's T0 menus (menubar.md). Items only Files can run (Empty Trash, Merge All Windows, Move Tab to New Window,
+  Services) are exported in Files' own menus (File, View) and context menus until the menu bar can host app-provided app
+  and Window items (a menubar change, later).
+- **F-11 Bars**: the path and status bars are hidden by default, as in the Finder; View shows them. The status bar
+  carries job progress and notices (a search stopped early) until the progress window exists (FP-68, PR 5): from PR 2
+  to PR 5 it shows itself while a job runs or a notice is up, whatever the setting, so nothing is hidden; FP-68 then
+  takes the progress.
+- **F-12 Names**: no Apple trademark in the UI (master-prompt §14): "This Mac" is "This Computer" (« Cet ordinateur »), as
+  in the system menu's About This Computer; Quick Look is Glance; Archive Utility has no name of its own (Files expands).
+
+### ADRs opened by this step
+- ADR-0026 Files window frames: size by Files, position and cascade by the compositor (cross-module: Files and
+  `config/hypr`).
+- ADR-0027 Files search: backends and saved searches (cross-module: the shell's Search uses the same backends).
+- ADR-0028 Privileged ownership and permission changes in Files through polkit (privileged action; opus review before
+  any code).
+- ADR-0029 Archives through `bsdtar` in a child process (a runtime dependency of the package; untrusted input).
+
+### Not decided here
+- Toolbar customization (FP-24), sidebar editing (FP-27), Finder Settings (FP-31), the Inspector (FP-62) and window
+  restoration (FP-16) are outside the five PRs; they stay listed so the matrix is complete.
+
+## Tabs and windows (Finder model)
+PR 1 of the Finder parity brief (matrix rows FP-1 to FP-16, FP-25; ADR-0026).
+- **Reference.** The library has no Finder tab capture. The Finder draws the AppKit tab bar, measured on a macOS 26 (Tahoe
+  beta 3) Terminal capture published by 9to5Mac (2 px per pt: the 28-px lights are 14 pt; kept in the git-ignored
+  `design/reference/web/`): a capsule track 27.5 tall right under the title row, 8 from the left edge, black at 0.13 on
+  the white window (222/255); the selected tab a pill 2 inside the track, white at 0.76 over it (247; the 253 edge beside it
+  reads as JPEG ringing, so no rim is drawn); equal-width tabs; titles about 11 pt, secondary colour for the others; a round 28-pt + button 4.5 after the
+  track and 8 from the right edge; a hairline 8 under the track. No dark capture: the dark track and pill use the
+  material fill (white at 0.14). Tokens `files.tab*`, `files.springDelay`.
+- **Tab bar** (`qml/TabBar.qml`, pure logic `qml/TabsLogic.js`): shown from the second tab, or with one tab while View >
+  Show Tab Bar is on (Ctrl+Shift+T, `view/tabBar`; disabled with more than one tab, as in the Finder). Equal-width tabs,
+  the current one the pill, titles in the caption size (current: text colour, others: secondary text, kept at A2's 4.5:1
+  where the capture's lighter grey is about 3.1:1), a close button on the hovered tab (middle click closes too), a right
+  click offers Close Tab, Close Other Tabs and Move Tab to New Window, and the round + opens a tab at the new-window
+  location. The hairline under the toolbar shows whenever the bar does.
+- **New windows and tabs** open at `FilesApp.newWindowUrl`, the home folder (Finder's "New Finder windows show"; its
+  default, Recents, arrives with PR 2). Open in New Tab and Cmd-double-click on a folder open that folder in a new tab.
+  New tabs go last.
+- **Closing**: Ctrl+W closes the tab (the window with its last tab), Ctrl+Shift+W the window with all its tabs (File >
+  Close Window, shown while there are tabs), Ctrl+Alt+W every window (File > Close All, shown with more than one window).
+  Closed tabs (also those of a closed window) go on a stack of 10 for File > Reopen Closed Tab (Ctrl+Alt+Shift+T, decision
+  F-2): it brings back the location, the history (Back/Forward) and the view. Ctrl+W closes the key window only: typed
+  in Get Info or Customize Folder (the browser window's own windows, its transient children) it closes that window, and
+  the browser stays. While one of them is the key window none of the browser's keys is live, neither its Shortcuts nor
+  its global menu's keyed items (`BrowserWindow.childIsKey`); while the browser is the key window, Get Info and Customize
+  Folder take none of its keys (Escape and Ctrl+W there are live only while that window is the key window). Qt reports a
+  window and its transient children active together, and the shortcut matcher of QtQuick.Templates (loaded with
+  Grassfield.Ui's controls) matches all their keys on that ground, so the key window is read from
+  `FilesApp.focusWindow` (`QGuiApplication::focusWindow`), never from `active`.
+- **Moving tabs** (Main.qml): View > Move Tab to New Window (and the tab menu) gives the current tab a window of its own;
+  View > Merge All Windows brings every other window's tabs into this one, window by window, and closes the emptied
+  windows (both are in View because the Window menu is the shell's, decision F-10). A tab keeps its state when it moves
+  (location, history, view, selection, scroll position): the tab object itself changes window (`FilesApp.reparent` makes
+  the new window its owner, and tabs are created from the application's context, not their window's).
+- **Dragging a tab** (a platform drag of `application/x-grassfield-files-tab`, "<pid>:<tab id>"; a tab of another Files
+  process is refused): along its own bar the other tabs slide to open the slot under the pointer (motion token
+  `motionFast`) and the drop reorders; over another window's tab bar a slot opens there and the drop moves the tab there
+  (an emptied window closes); anywhere else over another window it joins that window last; over its own window outside the
+  bar nothing happens; dropped outside every Files window it becomes a window (a window's only tab stays). The drag image
+  is the tab itself. The platform drag runs a nested event loop inside the source tab's mouse handler and the drop arrives
+  inside it, so a drop is only recorded (`Main.qml` `draggedTab`): the tab moves, and an emptied source window closes,
+  once the drag has ended and its handlers have returned (`Qt.callLater` from the drag's end; a target window closed
+  meanwhile is not used). A torn-off tab's window opens the same way.
+- **Files dropped on a tab** are moved or copied into its folder like a drop on a folder (FilesApp.drop: same file system
+  moves, else copies); the source application is told "copy" (as at every drop point of Files), so it never deletes its
+  files while Files still copies them. A tab hovered for `files.springDelay` (500 ms) during a file drag comes to the
+  front, so the drop can also land in its view. Search results take no drop.
+- **Title menu**: a right click or Cmd-click on the window title lists the enclosing folders, the shown one first; a plain
+  press still moves the window.
+- **Window size** (ADR-0026 part 1): the size of the last browser window resized (in its normal state, not zoomed or full
+  screen) or closed is kept (`window/width`, `window/height`) and every new window opens at it.
+- Tests: `tests/unit/tst_filestabs.qml` (bar visibility, close index, slots while reordering, for an incoming and an
+  outgoing tab, moves, the closed-tab stack, the drag payload, a file drop on a tab and every file drop answering Copy,
+  tab drops and tear-offs applied after the drag with `Main.qml` and stand-in windows, a real tab bar's drag reporting its
+  start to the manager before the platform drag runs), `tst_filesbrowser.qml` (the real windows: Ctrl+W in Get Info or
+  Customize Folder closes that window alone, the browser's keys wait meanwhile), `tst_filesnav.qml` (view and sort of a folder),
+  `tst_filescolumns.qml` (a real column view: a double-click opens a file, a folder only with Cmd), `tst_filesglobalmenu.qml` (Reopen Closed Tab, Show/Hide Tab Bar,
+  Merge All Windows, Close Window, Sort By from the tab), `tests/unit/files/tst_folderviews.cpp` (keys, invalid fields,
+  merge, round trip and order, the oldest goes when full, an unreadable or newer file is never overwritten, a missing
+  version, another process's entries kept; hostile files: a FIFO, a symlink to a device, one byte over the limit,
+  malformed and newer files with the choice waiting, 0600 under umask 000, a stale and a taken lock, a lock path that is a
+  directory, a FIFO or a link refused at once, four processes
+  writing at once, 68,000 entries under a time budget, changes that keep the mtime). Headless run of the real app (sway,
+  virtual keyboard and pointer, DBusMenu calls): `docs/audits/finder-parity-2026-10-26.md` § PR 1. The tab drag between
+  two windows after the deferral is verified in the nested session by the integrator (not here).
+
+## Preview pane
+PR 2 of the Finder parity brief (matrix rows FP-37, FP-38). Reference: Finder-Gallery (macOS 27, 2 px per pt).
+- **Measured** (pt): the pane 250 wide on the right, its own fill (235/255, the sidebar fill), no dividing line; content 11 from
+  both edges and 16.5 under the toolbar; in the gallery a 42-wide preview beside the name (the name 65 from the edge, about
+  15 bold, two lines), the kind and size under it (secondary); 24 to "Information" (13 bold) with Show More at the right in
+  the accent colour; rows every 22.75 (label secondary at the left, value at the right), a hairline between rows; 31 to
+  "Tags"; at the bottom a 70-high bar on the window background with the quick actions in three equal columns, glyphs 14
+  tall at 16.5, labels 10.5 under them. Tokens `files.preview*`.
+- **Where it shows** (View > Show Preview, Shift+Cmd+P; each view keeps its own setting as in the Finder): beside the icon
+  and list views with a large preview at the top (`view/preview`, off by default), in the gallery with the small preview
+  (`view/galleryInfo`, on), as the column view's last column on the window background (`view/columnPreview`, on). It
+  shows the selected item; with nothing selected the folder; with several items their number. A hidden pane is not made
+  at all, and a shown one reads the item again only when the shown or a selected row changes.
+- **Information**: Created, Modified, Dimensions (pictures: read from the file's header, turned by its EXIF orientation);
+  Show More adds Last opened, Size in bytes (zero and one spelt out) and Where.
+- **Dimensions are never read on the GUI thread** (`FolderModel::dimensionsAt`, `src/imagesize.h`): an item's type comes
+  from its name, so a FIFO named `pipe.png` or a link to `/dev/zero` named `x.png` is "a picture" to KIO, and opening it
+  would never return. The row is asked only when the listing says a local regular file of an image type; a worker thread
+  (one per listing, started when there is work) then walks the path from the root against the mount table before each
+  `lstat` (local, removable and memory filesystems only: a network share, FUSE or a pseudo filesystem is never looked at,
+  links into them included), opens only a regular file by the path the walk reached (`O_NONBLOCK`; no link followed
+  anywhere in it, openat2 `RESOLVE_NO_SYMLINKS`, so a link swapped in after the walk for the file or a folder above it is
+  refused wherever it leads; `O_NOFOLLOW` on the last component where openat2 answers ENOSYS, a kernel without it, or
+  EPERM, a sandbox's seccomp filter; the same inode checked on the descriptor), reads the format from the content and
+  at most 16 MiB. The answer arrives as the row's `dataChanged` and the pane reads it then; answers are kept per path
+  for the listed time and size (at most 256). A listing destroyed during a read waits 150 ms for it, then abandons it.
+- **Quick actions** (pictures Files can turn without a loss: JPEG, PNG, BMP; `imagerotate.h`): Rotate Left, and More…
+  with Rotate Right; none for a selection of more than 100 items (each is looked at on disk as the selection changes).
+  The name's type only offers the action; what is done is decided by the content (`ImageRotate::methodForContent`): a
+  JPEG turns through its tag whatever it is called, a real PNG or BMP is written again in that same format (Qt's reading
+  of the content must agree), anything else (a GIF, TIFF or WebP named `.png`) is left byte for byte. A file over 128 MiB
+  (`kMaxFileSize`: it is held in memory whole, decoded and encoded again) is refused before it is read.
+  The files are read and written on a thread of their own, one batch at a time and in order; Files waits for the batch
+  running when it quits. Each file is opened once without following links (`O_NOFOLLOW`) and handled through that
+  descriptor. A JPEG turns through its EXIF orientation tag, changed in place (two bytes, then `fsync`), or a minimal
+  EXIF segment holding only the orientation when it has none; PNG and BMP are decoded, turned and written again in their
+  own lossless format through a new file renamed over the old one, keeping its group, permissions, user extended
+  attributes (tags) and ACLs (a folder's default ACL is not taken), synced before the rename. A rewrite is refused, and
+  the file left as it is, when it would harm it: an animated PNG, a file owned by someone else or with other names (hard
+  links), one whose group, tags, ACLs or other attributes cannot be kept, a picture whose own orientation tag would no
+  longer match, a file renamed, replaced or changed while it was being turned. WebP, HEIF, GIF and TIFF get no quick action (a lossy
+  re-encode, a lost animation, or TIFF's compression and tags, which Qt does not write back, are never risked). Markup is
+  not offered: Grassfield has no annotation editor (`docs/specs/preview.md` non-goals). A turn is not part of Undo.
+- Tests: `tests/unit/files/tst_imagerotate.cpp` (the EXIF table, the kinds, the minimal segment, little-endian tags,
+  broken files, a JPEG without EXIF keeps its tags and mode and leaves no temporary file, an in-place change keeps the
+  inode, a PNG turned pixel by pixel, links, other kinds, animated PNGs and hard-linked files refused; misnamed pictures
+  by their content; the size limit), `tests/unit/files/tst_imagesize.cpp` (Dimensions: special files, a huge file, a
+  header that never ends, a link swapped in after the check for the file or a folder above it, remote and FUSE mounts,
+  the worker).
+
+## Views and selection
+PR 2 of the Finder parity brief (matrix rows FP-18, FP-19, FP-23, FP-39 to FP-43, FP-45, FP-46, FP-66). References:
+Finder-Home and Finder-Search (toolbar), the macOS
+27 Finder's behaviour where the library has no capture (grouped layouts: visual NOT verified).
+- **Sort By** (View, the background menu, the Group By button; per folder, F-3): Name, Kind, Application, Date Last
+  Opened, Date Modified, Date Created, Size, Tags. Date Added has no source on Linux files and is not offered. Date Last
+  Opened is the file system's access time (coarse under `relatime`, absent under `noatime`); Date Created is the birth
+  time where the file system keeps one (statx), else unknown. Items without the key's value (no tag, no default
+  application, an unknown date) come last in both directions; ties go by name. `FileLogic::SortKey`, `compareEntries`.
+- **Group By** (View > Use Groups, Ctrl+Cmd+0, and Group By; the toolbar's Group By button; per folder): None, Name,
+  Kind, Application, Date Last Opened, Date Modified, Date Created, Size, Tags. The rows are sorted group by group (the
+  groups in their own order whatever the direction), then by Sort By. Groups (`FileLogic::groupOf`): Name by first letter
+  (accents folded, "#" for digits and symbols, first); Kind by category from the MIME type and its ancestors (Applications,
+  Archives, Documents, Folders, Images, Movies, Music, PDF Documents, Presentations, Spreadsheets, then Other); Application
+  by the default application's name (folders first, Other last); dates newest first (Today, Yesterday, Previous 7 Days,
+  Previous 30 Days, the months of this year, the years before; Unknown last); Size largest first (More than 1 GB, 100 MB
+  to 1 GB, 1 MB to 100 MB, 100 KB to 1 MB, Less than 100 KB, Zero bytes; folders last); Tags by the first tag (colours in
+  palette order, then the others; No Tags last). Shown in the icon and list views; the column view and the gallery do
+  not group. The list view puts a header row above each group (`files.listGroupHeight`, estimate). The icon view shows
+  each group as one row under its header, scrolled sideways by a horizontal wheel or swipe; Show All lays the group out in
+  full, Show Less returns it to one row (`files.iconGroupHeight`, estimate). Keyboard: Left/Right walk the items across
+  groups, Up/Down move a line or to the nearest item of the next group (`Nav.groupedIconMove`); the view scrolls as
+  little as it takes to show the item (down the page, then along its line; a first line comes with its header). The
+  sections are placed from the group sizes (`Nav.groupedIconTops`, `groupedIconCell`, `groupedIconCells`), so the band and
+  the keyboard menu work from the same numbers; a section keeps its cells and its sideways scroll while the folder
+  changes or is sorted again, and only the cells near the view are made (a group of thousands shown in full included).
+  A section far from the view is an empty item of its height: its header, the DelegateModel of its rows and its views are
+  made while it is near the view (and the view has a cell width), so a folder grouped by name into thousands of first
+  letters does not pay one DelegateModel per group on every change of the listing. Measured offscreen (software scene
+  graph, 5,000 items, `tests/unit/tst_filesgrouped.qml` checks the behaviour): 2,500 groups made in 7.5 s and 4.7 ms per
+  changed row before, 1.1 s and 0.3 ms now; 27 groups of 185 made 1,908 cells (4.6 s) when the view was made before it
+  had its size, 168 cells (0.4 s) now; the flat grid of the same folder 0.5 s. Not measured nested or on the reference
+  hardware (L2). An
+  icon cell takes drops on its icon and name, like clicks; elsewhere a drop goes to the shown folder. Groups are cached
+  per item and dropped item by item when an item changes, goes or is renamed (KDirModel reports each type it finds); at
+  midnight (or the first grouping after it) the date groups are made again.
+- **Group By button** (FP-19, measured on Finder-Home at 2 px/pt): a 46.5 x 36 capsule after the view switcher, the
+  groups glyph (two rules over three 5-pt squares, 18 x 17.5, rules 1.5, outlines 1) 8 from its left end and a chevron;
+  its menu lists Group By, then Sort By. Disabled in the column view and the gallery. Tokens `files.group*`.
+- **View switcher** (FP-18, measured on Finder-Home at 2 px/pt): a 161 x 36 capsule of four segments 39.5 apart (1.5
+  from its ends); the selected view a 34 x 28 pill darker than the capsule (the fill colour at 0.09: 230 on the
+  reference's 252), a 1 x 20 rule between two views that are not selected (the fill colour at 0.22); outlined glyphs
+  (strokes 1.5): icons four 7-pt squares 1 apart, list three bullets of 2 with lines 13 x 1.25 every 5, columns a
+  19.5 x 15 frame in three panes, gallery a 19 x 10.5 frame over five 2.75 x 2.5 cells. While the search field is open
+  (Finder-Search), or where the whole switcher would leave the title less than its room (`files.toolbarTitleMinWidth`,
+  estimate), it is one 46 x 36 pop-up button: the current view's glyph 10.5 from its left end, up and down chevrons, and
+  View As as its menu. Tokens `files.view*`.
+- **Rubber band** (FP-41): icon view (also grouped; from any point outside an item's icon and name, between icons
+  included: an icon cell takes clicks on its icon and name only), list view (from the empty space or a row outside its
+  icon and name; a click there selects the row), column view (from a column's empty space; the columns after it follow
+  the new selection). Shift or Cmd add to the selection. The gallery has none (as in the Finder). A band whose press is
+  taken ends there; so does a list band started on a row when that row scrolls out of the cached rows (about 20 rows
+  away) while it runs.
+- **Spring-loaded folders** (FP-42): a drag resting on a folder of the icon, list or column view, or on a sidebar place,
+  opens it in the tab after `files.springDelay`. When a drag Files started ends without a drop (released outside the
+  windows, cancelled), the tab goes back to where it was; a drop or the user's own navigation keeps it. A drag from
+  another application springs too; when it leaves the window (or is cancelled over it) the window's tabs go back, and a
+  drop on the window keeps them where they are, whichever view took it (`FilesApp.outsideDragEnded`). The folder opened under a resting pointer becomes the drop target at once
+  (`FilesApp.refreshDrag` sends the last drag move again), so a release without moving drops into it. Space does not open
+  at once: Qt's platform drag takes every key press. While a drag Files started from a view runs, the tab keeps that view
+  (`BrowserTab.dragView`, `Nav.shownView`): a folder sprung open in another view of its own (or a search ending) shows in
+  the dragging view until the drag ends, then in its own. Qt Quick's drag uses the item that started it after its nested
+  event loop returns, so destroying the view under it would be a use-after-free (`tst_filesnav.qml` for the choice,
+  `tst_filesbrowser.qml` on a real tab).
+- **Drop modifiers** (FP-66, ⌘ as Ctrl, `FileLogic::dropAction`): a plain drop moves within a volume and copies across
+  volumes, Option (Alt) copies, Cmd (Ctrl) moves, Cmd+Option makes a symbolic link in the target (`KIO::link`, part of
+  Undo). Drags offer copy and move only: Wayland's drag and drop has no link action, so Files makes the link itself.
+- **Recents** (FP-46, decision F-5): first in the sidebar without a header, Go > Recents (Shift+Cmd+F); the local
+  regular files listed in `recently-used.xbel`, newest first, at most 500, read on a thread of their own and again when
+  the file changes (watched with its folder, a burst read once). Sorted by Date Last Opened, newest first, until arranged
+  otherwise; the time is the latest the list records for the file. The list is read only when it is a regular file of at
+  most 32 MiB, bounded and to its end (`Recents::readList`: a FIFO, a device or a link to one is never opened). Read only:
+  a drop there is refused (the background, its path segment and its sidebar row take no drag, as in the Finder). A recent file
+  renamed or moved while a Recents view is open keeps its place under the new path (`Recents::noteRenamed`, for the
+  session; an entry used after the rename is the new file at the old path); to the Trash it leaves the list.
+- **Glance and Redo**: Cmd+Y opens Glance like Space (Finder's Quick Look shortcut); Redo is Shift+Cmd+Z only, as in
+  the Finder (Ctrl+Y was a second Redo).
+- **Bars** (FP-23, decision F-11): View > Show Path Bar (Alt+Cmd+P), Show Status Bar (Cmd+/), Hide Sidebar (Ctrl+Cmd+S, the
+  lights move into the toolbar); `view/pathBar`, `view/statusBar` (off), `view/sidebar` (on). Until Files has a progress
+  window (FP-68) the status bar also shows while a job runs or a notice is up. Hide Toolbar is not offered: the toolbar
+  holds the window controls when the sidebar is hidden.
+- **Return and Cmd+O** (FP-43, decision F-4): Return renames the selected item, Cmd+O and Cmd+Down open.
+- The list view keeps its column widths and scrolls sideways (the header with it) when it is narrower than its columns
+  (a narrow window, the preview pane).
+
 ## Folder colours and Customize Folder (owner request 2026-10-19; macOS 26 model)
 macOS 26 colours folders (System Settings > Appearance > Folder Color: the accent or a colour) and "Customize Folder…" gives one folder its own colour and an optional symbol or emoji drawn on it; a folder follows the global colour until it has its own. Grassfield copies that model.
 - **Global**: `icons.folderColor` (`theme` = the icon theme's own folder colour, the default; `accent`; `#rrggbb`), Settings > Appearance > Folder colour (Theme, Accent, eight swatches). Applies live to every folder icon Grassfield draws: Files (icon, list, column and gallery views, the column preview, Get Info) and the desktop. Dock stacks and Search folder results do not exist today (the Dock has apps, minimized windows and the Trash; Search file rows use one generic document icon), so there is nothing to colour there; when they appear they use `FolderIcon`.
-- **Per folder**: context menu "Customize Folder…" (fr « Personnaliser le dossier… »; also File menu, and a button in Get Info), a window with a live preview, Colour (Default = follow the global colour, Accent, the seven tag colours, or a typed `#rrggbb`), Symbol (30 suggestions, or any typed or pasted emoji or symbol; the field holds one grapheme cluster at all times, so the preview is what Done saves), Reset, Cancel, Done. Keyboard: Tab walks colour swatches, hex field, symbol grid (the focus ring is on the chosen symbol, else the first, as soon as it has the focus; arrows move it, Return/Space chooses, Delete clears), symbol field, Reset, Cancel, Done; Esc cancels, Return in the window applies. Several folders can be customised at once (the window starts from the first one). A folder's own colour wins over the global one; `theme` as the own colour keeps the theme's colour while a global colour is set.
+- **Per folder**: context menu "Customize Folder…" (fr « Personnaliser le dossier… »; also File menu, and a button in Get Info), a window with a live preview, Colour (Default = follow the global colour, Accent, the seven tag colours, or a typed `#rrggbb`), Symbol (30 suggestions, or any typed or pasted emoji or symbol; the field holds one grapheme cluster at all times, so the preview is what Done saves), Reset, Cancel, Done. Keyboard: Tab walks colour swatches, hex field, symbol grid (the focus ring is on the chosen symbol, else the first, as soon as it has the focus; arrows move it, Return/Space chooses, Delete clears), symbol field, Reset, Cancel, Done; Esc and Ctrl+W cancel, Return in the window applies. Several folders can be customised at once (the window starts from the first one). A folder's own colour wins over the global one; `theme` as the own colour keeps the theme's colour while a global colour is set.
 - **Rendering** (`ui/Grassfield/Ui/FolderIcon.qml`, `FolderEffect.qml`, `FolderStyle.js`; separate from the icon modes of ADR-0014): a `TintedIcon` (mode unchanged) recoloured by one `MultiEffect` layer in default mode and, in an icon mode, by the icon shader itself on the artwork only (the system plate and its rim are not recoloured), with the same arithmetic (colorization 1: the luminance of the theme's folder, flap and shading, mapped onto the colour, alpha kept; tokens `folderIcon*`). No layer or effect exists for a folder without a colour (no extra cost). The colour step runs after the mode step, so Dark/Clear/Tinted still apply; in Tinted mode the folder colour wins for folders that have one, because the shader recolours the already tinted artwork (the plate and its rim keep the tint). A folder in a selected, focused row (an accent fill: Files list and column views) is drawn with `overAccent`, like every icon over an accent fill. The symbol is a `Text` over the effect inside a clipped box the size of the icon (a hostile value cannot draw outside it). Emoji are drawn opaque in their own colours (no alpha, no recolour; with an emoji font without colour glyphs the text fallback uses the shade below). A plain symbol is an engraved shade of the plate under it (macOS 26 model, `FolderStyle.glyphShade`): the plate's colour (the folder colour, or the theme's own folder colour) darkened in its hue (HSL lightness) until it reaches `folderIcon.glyphMinContrast` (3.0, gate A2 icons) plus `glyphContrastMargin` against the plate, with a 1 px light edge under it (`glyphHighlight`); a plate too dark for a darker symbol (black, very dark colours) gets a lightened shade instead. **The plate is computed from the raw icon, never grabbed from the visible one** (`FolderPlate`, `FolderStyle`; first a pass that grabbed the visible icon once per colour, size and mode, one 150 to 200 ms frame each time, so symbols popped in late and the "one frame" this spec claimed was false). A plate is a function of (icon file, size bucket, icon mode, mode tint, appearance, folder colour), and Qt's MultiEffect is arithmetic: the compiled shader's source says, on premultiplied colour c with alpha a, `c = (c - 0.5a)(1 + contrast) + 0.5a`, `c += brightness a`, `gray = dot(c, (0.299, 0.587, 0.114))`, `c = tint gray w + c (1 - w)` (w = colorization), `c = mix(gray, c, 1 + saturation)`, alpha x opacity. So the RAW icon's pixels under the symbol are read once per (icon file, size bucket 32/64/128/256: `folderIcon.plateBuckets`) as a grid of at most 12 x 12 samples (`FolderStyle.sampleBox`; a `Canvas` with `Canvas.Image`, CPU only, loads the icon by URL, draws it at the bucket size and reads back only the box under the symbol: 0 ms measured on the GUI thread, the icon's own decode is that of its provider: `image://icon` of Files is a synchronous pixmap provider, theme file URLs decode asynchronously; the read itself costs nothing on the GUI thread either way), by one `FolderIcon` at a time in the whole application (`FolderPlate.claim`), in an event-loop turn of its own and never from the visible icon or a layer. The plate of any combination is then computed from those samples (`FolderStyle.plateThrough`: the icon mode's stage (`IconModes.effect`) and then the folder colour's (`effect`) through `effectSamples`, each clamped to 8 bits like the layer, composited over the view behind a translucent Clear plate (`folderIcon.plateBackdropDark/Light`), reduced to the darkest and lightest quarter's mean, the mean hue and the luminance of the mode's own folder plate) and cached per full key (4096 entries at most), so 100 distinct folder colours, a new icon mode or a change of appearance cost 0.1 ms each and never another read. The model of the icon modes is a port of `shaders/icon.frag` (`FolderStyle.modeSamples`, `underlay`): the shader's recolouring of the artwork depends on the pixel alone (no plate or stroke analysis), so the model is its arithmetic, not an estimate. Dark darkens and slightly desaturates the folder and lifts its dark parts (the colour identity is kept), Clear makes it a flat ink whose opacity follows the folder's luminance, Tinted maps the luminance onto the two-tone ramp of the tint. The folder sits on the system plate (scaled by `iconMode.sysGlyphScale` about the centre together with the symbol) and the symbol's plate is the artwork over that system plate over the view behind it (`FolderStyle.underlay`: graphite, tinted, or the glass of Clear, light on a dark material, smoked on a light one or over the bare wallpaper, composited over the backdrop `folderIcon.plateBackdropDark/Light`); only Clear's artwork is translucent, so only there does the backdrop matter. The model is checked against the rendered pixels on a GPU scene graph (`tests/unit/tst_iconshader.qml` `test_folderModelMatchesTheShader`, run by `tests/visual/icon-a2.sh`: the Breeze folder (the WhiteSur one before 2026-10-21) and two synthetic folders, three modes, both appearances, window and wallpaper: at most 4/255 per channel; measured 1/255 at most for the WhiteSur folder and 0 for the flat ones; not re-run on the Breeze folder (test-icons is refused in the agent sandbox: NOT VERIFIED)). The folder-colour step (MultiEffect) is the arithmetic above on straight colour, exact for opaque pixels (the clamp differs from the layer's premultiplied one only where a pixel is translucent). The cache of raw reads evicts its least recently used quarter past 512 icons, so the icons on screen keep their plates. The software scene graph of the offscreen unit runner cannot draw the recolour or the shader, but the model is plain JavaScript and is tested there. Until the samples arrive (the next turns of the event loop, once per icon file) the symbol is drawn at once with the estimate of `FolderStyle.plateOf` (colour x `plateDefault` ...; calibrated on one icon theme, never used once the icon is read) and settles on the computed plate with a colour cross-fade of one motion token (`motionNormal`, at most 100 ms with Reduce Motion), no pop; an icon with no file to read keeps the estimate. An emoji is opaque and in its own colours and needs no plate.
 
   **One engraving rule per mode** (`FolderStyle.prefersLighter`, `glyphShade`): the shade is the plate's hue, darker or lighter than the plate until it reaches `glyphMinContrast` + `glyphContrastMargin` against the darkest plate (darker) or the lightest (lighter). Default, Dark and Clear engrave the darker shade (macOS 26: a debossed symbol; a Dark folder keeps its colour on the graphite plate); Tinted engraves the lighter shade when the mode's own folder plate (the theme's folder through the mode and the icon tint) has a relative luminance below `folderIcon.glyphLighterBelow` (0.25), darker otherwise, so the light appearance's dark tint plates take lighter symbols and the dark appearance's bright ones darker. The direction depends on the mode and its plate, never on the folder colour; a folder takes the other shade only when its plate cannot reach the contrast the preferred way (a black folder in Default, Dark, Clear and dark-appearance Tinted; the white folder in light-appearance Tinted; the accent folder in light-appearance Default, whose plate is darker than 0.115). Same colour, same mode, same appearance: same shade. Measured (nested, `tests/visual/folder-glyphs.sh` and `folder_glyph_contrast.py`, 12 folders x 4 icon modes x 2 appearances): 96/96 cells at 3:1 or more on Breeze (the base icon theme, 2026-10-21, min 3.28; the same on the former base theme) and 288/288 on the desktop and on the fallback theme (min 3.27); every symbol is drawn at the capture (the grab pass left the first captures after a change without symbol: it was still reading). Symbols per view (WhiteSur, 2026-10-20; not repeated on Breeze, only the 3:1 check was): Default and Clear in both appearances all darker except Black (and the accent folder in light-appearance Default); Tinted in light appearance all 12 lighter, in dark appearance all darker except Black; Dark lighter for 8 of 12, the pale Theme, Yellow, White and Lemon plates darker (a pale symbol on those plates would be under 3:1). Frame cost (`tests/visual/folder-glyph-perf.sh`, `qt.scenegraph.time.renderloop` per frame, nested, WhiteSur (the base theme then), 1000 folders, the first 100 with a symbol, 60 notches down and up): 1238 frames, none over 33 ms on the GUI thread or the render thread, with nothing customised, with one shared colour and with 100 distinct colours; CPU 3, 3 and 4 s (before, with the grab: 3, 3 and 5 s); the read itself, instrumented, costs 0 ms of canvas drawing and readback on the GUI thread (the icon decodes asynchronously, 11 to 45 ms in the background, once). The window's first population has frames over 33 ms in every run, nothing customised included: not attributable to folder icons.

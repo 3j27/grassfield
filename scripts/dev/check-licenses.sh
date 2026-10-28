@@ -3,7 +3,7 @@
 #   - packaging/licenses/omarchy-MIT.txt does not carry Omarchy's LICENSE verbatim: the text from its copyright line to the
 #     end must hash to the pinned SHA-256 of basecamp/omarchy v4.0.4's LICENSE and name "David Heinemeier Hansson"
 #   - a package_*() function of packaging/arch/PKGBUILD lacks a licence it ships: grassfield-desktop MIT + CC-BY-SA-4.0 +
-#     Unicode-3.0, grassfield-compositor MIT + LGPL-2.1-or-later + BSD-3-Clause, grassfield-icons MIT + GPL-3.0-only
+#     Unicode-3.0 + BSD-3-Clause (the clipboard helper's generated protocol code), grassfield-compositor MIT + LGPL-2.1-or-later + BSD-3-Clause, grassfield-icons MIT + GPL-3.0-only
 #   - a file of packaging/licenses/ is not installed by the PKGBUILD or not named in THIRD_PARTY.md
 #   - the notices that must ship are missing (LICENSE, THIRD_PARTY.md, Unicode License v3, the appmenu LGPL text)
 #   - THIRD_PARTY.md still says the project licence is unsettled or the Omarchy holder is "the Omarchy authors"
@@ -38,7 +38,7 @@ check_tree() { # <root>
   else
     echo "packaging/licenses/omarchy-MIT.txt: missing"; n=$((n + 1))
   fi
-  for spec in "grassfield-desktop:MIT CC-BY-SA-4.0 Unicode-3.0" "grassfield-compositor:MIT LGPL-2.1-or-later BSD-3-Clause" "grassfield-icons:MIT GPL-3.0-only"; do
+  for spec in "grassfield-desktop:MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause" "grassfield-compositor:MIT LGPL-2.1-or-later BSD-3-Clause" "grassfield-icons:MIT GPL-3.0-only"; do
     # shellcheck disable=SC2086
     missing=$(need "$t/packaging/arch/PKGBUILD" "${spec%%:*}" ${spec#*:} | paste -sd' ' -)
     [[ -z $missing ]] || { echo "PKGBUILD: ${spec%%:*} license= lacks: $missing"; n=$((n + 1)); }

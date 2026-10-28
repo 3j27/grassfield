@@ -7,15 +7,19 @@
 #include <QHash>
 #include <QPointer>
 #include <QSet>
+#include <QSize>
 #include <QSortFilterProxyModel>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 
+#include "filelogic.h"
 #include "folderstylelogic.h"
 #include "previewqueue.h"
 
 #include <KFileItem>
+
+#include <memory>
 
 class FolderStyleStore;
 class KDirLister;
@@ -24,6 +28,11 @@ class KJob;
 class ItemListModel;
 class OrgKdeKDirNotifyInterface;
 class SearchRunner;
+
+namespace ImageSize
+{
+class Reader;
+}
 
 namespace KIO
 {
@@ -45,6 +54,10 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(int sortKey READ sortKey WRITE setSortKey NOTIFY sortChanged)
     Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY sortChanged)
     Q_PROPERTY(bool foldersFirst READ foldersFirst WRITE setFoldersFirst NOTIFY sortChanged)
+    // View > Group By (FileLogic::GroupBy; 0: no groups). The rows are sorted group by group, then by sortKey.
+    Q_PROPERTY(int groupBy READ groupBy WRITE setGroupBy NOTIFY sortChanged)
+    // The groups in row order: [{title, first, count}] (empty without groups), for the grouped icon view.
+    Q_PROPERTY(QVariantList groups READ groups NOTIFY groupsChanged)
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY showHiddenChanged)
     Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
@@ -61,6 +74,8 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(int largePreviewSize READ largePreviewSize WRITE setLargePreviewSize NOTIFY previewSizeChanged)
     // A tag search location (see the class comment); searchLimited: a bound of TagSearch stopped it early.
     Q_PROPERTY(bool isSearch READ isSearch NOTIFY urlChanged)
+    // Recents (Recents::locationUrl): a search-like flat list of the recently used files; isSearch is true too.
+    Q_PROPERTY(bool isRecents READ isRecents NOTIFY urlChanged)
     Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
 
 public:
@@ -86,6 +101,10 @@ public:
         // A folder's own look (FolderStyleStore): its colour setting ("" = follows icons.folderColor) and its symbol.
         FolderColorRole,
         FolderGlyphRole,
+        // The title of the item's group (Group By; "" without groups): the list view's sections.
+        GroupRole,
+        // Not a QML role (not in roleNames): only signalled by dataChanged when a picture's size arrives (dimensionsAt).
+        DimensionsRole,
     };
     Q_ENUM(Roles)
 
@@ -100,6 +119,9 @@ public:
     void setSortDescending(bool descending);
     bool foldersFirst() const { return m_foldersFirst; }
     void setFoldersFirst(bool on);
+    int groupBy() const { return m_groupBy; }
+    void setGroupBy(int by);
+    QVariantList groups() const;
     bool showHidden() const;
     void setShowHidden(bool on);
     QString filterText() const { return m_filterText; }
@@ -118,6 +140,7 @@ public:
     int largePreviewSize() const { return m_large.size; }
     void setLargePreviewSize(int size);
     bool isSearch() const;
+    bool isRecents() const;
     bool searchLimited() const { return m_searchLimited; }
 
     // Where folder looks are read from (FilesApp's store; null: no folder is customised).
@@ -151,6 +174,10 @@ public:
     Q_INVOKABLE int findPrefix(const QString &prefix, int from) const;
     // Get Info data of a row, or of the listed folder itself (row -1).
     Q_INVOKABLE QVariantMap info(int row) const;
+    // A picture's size in pixels as "W × H" (the preview pane's Dimensions), "" until known or when it can't be known. Never
+    // read here: the first call asks ImageSize::Reader (a worker thread; a local regular file only, never a FIFO, a device
+    // or a network share), and the row's dataChanged (DimensionsRole) tells when the answer is in.
+    Q_INVOKABLE QString dimensionsAt(int row);
     // Ask for a thumbnail (delegates call this when created); batched into one PreviewJob. `large`: the gallery
     // preview size (role largeThumbnail) instead of the icon size (role thumbnail).
     Q_INVOKABLE void requestPreview(int row, bool large = false);
@@ -178,6 +205,7 @@ signals:
     void errorChanged();
     void rootChanged();
     void previewSizeChanged();
+    void groupsChanged();
     // The view should scroll to `row`, and start inline renaming when `rename` is true.
     void revealRequested(int row, bool rename);
     // The listed folder was deleted or the listing redirected elsewhere.
@@ -229,10 +257,40 @@ private:
     QModelIndex sourceIndexForUrl(const QUrl &url) const;
     // Tags of an item (cached per url; read from user.xdg.tags of its local path).
     QStringList tagsOf(const KFileItem &item) const;
+    // What sorting by `key` and grouping by m_groupBy read of an item (only those fields are filled).
+    FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key) const;
+    // An item's group (cached per url until the item, the folder, the grouping or the day changes).
+    FileLogic::Group groupFor(const KFileItem &item) const;
+    // The rows or their groups changed: groupsChanged follows (once per event loop turn).
+    void groupsDirty();
+    // Every cached group goes (the folder, the grouping or the day changed).
+    void clearGroupCache();
+    // A new day: the items are grouped and sorted again, outside any sort (its comparisons must see one grouping).
+    void regroupForNewDay();
+    // Arms m_dayTimer for the next midnight while the rows are grouped.
+    void armDayTimer();
     void dropTags(const QUrl &url);
     // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
     FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
+
+    // Picture sizes by local path, for the file as it was listed (modification time and size): answers of the reader, or
+    // pending. At most kMaxDimensions kept (all dropped beyond, and with the folder).
+    struct Dimensions {
+        QUrl url;
+        QDateTime modified;
+        qint64 size = -1;
+        bool pending = true;
+        QSize pixels;
+    };
+    static constexpr int kMaxDimensions = 256;
+    QHash<QString, Dimensions> m_dimensions;
+    std::unique_ptr<ImageSize::Reader> m_sizeReader;
+    void dimensionsReady(const QString &path, QSize pixels);
+
+    // Recents: read on a thread (RecentsLoader), again when the list changes on disk.
+    void startRecents();
+    void stopRecents();
 
     // Tag search.
     void startSearch();
@@ -246,6 +304,23 @@ private:
     KDirModel *m_dirModel = nullptr;
     QUrl m_url;
     int m_sortKey = 0;
+    int m_groupBy = 0;
+    // Recents: the load in flight is the current generation; when each file was last used (Date Last Opened there).
+    quint64 m_recentsGeneration = 0;
+    QHash<QUrl, QDateTime> m_recentTimes;
+    QFileSystemWatcher *m_recentsWatcher = nullptr;
+    QTimer m_recentsTimer;
+    mutable QHash<QUrl, FileLogic::Group> m_groupCache;
+    mutable QVariantList m_groups;
+    mutable bool m_groupsValid = false;
+    bool m_groupsNotifyQueued = false;
+    // "Now" of the date groups, read again once a minute (a sort compares many times).
+    mutable QDateTime m_groupNow;
+    mutable QElapsedTimer m_groupClock;
+    // The day the cached groups were made for; a new one (seen by groupFor, or the timer armed for midnight) regroups.
+    mutable QDate m_groupDay;
+    mutable bool m_newDayQueued = false;
+    QTimer m_dayTimer;
     bool m_descending = false;
     bool m_foldersFirst = true;
     QString m_filterText;

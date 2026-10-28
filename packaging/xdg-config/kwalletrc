@@ -1,0 +1,6 @@
+# Grassfield session (ADR-0035 D-12, owner decision Q17-b). Installed as /usr/share/grassfield/xdg-config/kwalletrc and read
+# through XDG_CONFIG_DIRS (packaging/uwsm/env-grassfield), below the user's own ~/.config/kwalletrc, which wins when it sets
+# the same key. KWallet's ksecretd then never takes org.freedesktop.secrets, so the Secret Service stays gnome-keyring's
+# (started by D-Bus on first use); KWallet keeps its own name, org.kde.secretservicecompat, for the apps that use KWallet.
+[org.freedesktop.secrets]
+apiEnabled=false

@@ -27,6 +27,8 @@ QtObject {
     property string folderColorSetting: "theme"
     // Accent colour (`accent.color`): "multicolor" (the Grassfield green) | blue | purple | pink | red | orange | yellow | green | graphite.
     property string accentSetting: "multicolor"
+    // Text highlight colour (`accent.highlight`): "automatic" (the accent) or an accent name (Accent.highlight).
+    property string highlightSetting: "automatic"
     // How menus label keyboard shortcuts: "pc" (the text, "Ctrl+Shift+N") or "mac" (the macOS symbols). Set by the host from
     // `keyboard.shortcutStyle` and the device (MenuShortcut.style).
     property string shortcutStyle: "pc"
@@ -78,8 +80,9 @@ QtObject {
     // The light palette for surfaces that are always light (the menu bar's dark foreground over a light wallpaper), hooked like `colors`.
     readonly property var lightColors: devGlyphMode !== "" ? glyphColors(accentedLight) : accentedLight
     // Highlight colour (text selection, Automatic as on macOS): it follows the accent.
-    readonly property color highlight: colors.accent
-    readonly property color highlightText: colors.accentText
+    readonly property var highlightPair: Accent.highlight(highlightSetting, dark, colors, Tokens)
+    readonly property color highlight: highlightPair.highlight
+    readonly property color highlightText: highlightPair.highlightText
 
     // Dev-only hook for tests/visual (contrast glyph mask; set by the shell's `visual glyphs <mode>` IPC, which is
     // refused outside GRASSFIELD_DEV; always "" in production). Every text and icon colour (text, textSecondary,

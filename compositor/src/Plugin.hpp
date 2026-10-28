@@ -43,6 +43,7 @@ namespace gf {
         SP<SHyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
         SP<SHyprCtlCommand>                hyprctlFramesStartCommand; // `hyprctl grassfield-frames-start` (records for 60 s)
         SP<SHyprCtlCommand>                hyprctlStagesCommand; // `hyprctl grassfield-stages` (the Stages state; stages-available needs it)
+        SP<SHyprCtlCommand>                hyprctlTilingCommand; // `hyprctl grassfield-tiling` (the tiling state; tiling-arrange needs it)
         bool                               luaHelloRegistered    = false;
         bool                               luaMinimizeRegistered = false;
         bool                               luaRestoreRegistered  = false;
@@ -53,10 +54,14 @@ namespace gf {
         bool                               luaCursorRefreshRegistered = false;
         bool                               luaOverviewFocusRegistered = false;
         bool                               luaTileRegistered          = false;
+        bool                               luaArrangeRegistered       = false;
+        bool                               luaTilePopoverRegistered   = false;
+        bool                               luaMoveToRegistered        = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;
-        // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingMargins): macOS defaults, all on.
+        // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingOptionDrag / tilingMargins): macOS
+        // defaults, all on.
         tiling::DragOptions tilingDrag;
         bool                tilingMargins = true;
         // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.

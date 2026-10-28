@@ -9,11 +9,11 @@ T.Button {
     property bool destructive: false
     // Alert style: a capsule, alertButtonHeight tall (a Dialog sets it on its buttons).
     property bool capsule: false
-    // macOS push button: buttonHeight (24) tall instead of the roomier default (a sheet sets it on its buttons).
+    // macOS 27 push button: a buttonHeight (24) tall capsule instead of the roomier default (a row's "Set…").
     property bool push: false
 
-    // Whole pixels, so that a row of buttons keeps every edge sharp.
-    implicitWidth: Math.ceil(Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg))
+    // Whole pixels, so that a row of buttons keeps every edge sharp. A push button is as wide as its label and its padding.
+    implicitWidth: root.push ? Math.ceil(label.implicitWidth + 2 * Tokens.controlPushPadding) : Math.ceil(Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg))
     implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
     // Disabled: the whole button dims, once (callers no longer set an opacity of their own).
     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
@@ -45,7 +45,7 @@ T.Button {
     }
 
     background: Rectangle {
-        radius: root.capsule ? height / 2 : Tokens.radiusControl
+        radius: root.capsule || root.push ? height / 2 : Tokens.radiusControl
         color: root.primary ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         // Increase Contrast: the border token carries a stronger value then.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -74,7 +74,7 @@ T.Button {
     }
 
     FocusRing {
-        shapeRadius: root.capsule ? root.height / 2 : Tokens.radiusControl
+        shapeRadius: root.capsule || root.push ? root.height / 2 : Tokens.radiusControl
         visible: root.visualFocus
     }
 }

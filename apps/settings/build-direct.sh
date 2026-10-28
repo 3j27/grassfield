@@ -8,9 +8,15 @@ root=$(git -C "$here" rev-parse --show-toplevel)
 out=$root/.dev/build
 mkdir -p "$out"
 
+# QObject with Q_OBJECT needs moc.
+moc=/usr/lib/qt6/moc
+[[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
+"$moc" "$here/src/backend.h" -o "$out/moc_backend.cpp"
+
 if [[ ${1:-} == "--tests" ]]; then
-  # The dev guard of the system sections and the wallpaper helper door (systemguard.cpp) and the Wi-Fi/Bluetooth logic over
-  # D-Bus (systembus.cpp, against a canned bus: no bus needed): Qt Core and the Qt DBus types only.
+  # The dev guard of the system sections and the wallpaper helper door (systemguard.cpp), the Wi-Fi/Bluetooth logic over
+  # D-Bus (systembus.cpp, against a canned bus: no bus needed) and the Backend's glue (backend.cpp: its processes run fake
+  # commands from a scratch PATH; it never connects to a bus): Qt Core, Qt Gui and the Qt DBus types.
   # --asan: the same with -fsanitize=address,undefined (.dev/build/settings-unit-tests-asan).
   extra=()
   suffix=""
@@ -19,9 +25,10 @@ if [[ ${1:-} == "--tests" ]]; then
     suffix="-asan"
   fi
   # shellcheck disable=SC2046
-  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" -I"$here/.." $(pkg-config --cflags Qt6Core Qt6DBus) \
+  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" -I"$here/.." -I"$out" $(pkg-config --cflags Qt6Core Qt6Gui Qt6DBus) \
     "$root/tests/unit/settings/tst_systemguard.cpp" "$root/tests/unit/settings/tst_systembus.cpp" "$here/src/systemguard.cpp" "$here/src/systembus.cpp" "$here/src/busjobs.cpp" "$root/tests/unit/settings/tst_busjobs.cpp" \
-    $(pkg-config --libs Qt6Core Qt6DBus) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests$suffix"
+    "$here/src/backend.cpp" "$out/moc_backend.cpp" "$root/tests/unit/settings/tst_backend.cpp" \
+    $(pkg-config --libs Qt6Core Qt6Gui Qt6DBus) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests$suffix"
   echo "built $out/settings-unit-tests$suffix"
   exit 0
 fi
@@ -30,11 +37,6 @@ defs=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # the on
 if [[ ${1:-} != "--install-paths" ]]; then
   defs+=("-DGRASSFIELD_SETTINGS_QML_DIR=\"$here/qml\"" "-DGRASSFIELD_DEV_BINDINGS=\"$root/config/hypr/grassfield/bindings.lua\"")
 fi
-
-# QObject with Q_OBJECT needs moc.
-moc=/usr/lib/qt6/moc
-[[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
-"$moc" "$here/src/backend.h" -o "$out/moc_backend.cpp"
 
 # shellcheck disable=SC2046
 g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${defs[@]}" \

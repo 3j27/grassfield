@@ -155,6 +155,16 @@ Variants {
             }
         }
 
+        // The pointer anywhere on the output, for a popup that closes when the pointer stays away from it (the tiling popover
+        // opened by the hover, TL22). Passive: it takes nothing from the areas below.
+        HoverHandler {
+            onPointChanged: {
+                const popover = holder.item as TilingPopover;
+                if (win.open && popover)
+                    popover.pointerAt(point.position.x, point.position.y);
+            }
+        }
+
         // Click outside closes. Right and middle buttons too.
         MouseArea {
             anchors.fill: parent
@@ -229,6 +239,8 @@ Variants {
                     return Popups.anchorX - width;
                 case "center":
                     return (win.width - width) / 2;
+                case "zone":
+                    return Popups.anchorX + ((Popups.data.width ?? width) - width) / 2;
                 }
                 return Popups.anchorX;
             }
@@ -238,11 +250,18 @@ Variants {
                 switch (Popups.align) {
                 case "above":
                     return Popups.anchorY - height;
+                case "below":
+                    // A gap from the light, or above it when the output has no room below (TL22).
+                    if (Popups.anchorY + Tokens.spacingXs + height + margin > win.height && Popups.data.flipY !== undefined)
+                        return Popups.data.flipY - Tokens.spacingXs - height;
+                    return Popups.anchorY + Tokens.spacingXs;
                 case "rightOf":
                 case "leftOf":
                     return Popups.anchorY - height / 2;
                 case "center":
                     return (win.height - height) / 2 - win.height * Tokens.panelDialogRaise;
+                case "zone":
+                    return Popups.anchorY + ((Popups.data.height ?? height) - height) / 2;
                 }
                 return Popups.anchorY;
             }
@@ -298,6 +317,10 @@ Variants {
                     return appAbout;
                 case "notice":
                     return noticeDialog;
+                case "tiling":
+                    return tilingPopover;
+                case "tilingSuggest":
+                    return tilingSuggestions;
                 }
                 return null;
             }
@@ -392,6 +415,18 @@ Variants {
         Component {
             id: noticeDialog
             NoticeDialog {}
+        }
+
+        // The tiling popover of a window's zoom light (docs/specs/tiling.md TL22-TL26).
+        Component {
+            id: tilingPopover
+            TilingPopover {}
+        }
+
+        // The tiling suggestions in an empty zone of a layout (docs/specs/tiling.md TL28).
+        Component {
+            id: tilingSuggestions
+            TilingSuggestions {}
         }
     }
 }

@@ -8,17 +8,37 @@ local self_path = debug and debug.getinfo and debug.getinfo(1, "S").source or ""
 local config_dir = self_path:match("^@(.+)/[^/]+$") or "/usr/share/grassfield/hypr"
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- A parse starts with none of Grassfield's modules loaded, so each one runs again on a reload (should Hyprland keep
+-- package.loaded) and a module loaded before core.lua stays loaded for the rest of this parse: bindings.lua reads the
+-- Trackpad gestures from grassfield.input, which omarchy.lua loads.
+for module in pairs(package.loaded) do
+  if module == "grassfield" or module:sub(1, 11) == "grassfield." then
+    package.loaded[module] = nil
+  end
+end
+
 -- Hardware/env from Omarchy (read-only). Grassfield defaults apply if it fails.
 local omarchy = require("grassfield.omarchy")
 if not omarchy.ok then
   print("grassfield: Omarchy include skipped: " .. tostring(omarchy.reason))
 end
 -- GF-066: the pointer defaults normally went in before the user's input.lua (omarchy.lua); without that include they apply here.
+-- Optional, like every module before core.lua: a failure is logged and costs the pointer defaults and the Settings
+-- choices, never the bindings, the lock key or the lid handling below.
 if not omarchy.input_applied then
-  require("grassfield.input")
+  local input_ok, input_err = pcall(require, "grassfield.input")
+  if not input_ok then
+    print("grassfield: input: " .. tostring(input_err))
+  end
 end
 if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+end
+-- ADR-0031: the displays set in Settings > Displays, after the user's monitors.lua (a display Settings never touched keeps
+-- the user's rule). A failure costs only these rules.
+local displays_ok, displays_err = pcall(require, "grassfield.displays")
+if not displays_ok then
+  print("grassfield: displays: " .. tostring(displays_err))
 end
 -- ADR-0001: a failed include is announced once (details in the journal, lines start with "grassfield: Omarchy include").
 if not omarchy.ok or #omarchy.problems > 0 then
@@ -31,7 +51,8 @@ end
 -- GF-032: the Omarchy shell must never start inside this session (updates, theme and font changes try to start it).
 -- The stand-ins' directory is fixed: a stray GRASSFIELD_SHIM_DIR would have let Omarchy's sleep-lock call Omarchy's own
 -- omarchy-shell instead of the stand-in that asks grassfield-shell to lock (the sleep-lock fallback, D-12).
-omarchy.guard_path("/usr/lib/grassfield/omarchy-shims")
+-- ADR-0035 D-3: Hyprland's "not responding" dialog goes through Grassfield's stand-in (session-bin/hyprland-dialog).
+omarchy.guard_path("/usr/lib/grassfield/omarchy-shims", "/usr/lib/grassfield/session-bin")
 
 hl.env("XDG_SESSION_DESKTOP", "Grassfield")
 hl.env("GRASSFIELD_SESSION", "1")

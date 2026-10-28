@@ -29,6 +29,16 @@ TestCase {
         compare(extra, {"XCURSOR_SIZE": "48"});
     }
 
+    // The apps the shell starts get GTK_USE_PORTAL=1 back when env-grassfield recorded that the session sets it
+    // (Mode.appsGtkPortal; the shell's own unit clears it, ADR-0035 D-8); nothing otherwise.
+    function test_portalEnvironment() {
+        compare(AppLaunch.portalEnvironment(true), {"GTK_USE_PORTAL": "1"});
+        for (const other of [false, undefined, null, "", "1", 1])
+            compare(AppLaunch.portalEnvironment(other), {}, String(other));
+        compare(AppLaunch.mergeEnvironment(AppLaunch.portalEnvironment(true), {"XCURSOR_SIZE": "48"}),
+                {"GTK_USE_PORTAL": "1", "XCURSOR_SIZE": "48"});
+    }
+
     function test_appsHomeIsNextToTheStateHome() {
         compare(AppLaunch.appsHomeFor("/w/.dev/state", "/run"), "/w/.dev/apps-home");
         compare(AppLaunch.appsHomeFor("/w/.dev/state/", "/run"), "/w/.dev/apps-home");

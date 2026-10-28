@@ -19,7 +19,18 @@ Tags: **VERIFIED** (checked in this session, source cited), **ASSUMPTION** (memo
 
 ## 2. Project licence and current repository status
 
-**Decision on file:** `docs/decisions/ADR-0005-license.md`, status **Proposed**, "needs legal review":
+> **Update 2026-10-27.** The text of this section and the table below describe the repository at 53b6c10 (2026-10-18)
+> and are stale. Current state (checked 2026-10-27 at the tree of `legal/owner-decisions-2026-10-27`): ADR-0005 is
+> **Accepted** (MIT for code, owner, 2026-10-18); the root `LICENSE` exists (MIT, "Copyright (c) 2026 Chapdel KAMGA and the
+> Grassfield contributors"); `THIRD_PARTY.md` exists and ships with both packages; Omarchy's MIT notice ships as
+> `packaging/licenses/omarchy-MIT.txt` (verbatim, pinned hash, `scripts/dev/check-licenses.sh`); the Hyprland BSD-3 text,
+> the appmenu LGPL notice, the Unicode licence and the clipboard protocol notices ship too; the `license=` arrays of the
+> PKGBUILD list MIT, CC-BY-SA-4.0, Unicode-3.0 and BSD-3-Clause for `grassfield-desktop`, MIT, LGPL-2.1-or-later and
+> BSD-3-Clause for `grassfield-compositor`, MIT and GPL-3.0-only for `grassfield-icons`. The art licence is CC-BY-SA-4.0,
+> decided by the owner on 2026-10-27, the Grassfield logo excluded (all rights reserved); `THIRD_PARTY.md` carries the
+> AI-assistance statement. The owner's decisions of 2026-10-27 are in `docs/legal/visual-review.md` section 7.
+
+**Decision on file (as of 2026-10-18; ADR-0005 has been Accepted since 2026-10-18, see the update above):** `docs/decisions/ADR-0005-license.md`, status **Proposed**, "needs legal review":
 - code (shell QML, plugin C++, bridge, apps, scripts, config): MIT, a root `LICENSE`, `SPDX-License-Identifier: MIT`
   in new source files;
 - code adapted from Omarchy keeps its MIT notice and attribution;
@@ -84,14 +95,22 @@ repositories; Grassfield does not redistribute it today. The ISO (M6) changes th
 | 14 | libnotify 0.8.8 | declared in `depends=()`; **no linking or execution found** in shipped code (only a comment in `shell/notifications/History.js:139`; `notify-send` appears in dev scripts) | LGPL-2.1-or-later | none identified | dependency without visible use: keep or drop is an owner choice |
 | 15 | Inter 4.1 (package inter-font) | UI font by family name; not bundled | `/usr/share/licenses/inter-font/LICENSE.txt`: SIL OFL 1.1, "Copyright (c) 2016 The Inter Project Authors"; pacman: OFL-1.1-RFN | OFL (licence text with the fonts, no sale alone, Reserved Font Name rules if modified) | not redistributed; RFN discrepancy (4.9) |
 | 16 | Noto Sans (noto-fonts 2026.09.01) | fallback family | OFL-1.1-no-RFN | OFL | not redistributed |
-| 17 | Grassfield icons (40 SVG) | shipped in `grassfield-desktop` | own; CC-BY-SA-4.0 proposed (`branding/LICENSES.md`) | attribution + ShareAlike if adopted | provenance complete; 2.4 and 2.5 |
+| 17 | Grassfield icons (40 SVG on 2026-10-18; on 2026-10-27 `ls branding/icons/symbolic/*.svg | wc -l` prints 96 (95 symbolic icons and the logo)) | shipped in `grassfield-desktop` | own; CC-BY-SA-4.0, decided by the owner 2026-10-27, the logo excluded (all rights reserved) (`branding/LICENSES.md`) | attribution + ShareAlike if adopted | provenance complete; 2.4 and 2.5 |
 | 18 | Procedural wallpaper | QML code in `shell/desktop/WallpaperArt.qml` | own; MIT as code (proposed) | — | provenance line added in this audit |
 | 19 | Omarchy 4.0.4 code | portions adapted in 3 QML files; run-time `require` of Omarchy Lua modules; reuse of its PAM service | MIT (pacman); no licence file installed under `/usr/share/omarchy` or `/usr/share/licenses` | MIT notice (copyright line + permission notice) | partial (4.11) |
 | 20 | DBusMenu and AppMenu Registrar interfaces | bridge calls `com.canonical.dbusmenu` (`GetLayout`, `AboutToShow`, `Event`) with explicit signatures; owns `com.canonical.AppMenu.Registrar` and answers introspection with an inline XML of 4 methods (`bridges/menu-bridge/src/DBusObjects.cpp:23-31`) | no upstream file copied (grep: no `com.canonical` XML file in the repo); licence of the original interface definitions not available locally | unknown | needs legal review (4.12) |
 | 21 | googletest 1.18.0 | `makedepends`; unit tests of plugin, bridge, Files, Preview; test binaries built in `check()` | BSD-3-Clause, "Copyright 2008, Google Inc." | notice only if test binaries were distributed | not packaged (VERIFIED: the package functions and the CMake `install()` rules install no test binary) |
 | 22 | wlr-virtual-pointer protocol (test tool) | `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`, "reconstructed from the request signatures" of Hyprland's generated header | upstream notice in `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`: MIT, "Copyright © 2019 Josef Gajdusek" | MIT notice if distributed | test-only, not packaged; no notice in the reconstructed file |
 | 23 | uwsm 0.26.7 | session launcher in `grassfield.desktop` `Exec=` | MIT | none (separate program) | dependency |
-| 24 | Breeze and Adwaita icon themes (`breeze-icons` 6.29.0, `adwaita-icon-theme` 50.0; runtime dependencies, ADR-0017 amended 2026-10-21) | icon theme data read by Qt and GTK as data; installed by pacman, never vendored or modified; WhiteSur was dropped on 2026-10-21 | LGPL-3.0-or-later and LGPL-2.1-only (Breeze); CC-BY-SA-3.0 OR LGPL-3.0-only (Adwaita), per pacman | licence files are installed by their packages; needs legal review |
+| 24 | **Stale since 2026-10-23 (see the update line after this table).** Breeze and Adwaita icon themes (`breeze-icons` 6.29.0, `adwaita-icon-theme` 50.0; runtime dependencies, ADR-0017 amended 2026-10-21) | icon theme data read by Qt and GTK as data; installed by pacman, never vendored or modified; WhiteSur was dropped on 2026-10-21 | LGPL-3.0-or-later and LGPL-2.1-only (Breeze); CC-BY-SA-3.0 OR LGPL-3.0-only (Adwaita), per pacman | licence files are installed by their packages; needs legal review |
+
+**Update 2026-10-27 on row 24 and G12.** Since the owner's decision of 2026-10-23 (ADR-0017 as amended) the package
+`grassfield-icons` ships a composed theme: Grassfield's own icons, the MacTahoe icon theme (GPL-3.0-only, pinned commit)
+and the Pebble icon theme (pinned commit, no licence file, README states GPL-3.0), `license=(MIT GPL-3.0-only)`; Breeze and
+Adwaita are only the inherited fallback (`Inherits=breeze,Adwaita,hicolor`). So GPL-3.0 icon data is packaged again and
+G12's "closed 2026-10-21" no longer holds. Owner decisions: risk accepted 2026-10-23; the composed pack accepted for
+publication at the owner's risk and Pebble without a licence file kept, 2026-10-27 (master-prompt D5/§14 amendment).
+Provenance: `THIRD_PARTY.md` section 5, `branding/LICENSES.md`. Not a legal conclusion.
 
 ### 4.2 Hyprland and its libraries (rows 1, 2, 5)
 
@@ -265,7 +284,7 @@ needs legal review: confirmation that executing separately distributed programs 
 | G9 | FFmpeg GPL-3.0 at run time in Preview and, since ADR-0016 W7 (video wallpapers), in the shell process (QtMultimedia plays the file that the `ffmpeg` program transcoded); the `ffmpeg` and `ffprobe` programs also run as separate processes of `grassfield-wallpaper` | ask counsel; engineering options: other backend, LGPL build of ffmpeg on the ISO, a separate wallpaper process (ADR-0016 option V2, which keeps FFmpeg out of the shell) |
 | G10 | No in-app notices | optional "Acknowledgements"/licences page in Settings › About |
 | G11 | Test-only protocol XML without notice | add the MIT notice to `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml` before publishing the repository |
-| G12 | Closed 2026-10-21: no GPL-3.0 icon data is packaged any more (WhiteSur dropped, ADR-0017 amendment) | Breeze and Adwaita are runtime dependencies installed by pacman (row 24). needs legal review |
+| G12 | Closed 2026-10-21, reopened 2026-10-23: GPL-3.0 icon data (MacTahoe, Pebble) is packaged again in `grassfield-icons`; owner-accepted risk 2026-10-23 and 2026-10-27 (was: no GPL-3.0 icon data packaged, WhiteSur dropped, ADR-0017 amendment) | Breeze and Adwaita are runtime dependencies installed by pacman (row 24). needs legal review |
 
 ## 6. Grassfield OS ISO (M6): items to plan
 
