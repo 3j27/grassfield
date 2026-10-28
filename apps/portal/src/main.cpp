@@ -1,0 +1,141 @@
+// grassfield-portal (ADR-0035 D-4; step 4b): the Open and Save panels of the Grassfield session, served to
+// xdg-desktop-portal as org.freedesktop.impl.portal.FileChooser under org.freedesktop.impl.portal.desktop.grassfield. Started
+// by D-Bus activation (grassfield-portal.service), it quits 60 s after its last request. The panels are the Files browser:
+// this binary links the Files library (apps/files/files-core.cmake) and loads Files' QML (FilePanels.qml), so a panel has
+// the sidebar, views, path pop-up, search, Quick Look and KIO sheets of Grassfield Files.
+#include "filechooser.h"
+#include "filesapp.h"
+#include "imageproviders.h"
+#include "panelstate.h"
+#include "runmode.h"
+#include "testbus.h"
+#include "translationloader.h"
+#include "windowchrome.h"
+
+#include <QApplication>
+#include <QDBusConnection>
+#include <QDir>
+#include <QQmlApplicationEngine>
+#include <QUrl>
+
+#include <wayland-client-core.h>
+
+#include <cstdio>
+#include <memory>
+
+#ifndef GRASSFIELD_FILES_QML_DIR
+#define GRASSFIELD_FILES_QML_DIR "/usr/share/grassfield/files/qml"
+#endif
+#ifndef GRASSFIELD_VERSION
+#define GRASSFIELD_VERSION "unknown"
+#endif
+
+namespace {
+
+// Whether a Qt GUI can start here: a platform named by QT_QPA_PLATFORM (the tests' offscreen), or a Wayland display that
+// answers. Without one, QApplication would abort the process; the backend then runs without panels and forwards every call
+// to x-d-p-gtk (D-4: the UI that cannot start).
+bool guiAvailable()
+{
+    if (!qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        return true;
+    if (qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY"))
+        return false;
+    wl_display *display = wl_display_connect(nullptr);
+    if (!display)
+        return false;
+    wl_display_disconnect(display);
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char *argv[])
+{
+    namespace runmode = grassfield::apps::runmode;
+    const bool gui = guiAvailable();
+    // QApplication (not QGuiApplication): KIO's widgets library (KDirLister, its job delegate class) expects one; its
+    // dialogs are not used (Grassfield's sheets, ADR-0035 D-12 a).
+    std::unique_ptr<QCoreApplication> app(gui ? new QApplication(argc, argv) : new QCoreApplication(argc, argv));
+    QCoreApplication::setApplicationName(QStringLiteral("grassfield-portal"));
+    QCoreApplication::setOrganizationName(QStringLiteral("Grassfield"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));
+    if (!runmode::session() && !runmode::dev()) {
+        std::fputs("grassfield-portal: refused: not a Grassfield session\n", stderr);
+        return 2;
+    }
+    // A dev run (the tests) never serves the user's own bus, where it could take the name from the real backend.
+    if (runmode::dev()
+        && (qgetenv("GF_TEST_BUS") != "1"
+            || !grassfield::apps::isPrivateTestBus(qEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS"), qEnvironmentVariable("GF_TEST_BUS_DIR")))) {
+        std::fputs("grassfield-portal: refused: a dev session runs it only on a private test bus (GF_TEST_BUS=1, GF_TEST_BUS_DIR)\n", stderr);
+        return 2;
+    }
+
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        std::fputs("grassfield-portal: no session bus\n", stderr);
+        return 1;
+    }
+
+    grassfield::portal::PanelState state(runmode::stateDir() + QStringLiteral("/portal-filechooser.json"));
+    grassfield::portal::FileChooser::Options options;
+    options.state = &state;
+    // Dev plumbing (ADR-0019), honoured only in a dev session: the tests shorten the waits.
+    if (const int ms = runmode::devValue("PORTAL_UI_DEADLINE_MS").toInt(); ms > 0)
+        options.uiDeadlineMs = ms;
+    if (const int ms = runmode::devValue("PORTAL_IDLE_MS").toInt(); ms > 0)
+        options.idleQuitMs = ms;
+    grassfield::portal::FileChooser chooser(bus, options);
+    new grassfield::portal::FileChooserAdaptor(&chooser);
+    QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), &QCoreApplication::quit);
+
+    // The panels' UI is made at the first request (the frontend starts every backend when it starts; an idle start costs
+    // no QML). The Files backend outlives the engine: bindings that run while the engine tears the windows down still see it.
+    std::unique_ptr<FilesApp> files;
+    std::unique_ptr<QQmlApplicationEngine> engine;
+    if (gui) {
+        chooser.setUiLoader([&]() -> bool {
+            grassfield::i18n::installForApplication();
+            // Windows that draw their own chrome are tagged for the compositor plugin (ADR-0015): the panels draw a sheet's.
+            new grassfield::apps::ChromeTagger(app.get());
+            files = std::make_unique<FilesApp>(QList<QUrl>());
+            engine = std::make_unique<QQmlApplicationEngine>();
+            engine->addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
+            const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+            for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
+                engine->addImportPath(*it);
+            engine->addImageProvider(QStringLiteral("icon"), new IconProvider);
+            engine->addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
+            QString qmlDir = runmode::devValue("FILES_QML");
+            if (qmlDir.isEmpty())
+                qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);
+            engine->setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(files.get())},
+                                          {QStringLiteral("host"), QVariant::fromValue(&chooser)},
+                                          {QStringLiteral("testAnswer"), runmode::devValue("PORTAL_TEST_ANSWER")}});
+            engine->load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("FilePanels.qml"))));
+            if (engine->rootObjects().isEmpty()) {
+                qWarning("grassfield-portal: the panels' QML did not load; every request goes to x-d-p-gtk");
+                return false;
+            }
+            return true;
+        });
+    } else {
+        qWarning("grassfield-portal: no display; every request goes to x-d-p-gtk");
+    }
+
+    // The object first, then the name: a caller that sees the name always finds the object.
+    if (!bus.registerObject(QStringLiteral("/org/freedesktop/portal/desktop"), &chooser, QDBusConnection::ExportAdaptors)) {
+        std::fputs("grassfield-portal: cannot export the FileChooser object\n", stderr);
+        return 1;
+    }
+    if (!bus.registerService(QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield"))) {
+        std::fputs("grassfield-portal: the bus name is taken\n", stderr);
+        return 1;
+    }
+    const int code = app->exec();
+    // Requests still open end with an error before the panels go (FileChooser's destructor answers them).
+    engine.reset();
+    files.reset();
+    return code;
+}
