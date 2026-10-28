@@ -61,9 +61,10 @@ Item {
     }
 
     function close(): void {
-        root.visible = false;
+        // The focus goes back first: hiding may open the window's next sheet (Files' queued KIO question), which then takes it.
         if (root.focusBack)
             root.focusBack.forceActiveFocus();
+        root.visible = false;
     }
 
     function cancel(): void {

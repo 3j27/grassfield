@@ -528,6 +528,33 @@ TestCase {
         compare(files.promptWindow, null);
     }
 
+    // One sheet at a time in a window (AppKit queues them): KIO's question waits while Go to Folder is open, out of sight and
+    // out of the keyboard's reach, and shows once it closes.
+    function test_kioQuestionWaitsForTheWindowsSheet() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        browser.goToFolder();
+        verify(waitForPolish(browser, 1000));
+        fakePrompts.current = {
+            id: 6,
+            kind: "notice",
+            title: "“Tool” wasn’t opened.",
+            text: "Files doesn’t run programs."
+        };
+        compare(files.promptWindow, browser);
+        wait(50);
+        verify(!test.kioSheet(browser).visible, "behind Go to Folder: not shown");
+        compare(fakePrompts.replies, []);
+        // Esc closes Go to Folder (the keyboard is still its own), then the question shows.
+        test.type(Qt.Key_Escape, Qt.NoModifier);
+        tryVerify(() => test.kioSheet(browser).visible, 1000, "Go to Folder closed: the question shows");
+        verify(waitForPolish(browser, 1000));
+        test.type(Qt.Key_Return, Qt.NoModifier);
+        compare(fakePrompts.replies, [{id: 6, button: "ok"}]);
+    }
+
     // BrowserTab.dragView: while a system drag started from the tab's view runs, that view stays (Qt Quick uses the item
     // that started the drag after QDrag::exec returns); a view chosen meanwhile applies once the drag has ended and its
     // own handlers have returned (Qt.callLater from dragFinished).
