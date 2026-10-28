@@ -21,3 +21,8 @@ require("grassfield.placement")
 require("grassfield.stacking")
 require("grassfield.bindings")
 require("grassfield.forwarding")
+
+-- ADR-0035 D-2: Hyprland's config-error bar stays on (no debug.suppress_errors). Under the Lua config of Hyprland 0.56.2
+-- `hyprctl configerrors` is empty as soon as anything dispatches (every dispatch is an eval, which clears the errors:
+-- src/debug/HyprCtl.cpp:1131-1134, src/config/lua/ConfigManager.cpp:880-886), so the shell has no source to show them
+-- instead (decision 3-15, integrator nested pass of 2f352b8).

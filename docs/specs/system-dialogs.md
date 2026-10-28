@@ -1,9 +1,11 @@
 # System dialogs spec · shell-engineer, platform-engineer, apps-engineer, security-engineer · 1.0 (ADR-0035)
 
-Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »). Nothing below is
-built yet. Decisions and delivery order: `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a
-Grassfield session, its provider and category): `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*,
-T*, G*) refer to that inventory; Q* are the owner's decisions recorded in the ADR.
+Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
+(steps 2b and 2c) and §4 (step 3); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not
+built yet. Decisions and delivery order:
+`docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
+`docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
+owner's decisions recorded in the ADR.
 
 This spec covers the surfaces Grassfield draws in place of another desktop's (category A of the inventory) and the toolkit
 appearance alignment (category C). Each section follows Appendix G of the master prompt. Geometry is measured from
@@ -219,7 +221,7 @@ A user `xdph.conf` naming another picker is respected; xdph blocks its main loop
 3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
 requesting app.
 
-## 4. Not responding (H1; ADR-0035 D-3)
+## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
 ### macOS reference behavior
 No alert. After a few seconds without event processing the pointer becomes the wait cursor over the app's windows; the app's
@@ -227,26 +229,71 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 "(Not Responding)" in red; the system never kills an app on its own.
 
 ### Functional requirements
-- NR1 the `hyprland-dialog` stand-in reports (pid of the stand-in, class, title) for an ANR call in en_US or fr_FR and waits
-  silently; every other call is the stock dialog (exec).
-- NR1b the shell accepts a report only when the windows matching class and title belong to exactly one client pid (> 1);
-  otherwise it refuses and the stand-in execs the stock dialog.
-- NR2 the shell marks the matching app as not responding while the stand-in lives: Force Quit lists it with "(Not
-  Responding)" (destructive colour, pre-selected when the panel opens), its Dock menu starts with a disabled "Application Not
-  Responding" item and offers "Force Quit"; the app menu keeps "Quit" (owner decision Q16). Force Quit acts on that pid only
-  and refuses when, at the confirmation, the pid no longer owns a window of that class (pid reuse).
-- NR3 the mark clears within 1 s of the stand-in's end (the app answered, closed, or was killed).
-- NR4 no alert, no sound, no focus change.
+- NR1 the `hyprland-dialog` stand-in (`packaging/session-bin/hyprland-dialog`) takes only Hyprland's exact ANR call in en_US
+  or fr_FR (`--title T --text X --buttons B`), tries every " - " split of "{title} - {class}" against Hyprland's client
+  list, and with exactly one (split, client pid above 1) match reports (its own pid, that pid, "c:" class, "t:" title, "i:"
+  Hyprland instance) to `anr report` and then `exec`s `sleep infinity` (same pid, silent, nothing forked) until Hyprland
+  kills it; every other call, and every case below, `exec`s the stock dialog with the same arguments.
+- NR1b the shell accepts a report only for a pid above 1, a class, its own Hyprland instance, and a window that no other pid
+  it knows shares class and live title with (ADR-0035 decision 3-1); otherwise it answers `refused` (the reason goes to the
+  journal) and the stand-in runs the stock dialog. An untitled window ("(unknown)" / "(inconnu)" in Hyprland's text) is
+  matched by its empty title and reported with it.
+- NR2 the shell marks that pid as not responding while one of its stand-ins lives: Force Quit lists the app with "(Not
+  Responding)" (destructive colour); the selection follows a window, not a row: the user's choice is kept, and before the
+  user moves it the panel selects the first such app and never moves away from the app shown; the app's Dock menu starts with a disabled "Application Not Responding" item and offers "Force
+  Quit" in place of "Quit", for the marked processes only (Option + Force Quit: all of the app's); the app menu keeps "Quit"
+  (owner decision Q16). At the confirmation a pid that no longer owns a window of the chosen class (pid reuse) is not
+  killed, and a notice says "The application had already quit."; the others are.
+- NR3 the mark clears within 1 s of the stand-in's end (the app answered, closed, or was killed): the shell checks the
+  stand-ins every 250 ms while there is a mark.
+- NR4 no alert, no sound, no focus change. `misc.anr_missed_pings = 3` (about 4.5 s).
 
 ### Acceptance criteria
-- A-NR1 (L0) stand-in with a fake shell: en and fr texts parsed; ambiguous or other-locale texts exec the fake stock dialog.
-- A-NR3 (L0) two processes of one app with the same class and title: no mark, the stock dialog; a pid reused between mark and
-  confirmation: Force Quit refuses.
-- A-NR2 (L1) a test client that stops answering pings (a fixture that blocks its event loop) in a nested session: after ~4.5 s
-  Force Quit shows "(Not Responding)"; the mark clears when the fixture resumes.
+- A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
+  parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
+  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
+  stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
+  the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an
+  ambiguity.
+- A-NR3 (L0, `tests/unit/tst_notresponding.qml`) two processes of one app with the same class and title: refused; a pid
+  reused between mark and confirmation: Force Quit refuses.
+- A-NR2 (L1, `tests/shell/anr_nested.sh`) a foot window stopped with SIGSTOP in a nested session is marked within 12 s and no
+  stock dialog opens; SIGCONT clears the mark, and so does killing the stopped app.
 
 ### Known limitations
-No wait cursor (Hyprland only tints the window); the ANR state is known only through Hyprland's dialog call.
+No wait cursor (Hyprland only tints the window); the ANR state is known only through Hyprland's dialog call. A shell restarted
+while an app hangs loses the mark until the app answers or closes (Hyprland runs its dialog once per hang); Force Quit still
+lists the app. A Hyprland release that changes the texts makes the stand-in fall back to the stock dialog, and so does an app
+without an app id (class "(unknown)") or a window that cannot be told apart. A nested Hyprland that crashes while an app hangs
+leaves the stand-in waiting (it holds nothing) until logout; the real session's unit takes it down with Hyprland.
+
+## 4b. Hyprland's config errors (H8, H9; ADR-0035 D-2; the notice built in step 3, not active on Hyprland 0.56.2)
+
+### macOS reference behavior
+macOS has no user-edited compositor configuration; a setting that cannot be applied is reported in words in a notification,
+never as a red bar over the screen.
+
+### Functional requirements
+- CE1 Hyprland's error bar stays on: no Grassfield file sets `debug.suppress_errors` (ADR-0035 decision 3-15). Under the Lua
+  config of Hyprland 0.56.2 `hyprctl configerrors` is empty (measured: every dispatch is an `eval`, which clears the
+  errors, and the shell dispatches at start and after each reload), so the shell has no source to show them instead.
+- CE2 the shell reads `hyprctl -j configerrors` when it starts and after every `configreloaded` event; each new non-empty
+  set of errors posts one notice "Some settings could not be applied" whose body lists the first three lines as text, then
+  "and N more"; the same set after a reload posts nothing; a reload that leaves no error withdraws the notice. No terminal,
+  no journal (decision 3-6); the shell logs the count, never the lines. On 0.56.2 the answer is always empty and no notice
+  shows.
+
+### Acceptance criteria
+- A-CE1 (L0, `tests/unit/tst_configerrors.qml`, `tests/shell/config_errors.sh`) Hyprland's reply parsed (none: `[""]`),
+  anything else ignored; one notice per new set, withdrawn when empty, three lines shown as text ("<eof>" kept); a reload
+  during a read is read once more.
+- A-CE2 (L0, `tests/shell/session_input.sh`) no Grassfield config file sets `suppress_errors`. (L1, integrator) a broken
+  config line in the nested session shows Hyprland's bar.
+
+### Known limitations
+Hyprland's bar, not a Grassfield notice, shows config errors on 0.56.2 (CE1); its runtime Lua errors (a binding's callback
+that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 
 ## 5. Password prompts (gcr, udiskie, NetworkManager, KIO; S1–S4, S6, S8, K1; ADR-0035 D-9, D-12; owner decisions Q1, Q10–Q12)
 Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12), applied in step 9 after the integrator's

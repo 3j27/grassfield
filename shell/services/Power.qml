@@ -59,10 +59,18 @@ Singleton {
         case "emptytrash":
             Trash.emptyNow();
             return;
-        case "forcequit":
-            // One pid (the Force Quit panel) or every process of an app (the Dock menu's Option variant).
-            (args.pids ? args.pids : [args.pid]).forEach(p => forceQuit(p));
+        case "forcequit": {
+            // One pid (the Force Quit panel) or every process of an app (the Dock menu). Each must still own a window of the
+            // class the user chose (ADR-0035 D-3): a pid reused by another process since then is never killed.
+            const pids = args.pids ? args.pids : [args.pid];
+            const owned = pids.filter(p => NotResponding.stillOwns(p, args.cls ?? ""));
+            if (owned.length < pids.length) {
+                console.warn("grassfield-shell: force quit refused for a process that no longer owns the app's window");
+                Popups.notice(qsTr("Force Quit"), qsTr("The application had already quit."));
+            }
+            owned.forEach(p => forceQuit(p));
             return;
+        }
         }
         Popups.close();
     }
