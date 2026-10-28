@@ -30,26 +30,31 @@ Singleton {
         });
     }
 
-    function show(hover: var): void {
+    // What happened, for the lock-surfaces harness (it runs without the plugin): "opened", or why not: "lock", "leave",
+    // "busy" (another popup is open, or this window's), what refuses it (WindowTiling.hoverRefusedBy), "unavailable" (no
+    // plugin feature) or "no window". The refusals and the closing of another window's popover come before the plugin's checks.
+    function show(hover: var): string {
         if (SessionState.refuses("tiling popover"))
-            return;
-        if (hover.state === "leave" || !Compositor.canTileHover)
-            return;
+            return "lock";
+        if (hover.state === "leave")
+            return "leave";
         if (hover.state === "enter" && Popups.active && (Popups.kind !== "tiling" || root.address === hover.address))
-            return;
+            return "busy";
         const refused = root.refusedBy();
         if (refused !== "") {
             console.info("grassfield: tiling popover refused: " + refused + " is open");
-            return;
+            return refused;
         }
-        const toplevel = Compositor.toplevelByAddress(hover.address);
-        const anchor = toplevel ? Compositor.popoverAnchor(hover.light) : null;
-        if (!anchor)
-            return;
         // Another window's popover closes first: the open one never sees its window change under it (its full-screen watch
         // would close the new one, which then opened with no window; integrator review of 4ead6fb).
         if (root.address !== "" && root.address !== hover.address)
             Popups.close();
+        if (!Compositor.canTileHover)
+            return "unavailable";
+        const toplevel = Compositor.toplevelByAddress(hover.address);
+        const anchor = toplevel ? Compositor.popoverAnchor(hover.light) : null;
+        if (!anchor)
+            return "no window";
         Popups.open("tiling", anchor.screen, anchor.x - Tokens.tilingPopoverLightInset, anchor.y, "below", {
             address: hover.address,
             tileable: hover.tileable,
@@ -57,6 +62,7 @@ Singleton {
             light: anchor.light,
             flipY: anchor.flipY
         });
+        return "opened";
     }
 
     Connections {

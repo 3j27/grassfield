@@ -484,7 +484,9 @@ shell no longer relies on that alone:
 - Fail mode: if the shell's `SessionState` wiring were missing, surfaces would open under the lock surface (Hyprland still
   shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
 Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
-control open while unlocked, all close at the lock, 18 popup kinds and every entry point refused while locked, open again
+control open while unlocked, the tiling popover's own guard (refused over Search, Apps, the polkit sheet and the Dock's
+keyboard mode, another window's popover closed first), all close at the lock, 18 popup kinds and every entry point refused
+while locked, open again
 after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
 close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
 `tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
