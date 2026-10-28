@@ -214,7 +214,8 @@ Scope {
     // The app's most recent window not minimized (else the most recent one) is raised last, so it ends up focused; the
     // other windows the app has hidden come back with it (macOS: activating a hidden app unhides all its windows).
     // Compositor.activate un-minimizes, brings a hidden window to the focused Space and activates it; Hyprland then
-    // switches to the window's Space and, with Stages, brings its stage forward (ST10).
+    // switches to the window's Space and, with Stages, brings its stage forward (ST10). The tile group of that window comes
+    // forward with it (TL29).
     function activateTarget(): void {
         const app = target;
         target = null;
@@ -225,7 +226,7 @@ Scope {
         const pool = live.length > 0 ? live : app.windows;
         const main = Compositor.mostRecent(pool) || pool[0];
         app.windows.filter(t => t !== main && Compositor.isHidden(t)).forEach(t => Compositor.activate(t));
-        Compositor.activate(main);
+        Compositor.activateWithGroup(main);
     }
 
     Timer {

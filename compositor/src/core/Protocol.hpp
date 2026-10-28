@@ -48,6 +48,8 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaTilePopover = "tile_popover";
     // hl.plugin.grassfield.move_to(address, output): the window onto another output (Move to <display>, tiling.md TL23, TL26)
     inline constexpr std::string_view kLuaMoveTo = "move_to";
+    // hl.plugin.grassfield.group_front(address): the window's tile group comes forward with it (tiling.md TL29)
+    inline constexpr std::string_view kLuaGroupFront = "group_front";
     // `hyprctl grassfield-tiling`: the tiling state (the `tiling` event is only a change notice, ADR-0036).
     inline constexpr std::string_view kHyprctlTilingCommand = "grassfield-tiling";
 
@@ -113,16 +115,21 @@ namespace gf::gfc {
     // tile-hover events, hl.plugin.grassfield.tile_popover and hl.plugin.grassfield.move_to (tiling.md TL22-TL26): the tiling
     // popover. Only together with window-tiling.
     inline constexpr std::string_view kFeatureTileHover = "tile-hover";
+    // ADR-0036 step 4b (tiling.md TL29): hl.plugin.grassfield.group_front, the tile groups the shell brings forward and lists
+    // (from the grassfield-tiling reply). Only together with window-tiling and tiling-arrange.
+    inline constexpr std::string_view kFeatureTilingGroups = "tiling-groups";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
     // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
-    // tiling-arrange with tiling-layouts, and tile-hover (each only together with window-tiling).
+    // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling) and tiling-groups (only together
+    // with tiling-arrange).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,
-                                           bool frameTimes = false, bool keyboardFocus = false, bool tilingArrange = false, bool tileHover = false);
+                                           bool frameTimes = false, bool keyboardFocus = false, bool tilingArrange = false, bool tileHover = false,
+                                           bool tilingGroups = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
     // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).
