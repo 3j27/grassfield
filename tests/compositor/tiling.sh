@@ -80,6 +80,8 @@
 #                  first, come above it (Hyprland's stacking order, `clients` bottom first); the focus stays on the second
 #   no-group       group_front of the second window changes nothing in the stacking order
 #   invalid        group_front of an unknown window: the `tiling` notice says "invalid"
+#   zoomed         the first window zoomed, then full screen, and focused (its tile suspended): group_front(first) leaves it
+#                  above the third (integrator review of cd74af2)
 #   locked         while the foreign locker holds the session lock, group_front raises nothing (reason "locked")
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
@@ -1173,6 +1175,19 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     mark_events
     group_front "0x1"
     check "group-front: an unknown window is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    # Zoomed, then full screen, and focused (integrator review of cd74af2): Suspended but on screen, the chosen window still
+    # ends above its group (the protocol activation does nothing for the focused window).
+    for mode in maximized fullscreen; do
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+      sleep 0.8
+      check "group-front $mode: the first window's tile is suspended" test "$(record_of "$addr" | jq -r '.state')" = suspended
+      group_front "$addr"
+      check "group-front $mode: the chosen window stays above its group" above "$addr3" "$addr"
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      sleep 0.8
+    done
+    check "group-front: the first window is tiled again after zoom and full screen" test "$(record_of "$addr" | jq -r '.state')" = tiled
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr2' })" >>"$log" 2>&1
     sleep 0.5
     if lock_session; then
