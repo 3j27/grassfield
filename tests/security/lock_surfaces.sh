@@ -121,6 +121,10 @@ calls("shell/menubar/AppMenus.qml", "", r"case \"window\":\s*FocusReturn\.skip\(
 calls("shell/overlay/DockMenu.qml", "", r"Compositor\.activateAfterLayer\(item\.ref, \"grassfield-overlay\"\)")
 calls("shell/overlay/DockMenu.qml", "", r"Compositor\.showTileGroupAfterLayer\(item\.ref, \"grassfield-overlay\", item\.members\)")
 calls("shell/overview/Overview.qml", "closeAnd", r"if \(target\.kind === \"window\" && !locked\)\s*Compositor\.groupForward\(target\.address\)")
+# The group forward follows the window's focus request, as from the other entry points (#38's first NIT; integrator review
+# of a6d04df: untested): no group_front before overview_focus in closeAnd.
+calls("shell/overview/Overview.qml", "closeAnd",
+      r"^(?:(?!Compositor\.groupForward)[\s\S])*Compositor\.overviewFocus\(target\)[\s\S]*Compositor\.groupForward\(target\.address\)")
 calls("shell/overview/Overview.qml", "", r"if \(restore && !locked\)\s*Compositor\.unminimizeWithGroup\(restore\)")
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
 # Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
@@ -526,6 +530,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/platform/Compositor.qml# || WindowTiling.membersOf(TilingLink.groups, address).length === 0)#)' \
   'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \
   'shell/overview/Overview.qml#if (target.kind === "window" && !locked)#if (target.kind === "window")' \
+  'shell/overview/Overview.qml#        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);\n        // A window chosen brings its tile group forward (TL29), sent after its focus request as from the other entry points.\n        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);#        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);\n        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);' \
   'shell/overview/Overview.qml#if (restore && !locked)\n            Compositor.unminimizeWithGroup(restore);#if (restore)\n            Compositor.unminimizeWithGroup(restore);' \
   'shell/switcher/Switcher.qml#Compositor.activateWithGroup(main)#Compositor.activate(main)' \
   'shell/menubar/AppMenus.qml#Compositor.activateWithGroup(item.ref)#Compositor.activate(item.ref)' \
