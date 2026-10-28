@@ -17,6 +17,7 @@ import qs.services
 //   g  a checker that cannot start: failed ("could not start")
 //   h  a checker that hangs: stopped at the deadline, failed ("took too long")
 //   i  busy: the file is not changed
+//   w  a waiter whose own answer is update-running again: the next one waits for waitRetryMs (no loop)
 //   j  GF-083's pending logout written to the file
 //   k  IPC (the script calls `qs ipc ... update check bogus|user` once "ipc-ready" is printed): bogus refused, user ran
 // Prints "software-update-service: PASS" or FAIL <why>.
@@ -41,9 +42,9 @@ ShellRoot {
         return JSON.stringify({version: 1, state: "available", channel: "stable", checkedAt: new Date().toISOString(), grassfield: {installed: "1.0.0-1", available: gf, notes: [], notesError: null}, omarchy: {installed: "4.0.4-1", available: om}, others: 1, otherPackages: [{name: "linux", installed: "6.18.1-1", available: "6.18.2-1"}]});
     }
 
+    // One writer per file, on a fixed path: a FileView whose path changes just before setText can lose the write.
     function put(name: string, text: string): void {
-        writer.path = root.fake + "/" + name;
-        writer.setText(text);
+        (name === "answer-waiter" ? waiterWriter : writer).setText(text);
     }
 
     function calls(): var {
@@ -63,7 +64,17 @@ ShellRoot {
 
     FileView {
         id: writer
+        path: root.fake + "/answer"
         printErrors: false
+        blockLoading: true
+        blockWrites: true
+    }
+
+    FileView {
+        id: waiterWriter
+        path: root.fake + "/answer-waiter"
+        printErrors: false
+        blockLoading: true
         blockWrites: true
     }
 
@@ -89,8 +100,10 @@ ShellRoot {
     Process {
         id: sh
         property var done: null
+        // qmllint disable signal-handler-parameters
         onExited: if (done)
             done()
+        // qmllint enable signal-handler-parameters
     }
 
     function shell(cmd: string, then: var): void {
@@ -131,6 +144,7 @@ ShellRoot {
             when(() => !SoftwareUpdate.checking && calls().length === 1, () => {
                 const f = SoftwareUpdate.file;
                 root.check(f.state === "available" && SoftwareUpdate.count === 2, "a: state " + f.state + ", count " + SoftwareUpdate.count);
+                root.check(SoftwareUpdate.menuDetail === "2 updates", "a: the Grassfield menu says " + JSON.stringify(SoftwareUpdate.menuDetail));
                 root.check(root.announced === 0, "a: a user's check announces nothing (" + root.announced + ")");
                 root.check(JSON.stringify(f.announced) === JSON.stringify(["grassfield 1.0.1-1", "omarchy 4.0.6-1"]), "a: both versions marked: " + JSON.stringify(f.announced));
                 const saved = JSON.parse(root.stateText() || "{}");
@@ -192,6 +206,7 @@ ShellRoot {
                 when(() => !SoftwareUpdate.waiting && SoftwareUpdate.file.state === "up-to-date", () => {
                     root.check(calls().length === 6, "e: a request while the waiter runs joins it (" + calls().length + " runs)");
                     root.check(SoftwareUpdate.file.state === "up-to-date" && SoftwareUpdate.count === 0, "e: the waiter's answer recorded: " + SoftwareUpdate.file.state);
+                    root.check(SoftwareUpdate.menuDetail === "", "e: nothing after Settings… without a release: " + JSON.stringify(SoftwareUpdate.menuDetail));
                     stepF();
                 });
             });
@@ -207,6 +222,7 @@ ShellRoot {
                 const f = SoftwareUpdate.file;
                 root.check(f.error === "unavailable" && f.message === "the checker gave no answer", "f: junk -> failed: " + f.error + " " + f.message);
                 root.check(SoftwareUpdate.count === 1 && f.previous.grassfield.available === "1.0.3-1", "f: the last success kept (" + SoftwareUpdate.count + ")");
+                root.check(SoftwareUpdate.menuDetail === "1 update", "f: the Grassfield menu says " + JSON.stringify(SoftwareUpdate.menuDetail));
                 shell("rm -f '" + root.fake + "/junk'", stepG);
             });
         });
@@ -244,8 +260,37 @@ ShellRoot {
         SoftwareUpdate.request("user");
         when(() => !SoftwareUpdate.checking && calls().length === n + 1, () => {
             root.check(JSON.stringify(SoftwareUpdate.file) === before, "i: busy changes nothing");
-            stepJ();
+            stepW();
         });
+    }
+
+    function waiterRuns(): int {
+        return calls().filter(c => c.indexOf("--after-update-lock") >= 0).length;
+    }
+
+    function stepW(): void {
+        const running = JSON.stringify({version: 1, state: "update-running", checkedAt: new Date().toISOString()});
+        put("answer", running);
+        put("answer-waiter", running);
+        const before = root.waiterRuns();
+        SoftwareUpdate.request("omarchy");
+        when(() => root.waiterRuns() > before && !SoftwareUpdate.waiting, () => {
+            // Two seconds more: a waiter restarted without a pause would have run dozens of times by then.
+            pause.next = () => {
+                root.check(root.waiterRuns() === before + 1, "w: the waiter's own update-running starts no other at once (" + (root.waiterRuns() - before) + " runs)");
+                root.check(SoftwareUpdate.file.state === "update-running", "w: the state stays update-running");
+                put("answer-waiter", JSON.stringify({version: 1, state: "up-to-date", channel: "stable", checkedAt: new Date().toISOString(), grassfield: {installed: "1.0.3-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}, others: 0, otherPackages: []}));
+                stepJ();
+            };
+            pause.restart();
+        });
+    }
+
+    Timer {
+        id: pause
+        interval: 2000
+        property var next: null
+        onTriggered: next()
     }
 
     function stepJ(): void {

@@ -3249,6 +3249,8 @@ QtObject {
     readonly property int softwareUpdateCheckTimeoutMs: 200000
     // the waiter blocks up to 7200 s on Omarchy's update lock, then checks for up to 180 s (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateWaitTimeoutMs: 7400000
+    // a waiter whose own answer is update-running again (its 2-hour wait ended with Omarchy's lock still held, or a dev fixture) starts the next one after this, never in a loop (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitRetryMs: 60000
     // a busy answer (another run of the checker holds its lock) is tried again once after this (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateBusyRetryMs: 60000
     // an automatic check skipped while offline or metered is looked at again after this, or when the connectivity changes (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]

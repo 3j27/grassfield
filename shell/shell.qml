@@ -354,7 +354,7 @@ ShellRoot {
             else if (kind === "grassfield")
                 Notifications.postInternalAction(qsTr("Grassfield %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
             else if (kind === "omarchy")
-                Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
+                Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
         }
     }
 

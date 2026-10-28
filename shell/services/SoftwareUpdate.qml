@@ -11,7 +11,9 @@ import Grassfield.Ui
 // Settings and Grassfield Store read that file and ask for a check over IPC (`update check user`); Omarchy's own update
 // reaches it through the omarchy-shell shim (`update check omarchy`, U9).
 //   - One check at a time: a request while one runs joins it. The answer `update-running` (omarchy update holds its lock)
-//     starts one waiter (--after-update-lock), which checks once the lock is released (U4).
+//     starts one waiter (--after-update-lock), which checks once the lock is released (U4); a waiter that answers
+//     `update-running` again starts the next one only after waitRetryMs. A file that still says `update-running` when the
+//     shell starts (the waiter ended with the session: a reboot or a log out during the update, a crash) is checked at once.
 //   - Automatic checks (updates.automaticCheck, default on): 10 minutes after the start, then every 6 hours, skipped while
 //     offline or on a metered connection (U7); a retry the checker asks for (retryAt, U3) comes earlier.
 //   - Each newly found Grassfield or Omarchy version, and each `blocking` episode, is announced once (`announce`; shell.qml
@@ -27,6 +29,9 @@ Singleton {
     // Releases available (owner decision O3: Grassfield's and Omarchy's, 0 to 2): the Dock's Settings tile and the
     // Grassfield menu's "Settings…" show it (U18, U19).
     readonly property int count: SoftwareUpdateLogic.releases(file)
+    // The Grassfield menu's text after "Settings…" (U19): "1 update", "2 updates", "" (singular and plural: the catalogs carry
+    // no numerus forms).
+    readonly property string menuDetail: count === 1 ? qsTr("1 update") : count > 1 ? qsTr("%1 updates").arg(count) : ""
     readonly property bool checking: checkProc.running
     readonly property bool waiting: waitProc.running
     // GF-083's updatePending, bound by shell.qml: written to the file for the pane's "Log out to finish updating" (U14).
@@ -55,6 +60,7 @@ Singleton {
     property int meteredTimeoutMs: Tokens.softwareUpdateMeteredTimeoutMs
     property int checkTimeoutMs: Tokens.softwareUpdateCheckTimeoutMs
     property int waitTimeoutMs: Tokens.softwareUpdateWaitTimeoutMs
+    property int waitRetryMs: Tokens.softwareUpdateWaitRetryMs
 
     // The release in a sentence: "1.0.1", or "1.0.1-4" for a rebuild of the installed version (owner decision O7).
     function releaseName(version: string, installed: string): string {
@@ -107,10 +113,11 @@ Singleton {
         // A user who asked while the waiter ran waits for its answer too.
         const user = userAsked;
         userAsked = false;
-        handle(answer, user);
+        handle(answer, user, waiter);
     }
 
-    function handle(answer: var, user: bool): void {
+    // `fromWaiter`: the answer is the waiter's.
+    function handle(answer: var, user: bool, fromWaiter: bool): void {
         if (answer.state === "busy") {
             // Another run of the checker holds its lock (Settings without a shell, U10): once more, later.
             if (!busyTimer.running)
@@ -124,9 +131,22 @@ Singleton {
             for (const n of items)
                 announce(n.kind, n.version, n.installed);
         }
-        if (answer.state === "update-running" && !waitProc.running)
-            run(waitProc, true, waitTimeoutMs);
+        // The waiter's own answer is update-running when its wait ended with the lock still held (or a dev fixture says
+        // so): the next waiter starts later, never in a loop.
+        if (answer.state === "update-running" && !waitProc.running) {
+            if (fromWaiter)
+                waitRetry.restart();
+            else
+                run(waitProc, true, waitTimeoutMs);
+        }
         reschedule();
+    }
+
+    // Once the file is read: a stored `update-running` whose waiter did not survive is checked now (the check answers
+    // update-running again, and starts a waiter, only while Omarchy's lock is still held).
+    function resume(): void {
+        if (file.state === "update-running" && !checkProc.running && !waitProc.running)
+            run(checkProc, false, checkTimeoutMs);
     }
 
     function save(next: var): void {
@@ -190,6 +210,15 @@ Singleton {
     Timer {
         id: autoTimer
         onTriggered: root.automatic()
+    }
+
+    Timer {
+        id: waitRetry
+        interval: root.waitRetryMs
+        onTriggered: {
+            if (!checkProc.running && !waitProc.running)
+                root.run(waitProc, true, root.waitTimeoutMs);
+        }
     }
 
     Timer {
@@ -399,6 +428,7 @@ Singleton {
             root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(f), root.logoutPending);
             root.loaded = true;
             root.reschedule();
+            root.resume();
         }
         onLoadFailed: {
             if (root.loaded)
