@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -133,6 +134,23 @@ namespace gf::frames {
         uint64_t          m_last  = 0;
     };
 
+    // The compositor thread's own time outside the renders, for attribution (integrator review of a6d04df: a main-loop
+    // stall before a render shows only as a late render, which reads as a client's late frame). While recording, the plugin
+    // beats on the event loop every kBeatUs; a beat more than kStallUs past its due time shows the loop was held from then
+    // to the beat (stallOf). The plugin also records its own work outside a render, each from its start to its end: the
+    // shared edge's drag (its motions and the frames it applies, tiling.md TL30). Both as spans: the start and the length.
+    inline constexpr uint64_t kBeatUs  = 4'000;
+    inline constexpr uint64_t kStallUs = 2'000;
+
+    // The stall a beat due at `dueUs` and run at `nowUs` shows, or nullopt when it was on time (within kStallUs).
+    std::optional<RenderSpan> stallOf(uint64_t dueUs, uint64_t nowUs);
+
+    struct LoopRecords {
+        uint64_t                beats = 0; // beats run since the recording started (0: the loop was not probed)
+        std::vector<RenderSpan> stalls;
+        std::vector<RenderSpan> work;
+    };
+
     struct MonitorFrames {
         std::string             name;
         double                  refreshHz = 0; // the mode's refresh rate (0 when unknown)
@@ -142,9 +160,10 @@ namespace gf::frames {
     };
 
     // {"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name":"GF-REF","refreshHz":60,
-    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}]}.
+    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}],
+    //  "loop":{"beats":N,"stalls":[[beginUs,lengthUs],...],"work":[[beginUs,lengthUs],...]}}.
     // Names are JSON-escaped and cut at kMaxNameBytes (on a UTF-8 boundary); at most kMaxMonitors monitors; a refresh rate
     // that is not finite and positive is written as 0.
-    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {});
+    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {}, const LoopRecords& loop = {});
 
 } // namespace gf::frames

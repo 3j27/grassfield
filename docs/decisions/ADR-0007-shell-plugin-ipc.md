@@ -177,7 +177,7 @@ event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
 event tile-hover: address state x y w h tileable
-event frames: clock marks monitors name presented refreshHz renders t total unit what
+event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h

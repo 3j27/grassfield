@@ -120,7 +120,13 @@ namespace gf::frames {
         return out;
     }
 
-    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks) {
+    std::optional<RenderSpan> stallOf(uint64_t dueUs, uint64_t nowUs) {
+        if (nowUs <= dueUs + kStallUs)
+            return std::nullopt;
+        return RenderSpan{.beginUs = dueUs, .cpuUs = nowUs - dueUs};
+    }
+
+    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks, const LoopRecords& loop) {
         std::string out = R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)";
         size_t      written = 0;
         for (const auto& m : monitors) {
@@ -150,7 +156,18 @@ namespace gf::frames {
                 out += ',';
             out += std::format(R"({{"t":{},"what":"{}"}})", marks[i].us, gfc::jsonEscape(cut(marks[i].what, kMaxMarkBytes)));
         }
-        out += "]}";
+        const auto spans = [&out](std::span<const RenderSpan> list) {
+            for (size_t i = 0; i < list.size(); ++i) {
+                if (i > 0)
+                    out += ',';
+                out += std::format("[{},{}]", list[i].beginUs, list[i].cpuUs);
+            }
+        };
+        out += std::format(R"(],"loop":{{"beats":{},"stalls":[)", loop.beats);
+        spans(loop.stalls);
+        out += R"(],"work":[)";
+        spans(loop.work);
+        out += "]}}";
         return out;
     }
 

@@ -43,19 +43,24 @@ TEST(FrameLog, OnlyTheLastCapacityFramesAreKept) {
         ASSERT_LT(s[i - 1], s[i]) << "time order across the wrap";
 }
 
+namespace {
+    // The loop records of a reply with no beat (the probe not recording, or a plugin that never beat).
+    const std::string kNoLoop = R"(,"loop":{"beats":0,"stalls":[],"work":[]}})";
+}
+
 TEST(FrameLog, JsonNamesTheClockAndEachMonitor) {
     const std::vector<MonitorFrames> m{{.name = "GF-REF", .refreshHz = 60, .total = 2, .presentedUs = {10, 26}, .renders = {}},
                                        {.name = "WAYLAND-1", .refreshHz = 59.951, .total = 0, .presentedUs = {}, .renders = {}}};
     EXPECT_EQ(framesJson(m), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
                              R"({"name":"GF-REF","refreshHz":60.000,"total":2,"presented":[10,26],"renders":[]},)"
-                             R"({"name":"WAYLAND-1","refreshHz":59.951,"total":0,"presented":[],"renders":[]}],"marks":[]})");
-    EXPECT_EQ(framesJson({}), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[],"marks":[]})");
+                             R"({"name":"WAYLAND-1","refreshHz":59.951,"total":0,"presented":[],"renders":[]}],"marks":[])" + kNoLoop);
+    EXPECT_EQ(framesJson({}), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[],"marks":[])" + kNoLoop);
 }
 
 TEST(FrameLog, JsonIsSafeWithOddMonitorData) {
     const std::vector<MonitorFrames> odd{{.name = "a\"b\\c\n", .refreshHz = std::nan(""), .total = 0, .presentedUs = {}, .renders = {}}};
     EXPECT_EQ(framesJson(odd), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
-                               R"({"name":"a\"b\\c\n","refreshHz":0.000,"total":0,"presented":[],"renders":[]}],"marks":[]})");
+                               R"({"name":"a\"b\\c\n","refreshHz":0.000,"total":0,"presented":[],"renders":[]}],"marks":[])" + kNoLoop);
     // A long name is cut on a UTF-8 boundary: 63 ASCII bytes then a 2-byte character that would straddle byte 64.
     const std::string                longName = std::string(63, 'x') + "\xc3\xa9" + "tail";
     const std::vector<MonitorFrames> named{{.name = longName, .refreshHz = 60, .total = 0, .presentedUs = {}, .renders = {}}};
@@ -103,7 +108,24 @@ TEST(FrameLog, JsonCarriesRendersAndMarks) {
     const std::vector<Mark>          marks{{.us = 5, .what = "overview-opening"}, {.us = 9, .what = "a\"b"}};
     EXPECT_EQ(framesJson(m, marks), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[)"
                                     R"({"name":"GF-REF","refreshHz":60.000,"total":1,"presented":[10],"renders":[[3,7],[20,18000]]}],)"
-                                    R"("marks":[{"t":5,"what":"overview-opening"},{"t":9,"what":"a\"b"}]})");
+                                    R"("marks":[{"t":5,"what":"overview-opening"},{"t":9,"what":"a\"b"}])" + kNoLoop);
+}
+
+// Integrator review of a6d04df (MAJOR 2): a main-loop stall before a render shows only as a late render. A beat of the loop
+// later than kStallUs past its due time records the stall; the plugin's own work outside a render is recorded beside it.
+TEST(FrameLog, ALateBeatIsAStallFromItsDueTime) {
+    EXPECT_FALSE(stallOf(10'000, 10'000).has_value());
+    EXPECT_FALSE(stallOf(10'000, 10'000 + kStallUs).has_value()) << "within kStallUs: on time";
+    EXPECT_EQ(stallOf(10'000, 10'001 + kStallUs), (RenderSpan{.beginUs = 10'000, .cpuUs = kStallUs + 1}));
+    EXPECT_EQ(stallOf(10'000, 60'000), (RenderSpan{.beginUs = 10'000, .cpuUs = 50'000})) << "a 50 ms stall";
+    EXPECT_FALSE(stallOf(10'000, 9'000).has_value()) << "early (a timer that fired before its due time)";
+    EXPECT_LT(kStallUs, kBeatUs);
+}
+
+TEST(FrameLog, JsonCarriesTheLoopsStallsAndThePluginsWork) {
+    const LoopRecords loop{.beats = 250, .stalls = {{.beginUs = 100, .cpuUs = 50'000}}, .work = {{.beginUs = 7, .cpuUs = 300}, {.beginUs = 90, .cpuUs = 12}}};
+    EXPECT_EQ(framesJson({}, {}, loop), R"({"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[],"marks":[],)"
+                                        R"("loop":{"beats":250,"stalls":[[100,50000]],"work":[[7,300],[90,12]]}})");
 }
 
 // Review of part B, 2026-10-24: off unless a measurement asked, bounded, and nothing kept from a locked session.
