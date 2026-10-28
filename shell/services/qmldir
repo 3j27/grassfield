@@ -28,3 +28,4 @@ singleton RecentItems 1.0 RecentItems.qml
 singleton ThemeIcons 1.0 ThemeIcons.qml
 WallClock 1.0 WallClock.qml
 singleton Clipboard 1.0 Clipboard.qml
+singleton NotResponding 1.0 NotResponding.qml

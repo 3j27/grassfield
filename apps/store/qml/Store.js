@@ -44,11 +44,114 @@ function symbolIcon(symbol) {
     return SYMBOLS[symbol] || "apps";
 }
 
-// The button of an app (SR13): Get, Open (installed with a launcher) or Installed (installed without one).
-function buttonState(app) {
-    if (!app || !app.installed)
+// The button of an app (SR13): its operation's ring while one runs or waits ("progress"), else Get, Open (installed with a
+// launcher) or Installed (installed without one). `actions`: the backend's (installed, launcher), when there is one.
+function buttonState(app, actions, operation) {
+    if (operation)
+        return "progress";
+    const installed = actions ? actions.installed : app && app.installed;
+    const launcher = actions ? actions.launcher : app && app.launcher;
+    if (!installed)
         return "get";
-    return app.launcher ? "open" : "installed";
+    return launcher ? "open" : "installed";
+}
+
+// Why Get is not offered now (the button's tooltip, SR13, SR30).
+function getBlockText(reason) {
+    switch (reason) {
+    case "dev":
+        return qsTr("dev: not applied");
+    case "offline":
+        return qsTr("You're offline.");
+    case "missing":
+        return qsTr("This computer can't install apps from the Store: Omarchy's commands or Grassfield's installer are missing.");
+    case "icon":
+        return qsTr("This web app's icon hasn't been downloaded yet. Refresh the Store, then try again.");
+    case "source":
+        return qsTr("Installing apps from this source comes in a later version of the Store.");
+    }
+    return "";
+}
+
+// What an operation is doing (its ring's accessible text and the queue's rows, SR18).
+function operationText(op) {
+    if (!op)
+        return "";
+    const removing = op.kind === "remove";
+    switch (op.state) {
+    case "waiting":
+        return op.blocked ? qsTr("Waiting for another installation or an update to finish") : qsTr("Waiting");
+    case "authorizing":
+        return qsTr("Waiting for permission…");
+    case "checking":
+        return removing ? qsTr("Finishing the uninstallation…") : qsTr("Finishing the installation…");
+    }
+    if (op.total > 0 && op.done > 0)
+        return removing ? qsTr("Uninstalling: %1 of %2").arg(op.done).arg(op.total) : qsTr("Installing: %1 of %2").arg(op.done).arg(op.total);
+    return removing ? qsTr("Uninstalling…") : qsTr("Installing…");
+}
+
+// How the last operation of an app ended, in one line (SR19, SR20); "" when there is nothing to say (done, or cancelled).
+function resultText(result) {
+    if (!result)
+        return "";
+    const removing = result.kind === "remove";
+    switch (result.outcome) {
+    case "interrupted":
+        return removing ? qsTr("The uninstallation was interrupted: %1 of %2 packages were removed.").arg(result.present).arg(result.total)
+                        : qsTr("The installation was interrupted: %1 of %2 packages were installed.").arg(result.present).arg(result.total);
+    case "notFinished":
+        return removing ? qsTr("The uninstallation did not finish.") : qsTr("The installation did not finish.");
+    case "lostTrack":
+        return qsTr("The Store stopped following this operation after a long time. Check what is installed in Installed.");
+    case "timedOut":
+        return qsTr("The request for permission timed out.");
+    case "didNotStart":
+        return removing ? qsTr("The uninstallation could not start: permission was not given.") : qsTr("The installation could not start: permission was not given.");
+    case "busy":
+        return qsTr("Another installation or an update is running.");
+    case "unfinished":
+        return qsTr("Finish the system update first.");
+    case "outdated":
+        return qsTr("Update your system first.");
+    case "refused":
+        return qsTr("This app can't be uninstalled from the Store.");
+    case "notApp":
+        return qsTr("This package isn't an app: the Store installs only apps.");
+    case "failed":
+        return removing ? qsTr("The uninstallation failed.") : qsTr("The installation failed.");
+    }
+    return "";
+}
+
+// A result the user can try again (the same plan; --needed completes a partial install).
+function canTryAgain(result) {
+    return !!result && ["interrupted", "notFinished", "timedOut", "didNotStart", "busy", "failed", "lostTrack"].indexOf(result.outcome) >= 0;
+}
+
+// Why "Uninstall…" is not offered (SR22); "" when it is, or when there is nothing to say (not installed).
+function uninstallReasonText(reason) {
+    switch (reason) {
+    case "omarchy":
+        return qsTr("Part of Omarchy");
+    case "grassfield":
+        return qsTr("Part of Grassfield");
+    case "system":
+        return qsTr("Part of the system");
+    case "dependency":
+        return qsTr("Installed with another app");
+    case "notApp":
+        return qsTr("Not an app: it has no window of its own");
+    case "notFromRepository":
+        return qsTr("Not from a repository: uninstalling it comes in a later version of the Store");
+    case "listsMissing":
+        return qsTr("Omarchy's package lists can't be read, so the Store uninstalls nothing");
+    case "dev":
+        return qsTr("dev: not applied");
+    case "missing":
+        return qsTr("This computer can't uninstall apps from the Store: Omarchy's commands or Grassfield's installer are missing.");
+    }
+    return "";
 }
 
 function buttonText(state) {

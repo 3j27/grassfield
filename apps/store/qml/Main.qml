@@ -135,6 +135,57 @@ Window {
         sidebar.search.selectAll();
     }
 
+    // ---- Get, Open and Uninstall… (spec SR13-SR22): the sheet asks first (OperationSheet), the backend's queue runs
+    // (operations.h). An app's button, its product page and its context menu call these.
+    function requestGet(app: var): void {
+        opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "install");
+    }
+
+    function requestUninstall(app: var): void {
+        opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
+    }
+
+    function launchApp(app: var): void {
+        if (!root.backend.open(app.id))
+            root.transientNotice = qsTr("“%1” could not be opened.").arg(app.name || "");
+    }
+
+    // pacman's message and what to do, for the last operation of an app (SR19).
+    function showDetails(id: string): void {
+        const r = root.backend.results[id];
+        if (r)
+            textSheet.show(Store.resultText(r) || qsTr("Details"), r.name || "", r.details || qsTr("No message was recorded."));
+    }
+
+    // The context menu of an installed app's item (SR22), at (x, y) in `item`'s coordinates.
+    function showAppMenu(app: var, item: Item, x: real, y: real): void {
+        const actions = root.backend.actions(app.id);
+        if (!actions.installed)
+            return;
+        const items = [];
+        if (actions.launcher)
+            items.push({id: "open", text: qsTr("Open")});
+        if (app.page !== false)
+            items.push({id: "page", text: qsTr("Show in Store")});
+        items.push({separator: true});
+        items.push({id: "uninstall", text: qsTr("Uninstall…"), enabled: actions.uninstall === "" && !root.backend.operations.some(o => o.app === app.id)});
+        appMenu.app = app;
+        appMenu.items = items;
+        appMenu.focusBack = item;
+        const p = item.mapToItem(root.contentItem, x, y);
+        appMenu.openAt(p.x, p.y);
+    }
+
+    // A notice that goes after a while (an app that could not be opened).
+    property string transientNotice: ""
+    Timer {
+        running: root.transientNotice !== ""
+        interval: 6000
+        onTriggered: root.transientNotice = ""
+    }
+    // How an operation ended, while it says something (the latest one first), and a lock pacman left (SR19, SR20).
+    readonly property var resultIds: Object.keys(root.backend.results || {}).filter(id => Store.resultText(root.backend.results[id]) !== "")
+
     onNavChanged: root.showPage(false)
 
     // The page of `current`: a search page that only changes its query keeps its item; anything else is made again, and gets
@@ -253,16 +304,27 @@ Window {
         value: root.backend.shortcutStyle
     }
 
-    // ---- Keyboard (spec "Keyboard"). The global menu's items carry the same shortcuts; each acts once.
+    // ---- Keyboard (spec "Keyboard"). The global menu's items carry the same shortcuts; each acts once. The window keeps its
+    // own Shortcuts beside the menu's (as Files), so every key works whatever the menu path: with the global menu bar, without
+    // its registrar, and when the shell shows the menu bar but not the app's menus.
     Loader {
         active: root.globalMenu
         sourceComponent: GlobalMenu {
             win: root
         }
+        // One log line per change, as Files (the menu bar exists only while the registrar does).
+        onItemChanged: console.info("grassfield: global menu " + (item ? "created" : "destroyed"))
     }
+
+    // The settings window is the key window (the backend's focusWindow; never `active`: Qt reports a window and its transient
+    // children active together). Qt still matches this window's Shortcuts and its global menu's keys then, so they wait: Ctrl+W
+    // typed in the settings would close the Store (Files' BrowserWindow.childIsKey). The settings window's own keys wait while
+    // this one is the key window.
+    readonly property bool childIsKey: root.settingsWindow !== null && root.backend.focusWindow === root.settingsWindow
 
     component Key: Shortcut {
         property var run: null
+        enabled: !root.childIsKey
         onActivated: run()
         onActivatedAmbiguously: run()
     }
@@ -291,9 +353,10 @@ Window {
         sequence: "Ctrl+W"
         run: () => root.close()
     }
+    // A running operation goes on (ADR-0037 f): the Store quits once it ended.
     Key {
         sequence: "Ctrl+Q"
-        run: () => Qt.quit()
+        run: () => root.backend.quitWhenIdle()
     }
 
     // Ctrl+1 … Ctrl+9: the sidebar's items in order.
@@ -306,7 +369,7 @@ Window {
 
             Shortcut {
                 sequence: "Ctrl+" + (digit.index + 1)
-                enabled: digit.index < root.sidebarItems.length
+                enabled: !root.childIsKey && digit.index < root.sidebarItems.length
                 onActivated: root.pick(root.sidebarItems[digit.index].key)
                 onActivatedAmbiguously: root.pick(root.sidebarItems[digit.index].key)
             }
@@ -355,8 +418,59 @@ Window {
             font.pixelSize: Tokens.storeBodySize
         }
 
+        // How an operation ended (the latest result that says something), pacman's lock left behind, an app that could not
+        // be opened (SR19, SR20): one line above the offline notice, with what can be done.
+        NoticeBar {
+            id: operationNotice
+            objectName: "operationNotice"
+            // The app whose page is shown has the line under its button (ProductPage.qml): not twice.
+            readonly property var others: root.resultIds.filter(id => !(pageLoader.page === "app" && pageLoader.entry.id === id))
+            readonly property string resultId: others.length > 0 ? others[others.length - 1] : ""
+            readonly property var result: resultId !== "" ? root.backend.results[resultId] : null
+            width: Math.min(implicitWidth, parent.width - 2 * Tokens.storeContentMargin)
+            x: Math.round((parent.width - width) / 2)
+            y: offlineNotice.y - height - (offlineNotice.visible ? Tokens.spacingSm : 0)
+            text: {
+                if (root.transientNotice !== "")
+                    return root.transientNotice;
+                if (result)
+                    return "“" + (result.name || resultId) + "”: " + Store.resultText(result);
+                return root.backend.staleLock ? qsTr("A package manager stopped mid-way and left its lock: nothing installs until it goes.") : "";
+            }
+            actions: {
+                if (root.transientNotice !== "")
+                    return [];
+                if (result)
+                    return (Store.canTryAgain(result) ? [{id: "again", text: qsTr("Try Again")}] : [])
+                        .concat([{id: "details", text: qsTr("Details…")}, {id: "close", text: qsTr("Close")}]);
+                return root.backend.staleLock ? [{id: "lock", text: qsTr("Details…")}] : [];
+            }
+            onActed: id => {
+                const r = result;
+                const app = resultId;
+                if (id === "again") {
+                    root.backend.dismiss(app);
+                    const a = Object.assign({id: app, name: r.name}, root.backend.app(app));
+                    if (r.kind === "remove")
+                        root.requestUninstall(a);
+                    else
+                        root.requestGet(a);
+                } else if (id === "details") {
+                    root.showDetails(app);
+                } else if (id === "close") {
+                    root.backend.dismiss(app);
+                } else if (id === "lock") {
+                    textSheet.show(qsTr("A package manager stopped mid-way"),
+                                   qsTr("pacman's lock file is still there, but no pacman is running. If nothing is installing or updating (Software Update included), remove the lock in a terminal, then try again:"),
+                                   "sudo rm /var/lib/pacman/db.lck");
+                }
+            }
+        }
+
         // Offline, or a catalog older than 30 days (SR29): one line at the bottom of the page.
         NoticeBar {
+            id: offlineNotice
+            objectName: "offlineNotice"
             width: Math.min(implicitWidth, parent.width - 2 * Tokens.storeContentMargin)
             x: Math.round((parent.width - width) / 2)
             y: parent.height - height - Tokens.storeNoticeBottom
@@ -423,12 +537,36 @@ Window {
                 }
             }
 
-            // Without a global menu bar (no registrar), the way to the settings that File > Settings… gives.
-            trailing: ToolButton {
-                visible: !root.globalMenu
-                iconName: "gear"
-                accessibleName: qsTr("Store Settings")
-                onClicked: root.openSettings()
+            trailing: Row {
+                spacing: Tokens.spacingXs
+
+                // The queue (SR18): what runs and what waits; a waiting operation can leave it.
+                ToolButton {
+                    id: queueButton
+                    visible: root.backend.operations.length > 0
+                    iconName: "arrow-down-circle"
+                    accessibleName: qsTr("Installations: %1").arg(root.backend.operations.length)
+                    onClicked: {
+                        const items = [];
+                        for (const op of root.backend.operations) {
+                            items.push({id: "", text: (op.name || op.app) + " — " + Store.operationText(op), enabled: false});
+                            if (op.state === "waiting")
+                                items.push({id: op.id, text: op.kind === "remove" ? qsTr("Don't Uninstall “%1”").arg(op.name) : qsTr("Don't Install “%1”").arg(op.name)});
+                        }
+                        queueMenu.items = items;
+                        queueMenu.focusBack = queueButton;
+                        const p = queueButton.mapToItem(root.contentItem, 0, queueButton.height + Tokens.spacingXs);
+                        queueMenu.openAt(Math.min(p.x, root.width - queueMenu.width - Tokens.spacingSm), p.y);
+                    }
+                }
+
+                // Without a global menu bar (no registrar), the way to the settings that File > Settings… gives.
+                ToolButton {
+                    visible: !root.globalMenu
+                    iconName: "gear"
+                    accessibleName: qsTr("Store Settings")
+                    onClicked: root.openSettings()
+                }
             }
         }
     }
@@ -473,6 +611,15 @@ Window {
             backend: root.backend
             app: root.backend.app(pageLoader.entry.id)
             onLinkRequested: url => root.backend.openLink(url)
+            onUninstallRequested: app => root.requestUninstall(app)
+            onDetailsRequested: id => root.showDetails(id)
+            onTryAgainRequested: (app, kind) => {
+                root.backend.dismiss(app.id);
+                if (kind === "remove")
+                    root.requestUninstall(app);
+                else
+                    root.requestGet(app);
+            }
         }
     }
 
@@ -498,6 +645,39 @@ Window {
         UpdatesPage {
             updates: root.backend.updates()
             onOpened: id => root.openApp(id)
+        }
+    }
+
+    // ---- Sheets and menus over the window.
+    OperationSheet {
+        id: opSheet
+        backend: root.backend
+    }
+
+    TextSheet {
+        id: textSheet
+    }
+
+    MenuPopup {
+        id: appMenu
+        property var app: null
+        accessibleName: qsTr("App")
+        onChosen: id => {
+            if (id === "open")
+                root.launchApp(appMenu.app);
+            else if (id === "page")
+                root.openApp(appMenu.app.id);
+            else if (id === "uninstall")
+                root.requestUninstall(appMenu.app);
+        }
+    }
+
+    MenuPopup {
+        id: queueMenu
+        accessibleName: qsTr("Installations")
+        onChosen: id => {
+            if (id !== "")
+                root.backend.removeWaiting(id);
         }
     }
 }

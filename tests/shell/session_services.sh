@@ -115,6 +115,10 @@ for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notif
 done
 desc="every helper in packaging/bin and packaging/shims is executable and installed by one PKGBUILD line (regular files only)"
 check bash -c 'for f in "$1"/bin/* "$1"/shims/*; do [[ -d $f || -x $f ]] || exit 1; done; grep -qF "find \"\$root/packaging/bin\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/\" {} +" "$1/arch/PKGBUILD" && grep -qF "find \"\$root/packaging/shims\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/omarchy-shims/\" {} +" "$1/arch/PKGBUILD"' _ "$pk"
+desc="ADR-0035 D-3: session.lua puts the directory the PKGBUILD installs first in Hyprland's PATH (guard_path)"
+check bash -c 'grep -qF "omarchy.guard_path(\"/usr/lib/grassfield/omarchy-shims\", \"/usr/lib/grassfield/session-bin\")" "$1/config/hypr/session.lua" && grep -qF "install -d \"\$pkgdir/usr/lib/grassfield/session-bin\"" "$2/arch/PKGBUILD"' _ "$root" "$pk"
+desc="ADR-0035 D-3: the session-bin stand-ins are executable and installed to /usr/lib/grassfield/session-bin"
+check bash -c 'for f in "$1"/session-bin/*; do [[ -f $f && -x $f ]] || exit 1; done; grep -qF "find \"\$root/packaging/session-bin\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/session-bin/\" {} +" "$1/arch/PKGBUILD"' _ "$pk"
 
 desc="the install lines skip a directory in packaging/bin (an ignored __pycache__ must neither break nor enter the package)"
 check bash -c 'w=$(mktemp -d) && mkdir -p "$w/packaging/bin/__pycache__" "$w/out" && printf "x\n" >"$w/packaging/bin/tool" && root=$w pkgdir=$w/pkg && mkdir -p "$pkgdir/usr/lib/grassfield" && eval "$(grep -F "find \"\$root/packaging/bin\" -maxdepth 1 -type f" "$1/arch/PKGBUILD")" && [[ -x $pkgdir/usr/lib/grassfield/tool && ! -e $pkgdir/usr/lib/grassfield/__pycache__ ]]; rc=$?; rm -rf "$w"; exit $rc' _ "$pk"

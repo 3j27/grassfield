@@ -61,6 +61,7 @@ namespace gf::tiling {
     struct DragOptions {
         bool edges   = true; // "Drag windows to left or right edge of screen to tile"
         bool menuBar = true; // "Drag windows to menu bar to fill screen"
+        bool altDrag = true; // "Hold Alt key while dragging windows to tile" (TL18)
     };
 
     // The output the pointer is on: its full box, the bottom of the menu bar strip (the output's top reserved area), and
@@ -74,6 +75,38 @@ namespace gf::tiling {
 
     // The place a drag would tile into with the pointer at (x, y), or none.
     std::optional<Place> placeForPointer(double x, double y, const Output& output, const DragOptions& options);
+
+    // TL18: with Alt held, the nearest half, quarter or fill from the pointer's position in the work area `area`, split in
+    // thirds across and down: the corner cells give the quarters, the side cells of the middle row the halves, the
+    // top-middle cell Fill, the centre and bottom-middle cells the half on the pointer's side. A pointer outside the area
+    // (on the menu bar, over the Dock) counts in the nearest cell.
+    Place placeForAltPointer(double x, double y, const Rect& area);
+
+    // The place of a drag with the pointer at (x, y) on `output` (nullopt: off it): with Alt held and the Alt drag on,
+    // placeForAltPointer in the work area `area`, whatever the edge and menu-bar settings; else placeForPointer.
+    std::optional<Place> dragPlace(double x, double y, const Output& output, const Rect& area, const DragOptions& options, bool alt);
+
+    // TL17: a drag's place shows (its preview is drawn, a release tiles it) once the pointer has rested on that place of
+    // the same output for kPreviewDelay ms (token tiling.previewDelay), at once with Alt held; another place, another
+    // output or none starts over and hides the preview at once.
+    inline constexpr uint64_t kPreviewDelay = theme::tokens::kTilingPreviewDelay;
+    class CDwell {
+      public:
+        // The pointer is on `place` of output `output` (nullopt: none) at `nowMs`; `immediate`: Alt is held. True when
+        // the place shows now.
+        bool update(std::optional<Place> place, std::string_view output, uint64_t nowMs, bool immediate);
+        // Milliseconds until the place shows if the pointer stays on it (the timer that draws it then); nullopt when it
+        // shows already or there is no place.
+        std::optional<uint64_t> remaining(uint64_t nowMs) const;
+        bool                    shown() const;
+        void                    reset();
+
+      private:
+        std::optional<Place> m_place;
+        std::string          m_output;
+        uint64_t             m_since = 0;
+        bool                 m_shown = false;
+    };
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -171,6 +204,32 @@ namespace gf::tiling {
     // Center: the window keeps its size (at most kCenterMaxFraction of the work area), in the middle, snapped.
     Rect centerFrame(const Rect& currentSurface, double band, const Area& area);
 
+    // TL20: the sides of a window a double-click on its resize border extends, as a mask.
+    inline constexpr uint8_t kSideLeft   = 1;
+    inline constexpr uint8_t kSideRight  = 2;
+    inline constexpr uint8_t kSideTop    = 4;
+    inline constexpr uint8_t kSideBottom = 8;
+    inline constexpr uint8_t kAllSides   = kSideLeft | kSideRight | kSideTop | kSideBottom;
+
+    // The sides a press at (x, y) on a window's resize border grips. `surface`: the box Hyprland's border grab surrounds
+    // (the window's geometric box, InputManager processMouseDownNormal). Left of it: left; right of it: right; above or
+    // below likewise (both near a corner); inside it (a press in a rounded corner, which Hyprland also takes as the
+    // border): the corner of the quadrant the press is in.
+    uint8_t sidesAt(double x, double y, const Rect& surface);
+
+    // The sides a double-click on `sides` extends: with Alt, the opposite side of each too (a corner then gives all four:
+    // the window fills the work area).
+    uint8_t extendedSides(uint8_t sides, bool alt);
+
+    // TL20: the frame `frame` (titlebar band included) with each side in `sides` moved to the work area's edge, inside the
+    // margin and on the grid (the edges of the whole-area frame, zoneFrame); the other sides stay. The window's limits
+    // (`constraints`, band included): never larger than its maximum nor smaller than its minimum, X11 increments round its
+    // surface down; the side that did not move stays, and when both sides of an axis moved a maximum centres the window.
+    Rect extendFrame(const Rect& frame, uint8_t sides, const Constraints& constraints, const Area& area);
+
+    // "top", "bottom", "left", "right" joined by "-" in that order ("top-left", "left-right"); "" for none.
+    std::string sidesName(uint8_t sides);
+
     // The frame (titlebar included) of a surface box: what the preview draws; and back.
     Rect frameOf(const Rect& surface, double titlebar);
     Rect surfaceOf(const Rect& frame, double titlebar);
@@ -212,11 +271,12 @@ namespace gf::tiling {
     };
     std::string_view nameOf(TileState state);
 
-    // Where a window was placed: a place, or zone `zone` of layout `layout`.
+    // Where a window was placed: a place, zone `zone` of layout `layout`, or the sides an edge double-click extended (TL20).
     struct Placement {
         std::optional<Place> place;
         std::string          layout;
-        int                  zone = -1;
+        int                  zone  = -1;
+        uint8_t              sides = 0;
 
         bool                 operator==(const Placement&) const = default;
     };
@@ -323,6 +383,7 @@ namespace gf::tiling {
     inline constexpr std::string_view kConfigEdges   = "tilingEdges";
     inline constexpr std::string_view kConfigMenuBar = "tilingMenuBar";
     inline constexpr std::string_view kConfigMargins = "tilingMargins";
+    inline constexpr std::string_view kConfigAltDrag = "tilingOptionDrag"; // Settings windows.tilingOptionDrag (TL18)
     std::optional<bool> parseBool(std::string_view value);
 
     // ---- the tiling notice and state (gfc/1, ADR-0007) ----

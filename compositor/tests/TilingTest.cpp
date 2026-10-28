@@ -667,11 +667,177 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     const std::array<StateOutput, 1> outputs{o};
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
-              R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
+              R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
+    Placement edge;
+    edge.sides = kSideTop | kSideLeft;
+    CTileBook edges;
+    edges.placed(0x1, Rect{1, 2, 3, 4}, Rect{8, 64, 400, 300}, 32, edge, "GF-REF", 2, 0);
+    StateOutput e{.name = "GF-REF", .area = Rect{0, 24, 1920, 974}, .outputClass = OutputClass::Large, .grid = 1, .windows = {&edges.records().front()}};
+    EXPECT_NE(stateJson(4, std::array<StateOutput, 1>{e}).find(R"("place":"","layout":"","zone":-1,"sides":"top-left","group":0)"), std::string::npos)
+        << "an edge double-click's record names its sides";
     for (Reason r : {Reason::Placed, Reason::Moved, Reason::Resized, Reason::Suspended, Reason::Restored, Reason::Forgotten, Reason::Relaid, Reason::Invalid,
                      Reason::Locked, Reason::Unavailable})
         EXPECT_FALSE(reasonName(r).empty());
     EXPECT_EQ(noticeJson(9, Reason::Locked), R"({"v":"gfc/1","type":"tiling","gen":9,"reason":"locked"})");
     EXPECT_EQ(noticeJson(std::numeric_limits<uint64_t>::max(), Reason::Unavailable).size(), 79U) << "the bound ADR-0007 states";
+}
+
+// ---- step 2: drags (TL17, TL18, TL20) ----
+
+TEST(TilingAltDrag, ThirdsOfTheWorkAreaGiveTheNearestTile) {
+    // kArea: thirds at x 2080 and 2720, y 348.7 and 673.3; the middle at x 2400.
+    EXPECT_EQ(placeForAltPointer(1500, 100, kArea), Place::TopLeft);
+    EXPECT_EQ(placeForAltPointer(2400, 100, kArea), Place::Fill);
+    EXPECT_EQ(placeForAltPointer(3300, 100, kArea), Place::TopRight);
+    EXPECT_EQ(placeForAltPointer(1500, 500, kArea), Place::Left);
+    EXPECT_EQ(placeForAltPointer(3300, 500, kArea), Place::Right);
+    EXPECT_EQ(placeForAltPointer(2399, 500, kArea), Place::Left) << "the centre: the half on the pointer's side";
+    EXPECT_EQ(placeForAltPointer(2400, 500, kArea), Place::Right);
+    EXPECT_EQ(placeForAltPointer(1500, 900, kArea), Place::BottomLeft);
+    EXPECT_EQ(placeForAltPointer(3300, 900, kArea), Place::BottomRight);
+    EXPECT_EQ(placeForAltPointer(2399, 900, kArea), Place::Left) << "bottom middle: the half on the pointer's side";
+    EXPECT_EQ(placeForAltPointer(2400, 900, kArea), Place::Right);
+    EXPECT_EQ(placeForAltPointer(2079, 300, kArea), Place::TopLeft);
+    EXPECT_EQ(placeForAltPointer(2080, 300, kArea), Place::Fill) << "the cell boundary belongs to the next cell";
+    EXPECT_EQ(placeForAltPointer(2400, 348, kArea), Place::Fill);
+    EXPECT_EQ(placeForAltPointer(2400, 349, kArea), Place::Right);
+    EXPECT_EQ(placeForAltPointer(2400, 5, kArea), Place::Fill) << "on the menu bar, above the area: the top row";
+    EXPECT_EQ(placeForAltPointer(1500, 1050, kArea), Place::BottomLeft) << "over the Dock, below the area: the bottom row";
+}
+
+TEST(TilingAltDrag, AltWinsOverTheEdgeSettingsAndNeedsItsOwnSetting) {
+    EXPECT_EQ(dragPlace(2400, 500, kOutput, kArea, DragOptions{}, true), Place::Right);
+    EXPECT_FALSE(dragPlace(2400, 500, kOutput, kArea, DragOptions{}, false).has_value()) << "without Alt: the edges only";
+    EXPECT_EQ(dragPlace(3359, 540, kOutput, kArea, DragOptions{}, false), Place::Right);
+    EXPECT_EQ(dragPlace(1500, 900, kOutput, kArea, DragOptions{false, false, true}, true), Place::BottomLeft) << "edges and menu bar off";
+    EXPECT_FALSE(dragPlace(2400, 500, kOutput, kArea, DragOptions{true, true, false}, true).has_value()) << "the Alt drag setting off";
+    EXPECT_EQ(dragPlace(3359, 540, kOutput, kArea, DragOptions{true, true, false}, true), Place::Right) << "then Alt changes nothing";
+    EXPECT_FALSE(dragPlace(1439, 500, kOutput, kArea, DragOptions{}, true).has_value()) << "off the output";
+    EXPECT_FALSE(dragPlace(2400, 500, kOutput, Rect{}, DragOptions{}, true).has_value()) << "no work area: the edges only";
+}
+
+TEST(TilingDwell, ThePreviewWaitsForTheDelayOnOnePlace) {
+    ASSERT_GT(kPreviewDelay, 1U);
+    CDwell d;
+    EXPECT_FALSE(d.remaining(0).has_value()) << "no place";
+    EXPECT_FALSE(d.update(Place::Left, "A", 1000, false));
+    EXPECT_EQ(d.remaining(1000), kPreviewDelay);
+    EXPECT_FALSE(d.update(Place::Left, "A", 1000 + kPreviewDelay - 1, false));
+    EXPECT_EQ(d.remaining(1000 + kPreviewDelay - 1), 1U);
+    EXPECT_FALSE(d.shown());
+    EXPECT_TRUE(d.update(Place::Left, "A", 1000 + kPreviewDelay, false));
+    EXPECT_TRUE(d.shown());
+    EXPECT_FALSE(d.remaining(1000 + kPreviewDelay).has_value()) << "shown: nothing to wait for";
+    EXPECT_TRUE(d.update(Place::Left, "A", 5000, false)) << "it stays shown while the pointer stays";
+    EXPECT_FALSE(d.update(Place::Right, "A", 5001, false)) << "another place starts over";
+    EXPECT_EQ(d.remaining(5001), kPreviewDelay);
+    EXPECT_FALSE(d.update(Place::Right, "B", 5002 + kPreviewDelay, false)) << "the same place on another output starts over";
+    EXPECT_EQ(d.remaining(5002 + kPreviewDelay), kPreviewDelay);
+    EXPECT_FALSE(d.update(std::nullopt, "", 9000, true)) << "no place: hidden at once, even with Alt";
+    EXPECT_FALSE(d.shown());
+    EXPECT_FALSE(d.remaining(9000).has_value());
+    EXPECT_FALSE(d.update(Place::Left, "A", 9001, false)) << "back on a place: the delay again";
+    EXPECT_EQ(d.remaining(9010), kPreviewDelay - 9);
+    EXPECT_EQ(d.remaining(9001 + 2 * kPreviewDelay), 0U) << "overdue: due now";
+}
+
+TEST(TilingDwell, AltShowsAtOnce) {
+    CDwell d;
+    EXPECT_TRUE(d.update(Place::Fill, "A", 100, true));
+    EXPECT_FALSE(d.update(Place::Left, "A", 101, false));
+    EXPECT_TRUE(d.update(Place::Left, "A", 102, true)) << "Alt pressed while waiting";
+    EXPECT_TRUE(d.update(Place::Left, "A", 103, false)) << "released: still shown";
+    d.reset();
+    EXPECT_FALSE(d.shown());
+    EXPECT_FALSE(d.remaining(104).has_value());
+    EXPECT_FALSE(d.update(Place::Left, "A", 104, false)) << "after a reset, the same place waits again";
+}
+
+TEST(TilingSides, ABorderPressGripsTheSidesItIsBeyond) {
+    const Rect s{2000, 300, 800, 500};
+    EXPECT_EQ(sidesAt(1995, 500, s), kSideLeft);
+    EXPECT_EQ(sidesAt(2805, 500, s), kSideRight);
+    EXPECT_EQ(sidesAt(2800, 500, s), kSideRight) << "the box's right edge is outside it";
+    EXPECT_EQ(sidesAt(2400, 295, s), kSideTop);
+    EXPECT_EQ(sidesAt(2400, 805, s), kSideBottom);
+    EXPECT_EQ(sidesAt(2400, 800, s), kSideBottom);
+    EXPECT_EQ(sidesAt(1995, 295, s), kSideLeft | kSideTop);
+    EXPECT_EQ(sidesAt(2805, 805, s), kSideRight | kSideBottom);
+    EXPECT_EQ(sidesAt(2005, 305, s), kSideLeft | kSideTop) << "inside, in a rounded corner: its quadrant's corner";
+    EXPECT_EQ(sidesAt(2795, 305, s), kSideRight | kSideTop);
+    EXPECT_EQ(sidesAt(2005, 795, s), kSideLeft | kSideBottom);
+    EXPECT_EQ(sidesAt(2795, 795, s), kSideRight | kSideBottom);
+    EXPECT_EQ(sidesAt(2400, 550, s), kSideRight | kSideBottom) << "the middle belongs to the second halves";
+}
+
+TEST(TilingSides, AltAddsTheOppositeSides) {
+    EXPECT_EQ(extendedSides(kSideLeft, false), kSideLeft);
+    EXPECT_EQ(extendedSides(kSideLeft, true), kSideLeft | kSideRight);
+    EXPECT_EQ(extendedSides(kSideRight, true), kSideLeft | kSideRight);
+    EXPECT_EQ(extendedSides(kSideBottom, true), kSideTop | kSideBottom);
+    EXPECT_EQ(extendedSides(kSideTop, true), kSideTop | kSideBottom);
+    EXPECT_EQ(extendedSides(kSideTop | kSideLeft, false), kSideTop | kSideLeft);
+    EXPECT_EQ(extendedSides(kSideTop | kSideLeft, true), kAllSides) << "Alt on a corner: the whole work area";
+    EXPECT_EQ(extendedSides(0xF0, true), 0) << "only the four sides";
+    EXPECT_EQ(sidesName(kSideTop | kSideLeft), "top-left");
+    EXPECT_EQ(sidesName(kSideLeft | kSideRight), "left-right");
+    EXPECT_EQ(sidesName(kSideBottom | kSideRight), "bottom-right");
+    EXPECT_EQ(sidesName(kAllSides), "top-bottom-left-right");
+    EXPECT_EQ(sidesName(0), "");
+}
+
+TEST(TilingExtend, EachSideGoesToTheWorkAreaEdgeInsideTheMargin) {
+    const Area area{kArea, kMargin, Grid{1440, 0, 1}};
+    const Rect full  = zoneFrame(Zone{}, area);
+    ASSERT_EQ(full, (Rect{1448, 32, 1904, 958}));
+    const Rect frame = frameOf(kWindow, kBar); // 2000, 268, 800 x 532
+    const Constraints c{.band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideLeft, c, area), (Rect{1448, 268, 1352, 532}));
+    EXPECT_EQ(extendFrame(frame, kSideRight, c, area), (Rect{2000, 268, 1352, 532}));
+    EXPECT_EQ(extendFrame(frame, kSideTop, c, area), (Rect{2000, 32, 800, 768})) << "the titlebar's top reaches the area";
+    EXPECT_EQ(extendFrame(frame, kSideBottom, c, area), (Rect{2000, 268, 800, 722}));
+    EXPECT_EQ(extendFrame(frame, kSideLeft | kSideRight, c, area), (Rect{1448, 268, 1904, 532}));
+    EXPECT_EQ(extendFrame(frame, kSideTop | kSideLeft, c, area), (Rect{1448, 32, 1352, 768}));
+    EXPECT_EQ(extendFrame(frame, kAllSides, c, area), full);
+    EXPECT_EQ(extendFrame(frame, 0, c, area), frame);
+    const Area bare{kArea, 0, Grid{1440, 0, 1}};
+    EXPECT_EQ(extendFrame(frame, kSideLeft | kSideBottom, c, bare), (Rect{1440, 268, 1360, 730})) << "no margins: the area's own edges";
+}
+
+TEST(TilingExtend, LimitsKeepTheSideThatDidNotMove) {
+    const Area area{kArea, kMargin, Grid{1440, 0, 1}};
+    const Rect frame = frameOf(kWindow, kBar);
+    const Constraints maxW{.maxW = 1000, .band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideLeft, maxW, area), (Rect{1800, 268, 1000, 532})) << "the right side stays";
+    EXPECT_EQ(extendFrame(frame, kSideRight, maxW, area), (Rect{2000, 268, 1000, 532}));
+    EXPECT_EQ(extendFrame(frame, kSideLeft | kSideRight, maxW, area), (Rect{1900, 268, 1000, 532})) << "both moved: centred";
+    const Constraints maxH{.maxH = 600, .band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideTop, maxH, area), (Rect{2000, 168, 800, 632})) << "the maximum counts the surface only";
+    const Constraints incW{.incW = 10, .baseW = 0, .band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideLeft, incW, area), (Rect{1450, 268, 1350, 532})) << "increments round down, the right side stays";
+    EXPECT_EQ(extendFrame(frame, kSideRight, incW, area), (Rect{2000, 268, 1350, 532}));
+    EXPECT_EQ(extendFrame(frame, kSideLeft | kSideRight, incW, area), (Rect{1448, 268, 1900, 532})) << "both moved, no maximum: not centred";
+    const Constraints incH{.incH = 20, .baseH = 4, .band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideBottom, incH, area), (Rect{2000, 268, 800, 716})) << "4 + 34 x 20 = 684 of surface";
+    const Rect narrow{1460, 268, 100, 532};
+    const Constraints minW{.minW = 300, .band = kBar};
+    EXPECT_EQ(extendFrame(narrow, kSideLeft, minW, area), (Rect{1260, 268, 300, 532})) << "never smaller than its minimum";
+    const Area grid{kArea, 0, Grid{1440, 0, 4}};
+    const Constraints odd{.maxW = 1001, .band = kBar};
+    EXPECT_EQ(extendFrame(frame, kSideLeft | kSideRight, odd, grid), (Rect{1896, 268, 1001, 532})) << "the centring offset on the grid";
+}
+
+TEST(TilingRecord, AnEdgePlacementIsItsOwnPlacement) {
+    Placement edge;
+    edge.sides = kSideLeft;
+    Placement other = edge;
+    other.sides     = kSideRight;
+    EXPECT_NE(edge, other);
+    EXPECT_NE(edge, Placement{});
+    CTileBook book;
+    const auto& r = book.placed(7, Rect{2000, 300, 800, 500}, Rect{1448, 300, 1352, 500}, 32, edge, "GF-REF", 1, 0);
+    EXPECT_EQ(r.where.sides, kSideLeft);
+    EXPECT_EQ(r.before, (Rect{2000, 300, 800, 500})) << "Return to Previous Size has a box to go back to";
+    EXPECT_EQ(book.takeBefore(7), (Rect{2000, 300, 800, 500}));
 }

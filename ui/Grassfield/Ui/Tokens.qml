@@ -3090,6 +3090,24 @@ QtObject {
     readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
     // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeButtonDisabledOpacity: 0.45
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSize: 26
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeRingStroke: 2.5
+    // estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSweep: 100
+    // estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingTurnMs: 1100
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
+    readonly property int storeRingStopSize: 8
+    // estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingStopRadius: 2
+    // estimate: the package rows an install or uninstall sheet shows before it scrolls [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetListMaxRows: 8
+    // estimate: one package row of that list [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetRowHeight: Math.round(20 * Appearance.textScale)
+    // estimate: the line under an app's button saying how its last operation ended [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeResultGap: 6
     // estimate: a category tile [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeCategoryHeight: 64
     // estimate: a column of category tiles: three at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
@@ -3180,6 +3198,8 @@ QtObject {
     readonly property int tilingMargin: 8
     // Center keeps the window's size, at most this fraction of the work area (kCenterMaxFraction before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property real tilingCenterMaxFraction: 0.9
+    // estimate until measured in nested against the owner's captures: a drag's tiling preview shows after the pointer rests this long on a place (ms); Alt shows it at once (parity row M08: macOS shows a short delay, U) [ref: docs/specs/tiling.md § Drags; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPreviewDelay: 250
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property var tilingLayoutLeftRight: [[0, 0, 6, 12], [6, 0, 6, 12]]
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]

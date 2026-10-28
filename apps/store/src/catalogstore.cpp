@@ -1,6 +1,7 @@
 #include "catalogstore.h"
 
 #include "signature.h"
+#include "statefile.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -40,13 +41,6 @@ bool writeFile(const QString &path, const QByteArray &data)
     if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size())
         return false;
     return f.commit();
-}
-
-QJsonObject readState(const QString &path)
-{
-    const QJsonDocument doc = QJsonDocument::fromJson(readFile(path, 1024 * 1024));
-    const QJsonObject o = doc.object();
-    return o.value(QStringLiteral("version")).toInt() == 1 ? o : QJsonObject{{QStringLiteral("version"), 1}};
 }
 
 bool isSha256(const QString &s)
@@ -150,26 +144,26 @@ QByteArray CatalogStore::cachedEtag(const QString &channel) const
 
 QDateTime CatalogStore::fetchedAt(const QString &channel) const
 {
-    const QJsonObject c = readState(m_stateFile).value(QStringLiteral("catalog")).toObject().value(channel).toObject();
+    const QJsonObject c = readStoreState(m_stateFile).value(QStringLiteral("catalog")).toObject().value(channel).toObject();
     return QDateTime::fromString(c.value(QStringLiteral("fetchedAt")).toString(), Qt::ISODate);
 }
 
 qint64 CatalogStore::acceptedSerial(const QString &channel) const
 {
-    const QJsonObject c = readState(m_stateFile).value(QStringLiteral("catalog")).toObject().value(channel).toObject();
+    const QJsonObject c = readStoreState(m_stateFile).value(QStringLiteral("catalog")).toObject().value(channel).toObject();
     return c.value(QStringLiteral("serial")).toInteger(0);
 }
 
 void CatalogStore::recordAccepted(const QString &channel, qint64 serial)
 {
-    QJsonObject state = readState(m_stateFile);
-    QJsonObject catalogs = state.value(QStringLiteral("catalog")).toObject();
-    QJsonObject c = catalogs.value(channel).toObject();
-    c.insert(QStringLiteral("serial"), std::max(serial, c.value(QStringLiteral("serial")).toInteger(0)));
-    c.insert(QStringLiteral("fetchedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-    catalogs.insert(channel, c);
-    state.insert(QStringLiteral("catalog"), catalogs);
-    writeFile(m_stateFile, QJsonDocument(state).toJson(QJsonDocument::Indented));
+    updateStoreState(m_stateFile, [&](QJsonObject &state) {
+        QJsonObject catalogs = state.value(QStringLiteral("catalog")).toObject();
+        QJsonObject c = catalogs.value(channel).toObject();
+        c.insert(QStringLiteral("serial"), std::max(serial, c.value(QStringLiteral("serial")).toInteger(0)));
+        c.insert(QStringLiteral("fetchedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+        catalogs.insert(channel, c);
+        state.insert(QStringLiteral("catalog"), catalogs);
+    });
 }
 
 void CatalogStore::touch(const QString &channel)

@@ -1,0 +1,142 @@
+import QtQuick
+import QtTest
+import "../../shell/services/NotResponding.js" as Logic
+
+// ADR-0035 D-3: "Not responding". A report marks exactly one process, never a guess; the marks drive Force Quit and the Dock
+// menu; Force Quit refuses a pid that no longer owns a window of the chosen class.
+TestCase {
+    name: "NotResponding"
+
+    readonly property string own: "abc_1_2"
+
+    function win(pid, cls, title) {
+        return {pid: pid, cls: cls, title: title};
+    }
+
+    function test_theStringArgumentsCarryTheirPrefix() {
+        compare(Logic.unprefix("c:org.gnome.Nautilus", "c:"), "org.gnome.Nautilus");
+        // A title may itself start with "-" or with another prefix.
+        compare(Logic.unprefix("t:-rw-r--r-- notes.txt", "t:"), "-rw-r--r-- notes.txt");
+        compare(Logic.unprefix("t:c:x", "t:"), "c:x");
+        compare(Logic.unprefix("t:", "t:"), "");
+        compare(Logic.unprefix("org.gnome.Nautilus", "c:"), null);
+        compare(Logic.unprefix("", "i:"), null);
+        compare(Logic.unprefix(undefined, "i:"), null);
+    }
+
+    function test_aReportForOneKnownProcessIsAccepted() {
+        const windows = [win(4242, "foot", "~"), win(5000, "firefox", "Mozilla Firefox")];
+        compare(Logic.decide(77, 4242, "foot", "~", own, own, windows), {ok: true, reason: ""});
+        // A window the shell has no pid for yet does not refuse: the stand-in found it in Hyprland's own list.
+        compare(Logic.decide(77, 4242, "foot", "~", own, own, [win(0, "foot", "~")]).ok, true);
+        compare(Logic.decide(77, 4242, "foot", "~", own, own, []).ok, true);
+        // Another process with the same class but another title is not the same window.
+        compare(Logic.decide(77, 4242, "foot", "~", own, own, windows.concat([win(4300, "foot", "/tmp")])).ok, true);
+    }
+
+    function test_twoProcessesWithTheSameWindowAreNotTold() {
+        const windows = [win(4242, "foot", "~"), win(4300, "foot", "~")];
+        compare(Logic.decide(77, 4242, "foot", "~", own, own, windows), {ok: false, reason: "ambiguous"});
+        compare(Logic.decide(77, 4300, "foot", "~", own, own, windows).reason, "ambiguous");
+    }
+
+    function test_badPidsAndMissingFieldsAreRefused() {
+        const windows = [win(4242, "foot", "~")];
+        compare(Logic.decide(77, 0, "foot", "~", own, own, windows).reason, "pid");
+        compare(Logic.decide(77, 1, "foot", "~", own, own, windows).reason, "pid");
+        compare(Logic.decide(77, -5, "foot", "~", own, own, windows).reason, "pid");
+        compare(Logic.decide(77, 42.5, "foot", "~", own, own, windows).reason, "pid");
+        compare(Logic.decide(1, 4242, "foot", "~", own, own, windows).reason, "standin");
+        compare(Logic.decide(0, 4242, "foot", "~", own, own, windows).reason, "standin");
+        compare(Logic.decide(77, 4242, "", "~", own, own, windows).reason, "window");
+        compare(Logic.decide(77, 4242, null, "~", own, own, windows).reason, "window");
+        compare(Logic.decide(77, 4242, "foot", null, own, own, windows).reason, "window");
+        // An empty title is a title.
+        compare(Logic.decide(77, 4242, "foot", "", own, own, [win(4242, "foot", "")]).ok, true);
+    }
+
+    function test_aReportFromAnotherCompositorIsRefused() {
+        const windows = [win(4242, "foot", "~")];
+        compare(Logic.decide(77, 4242, "foot", "~", "nested_9_9", own, windows).reason, "instance");
+        compare(Logic.decide(77, 4242, "foot", "~", "", own, windows).reason, "instance");
+        compare(Logic.decide(77, 4242, "foot", "~", null, own, windows).reason, "instance");
+        // A shell that does not know its own compositor accepts nothing.
+        compare(Logic.decide(77, 4242, "foot", "~", "", "", windows).reason, "instance");
+    }
+
+    function test_oneMarkPerStandin() {
+        let marks = Logic.withMark([], {standin: 77, pid: 4242, cls: "foot", title: "~"});
+        marks = Logic.withMark(marks, {standin: 78, pid: 5000, cls: "firefox", title: "Mozilla Firefox"});
+        compare(marks.length, 2);
+        // Hyprland runs one dialog per XWayland surface: a second stand-in for the same process adds a mark.
+        marks = Logic.withMark(marks, {standin: 90, pid: 4242, cls: "foot", title: "other"});
+        compare(marks.length, 3);
+        // The process stays marked while any of its stand-ins lives.
+        marks = Logic.withoutStandin(marks, 77);
+        verify(Logic.isMarked(marks, 4242));
+        marks = Logic.withoutStandin(marks, 90);
+        verify(!Logic.isMarked(marks, 4242));
+        // A stand-in that reports again carries one mark only.
+        marks = Logic.withMark(marks, {standin: 78, pid: 6000, cls: "gimp", title: "GIMP"});
+        compare(marks.length, 1);
+        verify(!Logic.isMarked(marks, 5000));
+        verify(Logic.isMarked(marks, 6000));
+    }
+
+    function test_marksDriveForceQuitAndTheDockMenu() {
+        const marks = [{standin: 77, pid: 4242, cls: "foot", title: "~"}];
+        verify(Logic.isMarked(marks, 4242));
+        verify(!Logic.isMarked(marks, 4243));
+        verify(!Logic.isMarked(marks, 0));
+        verify(!Logic.isMarked([], 4242));
+        verify(!Logic.isMarked(undefined, 4242));
+        // An app's windows: the marked pids, once each.
+        compare(Logic.markedAmong(marks, [4242, 5000, 4242, 0]), [4242]);
+        compare(Logic.markedAmong(marks, [5000]), []);
+        compare(Logic.markedAmong(marks, []), []);
+        // Force Quit opens on the first app that does not respond, else on the first row.
+        compare(Logic.initialIndex([5000, 0, 4242, 4242], marks), 2);
+        compare(Logic.initialIndex([5000, 6000], marks), 0);
+        compare(Logic.initialIndex([], marks), -1);
+    }
+
+    function test_forceQuitSelectionFollowsTheWindow() {
+        // Before the user moved: onto an app that does not respond (a hang that starts while the panel is open)...
+        compare(Logic.selectionAfterChange(false, 0, 2, true), 2);
+        // ... and never away from the app shown when its mark clears (initialIndex falls back to row 0, unmarked).
+        compare(Logic.selectionAfterChange(false, 2, 0, false), 2);
+        // A window opened or closed: the shown window keeps the selection at its new row.
+        compare(Logic.selectionAfterChange(false, 3, 0, false), 3);
+        // The shown window closed: the first row, or nothing when there is none.
+        compare(Logic.selectionAfterChange(false, -1, 0, false), 0);
+        compare(Logic.selectionAfterChange(false, -1, -1, false), -1);
+        // The user's choice is kept, even when another app stops responding...
+        compare(Logic.selectionAfterChange(true, 1, 2, true), 1);
+        // ... and when its window closed nothing is selected (Force Quit off), never another app.
+        compare(Logic.selectionAfterChange(true, -1, 0, false), -1);
+        compare(Logic.selectionAfterChange(true, -1, 2, true), -1);
+    }
+
+    function test_forceQuitRefusesAReusedPid() {
+        const windows = [win(4242, "foot", "~"), win(5000, "firefox", "Mozilla Firefox")];
+        verify(Logic.stillOwns(windows, 4242, "foot"));
+        // The app closed and another process took its pid: no window of that class any more.
+        verify(!Logic.stillOwns([win(4242, "gimp", "GIMP")], 4242, "foot"));
+        verify(!Logic.stillOwns([], 4242, "foot"));
+        verify(!Logic.stillOwns(windows, 1, "foot"));
+        verify(!Logic.stillOwns(windows, 0, ""));
+        // A caller that does not know the class is not checked (the pid still has to be a plain process).
+        verify(Logic.stillOwns(windows, 4242, ""));
+        verify(Logic.stillOwns(windows, 4242, undefined));
+        verify(Logic.stillOwns(windows, 4242, []));
+        // The Dock menu: the classes of the app's windows.
+        verify(Logic.stillOwns(windows, 4242, ["footclient", "foot"]));
+        verify(!Logic.stillOwns(windows, 4242, ["firefox"]));
+        verify(!Logic.stillOwns([win(4242, "gimp", "GIMP")], 4242, ["foot", "footclient"]));
+    }
+
+    function test_statusListsTheMarks() {
+        compare(Logic.statusJson([]), "[]");
+        compare(JSON.parse(Logic.statusJson([{standin: 77, pid: 4242, cls: "foot", title: "~", extra: 1}])), [{standin: 77, pid: 4242, cls: "foot", title: "~"}]);
+    }
+}

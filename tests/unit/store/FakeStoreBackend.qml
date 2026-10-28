@@ -25,14 +25,82 @@ QtObject {
     property var appData: ({origin: "installed", problem: ""})
     property var user: ({name: "Ada Lovelace", initials: "AL", picture: ""})
     property var sources: ({aur: false, flathub: false, flatpak: false, screenshots: true})
+    // The key window: the tests set it (the real backend follows QGuiApplication::focusWindow).
+    property var focusWindow: null
 
     property var calls: []
     property var links: []
+
+    // Step 3 (StoreBackend's operations): the queue, the results, pacman's lock; what each app may do; the plans the sheet
+    // gets (set by a test before it asks: {appId: plan}); the apps the tests opened, installed or removed.
+    property var operations: []
+    property var results: ({})
+    property bool staleLock: false
+    property var plans: ({})
+    property var blocks: ({}) // appId -> {get, uninstall}
+    property var opened: []
+    property bool openWorks: true
 
     signal appearanceChanged
     signal dataChanged
     signal networkChanged
     signal packageInfo(string name, var facts)
+    signal planReady(string app, string kind, var plan)
+
+    function actions(id) {
+        const a = find(id);
+        const b = blocks[id] || {};
+        const installed = a ? a.installed : id.startsWith("webapp:");
+        return {installed: installed, launcher: a ? a.launcher : installed,
+                get: installed ? "installed" : (b.get !== undefined ? b.get : ""), uninstall: b.uninstall !== undefined ? b.uninstall : (installed ? "" : "notInstalled")};
+    }
+
+    function plan(id, kind) {
+        calls.push("plan:" + kind + ":" + id);
+        if (plans[id] !== undefined)
+            planReady(id, kind, plans[id]);
+    }
+
+    function install(id) {
+        calls.push("install:" + id);
+        operations = operations.concat([{id: "op" + operations.length, app: id, name: (find(id) || {}).name || id, kind: "install",
+                                         state: operations.length === 0 ? "authorizing" : "waiting", blocked: false, done: 0, total: 2}]);
+        return true;
+    }
+
+    function uninstall(id) {
+        calls.push("uninstall:" + id);
+        operations = operations.concat([{id: "op" + operations.length, app: id, name: (find(id) || {}).name || id, kind: "remove",
+                                         state: operations.length === 0 ? "running" : "waiting", blocked: false, done: 0, total: 1}]);
+        return true;
+    }
+
+    function removeWaiting(opId) {
+        calls.push("removeWaiting:" + opId);
+        operations = operations.filter(o => o.id !== opId || o.state !== "waiting");
+        return true;
+    }
+
+    function dismiss(id) {
+        calls.push("dismiss:" + id);
+        const r = Object.assign({}, results);
+        delete r[id];
+        results = r;
+    }
+
+    function open(id) {
+        opened.push(id);
+        return openWorks;
+    }
+
+    function openSoftwareUpdate() {
+        calls.push("openSoftwareUpdate");
+        return true;
+    }
+
+    function quitWhenIdle() {
+        calls.push("quitWhenIdle");
+    }
 
     function app_(id, name, kind, installed, launcher) {
         return {id: id, name: name, summary: name + " does one thing well", icon: "", kind: kind, repo: kind === "repo" ? "extra" : "",
@@ -93,7 +161,7 @@ QtObject {
             homepage: "https://example.org/" + id, bugtracker: "", package: "paint", packages: ["paint"], desktopId: "paint.desktop",
             inCatalog: true, screenshots: ["https://example.org/1.png"], captions: ["The main window"], categories: ["Graphics"],
             releases: [{version: "2.0", date: "October 1, 2026", notes: "Faster."}], languages: ["Deutsch", "français"],
-            rated: true, rating: {social: 3}, setup: ({}), webUrl: "", flatpakId: ""});
+            rated: true, rating: {social: 3}, setup: ({}), webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: ""});
     }
 
     function requestPackageInfo(name) {
