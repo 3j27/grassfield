@@ -382,7 +382,8 @@ Rejected:
    `CHECKUPDATES_DB=$XDG_CACHE_HOME/grassfield/checkup-db`. Omarchy's checker uses the default `/tmp/checkup-db-$UID`, so the
    two never lock each other out. The checker drops its own `[grassfield]` files when the Server changes (P7).
 3. **Steps:**
-   1. `pacman-conf --repo-list` → `not-set-up` or `repair`.
+   1. `pacman-conf --repo-list` → `not-set-up` or `repair` (`not-set-up` still runs steps 4 and 5 without `[grassfield]`:
+      "Step 2 as built").
    2. `pacman-conf --repo grassfield Server` → the channel (P6: the Server comes back with `$arch` expanded).
    3. The `[grassfield]`-only sync of a2 → `blocking`.
    4. `checkupdates --nocolor`: exit 0 updates, 2 none, 1 failure (P9).
@@ -742,6 +743,24 @@ Choices made within this ADR:
 - `GRASSFIELD_UPDATE_LAUNCHER` is not used: a dev session suppresses Update Now like every action, and its exact command is
   held by `tst_systemguard` (`LaunchGuard`), `tst_backend` and the pane's test with a fake backend. It leaves ADR-0019's
   table. `GRASSFIELD_UPDATE_PKEXEC` stays `grassfield-channel-set`'s (step 1).
+
+After the integrator's opus review of a9a5974 (FAIL: three MAJORs, the privilege path sound):
+- **After Turn Off…, Software Update still offers the system's updates.** Decided by the integrator, under the owner's
+  delegation of 2026-10-27 (closest to macOS 27, no technical step). The checker's `not-set-up` no longer stops after
+  `pacman-conf`: it runs `checkupdates` without `[grassfield]` (no `[grassfield]` sync, no notes) and reports Omarchy's release
+  and the other updates, never a Grassfield release. A failure there is `failed`, never counted towards `blocking`.
+  `not-set-up` counts as a success in `SoftwareUpdateLogic.js`: the badge, the announcement and the pane show Omarchy's
+  release, with Update Now under Set Up…. The pane also offers Set Up… after a failed check while `grassfield-channel-set`
+  says `off`.
+- A stored `update-running` is never kept. The shell checks it as soon as it reads the file: the waiter ended with the
+  session after a reboot or a log out during the update, or a crash. The pane checks it when it opens. Check Now is never
+  disabled by the stored state alone.
+- A waiter whose own answer is `update-running` again starts the next one after `softwareUpdate.waitRetryMs` (60 s), never in
+  a loop.
+- Settings runs the installed `/usr/lib/grassfield/grassfield-channel-set`, never one found on PATH.
+- The Grassfield menu's "N updates" is `SoftwareUpdate.menuDetail`, which the service probe holds.
+- Omarchy's notification ends with "Update Now in Software Update installs it.", since the pane shows no Omarchy notes.
+- The restart rule's differences from `omarchy-update-restart` are listed in the spec's limits.
 
 Evidence (the branch's PR): the C++ tests of Settings (103, `apps/settings/build-direct.sh --tests`), the QML suite (2036; 2050 with main c5643400,
 none failed, no runtime warning), `tests/shell/software_update_service.sh`, `tests/security/ipc_inventory.sh` and the shim's

@@ -50,7 +50,9 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   - It is stopped after 180 s: SIGTERM, then SIGKILL 5 s later.
   - Every child runs with stdin from `/dev/null`.
 - U2. States:
-  - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf`;
+  - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf` (never set up, or turned off). The system's
+    updates are still checked and listed (Omarchy's release, the other updates), never a Grassfield release: macOS always
+    offers its system updates (the integrator's decision of 2026-10-28, ADR-0033 "Step 2 as built");
   - `repair`: the file is there, the `[grassfield]` lines are not; or the lines are there twice, or without their file
     (every pacman command fails then);
   - `blocking`: two `[grassfield]`-only syncs in a row (15 minutes apart) failed while the network works, so every
@@ -75,6 +77,10 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
     once) is handed to one waiter. The waiter blocks on `flock -x -w 7200` on that file, releases it at once, then checks.
   - This covers the shim's request, which comes from inside `omarchy update` (ADR-0033 d.5, Q8).
   - The state is `update-running` meanwhile.
+  - A waiter whose own answer is `update-running` again (its 2-hour wait ended with the lock held) starts the next one only
+    60 s later, never in a loop. A file that still says `update-running` when the shell starts (its waiter ended with the
+    session: a reboot or a log out during the update, a crash) is checked at once; the pane checks it when it opens, and
+    "Check Now" is never disabled by the stored state alone.
 - U5. When the Server differs from the one it last synced, the checker deletes its own `[grassfield]` database files first
   (ADR-0033 c, P7).
 - U6. Notes: fetched only for an available Grassfield release; https only (`file` in the container test); at most 64 KiB,
@@ -187,7 +193,8 @@ Pane (step 2)
     (U12, Known limitations).
   Status area: the U2 states; "Grassfield X.Y.Z" with "More Info…" (the notes, U6), "Omarchy X.Y.Z" (the text "Omarchy's
   release notes are on its project page", no link opened by Grassfield), "N other updates", "Update Now"; the installed
-  version and the time of the last check when up to date.
+  version and the time of the last check when up to date. With Grassfield updates off (`not-set-up`), Omarchy's release and
+  the other updates are listed with "Update Now" under "Set Up…", and the badge counts Omarchy's release.
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -310,3 +317,11 @@ owner decision O22). Omarchy's commands used:
 - Without a shell, Settings runs the checker itself without `--offline` (it does not know the connectivity): a failure while
   offline then counts towards `blocking` like one online.
 - Measured parity with macOS is not verified: no capture of the pane is on the machine that built it.
+- The restart rule (U14) is close to Omarchy's `omarchy-update-restart`, not the same. Omarchy:
+  - treats the kernel as updated when no package-owned `/usr/lib/modules/*/vmlinuz` belongs to the running release
+    (`pacman -Qo`);
+  - also offers a reboot when the running Hyprland binary was replaced;
+  - restarts the services its `restart-*-required` markers name;
+  - clears its markers when it reboots.
+  Grassfield's pane only reads Omarchy's `reboot-required` marker and whether the running kernel's modules folder is gone (no
+  pacman query). It says nothing for a replaced Hyprland or a service restart, and changes no marker.
