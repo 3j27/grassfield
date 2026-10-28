@@ -125,6 +125,7 @@ QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, co
     // However the process ends (aboutToQuit, or exit() from anywhere), the decoders are killed and the workers are gone before
     // Qt's static teardown: a worker still inside Qt at that point crashed Files on quit (round 4 review, SIGSEGV).
     static const bool atExit = [] {
+        AppIcons::setExitHook([] { AppIconProvider::shutdown(); });
         std::atexit([] { AppIconProvider::shutdown(); });
         return true;
     }();

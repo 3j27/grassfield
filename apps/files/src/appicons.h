@@ -49,6 +49,11 @@ QImage load(const QString &path, const QStringList &roots, const QSize &want);
 // anything refused, too slow or failed.
 QImage loadIsolated(const QString &path, const QStringList &roots, const QSize &want);
 void shutdown();                 // quit: no new decode, every running child killed
+// The function that stops the decodes at exit (imageproviders.cpp: AppIconProvider::shutdown). loadIsolated registers it with
+// std::atexit again after its first starts: exit-time actions run in the reverse order of their registration, so a hook that
+// was registered before Qt's process internals and the other statics a decode creates ran after they were destroyed, with a
+// worker still inside them (a bad_alloc or a SIGSEGV in 1 exit of 100 on a loaded machine). Idempotent.
+void setExitHook(void (*hook)());
 bool isDecodeChildInvocation(int argc, char **argv);
 int decodeChildMain(int argc, char **argv); // "--decode-icon <w> <h>": icon file bytes on stdin, PNG on stdout; 0 = ok, 1 = refused
 // Tests: another program (and its arguments before <w> <h>) as the decoder, a shorter deadline. Empty program = the default.

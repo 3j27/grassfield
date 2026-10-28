@@ -1,5 +1,7 @@
 #include "appicons.h"
 
+#include <cstdlib>
+
 #include "applicationslogic.h"
 
 #include <QAtomicInt>
@@ -230,6 +232,19 @@ QMutex g_mutex;
 QSet<qint64> g_pids;
 QSet<QString> g_failed; // paths whose decode timed out or failed in this run: not tried again
 QAtomicInt g_quitting;
+void (*g_exitHook)() = nullptr;
+QAtomicInt g_hookRegistrations;
+void runExitHook()
+{
+    if (g_exitHook)
+        g_exitHook();
+}
+// Registered after the statics that a decode creates, in the first starts only (see setExitHook).
+void registerExitHookAgain()
+{
+    if (g_exitHook && g_hookRegistrations.fetchAndAddRelaxed(1) < 4)
+        std::atexit(runExitHook);
+}
 QString g_program;
 QStringList g_arguments;
 int g_deadlineMs = AppIcons::kDecodeDeadlineMs;
@@ -283,6 +298,11 @@ int runningDecodes()
 {
     QMutexLocker lock(&g_mutex);
     return int(g_pids.size());
+}
+
+void setExitHook(void (*hook)())
+{
+    g_exitHook = hook;
 }
 
 void shutdown()
@@ -344,6 +364,7 @@ QImage loadIsolated(const QString &path, const QStringList &roots, const QSize &
     child.start(QIODevice::ReadWrite);
     if (!child.waitForStarted(2000))
         return {};
+    registerExitHookAgain(); // after the process internals the first start created
     const qint64 pid = child.processId();
     {
         QMutexLocker lock(&g_mutex);
