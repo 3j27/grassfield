@@ -4,7 +4,11 @@ import "MenuNav.js" as MenuNav
 import "MenuPlace.js" as MenuPlace
 
 // macOS-style menu on the frosted material. The host window supplies the blur region (see Material).
-// model: [{id, text, shortcut?, iconName?, enabled?, checked?, destructive?, separator?, submenu?: [...]}]
+// model: [{id, text, shortcut?, iconName?, glyph?, enabled?, checked?, destructive?, separator?, header?, submenu?: [...],
+//          alternate?: {...}}]
+// glyph: a tiling glyph ({zones, own}, MenuItem) in the icon's place. header: a section title row (text only, never selected).
+// alternate: the row shown instead while Alt is held (macOS Option alternates: Window > Move & Resize > Arrange), in this
+// menu and in its submenus.
 // A row may also be a swatch row (SwatchRow): {id, swatches: [{id, color, name, state}], caption?, enabled?, accessibleName?};
 // choosing a swatch activates the swatch object itself (its own id).
 // Keyboard: Up/Down/Home/End move, Return/Space activate, Right opens a submenu, Left closes it, Esc closes; on a
@@ -20,6 +24,11 @@ FocusScope {
     // Whether Alt (Option) is down, live while the menu has the keyboard (a host shows its Option variants, macOS Dock menu).
     // A submenu does not accept the Alt events, so they reach the top-level menu through the item tree.
     property bool altHeld: false
+    // Alt held in the menu that opened this submenu (a submenu opened by the pointer never has the keyboard).
+    property bool inheritedAlt: false
+    readonly property bool alternatesShown: root.altHeld || root.inheritedAlt
+    // The rows as shown: each row's alternate while Alt is held.
+    readonly property var displayModel: (root.model || []).map(item => root.alternatesShown && item && item.alternate ? item.alternate : item)
     property string accessibleName: ""
     // Index of the row whose submenu is open, -1 if none.
     property int openIndex: -1
@@ -66,13 +75,13 @@ FocusScope {
         rowsWidth = widest;
     }
 
-    onModelChanged: Qt.callLater(measure)
+    onDisplayModelChanged: Qt.callLater(measure)
 
     // Per row: whether its section (the rows between two separators) holds a checkable row, so that every label of that
     // section starts after the check column (macOS). A row is checkable when its model entry has a `checked` field.
     readonly property var checkColumns: {
         const out = [];
-        const m = root.model || [];
+        const m = root.displayModel;
         let start = 0;
         for (let i = 0; i <= m.length; i++) {
             if (i === m.length || (m[i] && m[i].separator)) {
@@ -108,7 +117,7 @@ FocusScope {
     }
 
     function activateIndex(index: int): void {
-        const item = root.model[index];
+        const item = root.displayModel[index];
         if (!MenuNav.selectable(item))
             return;
         if (MenuNav.hasSubmenu(item))
@@ -120,7 +129,7 @@ FocusScope {
     }
 
     function activateSwatch(index: int, swatch: int): void {
-        const item = root.model[index];
+        const item = root.displayModel[index];
         if (MenuNav.selectable(item) && MenuNav.hasSwatches(item) && swatch >= 0 && swatch < item.swatches.length)
             root.activated(item.swatches[swatch]);
     }
@@ -144,7 +153,7 @@ FocusScope {
         const p = root.mapFromItem(null, x, y);
         for (let i = 0; i < rows.count; i++) {
             const row = rows.itemAt(i);
-            if (!row || !MenuNav.selectable(root.model[i]))
+            if (!row || !MenuNav.selectable(root.displayModel[i]))
                 continue;
             const q = row.mapFromItem(root, p.x, p.y);
             if (q.x >= 0 && q.y >= 0 && q.x < row.width && q.y < row.height)
@@ -168,7 +177,7 @@ FocusScope {
             return;
         }
         root.currentIndex = i;
-        if (MenuNav.hasSubmenu(root.model[i])) {
+        if (MenuNav.hasSubmenu(root.displayModel[i])) {
             if (root.openIndex !== i)
                 root.openSubmenuAt(i, false, false);
         } else if (root.openIndex !== -1) {
@@ -183,7 +192,7 @@ FocusScope {
         if (sub && sub.containsPoint(x, y))
             return sub.releasePointer(x, y);
         const i = root.rowAt(x, y);
-        if (i < 0 || MenuNav.hasSwatches(root.model[i]))
+        if (i < 0 || MenuNav.hasSwatches(root.displayModel[i]))
             return false;
         root.currentIndex = i;
         root.activateIndex(i);
@@ -230,20 +239,20 @@ FocusScope {
         if (name === "")
             return;
         event.accepted = true;
-        const result = MenuNav.handleKey(root.model, root.currentIndex, name, root.isSubmenu);
+        const result = MenuNav.handleKey(root.displayModel, root.currentIndex, name, root.isSubmenu);
         root.currentIndex = result.index;
         switch (result.action) {
         case "activate":
-            if (MenuNav.hasSwatches(root.model[root.currentIndex]))
+            if (MenuNav.hasSwatches(root.displayModel[root.currentIndex]))
                 root.activateSwatch(root.currentIndex, root.swatchIndex);
             else
-                root.activated(root.model[root.currentIndex]);
+                root.activated(root.displayModel[root.currentIndex]);
             break;
         case "swatchPrevious":
-            root.swatchIndex = MenuNav.stepSwatch(root.model[root.currentIndex], root.swatchIndex, -1);
+            root.swatchIndex = MenuNav.stepSwatch(root.displayModel[root.currentIndex], root.swatchIndex, -1);
             break;
         case "swatchNext":
-            root.swatchIndex = MenuNav.stepSwatch(root.model[root.currentIndex], root.swatchIndex, 1);
+            root.swatchIndex = MenuNav.stepSwatch(root.displayModel[root.currentIndex], root.swatchIndex, 1);
             break;
         case "openSubmenu":
             root.openSubmenuAt(root.currentIndex, true, true);
@@ -279,7 +288,7 @@ FocusScope {
 
         Repeater {
             id: rows
-            model: root.model
+            model: root.displayModel
             onItemAdded: root.measure()
 
             delegate: Item {
@@ -296,12 +305,36 @@ FocusScope {
                 Loader {
                     id: loader
                     width: row.width
-                    sourceComponent: row.modelData.separator ? separatorComponent : MenuNav.hasSwatches(row.modelData) ? swatchComponent : itemComponent
+                    sourceComponent: row.modelData.separator ? separatorComponent : row.modelData.header ? headerComponent : MenuNav.hasSwatches(row.modelData) ? swatchComponent : itemComponent
                 }
 
                 Component {
                     id: separatorComponent
                     MenuSeparator {}
+                }
+
+                // A section title (macOS: small, bold, secondary), aligned with the labels of the rows below it.
+                Component {
+                    id: headerComponent
+                    Item {
+                        implicitWidth: Math.ceil(Tokens.menuItemPadding * 2 + headerText.implicitWidth)
+                        implicitHeight: Tokens.menuItemHeight
+                        Accessible.role: Accessible.Heading
+                        Accessible.name: headerText.text
+
+                        Text {
+                            id: headerText
+                            textFormat: Text.PlainText
+                            x: Tokens.menuItemPadding
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: row.modelData.text !== undefined ? row.modelData.text : ""
+                            color: Appearance.colors.textSecondary
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyCaptionSize
+                            font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
+                            font.weight: Tokens.typographyMenuBoldWeight
+                        }
+                    }
                 }
 
                 Component {
@@ -328,6 +361,7 @@ FocusScope {
                         text: row.modelData.text !== undefined ? row.modelData.text : ""
                         shortcut: row.modelData.shortcut !== undefined ? row.modelData.shortcut : ""
                         iconName: row.modelData.iconName !== undefined ? row.modelData.iconName : ""
+                        glyph: row.modelData.glyph !== undefined ? row.modelData.glyph : null
                         checked: row.modelData.checked === true
                         destructive: row.modelData.destructive === true
                         enabled: row.modelData.enabled !== false
@@ -375,6 +409,13 @@ FocusScope {
         y: root.submenuY(submenuLoader.rowY, submenuLoader.item ? (submenuLoader.item as Item).height : 0)
     }
 
+    Binding {
+        target: submenuLoader.item
+        property: "inheritedAlt"
+        value: root.alternatesShown
+        when: submenuLoader.item !== null
+    }
+
     Connections {
         target: submenuLoader.item
         ignoreUnknownSignals: true
@@ -393,7 +434,7 @@ FocusScope {
     }
 
     onOpenIndexChanged: {
-        const item = root.model[root.openIndex];
+        const item = root.displayModel[root.openIndex];
         if (root.openIndex >= 0 && MenuNav.hasSubmenu(item))
             submenuLoader.setSource("PopupMenu.qml", {model: item.submenu, isSubmenu: true, currentIndex: root.submenuByKey ? MenuNav.first(item.submenu) : -1, bounds: root.bounds});
         else
