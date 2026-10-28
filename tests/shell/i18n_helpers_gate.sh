@@ -322,6 +322,8 @@ declare -A variants=(
   [shiftmessages]='void a() { statusMessages << "Hello"; }'
   [shiftsnake]='void a() { last_errors << "Hello"; }'
   [shiftindex]='void a() { list[0].reasons << "Hello"; }'
+  [shiftindexvar]='void a(int idx) { reasons[idx] << "Hello"; }'
+  [shiftindex2]='void a(int i, int j) { m_errors[i][j] << "Hello"; }'
   [shiftderef]='void a() { (*reasons) << "Text"; }'
   [shiftcast]='void a() { static_cast<QStringList &>(reasons) << "Text"; }'
   [shiftassign]='void a() { reasons = QStringList() << "Failed"; }'
@@ -383,6 +385,7 @@ void w(QStringList &args, bool x) { args << reasonFlag << "status"; args << QStr
 void y(QTextStream &o) { o.insert("titles", "File:"); o.insert(QStringLiteral("set_toplevel_description"), QStringLiteral("os")); }
 void z(QStringList &statusFlags, QJsonObject &o) { statusFlags << "active"; o.insert("errorCode", "ENOENT"); QJsonObject{{"statusIcon", "network-wireless"}, {"statusType", "wifi"}}; }
 void x(QTextStream &cerr, QString &outline, QString &context, QString &hinting) { cerr << "failed"; outline << "failed"; context << "failed"; hinting << "failed"; }
+void aa(QStringList *items, QStringList &names, QStringList &paths, int i) { items[i] << "Hello"; paths[i] << "Hello"; contextLines << "x y"; }
 CPP
 desc="part (f): translated text, tokens, comparisons, log lines, comments and i18n-ignore pass"
 check bash -c '[[ -z $1 ]]' _ "$(cppgate "$tmp/cpp-good")"
