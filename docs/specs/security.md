@@ -488,7 +488,7 @@ macOS model (Gatekeeper): double-clicking a downloaded app, script or launcher d
 opened, and only a deliberate "Open Anyway" in System Settings runs it. Grassfield Files decides itself, before KIO
 (`KIO::OpenUrlJob::setRunExecutables(false)` documents executables but not every `.desktop` case; KIO's source is not on
 the host): `apps/files/src/launchguard.{h,cpp}` `LaunchGuard::verdict(inspect(url))` for every item `FilesApp::open`
-gets (Return, double-click, File > Open, the context menu), before the scripted-test switch:
+gets (double-click, File > Open, Ctrl+Down, the context menu; Return renames), before the scripted-test switch:
 - A desktop entry (named `*.desktop` / `*.kdelnk` / `.directory`, or of type `application/x-desktop`) is never handed to
   KIO, with or without the permission bit, wherever it is (review of a5646b8: KIO downloads a `Type=Link` target and runs
   the handler of the type the server announces, or the application in `X-KDE-LastOpenedWith`; the reviewer ran an
@@ -514,11 +514,14 @@ gets (Return, double-click, File > Open, the context menu), before the scripted-
   is unchanged: it opens the item WITH the chosen app (a launcher in a text editor), it never runs the item.
 - The Applications location (`grassfield-apps:/`, macOS: Finder's Applications) is the one place where Files starts an
   application, and it is not an exception to the rule above: its items are not files and have no path. They are the virtual
-  urls `grassfield-app:/<id>` of the apps the shell's Apps grid lists (`ApplicationsLogic`); Return, double-click and
-  File > Open call `FilesApp::launchApplication` instead of `FilesApp::open` (`BrowserTab.activate`/`openSelection`), so
+  urls `grassfield-app:/<id>` of the apps the shell's Apps grid lists (`ApplicationsLogic`); double-click, Ctrl+O/File > Open and Ctrl+Down call `FilesApp::launchApplication` instead of `FilesApp::open` (`BrowserTab.activate`/`openSelection`), so
   no `.desktop` file of a folder is ever handed to KIO and `LaunchGuard` is not bypassed for one. The id must resolve to an
-  INSTALLED service in KDE's database (`KService::serviceByStorageId`); the job is `KIO::ApplicationLauncherJob` with no URL
-  argument, which KIO runs in a systemd unit of its own, like Open With. `GRASSFIELD_FILES_NO_LAUNCH` blocks it. Open With
+  INSTALLED service in KDE's database (`KService::serviceByStorageId`); the process is started the way the shell's
+  Apps grid starts an entry (`Apps.launchNow`): the service's `Exec=` split and stripped of its field codes
+  (`ApplicationsLogic::launchCommand`, no URL argument, no shell), behind `xdg-terminal-exec` for `Terminal=true` (KIO's job
+  would ask KDE's terminal setting, konsole, absent on Omarchy), under `uwsm-app` in a real session (`apps/appscope.h`); an
+  entry with no `Exec=` is left to `KIO::ApplicationLauncherJob`. The list itself is built on a worker thread, every
+  `.desktop` is opened without blocking and only if it is a regular file, and at most 5000 folders are walked. `GRASSFIELD_FILES_NO_LAUNCH` blocks it. Open With
   is not offered for these items and `FilesApp::openWith`/`applicationsFor` refuse them (a desktop entry is not a file to
   open with another app: Kdenlive was offered for `*.kdenlive`). An absolute `Icon=` of an entry is read only if it is a
   regular file within 8 MiB under the shell's allowed roots, read from the descriptor that was checked (`ApplicationsLogic::
