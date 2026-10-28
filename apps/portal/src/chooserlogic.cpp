@@ -369,6 +369,10 @@ Results results(const Request &r, const QVariantMap &answer)
     }
     }
     out.map.insert(QStringLiteral("uris"), uris);
+    // What the user picked, the application may write (macOS gives an application read and write access to what its panel
+    // returns). xdg-desktop-portal 1.22.1 already reads a missing "writable" as writable and has no read-only option to
+    // honour; the key is said anyway, so a frontend that defaults to read-only gives sandboxed applications the same (4b-17).
+    out.map.insert(QStringLiteral("writable"), true);
 
     // Every choice of the request, with the panel's value when it is one the choice allows, else its initial value.
     QHash<QString, QString> chosen;

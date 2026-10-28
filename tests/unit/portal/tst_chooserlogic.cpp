@@ -91,6 +91,8 @@ TEST_F(ChooserLogic, OpenResultsAreExact)
     const auto choices = res.map.value("choices").value<QList<Pair>>();
     EXPECT_EQ(choices, (QList<Pair>{{QStringLiteral("enc"), QStringLiteral("b")}, {QStringLiteral("ro"), QStringLiteral("true")}}));
     EXPECT_EQ(res.map.value("current_filter").value<Filter>(), kImages);
+    // What the user picked, the application may write (4b-17): said, whatever the frontend's default.
+    EXPECT_EQ(res.map.value("writable"), QVariant(true));
 
     // The D-Bus signatures the frontend reads.
     EXPECT_STREQ(QDBusMetaType::typeToSignature(QMetaType::fromType<QList<Pair>>()), "a(ss)");
