@@ -6,6 +6,8 @@ Item {
 
     property string text: ""
     property string shortcut: ""
+    // Plain text in the right-hand column, before the shortcut: the Grassfield menu's "Settings…  1 update" (ADR-0033 U19).
+    property string detail: ""
     property string iconName: ""
     // A tiling glyph ({zones, own}: TileGlyph) in the icon's place, or null (Window > Move & Resize, docs/specs/tiling.md TL25).
     property var glyph: null
@@ -35,7 +37,7 @@ Item {
     implicitHeight: Tokens.menuItemHeight
     Accessible.role: Accessible.MenuItem
     Accessible.name: root.text
-    Accessible.description: root.shortcut
+    Accessible.description: root.detail !== "" && root.shortcut !== "" ? root.detail + ", " + root.shortcut : root.detail + root.shortcut
     Accessible.checkable: root.checked
     Accessible.checked: root.checked
     Accessible.focusable: true
@@ -101,6 +103,18 @@ Item {
             verticalCenter: parent.verticalCenter
         }
         spacing: Tokens.spacingSm
+
+        Text {
+            textFormat: Text.PlainText
+            visible: root.detail !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.detail
+            color: root.highlighted && root.enabled ? root.foreground : Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+            font.weight: Tokens.typographySmallWeight
+        }
 
         Text {
             textFormat: Text.PlainText

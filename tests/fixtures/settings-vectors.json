@@ -110,6 +110,8 @@
     {"name": "boolean 1 is the default", "path": "accessibility.reduceMotion", "stored": 1, "default": true, "valid": false},
     {"name": "boolean string true is the default", "path": "desktop.showIcons", "stored": "true", "default": true, "valid": false},
     {"name": "boolean false is kept", "path": "desktop.showIcons", "stored": false, "read": false, "valid": true},
+    {"name": "updates.automaticCheck false is kept", "path": "updates.automaticCheck", "stored": false, "read": false, "valid": true},
+    {"name": "updates.automaticCheck as a string is the default", "path": "updates.automaticCheck", "stored": "false", "default": true, "valid": false},
     {"name": "boolean null is the default", "path": "windows.tilingEdges", "stored": null, "default": true, "valid": false},
     {"name": "boolean 0 is the default", "path": "dock.showRecents", "stored": 0, "default": true, "valid": false},
     {"name": "boolean empty string is the default", "path": "menubar.showSearch", "stored": "", "default": true, "valid": false},

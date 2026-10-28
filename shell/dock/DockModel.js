@@ -179,6 +179,21 @@ function launcherOf(launcher, item) {
     return undefined;
 }
 
+// The launcher state with a count the shell sets for an app (Software Update's releases on Grassfield Settings, ADR-0033
+// U18): above 0 it is that app's own count, kept over what the app set; 0 leaves the state as it is. `id` lower case.
+function withCount(launcher, id, count) {
+    if (!(count > 0))
+        return launcher;
+    const out = Object.assign({}, launcher || {});
+    out[id] = Object.assign({urgent: false}, out[id] || {}, {count: count});
+    return out;
+}
+
+// Whether a tile is this app (its tile key or desktop entry id, whatever the case).
+function isApp(item, id) {
+    return !!item && item.kind === "app" && [String(item.key || "").toLowerCase(), String(item.entry && item.entry.id || "").toLowerCase()].indexOf(id) >= 0;
+}
+
 // Badge of an app tile: the count the app set itself when it did (macOS: the app is authoritative, 0 hides the badge),
 // else the number of its notifications.
 function tileBadge(history, item, launcher) {

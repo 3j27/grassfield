@@ -1,9 +1,10 @@
 # Software Update spec · platform-engineer (client, channel), shell-engineer (pane, badge, menu, banner) · owner brief 2026-10-27
 Status: step 0 (this spec and ADR-0033), revised after the first opus review (FAIL, 5 MAJOR); every owner decision of
 2026-10-27 (ADR-0033 O1-O20) is included; revised again after the second review. Step 1 (built; ADR-0033 "Step 1 as
-built") has the checker, the channel command and its root helper, the persistence and the container test. Step 2 builds
-the shell service (schedule, waiter, `software-update.json`, `updates.automaticCheck`, the shim's forward), the pane, the
-badge, the menu count and the notification, after the Settings PRs (#8, #9, #10) merge.
+built") has the checker, the channel command and its root helper, the persistence and the container test. Step 2 (built;
+ADR-0033 "Step 2 as built") has the shell service (schedule, waiter, `software-update.json`, `updates.automaticCheck`, the
+shim's forward), the pane, the badges, the menu count and the notification. Measured parity and the real flows (A12) are
+still open.
 Decisions and evidence: `docs/decisions/ADR-0033-software-update.md` (the contract with grassfieldhq/grassfield-packages,
 probes P0–P13, Q0–Q8 and R0–R5). UI names: "Software Update" (fr « Mise à jour de logiciels »), "Beta Updates" (fr « Mises à jour bêta »),
 "Update Now" (fr « Mettre à jour maintenant »).
@@ -49,7 +50,9 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
   - It is stopped after 180 s: SIGTERM, then SIGKILL 5 s later.
   - Every child runs with stdin from `/dev/null`.
 - U2. States:
-  - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf`;
+  - `not-set-up`: no `[grassfield]` and no `/etc/pacman.d/grassfield.conf` (never set up, or turned off). The system's
+    updates are still checked and listed (Omarchy's release, the other updates), never a Grassfield release: macOS always
+    offers its system updates (the integrator's decision of 2026-10-28, ADR-0033 "Step 2 as built");
   - `repair`: the file is there, the `[grassfield]` lines are not; or the lines are there twice, or without their file
     (every pacman command fails then);
   - `blocking`: two `[grassfield]`-only syncs in a row (15 minutes apart) failed while the network works, so every
@@ -74,6 +77,10 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
     once) is handed to one waiter. The waiter blocks on `flock -x -w 7200` on that file, releases it at once, then checks.
   - This covers the shim's request, which comes from inside `omarchy update` (ADR-0033 d.5, Q8).
   - The state is `update-running` meanwhile.
+  - A waiter whose own answer is `update-running` again (its 2-hour wait ended with the lock held) starts the next one only
+    60 s later, never in a loop. A file that still says `update-running` when the shell starts (its waiter ended with the
+    session: a reboot or a log out during the update, a crash) is checked at once; the pane checks it when it opens, and
+    "Check Now" is never disabled by the stored state alone.
 - U5. When the Server differs from the one it last synced, the checker deletes its own `[grassfield]` database files first
   (ADR-0033 c, P7).
 - U6. Notes: fetched only for an available Grassfield release; https only (`file` in the container test); at most 64 KiB,
@@ -99,7 +106,9 @@ When it runs (shell)
 Actions (never in a dev session)
 - U11. "Update Now" runs exactly `omarchy-launch-floating-terminal-with-presentation omarchy-update`, in Omarchy's floating
   terminal. Omarchy asks "Continue with update?" there; the user can cancel. While the update lock is held the button is
-  disabled and the pane says the update runs in the terminal. The pane checks again when the lock is released.
+  disabled and the pane says the update runs in the terminal. The pane checks again when the lock is released: 5 s after the
+  launch it asks for a check, which finds the lock held and waits for it (U4). While `blocking` (U22) the button is disabled
+  with a sentence, since every Omarchy update fails then.
 - U12. "Beta Updates" (Off / Grassfield Beta) runs `grassfield-channel-set beta` or `grassfield-channel-set stable` as a child
   process of Settings, with no terminal. The polkit dialog asks for the administrator's password; the row says "Waiting for
   permission…" meanwhile, up to 120 s. A refusal or a cancel shows one line ("Beta updates were not changed: not allowed"),
@@ -110,7 +119,8 @@ Actions (never in a dev session)
   `grassfield-channel-set off`. All work as U12 does.
 - U14. After a Grassfield update in this session (GF-083's `updatePending`), the pane shows "Log out to finish updating
   Grassfield" with "Log Out…". When Omarchy's `~/.local/state/omarchy/reboot-required` exists or the running kernel's modules
-  are gone, it shows "Restart to finish updating" with "Restart…" instead. Both use the existing session-end path.
+  are gone, it shows "Restart to finish updating" with "Restart…" instead. Both use the existing session-end path: the pane
+  asks first in a sheet, then Settings starts `grassfield-session-end logout|restart` (never in a dev session).
 
 `grassfield-channel-set`, `grassfield-channel-helper`, `grassfield-channel-scriptlet` (ADR-0033 a–c; owner decision O1: polkit)
 - U15. `grassfield-channel-set` (the user's command; it refuses to run as root):
@@ -183,7 +193,8 @@ Pane (step 2)
     (U12, Known limitations).
   Status area: the U2 states; "Grassfield X.Y.Z" with "More Info…" (the notes, U6), "Omarchy X.Y.Z" (the text "Omarchy's
   release notes are on its project page", no link opened by Grassfield), "N other updates", "Update Now"; the installed
-  version and the time of the last check when up to date.
+  version and the time of the last check when up to date. With Grassfield updates off (`not-set-up`), Omarchy's release and
+  the other updates are listed with "Update Now" under "Set Up…", and the badge counts Omarchy's release.
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -193,14 +204,14 @@ Pane (step 2)
 | `grassfield-channel-helper` given a scriptlet verb, or `grassfield-channel-scriptlet` given a helper verb | refused, nothing changed (each program knows only its own verbs) |
 | The polkit dialog cancelled, the password wrong, or no agent | the helper does not run; one line under the row; nothing changed |
 | Unknown channel argument | refused, usage printed, nothing changed |
-| A build without the pinned signing key, or whose `GRASSFIELD_REPO_BASE` is the `.invalid` placeholder (both the case until the owner provides a key and hosting) | refused: "no signing key in this build" / "no package repository in this build"; the pane hides "Set Up…" and says Software Update is not available in this build (the container tests build their own `repository.conf` with a `file://` base and a throwaway key) |
+| A build without the pinned signing key, or whose `GRASSFIELD_REPO_BASE` is the `.invalid` placeholder (both the case until the owner provides a key and hosting) | refused: "no signing key in this build" / "no package repository in this build"; the pane hides "Set Up…", says that Grassfield's own updates are not available in this build, and still offers the system's updates (the container tests build their own `repository.conf` with a `file://` base and a throwaway key) |
 | The shipped key file is not the pinned fingerprint | refused before `pacman-key` runs |
 | `omarchy update` running (its lock held) | `grassfield-channel-set` refuses (and the helper while pacman runs); "Update Now" disabled; checks wait for the release (U4) |
 | A package unsigned, signed by an unknown or disabled key, or changed after signing | pacman refuses it in Omarchy's terminal, nothing is upgraded (P8, P13); the next check still lists the update |
 | A `[grassfield]` database unsigned, badly signed or signed by a revoked key, or a server offline with no mirror answering | pacman refuses the database (P5, P7, P8, P13, Q1) and every `omarchy update` fails; the checker reports `blocking` and offers "Turn Off…" (U22) |
 | Notes unsigned, badly signed, revoked signer, over 64 KiB, not UTF-8, invalid JSON, not https | not shown (U6); the update is still offered |
 | A first installation from downloaded files (`pacman -U ./…`) | not verified by pacman (`LocalFileSigLevel = Optional`, Q0); not a documented procedure. The verified one is ADR-0033 b.3a (out-of-band fingerprint, `--lsign-key`, install from the repository). The owner accepted the residual risk of the helper's bootstrap (O17). |
-| A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…" and the beta switch log `dev guard: … suppressed` and do nothing; `GRASSFIELD_UPDATE_LAUNCHER` and `GRASSFIELD_UPDATE_PKEXEC` may record the commands |
+| A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…", the beta switch, "Log Out…" and "Restart…" log `dev guard: … suppressed` and do nothing (Settings refuses them, and its Backend again); `grassfield-channel-set` run by hand honours `GRASSFIELD_UPDATE_PKEXEC` (step 1) |
 | A second check while one runs | joins the running one |
 
 ## Acceptance criteria (each mapped to a test; level)
@@ -223,9 +234,9 @@ Pane (step 2)
 | A7i | rollback by a new snapshot; a pointer moved back fails for clients already updated (R4) | grassfield-packages end-to-end | L0 |
 | A7f | update lock: a request under the lock waits and checks after the release; a stale `db.lck` is removed (Q8) | checker tests | L0 |
 | A8 | notes: good, rogue, changed, revoked signer, oversize, bad JSON | checker unit tests (Python, fixtures) | L0 |
-| A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml` with `GRASSFIELD_UPDATE_FIXTURE` | L0 |
+| A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml`; `tests/shell/software_update_service.sh` (the service under Quickshell with a fake checker, its IPC); `tests/unit/tst_settingssoftwareupdate.qml` (the dev guard) | L0 |
 | A10 | grassfield-packages' real packages: stable install, update, beta and back, bad signature, the client sees each update | grassfield-packages end-to-end (step 1b) | L0 |
-| A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | offscreen tests and captures with the fake backend (step 2) | L0/L1 |
+| A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | `tests/unit/tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`, `tst_dockmodel.qml`; the Backend's doors in `tests/unit/settings/tst_systemguard.cpp` and `tst_backend.cpp`; captures `docs/audits/settings-parity-2026-10-26/software-update*.png` (offscreen; nested: visual NOT verified) | L0/L1 |
 | A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update Now in Omarchy's floating terminal | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
@@ -301,4 +312,16 @@ owner decision O22). Omarchy's commands used:
   anyway. In an Omarchy session the dialog is Omarchy's agent, not Grassfield's sheet.
 - Nothing is published: until the owner enables hosting, the base is the `.invalid` placeholder and "Set Up…" is hidden
   (Refusals).
-- "Software Update" is a descriptive name, as on macOS; it goes on the legal review list with the pane (step 2).
+- "Software Update" is a descriptive name, as on macOS; it is on the legal review list with the pane
+  (`docs/legal/visual-review.md` E37, question 13).
+- Without a shell, Settings runs the checker itself without `--offline` (it does not know the connectivity): a failure while
+  offline then counts towards `blocking` like one online.
+- Measured parity with macOS is not verified: no capture of the pane is on the machine that built it.
+- The restart rule (U14) is close to Omarchy's `omarchy-update-restart`, not the same. Omarchy:
+  - treats the kernel as updated when no package-owned `/usr/lib/modules/*/vmlinuz` belongs to the running release
+    (`pacman -Qo`);
+  - also offers a reboot when the running Hyprland binary was replaced;
+  - restarts the services its `restart-*-required` markers name;
+  - clears its markers when it reboots.
+  Grassfield's pane only reads Omarchy's `reboot-required` marker and whether the running kernel's modules folder is gone (no
+  pacman query). It says nothing for a replaced Hyprland or a service restart, and changes no marker.

@@ -4,7 +4,7 @@ import "MenuNav.js" as MenuNav
 import "MenuPlace.js" as MenuPlace
 
 // macOS-style menu on the frosted material. The host window supplies the blur region (see Material).
-// model: [{id, text, shortcut?, iconName?, glyph?, enabled?, checked?, destructive?, separator?, header?, submenu?: [...],
+// model: [{id, text, shortcut?, detail?, iconName?, glyph?, enabled?, checked?, destructive?, separator?, header?, submenu?: [...],
 //          alternate?: {...}}]
 // glyph: a tiling glyph ({zones, own}, MenuItem) in the icon's place. header: a section title row (text only, never selected).
 // alternate: the row shown instead while Alt is held (macOS Option alternates: Window > Move & Resize > Arrange), in this
@@ -360,6 +360,7 @@ FocusScope {
                     MenuItem {
                         text: row.modelData.text !== undefined ? row.modelData.text : ""
                         shortcut: row.modelData.shortcut !== undefined ? row.modelData.shortcut : ""
+                        detail: row.modelData.detail !== undefined ? row.modelData.detail : ""
                         iconName: row.modelData.iconName !== undefined ? row.modelData.iconName : ""
                         glyph: row.modelData.glyph !== undefined ? row.modelData.glyph : null
                         checked: row.modelData.checked === true

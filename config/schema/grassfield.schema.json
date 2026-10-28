@@ -846,6 +846,18 @@
         }
       }
     },
+    "updates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Software Update (Settings > General > Software Update, ADR-0033).",
+      "properties": {
+        "automaticCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for Grassfield and Omarchy releases in the background: 10 minutes after the session starts, then every 6 hours, never while offline or on a metered connection (ADR-0033 d.5). Opening the pane and Check Now check whatever this says; nothing is ever downloaded or installed without the user."
+        }
+      }
+    },
     "wallpaper": {
       "type": "object",
       "additionalProperties": false,

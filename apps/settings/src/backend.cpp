@@ -41,15 +41,17 @@ constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
+constexpr int kShellIpcMs = 5000;        // the shell's IPC answer to `update check`: at once (the check itself runs there)
+constexpr int kUpdateCheckMs = 200000;   // the checker stops itself after 180 s (SIGTERM, then SIGKILL 5 s later): U1
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
-void forceCLocale(QProcess &p)
+QProcessEnvironment cLocaleEnvironment()
 {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
     env.insert(QStringLiteral("LANG"), QStringLiteral("C"));
     env.remove(QStringLiteral("LANGUAGE"));
-    p.setProcessEnvironment(env);
+    return env;
 }
 
 // One short line explaining a failure: first non-empty line of stderr, else of stdout (bluetoothctl reports errors there).
@@ -151,6 +153,11 @@ Backend::~Backend()
 
 void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, Track track)
 {
+    start(argv, tag, timeoutMs, track, cLocaleEnvironment());
+}
+
+void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, Track track, const QProcessEnvironment &env)
+{
     auto *p = new QProcess(this);
     // Once, whichever way the process ends: the query or action it held is over.
     const auto settle = [this, tag, track] {
@@ -159,7 +166,7 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs, 
         else if (track == Track::Action)
             endAction(tag);
     };
-    forceCLocale(*p);
+    p->setProcessEnvironment(env);
     auto *timer = new QTimer(p);
     timer->setSingleShot(true);
     connect(timer, &QTimer::timeout, p, [p] {
@@ -249,6 +256,94 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         return false;
     start(argv, tag, grassfield::settings::actionTimeoutMs(argv, timeoutMs), latch ? Track::Action : Track::None);
     return true;
+}
+
+bool Backend::launch(const QString &what, const QStringList &argv)
+{
+    if (m_dev) {
+        qInfo().noquote() << "dev guard:" << what << "suppressed";
+        emit suppressed(what);
+        return false;
+    }
+    if (!grassfield::settings::isLaunch(argv)) {
+        qWarning().noquote() << "refused a launch that is not one of Settings':" << what;
+        return false;
+    }
+    // Omarchy's terminal and grassfield-session-end speak to the user: the session's own language, not the C locale.
+    QProcess p;
+    p.setProgram(argv.first());
+    p.setArguments(argv.mid(1));
+    p.setStandardInputFile(QProcess::nullDevice());
+    p.setStandardOutputFile(QProcess::nullDevice());
+    p.setStandardErrorFile(QProcess::nullDevice());
+    if (!p.startDetached()) {
+        qWarning().noquote() << "could not start" << what;
+        return false;
+    }
+    return true;
+}
+
+bool Backend::omarchyUpdate() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("omarchy-launch-floating-terminal-with-presentation")).isEmpty()
+        && !QStandardPaths::findExecutable(QStringLiteral("omarchy-update")).isEmpty();
+}
+
+QString Backend::softwareUpdateFile() const
+{
+    return grassfield::apps::runmode::stateDir() + QStringLiteral("/software-update.json");
+}
+
+void Backend::askShellToCheck(const QString &tag)
+{
+    const QStringList ipc = grassfield::apps::runmode::shellIpcArgs();
+    if (ipc.isEmpty()) {
+        emit failed(tag, grassfield::apps::runmode::shellIpcRefusal().left(kMaxReason));
+        emit finished(tag, false, QString());
+        return;
+    }
+    // The running shell is named by its directory (-p), never by a configuration Quickshell would look up from QS_*.
+    QProcessEnvironment env = cLocaleEnvironment();
+    for (const QString &key : env.keys()) {
+        if (key.startsWith(QLatin1String("QS_")))
+            env.remove(key);
+    }
+    start(QStringList{QStringLiteral("qs")} + ipc + QStringList{QStringLiteral("update"), QStringLiteral("check"), QStringLiteral("user")}, tag,
+          kShellIpcMs, Track::None, env);
+}
+
+QString Backend::updateCheckerProgram()
+{
+    const QString command = grassfield::apps::runmode::devValue("UPDATE_CHECK_CMD");
+    return command.isEmpty() ? QStringLiteral("/usr/lib/grassfield/grassfield-update-check") : command;
+}
+
+QString Backend::updateFixture()
+{
+    return grassfield::apps::runmode::devValue("UPDATE_FIXTURE");
+}
+
+void Backend::runUpdateChecker(const QString &tag)
+{
+    using namespace grassfield::apps;
+    // A dev session's canned answer (ADR-0019 dev plumbing): read here, answered on the next turn of the event loop like a run.
+    const QString fixture = updateFixture();
+    if (!fixture.isEmpty()) {
+        const QVariantMap r = readText(fixture);
+        const bool ok = r.value(QStringLiteral("ok")).toBool();
+        const QString text = r.value(QStringLiteral("text")).toString();
+        QTimer::singleShot(0, this, [this, tag, ok, text] {
+            if (!ok)
+                emit failed(tag, QCoreApplication::translate("SystemBus", "the answer file cannot be read"));
+            emit finished(tag, ok, ok ? text : QString());
+        });
+        return;
+    }
+    QProcessEnvironment env = cLocaleEnvironment();
+    // A dev session's checker keeps its cache under the dev state (ADR-0033 "Dev sessions"), as the shell's does.
+    if (m_dev)
+        env.insert(QStringLiteral("XDG_CACHE_HOME"), runmode::stateDir() + QStringLiteral("/cache"));
+    start({updateCheckerProgram()}, tag, kUpdateCheckMs, Track::None, env);
 }
 
 // One D-Bus job on a worker thread, on the app's one connection to the system bus (a blocked service never blocks the window, and
@@ -679,7 +774,7 @@ QString Backend::run(const QStringList &argv) const
         return QString();
     }
     QProcess p;
-    forceCLocale(p);
+    p.setProcessEnvironment(cLocaleEnvironment());
     p.start(argv.first(), argv.mid(1), QIODevice::ReadOnly);
     if (!p.waitForFinished(kRunTimeoutMs) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
         // Never destroy a running QProcess: terminate, then kill, each with a bounded wait.
