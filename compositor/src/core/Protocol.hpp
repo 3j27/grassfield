@@ -106,6 +106,10 @@ namespace gf::gfc {
     // `tiling` notice and `hyprctl grassfield-tiling` (the tile records), the thirds as tile() places and
     // config("titlebarDoubleClick", "fill"). Advertised when the verb, the command and the listeners registered.
     inline constexpr std::string_view kFeatureTilingArrange = "tiling-arrange";
+    // ADR-0036 step 4a (tiling.md TL27, TL28): arrange takes "with" (a pick of the suggestions joins the group of the window
+    // that asked) and the grassfield-tiling reply carries the pending "suggestion". Advertised together with tiling-arrange
+    // (the same verb, command and listeners).
+    inline constexpr std::string_view kFeatureTilingLayouts = "tiling-layouts";
     // tile-hover events, hl.plugin.grassfield.tile_popover and hl.plugin.grassfield.move_to (tiling.md TL22-TL26): the tiling
     // popover. Only together with window-tiling.
     inline constexpr std::string_view kFeatureTileHover = "tile-hover";
@@ -114,7 +118,7 @@ namespace gf::gfc {
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
     // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
-    // tiling-arrange and tile-hover (each only together with window-tiling).
+    // tiling-arrange with tiling-layouts, and tile-hover (each only together with window-tiling).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,

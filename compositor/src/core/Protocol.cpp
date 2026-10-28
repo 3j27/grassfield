@@ -142,8 +142,10 @@ namespace gf::gfc {
             out.push_back(kFeatureFrameTimes);
         if (keyboardFocus)
             out.push_back(kFeatureKeyboardFocus);
-        if (windowTiling && tilingArrange)
+        if (windowTiling && tilingArrange) {
             out.push_back(kFeatureTilingArrange);
+            out.push_back(kFeatureTilingLayouts);
+        }
         if (windowTiling && tileHover)
             out.push_back(kFeatureTileHover);
         return out;

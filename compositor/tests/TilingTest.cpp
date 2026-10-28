@@ -668,7 +668,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -1003,4 +1003,100 @@ TEST(TilingMoveTo, OutputNamesAreStrict) {
     EXPECT_FALSE(outputNameOk("a\"b"));
     EXPECT_TRUE(outputNameOk(std::string(kMaxOutputName, 'a')));
     EXPECT_FALSE(outputNameOk(std::string(kMaxOutputName + 1, 'a')));
+}
+
+// ---- step 4a: the Layouts section and the suggestions (TL27, TL28) ----
+
+TEST(TilingSuggest, WithNamesTheWindowWhoseLayoutTheZoneIs) {
+    const auto pick = parseArrange(R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x1a"})");
+    ASSERT_TRUE(pick.has_value()) << pick.error();
+    EXPECT_EQ(pick->with, 0x1aU);
+    EXPECT_EQ(pick->zone, 1);
+    EXPECT_FALSE(pick->fill);
+    EXPECT_FALSE(parseArrange(R"({"layout":"thirds","windows":["0x9"],"zone":0})")->with.has_value()) << "a zone of the Layouts section alone";
+    for (const char* bad : {
+             R"({"layout":"thirds","windows":["0x9"],"with":"0x1a"})",                    // with needs a zone
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x9"})",           // the window placed itself
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x0"})",           // not a window
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"zz"})",            // not hex
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":7})",               // not a string
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"1","with":"2"})",  // twice
+         })
+        EXPECT_FALSE(parseArrange(bad).has_value()) << bad;
+}
+
+TEST(TilingSuggest, TheZonesHeldAreThoseOfTheLayoutInstance) {
+    CTileBook  book;
+    const Rect any{0, 0, 10, 10};
+    book.placed(1, any, any, 0, inLayout("quarters", 2), "A", 1, 0);
+    const auto held = [&book](uint64_t id) { return zonesHeld(book.records(), *book.find(id)); };
+    book.placed(10, any, any, 0, inLayout("quarters", 1), "A", 1, 0);
+    EXPECT_EQ(held(1), (std::vector<int>{2})) << "alone: its own zone (another window without a group is not its group)";
+    const auto& quarters = *layoutById("quarters");
+    EXPECT_EQ(emptyZones(quarters, held(1)), (std::vector<int>{0, 1, 3}));
+    book.forget(10);
+    // A suggestion joins it: the asker's group (a new one) holds both zones.
+    const uint64_t before = book.generation();
+    const uint64_t group  = book.joinGroup(1);
+    EXPECT_GT(book.generation(), before) << "a change of the records";
+    EXPECT_NE(group, 0U);
+    EXPECT_EQ(book.find(1)->group, group);
+    EXPECT_EQ(book.joinGroup(1), group) << "the same group the next time";
+    book.placed(2, any, any, 0, inLayout("quarters", 0), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2}));
+    EXPECT_EQ(held(2), (std::vector<int>{0, 2})) << "from any member";
+    EXPECT_EQ(emptyZones(quarters, held(2)), (std::vector<int>{1, 3}));
+    // Not counted: another group, another layout, another output or Desktop, a member that is not holding its zone.
+    book.placed(3, any, any, 0, inLayout("quarters", 1), "A", 1, book.newGroup());
+    book.placed(4, any, any, 0, inLayout("quarters", 3), "B", 1, group);
+    book.placed(5, any, any, 0, inLayout("quarters", 3), "A", 2, group);
+    book.placed(6, any, any, 0, inLayout("thirds", 1), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2}));
+    book.placed(7, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    ASSERT_TRUE(book.beginMove(7).has_value());
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2})) << "dragged away: it left the group and its zone";
+    book.placed(8, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    ASSERT_TRUE(book.suspend(8));
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2, 3})) << "suspended (minimized): it comes back to its zone";
+    EXPECT_EQ(emptyZones(quarters, held(1)), (std::vector<int>{1}));
+    EXPECT_EQ(emptyZones(quarters, std::vector<int>{0, 1, 2, 3}), (std::vector<int>{})) << "full: nothing to suggest";
+    // A window placed by a place, not a layout, holds no zone of one.
+    book.placed(9, any, any, 0, at(Place::Left), "A", 1, 0);
+    EXPECT_TRUE(held(9).empty());
+    EXPECT_EQ(book.joinGroup(42), 0U) << "no record";
+    // Two members on one zone count it once; a record without a zone counts none.
+    book.placed(11, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    book.placed(12, any, any, 0, inLayout("quarters", -1), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2, 3}));
+    // A window being dragged out of its zone holds none.
+    CTileBook moving;
+    moving.placed(20, any, any, 0, inLayout("quarters", 1), "A", 1, 0);
+    ASSERT_TRUE(moving.beginMove(20).has_value());
+    EXPECT_TRUE(zonesHeld(moving.records(), *moving.find(20)).empty());
+}
+
+TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
+    Suggestion sg;
+    sg.generation = 12;
+    sg.asker      = 0xabc;
+    sg.layout     = "thirds";
+    sg.output     = "GF-REF";
+    sg.zones      = {0, 2};
+    sg.frames     = {Rect{8, 64, 629, 926}, Rect{1283, 64, 629, 926}};
+    sg.windows    = {0xd1, 0xd2};
+    const std::array<StateOutput, 0> none{};
+    EXPECT_EQ(stateJson(12, none, &sg),
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":null})");
+    // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
+    for (uint64_t i = 0; i < 20; ++i)
+        sg.windows.push_back(0x100 + i);
+    sg.zones.push_back(1);
+    const auto json = stateJson(12, none, &sg);
+    size_t     quotes = 0;
+    for (size_t at = json.find(R"("windows":[)"); at != std::string::npos && at < json.size(); ++at)
+        quotes += json[at] == '"' ? 1 : 0;
+    EXPECT_EQ(quotes, 2 + 2 * kMaxSuggested) << json;
+    EXPECT_EQ(json.find(R"("zone":1)"), std::string::npos);
 }

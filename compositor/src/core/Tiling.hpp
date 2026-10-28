@@ -409,6 +409,9 @@ namespace gf::tiling {
         std::span<const TileRecord> records() const;
         uint64_t                    newGroup();
         uint64_t                    generation() const;
+        // A suggestion's window joins the window that asked (TL28): that window's group, a new one it joins first when it has
+        // none. 0 when it has no record.
+        uint64_t joinGroup(uint64_t asker);
 
         // TL10: no other window that is Tiled or Resizing on `output` and `workspace` has a frame overlapping `frame` by
         // more than 1 px on both axes. `ignore`: windows that do not count either (an inactive stage's, drawn in the strip).
@@ -433,9 +436,11 @@ namespace gf::tiling {
     std::string_view    nameOf(Place place);
 
     // hl.plugin.grassfield.arrange(json): {"layout":"<catalogue id>","windows":["0x<hex>",…],"fill":bool?,"zone":int?,
-    // "output":"<name>"?}. windows[i] takes zone i (1 to the layout's zone count of them, distinct, not 0); with "fill" (default
-    // true) the plugin fills the remaining zones with the next tileable windows in stacking order (TL6). With "zone", exactly
-    // one window goes to that zone of the layout and nothing is filled. Untrusted: strictly validated, at most kMaxArrangeBytes.
+    // "with":"0x<hex>"?,"output":"<name>"?}. windows[i] takes zone i (1 to the layout's zone count of them, distinct, not 0);
+    // with "fill" (default true) the plugin fills the remaining zones with the next tileable windows in stacking order (TL6).
+    // With "zone", exactly one window goes to that zone of the layout and nothing is filled (a zone of the Layouts section,
+    // TL27). "with" (only with "zone"; feature tiling-layouts) names the window whose layout the zone belongs to: a pick of
+    // the suggestions (TL28); the window joins that window's group. Untrusted: strictly validated, at most kMaxArrangeBytes.
     inline constexpr size_t kMaxArrangeBytes = 4096;
     inline constexpr size_t kMaxOutputName   = 64;
     // An output name a request may carry: 1 to kMaxOutputName characters of [A-Za-z0-9._-].
@@ -444,10 +449,34 @@ namespace gf::tiling {
         std::string           layout;
         std::vector<uint64_t> windows;
         bool                  fill = true;
-        std::optional<int>    zone;
-        std::string           output;
+        std::optional<int>      zone;
+        std::optional<uint64_t> with;
+        std::string             output;
     };
     std::expected<ArrangeRequest, std::string> parseArrange(std::string_view json);
+
+    // ---- suggestions (TL28) ----
+
+    // The zones of the layout instance of `asker` that a window holds: its own and those of the members of its group placed
+    // in the same layout on the same output and Desktop (Tiled, Resizing or Suspended: a suspended member comes back to its
+    // zone), in zone order, each once.
+    std::vector<int> zonesHeld(std::span<const TileRecord> records, const TileRecord& asker);
+    // The zones of `layout` that are not in `held`, in zone order.
+    std::vector<int> emptyZones(const Layout& layout, std::span<const int> held);
+
+    // What the shell offers to fill the rest of a layout (TL28) after an arrangement or a zone of the Layouts section left
+    // zones empty: kept by the plugin, published in the state reply while the tile records are still those of `generation`
+    // (any later change ends it) and the window that asked still holds its zone.
+    inline constexpr size_t kMaxSuggested = 12;
+    struct Suggestion {
+        uint64_t              generation = 0;
+        uint64_t              asker      = 0; // the window whose layout it fills
+        std::string           layout;
+        std::string           output;
+        std::vector<int>      zones;   // the empty zones, zone order: the shell offers the first
+        std::vector<Rect>     frames;  // their frames (layout coordinates), same order
+        std::vector<uint64_t> windows; // the windows that can fill them, at most kMaxSuggested (D26)
+    };
 
     // hl.plugin.grassfield.config keys (values "true" | "false").
     inline constexpr std::string_view kConfigEdges   = "tilingEdges";
@@ -484,7 +513,7 @@ namespace gf::tiling {
         int                            grid        = 1;
         std::vector<const TileRecord*> windows;
     };
-    // The reply of `hyprctl grassfield-tiling`.
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs);
+    // The reply of `hyprctl grassfield-tiling`: "suggestion" is null without one.
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr);
 
 } // namespace gf::tiling

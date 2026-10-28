@@ -715,6 +715,17 @@ namespace gf::tiling {
         return m_generation;
     }
 
+    uint64_t CTileBook::joinGroup(uint64_t asker) {
+        TileRecord* r = get(asker);
+        if (!r)
+            return 0;
+        if (r->group == 0) {
+            r->group = newGroup();
+            changed();
+        }
+        return r->group;
+    }
+
     void CTileBook::changed() {
         ++m_generation;
     }
@@ -962,7 +973,7 @@ namespace gf::tiling {
             return Error{std::format("payload larger than {} bytes", kMaxArrangeBytes)};
         gf::json::CReader in{json, kMaxStringBytes, kMaxDepth};
         ArrangeRequest    request;
-        bool              haveLayout = false, haveWindows = false, haveFill = false, haveZone = false, haveOutput = false;
+        bool              haveLayout = false, haveWindows = false, haveFill = false, haveZone = false, haveWith = false, haveOutput = false;
         const auto        once = [](bool& seen) {
             const bool first = !seen;
             seen             = true;
@@ -1016,6 +1027,13 @@ namespace gf::tiling {
                     if (!n || *n != std::floor(*n) || *n < 0 || *n >= static_cast<double>(kMaxZones))
                         return Error{std::format("zone is not an integer in 0..{}", kMaxZones - 1)};
                     request.zone = static_cast<int>(*n);
+                } else if (*key == "with") {
+                    if (!once(haveWith))
+                        return Error{"with given twice"};
+                    const auto text = in.string();
+                    request.with    = text ? gf::minimize::parseAddress(*text) : std::nullopt; // never 0
+                    if (!request.with)
+                        return Error{"with is not 1-16 hex digits (\"0x\" optional), not 0"};
                 } else if (*key == "output") {
                     if (!once(haveOutput))
                         return Error{"output given twice"};
@@ -1047,7 +1065,39 @@ namespace gf::tiling {
                 return Error{"zone fills nothing (fill must be false or absent)"};
             request.fill = false;
         }
+        if (request.with) {
+            if (!request.zone)
+                return Error{"with needs a zone"};
+            if (*request.with == request.windows.front())
+                return Error{"with names the window placed"};
+        }
         return request;
+    }
+
+    // ---- suggestions ----
+
+    std::vector<int> zonesHeld(std::span<const TileRecord> records, const TileRecord& asker) {
+        std::vector<int> held;
+        const auto       inInstance = [&asker](const TileRecord& r) {
+            if (r.id != asker.id && (asker.group == 0 || r.group != asker.group))
+                return false;
+            return counts(r.state) && r.where.layout == asker.where.layout && r.output == asker.output && r.workspace == asker.workspace;
+        };
+        for (const auto& r : records) { // a place or extended sides has no zone (-1)
+            if (inInstance(r) && r.where.zone >= 0 && std::ranges::find(held, r.where.zone) == held.end())
+                held.push_back(r.where.zone);
+        }
+        std::ranges::sort(held);
+        return held;
+    }
+
+    std::vector<int> emptyZones(const Layout& layout, std::span<const int> held) {
+        std::vector<int> out;
+        for (int i = 0; i < static_cast<int>(layout.zones.size()); ++i) {
+            if (std::ranges::find(held, i) == held.end())
+                out.push_back(i);
+        }
+        return out;
     }
 
     // ---- the notice and the state ----
@@ -1091,7 +1141,7 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1118,7 +1168,24 @@ namespace gf::tiling {
             }
             out += "]}";
         }
-        out += "]}";
+        out += "]";
+        if (!suggestion) {
+            out += R"(,"suggestion":null})";
+            return out;
+        }
+        out += std::format(R"(,"suggestion":{{"gen":{},"address":"{:x}","layout":")", suggestion->generation, suggestion->asker);
+        out += gf::gfc::jsonEscape(suggestion->layout);
+        out += R"(","output":")";
+        out += gf::gfc::jsonEscape(suggestion->output);
+        out += R"(","zones":[)";
+        for (size_t i = 0; i < suggestion->zones.size() && i < suggestion->frames.size(); ++i) {
+            const auto& f = suggestion->frames[i];
+            out += std::format(R"({}{{"zone":{},"x":{},"y":{},"w":{},"h":{}}})", i == 0 ? "" : ",", suggestion->zones[i], num(f.x), num(f.y), num(f.w), num(f.h));
+        }
+        out += R"(],"windows":[)";
+        for (size_t i = 0; i < suggestion->windows.size() && i < kMaxSuggested; ++i)
+            out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", suggestion->windows[i]);
+        out += "]}}";
         return out;
     }
 

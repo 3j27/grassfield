@@ -5,6 +5,7 @@
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
+#include "Minimize.hpp"
 #include "TopClamp.hpp"
 #include "core/Minimize.hpp"
 #include "core/TitlebarLayout.hpp"
@@ -93,6 +94,7 @@ namespace gf::tiler {
             std::optional<SMoveRelease>      moveRelease;
             SBorderClicks                    border;
             std::optional<SExtend>           extend;
+            std::optional<tiling::Suggestion> suggestion; // TL28: valid while the book is at its generation
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -283,16 +285,21 @@ namespace gf::tiler {
             return m && m->m_activeSpecialWorkspace;
         }
 
-        // TL9 (no drag preview, refused by tile and arrange).
-        bool placeable(const PHLWINDOW& w) {
-            if (!w || !tiling::movable(factsOf(w)) || w->isHidden() || !w->m_isFloating || w->m_pinned)
+        // TL9 apart from where the window is now: what a window minimized from an output passes to be suggested there (TL28).
+        bool tileableKind(const PHLWINDOW& w) {
+            if (!w || !tiling::movable(factsOf(w)) || !w->m_isFloating || w->m_pinned || fullscreenNow(w))
                 return false;
-            if (!w->m_workspace || w->m_workspace->m_isSpecialWorkspace || fullscreenNow(w))
-                return false; // minimized and hidden windows live on special workspaces
-            if (w->parent() || x11FloatedByHyprland(w) || w->m_class == kGlanceClass || gf::stager::inStripStage(w))
+            if (w->parent() || x11FloatedByHyprland(w) || w->m_class == kGlanceClass)
                 return false;
             const auto c = constraintsOf(w);
             return !((c.maxW > 0 && c.minW >= c.maxW) || (c.maxH > 0 && c.minH >= c.maxH)); // fixed size on an axis
+        }
+
+        // TL9 (no drag preview, refused by tile and arrange).
+        bool placeable(const PHLWINDOW& w) {
+            if (!tileableKind(w) || w->isHidden() || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace)
+                return false; // minimized and hidden windows live on special workspaces
+            return !gf::stager::inStripStage(w);
         }
 
         // TL1, TL2, TL3: the output minus its reserved area now, minus the Stages strip column; the margin; the grid.
@@ -519,6 +526,45 @@ namespace gf::tiler {
             const auto records = st().book.records();
             if (std::ranges::any_of(records, [](const tiling::TileRecord& r) { return r.state == tiling::TileState::Tiled && r.deferred; }))
                 relayout(ERelayout::CatchUp);
+        }
+
+        // TL28: what fills the rest of the layout of `askerId` on `m`: its empty zones (their frames in the work area now) and the
+        // windows that can take them (D26): the tileable windows of that output's Desktop in the active stage, top first, then
+        // the windows minimized from that output, the latest first; never one that holds a zone of that layout already.
+        // nullopt when no zone is empty or no window fits (nothing is shown then).
+        std::optional<tiling::Suggestion> suggestionFor(uint64_t askerId, const PHLMONITOR& m) {
+            const auto& s      = st();
+            const auto* asker  = s.book.find(askerId);
+            const auto* layout = asker ? tiling::layoutById(asker->where.layout) : nullptr;
+            if (!layout || !m || !m->m_activeWorkspace || !Desktop::windowState())
+                return std::nullopt;
+            const auto held  = tiling::zonesHeld(s.book.records(), *asker);
+            const auto empty = tiling::emptyZones(*layout, held);
+            if (empty.empty())
+                return std::nullopt;
+            tiling::Suggestion sg{.generation = s.book.generation(), .asker = askerId, .layout = asker->where.layout, .output = m->m_name, .zones = empty, .frames = {}, .windows = {}};
+            const auto         area = areaFor(m);
+            for (const int z : empty)
+                sg.frames.push_back(tiling::zoneFrame(layout->zones[static_cast<size_t>(z)], area));
+            const auto inLayout = [&s, asker](uint64_t id) {
+                const auto* r = s.book.find(id);
+                return r && (r->id == asker->id || (asker->group != 0 && r->group == asker->group && r->where.layout == asker->where.layout));
+            };
+            const auto& all = Desktop::windowState()->windows(); // bottom to top
+            for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
+                const auto& w = *it;
+                if (w && w->m_workspace == m->m_activeWorkspace && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)))
+                    sg.windows.push_back(idOf(w));
+            }
+            for (const auto id : gf::minimizer::minimizedFrom(m->m_name)) {
+                if (sg.windows.size() >= tiling::kMaxSuggested)
+                    break;
+                if (tileableKind(windowById(id)) && !inLayout(id))
+                    sg.windows.push_back(id);
+            }
+            if (sg.windows.empty())
+                return std::nullopt;
+            return sg;
         }
 
         // Return to Previous Size and a window coming back to a taken zone: `before`, centred in the free area of the
@@ -893,6 +939,7 @@ namespace gf::tiler {
         auto& s   = st();
         // A load starts with no record, also when the library stayed mapped since a previous load (FR23).
         s.book.clear();
+        s.suggestion.reset();
         s.posted = s.book.generation();
         s.resizing.reset();
         s.relayoutPending = false;
@@ -936,6 +983,7 @@ namespace gf::tiler {
         s.relayoutPending = false;
         s.resuming.clear();
         s.book.clear(); // windows keep their boxes; groups are forgotten
+        s.suggestion.reset();
         if (std::exchange(s.ready, false))
             notify(tiling::Reason::Unavailable);
     }
@@ -1219,40 +1267,78 @@ namespace gf::tiler {
             refuse("no layout manager");
             return;
         }
+        // A pick of the suggestions (TL28): the window whose layout the zone belongs to, still tiled in that layout.
+        const auto asker = request->with ? windowById(*request->with) : nullptr;
+        if (request->with) {
+            const auto* r = asker ? s.book.find(*request->with) : nullptr;
+            if (!r || r->state != tiling::TileState::Tiled || r->where.layout != request->layout) {
+                refuse("with is not a window tiled in that layout (tiling.md TL28)");
+                return;
+            }
+        }
         std::vector<PHLWINDOW> windows;
         for (const auto address : request->windows) {
             const auto w = windowById(address);
-            if (!placeable(w)) {
+            if (!w) {
                 refuse("a window is not a live tileable window (tiling.md TL9)");
                 return;
             }
             windows.push_back(w);
         }
-        // Every check before anything moves (ADR-0007: a refusal changes nothing). The output is the one the windows are on
-        // (under their middle), whatever Desktop Hyprland still records for them.
-        const auto first = windows.front();
-        const auto here  = monitorOf(first);
-        const auto m     = request->output.empty() ? here : monitorByName(request->output);
+        // The output is the one the windows are on (under their middle), whatever Desktop Hyprland still records for them; for
+        // a pick, the one of the window that asked: the picked window may wait on special:minimized (D27).
+        const auto here = monitorOf(asker ? asker : windows.front());
+        const auto m    = request->output.empty() ? here : monitorByName(request->output);
         if (!m) {
             refuse("the output is unknown");
             return;
         }
         if (here != m) {
-            refuse(std::format("the first window is on {}, not on {} (D3)", here ? here->m_name : "no output", m->m_name));
+            refuse(std::format("the {} window is on {}, not on {} (D3)", asker ? "asking" : "first", here ? here->m_name : "no output", m->m_name));
             return;
         }
+        // A pick may be a window minimized from that output (D27): restored first, once every check passed.
+        const auto minimized = asker ? gf::minimizer::minimizedFrom(m->m_name) : std::vector<uint64_t>{};
+        const bool restoring = asker && std::ranges::find(minimized, idOf(windows.front())) != minimized.end() && tileableKind(windows.front());
+        for (const auto& w : windows) {
+            if (!restoring && !placeable(w)) {
+                refuse("a window is not a live tileable window (tiling.md TL9)");
+                return;
+            }
+        }
+        // Every check before anything moves (ADR-0007: a refusal changes nothing).
         if (showsSpecial(m) || !m->m_activeWorkspace) {
             refuse(std::format("{} shows a special workspace or no Desktop (TL9)", m->m_name));
             return;
         }
         for (const auto& w : windows) {
-            if (monitorOf(w) != m) {
+            if (!restoring && monitorOf(w) != m) {
                 refuse(std::format("the windows are not all on {}", m->m_name));
                 return;
             }
         }
-        // Then each window takes the Desktop of the output it is on (D9), whatever moved it there: the plugin's titlebar
-        // drag, or a move Hyprland's own action makes without changing the Desktop (Actions::move).
+        if (request->with) {
+            const auto* r    = s.book.find(*request->with);
+            const auto  held = tiling::zonesHeld(s.book.records(), *r);
+            if (r->output != m->m_name || r->workspace != m->m_activeWorkspace->m_id) {
+                refuse("the asking window's tile is not on that output's Desktop");
+                return;
+            }
+            if (std::ranges::find(held, *request->zone) != held.end()) {
+                refuse(std::format("zone {} of {} is held", *request->zone, request->layout));
+                return;
+            }
+        }
+        // Then a minimized pick comes back to that output's Desktop (no Dock animation: it appears in its zone), and each window
+        // takes the Desktop of the output it is on (D9), whatever moved it there: the plugin's titlebar drag, or a move
+        // Hyprland's own action makes without changing the Desktop (Actions::move).
+        if (restoring) {
+            gf::minimizer::restore(idOf(windows.front()), std::nullopt);
+            if (!placeable(windows.front()) || monitorOf(windows.front()) != m) {
+                refuse("the minimized window did not come back on that output");
+                return;
+            }
+        }
         for (const auto& w : windows)
             followOutput(w);
         const auto workspace = m->m_activeWorkspace;
@@ -1263,6 +1349,13 @@ namespace gf::tiler {
             }
         }
         catchUp();
+        if (request->with) {
+            const auto* r = s.book.find(*request->with);
+            if (!r || r->state != tiling::TileState::Tiled || r->where.layout != request->layout) { // catchUp freed it (moved by other means)
+                refuse("with is not a window tiled in that layout any more");
+                return;
+            }
+        }
         const auto*               layout = tiling::layoutById(request->layout); // parseArrange checked the id
         std::vector<int>          zoneIndex;
         std::vector<tiling::Zone> zones;
@@ -1287,8 +1380,8 @@ namespace gf::tiler {
         for (const auto i : zoneIndex)
             zones.push_back(layout->zones[static_cast<size_t>(i)]);
         const auto frames = fitted(zones, windows, areaFor(m));
-        // The windows placed together form a tile group (TL6, T1d); one window alone has none.
-        const uint64_t group = windows.size() >= 2 ? s.book.newGroup() : 0;
+        // The windows placed together form a tile group (TL6, T1d); one window alone has none; a pick joins the asker's (TL28).
+        const uint64_t group = request->with ? s.book.joinGroup(*request->with) : windows.size() >= 2 ? s.book.newGroup() : 0;
         for (size_t i = 0; i < windows.size(); ++i) {
             const auto& w       = windows[i];
             const auto  target  = w->layoutTarget();
@@ -1299,7 +1392,10 @@ namespace gf::tiler {
             s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zoneIndex[i]},
                           m->m_name, workspace->m_id, group);
         }
-        logRequest(Log::DEBUG, "arrange: {} with {} window(s) on {}", layout->id, windows.size(), m->m_name);
+        // TL28: the zones left empty in that layout, offered to the shell in the state reply until the next change.
+        s.suggestion = suggestionFor(request->with ? *request->with : idOf(windows.front()), m);
+        logRequest(Log::DEBUG, "arrange: {} with {} window(s) on {}{}", layout->id, windows.size(), m->m_name,
+                   s.suggestion ? std::format(", {} zone(s) to suggest", s.suggestion->zones.size()) : "");
         notify(tiling::Reason::Placed);
     }
 
@@ -1323,7 +1419,15 @@ namespace gf::tiler {
             }
             outputs.push_back(std::move(o));
         }
-        return tiling::stateJson(s.book.generation(), outputs);
+        // TL28: the suggestion while nothing changed since; a window closed meanwhile is left out.
+        std::optional<tiling::Suggestion> suggestion;
+        if (s.suggestion && s.suggestion->generation == s.book.generation()) {
+            suggestion = *s.suggestion;
+            std::erase_if(suggestion->windows, [](uint64_t id) { return !windowById(id); });
+            if (suggestion->windows.empty())
+                suggestion.reset();
+        }
+        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr);
     }
 
     void beforePointerMotion() {
