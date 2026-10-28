@@ -1,33 +1,49 @@
-#!/bin/bash
+#!/bin/bash -p
 # grassfield-store-run: Grassfield Store's script in Omarchy's terminal (ADR-0037 b.2; spec SR17). OPUS SECURITY REVIEW
 # REQUIRED (ADR-0037 e.9). It runs as the user, never as root: Omarchy's recipes call sudo themselves, in this terminal,
 # as in Omarchy's own menu. Started only by the Store, as
 #   omarchy-launch-floating-terminal-with-presentation "/usr/lib/grassfield/grassfield-store-run <op-id> <deadline> setup <recipe> [<arg>...]"
 # the command string built from the validated tokens of ADR-0037 e.5 only, and watched through
 # $XDG_RUNTIME_DIR/grassfield/store/<op-id>.started and <op-id>.exit (the terminal is detached: no exit code comes back).
-# It:
+# It never runs as root, and runs every program with PATH=<Omarchy's folder>/bin:/usr/bin, without BASH_ENV or the
+# caller's exported shell functions (`bash -p` reads neither for itself): the commands the recipe names are Omarchy's
+# pinned ones and the system's. Then it:
 #   1. refuses to start after <deadline> (Unix seconds: the Store stops waiting for the terminal 60 s after asking);
 #   2. takes Omarchy's update lock (the file omarchy-update-lock locks), on a descriptor of its own that every program it
 #      starts gets closed (9>&-): `omarchy update` says it is already running, and no process the recipe leaves running
 #      keeps the lock (S13); refuses when it is held. The lock goes when this script ends, whatever ends it;
 #   3. writes <op-id>.started (its pid and start time: the Store knows it still runs);
-#   4. checks again: no db.lck, pacman -Qu lists nothing but "[ignored]" (S12), the recipe is Omarchy's, and every file the
-#      catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is unchanged in the installed Omarchy;
+#   4. checks again: no db.lck, pacman -Qu answers (exit 0 or 1) and lists nothing but "[ignored]" (S12), the recipe is
+#      Omarchy's, and every file the catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is
+#      unchanged in the installed Omarchy;
 #   5. runs the recipe, ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<recipe>, with its arguments, as an argument vector;
 #   6. writes <op-id>.exit with the code (by rename, the Store never reads half a file) and exits with it.
 # <recipe> is omarchy-install-<name> or omarchy-remove-<name>; at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
 # Exit: 0 done; 1 the recipe failed; 2 usage; 3 busy (Omarchy's update lock, or pacman's db.lck); 4 the last system update
 # did not finish; 5 the installed Omarchy differs from the catalog's pins (or the recipe is missing); 6 too late (the
-# terminal opened after the deadline); 130 stopped with Ctrl+C. A closed terminal ends it without an exit file (SIGHUP):
-# the Store reads the system then.
+# terminal opened after the deadline); 130 stopped with Ctrl+C (before the recipe: nothing was run). A closed terminal
+# ends it without an exit file (SIGHUP): the Store reads the system then.
 set -uo pipefail
 umask 077
+# Ctrl+C from the start is answered with 130 (below). A handler, not an ignored signal: an ignored SIGINT would be ignored
+# by the recipe too, which Ctrl+C then could not stop.
+stopped=0
+trap 'stopped=1' INT
+# The caller's exported shell functions (BASH_FUNC_<name>%% in the environment, one would stand for a command) reach no
+# program: `bash -p` does not import them here, and the recipe, a bash script too, runs without them (below). Nor do
+# BASH_ENV and the rest of what bash reads at its start.
+unexported=()
+while IFS= read -r -d '' entry; do
+  [[ $entry == BASH_FUNC_* ]] && unexported+=(-u "${entry%%=*}")
+done </proc/$$/environ
+unset BASH_ENV ENV CDPATH GLOBIGNORE
 
 usage() {
-  echo "grassfield-store-run: started by Grassfield Store only" >&2
+  echo "grassfield-store-run: ${1:-started by Grassfield Store only}" >&2
   exit 2
 }
 
+((EUID != 0)) || usage "runs as the user, never as root"
 (($# >= 4 && $# <= 8)) || usage
 op=$1 deadline=$2 kind=$3 recipe=$4
 shift 4
@@ -36,13 +52,17 @@ shift 4
 for arg in "$@"; do
   [[ $arg =~ ^[a-z0-9][a-z0-9.-]{0,63}$ ]] || usage
 done
-[[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR && ! -L $XDG_RUNTIME_DIR ]] || usage
-dir=$XDG_RUNTIME_DIR/grassfield/store
-mkdir -p -- "$dir" 9>&- && chmod 700 -- "$dir" 9>&- || usage
-[[ -d $dir && ! -L $dir && -O $dir ]] || usage
-[[ ! -e $dir/$op.exit && ! -e $dir/$op.started ]] || usage # an operation id runs once
 omarchy=${OMARCHY_PATH:-/usr/share/omarchy}
 omarchy=${omarchy%/}
+[[ $omarchy == /* && $omarchy != *:* ]] || usage
+export PATH=$omarchy/bin:/usr/bin
+[[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR && ! -L $XDG_RUNTIME_DIR ]] || usage
+dir=$XDG_RUNTIME_DIR/grassfield/store
+# Its folder is the user's own and not a link before its mode changes (chmod follows a link).
+mkdir -p -- "$dir" 9>&- || usage
+[[ -d $dir && ! -L $dir && -O $dir ]] || usage
+chmod 700 -- "$dir" 9>&- || usage
+[[ ! -e $dir/$op.exit && ! -e $dir/$op.started ]] || usage # an operation id runs once
 
 # The exit file, by rename, then the exit (the lock goes with this process). Omarchy's launcher says "Done!" after it.
 finish() { # code [message]
@@ -65,18 +85,28 @@ read -r -a fields <<<"$rest"
 printf '%s %s\n' "$$" "${fields[19]-}" >|"$dir/.$op.started" && mv -f -- "$dir/.$op.started" "$dir/$op.started" 9>&- ||
   finish 1 "Cannot write $dir/$op.started."
 
-# Ctrl+C stops the recipe (its default action there) and is answered here with 130 and the exit file. A handler, not an
-# ignored signal: an ignored SIGINT would be ignored by the recipe too.
-stopped=0
-trap 'stopped=1' INT
+# Ctrl+C stops what runs (its default action there) and is answered with 130 and the exit file: before the recipe,
+# nothing of it ran; a check it cut short is not passed.
+stop() {
+  ((stopped)) && finish 130 "Stopped: nothing was run."
+}
+stop
 
 # 4. Checked again, under the lock.
-dbpath=$(pacman-conf DBPath 9>&-) || finish 1 "pacman-conf DBPath failed."
+dbpath=$(pacman-conf DBPath 9>&-)
+code=$?
+stop
+((code == 0)) || finish 1 "pacman-conf DBPath failed."
 [[ ! -e ${dbpath%/}/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left its lock). Try again when it has finished."
+# pacman -Qu exits 0 when it lists packages and 1 when there are none; anything else is not an answer.
+updates=$(pacman -Qu 2>/dev/null 9>&-)
+code=$?
+stop
+((code == 0 || code == 1)) || finish 1 "pacman -Qu failed (exit code $code): nothing was run."
 while IFS= read -r line; do
   [[ -z $line || $line == *' [ignored]' ]] && continue
   finish 4 "The last system update did not finish ($line). Finish it in Software Update, then try again."
-done < <(pacman -Qu 2>/dev/null 9>&-)
+done <<<"$updates"
 program=$omarchy/bin/$recipe
 [[ -f $program && -x $program ]] || finish 5 "Omarchy's $recipe is not installed: nothing was run."
 pins=$dir/$op.pins
@@ -88,16 +118,18 @@ while IFS= read -r line; do
   [[ /$rel/ != */./* && /$rel/ != */../* ]] || finish 5 "The Store's pins cannot be read: nothing was run."
   [[ $rel == "bin/$recipe" ]] && recipe_pinned=1
   have=$(sha256sum -- "$omarchy/$rel" 2>/dev/null 9>&-) || have=missing
+  stop
   [[ ${have%% *} == "$want" ]] ||
     finish 5 "This setup was checked against another version of Omarchy ($rel differs): nothing was run. The Store offers it again once its catalog has checked your Omarchy."
   count=$((count + 1))
 done <"$pins"
 ((count > 0 && recipe_pinned)) || finish 5 "The Store's pins do not name $recipe: nothing was run."
+stop
 
 # 5. The recipe, without the lock's descriptor.
 echo "Grassfield Store runs Omarchy's $recipe $*"
 echo
-"$program" "$@" 9>&-
+env "${unexported[@]}" -- "$program" "$@" 9>&-
 code=$?
 ((stopped || code == 130)) && finish 130 "Stopped. Part of it may be installed: Grassfield Store reads what is there."
 ((code == 0)) && finish 0
