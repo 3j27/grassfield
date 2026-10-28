@@ -743,7 +743,7 @@ Choices made within this ADR:
   held by `tst_systemguard` (`LaunchGuard`), `tst_backend` and the pane's test with a fake backend. It leaves ADR-0019's
   table. `GRASSFIELD_UPDATE_PKEXEC` stays `grassfield-channel-set`'s (step 1).
 
-Evidence (the branch's PR): the C++ tests of Settings (103, `apps/settings/build-direct.sh --tests`), the QML suite (2036,
+Evidence (the branch's PR): the C++ tests of Settings (103, `apps/settings/build-direct.sh --tests`), the QML suite (2036; 2050 with main c5643400,
 none failed, no runtime warning), `tests/shell/software_update_service.sh`, `tests/security/ipc_inventory.sh` and the shim's
 cases, `scripts/dev/upstream-drift.sh --require` against Omarchy v4.0.4, `check-i18n`, captures in
 `docs/audits/settings-parity-2026-10-26/software-update*.png`. Not verified here: measured parity against a macOS capture
