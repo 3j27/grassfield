@@ -9,7 +9,7 @@ Dialog {
     id: root
 
     readonly property var entry: Apps.lookup(Popups.data.appId ? Popups.data.appId : "")
-    readonly property string appName: entry ? entry.name : (Popups.data.appId ? Popups.data.appId : "")
+    readonly property string appName: entry ? Apps.displayName(entry) : (Popups.data.appId ? Popups.data.appId : "")
 
     title: qsTr("About %1").arg(appName)
     sheet: true
@@ -34,11 +34,11 @@ Dialog {
         Line {
             visible: text !== ""
             color: Appearance.colors.text
-            text: root.entry ? root.entry.comment : ""
+            text: Apps.displayComment(root.entry)
         },
         Line {
             visible: text !== ""
-            text: root.entry && root.entry.genericName !== "" ? qsTr("Type: %1").arg(root.entry.genericName) : ""
+            text: Apps.displayGenericName(root.entry) !== "" ? qsTr("Type: %1").arg(Apps.displayGenericName(root.entry)) : ""
         },
         Line {
             text: qsTr("Application ID: %1").arg(Popups.data.appId ? Popups.data.appId : "")
