@@ -3218,4 +3218,21 @@ QtObject {
     readonly property var tilingClassUltraWide: ["left-right", "wide-left", "left-quarters", "quarters", "thirds", "wide-center", "four-columns"]
     // the Layouts section of an output taller than wide (T1f) [ref: docs/specs/tiling.md § Functional requirements; ADR-0036]
     readonly property var tilingClassPortrait: ["top-bottom", "stacked-thirds", "top-quarters"]
+
+    // the first automatic check, 10 minutes after the shell starts (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateFirstCheckMs: 600000
+    // then an automatic check every 6 hours (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateIntervalMs: 21600000
+    // the pane checks when it opens unless a check finished less than this ago (U8) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdatePaneFreshMs: 60000
+    // the checker stops itself after 180 s and its children 5 s later; the shell kills it past this backstop (U1) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateCheckTimeoutMs: 200000
+    // the waiter blocks up to 7200 s on Omarchy's update lock, then checks for up to 180 s (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateWaitTimeoutMs: 7400000
+    // a busy answer (another run of the checker holds its lock) is tried again once after this (U4) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateBusyRetryMs: 60000
+    // an automatic check skipped while offline or metered is looked at again after this, or when the connectivity changes (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateRecheckMs: 1800000
+    // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateMeteredTimeoutMs: 10000
 }

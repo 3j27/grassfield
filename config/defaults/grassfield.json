@@ -129,6 +129,9 @@
     "kind": "artwork",
     "folder": ""
   },
+  "updates": {
+    "automaticCheck": true
+  },
   "wallpaper": {
     "source": "builtin",
     "path": "",
