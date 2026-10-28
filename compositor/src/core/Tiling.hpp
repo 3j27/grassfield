@@ -519,8 +519,9 @@ namespace gf::tiling {
     // (`windows`, which hold every window of the edge): the before windows' far side and the after windows' near side move
     // together and the gap stays; the edge lands on the grid line nearest the pointer; it never takes a window under its
     // minimum or over its maximum (heights count the titlebar band), stopping on the last grid line that keeps every window
-    // within them, and does not move when no line does. Returns the new frames, the before windows then the after ones in
-    // the edge's order (a window `windows` lacks is left out).
+    // within them, and does not move when no line does, nor when `windows` lacks every window of one side (nothing would
+    // bound the other). Returns the new frames, the before windows then the after ones in the edge's order (a window
+    // `windows` lacks is left out).
     std::vector<std::pair<uint64_t, Rect>> dragEdge(const SharedEdge& edge, std::span<const EdgeWindow> windows, double delta, const Grid& grid);
 
     // ---- suggestions (TL28) ----

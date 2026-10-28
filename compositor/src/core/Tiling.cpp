@@ -1173,8 +1173,11 @@ namespace gf::tiling {
     std::vector<std::pair<uint64_t, Rect>> dragEdge(const SharedEdge& edge, std::span<const EdgeWindow> windows, double delta, const Grid& grid) {
         const bool   v   = edge.vertical;
         const double inf = std::numeric_limits<double>::infinity();
-        // The range of moves that keeps every window within its limits (its length along the axis, frame terms).
+        // The range of moves that keeps every window within its limits (its length along the axis, frame terms). A side with
+        // no window in `windows` bounds nothing: the edge does not move then (the other side would follow the pointer off the
+        // work area; integrator re-review of ce82fd3).
         double lo = -inf, hi = inf;
+        bool   boundBefore = false, boundAfter = false;
         const auto limits = [v, inf](const EdgeWindow& w) {
             const double band = v ? 0 : w.limits.band;
             const double min  = (v ? w.limits.minW : w.limits.minH) + band;
@@ -1187,6 +1190,7 @@ namespace gf::tiling {
                 const double len      = v ? w->frame.w : w->frame.h;
                 lo                    = std::max(lo, min - len);
                 hi                    = std::min(hi, max - len);
+                boundBefore           = true;
             }
         }
         for (const auto id : edge.after) {
@@ -1195,6 +1199,7 @@ namespace gf::tiling {
                 const double len      = v ? w->frame.w : w->frame.h;
                 lo                    = std::max(lo, len - max);
                 hi                    = std::min(hi, len - min);
+                boundAfter            = true;
             }
         }
         // The edge on the grid line nearest the pointer, else the last line inside the range; no move when none is.
@@ -1205,7 +1210,7 @@ namespace gf::tiling {
             line = snapUp(edge.at + lo, origin, step);
         if (line - edge.at > hi)
             line = snapDown(edge.at + hi, origin, step);
-        const double moved = line - edge.at < lo - kSlack || line - edge.at > hi + kSlack ? 0 : line - edge.at;
+        const double moved = !boundBefore || !boundAfter || line - edge.at < lo - kSlack || line - edge.at > hi + kSlack ? 0 : line - edge.at;
 
         std::vector<std::pair<uint64_t, Rect>> out;
         for (const auto id : edge.before) {

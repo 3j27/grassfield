@@ -1343,6 +1343,17 @@ TEST(TilingEdge, ADragLandsOnTheGrid) {
     stuck[2].limits.minH = 500;
     EXPECT_EQ(frameOf(dragEdge(h, stuck, 50, Grid{}), 2), windows[1].frame);
     EXPECT_EQ(frameOf(dragEdge(h, stuck, 50, Grid{}), 3), windows[2].frame);
-    // A window the frames lack is left out.
-    EXPECT_EQ(dragEdge(h, std::vector<EdgeWindow>{windows[1]}, 10, Grid{}).size(), 1u);
+    // A window the frames lack is left out; a side with none left does not move the edge (integrator re-review of ce82fd3:
+    // Left & Right, the left window gone, a drag of -600 put the right one at x -96, off the work area).
+    const auto alone = dragEdge(h, std::vector<EdgeWindow>{windows[1]}, 10, Grid{});
+    ASSERT_EQ(alone.size(), 1u);
+    EXPECT_EQ(alone[0].second, windows[1].frame) << "the after side is gone: nothing bounds the before window";
+    std::vector<EdgeWindow> pair{{.id = 1, .group = 3, .frame = Rect{8, 8, 488, 784}, .limits = {}}, {.id = 2, .group = 3, .frame = Rect{504, 8, 488, 784}, .limits = {}}};
+    const auto              lr = sharedEdges(pair, 8, 120, 8);
+    ASSERT_EQ(lr.size(), 1u);
+    const auto right = dragEdge(lr[0], std::vector<EdgeWindow>{pair[1]}, -600, Grid{});
+    ASSERT_EQ(right.size(), 1u);
+    EXPECT_EQ(right[0].second, pair[1].frame) << "the before side is gone: the right window stays in the work area";
+    pair[0].limits.minW = 20; // the glue's floor (MIN_WINDOW_SIZE)
+    EXPECT_EQ(frameOf(dragEdge(lr[0], pair, -600, Grid{}), 2), (Rect{36, 8, 956, 784})) << "with both, the left window's minimum bounds the edge";
 }

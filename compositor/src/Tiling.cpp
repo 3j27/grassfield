@@ -98,7 +98,7 @@ namespace gf::tiler {
             uint64_t                                    appliedMs = 0;
             uint32_t                                    steps     = 0; // applications that changed a frame
             uint32_t                                    held      = 0; // motions that waited for the next refresh
-            std::vector<uint64_t>                       left;          // windows that left it (gate C1): Tiled again at its end
+            std::vector<uint64_t>                       left;          // windows that left it (gate C1): no longer set, still bounds
             uint64_t                                    workUs    = 0; // the plugin's own time in the drag's motions and frames
             uint64_t                                    maxWorkUs = 0; // the longest of them (one motion or one refresh's frames)
         };
@@ -1125,8 +1125,9 @@ namespace gf::tiler {
         // The frames of the drag's delta (core dragEdge) on the windows still there: each surface box set and its animation
         // ended at once (as a step of Hyprland's own resize: setTargetGeom, warpPositionSize). A window closed, unmapped (its
         // Desktop and layout space gone while the object lives: gate C1, setTargetGeom would reach the missing space) or no
-        // longer Resizing meanwhile (full screen, zoom, minimized: Suspended; forgotten) leaves the drag (once, logged; its
-        // limits no longer hold the edge); the others go on.
+        // longer Resizing meanwhile (full screen, zoom, minimized: Suspended; forgotten) leaves the drag (once, logged): it is
+        // no longer set, but its frame from the press and its limits still bound the edge (integrator re-review of ce82fd3:
+        // without them, the other side's windows would follow the pointer off the work area); the others go on.
         void edgeApply() {
             auto& s = st();
             if (!s.edge || !g_layoutManager)
@@ -1139,10 +1140,12 @@ namespace gf::tiler {
             std::vector<uint64_t> gone;
             for (const auto& f : frames) {
                 const uint64_t id = f.first;
-                const auto     w  = windowById(id);
-                const auto     t  = tiling::movable(factsOf(w)) ? w->layoutTarget() : nullptr; // C1: mapped, on a Desktop, in a layout space
-                const auto     e  = std::ranges::find_if(d.windows, [id](const tiling::EdgeWindow& x) { return x.id == id; });
-                const auto     r  = s.book.find(id);
+                if (std::ranges::find(d.left, id) != d.left.end())
+                    continue;
+                const auto w = windowById(id);
+                const auto t = tiling::movable(factsOf(w)) ? w->layoutTarget() : nullptr; // C1: mapped, on a Desktop, in a layout space
+                const auto e = std::ranges::find_if(d.windows, [id](const tiling::EdgeWindow& x) { return x.id == id; });
+                const auto r = s.book.find(id);
                 if (!t || e == d.windows.end() || !r || r->state != tiling::TileState::Resizing) {
                     gone.push_back(id);
                     continue;
@@ -1151,7 +1154,6 @@ namespace gf::tiler {
                 t->warpPositionSize();
             }
             for (const uint64_t id : gone) {
-                std::erase_if(d.windows, [id](const tiling::EdgeWindow& x) { return x.id == id; });
                 d.left.push_back(id);
                 logRequest(Log::INFO, "window {:x} closed, unmapped or no longer resizing: it leaves the shared edge's drag (gate C1)", id);
             }
@@ -1198,15 +1200,12 @@ namespace gf::tiler {
             edgeApply();
             const auto d = std::move(*s.edge);
             s.edge.reset();
-            std::vector<uint64_t> ids = d.left;
-            for (const auto& e : d.windows)
-                ids.push_back(e.id);
-            for (const uint64_t id : ids) {
-                const auto w = windowById(id);
+            for (const auto& e : d.windows) {
+                const auto w = windowById(e.id);
                 const auto t = w ? w->layoutTarget() : nullptr;
-                const auto r = s.book.find(id);
+                const auto r = s.book.find(e.id);
                 if (t && r && r->state == tiling::TileState::Resizing)
-                    s.book.endResize(id, toRect(t->position()));
+                    s.book.endResize(e.id, toRect(t->position()));
             }
             notify(tiling::Reason::Resized);
             edgeCursor(std::nullopt);
