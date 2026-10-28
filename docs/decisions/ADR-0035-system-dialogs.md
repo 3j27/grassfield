@@ -1213,8 +1213,8 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
   shows as a sheet) took its action on Return, where KDE's own box defaults to Cancel (`kmessagedialog.cpp:357-386`), and
   common rule 3 says a destructive button is never the default. **Choice:** on a warning, Return gives Cancel, or the
   secondary action where there is no Cancel; on a permanent deletion KIO asks about, Return cancels. Questions that are
-  not warnings keep their primary action as the default. The conflict sheet's default (Replace, as the Finder) is the
-  owner's to decide (integrator review, point 3): unchanged until then.
+  not warnings keep their primary action as the default. The conflict sheet's default is the owner's decision Q18 (below):
+  Replace, as the Finder, a written exception to common rule 3 for that sheet only.
 - **4a-18. One answer, one question** (integrator review of c0dd590, MAJOR 2). The next question shows in the same sheet the
   moment one is answered, so the second click of a double click on Replace, or a Return held down, answered a second job's
   question unseen. **Choice:** a question takes no click and no key for the double-click interval after it shows
@@ -1320,6 +1320,7 @@ review.
 | Q16 | Rename Quit to "Force Quit" in the app menu of a hung app | no, macOS model / yes | « Non, modèle macOS (Recommandé) » | no |
 | Q17 | Which daemon holds the Secret Service in the Grassfield session (D-12) | Q17-a gnome-keyring started with the session / Q17-b KWallet's takeover off for the session / Q17-c as is | « Bloquer KWallet » | Q17-b (not the recommended option) |
 | Q17 (when) | When to deliver Q17's answer | with step 2 / in step 9 | « Avec l'étape 2 (Recommandé) » | with step 2 |
+| Q18 | Return (the default button) in the copy/move conflict sheet, "An item named “X” already exists" (step 4a; integrator review of c0dd590, point 3) | Replace, as the Finder / Stop, as KIO's dialog / Keep Both | relayed by the integrator on grassfieldhq/grassfield#33, 2026-10-28: "Replace … like Finder" | Replace: a written exception to common rule 3 (a destructive button is never the default) for the copy/move conflict sheet only (with Merge for a folder and Resume for a copy that stopped part way); a worker's warnings and the deletions keep Return = Cancel (4a-17) |
 
 ## macOS reference
 One system draws every system question: open and save panels and the print sheet are AppKit's, shown as sheets of the app's

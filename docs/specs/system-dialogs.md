@@ -25,7 +25,8 @@ measurements.
    Motion as the rest of the shell (crossfades ≤ 100 ms).
 3. **Keyboard.** Every control reachable with Tab and Shift+Tab, a visible focus ring (`Appearance.focusRingColor`), Return
    activates the default button, Esc (and Cmd-.) cancels, Space activates the focused button. A destructive button is never
-   the default. Focus enters the surface when it maps and returns to the window that asked when it closes (the platform's
+   the default, with one written exception: the copy/move conflict sheet of Files (section 9), whose default is Replace, as
+   the Finder's (owner decision Q18, ADR-0035, 2026-10-28). Focus enters the surface when it maps and returns to the window that asked when it closes (the platform's
    focus-return path, ADR-0012).
 4. **Accessibility.** `Accessible.role: Accessible.Dialog`, `Accessible.name` = the title, `Accessible.description` = the
    message; every control has a role and a name; secure fields expose no text (A1).
@@ -635,7 +636,8 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   KIO's progress window (4a-12).
 - KD5 Paste is offered for items only: text or an image on the clipboard is not pasted (4a-14).
 - KD6 Return never takes a warning's action or a deletion (Cancel, or the secondary action where there is no Cancel,
-  4a-17); a question takes no input for the double-click interval after it shows, a key's auto-repeat answers nothing,
+  4a-17); in the copy/move conflict sheet Return replaces (Merge onto a folder, Resume for a copy that stopped part way),
+  as the Finder (owner decision Q18, the exception to common rule 3); a question takes no input for the double-click interval after it shows, a key's auto-repeat answers nothing,
   and a question opens with the keyboard on the sheet,
   not on a button clicked before (4a-18); a long text scrolls inside the sheet, the buttons stay on screen (4a-19); names
   inside KIO's texts show their direction controls (4a-20).
