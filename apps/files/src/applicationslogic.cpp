@@ -23,6 +23,9 @@ namespace
 constexpr qint64 kMaxEntryBytes = 256 * 1024;
 constexpr int kMaxDepth = 32; // Quickshell has no limit; loops are cut by the visited set, this only bounds a hostile tree
 constexpr int kMaxEntries = 20000;
+// Folders walked in one directory tree: a link to /usr under an applications folder took 33 s (every folder is read, and
+// each one is canonicalised). Quickshell has no such limit (a documented difference); 5000 covers any real share/applications.
+constexpr int kMaxFolders = 5000;
 
 bool hasDesktop(const QString &list, const QStringList &current)
 {
@@ -173,12 +176,39 @@ QString nameOf(const Fields &f, const QStringList &locales)
     return name;
 }
 
+// The text of a desktop file, or a null array: opened without blocking and only when it is a regular file, checked on the
+// descriptor itself (a FIFO swapped in after the listing froze the GUI thread). Links are followed, as Quickshell does.
+QByteArray readDesktopFile(const QString &path)
+{
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+    if (fd < 0)
+        return {};
+    struct stat info;
+    if (::fstat(fd, &info) != 0 || !S_ISREG(info.st_mode)) {
+        ::close(fd);
+        return {};
+    }
+    QByteArray data;
+    data.resize(kMaxEntryBytes);
+    qsizetype got = 0;
+    while (got < data.size()) {
+        const ssize_t n = ::read(fd, data.data() + got, size_t(data.size() - got));
+        if (n <= 0)
+            break;
+        got += n;
+    }
+    ::close(fd);
+    data.resize(got);
+    return data.isNull() ? QByteArray("") : data;
+}
+
 // The ids and paths of every desktop file below `dir` (symlinked folders followed, loops cut), in Quickshell's order: each
 // folder's entries sorted by name, case-insensitively, files and folders mixed.
-void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visited, QList<QPair<QString, QString>> &out)
+void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visited, QList<QPair<QString, QString>> &out, int &folders)
 {
-    if (depth > kMaxDepth || out.size() >= kMaxEntries)
+    if (depth > kMaxDepth || out.size() >= kMaxEntries || folders >= kMaxFolders)
         return;
+    folders++;
     const QString canonical = QFileInfo(dir.absolutePath()).canonicalFilePath();
     if (canonical.isEmpty() || visited.contains(canonical))
         return;
@@ -189,8 +219,9 @@ void collect(const QDir &base, const QDir &dir, int depth, QSet<QString> &visite
         if (info.fileName().contains(QLatin1Char('\n')))
             continue;
         if (info.isDir()) {
-            collect(base, QDir(info.absoluteFilePath()), depth + 1, visited, out);
-        } else if (info.fileName().endsWith(QLatin1String(".desktop"))) {
+            collect(base, QDir(info.absoluteFilePath()), depth + 1, visited, out, folders);
+        } else if (info.fileName().endsWith(QLatin1String(".desktop")) && info.isFile()) {
+            // isFile(): a regular file (or a link to one); a FIFO, a socket or a device named x.desktop is no entry.
             QString id = base.relativeFilePath(info.absoluteFilePath());
             id.chop(8);
             id.replace(QLatin1Char('/'), QLatin1Char('-'));
@@ -343,7 +374,8 @@ QList<Entry> listApplications(const Environment &env)
             continue;
         QList<QPair<QString, QString>> files;
         QSet<QString> visited;
-        collect(dir, dir, 0, visited, files);
+        int folders = 0;
+        collect(dir, dir, 0, visited, files, folders);
         // A file that is not an application with a Name (a Link, a Directory, no Name) does not exist for Quickshell: it masks
         // nothing. A valid one does, also when it is then not listed (Hidden=true, NoDisplay=true, OnlyShowIn elsewhere), and
         // of two valid files of one id in this directory the later one in the sorted walk wins.
@@ -356,10 +388,9 @@ QList<Entry> listApplications(const Environment &env)
         for (const auto &file : std::as_const(files)) {
             if (seen.contains(file.first))
                 continue;
-            QFile f(file.second);
-            if (!f.open(QIODevice::ReadOnly))
+            const QByteArray text = readDesktopFile(file.second);
+            if (text.isNull())
                 continue;
-            const QByteArray text = f.read(kMaxEntryBytes);
             const Fields fields = readFields(text);
             if (fields.type != QLatin1String("Application") || nameOf(fields, env.locales).isEmpty())
                 continue;
@@ -386,6 +417,70 @@ QList<Entry> listApplications(const Environment &env)
         return c != 0 ? c < 0 : a.id < b.id;
     });
     return result;
+}
+
+QStringList execArguments(const QString &exec)
+{
+    QStringList raw;
+    QString current;
+    bool inArg = false;
+    bool quoted = false;
+    for (qsizetype i = 0; i < exec.size(); i++) {
+        const QChar c = exec.at(i);
+        if (quoted) {
+            if (c == QLatin1Char('\\') && i + 1 < exec.size() && QStringLiteral("\"$`\\").contains(exec.at(i + 1))) {
+                current += exec.at(++i);
+            } else if (c == QLatin1Char('"')) {
+                quoted = false;
+            } else {
+                current += c;
+            }
+        } else if (c == QLatin1Char('"')) {
+            quoted = true;
+            inArg = true;
+        } else if (c == QLatin1Char(' ') || c == QLatin1Char('\t')) {
+            if (inArg)
+                raw << current;
+            current.clear();
+            inArg = false;
+        } else {
+            current += c;
+            inArg = true;
+        }
+    }
+    if (inArg)
+        raw << current;
+    static const QRegularExpression whole(QStringLiteral("^%[a-zA-Z]$"));
+    static const QRegularExpression code(QStringLiteral("%(.)"));
+    QStringList out;
+    for (const QString &arg : std::as_const(raw)) {
+        if (whole.match(arg).hasMatch())
+            continue;
+        QString a = arg;
+        QString cleaned;
+        qsizetype last = 0;
+        QRegularExpressionMatchIterator it = code.globalMatch(a);
+        while (it.hasNext()) {
+            const QRegularExpressionMatch m = it.next();
+            cleaned += a.mid(last, m.capturedStart() - last);
+            if (m.captured(1) == QLatin1String("%"))
+                cleaned += QLatin1Char('%');
+            last = m.capturedEnd();
+        }
+        cleaned += a.mid(last);
+        out << cleaned;
+    }
+    return out;
+}
+
+QStringList launchCommand(const QString &exec, bool runInTerminal)
+{
+    QStringList command = execArguments(exec);
+    if (command.isEmpty())
+        return {};
+    if (runInTerminal)
+        command.prepend(QStringLiteral("xdg-terminal-exec"));
+    return command;
 }
 
 QStringList iconRoots()

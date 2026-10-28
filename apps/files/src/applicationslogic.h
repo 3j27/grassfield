@@ -97,6 +97,14 @@ QString safeIconFile(const QString &path, const QStringList &roots, qint64 cap =
 // Empty for anything refused. Decoding is appicons.h's job.
 QByteArray readIconFile(const QString &path, const QStringList &roots, qint64 cap = 8 * 1024 * 1024);
 
+// The argv of an Exec= value (shell/services/AppLaunch.js stripFieldCodes after the Desktop Entry quoting): arguments split on
+// unquoted spaces, "double quotes" group (\\ \" \$ \` escape inside), a field code (%f %F %u %U %i %c %k ...) alone is
+// dropped, one inside an argument is removed, "%%" is a literal percent. Empty when nothing is left.
+QStringList execArguments(const QString &exec);
+// What the shell's Apps.launchNow starts for an entry: execArguments, with xdg-terminal-exec in front when the entry runs in a
+// terminal (KIO would use KDE's terminal setting: konsole, absent here). Empty when there is no command.
+QStringList launchCommand(const QString &exec, bool runInTerminal);
+
 // The url of the Applications location and of one application in it: grassfield-apps:/ and grassfield-app:/<id>.
 QUrl locationUrl();
 bool isLocationUrl(const QUrl &url);

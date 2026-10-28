@@ -3534,6 +3534,10 @@
         <translation>L’application n’est plus installée.</translation>
     </message>
     <message>
+        <source>“%1” could not be started.</source>
+        <translation>Impossible de démarrer «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
         <source>Glance could not be started: grassfield-preview was not found.</source>
         <translation>Impossible de lancer le Survol&#xa0;: grassfield-preview est introuvable.</translation>
     </message>

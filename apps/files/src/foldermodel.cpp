@@ -22,6 +22,8 @@
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QScopedValueRollback>
+#include <memory>
+#include <QThread>
 
 #include <KApplicationTrader>
 #include <KDirLister>
@@ -436,6 +438,7 @@ void FolderModel::setUrl(const QUrl &url)
     emit freeSpaceChanged();
     stopSearch();
     stopRecents();
+    ++m_appsGeneration; // an Applications build still running is of no use now
     if (search) {
         // The folder listing stops; the matches of the search (or the recent files) are the rows.
         m_lister->stop();
@@ -1493,7 +1496,28 @@ void FolderModel::reload()
 
 void FolderModel::loadApplications()
 {
-    const QList<ApplicationsLogic::Entry> entries = ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment());
+    const quint64 generation = ++m_appsGeneration;
+    if (!m_loading && m_apps.isEmpty()) {
+        m_loading = true;
+        emit loadingChanged();
+    }
+    auto result = std::make_shared<QList<ApplicationsLogic::Entry>>();
+    QThread *worker = QThread::create([result] { *result = ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()); });
+    // finished() is queued to this object (the result is complete by then); a model gone meanwhile drops the answer.
+    connect(worker, &QThread::finished, this, [this, generation, result] {
+        if (generation == m_appsGeneration && isApplications())
+            applyApplications(*result);
+    });
+    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+    worker->start();
+}
+
+void FolderModel::applyApplications(const QList<ApplicationsLogic::Entry> &entries)
+{
+    QVariantMap paths;
+    for (const ApplicationsLogic::Entry &e : entries)
+        paths.insert(e.id, e.path);
+    emit applicationsListed(paths);
     // Rows that stay keep their selection; the others go.
     QHash<QUrl, ApplicationsLogic::Entry> next;
     KFileItemList items;

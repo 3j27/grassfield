@@ -649,6 +649,7 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 {
     auto *model = new FolderModel(parent ? parent : this);
     connect(model, &FolderModel::tagsSeen, this, &FilesApp::noteTags);
+    connect(model, &FolderModel::applicationsListed, this, [this](const QVariantMap &paths) { m_applicationPaths = paths; });
     connect(this, &FilesApp::tagsChanged, model, &FolderModel::tagsChanged);
     model->setStyleStore(&m_folderStyles);
     connect(this, &FilesApp::folderStylesChanged, model, &FolderModel::folderStylesChanged);
@@ -868,7 +869,7 @@ QUrl FilesApp::applicationsUrl() const
 
 int FilesApp::applicationsCount() const
 {
-    return ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()).size();
+    return int(m_applicationPaths.size()); // the location lists them (FolderModel::applicationsListed); never walked here
 }
 
 bool FilesApp::isApplicationUrl(const QUrl &url) const
@@ -890,6 +891,25 @@ void FilesApp::launchApplication(const QUrl &url)
     }
     if (launchingBlocked()) {
         emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    // The way the shell's Apps grid starts it (Apps.launchNow): the Exec line without its field codes, behind xdg-terminal-exec
+    // for Terminal=true (KIO would ask KDE's terminal setting: konsole, not installed on Omarchy), in the scope uwsm-app gives a
+    // real session. An entry without an Exec line (D-Bus activation only) is left to KIO.
+    const QStringList command = ApplicationsLogic::launchCommand(service->exec(), service->terminal());
+    if (!command.isEmpty()) {
+        const QStringList argv = grassfield::apps::scopedCommand(command.first(), command.mid(1), grassfield::apps::scopedLaunch());
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        if (qEnvironmentVariable("GRASSFIELD_APPS_GTK_USE_PORTAL") == QLatin1String("1"))
+            environment.insert(QStringLiteral("GTK_USE_PORTAL"), QStringLiteral("1")); // shell/services/AppLaunch.js portalEnvironment
+        QProcess process;
+        process.setProgram(argv.first());
+        process.setArguments(argv.mid(1));
+        process.setProcessEnvironment(environment);
+        if (!service->workingDirectory().isEmpty())
+            process.setWorkingDirectory(service->workingDirectory());
+        if (!process.startDetached())
+            emit operationFailed(tr("“%1” could not be started.").arg(service->name()));
         return;
     }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
@@ -943,15 +963,13 @@ bool FilesApp::refuseApplicationItems(const QList<QUrl> &urls)
 // entry, so Copy puts the entry's file on the clipboard (a launcher to paste somewhere); Cut is refused like a move.
 QList<QUrl> FilesApp::applicationFiles(const QList<QUrl> &urls) const
 {
-    QHash<QString, QString> paths;
-    for (const ApplicationsLogic::Entry &e : ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()))
-        paths.insert(e.id, e.path);
+    const QVariantMap &paths = m_applicationPaths; // the rows on show: Copy is only possible from the location
     QList<QUrl> files;
     for (const QUrl &u : urls) {
         const QString id = ApplicationsLogic::entryId(u);
         if (id.isEmpty() || !paths.contains(id))
             return {};
-        files << QUrl::fromLocalFile(paths.value(id));
+        files << QUrl::fromLocalFile(paths.value(id).toString());
     }
     return files;
 }

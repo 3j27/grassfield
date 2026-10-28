@@ -10,9 +10,11 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "applicationslogic.h"
 
@@ -348,4 +350,68 @@ TEST(Applications, UrlsRoundTrip)
         EXPECT_EQ(entryId(entryUrl(id)), id);
     EXPECT_EQ(entryId(QUrl::fromLocalFile(QStringLiteral("/tmp/x"))), QString());
     EXPECT_EQ(entryId(locationUrl()), QString());
+}
+
+// The Exec line as the shell's Apps.launchNow runs it: AppLaunch.stripFieldCodes on the split line, xdg-terminal-exec in front
+// of a Terminal=true entry (KIO's own terminal lookup finds konsole, which Omarchy does not have: btop, nvim, cliamp failed).
+TEST(Applications, TheExecLineIsSplitAndItsFieldCodesDropped)
+{
+    EXPECT_EQ(execArguments(QStringLiteral("btop")), QStringList{QStringLiteral("btop")});
+    EXPECT_EQ(execArguments(QStringLiteral("nvim %F")), QStringList{QStringLiteral("nvim")});
+    EXPECT_EQ(execArguments(QStringLiteral("env FOO=1 app --flag=%u %i x%%y")),
+              (QStringList{QStringLiteral("env"), QStringLiteral("FOO=1"), QStringLiteral("app"), QStringLiteral("--flag="), QStringLiteral("x%y")}));
+    EXPECT_EQ(execArguments(QStringLiteral("sh -c \"echo \\\"a b\\\" \\$HOME\"")),
+              (QStringList{QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("echo \"a b\" $HOME")}));
+    EXPECT_TRUE(execArguments(QStringLiteral("")).isEmpty());
+    EXPECT_TRUE(execArguments(QStringLiteral("%U")).isEmpty());
+    EXPECT_EQ(execArguments(QStringLiteral("a \"\" b")), (QStringList{QStringLiteral("a"), QString(), QStringLiteral("b")}));
+}
+
+TEST(Applications, ATerminalEntryRunsBehindXdgTerminalExec)
+{
+    EXPECT_EQ(launchCommand(QStringLiteral("btop"), true), (QStringList{QStringLiteral("xdg-terminal-exec"), QStringLiteral("btop")}));
+    EXPECT_EQ(launchCommand(QStringLiteral("cliamp %U"), true), (QStringList{QStringLiteral("xdg-terminal-exec"), QStringLiteral("cliamp")}));
+    EXPECT_EQ(launchCommand(QStringLiteral("nvim %F"), false), QStringList{QStringLiteral("nvim")});
+    EXPECT_TRUE(launchCommand(QStringLiteral("%f"), true).isEmpty()) << "no command, nothing to put behind the terminal";
+}
+
+// A .desktop that is a FIFO (or a link to one) froze the GUI thread in a blocking open until a timeout: it is no entry, and
+// the others are listed at once.
+TEST(Applications, AFifoNamedDesktopNeverBlocksTheListing)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString home = tmp.filePath(QStringLiteral("home")), sys = tmp.filePath(QStringLiteral("sys"));
+    const QString ha = home + QStringLiteral("/applications/");
+    write(ha + QStringLiteral("good.desktop"), app());
+    ASSERT_EQ(::mkfifo(QFile::encodeName(ha + QStringLiteral("fifo.desktop")).constData(), 0600), 0);
+    ASSERT_TRUE(QFile::link(ha + QStringLiteral("fifo.desktop"), ha + QStringLiteral("link.desktop")));
+    QDir().mkpath(sys + QStringLiteral("/applications"));
+    QElapsedTimer timer;
+    timer.start();
+    const QList<Entry> list = listApplications(envFor(home, sys));
+    EXPECT_LT(timer.elapsed(), 3000);
+    EXPECT_EQ(ids(list), QSet<QString>{QStringLiteral("good")});
+}
+
+// A folder link to a huge tree (a link to /usr took 33 s): the folders walked are counted, the walk ends at the limit.
+TEST(Applications, AFolderLinkToAHugeTreeEndsAtTheFolderLimit)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString home = tmp.filePath(QStringLiteral("home")), sys = tmp.filePath(QStringLiteral("sys"));
+    const QString wide = tmp.filePath(QStringLiteral("wide"));
+    for (int i = 0; i < 6000; i++)
+        ASSERT_TRUE(QDir().mkpath(wide + QStringLiteral("/d%1").arg(i, 5, 10, QLatin1Char('0'))));
+    write(wide + QStringLiteral("/d00000/first.desktop"), app());
+    write(wide + QStringLiteral("/d05999/last.desktop"), app());
+    QDir().mkpath(home + QStringLiteral("/applications"));
+    ASSERT_TRUE(QFile::link(wide, home + QStringLiteral("/applications/deep")));
+    QDir().mkpath(sys + QStringLiteral("/applications"));
+    QElapsedTimer timer;
+    timer.start();
+    const QList<Entry> list = listApplications(envFor(home, sys));
+    EXPECT_LT(timer.elapsed(), 10000);
+    EXPECT_TRUE(ids(list).contains(QStringLiteral("deep-d00000-first")));
+    EXPECT_FALSE(ids(list).contains(QStringLiteral("deep-d05999-last"))) << "folders past the limit are not walked";
 }

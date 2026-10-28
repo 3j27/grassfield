@@ -201,6 +201,8 @@ public:
     KFileItem rootItem() const;
 
 signals:
+    // The Applications location was built (id -> .desktop path of every row): FilesApp keeps it for Copy and Get Info.
+    void applicationsListed(const QVariantMap &paths);
     void urlChanged();
     void sortChanged();
     void showHiddenChanged();
@@ -378,6 +380,10 @@ private:
     ItemListModel *m_results = nullptr;
     // The shown applications by item url (Get Info, Kind) and the watch on the applications directories.
     QHash<QUrl, ApplicationsLogic::Entry> m_apps;
+    // The list is built on a thread of its own (a slow or hostile applications folder never freezes the window); only the
+    // newest build is applied.
+    quint64 m_appsGeneration = 0;
+    void applyApplications(const QList<ApplicationsLogic::Entry> &entries);
     QFileSystemWatcher m_appsWatcher;
     QTimer m_appsTimer;
     SearchRunner *m_search = nullptr;

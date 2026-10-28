@@ -114,9 +114,10 @@ QThreadPool *decodePool()
 void AppIconProvider::shutdown()
 {
     // Quit: no new decode, the running children are killed (their workers return within milliseconds), then a bounded wait
-    // so no worker is still inside Qt when the static destruction starts.
+    // so no worker is still inside Qt when the static destruction starts. A worker that has not yet seen the quit can still be
+    // in waitForStarted (2 s) and, after the kill, in waitForFinished (1 s, appicons.cpp loadIsolated): the wait covers both.
     AppIcons::shutdown();
-    decodePool()->waitForDone(1500);
+    decodePool()->waitForDone(3500);
 }
 
 QQuickImageResponse *AppIconProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
