@@ -146,14 +146,23 @@ Singleton {
 
     // Activate once a shell layer surface is gone. Hyprland refuses to focus a window while an Exclusive layer surface exists
     // (the switcher waits for `closelayer` for the same reason), and a popup menu that is closing still has its surface for a
-    // moment: a window chosen from a menu is activated when the compositor reports `namespace` unmapped, or after
-    // Tokens.dockMenuLayerWait if that event never comes. One pending request at a time (the latest wins).
+    // moment: a window chosen from a menu is activated, its tile group coming forward with it (TL29), when the compositor
+    // reports `namespace` unmapped, or after Tokens.dockMenuLayerWait if that event never comes. One pending request at a
+    // time (the latest wins).
     property var pendingActivation: null
 
     function activateAfterLayer(toplevel: var, namespace: string): void {
         if (!toplevel)
             return;
-        pendingActivation = {toplevel: toplevel, namespace: namespace};
+        pendingActivation = {toplevel: toplevel, namespace: namespace, members: null};
+        layerWaitTimer.restart();
+    }
+
+    // The same for the Dock menu's Show Tile Group (showTileGroup): `members` the group's addresses.
+    function showTileGroupAfterLayer(toplevel: var, namespace: string, members: var): void {
+        if (!toplevel)
+            return;
+        pendingActivation = {toplevel: toplevel, namespace: namespace, members: members};
         layerWaitTimer.restart();
     }
 
@@ -161,8 +170,13 @@ Singleton {
         const p = pendingActivation;
         pendingActivation = null;
         layerWaitTimer.stop();
-        if (p)
-            activate(p.toplevel);
+        // The lock engaged while the menu's surface went away (integrator review of cd74af2): nothing moves behind it.
+        if (!p || SessionState.refuses("menu activation"))
+            return;
+        if (p.members)
+            showTileGroup(p.toplevel, p.members);
+        else
+            activateWithGroup(p.toplevel);
     }
 
     Timer {
@@ -537,6 +551,92 @@ Singleton {
         if (sent)
             root.askSuggestion(Minimized.normalizeAddress(withAddress));
         return sent;
+    }
+
+    // Tile groups (TL29): a window brought forward from the Dock, its menu, the menu bar's Window menu, the app switcher or
+    // the Overview brings its tile group forward; the Dock menu's Show Tile Group; an Overview drop moves the group
+    // (TilingLink.groups). Nothing without the capability, nothing while locked.
+    readonly property bool canGroups: Capabilities.has("tiling-groups")
+
+    // The tile group of the window `address` (with or without 0x) comes forward: its members on screen on its Desktop in
+    // their stacking order, then the window when it is on screen (the plugin's group_front). Sent after the window's
+    // activation or restore, through the dispatch channel; the plugin's result does not depend on which reaches it first
+    // (a window on a special workspace is not raised, its restore raises it). Only for a window in a group of the last
+    // reply (WindowTiling.membersOf); refused while locked (the plugin refuses too).
+    function groupForward(address: string): bool {
+        if (SessionState.refuses("tile group forward"))
+            return false;
+        if (!root.canGroups || WindowTiling.membersOf(TilingLink.groups, address).length === 0)
+            return false;
+        return dispatchRequest(Minimized.groupFrontCall(address));
+    }
+
+    // Activate (activate) a window, its tile group coming forward with it.
+    function activateWithGroup(toplevel: var): void {
+        if (!toplevel)
+            return;
+        activate(toplevel);
+        groupForward(addressOf(toplevel));
+    }
+
+    // Restore a minimized window (unminimize: a Dock tile, the Overview's strip), its tile group coming forward with it.
+    function unminimizeWithGroup(toplevel: var): void {
+        if (!toplevel)
+            return;
+        unminimize(toplevel);
+        groupForward(addressOf(toplevel));
+    }
+
+    // The windows `addresses` (lower-case hex without 0x) as WindowTiling's group functions take them: {address, workspace
+    // (Hyprland's id: a special workspace is negative), active (shown), minimized, parked (on no Desktop)}.
+    function groupWindowFacts(addresses: var): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const minimized = minimizedAddresses().map(a => Minimized.normalizeAddress(a));
+        return all.map(t => {
+            const address = Minimized.normalizeAddress(t.address);
+            const ws = t.workspace;
+            const isMin = minimized.indexOf(address) >= 0;
+            return {
+                address: address,
+                workspace: ws ? ws.id : 0,
+                active: !!(ws && ws.active),
+                minimized: isMin,
+                parked: isMin || !ws || ws.id <= 0
+            };
+        }).filter(w => addresses.indexOf(w.address) >= 0);
+    }
+
+    // The Dock menu's Show Tile Group (TL29, D30): the steps of WindowTiling.tileGroupSteps for the app's window `toplevel`
+    // and its group `members`, sent in that order through the dispatch channel (the group's Desktop, the restores, the
+    // focus, the group).
+    function showTileGroup(toplevel: var, members: var): void {
+        const own = addressOf(toplevel);
+        if (own === "")
+            return;
+        root.endShowDesktop();
+        const group = members.map(a => Minimized.normalizeAddress(a)).concat([own]);
+        for (const step of WindowTiling.tileGroupSteps(own, members, groupWindowFacts(group))) {
+            switch (step.op) {
+            case "space":
+                focusSpace(step.id);
+                break;
+            case "restore":
+                unminimize(toplevelByAddress(step.address));
+                break;
+            case "move":
+                dispatchRequest(moveRequest(step.address, String(step.id))); // hidden with its app: back with the group
+                break;
+            case "activate":
+                activate(toplevel);
+                break;
+            case "focus":
+                dispatchRequest(Minimized.focusWindowRequest(step.address));
+                break;
+            case "groupFront":
+                groupForward(step.address);
+                break;
+            }
+        }
     }
 
     // The tiling popover of the zoom light (TL22-TL26): the plugin's hover event, its keyboard opening and Move to <display>.
@@ -1263,6 +1363,19 @@ Singleton {
         if (!(id > 0))
             return false;
         return dispatchRequest(moveRequest(address, String(Math.floor(id))));
+    }
+
+    // An Overview drop (TL29, D31): the window `address` to Space `id` without following it, with the members of its tile
+    // group on its Space (WindowTiling.groupMovers: a minimized or hidden member is on none and stays). False when nothing
+    // moved.
+    function moveGroupToSpace(address: string, id: int): bool {
+        const own = Minimized.normalizeAddress(address);
+        const members = root.canGroups ? WindowTiling.membersOf(TilingLink.groups, own) : [];
+        const movers = WindowTiling.groupMovers(own, members, groupWindowFacts(members)); // read before the move changes them
+        if (!moveToSpace(address, id))
+            return false;
+        movers.forEach(a => moveToSpace(a, id));
+        return true;
     }
 
     // Move a window (foreign-toplevel handle) to a Space without following it.

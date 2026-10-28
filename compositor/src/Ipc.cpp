@@ -194,13 +194,17 @@ namespace gf::ipc {
         return tilingAvailable() && state().luaTilePopoverRegistered && state().luaMoveToRegistered;
     }
 
+    bool tilingGroupsAvailable() {
+        return tilingArrangeAvailable() && state().luaGroupFrontRegistered;
+    }
+
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 tilingAvailable(), layerPointer::ready(), state().luaConfigRegistered, chrome::ready(),
                                                 frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
-                                                appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable());
+                                                appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable(), tilingGroupsAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -572,6 +576,21 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.group_front(address): the window's tile group comes forward with it (TL29: a window brought
+        // forward from the Dock, the app switcher or the Overview). Untrusted: the address is compared with the live windows.
+        int luaGroupFront(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            guarded("hl.plugin.grassfield.group_front", [&] {
+                if (!address.ok) {
+                    logRequest(Log::WARN, "group_front: rejected: invalid arguments");
+                    tiler::groupFrontRequest(""); // posts the refusal (reason invalid, or locked)
+                    return;
+                }
+                tiler::groupFrontRequest(address.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
         // hl.plugin.grassfield.appmenu(address): re-posts the appmenu event of a mapped window (the shell calls it
         // after a restart). Untrusted: the address is parsed and compared with the live windows.
         int luaAppmenu(lua_State* L) {
@@ -695,6 +714,7 @@ namespace gf::ipc {
         s.luaArrangeRegistered       = tiler::ready() && addLua(gfc::kLuaArrange, luaArrange); // only with its listeners
         s.luaTilePopoverRegistered   = addLua(gfc::kLuaTilePopover, luaTilePopover);
         s.luaMoveToRegistered        = addLua(gfc::kLuaMoveTo, luaMoveTo);
+        s.luaGroupFrontRegistered    = tiler::ready() && addLua(gfc::kLuaGroupFront, luaGroupFront); // only with the tile records
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -743,6 +763,7 @@ namespace gf::ipc {
         removeLua(s.luaArrangeRegistered, gfc::kLuaArrange);
         removeLua(s.luaTilePopoverRegistered, gfc::kLuaTilePopover);
         removeLua(s.luaMoveToRegistered, gfc::kLuaMoveTo);
+        removeLua(s.luaGroupFrontRegistered, gfc::kLuaGroupFront);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

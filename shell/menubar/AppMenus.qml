@@ -142,7 +142,7 @@ Singleton {
             break;
         case "window":
             FocusReturn.skip();
-            Compositor.activate(item.ref);
+            Compositor.activateWithGroup(item.ref);
             break;
         }
         Popups.close();

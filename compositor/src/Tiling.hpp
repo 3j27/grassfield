@@ -93,6 +93,15 @@ namespace gf::tiler {
     // unknown output, the window's own output or a window that cannot move (reason "invalid").
     void moveToRequest(std::string_view address, std::string_view output);
 
+    // hl.plugin.grassfield.group_front(address) (TL29): the members of the window's tile group on screen on its Desktop come
+    // forward, in their stacking order (core groupRaiseOrder), above every other window, the window itself last when it is
+    // on screen, zoomed or full screen included (the shell's activation may reach the compositor first, and changes nothing
+    // for the focused window). A minimized or hidden window's restore raises it, before or after this request. Nothing for a
+    // window without a group. Untrusted: the address is compared with the live
+    // windows. Refused while locked (reason "locked") and for an unknown window (reason "invalid"); the tile records do not
+    // change (no notice otherwise).
+    void groupFrontRequest(std::string_view address);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);

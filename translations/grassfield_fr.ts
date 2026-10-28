@@ -3418,6 +3418,14 @@
         <translation>Retirer du Dock</translation>
     </message>
     <message>
+        <source>Show Tile Group</source>
+        <translation>Afficher le groupe</translation>
+    </message>
+    <message>
+        <source>Show Tile Group with %1</source>
+        <translation>Afficher le groupe avec %1</translation>
+    </message>
+    <message>
         <source>Sort by</source>
         <translation>Trier par</translation>
     </message>
