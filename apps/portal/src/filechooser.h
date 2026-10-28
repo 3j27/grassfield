@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 #include <QVariantMap>
 
@@ -46,6 +47,10 @@ public:
         int maxPending = 16;
         // The per-application memory of the panels (null: none).
         PanelState *state = nullptr;
+        // How long the panels wait on the disk (probe): a path that has not answered by then is "not responding".
+        int probeDeadlineMs = 1000;
+        // What a local path names, read on a probe thread (empty: pathKindOf; the tests give a slow one).
+        std::function<int(const QString &path)> statPath;
     };
 
     FileChooser(const QDBusConnection &bus, const Options &options, QObject *parent = nullptr);
@@ -75,10 +80,18 @@ public:
     // The panels' memory of an application: {folder, view, expanded} ("" fields when nothing is kept).
     Q_INVOKABLE QVariantMap memory(const QString &appId) const;
     Q_INVOKABLE void remember(const QString &appId, const QVariantMap &entry);
-    // The standard folders (file URLs, "" for one that does not exist): {home, desktop, documents, downloads}.
-    Q_INVOKABLE QVariantMap places() const;
-    // What a local URL names now: 0 nothing, 1 a file (or anything but a folder), 2 a folder; -1 not a local URL.
-    Q_INVOKABLE int pathKind(const QUrl &url) const;
+    // The panels' questions to the disk, never asked on the GUI thread (FC7; integrator review of bd78424, MAJOR 1): a hung
+    // mount (an NFS or SMB share gone, a sleeping disk) must not stall this panel, another application's panel or the 3-s
+    // forward, which all run on that thread. What each URL names is answered by probed(token, {url: kind}) once every path
+    // has answered or after probeDeadlineMs: kNotResponding for a path that has not, -1 for anything but a local file URL,
+    // else pathKindOf's. Each path is read on a thread of its own; a path still being read (stuck) is not read twice, and
+    // beyond kMaxProbeThreads paths in flight a new one is not responding at once. Returns the token.
+    Q_INVOKABLE int probe(const QStringList &urls);
+    // What a local path names now: 0 nothing, 1 a file (anything but a folder, a dangling symbolic link too), 2 a folder.
+    // It reads the disk: never on the GUI thread (probe).
+    static int pathKindOf(const QString &path);
+    static constexpr int kNotResponding = -2;
+    static constexpr int kMaxProbeThreads = 16;
     // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
     // has no entry.
     Q_INVOKABLE QString appName(const QString &appId) const;
@@ -89,8 +102,12 @@ public:
     static QString windowAppId(const QString &appId);
 
 signals:
-    // A panel to make for request `id` (chooser::toQml).
+    // A panel to make for request `id`: chooser::toQml, with `places` (the standard folders that answered as folders,
+    // {home, desktop, documents, downloads}; "" for the others, home always) and `folderKinds` ({url: kind} of the folders
+    // a panel may start in: the application's, the remembered one, the places), probed first.
     void opened(int id, const QVariantMap &request);
+    // The answer to probe(urls).
+    void probed(int token, const QVariantMap &kinds);
     // Request `id` ended without the panel's answer (Close, the deadline): its panel goes.
     void closed(int id);
     void pendingChanged();
@@ -99,7 +116,13 @@ signals:
 
 private:
     struct Request;
+    struct Probe;
+    struct ProbeShared;
     void finish(int id, uint response, const QVariantMap &results);
+    int startProbe(const QStringList &urls, std::function<void(int token, const QVariantMap &kinds)> done);
+    void probeAnswered(const QString &path, int kind);
+    void finishProbe(int token);
+    QVariantMap placeUrls() const;
     void forward(int id);
     void closeForwarded(int id, int tries);
     void armIdle();
@@ -111,6 +134,11 @@ private:
     int m_nextId = 1;
     QHash<int, std::shared_ptr<Request>> m_requests;
     QTimer m_idle;
+    int m_nextProbe = 1;
+    QHash<int, std::shared_ptr<Probe>> m_probes;
+    // Paths being read now (a thread each), and the probes waiting on each.
+    QHash<QString, QList<int>> m_reading;
+    std::shared_ptr<ProbeShared> m_shared;
 };
 
 // org.freedesktop.impl.portal.Request at a request's handle: Close() ends it (the application went away or cancelled).

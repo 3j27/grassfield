@@ -16,11 +16,17 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDeadlineTimer>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
 #include <QGuiApplication>
 #include <QProcess>
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QThread>
+
+#include <atomic>
 #include <QTest>
 
 #include <functional>
@@ -89,6 +95,22 @@ struct Reply {
     QVariantMap results;
 };
 
+// A hung mount, as the fixture's backend sees it: reading a path under /slowmnt takes kSlowMs (the probe's deadline is far
+// shorter); kSlowReads counts the reads.
+constexpr int kSlowMs = 2500;
+constexpr int kProbeMs = 400;
+std::atomic<int> kSlowReads{0};
+
+int slowStat(const QString &path)
+{
+    if (path.startsWith(QLatin1String("/slowmnt"))) {
+        ++kSlowReads;
+        QThread::msleep(kSlowMs);
+        return 2;
+    }
+    return FileChooser::pathKindOf(path);
+}
+
 // The waits of the fixture's backend: the deadline far above a loaded machine's latency between the call and opened(), the
 // "well before the deadline" waits half of it (review of step 4b, NIT 12).
 constexpr int kDeadlineMs = 1500;
@@ -111,6 +133,8 @@ protected:
         options.gtkService = QString::fromLatin1(kFakeGtk);
         options.uiDeadlineMs = kDeadlineMs;
         options.idleQuitMs = kIdleMs;
+        options.probeDeadlineMs = kProbeMs;
+        options.statPath = slowStat;
         options.state = &state;
         chooser = std::make_unique<FileChooser>(*backendBus, options);
         new FileChooserAdaptor(chooser.get());
@@ -218,6 +242,7 @@ TEST_F(FileChooserTest, OpenFileOverTheBusGivesThePanelsAnswer)
     EXPECT_EQ(reply->results.value("uris").toStringList(), (QStringList{QStringLiteral("file:///tmp/a.txt"), QStringLiteral("file:///tmp/b.txt")}));
     EXPECT_EQ(qdbus_cast<QList<Pair>>(reply->results.value("choices")), (QList<Pair>{{QStringLiteral("ro"), QStringLiteral("false")}}));
     EXPECT_EQ(qdbus_cast<Filter>(reply->results.value("current_filter")), filters().at(1));
+    EXPECT_TRUE(reply->results.value("writable").toBool()); // 4b-17
     EXPECT_EQ(closed, QList<int>{opened.first().first});
     EXPECT_EQ(chooser->pending(), 0);
     // The request object is gone with the request.
@@ -376,6 +401,86 @@ TEST_F(FileChooserTest, ACloseBeforeGtkExportsItsRequestIsSentAgain)
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_EQ(reply->response, 2u);
     EXPECT_EQ(closes, 1);
+}
+
+// A hung mount never stalls the backend (FC7; integrator review of bd78424, MAJOR 1): the panels' questions to the disk are
+// read off the GUI thread. A panel whose folder does not answer opens after the probe's deadline, passed over to the next
+// folder; another application's request sent meanwhile opens at once; the stuck path is read once, however often asked.
+TEST_F(FileChooserTest, AHungFolderStallsNoOtherRequest)
+{
+    chooser->setUiLoader([] { return true; });
+    const int readsBefore = kSlowReads;
+    QElapsedTimer clock;
+    clock.start();
+    auto slow = call(QStringLiteral("OpenFile"), QStringLiteral("/r/h1"), {{QStringLiteral("current_folder"), QByteArray("/slowmnt/share\0", 15)}});
+    auto quick = call(QStringLiteral("OpenFile"), QStringLiteral("/r/h2"), {{QStringLiteral("current_folder"), QByteArray("/tmp\0", 5)}});
+    QHash<int, qint64> at;
+    QHash<int, QVariantMap> shown;
+    QObject::connect(chooser.get(), &FileChooser::opened, chooser.get(), [&](int id, const QVariantMap &request) {
+        at.insert(id, clock.elapsed());
+        shown.insert(id, request);
+    });
+    ASSERT_TRUE(waitFor([&] { return at.size() == 2; }, kSlowMs));
+    const int slowId = shown.constBegin().value().value("currentFolder").toString().contains("slowmnt") ? shown.constBegin().key() : std::next(shown.constBegin()).key();
+    const int quickId = slowId == shown.constBegin().key() ? std::next(shown.constBegin()).key() : shown.constBegin().key();
+    EXPECT_LT(at.value(quickId), kProbeMs) << "the other request opened at once";
+    EXPECT_GE(at.value(slowId), kProbeMs - 50) << "the hung one after the probe's deadline";
+    EXPECT_LT(at.value(slowId), kSlowMs) << "never after the hung read";
+    EXPECT_EQ(shown.value(slowId).value("folderKinds").toMap().value("file:///slowmnt/share").toInt(), FileChooser::kNotResponding);
+    EXPECT_EQ(shown.value(quickId).value("folderKinds").toMap().value("file:///tmp").toInt(), 2);
+    EXPECT_FALSE(shown.value(slowId).value("places").toMap().value("home").toString().isEmpty());
+
+    // probe(): the stuck path again (not read twice), a folder, a remote URL.
+    QSignalSpy probed(chooser.get(), &FileChooser::probed);
+    const int token = chooser->probe({QStringLiteral("file:///slowmnt/share"), QStringLiteral("file:///tmp"), QStringLiteral("smb://host/share")});
+    EXPECT_EQ(probed.count(), 0) << "never answered from inside the call";
+    ASSERT_TRUE(probed.wait(kSlowMs));
+    EXPECT_EQ(probed.at(0).at(0).toInt(), token);
+    const QVariantMap kinds = probed.at(0).at(1).toMap();
+    EXPECT_EQ(kinds.value("file:///slowmnt/share").toInt(), FileChooser::kNotResponding);
+    EXPECT_EQ(kinds.value("file:///tmp").toInt(), 2);
+    EXPECT_EQ(kinds.value("smb://host/share").toInt(), -1);
+    EXPECT_EQ(kSlowReads - readsBefore, 1) << "a stuck path is read once";
+
+    chooser->answer(quickId, 1);
+    chooser->answer(slowId, 1);
+    ASSERT_TRUE(waitFor([&] { return slow->done && quick->done; }));
+}
+
+// Beyond kMaxProbeThreads paths being read, a new path is not responding at once: stuck reads cannot pile up threads.
+TEST_F(FileChooserTest, StuckReadsAreBounded)
+{
+    const int readsBefore = kSlowReads;
+    QStringList urls;
+    for (int i = 0; i <= FileChooser::kMaxProbeThreads; ++i)
+        urls << QStringLiteral("file:///slowmnt/bounded-%1").arg(i);
+    QSignalSpy probed(chooser.get(), &FileChooser::probed);
+    chooser->probe(urls);
+    ASSERT_TRUE(probed.wait(kSlowMs));
+    const QVariantMap kinds = probed.at(0).at(1).toMap();
+    for (const QString &u : urls)
+        EXPECT_EQ(kinds.value(u).toInt(), FileChooser::kNotResponding) << qPrintable(u);
+    QTest::qWait(50);
+    EXPECT_EQ(kSlowReads - readsBefore, FileChooser::kMaxProbeThreads);
+}
+
+// What a local path names (integrator review of bd78424, MINOR 3): a dangling symbolic link is a file (saving over it asks
+// first), a link to a folder is a folder.
+TEST(PathKind, FilesFoldersAndLinks)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    QFile file(dir.filePath(QStringLiteral("file")));
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    file.close();
+    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("folder")));
+    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("missing")), dir.filePath(QStringLiteral("dangling"))));
+    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("folder")), dir.filePath(QStringLiteral("to-folder"))));
+    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("file"))), 1);
+    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("folder"))), 2);
+    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("dangling"))), 1);
+    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("to-folder"))), 2);
+    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("missing"))), 0);
 }
 
 TEST_F(FileChooserTest, GtkMissingEndsTheRequestWithAnError)
