@@ -4,9 +4,11 @@
 # open descriptors, loopback TCP connections), measures 101 samples of each tab back to back on the sampler's thread clock,
 # and compares each tab's median with its threshold. The fixture is stopped at the end, whatever happens.
 #
-#   tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only]
+#   tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only] [--model]
 #     defaults: 400 processes of 4 threads and 9 extra descriptors each, 100 TCP connections, 101 samples (A10's fixture;
-#     the other owners' processes are whatever this machine runs). --report-only prints the numbers and exits 0.
+#     the other owners' processes are whatever this machine runs). --report-only prints the numbers and exits 0. --model
+#     also builds probe A10 (docs/audits/activity-2026-10-28/sampcost.c) and runs it on the same fixture right after, and
+#     prints each tab's product/model ratio (the review of 949fc98 asks for about 1.1); the gate stays the thresholds.
 #   Exit 0 every tab within its threshold (or SKIP without g++), 1 a tab over, 2 usage or a refused run.
 #
 # Run as the user the app will run as, never as root: root reads every process's io and descriptors, which is not the
@@ -16,7 +18,7 @@ set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd "$root"
 
-processes=400 threads=4 fds=9 tcp=100 samples=101 report=0
+processes=400 threads=4 fds=9 tcp=100 samples=101 report=0 model=0
 while (($#)); do
   case $1 in
     --processes) processes=${2:?}; shift ;;
@@ -25,7 +27,8 @@ while (($#)); do
     --tcp) tcp=${2:?}; shift ;;
     --samples) samples=${2:?}; shift ;;
     --report-only) report=1 ;;
-    *) echo "usage: tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only]" >&2; exit 2 ;;
+    --model) model=1 ;;
+    *) echo "usage: tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only] [--model]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -36,6 +39,10 @@ declare -A limit=([cpu]=6 [memory]=10 [energy]=13 [disk]=7 [network]=7) # ms per
 
 apps/activity/build-direct.sh --bench >/dev/null || { echo "FAIL: building activity-sampler-bench"; exit 1; }
 bench=$root/.dev/build/activity-sampler-bench
+probe=$root/.dev/build/activity-sampcost
+if ((model)); then
+  gcc -O2 -o "$probe" docs/audits/activity-2026-10-28/sampcost.c -lpthread || { echo "FAIL: building probe A10"; exit 1; }
+fi
 
 pids=()
 cleanup() {
@@ -51,7 +58,7 @@ pids+=($!)
 pids+=($!)
 sleep 3
 
-echo "fixture: $processes processes of $threads threads and $fds extra descriptors, $tcp TCP connections; $(nproc) processors"
+echo "fixture: $processes processes of $threads threads and $fds extra descriptors, $tcp TCP connections; $(nproc) processors; soft RLIMIT_NOFILE $(ulimit -Sn) (the sampler and the probe raise it)"
 echo "machine: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//'), kernel $(uname -r)"
 out=$("$bench" measure --tab all --samples "$samples") || { echo "FAIL: the bench failed"; exit 1; }
 echo "$out"
@@ -68,5 +75,23 @@ while read -r line; do
     status=1
   fi
 done <<<"$out"
+if ((model)); then
+  modelOut=$("$probe" measure "$samples") || { echo "FAIL: probe A10 failed"; exit 1; }
+  echo "probe A10 on the same fixture:"
+  grep -E "raised|listed|could not be opened|^    (CPU|Memory|Disk|Energy|Network)" <<<"$modelOut"
+  declare -A modelMs=(
+    [cpu]=$(sed -n 's/^    CPU  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [memory]=$(sed -n 's/^    Memory (+ statm[^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [disk]=$(sed -n 's/^    Disk (+ io)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [energy]=$(sed -n 's/^    Energy ([^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+    [network]=$(sed -n 's/^    Network ([^)]*)  *\([0-9.]*\) ms.*/\1/p' <<<"$modelOut")
+  )
+  while read -r line; do
+    tab=$(sed -n 's/^tab \([a-z]*\):.*/\1/p' <<<"$line")
+    median=$(sed -n 's/.* median \([0-9.]*\) ms.*/\1/p' <<<"$line")
+    [[ -n $tab && -n $median && -n ${modelMs[$tab]:-} ]] || continue
+    awk -v t="$tab" -v p="$median" -v m="${modelMs[$tab]}" 'BEGIN { printf "ratio: %s product %.3f ms / model %.3f ms = %.2f\n", t, p, m, p / m }'
+  done <<<"$out"
+fi
 ((report)) && exit 0
 exit "$status"

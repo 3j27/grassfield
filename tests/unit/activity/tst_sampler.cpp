@@ -6,6 +6,7 @@
 #include "sampler.h"
 
 #include <algorithm>
+#include <filesystem>
 
 #include <unistd.h>
 
@@ -64,7 +65,8 @@ TEST(Sampler, OwnersNamesKindsAndTheKernelRow)
     f.process(3, "kworker/0:1", 0, 60, 2, "", "/", kPfKthread);
     // An own process whose name carries a right-to-left override and a control character.
     f.process(400, "evil", kMe, 0, 6000, nul({"/tmp/evil\u202Etxt.exe\x1b"}), user + "/app.slice/x.service");
-    f.process(500, "grassfield-shel", kMe, 0, 7000, nul({"/usr/bin/qs", "-p", "/usr/share/grassfield/shell"}), user + "/session.slice/grassfield-shell.service");
+    f.link("/tmp/evil\u202Etxt.exe\x1b", "proc/400/exe");
+    f.process(500, "qs", kMe, 0, 7000, nul({"/usr/bin/qs", "-p", "/usr/share/grassfield/shell"}), user + "/session.slice/grassfield-shell.service");
     Sampler s(options(f));
     const Snapshot snap = s.sample(ReadProcesses | ReadStatus | ReadCommand, 10.0);
 
@@ -112,6 +114,7 @@ TEST(Sampler, OwnersNamesKindsAndTheKernelRow)
     EXPECT_EQ(shell->kind, Kind::Session);
     EXPECT_FALSE(shell->efficiencyEligible);
     EXPECT_EQ(snap.counters.cmdlineReads, 3u); // the own processes only
+    EXPECT_EQ(snap.counters.cgroupReads, 3u);  // the own processes only: another owner's unit is never read (AD25)
 }
 
 TEST(Sampler, WithoutStatusTheDirectoryOwnerDecidesAndNoCmdlineIsReadForOthers)
@@ -163,14 +166,71 @@ TEST(Sampler, APidReusedIsAnotherProcess)
     Sampler s(options(f));
     s.sample(ReadProcesses, 1.0);
     // Same pid, another start time: another process (row identity, the spec's Terms).
-    f.process(100, "new", kMe, 10, 9000, nul({"/usr/bin/new"}), user + "/app.slice/y.service");
+    f.process(100, "new", kMe, 10, 9000, nul({"/usr/bin/new"}), user + "/app.slice/app-graphical.slice/app-Hyprland-new-1a2b3c4d.scope");
     const Snapshot snap = s.sample(ReadProcesses, 2.0);
     const ProcessRow *r = row(snap, 100);
     ASSERT_NE(r, nullptr);
     EXPECT_EQ(r->start, 9000u);
     EXPECT_EQ(r->name, "new");
-    EXPECT_LT(r->cpuPercent, 0); // no rate from the old process's ticks
-    EXPECT_EQ(r->cgroup, user + "/app.slice/y.service");
+    EXPECT_LT(r->cpuPercent, 0);   // no rate from the old process's ticks
+    EXPECT_EQ(r->kind, Kind::App); // its own unit, read again
+}
+
+TEST(Sampler, ANameFollowsAnExec)
+{
+    // sh -c 'sleep 1; exec sleep 30': the same pid and start time, another image (review of 949fc98).
+    Fixture f;
+    f.process(100, "sh", kMe, 1, 5000, nul({"sh", "-c", "sleep 1; exec sleep 30"}), user + "/app.slice/x.service");
+    f.link("/usr/bin/bash", "proc/100/exe");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand;
+    EXPECT_EQ(row(s.sample(reads, 1.0), 100)->name, "sh"); // argv[0] "sh" is stat's name: a symbolic link to bash
+    f.write("proc/100/stat", Fixture::statLine(100, "sleep", 'S', 1, 0, 1, 0, 1, 5000));
+    f.write("proc/100/cmdline", nul({"sleep", "30"}));
+    f.link("/usr/bin/sleep", "proc/100/exe");
+    const Snapshot snap = s.sample(reads, 2.0);
+    EXPECT_EQ(row(snap, 100)->name, "sleep");
+    EXPECT_EQ(row(snap, 100)->command, "sleep 30");
+    EXPECT_GE(row(snap, 100)->cpuPercent, 0); // the same process: its rate goes on
+}
+
+TEST(Sampler, AnExecThatKeepsStatsNameIsSeenByItsCodeAddresses)
+{
+    Fixture f;
+    f.process(100, "app", kMe, 1, 5000, nul({"/opt/v1/app"}), user + "/app.slice/x.service");
+    f.write("proc/100/stat", Fixture::statLine(100, "app", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x55550000));
+    f.link("/opt/v1/app", "proc/100/exe");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand;
+    EXPECT_EQ(row(s.sample(reads, 1.0), 100)->command, "/opt/v1/app");
+    const Snapshot same = s.sample(reads, 2.0); // nothing changed: nothing read again
+    EXPECT_EQ(same.counters.cmdlineReads, 0u);
+    EXPECT_EQ(same.counters.exeLinks, 0u);
+    f.write("proc/100/stat", Fixture::statLine(100, "app", 'S', 1, 0, 1, 0, 1, 5000, 0, 0x56660000)); // a new image
+    f.write("proc/100/cmdline", nul({"/opt/v2/app", "--new"}));
+    f.link("/opt/v2/app", "proc/100/exe");
+    const Snapshot snap = s.sample(reads, 3.0);
+    EXPECT_EQ(row(snap, 100)->command, "/opt/v2/app --new");
+    EXPECT_EQ(snap.counters.exeLinks, 1u);
+}
+
+TEST(Sampler, ATitleWrittenOverArgv0NeverNamesTheProcess)
+{
+    // Chromium's and Electron's helpers write a title over argv[0] (review of 949fc98).
+    Fixture f;
+    f.process(100, "chrome", kMe, 1, 5000,
+              nul({"/usr/lib/fakechrome/chrome --type=renderer --user-data-dir=/home/u/.config/myapp --lang=en-US"}),
+              user + "/app.slice/x.service");
+    f.link("/usr/lib/fakechrome/chrome", "proc/100/exe");
+    f.process(101, "bash", kMe, 1, 5000, nul({"-bash"}), user + "/app.slice/x.service"); // a login shell
+    f.link("/usr/bin/bash", "proc/101/exe");
+    f.process(102, "python3", kMe, 1, 5000, nul({"/usr/bin/python3", "tool.py"}), user + "/app.slice/x.service");
+    f.link("/usr/bin/python3.13", "proc/102/exe"); // python3 is a symbolic link: the invoked name stays
+    Sampler s(options(f));
+    const Snapshot snap = s.sample(ReadProcesses | ReadStatus, 1.0);
+    EXPECT_EQ(row(snap, 100)->name, "chrome");
+    EXPECT_EQ(row(snap, 101)->name, "bash");
+    EXPECT_EQ(row(snap, 102)->name, "python3");
 }
 
 TEST(Sampler, AProcessThatEndsGoesAndItsDescriptorsClose)
@@ -324,7 +384,66 @@ TEST(Sampler, DescriptorsAreReadInTurnsOfTenAndClassified)
     for (int i = 1; i < 10; ++i) {
         const Snapshot snap = s.sample(reads, static_cast<double>(i));
         EXPECT_EQ(snap.counters.fdListReads, 1u) << i; // one tenth of the ten processes
-        EXPECT_EQ(snap.counters.cgroupReads, 1u) << i; // its unit read again in its turn
+        EXPECT_EQ(snap.counters.cgroupReads, 1u) << i; // its unit read again in its first turns
+    }
+    for (int i = 10; i < 30; ++i)
+        s.sample(reads, static_cast<double>(i));
+    EXPECT_EQ(s.sample(reads, 30.0).counters.cgroupReads, 0u); // after two turns, never again
+}
+
+TEST(Sampler, TheOwnerIsReadOnArrivalAfterAnExecAndInItsTurn)
+{
+    // Not six hundred fstatat a sample (review of 949fc98): a process's directory owner when it is first seen, after an
+    // exec, and in its turn, a tenth of the processes per sample.
+    Fixture f;
+    for (int pid = 100; pid < 110; ++pid)
+        f.process(pid, "o", kMe, 0, 1, nul({"o"}), "/");
+    Options o = options(f);
+    o.descriptorTurns = 10;
+    Sampler s(o);
+    EXPECT_EQ(s.sample(ReadProcesses, 0.0).counters.ownerStats, 10u);
+    for (int i = 1; i <= 9; ++i)
+        EXPECT_EQ(s.sample(ReadProcesses, static_cast<double>(i)).counters.ownerStats, 1u) << i;
+    f.write("proc/105/stat", Fixture::statLine(105, "other", 'S', 1, 0, 0, 0, 1, 1)); // an exec
+    const Snapshot snap = s.sample(ReadProcesses, 10.0);
+    EXPECT_EQ(snap.counters.ownerStats, 2u); // its turn's process and the one that exec'd
+    EXPECT_EQ(row(snap, 105)->name, "other");
+}
+
+TEST(Sampler, AKernelThreadsNewNameIsNoExec)
+{
+    Fixture f;
+    f.process(3, "kworker/0:1", 0, 10, 2, "", "/", kPfKthread);
+    Sampler s(options(f));
+    EXPECT_EQ(s.sample(ReadProcesses, 0.0).counters.ownerStats, 0u); // a kernel thread's owner is root: never looked up
+    f.write("proc/3/stat", Fixture::statLine(3, "kworker/0:1-events", 'I', 0, kPfKthread, 20, 0, 1, 2));
+    const Snapshot snap = s.sample(ReadProcesses, 1.0);
+    EXPECT_EQ(snap.counters.ownerStats, 0u);
+    EXPECT_EQ(snap.counters.cmdlineReads, 0u);
+    EXPECT_EQ(snap.kernel.threads, 1);
+    EXPECT_DOUBLE_EQ(snap.kernel.cpuPercent, 10.0); // the same thread, its rate goes on
+}
+
+TEST(Sampler, TheTurnsAreAsFullWhateverThePids)
+{
+    // Twenty processes whose pids are all multiples of ten: turns by pid would read all twenty at one sample and none at
+    // the nine others (review of 949fc98); by place of arrival, two each time.
+    Fixture f;
+    for (int i = 0; i < 20; ++i) {
+        const int pid = 3000 + 10 * i;
+        f.process(pid, "d", kMe, 1, 1, nul({"d"}), "/");
+        f.write("proc/" + std::to_string(pid) + "/task/" + std::to_string(pid) + "/status", Fixture::statusText("d", kMe, 1, 0, 1));
+    }
+    Options o = options(f);
+    o.descriptorTurns = 10;
+    o.threadTurns = 5;
+    Sampler s(o);
+    const unsigned reads = ReadProcesses | ReadStatus | ReadDescriptors | ReadThreads;
+    s.sample(reads, 0.0);
+    for (int i = 1; i <= 10; ++i) {
+        const Snapshot snap = s.sample(reads, static_cast<double>(i));
+        EXPECT_EQ(snap.counters.fdListReads, 2u) << i;
+        EXPECT_EQ(snap.counters.threadStatusReads, 4u) << i;
     }
 }
 
@@ -357,6 +476,7 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     const Snapshot snap = s.sample(reads, 2.0);
     const ProcessRow *game = row(snap, 100);
     ASSERT_TRUE(game->hasGpu);
+    EXPECT_EQ(game->gpuDevices, std::vector<std::string>{"0000:00:02.0"}); // Processes, by GPU (AM49)
     EXPECT_DOUBLE_EQ(game->gpuPercent, 50.0); // the busiest engine (AM46)
     EXPECT_EQ(game->gpuNs, 1500000000u);       // every engine's time
     EXPECT_DOUBLE_EQ(row(snap, 200)->gpuPercent, 30.0);
@@ -408,6 +528,157 @@ TEST(Sampler, UserAndSystemAsMacOSMeansThem)
     EXPECT_DOUBLE_EQ(hidden.system.systemShare, 0.1);
     EXPECT_TRUE(hidden.rows.empty());
     EXPECT_EQ(hidden.counters.statReads, 0u);
+}
+
+TEST(Sampler, TheUserShareIsNeverAboveTheBusyShare)
+{
+    // The user's processes' ticks and /proc/stat's are read a moment apart: their ratio can pass what /proc/stat counted
+    // busy. User is capped there, System at 0 (AM29).
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    f.write("proc/stat", "cpu  1000 0 1000 8000 0 0 0 0 0 0\ncpu0 1000 0 1000 8000 0 0 0 0 0 0\n");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadSystemCpu;
+    s.sample(reads, 1.0);
+    f.write("proc/stat", "cpu  1100 0 1000 8900 0 0 0 0 0 0\ncpu0 1100 0 1000 8900 0 0 0 0 0 0\n"); // 100 busy of 1000
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 250, 0, 1, 1));       // 150 of the user's
+    const Snapshot snap = s.sample(reads, 11.0);
+    ASSERT_TRUE(snap.system.sharesByOwner);
+    EXPECT_DOUBLE_EQ(snap.system.userShare, 0.1);
+    EXPECT_DOUBLE_EQ(snap.system.systemShare, 0.0);
+}
+
+TEST(Sampler, TheClockTickIsTheMachines)
+{
+    Fixture f;
+    f.process(100, "busy", kMe, 0, 1, nul({"busy"}), "/");
+    Options o = options(f);
+    o.clockTicks = 250;
+    Sampler s(o);
+    s.sample(ReadProcesses, 1.0);
+    f.write("proc/100/stat", Fixture::statLine(100, "busy", 'R', 1, 0, 250, 0, 1, 1));
+    EXPECT_DOUBLE_EQ(row(s.sample(ReadProcesses, 3.0), 100)->cpuPercent, 50.0); // 250 ticks in 2 s at 250 a second
+}
+
+TEST(Sampler, MemoryColumnsFromStatus)
+{
+    Fixture f;
+    f.process(100, "m", kMe, 0, 1, nul({"m"}), "/");
+    f.write("proc/100/status", Fixture::statusText("m", kMe, 3000, 700)); // RssAnon 3000, VmSwap 700, RssFile 4000, RssShmem 1000 kB
+    Sampler s(options(f));
+    const ProcessRow r = *row(s.sample(ReadProcesses | ReadStatus, 1.0), 100);
+    EXPECT_EQ(r.memory, (3000u + 700u) * 1024);      // AM30: RssAnon + VmSwap
+    EXPECT_EQ(r.privateMemory, 3000u * 1024);        // AM31: RssAnon
+    EXPECT_EQ(r.sharedMemory, (4000u + 1000u) * 1024); // AM31: RssFile + RssShmem
+    EXPECT_EQ(r.swapped, 700u * 1024);
+    EXPECT_EQ(r.realMemory, (3000u + 5000u) * 1024); // VmRSS
+}
+
+TEST(Sampler, TheMemoryTabReadsStatmAndStatusInTurns)
+{
+    // AD32: statm every sample (resident - shared = RssAnon), VmSwap and VmHWM from status, a fifth of the processes per
+    // sample and every new one at once.
+    Fixture f;
+    for (int pid = 100; pid < 110; ++pid) {
+        f.process(pid, "m", kMe, 0, 1, nul({"m"}), "/");
+        f.write("proc/" + std::to_string(pid) + "/status", Fixture::statusText("m", kMe, 3000, 700));
+        f.write("proc/" + std::to_string(pid) + "/statm", "50000 2000 750 10 0 900 0\n"); // pages
+    }
+    Options o = options(f);
+    o.pageSize = 4096;
+    Sampler s(o);
+    const unsigned reads = readsForTab(Tab::Memory);
+    const Snapshot first = s.sample(reads, 1.0);
+    EXPECT_EQ(first.counters.statusReads, 10u);
+    EXPECT_EQ(first.counters.statmReads, 10u);
+    const ProcessRow r = *row(first, 100);
+    ASSERT_TRUE(r.hasMemory);
+    EXPECT_EQ(r.realMemory, 2000u * 4096);
+    EXPECT_EQ(r.sharedMemory, 750u * 4096);
+    EXPECT_EQ(r.privateMemory, 1250u * 4096);
+    EXPECT_EQ(r.swapped, 700u * 1024);
+    EXPECT_EQ(r.memory, 1250u * 4096 + 700u * 1024); // AM30: RssAnon + VmSwap
+    EXPECT_EQ(r.peakMemory, 9000u * 1024);           // VmHWM, never below the resident set read since
+    EXPECT_EQ(r.virtualMemory, 50000u * 4096);
+    for (int i = 2; i <= 6; ++i) {
+        const Snapshot snap = s.sample(reads, static_cast<double>(i));
+        EXPECT_EQ(snap.counters.statusReads, 2u) << i; // a fifth of the ten
+        EXPECT_EQ(snap.counters.statmReads, 10u) << i;
+    }
+    // Swap grows: seen at the process's next status turn, within five samples.
+    for (int pid = 100; pid < 110; ++pid)
+        f.write("proc/" + std::to_string(pid) + "/status", Fixture::statusText("m", kMe, 3000, 900));
+    for (int i = 7; i <= 11; ++i)
+        s.sample(reads, static_cast<double>(i));
+    for (const ProcessRow &x : s.sample(reads, 12.0).rows)
+        EXPECT_EQ(x.swapped, 900u * 1024) << x.pid;
+}
+
+TEST(Sampler, ACounterThatWentBackGivesNoRate)
+{
+    Fixture f;
+    f.process(100, "w", kMe, 0, 1, nul({"w"}), "/");
+    f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 5000\nwrite_bytes: 5000\ncancelled_write_bytes: 0\n");
+    Sampler s(options(f));
+    s.sample(ReadProcesses | ReadStatus | ReadIo, 1.0);
+    f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 1000\nwrite_bytes: 6000\ncancelled_write_bytes: 0\n");
+    const ProcessRow r = *row(s.sample(ReadProcesses | ReadStatus | ReadIo, 2.0), 100);
+    EXPECT_LT(r.readRate, 0); // "—", not a wrapped number
+    EXPECT_DOUBLE_EQ(r.writeRate, 1000.0);
+}
+
+namespace
+{
+std::vector<TcpCounters> fakeTcp;
+bool fakeTcpOk = true;
+bool fakeDump(std::vector<TcpCounters> &out)
+{
+    if (!fakeTcpOk)
+        return false;
+    out = fakeTcp;
+    return true;
+}
+} // namespace
+
+TEST(Sampler, AFailedTcpDumpChangesNoTotal)
+{
+    // One failed dump (EMFILE) read as "every socket closed" doubled the totals once the sockets came back (review of
+    // 949fc98): 100001 became 200002.
+    Fixture f;
+    f.process(100, "net", kMe, 0, 1, nul({"net"}), "/");
+    f.link("socket:[4242]", "proc/100/fd/3");
+    Options o = options(f);
+    o.descriptorTurns = 1;
+    o.tcpDump = fakeDump;
+    fakeTcp = {TcpCounters{4242, kMe, 100001, 50, 10, 5}};
+    fakeTcpOk = true;
+    Sampler s(o);
+    const unsigned reads = ReadProcesses | ReadStatus | ReadDescriptors | ReadSockets;
+    EXPECT_EQ(row(s.sample(reads, 1.0), 100)->tcpSent, 100001u);
+    fakeTcpOk = false;
+    EXPECT_EQ(row(s.sample(reads, 2.0), 100)->tcpSent, 100001u);
+    fakeTcpOk = true;
+    EXPECT_EQ(row(s.sample(reads, 3.0), 100)->tcpSent, 100001u);
+    fakeTcp.clear(); // the socket closed: its bytes stay with the process (AM43)
+    EXPECT_EQ(row(s.sample(reads, 4.0), 100)->tcpSent, 100001u);
+}
+
+TEST(Sampler, AFailedListingWipesNothing)
+{
+    Fixture f;
+    f.process(100, "a", kMe, 0, 1, nul({"a"}), "/");
+    Sampler s(options(f));
+    s.sample(ReadProcesses | ReadStatus, 1.0);
+    std::filesystem::rename(f.proc(), f.proc() + "-gone"); // /proc cannot be listed
+    const Snapshot stale = s.sample(ReadProcesses | ReadStatus, 2.0);
+    EXPECT_TRUE(stale.processesStale);
+    ASSERT_EQ(stale.rows.size(), 1u); // the previous sample's rows
+    EXPECT_EQ(stale.rows[0].name, "a");
+    std::filesystem::rename(f.proc() + "-gone", f.proc());
+    f.write("proc/100/stat", Fixture::statLine(100, "a", 'R', 1, 0, 100, 0, 1, 1));
+    const Snapshot back = s.sample(ReadProcesses | ReadStatus, 3.0);
+    EXPECT_FALSE(back.processesStale);
+    EXPECT_DOUBLE_EQ(row(back, 100)->cpuPercent, 50.0); // its state was kept: a rate over the 2 s since the last good read
 }
 
 TEST(Sampler, WholePhysicalDisksAndInterfacesButLo)

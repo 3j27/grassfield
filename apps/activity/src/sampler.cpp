@@ -69,7 +69,7 @@ unsigned readsForTab(Tab tab)
     case Tab::Cpu:
         return ReadProcesses | ReadDescriptors | ReadGpu | ReadSystemCpu;
     case Tab::Memory:
-        return ReadProcesses | ReadStatus | ReadSystemMemory;
+        return ReadProcesses | ReadMemory | ReadSystemMemory;
     case Tab::Energy:
         return ReadProcesses | ReadIo | ReadThreads | ReadDescriptors | ReadGpu | ReadSystemCpu;
     case Tab::Disk:
@@ -86,6 +86,8 @@ Options defaultOptions()
     o.uid = getuid();
     const long tick = sysconf(_SC_CLK_TCK);
     o.clockTicks = tick > 0 ? tick : 100;
+    const long page = sysconf(_SC_PAGESIZE);
+    o.pageSize = page > 0 ? page : 4096;
     std::string defs;
     if (FILE *f = std::fopen("/etc/login.defs", "re")) {
         char chunk[4096];
@@ -137,20 +139,28 @@ PressureLevel pressureLevel(const Meminfo &m, const Pressure &p)
 
 Sampler::Sampler(Options options)
     : opt_(std::move(options))
+    , io_(new char[kBufSize]) // default-initialized: a 64 KiB clear at every read was most of a sample's cost (review of 949fc98)
 {
-    buf_.resize(kBufSize);
     if (opt_.threadTurns < 1)
         opt_.threadTurns = 1;
     if (opt_.descriptorTurns < 1)
         opt_.descriptorTurns = 1;
+    if (opt_.statusTurns < 1)
+        opt_.statusTurns = 1;
+    if (opt_.pageSize <= 0)
+        opt_.pageSize = 4096;
     if (opt_.clockTicks <= 0)
         opt_.clockTicks = 100;
+    if (!opt_.tcpDump)
+        opt_.tcpDump = dumpTcpSockets;
 }
 
 Sampler::~Sampler()
 {
     for (auto &[pid, p] : procs_)
         closeProc(p);
+    if (procFd_ >= 0)
+        close(procFd_);
 }
 
 void Sampler::setWindowOwners(std::unordered_set<int> pids)
@@ -158,29 +168,32 @@ void Sampler::setWindowOwners(std::unordered_set<int> pids)
     windowOwners_ = std::move(pids);
 }
 
-std::string Sampler::procPath(int pid, const char *file) const
+// "<procRoot>/<pid>/<file>" in path_, whose capacity stays: no allocation once the first path was built.
+const std::string &Sampler::procPath(int pid, const char *file)
 {
-    std::string s = opt_.procRoot;
-    s += '/';
-    s += std::to_string(pid);
+    char digits[16];
+    const int n = std::snprintf(digits, sizeof digits, "%d", pid);
+    path_.assign(opt_.procRoot);
+    path_ += '/';
+    path_.append(digits, static_cast<size_t>(n));
     if (file && *file) {
-        s += '/';
-        s += file;
+        path_ += '/';
+        path_ += file;
     }
-    return s;
+    return path_;
 }
 
-// Reads `path` into buf_ (its size set to the bytes read) through a kept descriptor when the budget allows (AD10, A10: a
-// pread at offset 0 of an open /proc file costs less than an open, a read and a close). A kept descriptor of a process that
-// ended fails its read (ESRCH): it is closed and false returned, so a pid reused since is never read through it.
-bool Sampler::readKept(int &fd, const std::string &path, std::string &buf, uint64_t &counter)
+// Reads /proc/<pid>/<file> into io_ (`out` views the bytes read) through a kept descriptor when the budget allows (AD10,
+// A10: a pread at offset 0 of an open /proc file costs less than an open, a read and a close). A kept descriptor of a
+// process that ended fails its read (ESRCH): it is closed and false returned, so a pid reused since is never read through
+// it. Nothing is cleared or copied: the parsers look at the bytes read only.
+bool Sampler::readKept(int &fd, int pid, const char *file, std::string_view &out, uint64_t &counter)
 {
-    buf.resize(kBufSize);
     ++counter;
     if (fd >= 0) {
-        const ssize_t n = pread(fd, buf.data(), buf.size(), 0);
+        const ssize_t n = pread(fd, io_.get(), kBufSize, 0);
         if (n > 0) {
-            buf.resize(static_cast<size_t>(n));
+            out = std::string_view(io_.get(), static_cast<size_t>(n));
             return true;
         }
         close(fd);
@@ -188,15 +201,15 @@ bool Sampler::readKept(int &fd, const std::string &path, std::string &buf, uint6
         --kept_;
         return false;
     }
-    const int f = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    const int f = open(procPath(pid, file).c_str(), O_RDONLY | O_CLOEXEC);
     if (f < 0)
         return false;
-    const ssize_t n = read(f, buf.data(), buf.size());
+    const ssize_t n = read(f, io_.get(), kBufSize);
     if (n <= 0) {
         close(f);
         return false;
     }
-    buf.resize(static_cast<size_t>(n));
+    out = std::string_view(io_.get(), static_cast<size_t>(n));
     if (kept_ < opt_.maxKeptFiles) {
         fd = f;
         ++kept_;
@@ -206,26 +219,42 @@ bool Sampler::readKept(int &fd, const std::string &path, std::string &buf, uint6
     return true;
 }
 
-bool Sampler::readFile(const std::string &path, std::string &buf)
+// `oneRecord`: a per-process file the kernel writes whole at each read (cmdline, cgroup, fdinfo): a read that does not fill
+// the buffer had all of it, and no second read is made to see the end (one system call less per file, review of 949fc98).
+// The system files are lists the kernel hands out a page at a time: they are read to the end.
+bool Sampler::readFile(const std::string &path, std::string &buf, bool oneRecord)
 {
-    buf.clear();
     const int f = open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (f < 0)
         return false;
-    char chunk[8192];
+    buf.clear();
     for (;;) {
-        const ssize_t n = read(f, chunk, sizeof chunk);
+        const ssize_t n = read(f, io_.get(), kBufSize);
         if (n < 0) {
             close(f);
             return false;
         }
         if (n == 0)
             break;
-        buf.append(chunk, static_cast<size_t>(n));
-        if (buf.size() > (1u << 20)) // no /proc file the monitor reads is this long: stop rather than grow without end
+        buf.append(io_.get(), static_cast<size_t>(n));
+        if ((oneRecord && static_cast<size_t>(n) < kBufSize) || buf.size() > (1u << 20)) // no file it reads is this long
             break;
     }
     close(f);
+    return true;
+}
+
+// One read of a small file under the directory `dir` (a thread's status): openat, as A10 does, no path built.
+bool Sampler::readAt(int dir, const char *name, std::string &buf)
+{
+    const int f = openat(dir, name, O_RDONLY | O_CLOEXEC);
+    if (f < 0)
+        return false;
+    const ssize_t n = read(f, io_.get(), kBufSize);
+    close(f);
+    if (n <= 0)
+        return false;
+    buf.assign(io_.get(), static_cast<size_t>(n));
     return true;
 }
 
@@ -241,25 +270,81 @@ void Sampler::closeProc(Proc &p)
         p.statusFd = -1;
         --kept_;
     }
+    if (p.ioFd >= 0) {
+        close(p.ioFd);
+        p.ioFd = -1;
+        --kept_;
+    }
+    if (p.statmFd >= 0) {
+        close(p.statmFd);
+        p.statmFd = -1;
+        --kept_;
+    }
+}
+
+// Names a process (AM17) when it is first seen and again after an exec (stat's name or the exe link changed; review of
+// 949fc98): another owner by stat's name only (AD25); one of the user's own from its argv[0], its stat name and its
+// executable (processName), its command line read again.
+void Sampler::identify(int pid, Proc &p, bool own, unsigned reads, const std::string &comm, Counters &c)
+{
+    p.comm = comm;
+    p.command.clear();
+    p.haveCommand = false;
+    if (!own) {
+        p.exe.clear();
+        p.name = sanitizeDisplay(comm);
+        return;
+    }
+    ++c.exeLinks;
+    char target[4096];
+    const ssize_t n = readlink(procPath(pid, "exe").c_str(), target, sizeof target - 1);
+    p.exe.assign(target, n > 0 ? static_cast<size_t>(n) : 0);
+    std::string argv0;
+    ++c.cmdlineReads;
+    if (readFile(procPath(pid, "cmdline"), buf_, true)) {
+        argv0 = cmdlineFirstWord(buf_);
+        if (reads & ReadCommand) {
+            p.command = sanitizeDisplay(cmdlineJoined(buf_));
+            p.haveCommand = true;
+        }
+    }
+    p.name = sanitizeDisplay(processName(argv0, comm, p.exe));
+}
+
+// The user's own process's unit (AM54, AM65, AM68): read when it is first seen and again in its descriptor turn (moved
+// into a scope); what the rows need of it is kept, the path itself never leaves the sampler.
+void Sampler::readCgroup(int pid, Proc &p, Counters &c)
+{
+    ++c.cgroupReads;
+    if (!readFile(procPath(pid, "cgroup"), buf_, true))
+        return;
+    std::string path = parseCgroupV2(buf_);
+    if (path == p.cgroup && !p.cgroup.empty())
+        return;
+    p.cgroup = std::move(path);
+    p.kindAlone = classify(p.cgroup, true, false, false);
+    p.kindWithWindow = classify(p.cgroup, true, false, true);
+    p.sessionUnit = isSessionProcess(p.cgroup);
+    p.eligible = efficiencyEligible(p.cgroup);
 }
 
 void Sampler::readThreads(int pid, Proc &p, double now, Counters &c)
 {
-    const std::string dir = procPath(pid, "task");
-    DIR *d = opendir(dir.c_str());
+    DIR *d = opendir(procPath(pid, "task").c_str());
     if (!d)
         return;
     uint64_t sum = 0;
-    std::string tbuf;
+    char name[sizeof(dirent::d_name) + 8];
     while (dirent *e = readdir(d)) {
         if (!isNumeric(e->d_name))
             continue;
         ++c.threadStatusReads;
-        if (!readFile(dir + '/' + e->d_name + "/status", tbuf))
+        std::snprintf(name, sizeof name, "%s/status", e->d_name);
+        if (!readAt(dirfd(d), name, buf_))
             continue;
-        StatusFields st;
-        if (parseStatus(tbuf, st) && st.hasCtx)
-            sum += st.voluntaryCtx;
+        uint64_t switches = 0;
+        if (parseVoluntarySwitches(buf_, switches))
+            sum += switches;
     }
     closedir(d);
     // A thread that ended takes its switches with it: a sum below the last one gives no rate this turn, the baseline moves.
@@ -272,18 +357,12 @@ void Sampler::readThreads(int pid, Proc &p, double now, Counters &c)
 
 void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
 {
-    const std::string dir = procPath(pid, "fd");
-    DIR *d = opendir(dir.c_str());
+    DIR *d = opendir(procPath(pid, "fd").c_str());
     ++c.fdListReads;
     if (!d) {
         p.scanned = true; // refused (non-dumpable): "—", and the turn comes again
         p.openFiles = -1;
         return;
-    }
-    for (uint64_t inode : p.sockets) {
-        auto it = socketOwner_.find(inode);
-        if (it != socketOwner_.end() && it->second == pid)
-            socketOwner_.erase(it);
     }
     p.sockets.clear();
     p.drmFds.clear();
@@ -300,10 +379,8 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
         target[n] = '\0';
         if (std::strncmp(target, "socket:[", 8) == 0) {
             const uint64_t inode = std::strtoull(target + 8, nullptr, 10);
-            if (inode) {
+            if (inode)
                 p.sockets.push_back(inode);
-                socketOwner_[inode] = pid;
-            }
         } else if (std::strncmp(target, "/dev/dri/", 9) == 0) {
             p.drmFds.push_back(std::atoi(e->d_name));
         }
@@ -322,9 +399,10 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
     bool any = false;
     const double dt = p.haveGpu ? now - p.gpuTime : 0;
     std::string fbuf;
+    std::vector<std::string> pdevs;
     for (int fd : p.drmFds) {
         ++c.fdinfoReads;
-        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf))
+        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true))
             continue;
         DrmClient client;
         if (!parseDrmFdinfo(fbuf, client) || client.engineNs.empty())
@@ -333,6 +411,8 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
         if (!clientsSeen.insert(key).second)
             continue; // the same client through another descriptor (or a process that shares it)
         any = true;
+        if (std::find(pdevs.begin(), pdevs.end(), client.pdev) == pdevs.end())
+            pdevs.push_back(client.pdev);
         GpuDevice &dev = devices[client.pdev];
         dev.pdev = client.pdev;
         dev.driver = client.driver;
@@ -358,8 +438,11 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
         p.gpuPercent = -1;
         p.engineNs.clear();
         p.enginePercent.clear();
+        p.gpuDevices.clear();
         return;
     }
+    std::sort(pdevs.begin(), pdevs.end());
+    p.gpuDevices = std::move(pdevs);
     double busiest = p.haveGpu ? 0.0 : -1.0;
     for (const auto &[k, share] : perEngine)
         busiest = std::max(busiest, std::min(share, 100.0));
@@ -371,81 +454,124 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
     p.haveGpu = true;
 }
 
-Snapshot Sampler::sample(unsigned reads)
+const Snapshot &Sampler::sample(unsigned reads)
 {
     return sample(reads, monotonicNow());
 }
 
-Snapshot Sampler::sample(unsigned reads, double now)
+const Snapshot &Sampler::sample(unsigned reads, double now)
 {
     const double cpu0 = threadCpuMs();
-    Snapshot s;
+    Snapshot &s = snap_;
+    s.system = SystemSnapshot{};
+    s.gpus.clear();
+    s.energyImpact = -1;
+    s.counters = Counters{};
+    s.processesStale = false;
     Counters &c = s.counters;
     uint64_t ownDelta = 0;
-    bool ownDeltaKnown = false;
     std::map<std::string, GpuDevice> devices;
     std::unordered_set<std::string> clientsSeen;
 
-    if (reads & ReadProcesses) {
-        ownDeltaKnown = true;
-        std::vector<std::pair<int, uint32_t>> listing;
-        listing.reserve(procs_.size() + 64);
-        if (DIR *d = opendir(opt_.procRoot.c_str())) {
+    bool listed = false;
+    if (!(reads & ReadProcesses)) {
+        s.rows.clear(); // not asked for: no rows (the Dock's graph while the window is hidden, AM8)
+        s.kernel = KernelRow{};
+    } else {
+        listing_.clear();
+        if (procFd_ < 0)
+            procFd_ = open(opt_.procRoot.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (DIR *d = procFd_ >= 0 ? opendir(opt_.procRoot.c_str()) : nullptr) {
             while (dirent *e = readdir(d)) {
                 if (!isNumeric(e->d_name))
                     continue;
-                struct stat st{};
-                if (fstatat(dirfd(d), e->d_name, &st, 0) != 0)
-                    continue;
-                listing.emplace_back(std::atoi(e->d_name), static_cast<uint32_t>(st.st_uid));
+                int pid = 0;
+                for (const char *ch = e->d_name; *ch; ++ch)
+                    pid = pid * 10 + (*ch - '0');
+                listing_.push_back(pid);
             }
             closedir(d);
+            listed = true;
+        } else {
+            // A failed listing (out of descriptors, /proc gone) wipes nothing: the previous rows, the Kernel row and every
+            // process's state stay until a listing succeeds (review of 949fc98).
+            s.processesStale = true;
         }
-        c.listed = listing.size();
-        s.system.processes = static_cast<int>(listing.size());
-        std::sort(listing.begin(), listing.end());
-        std::unordered_set<int> present;
-        present.reserve(listing.size());
+    }
+
+    if (listed) {
+        const uint64_t mark = index_ + 1;
+        c.listed = listing_.size();
+        s.system.processes = static_cast<int>(listing_.size());
+        if (!std::is_sorted(listing_.begin(), listing_.end())) // /proc lists pids in increasing order
+            std::sort(listing_.begin(), listing_.end());
+        s.rows.clear();
+        s.rows.reserve(listing_.size());
+        s.kernel = KernelRow{};
         double kernelPercent = 0;
         bool kernelKnown = false;
 
-        for (const auto &[pid, dirUid] : listing) {
-            auto found = procs_.find(pid);
-            bool fresh = found == procs_.end();
-            Proc &p = procs_[pid];
-            if (!readKept(p.statFd, procPath(pid, "stat"), buf_, c.statReads)) {
+        for (const int pid : listing_) {
+            auto [it, fresh] = procs_.try_emplace(pid);
+            Proc &p = it->second;
+            std::string_view text; // views io_: parsed before the next read
+            if (!readKept(p.statFd, pid, "stat", text, c.statReads)) {
                 if (fresh) {
-                    procs_.erase(pid);
+                    procs_.erase(it);
                     continue;
                 }
                 // The kept descriptor's process ended; the pid may have a new one.
                 closeProc(p);
                 p = Proc{};
                 fresh = true;
-                if (!readKept(p.statFd, procPath(pid, "stat"), buf_, c.statReads)) {
-                    procs_.erase(pid);
+                if (!readKept(p.statFd, pid, "stat", text, c.statReads)) {
+                    procs_.erase(it);
                     continue;
                 }
             }
             StatFields st;
-            if (!parseStat(buf_, st)) {
+            if (!parseStat(text, st, fresh || p.dirUid == opt_.uid)) { // code addresses: 0 for others (not traceable)
                 closeProc(p);
-                procs_.erase(pid);
+                procs_.erase(it);
                 continue;
             }
             if (!fresh && st.starttime != p.start) { // a pid reused, read by path: another process
                 closeProc(p);
                 p = Proc{};
                 fresh = true;
-                readKept(p.statFd, procPath(pid, "stat"), buf_, c.statReads);
-                if (!parseStat(buf_, st)) {
-                    procs_.erase(pid);
+                if (!readKept(p.statFd, pid, "stat", text, c.statReads) || !parseStat(text, st)) {
+                    closeProc(p);
+                    procs_.erase(it);
                     continue;
                 }
             }
-            p.start = st.starttime;
+            if (fresh)
+                p.turn = nextTurn_++;
             p.kthread = (st.flags & kPfKthread) != 0;
-            present.insert(pid);
+            // A kernel thread's name changes with its work ("kworker/0:1-events"): never an exec, and its owner is root.
+            const bool exec = !fresh && !p.kthread
+                && (st.comm != p.comm || (st.startCode && (st.startCode != p.startCode || st.endCode != p.endCode)));
+            // The owner from the directory: read when the process is first seen, after an exec and in its turn (a tenth
+            // per sample, for a process that changed its uid without one), not at every sample (review of 949fc98: six
+            // hundred fstatat a sample, a fifth of the CPU tab's cost).
+            if (!p.kthread
+                && (fresh || exec || index_ % static_cast<uint64_t>(opt_.descriptorTurns) == p.turn % static_cast<uint64_t>(opt_.descriptorTurns))) {
+                char name[16];
+                std::snprintf(name, sizeof name, "%d", pid);
+                struct stat dirStat{};
+                ++c.ownerStats;
+                if (fstatat(procFd_, name, &dirStat, 0) != 0) {
+                    closeProc(p);
+                    procs_.erase(it);
+                    continue;
+                }
+                if (!fresh && p.dirUid != static_cast<uint32_t>(dirStat.st_uid))
+                    p.uidKnown = false; // read the real uid again (status) when the directory says root
+                p.dirUid = static_cast<uint32_t>(dirStat.st_uid);
+            }
+            const uint32_t dirUid = p.dirUid;
+            p.seen = mark;
+            p.start = st.starttime;
             const uint64_t ticks = st.utime + st.stime;
             double percent = -1;
             const double cpuSeconds = now - p.ticksTime;
@@ -467,11 +593,20 @@ Snapshot Sampler::sample(unsigned reads, double now)
 
             // The owner: the real uid of status when it is read; else the directory's owner (the effective uid), except
             // that a directory owned by root may hide a non-dumpable process of anyone: status tells (the spec's Terms).
+            // The Memory tab reads status in turns (AD32): VmSwap and VmHWM change slowly, statm gives the rest each sample.
             StatusFields status;
             bool haveStatus = false;
-            if ((reads & ReadStatus) || (dirUid == 0 && !p.uidKnown)) {
-                if (readKept(p.statusFd, procPath(pid, "status"), buf_, c.statusReads))
-                    haveStatus = parseStatus(buf_, status);
+            const bool memoryTurn = (reads & ReadMemory)
+                && (!p.haveSwap || index_ % static_cast<uint64_t>(opt_.statusTurns) == p.turn % static_cast<uint64_t>(opt_.statusTurns));
+            if ((reads & ReadStatus) || memoryTurn || (dirUid == 0 && !p.uidKnown)) {
+                std::string_view statusText;
+                if (readKept(p.statusFd, pid, "status", statusText, c.statusReads))
+                    haveStatus = parseStatus(statusText, status, false);
+            }
+            if (haveStatus && status.hasMemory) {
+                p.vmSwapKb = status.vmSwapKb;
+                p.vmHwmKb = status.vmHwmKb;
+                p.haveSwap = true;
             }
             uint32_t uid = dirUid;
             if (haveStatus && status.hasUid) {
@@ -483,28 +618,25 @@ Snapshot Sampler::sample(unsigned reads, double now)
             }
             const bool own = uid == opt_.uid;
 
+            // Named when first seen and again after an exec (review of 949fc98): stat's name changed, or the code addresses
+            // stat gives for the user's own processes did (a new image is mapped elsewhere, even under the same name). Both
+            // come with the stat read every sample: nothing more is read to notice an exec.
+            p.startCode = st.startCode;
+            p.endCode = st.endCode;
             if (fresh) {
-                ++c.cgroupReads;
-                if (readFile(procPath(pid, "cgroup"), buf_))
-                    p.cgroup = parseCgroupV2(buf_);
-                std::string name;
-                if (own) {
-                    ++c.cmdlineReads;
-                    if (readFile(procPath(pid, "cmdline"), buf_)) {
-                        name = std::string(baseName(cmdlineFirstWord(buf_)));
-                        if (reads & ReadCommand)
-                            p.command = sanitizeDisplay(cmdlineJoined(buf_));
-                    }
-                }
-                // Another owner's name is the kernel's short name, never its cmdline: an argv[0] can be a title (AD25).
-                p.name = sanitizeDisplay(name.empty() ? st.comm : name);
-            } else if (own && (reads & ReadCommand) && p.command.empty()) {
+                if (own)
+                    readCgroup(pid, p, c);
+                identify(pid, p, own, reads, st.comm, c);
+            } else if (exec) {
+                identify(pid, p, own, reads, st.comm, c);
+            } else if (own && (reads & ReadCommand) && !p.haveCommand) {
                 ++c.cmdlineReads;
-                if (readFile(procPath(pid, "cmdline"), buf_))
+                if (readFile(procPath(pid, "cmdline"), buf_, true))
                     p.command = sanitizeDisplay(cmdlineJoined(buf_));
+                p.haveCommand = true;
             }
 
-            ProcessRow row;
+            ProcessRow &row = s.rows.emplace_back(); // reserved above: no reallocation, the reference holds
             row.pid = pid;
             row.start = st.starttime;
             row.ppid = st.ppid;
@@ -516,11 +648,15 @@ Snapshot Sampler::sample(unsigned reads, double now)
             row.nice = st.nice;
             row.threads = st.numThreads;
             row.name = p.name;
-            row.command = own ? p.command : std::string();
-            row.cgroup = p.cgroup;
-            row.kind = classify(p.cgroup, own, row.systemAccount, windowOwners_.count(pid) != 0);
-            row.session = own && isSessionProcess(p.cgroup);
-            row.efficiencyEligible = own && efficiencyEligible(p.cgroup);
+            if (own) {
+                row.command = p.command;
+                const bool ownsWindow = !windowOwners_.empty() && windowOwners_.count(pid) != 0;
+                row.kind = ownsWindow ? p.kindWithWindow : p.kindAlone;
+                row.session = p.sessionUnit;
+                row.efficiencyEligible = p.eligible;
+            } else {
+                row.kind = classify({}, false, row.systemAccount, false);
+            }
             row.cpuTicks = ticks;
             row.cpuPercent = percent;
             row.minorFaults = st.minflt;
@@ -540,12 +676,28 @@ Snapshot Sampler::sample(unsigned reads, double now)
                 row.swapped = status.vmSwapKb * 1024;
                 row.peakMemory = status.vmHwmKb * 1024;
                 row.virtualMemory = status.vmSizeKb * 1024;
+            } else if (reads & ReadMemory) {
+                // AM30 from statm (a sixth of status's cost, A10): resident - (file + shared memory) is RssAnon; VmSwap
+                // is status's of the process's last turn (AD32).
+                std::string_view statmText;
+                Statm sm;
+                if (p.haveSwap && readKept(p.statmFd, pid, "statm", statmText, c.statmReads) && parseStatm(statmText, sm)) {
+                    const uint64_t page = static_cast<uint64_t>(opt_.pageSize);
+                    row.hasMemory = true;
+                    row.realMemory = sm.resident * page;
+                    row.sharedMemory = std::min(sm.shared, sm.resident) * page;
+                    row.privateMemory = row.realMemory - row.sharedMemory;
+                    row.swapped = p.vmSwapKb * 1024;
+                    row.memory = row.privateMemory + row.swapped;
+                    row.peakMemory = std::max(p.vmHwmKb * 1024, row.realMemory);
+                    row.virtualMemory = sm.size * page;
+                }
             }
 
             if (own && (reads & ReadIo)) {
-                ++c.ioReads;
                 IoFields io;
-                if (readFile(procPath(pid, "io"), buf_) && parseIo(buf_, io)) {
+                std::string_view ioText; // kept and re-read with pread, as stat (the kernel checks the access at each read)
+                if (readKept(p.ioFd, pid, "io", ioText, c.ioReads) && parseIo(ioText, io)) {
                     if (p.haveIo && now > p.ioTime) {
                         p.readRate = rate(io.readBytes, p.ioRead, now - p.ioTime);
                         p.writeRate = rate(io.writeBytes, p.ioWrite, now - p.ioTime);
@@ -564,21 +716,25 @@ Snapshot Sampler::sample(unsigned reads, double now)
                 }
             }
 
+            // The turns go by each process's place of arrival, not by its pid: as full at every sample whatever the pids
+            // (review of 949fc98).
             if (own && (reads & ReadThreads)) {
-                const bool turn = !p.haveCtx || static_cast<int>(index_ % opt_.threadTurns) == pid % opt_.threadTurns;
-                if (turn)
+                if (!p.haveCtx || index_ % static_cast<uint64_t>(opt_.threadTurns) == p.turn % static_cast<uint64_t>(opt_.threadTurns))
                     readThreads(pid, p, now, c);
                 row.wakeRate = p.wakeRate;
             }
 
             if (own && (reads & ReadDescriptors)) {
-                const bool turn = !p.scanned || static_cast<int>(index_ % opt_.descriptorTurns) == pid % opt_.descriptorTurns;
-                if (turn) {
+                if (!p.scanned || index_ % static_cast<uint64_t>(opt_.descriptorTurns) == p.turn % static_cast<uint64_t>(opt_.descriptorTurns)) {
                     scanDescriptors(pid, p, c);
-                    if (!fresh) { // its unit may have changed (moved into a scope): read again in its turn
-                        ++c.cgroupReads;
-                        if (readFile(procPath(pid, "cgroup"), buf_))
-                            p.cgroup = parseCgroupV2(buf_);
+                    if (!fresh && p.cgroupTurns < 2) {
+                        // A process listed in the moment before its launcher moved it into its unit: read again in its
+                        // first two turns, after which a unit no longer changes (uwsm moves a launch before its exec).
+                        ++p.cgroupTurns;
+                        readCgroup(pid, p, c);
+                        row.kind = !windowOwners_.empty() && windowOwners_.count(pid) ? p.kindWithWindow : p.kindAlone;
+                        row.session = p.sessionUnit;
+                        row.efficiencyEligible = p.eligible;
                     }
                 }
                 row.openFiles = p.openFiles;
@@ -589,6 +745,7 @@ Snapshot Sampler::sample(unsigned reads, double now)
                 row.hasGpu = p.haveGpu;
                 row.gpuNs = p.gpuNs;
                 row.gpuPercent = p.gpuPercent;
+                row.gpuDevices = p.gpuDevices;
             }
 
             if (own && (reads & ReadIo) && (reads & ReadThreads) && percent >= 0) {
@@ -598,21 +755,14 @@ Snapshot Sampler::sample(unsigned reads, double now)
                 row.averageEnergyImpact = p.energySum / p.energyTime;
                 s.energyImpact = (s.energyImpact < 0 ? 0 : s.energyImpact) + row.energyImpact;
             }
-
-            s.rows.push_back(std::move(row));
         }
         s.kernel.cpuPercent = kernelKnown ? kernelPercent : -1;
 
-        // Processes that ended: their descriptors and their sockets' owner entries go.
+        // Processes that ended: their kept descriptors close.
         for (auto it = procs_.begin(); it != procs_.end();) {
-            if (present.count(it->first)) {
+            if (it->second.seen == mark) {
                 ++it;
                 continue;
-            }
-            for (uint64_t inode : it->second.sockets) {
-                auto o = socketOwner_.find(inode);
-                if (o != socketOwner_.end() && o->second == it->first)
-                    socketOwner_.erase(o);
             }
             closeProc(it->second);
             it = procs_.erase(it);
@@ -620,35 +770,40 @@ Snapshot Sampler::sample(unsigned reads, double now)
 
         if (reads & ReadSockets) {
             ++c.sockDumps;
-            std::vector<TcpCounters> dump;
-            std::unordered_map<uint64_t, TcpCounters> byInode;
-            if (dumpTcpSockets(dump)) {
-                byInode.reserve(dump.size());
-                for (const TcpCounters &t : dump)
-                    byInode[t.inode] = t;
-            }
+            tcp_.clear();
+            // A failed dump changes nothing: the last good totals show again. Read as "every socket closed", it doubled
+            // each process's totals once the sockets came back (review of 949fc98).
+            const bool dumped = opt_.tcpDump(tcp_);
+            // Sorted by inode and searched: no table built (and allocated) at every sample.
+            std::sort(tcp_.begin(), tcp_.end(), [](const TcpCounters &a, const TcpCounters &b) { return a.inode < b.inode; });
+            auto inDump = [this](uint64_t inode) -> const TcpCounters * {
+                auto f = std::lower_bound(tcp_.begin(), tcp_.end(), inode,
+                                          [](const TcpCounters &t, uint64_t i) { return t.inode < i; });
+                return f != tcp_.end() && f->inode == inode ? &*f : nullptr;
+            };
             for (ProcessRow &row : s.rows) {
                 if (!row.own)
                     continue;
-                Proc &p = procs_[row.pid];
+                Proc &p = procs_.find(row.pid)->second;
                 if (!p.scanned)
                     continue;
-                // A socket seen before and gone from the dump closed: its last counters stay with the process.
-                for (auto it = p.live.begin(); it != p.live.end();) {
-                    if (byInode.count(it->first)) {
-                        ++it;
-                        continue;
+                if (dumped) {
+                    // A socket seen before and gone from the dump closed: its last counters stay with the process.
+                    for (auto it = p.live.begin(); it != p.live.end();) {
+                        if (inDump(it->first)) {
+                            ++it;
+                            continue;
+                        }
+                        p.closed.sent += it->second.bytesAcked;
+                        p.closed.received += it->second.bytesReceived;
+                        p.closed.segsOut += it->second.segsOut;
+                        p.closed.segsIn += it->second.segsIn;
+                        it = p.live.erase(it);
                     }
-                    p.closed.sent += it->second.bytesAcked;
-                    p.closed.received += it->second.bytesReceived;
-                    p.closed.segsOut += it->second.segsOut;
-                    p.closed.segsIn += it->second.segsIn;
-                    it = p.live.erase(it);
-                }
-                for (uint64_t inode : p.sockets) {
-                    auto f = byInode.find(inode);
-                    if (f != byInode.end())
-                        p.live[inode] = f->second;
+                    for (uint64_t inode : p.sockets) {
+                        if (const TcpCounters *t = inDump(inode))
+                            p.live[inode] = *t;
+                    }
                 }
                 row.hasNet = true;
                 row.tcpSent = p.closed.sent;
@@ -670,7 +825,7 @@ Snapshot Sampler::sample(unsigned reads, double now)
             for (const ProcessRow &row : s.rows) {
                 if (!row.hasGpu)
                     continue;
-                for (const auto &[k, share] : procs_[row.pid].enginePercent) {
+                for (const auto &[k, share] : procs_.find(row.pid)->second.enginePercent) {
                     const size_t bar = k.find('|');
                     engines[k.substr(0, bar)][k.substr(bar + 1)] += share;
                 }
@@ -688,7 +843,7 @@ Snapshot Sampler::sample(unsigned reads, double now)
     // AM29: User = the user's processes, System = every other non-idle tick, Idle = the rest (macOS's meaning, AD5). Only
     // when this sample and the previous one both read the processes and /proc/stat, so both deltas span the same interval;
     // otherwise the kernel's split stays (sharesByOwner false: the Dock's CPU graph while the window is hidden, AM62).
-    if (ownDeltaKnown && cpuDeltaTicks_ > 0 && lastProcessIndex_ + 1 == index_ && lastCpuIndex_ + 1 == index_
+    if (listed && cpuDeltaTicks_ > 0 && lastProcessIndex_ + 1 == index_ && lastCpuIndex_ + 1 == index_
         && s.system.userShare >= 0) {
         const double busy = s.system.userShare + s.system.systemShare;
         const double user = std::min(busy, static_cast<double>(ownDelta) / static_cast<double>(cpuDeltaTicks_));
@@ -696,7 +851,7 @@ Snapshot Sampler::sample(unsigned reads, double now)
         s.system.systemShare = std::max(0.0, busy - user);
         s.system.sharesByOwner = true;
     }
-    if (reads & ReadProcesses)
+    if (listed)
         lastProcessIndex_ = index_;
     if ((reads & ReadSystemCpu) && s.system.cpuOk)
         lastCpuIndex_ = index_;

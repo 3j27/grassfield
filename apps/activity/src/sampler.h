@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -35,6 +36,7 @@ enum Read : unsigned {
     ReadSystemMemory = 1u << 9, // /proc/meminfo, /proc/pressure/memory, /proc/swaps, zram's mm_stat
     ReadSystemDisk = 1u << 10, // /proc/diskstats
     ReadSystemNet = 1u << 11,  // /proc/net/dev
+    ReadMemory = 1u << 12,     // statm of every process, status of one fifth of them in turn (Memory tab, AD32)
 };
 
 enum class Tab { Cpu, Memory, Energy, Disk, Network };
@@ -48,8 +50,12 @@ struct Options {
     uint32_t uidMin = 1000;       // UID_MIN of /etc/login.defs
     long clockTicks = 100;        // sysconf(_SC_CLK_TCK)
     size_t maxKeptFiles = 0;      // kept /proc descriptors at most (0 keeps none; defaultOptions sets it from RLIMIT_NOFILE)
+    long pageSize = 4096;         // sysconf(_SC_PAGESIZE): statm counts pages
     int threadTurns = 5;          // AM23
+    int statusTurns = 5;          // AM30, AD32: VmSwap and VmHWM from status, one fifth of the processes per sample
     int descriptorTurns = 10;     // AM43, AM45
+    // The TCP dump (AM43); tests put a function of their own here (a failed dump, the review of 949fc98).
+    bool (*tcpDump)(std::vector<TcpCounters> &out) = dumpTcpSockets;
 };
 
 // Options for this machine: getuid(), /etc/login.defs, the clock tick, and a kept-descriptor budget from the soft
@@ -81,9 +87,10 @@ struct ProcessRow {
     char state = '?';
     long nice = 0;
     int threads = 0;
-    std::string name;    // sanitized (AM17)
+    std::string name;    // sanitized (AM17); refreshed after an exec
     std::string command; // own processes with ReadCommand, sanitized (AM28); "" otherwise
-    std::string cgroup;  // the cgroup v2 path, raw
+    // No cgroup path: another owner's is never read (AD25), and an action on one of the user's units reads it again at the
+    // time of the action (step 4). What the table needs of it is below.
     Kind kind = Kind::Background;
     bool session = false;            // AM54
     bool efficiencyEligible = false; // AM68
@@ -102,10 +109,11 @@ struct ProcessRow {
     double wakeRate = -1;
     // Descriptors (AM25): -1 until the process's descriptor list was read.
     int openFiles = -1;
-    // GPU (AM45, AM46).
+    // GPU (AM45, AM46); the devices it is a client of, for Processes, by GPU (AM49).
     bool hasGpu = false;
     uint64_t gpuNs = 0;
     double gpuPercent = -1;
+    std::vector<std::string> gpuDevices; // drm-pdev, sorted
     // Network (AM43): TCP only, since the app opened.
     bool hasNet = false;
     uint64_t tcpSent = 0, tcpReceived = 0, tcpSegsOut = 0, tcpSegsIn = 0;
@@ -175,12 +183,16 @@ struct SystemSnapshot {
 // What one sample read, for the cost gates (AM-P2) and the dev counters.
 struct Counters {
     uint64_t listed = 0, statReads = 0, statusReads = 0, ioReads = 0, threadStatusReads = 0, fdListReads = 0, fdLinks = 0,
-             fdinfoReads = 0, sockDumps = 0, cmdlineReads = 0, cgroupReads = 0, systemReads = 0;
+             fdinfoReads = 0, sockDumps = 0, cmdlineReads = 0, cgroupReads = 0, exeLinks = 0, systemReads = 0,
+             statmReads = 0, ownerStats = 0;
     size_t keptFiles = 0;
 };
 
 struct Snapshot {
-    std::vector<ProcessRow> rows; // kernel threads excluded, in pid order
+    // Kernel threads excluded, in pid order. When /proc cannot be listed, the previous sample's rows stay and
+    // processesStale is true (the review of 949fc98: a failed listing wipes nothing).
+    std::vector<ProcessRow> rows;
+    bool processesStale = false;
     KernelRow kernel;
     SystemSnapshot system;
     std::vector<GpuDevice> gpus;
@@ -197,9 +209,10 @@ public:
     Sampler(const Sampler &) = delete;
     Sampler &operator=(const Sampler &) = delete;
 
-    // One sample at CLOCK_MONOTONIC's time, or at `now` (seconds, tests).
-    Snapshot sample(unsigned reads);
-    Snapshot sample(unsigned reads, double now);
+    // One sample at CLOCK_MONOTONIC's time, or at `now` (seconds, tests). The snapshot is the sampler's own, valid until
+    // the next sample: a caller that keeps it copies it.
+    const Snapshot &sample(unsigned reads);
+    const Snapshot &sample(unsigned reads, double now);
 
     // The pids that own a window (the shell's projection, AM60): their processes are Apps (AM65).
     void setWindowOwners(std::unordered_set<int> pids);
@@ -212,11 +225,23 @@ private:
     };
     struct Proc {
         uint64_t start = 0;
-        int statFd = -1, statusFd = -1;
+        uint64_t seen = 0; // index_ + 1 of the last sample that listed it
+        uint64_t turn = 0; // its place in the turns (AM23, AM43): given in order of arrival, so every turn is as full
+        int statFd = -1, statusFd = -1, ioFd = -1, statmFd = -1;
+        bool haveSwap = false;                // status read for the Memory tab (AD32): its last VmSwap and VmHWM
+        uint64_t vmSwapKb = 0, vmHwmKb = 0;
         bool kthread = false;
         bool uidKnown = false;
         uint32_t uid = 0;
-        std::string name, command, cgroup;
+        std::string comm, exe; // stat's name and the exe link at the last identification
+        uint64_t startCode = 0, endCode = 0; // stat's code addresses: a change is an exec (review of 949fc98)
+        uint32_t dirUid = 0;   // the /proc/<pid> directory's owner, read again in its turn and after an exec
+        int cgroupTurns = 0;   // descriptor turns that read its unit again
+        std::string name, command;
+        bool haveCommand = false;
+        std::string cgroup; // own processes only (AD25)
+        Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
+        bool sessionUnit = false, eligible = false;
         bool haveTicks = false;
         uint64_t ticks = 0;
         double ticksTime = 0;
@@ -239,14 +264,18 @@ private:
         double gpuPercent = -1;
         double energySum = 0, energyTime = 0; // Σ EI × seconds, Σ seconds (AM37)
         std::map<std::string, double> enginePercent; // "<pdev>|<engine>" → this process's share, for the GPUs
+        std::vector<std::string> gpuDevices;
         std::unordered_map<uint64_t, TcpCounters> live; // its sockets seen in the dump
         SocketTotals closed;                            // sockets that went, their last counters
     };
 
-    std::string procPath(int pid, const char *file) const;
-    bool readKept(int &fd, const std::string &path, std::string &buf, uint64_t &counter);
-    bool readFile(const std::string &path, std::string &buf);
+    const std::string &procPath(int pid, const char *file);
+    bool readKept(int &fd, int pid, const char *file, std::string_view &out, uint64_t &counter);
+    bool readFile(const std::string &path, std::string &buf, bool oneRecord = false);
+    bool readAt(int dir, const char *name, std::string &buf);
     void closeProc(Proc &p);
+    void identify(int pid, Proc &p, bool own, unsigned reads, const std::string &comm, Counters &c);
+    void readCgroup(int pid, Proc &p, Counters &c);
     void readThreads(int pid, Proc &p, double now, Counters &c);
     void scanDescriptors(int pid, Proc &p, Counters &c);
     void readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::string, GpuDevice> &devices,
@@ -256,10 +285,16 @@ private:
     Options opt_;
     std::unordered_map<int, Proc> procs_;
     std::unordered_set<int> windowOwners_;
-    std::unordered_map<uint64_t, int> socketOwner_; // inode → pid, from the descriptor scans
     size_t kept_ = 0;
-    uint64_t index_ = 0; // samples taken: the turns of AM23 and AM43
-    std::string buf_;
+    uint64_t index_ = 0;     // samples taken: the turns of AM23 and AM43
+    uint64_t nextTurn_ = 0;  // the next process's place in the turns
+    Snapshot snap_;          // the last sample, rebuilt in place (its vectors keep their capacity)
+    std::vector<int> listing_; // the pids /proc lists
+    int procFd_ = -1;          // opt_.procRoot, for fstatat
+    std::vector<TcpCounters> tcp_;
+    std::string buf_;        // whole files read by readFile
+    std::string path_;       // the /proc path being built (its capacity kept: no allocation per read)
+    std::unique_ptr<char[]> io_; // kept files' contents (kBufSize, never cleared: only the bytes read are looked at)
     // System state between samples.
     bool haveCpu_ = false;
     CpuTimes lastCpu_;

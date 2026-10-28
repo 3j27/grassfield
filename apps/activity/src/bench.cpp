@@ -3,8 +3,9 @@
 //
 //   activity-sampler-bench measure [--tab cpu|memory|energy|disk|network|all] [--samples N] [--interval-ms MS]
 //                                  [--proc-root DIR] [--sys-root DIR]
-//       N samples of each tab (101 by default, back to back unless --interval-ms): the median, 95th percentile and maximum
-//       CPU time of one sample on the sampler's thread, the rows and the reads of the last sample.
+//       N samples of each tab (101 by default, back to back unless --interval-ms, nothing done between two): the median,
+//       95th percentile and maximum CPU time of one sample on the sampler's thread, the mean of its user and kernel parts
+//       (getrusage, tick-based), the rows and the reads of the last sample.
 //   activity-sampler-bench dump [--tab ...] [--samples N] [--interval-ms MS] [--proc-root DIR] [--sys-root DIR]
 //       one line per row of the last sample, tab-separated (tests/integration/activity_owners.sh reads it).
 //   activity-sampler-bench spawn N T F    N idle processes of T threads and F extra open descriptors each (waits)
@@ -24,6 +25,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -31,6 +33,11 @@ using namespace activity;
 
 namespace
 {
+
+double msBetween(const timeval &a, const timeval &b)
+{
+    return static_cast<double>(b.tv_sec - a.tv_sec) * 1e3 + static_cast<double>(b.tv_usec - a.tv_usec) / 1e3;
+}
 
 void *idleThread(void *)
 {
@@ -186,14 +193,24 @@ int main(int argc, char **argv)
         Sampler sampler(opt);
         const unsigned reads = readsForTab(tab) | (dump ? ReadStatus | ReadIo | ReadCommand | ReadSockets : 0u);
         std::vector<double> ms;
-        Snapshot last;
+        double userMs = 0, kernelMs = 0;
+        const Snapshot *snap = nullptr;
         for (int i = 0; i < samples; ++i) {
-            last = sampler.sample(reads);
-            if (i > 0) // the first sample opens every kept descriptor and has no rates: it is not the steady cost
-                ms.push_back(last.cpuMs);
+            // Back to back, as probe A10 measures, and nothing between two samples: the snapshot is looked at in place
+            // (copying 600 rows between samples would put the next one on cold caches the model never has).
+            rusage before{}, after{};
+            getrusage(RUSAGE_THREAD, &before);
+            snap = &sampler.sample(reads);
+            getrusage(RUSAGE_THREAD, &after);
+            if (i > 0) { // the first sample opens every kept descriptor and has no rates: it is not the steady cost
+                ms.push_back(snap->cpuMs);
+                userMs += msBetween(before.ru_utime, after.ru_utime);
+                kernelMs += msBetween(before.ru_stime, after.ru_stime);
+            }
             if (intervalMs)
                 std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
         }
+        const Snapshot last = *snap;
         if (dump) {
             printDump(last);
             continue;
@@ -206,10 +223,12 @@ int main(int argc, char **argv)
         for (const ProcessRow &r : last.rows)
             own += r.own ? 1 : 0;
         const Counters &c = last.counters;
-        std::printf("tab %s: samples %d, median %.3f ms, p95 %.3f ms, max %.3f ms; rows %zu (own %zu), kernel threads %d; "
+        const double n = ms.empty() ? 1.0 : static_cast<double>(ms.size());
+        std::printf("tab %s: samples %d, median %.3f ms, p95 %.3f ms, max %.3f ms (mean %.3f in user mode, %.3f in the kernel); "
+                    "rows %zu (own %zu), kernel threads %d; "
                     "reads: listed %llu stat %llu status %llu io %llu thread-status %llu fd-lists %llu fd-links %llu fdinfo %llu "
                     "sock-dumps %llu system %llu; kept %zu\n",
-                    tabName(tab), samples, median, p95, max, last.rows.size(), own, last.kernel.threads,
+                    tabName(tab), samples, median, p95, max, userMs / n, kernelMs / n, last.rows.size(), own, last.kernel.threads,
                     static_cast<unsigned long long>(c.listed), static_cast<unsigned long long>(c.statReads),
                     static_cast<unsigned long long>(c.statusReads), static_cast<unsigned long long>(c.ioReads),
                     static_cast<unsigned long long>(c.threadStatusReads), static_cast<unsigned long long>(c.fdListReads),

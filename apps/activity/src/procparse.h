@@ -28,12 +28,16 @@ struct StatFields {
     uint64_t starttime = 0; // clock ticks after boot: with the pid, the row's identity
     uint64_t vsize = 0;     // bytes
     int64_t rssPages = 0;
+    // Where the program's code is mapped (fields 26, 27): new at every exec (address-space randomization), so a change is
+    // an exec even when stat's name stayed; 0 where the reader may not trace the process (another owner's).
+    uint64_t startCode = 0, endCode = 0;
 };
 
 // The kernel's own flag for its threads (include/linux/sched.h PF_KTHREAD).
 constexpr unsigned long kPfKthread = 0x00200000;
 
-bool parseStat(std::string_view text, StatFields &out);
+// `codeAddresses` false stops at field 24 (rss): the sampler asks for fields 26 and 27 of the processes it may trace only.
+bool parseStat(std::string_view text, StatFields &out, bool codeAddresses = true);
 
 // /proc/<pid>/status (only the fields the monitor shows; sizes in KiB as the kernel writes them).
 struct StatusFields {
@@ -47,7 +51,17 @@ struct StatusFields {
     uint64_t voluntaryCtx = 0, involuntaryCtx = 0;
 };
 
-bool parseStatus(std::string_view text, StatusFields &out);
+// `switches` false stops at VmSwap, the last field the sampler needs of a process's status (the Memory tab, the owner).
+bool parseStatus(std::string_view text, StatusFields &out, bool switches = true);
+// voluntary_ctxt_switches of a thread's status (Wake Ups, AM23), found from the end of the file.
+bool parseVoluntarySwitches(std::string_view text, uint64_t &out);
+
+// /proc/<pid>/statm, in pages: the whole size, the resident set and its file and shared-memory part (`shared`), so
+// resident - shared is RssAnon (fs/proc/task_mmu.c task_statm). Readable for every owner (A1).
+struct Statm {
+    uint64_t size = 0, resident = 0, shared = 0;
+};
+bool parseStatm(std::string_view text, Statm &out);
 
 // /proc/<pid>/io (own processes only, A1).
 struct IoFields {
@@ -63,6 +77,13 @@ std::string parseCgroupV2(std::string_view text);
 std::string cmdlineFirstWord(std::string_view raw);
 std::string cmdlineJoined(std::string_view raw);
 std::string_view baseName(std::string_view path);
+
+// AM17: the name of one of the user's own processes from its argv[0] (cmdlineFirstWord), its stat name and the target of
+// its exe link. argv[0]'s basename when argv[0] is a plain path (no space) whose basename is the executable's or the stat
+// name's (the invoked name, a symbolic link's included); else the executable's basename (" (deleted)" removed); else the
+// stat name. So a title written over argv[0] (Chromium's and Electron's helpers, setproctitle, a login shell's "-bash")
+// never names the process.
+std::string processName(std::string_view argv0, std::string_view comm, std::string_view exePath);
 
 // /proc/stat: the "cpu" line and one "cpuN" line per logical processor (ticks).
 struct CpuTimes {

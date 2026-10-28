@@ -1,7 +1,10 @@
 #include "procparse.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdlib>
+#include <cstring>
+#include <type_traits>
 
 namespace activity
 {
@@ -85,76 +88,203 @@ uint64_t firstNumber(std::string_view value)
     return n;
 }
 
+// One decimal field of a stat line at `p` ('-' first for a signed type), up to the next space or newline; `p` moves past
+// the field whatever it holds. False when it is not a number.
+template <typename T>
+bool statNumber(const char *&p, const char *end, T &out)
+{
+    bool negative = false;
+    if (p < end && *p == '-') {
+        negative = true;
+        ++p;
+    }
+    const char *start = p;
+    uint64_t v = 0;
+    while (p < end && static_cast<unsigned char>(*p - '0') < 10) {
+        v = v * 10 + static_cast<unsigned>(*p - '0');
+        ++p;
+    }
+    const bool digitsOnly = p != start && (p == end || *p == ' ' || *p == '\n');
+    while (p < end && *p != ' ' && *p != '\n')
+        ++p;
+    if (!digitsOnly || (negative && !std::is_signed_v<T>))
+        return false;
+    out = negative ? static_cast<T>(-static_cast<int64_t>(v)) : static_cast<T>(v);
+    return true;
+}
+
 } // namespace
 
-bool parseStat(std::string_view text, StatFields &out)
+bool parseStat(std::string_view text, StatFields &out, bool codeAddresses)
 {
     const size_t open = text.find('(');
-    const size_t close = text.rfind(')');
-    if (open == std::string_view::npos || close == std::string_view::npos || close < open)
+    if (open == std::string_view::npos)
+        return false;
+    // The name ends at the line's last ')': what follows is numbers and a state letter, so that ')' lies within the name's
+    // 64 bytes at most (a workqueue thread's name passes 15). Looked for there first, in the whole line otherwise.
+    size_t close = text.substr(0, std::min(text.size(), open + 66)).rfind(')');
+    if (close == std::string_view::npos)
+        close = text.rfind(')');
+    if (close == std::string_view::npos || close < open)
         return false;
     if (!toNumber(trim(text.substr(0, open)), out.pid))
         return false;
-    out.comm = std::string(text.substr(open + 1, close - open - 1));
-    // Fields from 3 on, after the closing parenthesis; field n is index n-3 of the rest.
-    std::string_view rest = text.substr(close + 1);
-    size_t pos = 0;
-    std::string_view w;
-    std::vector<std::string_view> f;
-    f.reserve(24);
-    while (f.size() < 22 && nextWord(rest, pos, w))
-        f.push_back(trim(w));
-    if (f.size() < 22)
-        return false;
-    out.state = f[0].empty() ? '?' : f[0][0];
-    bool ok = toNumber(f[1], out.ppid) && toNumber(f[2], out.pgrp) && toNumber(f[6], out.flags)
-        && toNumber(f[7], out.minflt) && toNumber(f[9], out.majflt) && toNumber(f[11], out.utime)
-        && toNumber(f[12], out.stime) && toNumber(f[16], out.nice) && toNumber(f[17], out.numThreads)
-        && toNumber(f[19], out.starttime) && toNumber(f[20], out.vsize) && toNumber(f[21], out.rssPages);
-    return ok;
+    out.comm.assign(text.data() + open + 1, close - open - 1);
+    // Fields from 3 on, after the closing parenthesis; field n is word n-3 of the rest. One pass, nothing allocated: every
+    // process's stat is parsed at every sample (AM-P2, review of 949fc98).
+    const char *p = text.data() + close + 1;
+    const char *const end = text.data() + text.size();
+    bool ok = true;
+    int i = 0;
+    const int fields = codeAddresses ? 25 : 22;
+    for (; i < fields; ++i) {
+        while (p < end && *p == ' ')
+            ++p;
+        if (p >= end || *p == '\n')
+            break;
+        switch (i) { // the fields the sampler uses, read as they pass; the others skipped byte by byte
+        case 0:
+            out.state = *p;
+            while (p < end && *p != ' ' && *p != '\n')
+                ++p;
+            break;
+        case 1: ok = statNumber(p, end, out.ppid) && ok; break;
+        case 2: ok = statNumber(p, end, out.pgrp) && ok; break;
+        case 6: ok = statNumber(p, end, out.flags) && ok; break;
+        case 7: ok = statNumber(p, end, out.minflt) && ok; break;
+        case 9: ok = statNumber(p, end, out.majflt) && ok; break;
+        case 11: ok = statNumber(p, end, out.utime) && ok; break;
+        case 12: ok = statNumber(p, end, out.stime) && ok; break;
+        case 16: ok = statNumber(p, end, out.nice) && ok; break;
+        case 17: ok = statNumber(p, end, out.numThreads) && ok; break;
+        case 19: ok = statNumber(p, end, out.starttime) && ok; break;
+        case 20: ok = statNumber(p, end, out.vsize) && ok; break;
+        case 21: ok = statNumber(p, end, out.rssPages) && ok; break;
+        case 23: statNumber(p, end, out.startCode); break; // fields 26 and 27: 0 where the reader may not trace the process
+        case 24: statNumber(p, end, out.endCode); break;
+        default:
+            while (p < end && *p != ' ' && *p != '\n')
+                ++p;
+            break;
+        }
+    }
+    return ok && i >= 22;
 }
 
-bool parseStatus(std::string_view text, StatusFields &out)
+namespace
 {
-    size_t pos = 0;
-    std::string_view line, key, value;
-    bool any = false;
-    while (nextLine(text, pos, line)) {
-        if (!keyValue(line, key, value))
-            continue;
-        any = true;
-        if (key == "Name") {
-            out.name = std::string(value);
-        } else if (key == "Uid") {
+
+void statusField(std::string_view key, std::string_view value, StatusFields &out)
+{
+    // By length first: most of status's sixty lines are none of these, and are passed over at one comparison.
+    switch (key.size()) {
+    case 3:
+        if (key == "Uid") {
             size_t p = 0;
             std::string_view a, b;
             if (nextWord(value, p, a) && nextWord(value, p, b) && toNumber(a, out.ruid) && toNumber(b, out.euid))
                 out.hasUid = true;
-        } else if (key == "PPid") {
-            toNumber(value, out.ppid);
-        } else if (key == "VmSize") {
-            out.vmSizeKb = firstNumber(value);
-        } else if (key == "VmRSS") {
+        }
+        break;
+    case 4:
+        if (key == "Name")
+            out.name = std::string(trim(value));
+        else if (key == "PPid")
+            toNumber(trim(value), out.ppid);
+        break;
+    case 5:
+        if (key == "VmRSS") {
             out.vmRssKb = firstNumber(value);
             out.hasMemory = true;
-        } else if (key == "RssAnon") {
-            out.rssAnonKb = firstNumber(value);
-        } else if (key == "RssFile") {
-            out.rssFileKb = firstNumber(value);
-        } else if (key == "RssShmem") {
-            out.rssShmemKb = firstNumber(value);
-        } else if (key == "VmSwap") {
-            out.vmSwapKb = firstNumber(value);
         } else if (key == "VmHWM") {
             out.vmHwmKb = firstNumber(value);
-        } else if (key == "voluntary_ctxt_switches") {
+        }
+        break;
+    case 6:
+        if (key == "VmSize")
+            out.vmSizeKb = firstNumber(value);
+        else if (key == "VmSwap")
+            out.vmSwapKb = firstNumber(value);
+        break;
+    case 7:
+        if (key == "RssAnon")
+            out.rssAnonKb = firstNumber(value);
+        else if (key == "RssFile")
+            out.rssFileKb = firstNumber(value);
+        break;
+    case 8:
+        if (key == "RssShmem")
+            out.rssShmemKb = firstNumber(value);
+        break;
+    case 23:
+        if (key == "voluntary_ctxt_switches") {
             out.voluntaryCtx = firstNumber(value);
             out.hasCtx = true;
-        } else if (key == "nonvoluntary_ctxt_switches") {
-            out.involuntaryCtx = firstNumber(value);
         }
+        break;
+    case 26:
+        if (key == "nonvoluntary_ctxt_switches")
+            out.involuntaryCtx = firstNumber(value);
+        break;
+    default:
+        break;
+    }
+}
+
+} // namespace
+
+bool parseStatus(std::string_view text, StatusFields &out, bool switches)
+{
+    const char *p = text.data();
+    const char *const end = p + text.size();
+    bool any = false;
+    while (p < end) {
+        const char *nl = static_cast<const char *>(std::memchr(p, '\n', static_cast<size_t>(end - p)));
+        const char *lineEnd = nl ? nl : end;
+        // Only keys that start with these letters are looked at: most lines are passed over at one comparison.
+        const char first = *p;
+        if (first == 'N' || first == 'U' || first == 'P' || first == 'V' || first == 'R' || first == 'v' || first == 'n') {
+            const char *colon = p;
+            while (colon < lineEnd && *colon != ':')
+                ++colon;
+            if (colon < lineEnd) {
+                any = true;
+                const std::string_view key(p, static_cast<size_t>(colon - p));
+                statusField(key, std::string_view(colon + 1, static_cast<size_t>(lineEnd - colon - 1)), out);
+                // VmSwap is the last size field the kernel writes: past it, only the switches are left to read.
+                if (!switches && key == "VmSwap")
+                    return true;
+            }
+        } else if (first != '\n') {
+            any = true;
+        }
+        p = nl ? nl + 1 : end;
     }
     return any;
+}
+
+bool parseVoluntarySwitches(std::string_view text, uint64_t &out)
+{
+    // The second line from the end of a status file: looked for from the end.
+    constexpr std::string_view key = "\nvoluntary_ctxt_switches:";
+    const size_t at = text.rfind(key);
+    if (at == std::string_view::npos)
+        return false;
+    out = firstNumber(text.substr(at + key.size(), 32));
+    return true;
+}
+
+bool parseStatm(std::string_view text, Statm &out)
+{
+    const char *p = text.data();
+    const char *const end = p + text.size();
+    for (uint64_t *field : {&out.size, &out.resident, &out.shared}) {
+        while (p < end && *p == ' ')
+            ++p;
+        if (!statNumber(p, end, *field))
+            return false;
+    }
+    return true;
 }
 
 bool parseIo(std::string_view text, IoFields &out)
@@ -222,6 +352,23 @@ std::string_view baseName(std::string_view path)
         path.remove_suffix(1);
     const size_t slash = path.rfind('/');
     return slash == std::string_view::npos ? path : path.substr(slash + 1);
+}
+
+std::string processName(std::string_view argv0, std::string_view comm, std::string_view exePath)
+{
+    constexpr std::string_view deleted = " (deleted)";
+    if (exePath.size() > deleted.size() && exePath.substr(exePath.size() - deleted.size()) == deleted)
+        exePath.remove_suffix(deleted.size());
+    const std::string_view exe = exePath.empty() ? std::string_view() : baseName(exePath);
+    if (!argv0.empty() && argv0.find(' ') == std::string_view::npos) {
+        const std::string_view name = baseName(argv0);
+        // The stat name is the invoked file's name cut to 15 bytes (TASK_COMM_LEN - 1): a longer argv[0] matches its start.
+        const bool matchesComm = !comm.empty()
+            && (name == comm || (comm.size() >= 15 && name.size() > comm.size() && name.substr(0, comm.size()) == comm));
+        if (!name.empty() && (name == exe || matchesComm))
+            return std::string(name);
+    }
+    return std::string(exe.empty() ? comm : exe);
 }
 
 bool parseProcStat(std::string_view text, CpuTimes &total, std::vector<CpuTimes> &perCpu)

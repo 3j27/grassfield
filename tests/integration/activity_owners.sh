@@ -44,7 +44,8 @@ as alice git config --global --add safe.directory '*'
 as alice bash -c 'cd /home/alice/repo && apps/activity/build-direct.sh --bench' >>"$W/log" 2>&1 || { echo "FAIL: building the bench (see $W/log)"; tail -5 "$W/log"; exit 1; }
 bench=/home/alice/repo/.dev/build/activity-sampler-bench
 
-# bob: a process whose argv[0] is a title, as an SSH server writes one; alice: one of her own with arguments.
+# bob: a process whose argv[0] is a title, as an SSH server writes one; alice: one of her own with arguments, its argv[0]
+# rewritten to a path that is not its executable.
 as bob bash -c 'exec -a "sshd: bob@pts/0 secret-host" sleep 600' &
 as alice bash -c 'exec -a /usr/bin/alicetool sleep 600 1s' &
 sleep 1
@@ -68,7 +69,8 @@ grep -q "secret-host\|bob@pts" <<<"$dump" && fail "bob's argv[0] title reached t
 [[ $(field "$bob_pid" openFiles) == -1 ]] && pass "bob's descriptors are not read" || fail "bob's row: openFiles=$(field "$bob_pid" openFiles)"
 
 [[ $(field "$alice_pid" own) == 1 ]] && pass "alice's process is her own" || fail "alice's row: own=$(field "$alice_pid" own)"
-[[ $(field "$alice_pid" name) == alicetool ]] && pass "alice's name comes from her argv[0]" || fail "alice's row: name=$(field "$alice_pid" name)"
+# An argv[0] that is neither the executable nor the invoked name names nothing: the executable does (AM17, review of 949fc98).
+[[ $(field "$alice_pid" name) == sleep ]] && pass "alice's rewritten argv[0] gives way to her executable's name" || fail "alice's row: name=$(field "$alice_pid" name)"
 [[ $(field "$alice_pid" command) == "/usr/bin/alicetool 600 1s" ]] && pass "alice's command line is shown" || fail "alice's row: command=$(field "$alice_pid" command)"
 [[ $(field "$alice_pid" hasIo) == 1 ]] && pass "alice's io is read" || fail "alice's row: hasIo=$(field "$alice_pid" hasIo)"
 [[ $(field "$alice_pid" openFiles) -ge 0 ]] && pass "alice's descriptors are read" || fail "alice's row: openFiles=$(field "$alice_pid" openFiles)"

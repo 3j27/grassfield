@@ -2,9 +2,12 @@
 // (the same inode), so the sampler's kept descriptors read the new contents, as they would read the kernel's.
 #pragma once
 
-#include <cstdio>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 
 #include <stdlib.h>
@@ -16,11 +19,15 @@ namespace activity_test
 class Fixture
 {
 public:
+    // Under $TMPDIR (else /tmp). A fixture that cannot be made fails its test loudly (an exception gtest reports), never
+    // silently (the review of 949fc98: 17 tests failed for no visible reason where /tmp was not writable).
     Fixture()
     {
-        char tmpl[] = "/tmp/activity-fixture-XXXXXX";
-        const char *d = mkdtemp(tmpl);
-        root_ = d ? d : "/tmp/activity-fixture-failed";
+        const char *tmp = std::getenv("TMPDIR");
+        std::string tmpl = std::string(tmp && *tmp ? tmp : "/tmp") + "/activity-fixture-XXXXXX";
+        if (!mkdtemp(tmpl.data()))
+            throw std::runtime_error("activity fixture: mkdtemp(" + tmpl + "): " + std::strerror(errno));
+        root_ = tmpl;
         std::filesystem::create_directories(proc());
         std::filesystem::create_directories(sys());
     }
@@ -42,6 +49,9 @@ public:
         std::filesystem::create_directories(p.parent_path());
         std::ofstream f(p, std::ios::binary | std::ios::trunc);
         f << text;
+        f.close();
+        if (!f)
+            throw std::runtime_error("activity fixture: cannot write " + p.string());
     }
     void link(const std::string &target, const std::string &rel) const
     {
@@ -59,12 +69,14 @@ public:
 
     // /proc/<pid>/stat with the fields the sampler reads; every other field 0.
     static std::string statLine(int pid, const std::string &comm, char state, int ppid, unsigned long flags, unsigned long utime,
-                                unsigned long stime, int threads, unsigned long long start, long nice = 0)
+                                unsigned long stime, int threads, unsigned long long start, long nice = 0,
+                                unsigned long long code = 0)
     {
         char buf[512];
         std::snprintf(buf, sizeof buf,
-                      "%d (%s) %c %d %d %d 0 -1 %lu 10 0 2 0 %lu %lu 0 0 20 %ld %d 0 %llu 104857600 2560 18446744073709551615 0 0 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0\n",
-                      pid, comm.c_str(), state, ppid, pid, pid, flags, utime, stime, nice, threads, start);
+                      "%d (%s) %c %d %d %d 0 -1 %lu 10 0 2 0 %lu %lu 0 0 20 %ld %d 0 %llu 104857600 2560 18446744073709551615 %llu %llu 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0\n",
+                      pid, comm.c_str(), state, ppid, pid, pid, flags, utime, stime, nice, threads, start, code,
+                      code ? code + 4096 : 0);
         return buf;
     }
 

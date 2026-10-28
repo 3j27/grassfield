@@ -195,3 +195,48 @@ TEST(ProcParse, DrmFdinfo)
     DrmClient none;
     EXPECT_FALSE(parseDrmFdinfo("pos:\t0\nflags:\t0\n", none));
 }
+
+TEST(ProcParse, ProcessNames)
+{
+    // AM17 after the review of 949fc98: argv[0] names the process only when it is the executable or the invoked name.
+    EXPECT_EQ(processName("/usr/bin/foot", "foot", "/usr/bin/foot"), "foot");
+    EXPECT_EQ(processName("/usr/lib/fakechrome/chrome --type=renderer --user-data-dir=/home/u/.config/myapp --lang=en-US",
+                          "chrome", "/usr/lib/fakechrome/chrome"),
+              "chrome");                                                              // a title over argv[0]
+    EXPECT_EQ(processName("sshd: alice@pts/0", "sshd", "/usr/bin/sshd"), "sshd");    // setproctitle
+    EXPECT_EQ(processName("-bash", "bash", "/usr/bin/bash"), "bash");                // a login shell
+    EXPECT_EQ(processName("vi", "vi", "/usr/bin/vim"), "vi");                         // a symbolic link: the invoked name
+    EXPECT_EQ(processName("/usr/bin/gnome-session-binary", "gnome-session-b", ""), "gnome-session-binary"); // comm cut at 15
+    EXPECT_EQ(processName("/usr/bin/gnome-session-other", "gnome-session-b", "/usr/bin/x"), "x"); // not the invoked name
+    EXPECT_EQ(processName("/usr/bin/gnome-session-binary --session=gnome", "gnome-session-b", ""), "gnome-session-b"); // a title that starts as the cut name
+    EXPECT_EQ(processName("worker", "kworkerish", "/opt/app/app"), "app");           // neither: the executable
+    EXPECT_EQ(processName("/opt/old/app", "app", "/opt/old/app (deleted)"), "app");   // replaced on disk
+    EXPECT_EQ(processName("title with spaces", "comm", ""), "comm");                 // nothing else: stat's name
+    EXPECT_EQ(processName("", "comm", ""), "comm");
+}
+
+TEST(ProcParse, Statm)
+{
+    Statm m;
+    ASSERT_TRUE(parseStatm("50000 2000 750 10 0 900 0\n", m));
+    EXPECT_EQ(m.size, 50000u);
+    EXPECT_EQ(m.resident, 2000u);
+    EXPECT_EQ(m.shared, 750u);
+    EXPECT_FALSE(parseStatm("50000 x 750", m));
+    EXPECT_FALSE(parseStatm("", m));
+}
+
+TEST(ProcParse, StatCodeAddressesOnlyWhenAsked)
+{
+    const std::string line = "42 (app) S 1 42 42 0 -1 4194304 10 0 2 0 7 3 0 0 20 0 1 0 5000 104857600 2560 "
+                             "18446744073709551615 93824992231424 93824992310000 140737488347136 0 0\n";
+    StatFields all, some;
+    ASSERT_TRUE(parseStat(line, all));
+    EXPECT_EQ(all.startCode, 93824992231424u);
+    EXPECT_EQ(all.endCode, 93824992310000u);
+    EXPECT_EQ(all.rssPages, 2560);
+    ASSERT_TRUE(parseStat(line, some, false)); // another owner's: never traceable, the fields are 0 anyway
+    EXPECT_EQ(some.startCode, 0u);
+    EXPECT_EQ(some.starttime, 5000u);
+    EXPECT_EQ(some.rssPages, 2560);
+}
