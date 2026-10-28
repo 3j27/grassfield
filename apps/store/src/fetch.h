@@ -31,6 +31,11 @@ QNetworkRequest storeRequest(const QUrl &url, const FetchLimits &limits, const Q
 // devPlumbing: the URL came from GRASSFIELD_STORE_CATALOG_URL in a dev session (file:// allowed then).
 FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &etag = {}, bool devPlumbing = false);
 
+// A HEAD request (the first package of a plan, ADR-0037 e.4 and S5): the HTTP status after the redirects fetch allows, 0
+// when no answer came, -1 when the URL is not one the Store requests (not https). Through dev plumbing a file:// URL
+// answers 200 when the file exists, else 404.
+int headStatus(const QUrl &url, int timeoutMs, bool devPlumbing = false);
+
 // The same request saved to `file`, written whole and then renamed into place; on any failure nothing is left there (the
 // AppStream package file and its signature, appstreamsource.h).
 bool downloadTo(const QUrl &url, const QString &file, const FetchLimits &limits, bool devPlumbing = false);

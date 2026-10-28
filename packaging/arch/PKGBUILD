@@ -20,7 +20,7 @@
 _here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
 pkgbase=grassfield
-pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
+pkgname=(grassfield-desktop grassfield-compositor grassfield-icons grassfield-store)
 pkgver=${_ver//-/}
 if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; then
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
@@ -129,6 +129,10 @@ build() {
   cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/preview-build"
+  # Grassfield Store (ADR-0037): the app, its QML, its root helper and polkit policy; packaged as grassfield-store.
+  cmake -S "$(_root)/apps/store" -B "$srcdir/store-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/store-build"
   # grassfield-menu-bridge (ADR-0008): global menus, systemd user unit, D-Bus diagnostics XML.
   cmake -S "$(_root)/bridges/menu-bridge" -B "$srcdir/menu-bridge-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
@@ -404,6 +408,22 @@ package_grassfield-compositor() {
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"
   install -Dm644 "$root/packaging/licenses/appmenu-LGPL-2.1-or-later.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/appmenu-LGPL-2.1-or-later.txt"
+}
+
+package_grassfield-store() {
+  pkgdesc="Grassfield Store: find, install, open and uninstall apps from Arch's repositories, Omarchy's and its web apps"
+  # ADR-0037 f: grassfield-desktop of the same build (design system, translations, menu bridge); polkit (pkexec, the helper's
+  # action, ADR-0037 b.1); gnupg (gpgv: the catalog's signature); kimageformats (the JPEG XL icons of Arch's app data, S3).
+  # Omarchy's commands (web apps) and pacman come with the system. The Store's own helper is its only root code: the
+  # security review of step 3 covers it and its policy.
+  depends=("grassfield-desktop=$pkgver-$pkgrel" polkit gnupg kimageformats qt6-declarative qt6-wayland zlib)
+  optdepends=(
+    "archlinux-appstream-data: Arch's app data on this computer (else the Store fetches it from your package mirror and checks it)"
+  )
+  license=(MIT)
+  DESTDIR="$pkgdir" cmake --install "$srcdir/store-build"
+  install -Dm644 "$(_root)/LICENSE" "$pkgdir/usr/share/licenses/grassfield-store/LICENSE"
+  install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/grassfield/store/BUILD-COMMIT"
 }
 
 package_grassfield-icons() {

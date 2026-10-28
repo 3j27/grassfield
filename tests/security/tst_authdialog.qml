@@ -309,6 +309,97 @@ TestCase {
         return null;
     }
 
+    // Grassfield Store's request (ADR-0037 SD2): the sheet says "Install" and the package names, then the action ID and the
+    // program's path; another request shows no program line.
+    function test_12_storeRequestNamesPackagesAndProgram() {
+        const message = flow.message;
+        const actionId = flow.actionId;
+        const text = findNamed(dialog, "polkitMessage");
+        const program = findNamed(dialog, "polkitProgram");
+        verify(text !== null && program !== null);
+        verify(!program.visible);
+        flow.actionId = "org.grassfield.store.manage-packages";
+        flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef xterm gimp";
+        compare(text.text, "Install xterm, gimp");
+        verify(program.visible);
+        compare(program.text, "Program: /usr/lib/grassfield/grassfield-store-helper");
+        flow.message = message;
+        flow.actionId = actionId;
+        verify(!program.visible);
+    }
+
+    // Grassfield Store's request names every package (review of 19d2e9e, item 3): 64 names of 128 characters, the helper's
+    // most, are all in the text and none is elided; the sheet shows storeLines lines and scrolls to the rest (Tab reaches
+    // it, then End, Home, the arrows, Page Down), and the action line and the buttons stay in the sheet.
+    function test_13_storeRequestNamesEveryPackage() {
+        const message = flow.message;
+        const actionId = flow.actionId;
+        const identities = flow.identities;
+        const text = findNamed(dialog, "polkitMessage");
+        const view = findNamed(dialog, "polkitMessageView");
+        verify(text !== null && view !== null);
+        const names = [];
+        for (let i = 0; i < 64; i++)
+            names.push(("gs" + i + "-").padEnd(128, "x"));
+        try {
+            flow.identities = [{displayName: "ada"}];
+            flow.actionId = "org.grassfield.store.manage-packages";
+            flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef " + names.join(" ");
+            waitForRendering(dialog);
+
+            compare(text.text, "Install " + names.join(", "));
+            verify(!text.truncated, "no name elided");
+            compare(text.Accessible.name, text.text);
+            verify(text.lineCount > dialog.storeLines, "lines: " + text.lineCount);
+            verify(view.scrolls);
+            verify(Math.abs(view.height - dialog.storeLines * view.lineStep) < 1, "shown: " + view.height);
+            verify(dialog.height < test.height, "dialog height " + dialog.height);
+            const action = findExact(dialog, "Action: org.grassfield.store.manage-packages");
+            const allow = findExact(dialog, "Allow");
+            const cancel = findExact(dialog, "Cancel");
+            verify(action !== null && allow !== null && cancel !== null);
+            verify(insideDialog(action), "action line visible");
+            verify(insideDialog(allow), "Allow visible");
+
+            // The sheet's tab chain is the list, Cancel and Allow (the field has the keys when it opens): Tab from Allow
+            // and Shift+Tab from Cancel reach the list.
+            allow.forceActiveFocus();
+            keyClick(Qt.Key_Tab);
+            verify(view.activeFocus, "Tab from Allow reaches the list");
+            cancel.forceActiveFocus();
+            keyClick(Qt.Key_Backtab, Qt.ShiftModifier);
+            verify(view.activeFocus, "Shift+Tab from Cancel reaches the list");
+            keyClick(Qt.Key_End);
+            compare(view.contentY, view.contentHeight - view.height);
+            keyClick(Qt.Key_Home);
+            compare(view.contentY, 0);
+            keyClick(Qt.Key_Down);
+            compare(view.contentY, view.lineStep);
+            keyClick(Qt.Key_PageDown);
+            compare(view.contentY, view.lineStep + view.height);
+            // Another request of the Store starts at its first line.
+            flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper remove 0123456789abcdef0123456789abcdef " + names.slice(0, 40).join(" ");
+            waitForRendering(dialog);
+            verify(view.scrolls);
+            compare(view.contentY, 0, "a new request starts at its first line");
+            dialog.inputEnabled = false;
+            verify(!view.activeFocus, "no focus while AuthAgent keeps the keys");
+            view.forceActiveFocus();
+            verify(!view.activeFocus, "nor when something forces it");
+        } finally {
+            dialog.inputEnabled = true;
+            dialog.focusField();
+            flow.message = message;
+            flow.actionId = actionId;
+            flow.identities = identities;
+        }
+        // Another request: capped, out of the tab chain (Qt applies that once the list has lost the focus).
+        waitForRendering(dialog);
+        verify(!view.scrolls, "another request is capped, not scrolled");
+        verify(!view.activeFocusOnTab);
+        compare(view.contentY, 0);
+    }
+
     // D-4 (macOS style): with the action's icon the lock becomes a badge on it; without one
     // (no icon_name, or the theme lacks it) the sheet shows the lock alone, at full size.
     function test_10_programIconWithLockBadge() {

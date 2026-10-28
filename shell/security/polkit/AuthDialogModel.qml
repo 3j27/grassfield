@@ -24,8 +24,13 @@ QtObject {
 
     // Every binding tests `flow` itself: the flow object can disappear between two updates.
     readonly property bool active: !!flow
-    readonly property string message: flow ? plainLine(flow.message, maxMessageLength) : ""
+    // Grassfield Store's request (ADR-0037 b.1, SD2), {verb: "install" | "remove", packages: [names]}, else null: the message
+    // says it in plain words ("Install …", "Remove …") and the sheet adds the program's path under the action ID.
+    readonly property var storeRequest: flow ? storeRequestOf(flow.actionId, flow.message) : null
+    readonly property string message: storeRequest ? storeMessage(storeRequest) : flow ? plainLine(flow.message, maxMessageLength) : ""
     readonly property string actionId: flow ? plainLine(flow.actionId, maxDetailLength) : ""
+    // The program polkit will run, when the request names it in a form this sheet reads (Grassfield Store's helper), else "".
+    readonly property string program: storeRequest ? storeHelper : ""
     // The action's theme icon (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName), shown with a lock
     // badge (D-4: macOS shows an icon for the request). It describes the action, not the program that asked: Quickshell
     // 0.3.1's AuthFlow exposes no subject, process or command line; the message (pkexec names the program there), the
@@ -161,6 +166,29 @@ QtObject {
         if (maxLength > 0 && t.length > maxLength)
             t = t.slice(0, maxLength - 1).trim() + "\u2026";
         return t;
+    }
+
+    // Grassfield Store's action (ADR-0037 b.1, SD2). Its policy's message ends with $(command_line), which polkitd expands
+    // with the helper's argument vector as pkexec reports it, so the package names come from polkit, not from the program
+    // that asked. Read only for this action id, and only when the whole message is one of the policy's two messages
+    // (English, French) followed by the helper's path, install or remove, an operation id and 1 to 64 package names of
+    // ADR-0037 e.5: anything else (another language, a character more) is shown as polkit gives it.
+    readonly property string storeActionId: "org.grassfield.store.manage-packages"
+    readonly property string storeHelper: "/usr/lib/grassfield/grassfield-store-helper"
+    readonly property var storePattern: /^(?:Authentication is required to install or remove apps:|Une authentification est nécessaire pour installer ou supprimer des apps :) \/usr\/lib\/grassfield\/grassfield-store-helper (install|remove) [0-9a-f]{32}((?: [a-z0-9@_+][a-z0-9@._+-]{0,127}){1,64})$/
+
+    function storeRequestOf(actionId: var, message: var): var {
+        if (actionId !== root.storeActionId || typeof message !== "string")
+            return null;
+        const m = root.storePattern.exec(message);
+        if (!m)
+            return null;
+        return {verb: m[1], packages: m[2].slice(1).split(" ")};
+    }
+
+    function storeMessage(request: var): string {
+        const names = request.packages.join(", ");
+        return request.verb === "install" ? qsTr("Install %1").arg(names) : qsTr("Remove %1").arg(names);
     }
 
     // "Password: " → "Password"

@@ -1084,6 +1084,10 @@
         <translation>Action&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Program: %1</source>
+        <translation>Programme&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>User: %1</source>
         <translation>Utilisateur&#xa0;: %1</translation>
     </message>
@@ -1121,6 +1125,14 @@
     <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the sheet to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur la fenêtre pour y répondre.</translation>
+    </message>
+    <message>
+        <source>Install %1</source>
+        <translation>Installer %1</translation>
+    </message>
+    <message>
+        <source>Remove %1</source>
+        <translation>Supprimer %1</translation>
     </message>
     <message>
         <source>Incorrect password. Try again.</source>
@@ -5626,8 +5638,56 @@
         <translation>Mises à jour</translation>
     </message>
     <message>
+        <source>“%1” could not be opened.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas pu être ouverte.</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>No message was recorded.</source>
+        <translation>Aucun message n’a été enregistré.</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Show in Store</source>
+        <translation>Afficher dans le Store</translation>
+    </message>
+    <message>
+        <source>Uninstall…</source>
+        <translation>Désinstaller…</translation>
+    </message>
+    <message>
         <source>Loading apps…</source>
         <translation>Chargement des apps…</translation>
+    </message>
+    <message>
+        <source>A package manager stopped mid-way and left its lock: nothing installs until it goes.</source>
+        <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou&#xa0;: rien ne s’installe tant qu’il est là.</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>A package manager stopped mid-way</source>
+        <translation>Un gestionnaire de paquets s’est arrêté en cours de route</translation>
+    </message>
+    <message>
+        <source>pacman&apos;s lock file is still there, but no pacman is running. If nothing is installing or updating (Software Update included), remove the lock in a terminal, then try again:</source>
+        <translation>Le fichier de verrou de pacman est toujours là, mais aucun pacman ne tourne. Si rien n’est en cours d’installation ni de mise à jour (Mise à jour de logiciels comprise), supprimez le verrou dans un terminal, puis réessayez&#xa0;:</translation>
     </message>
     <message>
         <source>You&apos;re offline. The catalog is from %1.</source>
@@ -5646,8 +5706,28 @@
         <translation>Le catalogue Grassfield n’est pas disponible : les apps d’Arch sont affichées.</translation>
     </message>
     <message>
+        <source>Installations: %1</source>
+        <translation>Installations&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Don&apos;t Uninstall “%1”</source>
+        <translation>Ne pas désinstaller «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Don&apos;t Install “%1”</source>
+        <translation>Ne pas installer «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
         <source>Store Settings</source>
         <translation>Réglages du Store</translation>
+    </message>
+    <message>
+        <source>App</source>
+        <translation>App</translation>
+    </message>
+    <message>
+        <source>Installations</source>
+        <translation>Installations</translation>
     </message>
 </context>
 <context>
@@ -6301,6 +6381,145 @@
     </message>
 </context>
 <context>
+    <name>OperationSheet</name>
+    <message>
+        <source>Uninstall “%1”?</source>
+        <translation>Désinstaller «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Install “%1”?</source>
+        <translation>Installer «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Finish the system update first</source>
+        <translation>Terminez d’abord la mise à jour du système</translation>
+    </message>
+    <message>
+        <source>Update your system first</source>
+        <translation>Mettez d’abord le système à jour</translation>
+    </message>
+    <message>
+        <source>Another installation or an update is running</source>
+        <translation>Une autre installation ou une mise à jour est en cours</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline</source>
+        <translation>Vous êtes hors ligne</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be uninstalled</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée</translation>
+    </message>
+    <message>
+        <source>Uninstalling it would also remove part of the system</source>
+        <translation>La désinstaller retirerait aussi une partie du système</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be uninstalled now</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être désinstallée pour le moment</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be installed now</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être installée pour le moment</translation>
+    </message>
+    <message>
+        <source>Checking what this changes…</source>
+        <translation>Vérification de ce que cela change…</translation>
+    </message>
+    <message>
+        <source>The launcher and its icon are removed from Apps.</source>
+        <translation>Le lanceur et son icône sont retirés d’Apps.</translation>
+    </message>
+    <message>
+        <source>A launcher that opens %1 in your browser is added to Apps, with its icon.</source>
+        <translation>Un lanceur qui ouvre %1 dans votre navigateur est ajouté à Apps, avec son icône.</translation>
+    </message>
+    <message>
+        <source>These packages will be removed. Your files and settings stay.</source>
+        <translation>Ces paquets seront supprimés. Vos fichiers et vos réglages restent.</translation>
+    </message>
+    <message>
+        <source>These packages will be installed:</source>
+        <translation>Ces paquets seront installés&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
+        <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>This app needs newer packages than this computer has. Update your system in Software Update, then try again.</source>
+        <translation>Cette app a besoin de paquets plus récents que ceux de cet ordinateur. Mettez le système à jour dans Mise à jour de logiciels, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>Try again when it has finished.</source>
+        <translation>Réessayez quand elle sera terminée.</translation>
+    </message>
+    <message>
+        <source>Installing an app needs a connection to the internet.</source>
+        <translation>Installer une app nécessite une connexion à Internet.</translation>
+    </message>
+    <message>
+        <source>Other apps need it: %1.</source>
+        <translation>D’autres apps en ont besoin&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.</source>
+        <translation>Désinstaller «&#xa0;%1&#xa0;» retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
+    </message>
+    <message>
+        <source>The Store could not read what this would change.</source>
+        <translation>Le Store n’a pas pu lire ce que cela changerait.</translation>
+    </message>
+    <message>
+        <source>Uninstall</source>
+        <translation>Désinstaller</translation>
+    </message>
+    <message>
+        <source>Install</source>
+        <translation>Installer</translation>
+    </message>
+    <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Checking</source>
+        <translation>Vérification</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Licence</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Licence not stated</source>
+        <translation>Licence non indiquée</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>Téléchargement</translation>
+    </message>
+    <message>
+        <source>Installed size</source>
+        <translation>Taille installée</translation>
+    </message>
+    <message>
+        <source>Packages to remove</source>
+        <translation>Paquets à supprimer</translation>
+    </message>
+    <message>
+        <source>Packages to install</source>
+        <translation>Paquets à installer</translation>
+    </message>
+</context>
+<context>
     <name>OsdWindow</name>
     <message>
         <source>Brightness %1%</source>
@@ -6882,12 +7101,28 @@
 <context>
     <name>ProductPage</name>
     <message>
+        <source>More for %1</source>
+        <translation>Plus pour %1</translation>
+    </message>
+    <message>
+        <source>Uninstall…</source>
+        <translation>Désinstaller…</translation>
+    </message>
+    <message>
         <source>Licence: %1</source>
         <translation>Licence&#xa0;: %1</translation>
     </message>
     <message>
         <source>Licence not stated</source>
         <translation>Licence non indiquée</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Details…</source>
+        <translation>Détails…</translation>
     </message>
     <message>
         <source>This app has no window of its own: it runs in a terminal.</source>
@@ -8557,6 +8792,154 @@
         <translation>Hors dépôts</translation>
     </message>
     <message>
+        <source>dev: not applied</source>
+        <translation>dév.&#xa0;: non appliqué</translation>
+    </message>
+    <message>
+        <source>You&apos;re offline.</source>
+        <translation>Vous êtes hors ligne.</translation>
+    </message>
+    <message>
+        <source>This computer can&apos;t install apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
+        <translation>Cet ordinateur ne peut pas installer d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+    </message>
+    <message>
+        <source>This web app&apos;s icon hasn&apos;t been downloaded yet. Refresh the Store, then try again.</source>
+        <translation>L’icône de cette app web n’a pas encore été téléchargée. Actualisez le Store, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>Installing apps from this source comes in a later version of the Store.</source>
+        <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
+    </message>
+    <message>
+        <source>Waiting for another installation or an update to finish</source>
+        <translation>En attente de la fin d’une autre installation ou d’une mise à jour</translation>
+    </message>
+    <message>
+        <source>Waiting</source>
+        <translation>En attente</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Finishing the uninstallation…</source>
+        <translation>Fin de la désinstallation…</translation>
+    </message>
+    <message>
+        <source>Finishing the installation…</source>
+        <translation>Fin de l’installation…</translation>
+    </message>
+    <message>
+        <source>Uninstalling: %1 of %2</source>
+        <translation>Désinstallation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Installing: %1 of %2</source>
+        <translation>Installation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Uninstalling…</source>
+        <translation>Désinstallation…</translation>
+    </message>
+    <message>
+        <source>Installing…</source>
+        <translation>Installation…</translation>
+    </message>
+    <message>
+        <source>The uninstallation was interrupted: %1 of %2 packages were removed.</source>
+        <translation>La désinstallation a été interrompue&#xa0;: %1 paquets sur %2 ont été supprimés.</translation>
+    </message>
+    <message>
+        <source>The installation was interrupted: %1 of %2 packages were installed.</source>
+        <translation>L’installation a été interrompue&#xa0;: %1 paquets sur %2 ont été installés.</translation>
+    </message>
+    <message>
+        <source>The uninstallation did not finish.</source>
+        <translation>La désinstallation ne s’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>The installation did not finish.</source>
+        <translation>L’installation ne s’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>The Store stopped following this operation after a long time. Check what is installed in Installed.</source>
+        <translation>Le Store a cessé de suivre cette opération au bout d’un long moment. Vérifiez ce qui est installé dans Installées.</translation>
+    </message>
+    <message>
+        <source>The request for permission timed out.</source>
+        <translation>La demande d’autorisation a expiré.</translation>
+    </message>
+    <message>
+        <source>The uninstallation could not start: permission was not given.</source>
+        <translation>La désinstallation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
+    </message>
+    <message>
+        <source>The installation could not start: permission was not given.</source>
+        <translation>L’installation n’a pas pu démarrer&#xa0;: l’autorisation n’a pas été donnée.</translation>
+    </message>
+    <message>
+        <source>Another installation or an update is running.</source>
+        <translation>Une autre installation ou une mise à jour est en cours.</translation>
+    </message>
+    <message>
+        <source>Finish the system update first.</source>
+        <translation>Terminez d’abord la mise à jour du système.</translation>
+    </message>
+    <message>
+        <source>Update your system first.</source>
+        <translation>Mettez d’abord le système à jour.</translation>
+    </message>
+    <message>
+        <source>This app can&apos;t be uninstalled from the Store.</source>
+        <translation>Cette app ne peut pas être désinstallée depuis le Store.</translation>
+    </message>
+    <message>
+        <source>This package isn&apos;t an app: the Store installs only apps.</source>
+        <translation>Ce paquet n’est pas une app&#xa0;: le Store n’installe que des apps.</translation>
+    </message>
+    <message>
+        <source>The uninstallation failed.</source>
+        <translation>La désinstallation a échoué.</translation>
+    </message>
+    <message>
+        <source>The installation failed.</source>
+        <translation>L’installation a échoué.</translation>
+    </message>
+    <message>
+        <source>Part of Omarchy</source>
+        <translation>Fait partie d’Omarchy</translation>
+    </message>
+    <message>
+        <source>Part of Grassfield</source>
+        <translation>Fait partie de Grassfield</translation>
+    </message>
+    <message>
+        <source>Part of the system</source>
+        <translation>Fait partie du système</translation>
+    </message>
+    <message>
+        <source>Installed with another app</source>
+        <translation>Installée avec une autre app</translation>
+    </message>
+    <message>
+        <source>Not an app: it has no window of its own</source>
+        <translation>Pas une app&#xa0;: elle n’a pas de fenêtre à elle</translation>
+    </message>
+    <message>
+        <source>Not from a repository: uninstalling it comes in a later version of the Store</source>
+        <translation>Hors dépôts&#xa0;: sa désinstallation arrive dans une prochaine version du Store</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s package lists can&apos;t be read, so the Store uninstalls nothing</source>
+        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues&#xa0;: le Store ne désinstalle rien</translation>
+    </message>
+    <message>
+        <source>This computer can&apos;t uninstall apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
+        <translation>Cet ordinateur ne peut pas désinstaller d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
@@ -8708,6 +9091,14 @@
 <context>
     <name>StoreButton</name>
     <message>
+        <source>Installing and opening apps work in the Store&apos;s window.</source>
+        <translation>L’installation et l’ouverture d’apps se font dans la fenêtre du Store.</translation>
+    </message>
+    <message>
+        <source>This app has no window of its own.</source>
+        <translation>Cette app n’a pas de fenêtre à elle.</translation>
+    </message>
+    <message>
         <source>Open %1</source>
         <translation>Ouvrir %1</translation>
     </message>
@@ -8720,8 +9111,8 @@
         <translation>Obtenir %1</translation>
     </message>
     <message>
-        <source>Installing and opening apps from the Store come in a later version.</source>
-        <translation>L’installation et l’ouverture des apps depuis le Store arrivent dans une prochaine version.</translation>
+        <source>Remove %1 from the queue</source>
+        <translation>Retirer %1 de la file d’attente</translation>
     </message>
 </context>
 <context>
@@ -9027,6 +9418,13 @@
     <message>
         <source>Gray</source>
         <translation>Gris</translation>
+    </message>
+</context>
+<context>
+    <name>TextSheet</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
     </message>
 </context>
 <context>
