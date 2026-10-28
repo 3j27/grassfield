@@ -1,9 +1,9 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
 Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
-(PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a on its branch
-(the Layouts section, its number keys and the suggestions, TL27, TL28), 4b (tile groups, TL29) and 4c (the shared edge,
-TL30) not built; steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
+(PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
+(PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b on its branch (tile groups, TL29), 4c
+(the shared edge, TL30) not built; steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -348,6 +348,19 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   app's groups ("Show Tile Group"); the Overview moves a group to another Desktop as one; membership follows TL10: a
   window leaves its group when it is dragged away (Moving), tiled elsewhere or becomes Free; a resize keeps it; minimized
   windows stay members; a group of one dissolves.
+  Step 4b as built (D29-D31): verb `group_front(address)` (core `groupRaiseOrder`): the members of the window's group that
+  are Tiled or being resized on its Desktop are raised in their stacking order, bottom first, then the window itself when
+  it is on screen (`alterZOrder("top")`, the same raise as a restore); a minimized, full-screen or hidden member stays; no
+  tile record changes. The shell (Compositor `groupForward`, `activateWithGroup`) sends it after the window's own
+  activation for a Dock click (the window that ends focused), the Dock menu's and the menu bar's window rows, the app
+  switcher and the Overview's choice of a window; the window ends in front whichever request the compositor takes first.
+  The groups are the `group` of each window in the `hyprctl grassfield-tiling` reply (`WindowTiling.parseGroups`, a
+  suspended member included), read again by platform/TilingLink after every change of the tile records. The Dock menu
+  lists the app's groups after Show All Windows (`WindowTiling.tileGroupRows`): "Show Tile Group", or "Show Tile Group
+  with <the other members' apps>" when the app has several; the row (Compositor `showTileGroup`) shows the window's
+  Desktop, restores the group's minimized members there, focuses the window and brings the group forward, all through the
+  dispatch channel in that order. An Overview drop (Compositor `moveGroupToSpace`) moves the window and the members on its
+  Desktop to the target Desktop, where they stay tiled and grouped (TL14). Feature `tiling-groups`, with `tiling-arrange`.
 - **TL30** Shared edge (T1e, option 1, M43, W18): between two windows of a group whose frames share an edge (margin
   between them included), the pointer over the middle `tiling.handleLength` of that edge shows a handle (resize cursor);
   dragging it moves the edge for every window of the group along it, within their minimum and maximum; outside the handle

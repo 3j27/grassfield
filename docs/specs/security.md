@@ -398,7 +398,13 @@ shell no longer relies on that alone:
   locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
   review of 4ead6fb). Tiling step 4a: `arrange` with `zone` and `with` (a zone of the Layouts section, a pick of the
   suggestions) is refused while locked like every `arrange`; the suggestion in the `hyprctl grassfield-tiling` reply is read
-  only by the shell after its own arrangement, and lists window addresses only (no titles, no contents).
+  only by the shell after its own arrangement, and lists window addresses only (no titles, no contents). Tiling step 4b
+  (TL29): `hl.plugin.grassfield.group_front` refuses while the session is locked (`tiling` notice with
+  `reason:"locked"`, no window is raised) and for an unknown window (`reason:"invalid"`); it only changes the stacking
+  order of windows already on screen (no move, no focus, no tile record). The shell sends it only from entry points the
+  lock already refuses (a Dock click or Dock menu row, the app switcher, the Overview's choice, the menu bar's Window menu)
+  and adds no IPC function or popup kind; the groups it reads from the `hyprctl grassfield-tiling` reply are window
+  addresses and group numbers only.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
