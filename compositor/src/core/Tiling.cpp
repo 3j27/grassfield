@@ -1164,6 +1164,12 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
+    bool handleClear(const SharedEdge& edge, uint64_t topmost, bool popup) {
+        if (topmost == 0)
+            return true;
+        return !popup && (std::ranges::find(edge.before, topmost) != edge.before.end() || std::ranges::find(edge.after, topmost) != edge.after.end());
+    }
+
     std::vector<std::pair<uint64_t, Rect>> dragEdge(const SharedEdge& edge, std::span<const EdgeWindow> windows, double delta, const Grid& grid) {
         const bool   v   = edge.vertical;
         const double inf = std::numeric_limits<double>::infinity();

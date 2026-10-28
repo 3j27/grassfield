@@ -508,6 +508,13 @@ namespace gf::tiling {
     // The edge one of whose handles holds the point (x, y) (the first in `edges`), or nullopt.
     std::optional<SharedEdge> edgeAt(std::span<const SharedEdge> edges, double x, double y);
 
+    // Whether a handle under the pointer may take it (TL30, TL34): the frontmost window under the point always gets the
+    // click (macOS). `topmost`: the window Hyprland's pointer focus finds there (its hit test with the reserved and input
+    // extents and floating windows: a titlebar, a border grab area, a popup, a full-screen window, from the top of the
+    // stack), 0 when none; `popup`: an xdg popup of it holds the point. Clear when no window is there or it is one of the
+    // edge's own windows by its body or border, never by a popup.
+    bool handleClear(const SharedEdge& edge, uint64_t topmost, bool popup);
+
     // A drag of `edge` by `delta` logical px along its axis (x for a vertical edge) from the frames at the press
     // (`windows`, which hold every window of the edge): the before windows' far side and the after windows' near side move
     // together and the gap stays; the edge lands on the grid line nearest the pointer; it never takes a window under its

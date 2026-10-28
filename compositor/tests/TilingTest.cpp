@@ -1184,17 +1184,21 @@ TEST(TilingEdge, TheGroupsSharedEdgesAndTheirHandles) {
 
     // A band wider than the gap widens the handle equally into both windows; a stretch shorter than the handle is all of it.
     const auto wide = sharedEdges(windows, 8, 1000, 12);
+    ASSERT_FALSE(wide.empty());
+    ASSERT_FALSE(wide[0].handles.empty());
     EXPECT_EQ(wide[0].handles[0], (Rect{494, 8, 12, 388}));
     // Without margins the windows touch: the handle is the band, half in each.
     std::vector<EdgeWindow> touching{{.id = 1, .group = 3, .frame = Rect{0, 0, 500, 800}, .limits = {}}, {.id = 2, .group = 3, .frame = Rect{500, 0, 500, 800}, .limits = {}}};
     const auto flush = sharedEdges(touching, 0, 120, 8);
     ASSERT_EQ(flush.size(), 1u);
     EXPECT_DOUBLE_EQ(flush[0].gap, 0);
+    ASSERT_EQ(flush[0].handles.size(), 1u);
     EXPECT_EQ(flush[0].handles[0], (Rect{496, 340, 8, 120}));
     // A one-px overlap still counts (gap 0); more, or a gap wider than the margin, does not.
     touching[1].frame.x = 499;
-    EXPECT_EQ(sharedEdges(touching, 0, 120, 8).size(), 1u);
-    EXPECT_DOUBLE_EQ(sharedEdges(touching, 0, 120, 8)[0].gap, 0);
+    const auto overlap = sharedEdges(touching, 0, 120, 8);
+    ASSERT_EQ(overlap.size(), 1u);
+    EXPECT_DOUBLE_EQ(overlap[0].gap, 0);
     touching[1].frame.x = 497;
     EXPECT_TRUE(sharedEdges(touching, 0, 120, 8).empty());
     touching[1].frame.x = 510;
@@ -1236,16 +1240,26 @@ TEST(TilingEdge, OnlyMembersOfOneGroupShareAnEdge) {
     EXPECT_EQ(cross[0].handles.size(), 2u);
     EXPECT_EQ(cross[1].before, (std::vector<uint64_t>{1, 2}));
     EXPECT_EQ(cross[1].after, (std::vector<uint64_t>{3, 4}));
+    // Two groups side by side on one line (the top pair one group, the bottom pair another): two edges, never one.
+    auto halves     = quarters;
+    halves[2].group = 2;
+    halves[3].group = 2;
+    const auto pairs = sharedEdges(halves, 8, 120, 8);
+    ASSERT_EQ(pairs.size(), 2u) << "the vertical line splits by group; no window faces one of its group across the horizontal";
+    EXPECT_EQ(pairs[0].group, 1u);
+    EXPECT_EQ(pairs[0].before, (std::vector<uint64_t>{1}));
+    EXPECT_EQ(pairs[0].after, (std::vector<uint64_t>{2}));
+    EXPECT_EQ(pairs[1].group, 2u);
+    EXPECT_EQ(pairs[1].before, (std::vector<uint64_t>{3}));
+    EXPECT_EQ(pairs[1].after, (std::vector<uint64_t>{4}));
 }
 
 TEST(TilingEdge, AHandleUnderThePointer) {
     const auto edges = sharedEdges(leftQuarters(), 8, 120, 8);
     const auto onVertical = edgeAt(edges, 500, 200);
-    ASSERT_TRUE(onVertical.has_value());
-    EXPECT_TRUE(onVertical.value_or(SharedEdge{.vertical = false}).vertical);
+    EXPECT_TRUE(onVertical.has_value() && onVertical->vertical);
     const auto onHorizontal = edgeAt(edges, 700, 400);
-    ASSERT_TRUE(onHorizontal.has_value());
-    EXPECT_FALSE(onHorizontal.value_or(SharedEdge{.vertical = true}).vertical);
+    EXPECT_TRUE(onHorizontal.has_value() && !onHorizontal->vertical);
     EXPECT_TRUE(edgeAt(edges, 496, 142).has_value()) << "the handle's own corner";
     EXPECT_FALSE(edgeAt(edges, 504, 200).has_value()) << "its far side is out";
     EXPECT_FALSE(edgeAt(edges, 500, 262).has_value());
@@ -1254,9 +1268,23 @@ TEST(TilingEdge, AHandleUnderThePointer) {
     EXPECT_FALSE(edgeAt(std::vector<SharedEdge>{}, 500, 200).has_value());
 }
 
+TEST(TilingEdge, AHandleYieldsToAWindowInFrontOfIt) {
+    const auto edges = sharedEdges(leftQuarters(), 8, 120, 8);
+    ASSERT_EQ(edges.size(), 2u);
+    const auto& v = edges[0];
+    EXPECT_TRUE(handleClear(v, 0, false)) << "nothing there: the margin between the edge's windows";
+    EXPECT_TRUE(handleClear(v, 1, false)) << "a before window's border grab area";
+    EXPECT_TRUE(handleClear(v, 3, false)) << "an after window's";
+    EXPECT_FALSE(handleClear(v, 9, false)) << "another window in front (free, zoomed, full screen, or its titlebar) gets the click";
+    EXPECT_FALSE(handleClear(v, 1, true)) << "a popup of the edge's own window";
+    EXPECT_FALSE(handleClear(v, 9, true));
+    EXPECT_FALSE(handleClear(edges[1], 1, false)) << "a window of the group outside this edge";
+}
+
 TEST(TilingEdge, ADragMovesTheEdgeForEveryWindowWithinTheirLimits) {
     auto       windows = leftQuarters();
     const auto edges   = sharedEdges(windows, 8, 120, 8);
+    ASSERT_EQ(edges.size(), 2u);
     const auto& v = edges[0];
     const auto& h = edges[1];
     const Grid  grid{.originX = 0, .originY = 0, .step = 1};
@@ -1291,8 +1319,10 @@ TEST(TilingEdge, ADragMovesTheEdgeForEveryWindowWithinTheirLimits) {
 
 TEST(TilingEdge, ADragLandsOnTheGrid) {
     const auto windows = leftQuarters();
-    const auto h       = sharedEdges(windows, 8, 120, 8)[1];
-    const Grid even{.originX = 0, .originY = 0, .step = 2};
+    const auto edges   = sharedEdges(windows, 8, 120, 8);
+    ASSERT_EQ(edges.size(), 2u);
+    const auto& h = edges[1];
+    const Grid  even{.originX = 0, .originY = 0, .step = 2};
     EXPECT_EQ(frameOf(dragEdge(h, windows, 3, even), 2).h, 392) << "396 + 3 to the nearest even line, 400";
     // The last line inside the limits when the nearest is outside them.
     auto limited          = windows;
@@ -1301,7 +1331,7 @@ TEST(TilingEdge, ADragLandsOnTheGrid) {
     // Moving left, the nearest line below the limit: the first line inside it.
     auto vlimited          = windows;
     vlimited[0].limits.minW = 400.6; // L may lose 87.4 px: 408.6 is the edge's limit, 408 the nearest even line
-    const auto v           = sharedEdges(windows, 8, 120, 8)[0];
+    const auto& v          = edges[0];
     EXPECT_EQ(frameOf(dragEdge(v, vlimited, -100, even), 1).w, 402) << "the edge on 410";
     // No line inside the limits: nothing moves.
     const Grid coarse{.originX = 0, .originY = 0, .step = 4};
