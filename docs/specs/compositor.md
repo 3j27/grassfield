@@ -162,9 +162,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
 - **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
   state always matches the device and the click after any titlebar gesture reaches the window under the
-  pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
-  are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
-  was. Such a press is taken only when no device holds that button already (the bus event names no device). Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  pointer. Two exceptions, P6 (the revealed titlebar of a full-screen window) and the shared edge's handle between two tiled
+  windows of a group (docs/specs/tiling.md TL30): a press on it and the release of that press are cancelled together;
+  Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it was. Such a press is
+  taken only when no device holds a button already (the bus event names no device), and a release still owed when the
+  button is pressed again was lost and is forgotten. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.
@@ -981,13 +983,15 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - APIs used (all read from the 0.56.2 headers): `HyprlandAPI::{addWindowDecoration, removeWindowDecoration,
   addLuaFunction, removeLuaFunction, registerHyprCtlCommand, unregisterHyprCtlCommand, addNotification,
   getHyprlandVersion}`, `Event::bus()->m_events.{window.open, window.floating, window.fullscreen,
-  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled; the deprecated
+  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled but for FR13's two exceptions; the deprecated
   `registerCallbackDynamic` is not used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`,
   `g_pDecorationPositioner`, `g_pHyprRenderer->addPassElement` with `CRectPassElement` /
   `CTexPassElement`, `renderText`, `g_layoutManager->setTargetGeom` (move),
   `Desktop::focusState()->fullWindowFocus`, `Fullscreen::controller()->setFullscreenMode`,
   `Config::Actions::{closeWindow, alterZOrder}`, `Event::bus()->m_events.input.mouse.move`,
   `g_pInputManager->{hasHeldButtons(), m_pointers, getMouseCoordsInternal()}`,
+  `Pointer::Cursor::overrideController->{setOverride, unsetOverride}` (special-action group: the shared edge's cursor,
+  tiling.md TL30),
   `CWindow::{m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration,
   forceRecalcFor}`, `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
   Minimize (M2, also checked in the exported symbol table): `Event::bus()->m_events.{render.preChecks,

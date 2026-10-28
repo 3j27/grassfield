@@ -384,8 +384,10 @@ shell no longer relies on that alone:
   kind `tilingSuggest`, opened only through `Popups.open` by services/TilingSuggest, whose `show` asks
   `SessionState.refuses("tiling suggestions")` first, then refuses them over the polkit sheet, a full-attention surface and
   the Dock's keyboard mode (`TilingHover.refusedBy`) and in place of any popup but the tiling popover; they close with every
-  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Planned, not built
-  (step 4c): the shared-edge handle joins this list, and closes when the lock engages.
+  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Built in tiling step 4c
+  (TL30): the shared-edge handle draws no surface; the plugin shows its cursor and takes its press only when the session
+  is not locked and no foreign Exclusive layer or layer covers the point, and a drag in progress ends when the lock
+  engages (the windows keep the boxes they reached; the release it owes is still cancelled).
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or

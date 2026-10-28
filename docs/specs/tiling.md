@@ -2,8 +2,8 @@
 
 Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
-(PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b on its branch (tile groups, TL29), 4c
-(the shared edge, TL30) not built; steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
+(PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
+on its branch (the shared edge, TL30); steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -373,6 +373,27 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`CWindow::m_events.resize` or the motion listener, then `setTargetGeom` and a warp), measured for configure storms and
   P3; if live following proves too slow, the neighbours follow at the release and show their app icon on the glass during
   the drag (Windows' placeholder).
+  Step 4c as built (D32-D34): the plugin drives the drag itself, Hyprland's resize is not followed (D33). Core
+  `sharedEdges` finds, per output Desktop, the edges the Tiled members of a group share: two windows face each other when
+  the gap between their facing sides is the margin or less (from -1 to margin + 1 px) and they overlap along it by more
+  than 1 px; an edge holds every window of the group on that line, before (left or above) and after it; one handle per
+  pair of facing windows, the middle `tiling.handleLength` of the stretch they share, across the gap and at least
+  `tiling.handleBand` wide (without margins half in each window). The pointer resting on a handle (no button held, no
+  modifier, the desktop not covered: not locked, no foreign Exclusive layer, no layer under the point) shows a left-right or
+  up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon); nothing is drawn
+  (D32). A plain left press there, with no button held by any device, is the plugin's: it and its release are cancelled
+  on the bus (compositor.md FR13, as P6), every window of the edge goes Resizing, and the edge follows the pointer along
+  its axis (core `dragEdge`: the before windows' far side and the after windows' near side move together, the gap kept,
+  the edge on the grid line nearest the pointer and never past any window's minimum or maximum, heights counting the
+  titlebar band), each window's surface set and its animation ended at once (`setTargetGeom`, `warpPositionSize`, as a
+  step of Hyprland's own resize), at most once per refresh of the output (the motions in between wait for a timer: P3,
+  the neighbours configured at most once per refresh); the release (or the lock engaging) ends it: Tiled with the new
+  boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions and duration. A window closed meanwhile is
+  left out, the others go on. Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
+  and group). During the drag DesktopFocus and the titlebars ignore the pointer. Feature `tiling-shared-edge`, with
+  `tiling-arrange`. The spike's measurement (D34): tests/visual/presented-frames.sh `shared-edge` (two live windows, three
+  glides with the button held) gives P3 in nested; the fallback of the release with placeholders is built only if it
+  fails there.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
