@@ -19,7 +19,8 @@
 
 int main(int argc, char *argv[])
 {
-    // QApplication (not QGuiApplication): KIO's conflict, Open With and undo confirmation dialogs are widgets.
+    // QApplication (not QGuiApplication): KIO's widgets library (KDirLister, its job delegate class) expects one; its
+    // dialogs are not used (Grassfield's sheets, ADR-0035 D-12 a, src/kioprompts.h).
     QApplication app(argc, argv);
     // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
     grassfield::apps::reserveFirstShortcutId(app);
