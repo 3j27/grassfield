@@ -171,12 +171,19 @@ private:
     std::function<void(const QString &)> m_reportError;
 };
 
+class QMimeData;
+
 namespace KioDialogs
 {
-// Called once at start: every KIO delegate Files gets from now on is Grassfield's, also for the sub-jobs KIO gives a default
-// delegate of their own (DirectCopyJob, src/core/job.cpp:282), which the delegate of the job Files starts would not reach;
-// undo and redo ask through Grassfield's interface.
-void install(KioPrompts *prompts, const std::function<void(const QString &)> &reportError);
+// Called once at start, before Files starts any job: every KIO delegate Files gets from now on is Grassfield's, also for
+// the sub-jobs KIO gives a default delegate of their own (DirectCopyJob, src/core/job.cpp:282), which the delegate of the
+// job Files starts would not reach; undo and redo ask through Grassfield's interface; KIO's job tracker opens no progress
+// window (KWidgetJobTracker). All of it is KIO's again once `prompts` is destroyed. Returns `prompts`.
+KioPrompts *install(KioPrompts *prompts, const std::function<void(const QString &)> &reportError);
 // The delegate for a job Files starts (explicit, so it does not depend on the default factory).
 KJobUiDelegate *createDelegate(KJobUiDelegate::Flags flags = KJobUiDelegate::AutoHandlingDisabled);
+// The items a paste of `data` would copy or move. Data without items (text, an image) is not pasted: KIO would ask for a
+// file name and a format in its own widget dialogs (KIO::PasteDialog, src/widgets/paste.cpp), and the Finder pastes items
+// only (ADR-0035 4a-14).
+QList<QUrl> pastableItems(const QMimeData *data);
 } // namespace KioDialogs

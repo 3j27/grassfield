@@ -14,6 +14,11 @@
 #include <KFileUtils>
 #include <KIO/CopyJob>
 #include <KIO/Job>
+#include <KJobTrackerInterface>
+#include <KUrlMimeData>
+#include <kio/jobtracker.h>
+
+#include <QMimeData>
 
 #include <memory>
 
@@ -487,19 +492,28 @@ bool GrassfieldUndoUi::copiedFileWasModified(const QUrl &, const QUrl &dest, con
 
 namespace KioDialogs
 {
-void install(KioPrompts *prompts, const std::function<void(const QString &)> &reportError)
+KioPrompts *install(KioPrompts *prompts, const std::function<void(const QString &)> &reportError)
 {
+    if (s_prompts) // one FilesApp, one install
+        return prompts;
     s_prompts = prompts;
     KIO::JobUiDelegateFactory *previous = KIO::defaultJobUiDelegateFactory();
     auto *factory = new GrassfieldJobUiDelegateFactory(prompts);
     KIO::setDefaultJobUiDelegateFactory(factory);
     KIO::FileUndoManager::self()->setUiInterface(new GrassfieldUndoUi(reportError));
-    QObject::connect(prompts, &QObject::destroyed, [previous, factory] {
+    // KIO's tracker for jobs started without HideProgressInfo (an undo's link removal, fileundomanager.cpp:699) opens
+    // KIO's progress window when no KDE job server answers on the bus (kdynamicjobtracker.cpp:103-195): one that tracks
+    // nothing instead (ADR-0035 4a-12; KIO's own setter, marked internal, jobtracker.h:28).
+    KJobTrackerInterface *previousTracker = KIO::getJobTracker();
+    KIO::setJobTracker(new KJobTrackerInterface(prompts));
+    QObject::connect(prompts, &QObject::destroyed, [previous, factory, previousTracker] {
         KIO::setDefaultJobUiDelegateFactory(previous);
         delete factory;
         s_prompts = nullptr;
         KIO::FileUndoManager::self()->setUiInterface(new KIO::FileUndoManager::UiInterface);
+        KIO::setJobTracker(previousTracker);
     });
+    return prompts;
 }
 
 KJobUiDelegate *createDelegate(KJobUiDelegate::Flags flags)
@@ -507,5 +521,19 @@ KJobUiDelegate *createDelegate(KJobUiDelegate::Flags flags)
     if (!s_prompts)
         return KIO::createDefaultJobUiDelegate(flags, nullptr);
     return new GrassfieldJobUiDelegate(s_prompts, flags, nullptr);
+}
+
+QList<QUrl> pastableItems(const QMimeData *data)
+{
+    // KIO::paste copies or moves URLs only when the data has them as text/uri-list (pastejob.cpp:68-70); anything else
+    // goes to its dialogs.
+    if (!data || !data->hasUrls())
+        return {};
+    QList<QUrl> urls;
+    for (const QUrl &url : KUrlMimeData::urlsFromMimeData(data, KUrlMimeData::PreferLocalUrls)) {
+        if (url.isValid() && !url.scheme().isEmpty())
+            urls << url;
+    }
+    return urls;
 }
 } // namespace KioDialogs

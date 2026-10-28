@@ -338,8 +338,9 @@ private:
     void folderViewsWritten(FolderViews::WriteResult result, const QString &error);
 
     QList<QUrl> m_initialUrls;
-    PlacesModel *m_places = nullptr;
+    // Before m_places: Grassfield's KIO delegate is in place before the first job (the Trash listing) starts.
     KioPrompts *m_prompts = nullptr;
+    PlacesModel *m_places = nullptr;
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
     bool m_dark = true;

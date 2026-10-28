@@ -12,7 +12,9 @@
 #include <QDirIterator>
 #include <QEventLoop>
 #include <QFile>
+#include <QMimeData>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -472,6 +474,48 @@ TEST_F(KioDialogsTest, UndoKeepsACopyChangedSince)
     EXPECT_NE(dynamic_cast<GrassfieldUndoUi *>(KIO::FileUndoManager::self()->uiInterface()), nullptr);
 }
 
+TEST_F(KioDialogsTest, UndoOfALinkOpensNoProgressWindow)
+{
+    // Undo removes a link with a job KIO tracks (KIO::file_delete without HideProgressInfo, fileundomanager.cpp:699): with
+    // no KDE job server, KIO's tracker would make its progress window (TearDown fails on any widget).
+    write(QStringLiteral("from/a.txt"), "a");
+    KIO::CopyJob *job = withGrassfieldsDelegate(KIO::link(url(QStringLiteral("from/a.txt")), url(QStringLiteral("to")), KIO::HideProgressInfo));
+    KIO::FileUndoManager::self()->recordCopyJob(job);
+    ASSERT_TRUE(run(job));
+    ASSERT_TRUE(QFileInfo(path(QStringLiteral("to/a.txt"))).isSymLink());
+    bool undone = false;
+    const auto done = QObject::connect(KIO::FileUndoManager::self(), &KIO::FileUndoManager::undoJobFinished, [&undone] {
+        undone = true;
+    });
+    KIO::FileUndoManager::self()->undo();
+    EXPECT_TRUE(waitFor([&undone] {
+        return undone;
+    }));
+    QObject::disconnect(done);
+    EXPECT_FALSE(QFileInfo(path(QStringLiteral("to/a.txt"))).isSymLink()) << "the link is removed";
+    EXPECT_TRUE(s_reported.isEmpty()) << (s_reported.isEmpty() ? std::string() : s_reported.first().toStdString());
+}
+
+// What Files pastes: items only (ADR-0035 4a-14). Text, an image, or URLs KIO::paste would not take as items would go to
+// KIO's own dialogs (KIO::PasteDialog).
+TEST(KioDialogsPaste, OnlyItemsArePasted)
+{
+    QMimeData text;
+    text.setText(QStringLiteral("some words"));
+    EXPECT_TRUE(KioDialogs::pastableItems(&text).isEmpty());
+    QMimeData image;
+    image.setData(QStringLiteral("image/png"), QByteArray("\x89PNG", 4));
+    EXPECT_TRUE(KioDialogs::pastableItems(&image).isEmpty());
+    QMimeData kdeOnly; // KIO::paste reads items from text/uri-list only (pastejob.cpp:68-70)
+    kdeOnly.setData(QStringLiteral("application/x-kde4-urilist"), QByteArray("file:///tmp/a\r\n"));
+    EXPECT_TRUE(KioDialogs::pastableItems(&kdeOnly).isEmpty());
+    EXPECT_TRUE(KioDialogs::pastableItems(nullptr).isEmpty());
+    QMimeData items;
+    items.setUrls({QUrl::fromLocalFile(QStringLiteral("/tmp/a")), QUrl(QStringLiteral("sftp://host/b"))});
+    items.setText(QStringLiteral("/tmp/a"));
+    EXPECT_EQ(KioDialogs::pastableItems(&items).size(), 2);
+}
+
 // The sources of Files: no widget dialog of KIO or Qt (every question is a sheet), every delegate Grassfield's, and no job
 // that asks KIO's "open or execute" question (OpenOrExecuteFileInterface, which Grassfield does not provide).
 TEST(KioDialogsSources, FilesCreatesNoWidgetDialog)
@@ -483,8 +527,12 @@ TEST(KioDialogsSources, FilesCreatesNoWidgetDialog)
         QStringLiteral("KPropertiesDialog"), QStringLiteral("KSslInfoDialog"),   QStringLiteral("RenameDialog("),
         QStringLiteral("SkipDialog("),       QStringLiteral("KDialogJobUiDelegate"), QStringLiteral("KFileWidget"),
         QStringLiteral("KDirOperator"),      QStringLiteral("setShowOpenOrExecuteDialog"),
-        QStringLiteral("WidgetsAskUserActionHandler"),
+        QStringLiteral("WidgetsAskUserActionHandler"), QStringLiteral("PasteDialog"),
+        // Files decides what it pastes itself (KioDialogs::pastableItems): KIO's rule accepts text, which goes to its dialogs.
+        QStringLiteral("canPasteMimeData"),
     };
+    // A comment starts at "//" after a space or at the start of a line ("file://" in a literal is code).
+    static const QRegularExpression comment(QStringLiteral("(^|\\s)//.*$"));
     int files = 0;
     QDirIterator it(QStringLiteral(FILES_SOURCE_DIR), {QStringLiteral("*.cpp"), QStringLiteral("*.h")}, QDir::Files);
     while (it.hasNext()) {
@@ -496,9 +544,7 @@ TEST(KioDialogsSources, FilesCreatesNoWidgetDialog)
         while (!f.atEnd()) {
             ++line;
             QString code = QString::fromUtf8(f.readLine());
-            const qsizetype comment = code.indexOf(QLatin1String("//"));
-            if (comment >= 0)
-                code.truncate(comment);
+            code.remove(comment);
             for (const QString &word : forbidden)
                 EXPECT_FALSE(code.contains(word)) << file.toStdString() << ":" << line << ": " << word.toStdString();
             // Every delegate Files sets is Grassfield's.

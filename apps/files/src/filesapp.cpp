@@ -151,15 +151,15 @@ QList<QUrl> clipboardUrls()
 FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     : QObject(parent)
     , m_initialUrls(initialUrls)
+    , m_prompts(KioDialogs::install(new KioPrompts(this),
+                                    [this](const QString &message) {
+                                        emit operationFailed(message);
+                                    }))
     , m_places(new PlacesModel(this))
-    , m_prompts(new KioPrompts(this))
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
 {
     m_rotations.setMaxThreadCount(1);
-    KioDialogs::install(m_prompts, [this](const QString &message) {
-        emit operationFailed(message);
-    });
     auto *undo = KIO::FileUndoManager::self();
     connect(undo, &KIO::FileUndoManager::undoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
@@ -349,8 +349,7 @@ QString FilesApp::redoText() const
 
 bool FilesApp::canPaste() const
 {
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data && KIO::canPasteMimeData(data);
+    return !KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).isEmpty();
 }
 
 int FilesApp::clipboardCount() const
@@ -900,7 +899,8 @@ void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
 void FilesApp::paste(const QUrl &destination, QObject *folder)
 {
     const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    if (!data || !KIO::canPasteMimeData(data))
+    // Items only, as the Finder: text or an image would go to KIO's own file-name dialogs (KioDialogs::pastableItems).
+    if (KioDialogs::pastableItems(data).isEmpty())
         return;
     const bool cut = KIO::isClipboardDataCut(data);
     const QList<QUrl> urls = KUrlMimeData::urlsFromMimeData(data);
