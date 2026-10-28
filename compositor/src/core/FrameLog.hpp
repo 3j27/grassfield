@@ -167,8 +167,11 @@ namespace gf::frames {
     // beats on the event loop every kBeatUs; a beat more than kStallUs past its due time shows the loop was held from then
     // to the beat (stallOf). The plugin also records its own work outside a render, each from its start to its end: the
     // shared edge's drag (its motions and the frames it applies, tiling.md TL30), as RenderSpans (the start and the length).
-    inline constexpr uint64_t kBeatUs  = 4'000;
-    inline constexpr uint64_t kStallUs = 2'000;
+    // A hold is recorded at most one beat short (its stall starts at the first beat due inside it): with 1 ms, a 12 ms hold
+    // before a 3 ms render reads as over 0.8 of a 60 Hz period (integrator re-review of ce82fd3: with a 4 ms beat it did
+    // not). The beats run only while a measurement records.
+    inline constexpr uint64_t kBeatUs  = 1'000;
+    inline constexpr uint64_t kStallUs = 1'000;
 
     // A stall of the event loop: from the beat's due time, its length, and the CPU time the compositor's main thread used
     // from the previous beat to this one (the stall and at most kBeatUs before it; integrator nested pass of ce82fd3: is a

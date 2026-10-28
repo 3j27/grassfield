@@ -120,7 +120,19 @@ TEST(FrameLog, ALateBeatIsAStallFromItsDueTime) {
     EXPECT_EQ(stallOf(10'000, 60'000, 51'000), (Stall{.beginUs = 10'000, .lengthUs = 50'000, .cpuUs = 51'000})) << "a 50 ms stall, the thread working";
     EXPECT_EQ(stallOf(10'000, 60'000, 900).value_or(Stall{}).cpuUs, 900U) << "the same stall with the thread waiting";
     EXPECT_FALSE(stallOf(10'000, 9'000, 0).has_value()) << "early (a timer that fired before its due time)";
-    EXPECT_LT(kStallUs, kBeatUs);
+    EXPECT_LE(kStallUs, kBeatUs);
+}
+
+// Integrator re-review of ce82fd3: a hold is recorded at most one beat short, so a 12 ms hold before a 3 ms render must read
+// as over the attribution's budget, 0.8 of a 60 Hz period (13.3 ms); a beat of 4 ms let it pass.
+TEST(FrameLog, TheBeatSeesAHoldThatMissesAFrame) {
+    constexpr double kBudgetUs = 0.8 * 1e6 / 60;
+    EXPECT_GT(static_cast<double>(12'000 - kBeatUs + 3'000), kBudgetUs);
+    // The hold begins just after a beat ran: the next beat, due kBeatUs later, runs when the hold ends.
+    const uint64_t ran  = 100'000;
+    const auto     seen = stallOf(ran + kBeatUs, ran + 12'000, 12'000);
+    ASSERT_TRUE(seen.has_value());
+    EXPECT_GE(seen.value_or(Stall{}).lengthUs, 12'000 - kBeatUs);
 }
 
 TEST(FrameLog, StallsAreKeptInTimeOrder) {
