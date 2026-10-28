@@ -718,8 +718,9 @@ Choices made within this ADR:
 - The channel shown is what `grassfield-channel-set` prints with no argument (a read-only query, also in a dev session),
   read again whenever `/etc/pacman.d/grassfield.conf` changes; never stored per user (U12).
 - Whether the build can set updates up is `grassfield-channel-set`'s own rule (`require_build`) applied to the installed
-  `repository.conf`: without a key, or with the `.invalid` base, Set Up… is hidden and the pane says Software Update is not
-  available in this build (Refusals).
+  `repository.conf`: without a key, or with the `.invalid` base, Set Up… is hidden and the pane says that Grassfield's own
+  updates are not available in this build, under the up-to-date or available headline of the system's updates (Refusals;
+  the integrator's re-review of 5ae52b1).
 - The Backend's doors (`apps/settings/src/systemguard.cpp`, opus review): `grassfield-channel-set stable|beta|repair|off`
   joins the action allowlist (exactly one verb; never the helper itself), as an action that may wait for a password (one per
   tag, 130 s, `pendingActions`: "Waiting for permission…"); a new `Backend::launch` starts, detached and in the session's own
@@ -761,6 +762,9 @@ After the integrator's opus review of a9a5974 (FAIL: three MAJORs, the privilege
 - The Grassfield menu's "N updates" is `SoftwareUpdate.menuDetail`, which the service probe holds.
 - Omarchy's notification ends with "Update Now in Software Update installs it.", since the pane shows no Omarchy notes.
 - The restart rule's differences from `omarchy-update-restart` are listed in the spec's limits.
+- After the re-review of 5ae52b1 (PASS, two minors): in a build without a host or key the pane never says Software Update is
+  unavailable while it offers the system's updates; Turn Off… (`not-set-up`) deletes the checker's failure count, so a later
+  Set Up… starts a new count instead of reporting `blocking` from the old episode at its first failure (a gap since step 1).
 
 Evidence (the branch's PR): the C++ tests of Settings (103, `apps/settings/build-direct.sh --tests`), the QML suite (2036; 2050 with main c5643400,
 none failed, no runtime warning), `tests/shell/software_update_service.sh`, `tests/security/ipc_inventory.sh` and the shim's

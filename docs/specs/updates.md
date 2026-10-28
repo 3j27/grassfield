@@ -204,7 +204,7 @@ Pane (step 2)
 | `grassfield-channel-helper` given a scriptlet verb, or `grassfield-channel-scriptlet` given a helper verb | refused, nothing changed (each program knows only its own verbs) |
 | The polkit dialog cancelled, the password wrong, or no agent | the helper does not run; one line under the row; nothing changed |
 | Unknown channel argument | refused, usage printed, nothing changed |
-| A build without the pinned signing key, or whose `GRASSFIELD_REPO_BASE` is the `.invalid` placeholder (both the case until the owner provides a key and hosting) | refused: "no signing key in this build" / "no package repository in this build"; the pane hides "Set Up…" and says Software Update is not available in this build (the container tests build their own `repository.conf` with a `file://` base and a throwaway key) |
+| A build without the pinned signing key, or whose `GRASSFIELD_REPO_BASE` is the `.invalid` placeholder (both the case until the owner provides a key and hosting) | refused: "no signing key in this build" / "no package repository in this build"; the pane hides "Set Up…", says that Grassfield's own updates are not available in this build, and still offers the system's updates (the container tests build their own `repository.conf` with a `file://` base and a throwaway key) |
 | The shipped key file is not the pinned fingerprint | refused before `pacman-key` runs |
 | `omarchy update` running (its lock held) | `grassfield-channel-set` refuses (and the helper while pacman runs); "Update Now" disabled; checks wait for the release (U4) |
 | A package unsigned, signed by an unknown or disabled key, or changed after signing | pacman refuses it in Omarchy's terminal, nothing is upgraded (P8, P13); the next check still lists the update |
