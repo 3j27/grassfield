@@ -9,7 +9,7 @@ Grassfield's own code is MIT (root `LICENSE`, ADR-0005 accepted by the owner 202
 
 | Package | `license=` | Why |
 |---|---|---|
-| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0`, `BSD-3-Clause` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`); the Unicode-derived grapheme tables (section 5a); the clipboard helper's code generated from `hyprland-lock-notify-v1.xml` (section 2a) |
+| `grassfield-desktop` | `MIT`, `CC-BY-SA-4.0`, `Unicode-3.0`, `BSD-3-Clause`, `LicenseRef-Grassfield-logo-all-rights-reserved` | own code; own art (symbolic icons, cursor templates, `BRANDING.md`), the Grassfield logo excepted: all rights reserved, the owner's mark, installed in the same package (owner decision 2026-10-27); the Unicode-derived grapheme tables (section 5a); the clipboard helper's code generated from `hyprland-lock-notify-v1.xml` (section 2a) |
 | `grassfield-compositor` | `MIT`, `LGPL-2.1-or-later`, `BSD-3-Clause` | own code; server code generated from the KDE appmenu protocol XML; Hyprland headers compiled in |
 | `grassfield-icons` | `MIT`, `GPL-3.0-only` | own glyphs; the third-party icon pack (risk accepted by the owner, decision D-9, 2026-10-23; the composed pack accepted for publication at the owner's risk, amendment of 2026-10-27) |
 
@@ -144,7 +144,7 @@ no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
-Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 79 SVG icons are Grassfield's own
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 96 (95 symbolic icons and the logo))
 (CC-BY-SA-4.0); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Licence of Grassfield-made art (symbolic icons, cursors, wallpaper): CC-BY-SA-4.0, decided by the
 owner on 2026-10-27 (an earlier text attributed this to decision D-9, which concerned the icon pack). The Grassfield

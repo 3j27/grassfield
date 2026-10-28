@@ -1,5 +1,5 @@
 # ADR-0005: License of Grassfield code and assets
-Status: Accepted by the owner 2026-10-18 (MIT for Grassfield's own code; root LICENSE); art licence CC-BY-SA-4.0 decided 2026-10-27 · Date: 2026-10-17 · Decider: owner · Asset/trade-dress questions still need legal review (§14)
+Status: Accepted by the owner 2026-10-18 (MIT for Grassfield's own code; root LICENSE); art licence CC-BY-SA-4.0 decided 2026-10-27 · Date: 2026-10-17 · Decider: owner · The overall trade dress (D5) is kept without a lawyer's review: owner-accepted risk, 2026-10-27
 
 ## Context
 Grassfield reuses or links: Omarchy (MIT), Hyprland headers (BSD-3-Clause), Quickshell (LGPL-3.0-only,
@@ -20,7 +20,6 @@ licence file, so the upstream copyright line is unverified.
 - Code (shell QML, plugin C++, bridge, apps, scripts, config): **MIT**, `LICENSE` at the root,
   SPDX headers `SPDX-License-Identifier: MIT` in new source files.
 - Code adapted from Omarchy keeps its MIT notice and attribution in the file header.
-- Code: MIT, accepted by the owner on 2026-10-18.
 - Grassfield-made art (symbolic icons, cursors, wallpaper; `branding/`): **CC-BY-SA-4.0**, decided by the owner on
   2026-10-27; provenance per file in `branding/LICENSES.md`. The Grassfield logo is excluded: all rights reserved, the
   owner's mark. (Earlier text attributed the art licence to D-9, which concerned the icon pack, not the licence.)

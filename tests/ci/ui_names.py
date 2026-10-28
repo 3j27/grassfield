@@ -53,8 +53,12 @@ def hits_in(text, kind):
     return out
 
 
-def tracked():
-    files = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+def repo_root():
+    return Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+
+
+def classify(files):
+    """(path, kind) of the files this check scans; paths are relative to the repository root."""
     for f in files:
         if f.startswith(("shell/", "ui/", "apps/")) and f.endswith((".qml", ".js", ".cpp", ".h")):
             yield f, "code"
@@ -62,6 +66,22 @@ def tracked():
             yield f, "ts"
         elif f.endswith(".desktop"):
             yield f, "desktop"
+
+
+def tracked(root):
+    return classify(subprocess.check_output(["git", "-C", str(root), "ls-files"], text=True).splitlines())
+
+
+def scan(root, entries):
+    """Returns (hits, files scanned); an empty scan is the caller's failure, never a pass."""
+    bad = 0
+    count = 0
+    for rel, kind in entries:
+        count += 1
+        for number, word, s in hits_in((root / rel).read_text(encoding="utf-8", errors="replace"), kind):
+            print(f"{rel}:{number}: banned name \"{word}\" in a visible string: {s}")
+            bad += 1
+    return bad, count
 
 
 def selftest():
@@ -87,27 +107,32 @@ def selftest():
     bad = [c for c in cases if len(hits_in(c[0], c[1])) != c[2]]
     for text, kind, want in bad:
         print(f"selftest FAIL ({kind}, want {want} hits): {text}")
+    # Nothing to scan (a run from a subdirectory used to list no files) must fail, not pass.
+    if run(Path("."), []) != 1:
+        print("selftest FAIL: a scan of 0 files must exit 1")
+        bad.append(("zero files", "", 1))
     if not bad:
         print(f"ui_names selftest: {len(cases)} cases ok")
     return 1 if bad else 0
 
 
-def main():
-    if "--selftest" in sys.argv:
-        return selftest()
-    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
-    bad = 0
-    count = 0
-    for rel, kind in tracked():
-        count += 1
-        for number, word, s in hits_in((root / rel).read_text(encoding="utf-8", errors="replace"), kind):
-            print(f"{rel}:{number}: banned name \"{word}\" in a visible string: {s}")
-            bad += 1
+def run(root, entries):
+    bad, count = scan(root, entries)
+    if count == 0:
+        print("ui_names: 0 files scanned: the check found nothing to look at (wrong directory?)")
+        return 1
     if bad:
         print(f"ui_names: {bad} banned name(s); see docs/legal/visual-review.md (owner decisions of 2026-10-27)")
         return 1
     print(f"ui_names: {count} files scanned, no banned name in a visible string")
     return 0
+
+
+def main():
+    if "--selftest" in sys.argv:
+        return selftest()
+    root = repo_root()
+    return run(root, tracked(root))
 
 
 sys.exit(main())
