@@ -257,6 +257,64 @@ function parseGroups(text) {
     return {groupOf: groupOf, members: members};
 }
 
+// The members of the tile group of the window `address` (any address form) in `groups` (parseGroups), itself included, in
+// the reply's order; [] for a window in no group or without groups (TL29: only a window in a group sends group_front).
+function membersOf(groups, address) {
+    const key = groups ? groups.groupOf[hexAddress(address)] : undefined;
+    return key !== undefined ? groups.members[key].slice() : [];
+}
+
+// The members an Overview drop of the window `own` moves with it (TL29, D31): those of `members` (membersOf) on its Desktop,
+// `windows` [{address, workspace (Hyprland's id: a special workspace is negative), parked (minimized or hidden)}]. A
+// minimized or hidden member is on no Desktop and stays.
+function groupMovers(own, members, windows) {
+    const byAddress = {};
+    for (const w of (Array.isArray(windows) ? windows : []))
+        byAddress[hexAddress(w.address)] = w;
+    const self = byAddress[hexAddress(own)];
+    if (!self || !(self.workspace > 0))
+        return [];
+    return (Array.isArray(members) ? members : []).map(hexAddress).filter(a => {
+        const w = byAddress[a];
+        return a !== "" && a !== hexAddress(own) && w !== undefined && w.workspace === self.workspace && !w.parked;
+    });
+}
+
+// The steps of the Dock menu's Show Tile Group (TL29, D30), in the order the shell sends them through its one dispatch
+// channel: [{op: "space", id} | {op: "restore", address} | {op: "move", address, id} | {op: "activate", address} |
+// {op: "focus", address} | {op: "groupFront", address}]. `own` is the app's window of the group, `members` the group
+// (membersOf), `windows` [{address, workspace (a special workspace is negative), active (its workspace is shown),
+// minimized}]. The group's Desktop (own's, else the first member's that is on one) is shown first, so that every restore
+// lands there (a restore takes the Desktop its display shows); own comes back (a minimized one restored, one hidden with
+// its app moved there), then the minimized members; the restores focus their window, so own takes the focus after them;
+// the group comes forward last, own in front.
+function tileGroupSteps(own, members, windows) {
+    const byAddress = {};
+    for (const w of (Array.isArray(windows) ? windows : []))
+        byAddress[hexAddress(w.address)] = w;
+    const me = hexAddress(own);
+    const self = byAddress[me];
+    if (!self)
+        return [];
+    const group = (Array.isArray(members) ? members : []).map(hexAddress).filter(a => a !== "" && byAddress[a] !== undefined);
+    const anchor = self.workspace > 0 ? self : group.map(a => byAddress[a]).find(w => w.workspace > 0);
+    const steps = [];
+    if (anchor && !anchor.active)
+        steps.push({op: "space", id: anchor.workspace});
+    if (self.minimized)
+        steps.push({op: "restore", address: me});
+    else if (!(self.workspace > 0) && anchor)
+        steps.push({op: "move", address: me, id: anchor.workspace});
+    else if (!(self.workspace > 0))
+        steps.push({op: "activate", address: me});
+    for (const a of group) {
+        if (a !== me && byAddress[a].minimized)
+            steps.push({op: "restore", address: a});
+    }
+    steps.push({op: "focus", address: me}, {op: "groupFront", address: me});
+    return steps;
+}
+
 // The Dock menu's Show Tile Group rows of an app (TL29): the groups `groups` (parseGroups) that hold one of the app's
 // windows `addresses`, each once, in the order of the app's windows: [{group, members, own}] where `own` is the app's
 // first window in that group (the one the row brings forward).

@@ -234,6 +234,9 @@ TestCase {
         compare(JSON.stringify(WindowTiling.parseGroups(stateReply([]))), JSON.stringify({groupOf: {}, members: {}}));
         for (const text of ["", "x", JSON.stringify({v: "gfc/1", type: "tiling"}), JSON.stringify({v: "gfc/2", type: "tiling", outputs: []}), JSON.stringify({v: "gfc/1", type: "stages", outputs: []})])
             compare(WindowTiling.parseGroups(text), null, text);
+        // Group 0 is no group, however many windows have it (review of cd74af2, mutant S4).
+        const none = WindowTiling.parseGroups(stateReply([{address: "a1", group: 0}, {address: "a2", group: 0}, {address: "a3", group: -1}, {address: "a4", group: -1}]));
+        compare(JSON.stringify(none), JSON.stringify({groupOf: {}, members: {}}));
         // Malformed windows are skipped, not fatal.
         const skipped = WindowTiling.parseGroups(stateReply([{address: "zz", group: 3}, {address: "a1", group: "3"}, {address: "a2", group: 3}, null, {address: "a3", group: 3}]));
         compare(JSON.stringify(skipped.members), JSON.stringify({"3": ["a2", "a3"]}));
@@ -252,5 +255,51 @@ TestCase {
         compare(WindowTiling.tileGroupRows(["a1"], null).length, 0);
         rows[0].members.push("zz");
         compare(groups.members["2"].length, 2, "the rows copy the members");
+    }
+
+    function test_membersOfReadsTheWindowsGroup() {
+        const groups = {groupOf: {"a1": "2", "c3": "2"}, members: {"2": ["a1", "c3"]}};
+        compare(JSON.stringify(WindowTiling.membersOf(groups, "0xA1")), JSON.stringify(["a1", "c3"]));
+        compare(JSON.stringify(WindowTiling.membersOf(groups, "b2")), "[]", "in no group: no group_front");
+        compare(JSON.stringify(WindowTiling.membersOf(null, "a1")), "[]", "no reply yet");
+        WindowTiling.membersOf(groups, "a1").push("zz");
+        compare(groups.members["2"].length, 2, "a copy");
+    }
+
+    // An Overview drop (D31): the members on the window's Desktop move with it; minimized, hidden or elsewhere they stay.
+    function test_groupMoversAreTheMembersOnTheWindowsDesktop() {
+        const windows = [
+            {address: "a1", workspace: 2, parked: false}, {address: "b2", workspace: 2, parked: false},
+            {address: "c3", workspace: -98, parked: true}, {address: "d4", workspace: 3, parked: false},
+            {address: "e5", workspace: 2, parked: true}, {address: "f6", workspace: 2, parked: false}
+        ];
+        compare(JSON.stringify(WindowTiling.groupMovers("0xA1", ["a1", "b2", "c3", "d4", "e5"], windows)), JSON.stringify(["b2"]));
+        compare(JSON.stringify(WindowTiling.groupMovers("a1", ["a1"], windows)), "[]");
+        compare(JSON.stringify(WindowTiling.groupMovers("c3", ["a1", "b2", "c3"], windows)), "[]", "a parked window is on no Desktop");
+        compare(JSON.stringify(WindowTiling.groupMovers("zz", ["a1", "b2"], windows)), "[]");
+        compare(JSON.stringify(WindowTiling.groupMovers("a1", ["b2", "zz"], windows)), JSON.stringify(["b2"]), "an unknown member is skipped");
+    }
+
+    // Show Tile Group (D30; review of cd74af2: the order the shell sends).
+    function test_tileGroupStepsShowTheGroupsDesktopFirst() {
+        const steps = (own, members, windows) => JSON.stringify(WindowTiling.tileGroupSteps(own, members, windows));
+        const on = (address, workspace, active, minimized) => ({address: address, workspace: workspace, active: active, minimized: minimized});
+        // Everything on the Desktop shown: the focus, then the group.
+        compare(steps("a1", ["a1", "b2"], [on("a1", 1, true, false), on("b2", 1, true, false)]),
+                JSON.stringify([{op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
+        // From another Desktop, a member minimized: that Desktop first, then the restore, then the focus and the group.
+        compare(steps("0xA1", ["a1", "b2", "c3"], [on("a1", 2, false, false), on("b2", -98, false, true), on("c3", 2, false, false)]),
+                JSON.stringify([{op: "space", id: 2}, {op: "restore", address: "b2"}, {op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
+        // The app's window minimized itself: the Desktop of a member on one, then its restore and the others'.
+        compare(steps("a1", ["b2", "a1", "c3"], [on("a1", -98, false, true), on("b2", 3, false, false), on("c3", -98, false, true)]),
+                JSON.stringify([{op: "space", id: 3}, {op: "restore", address: "a1"}, {op: "restore", address: "c3"}, {op: "focus", address: "a1"},
+                                {op: "groupFront", address: "a1"}]));
+        // Hidden with its app: moved to the group's Desktop (shown already: no space step).
+        compare(steps("a1", ["a1", "b2"], [on("a1", -97, false, false), on("b2", 1, true, false)]),
+                JSON.stringify([{op: "move", address: "a1", id: 1}, {op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
+        // Every member off the Desktops: a plain activation brings the window to the Desktop shown, then the restores.
+        compare(steps("a1", ["a1", "b2"], [on("a1", -97, false, false), on("b2", -98, false, true)]),
+                JSON.stringify([{op: "activate", address: "a1"}, {op: "restore", address: "b2"}, {op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
+        compare(steps("zz", ["a1"], [on("a1", 1, true, false)]), "[]", "an unknown window: nothing");
     }
 }

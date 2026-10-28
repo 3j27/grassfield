@@ -336,7 +336,7 @@ Scope {
             return;
         }
         if (item.kind === "minimized") {
-            Compositor.unminimize(item.toplevel);
+            Compositor.unminimizeWithGroup(item.toplevel); // its tile group comes forward with it (TL29)
             return;
         }
         if (item.kind === "folder") {

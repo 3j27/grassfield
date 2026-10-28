@@ -78,8 +78,8 @@ function zoneCall(address, layout, zone, withAddress) {
     return guardedPluginCall("arrange", ["\"" + JSON.stringify(request).replace(/"/g, "\\\"") + "\""]);
 }
 
-// hl.plugin.grassfield.group_front(address) (capability "tiling-groups", TL29): the window's tile group comes forward (called
-// right before the window is activated). "" when the address is invalid.
+// hl.plugin.grassfield.group_front(address) (capability "tiling-groups", TL29): the window's tile group comes forward (sent
+// after the window's activation or restore: Compositor.groupForward). "" when the address is invalid.
 function groupFrontCall(address) {
     const hex = normalizeAddress(address);
     return hex === "" ? "" : guardedPluginCall("group_front", ["\"0x" + hex + "\""]);

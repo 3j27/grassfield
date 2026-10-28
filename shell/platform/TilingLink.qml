@@ -31,13 +31,6 @@ Singleton {
         Compositor.suggestionAsked = null;
     }
 
-    // The members of the tile group of the window `address` (lower-case hex without 0x), itself included, in the reply's
-    // order; empty for a window in no group (or before the first reply).
-    function membersOf(address: string): var {
-        const key = root.groups ? root.groups.groupOf[address] : undefined;
-        return key !== undefined ? root.groups.members[key].slice() : [];
-    }
-
     function fetch(): void {
         fetchDeadline.restart();
         if (stateFetch.running)
