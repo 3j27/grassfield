@@ -230,6 +230,7 @@
  {"path": "tests/unit/store/tst_storeview.cpp", "layer": "logic"},
  {"path": "tests/integration/store_catalog.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/integration/store_helper.sh", "layer": "logic", "runner": "bare"},
+ {"path": "tests/integration/store_run.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/unit/wallpaper-tool/tst_wallpaperlogic.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_commonsfetch.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_videotool.cpp", "layer": "logic"},

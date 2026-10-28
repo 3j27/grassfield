@@ -1,0 +1,104 @@
+#!/bin/bash
+# grassfield-store-run: Grassfield Store's script in Omarchy's terminal (ADR-0037 b.2; spec SR17). OPUS SECURITY REVIEW
+# REQUIRED (ADR-0037 e.9). It runs as the user, never as root: Omarchy's recipes call sudo themselves, in this terminal,
+# as in Omarchy's own menu. Started only by the Store, as
+#   omarchy-launch-floating-terminal-with-presentation "/usr/lib/grassfield/grassfield-store-run <op-id> <deadline> setup <recipe> [<arg>...]"
+# the command string built from the validated tokens of ADR-0037 e.5 only, and watched through
+# $XDG_RUNTIME_DIR/grassfield/store/<op-id>.started and <op-id>.exit (the terminal is detached: no exit code comes back).
+# It:
+#   1. refuses to start after <deadline> (Unix seconds: the Store stops waiting for the terminal 60 s after asking);
+#   2. takes Omarchy's update lock (the file omarchy-update-lock locks), on a descriptor of its own that every program it
+#      starts gets closed (9>&-): `omarchy update` says it is already running, and no process the recipe leaves running
+#      keeps the lock (S13); refuses when it is held. The lock goes when this script ends, whatever ends it;
+#   3. writes <op-id>.started (its pid and start time: the Store knows it still runs);
+#   4. checks again: no db.lck, pacman -Qu lists nothing but "[ignored]" (S12), the recipe is Omarchy's, and every file the
+#      catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is unchanged in the installed Omarchy;
+#   5. runs the recipe, ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<recipe>, with its arguments, as an argument vector;
+#   6. writes <op-id>.exit with the code (by rename, the Store never reads half a file) and exits with it.
+# <recipe> is omarchy-install-<name> or omarchy-remove-<name>; at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
+# Exit: 0 done; 1 the recipe failed; 2 usage; 3 busy (Omarchy's update lock, or pacman's db.lck); 4 the last system update
+# did not finish; 5 the installed Omarchy differs from the catalog's pins (or the recipe is missing); 6 too late (the
+# terminal opened after the deadline); 130 stopped with Ctrl+C. A closed terminal ends it without an exit file (SIGHUP):
+# the Store reads the system then.
+set -uo pipefail
+umask 077
+
+usage() {
+  echo "grassfield-store-run: started by Grassfield Store only" >&2
+  exit 2
+}
+
+(($# >= 4 && $# <= 8)) || usage
+op=$1 deadline=$2 kind=$3 recipe=$4
+shift 4
+[[ $op =~ ^[0-9a-f]{32}$ && $deadline =~ ^[0-9]{1,12}$ && $kind == setup ]] || usage
+[[ $recipe =~ ^omarchy-(install|remove)-[a-z0-9-]+$ ]] || usage
+for arg in "$@"; do
+  [[ $arg =~ ^[a-z0-9][a-z0-9.-]{0,63}$ ]] || usage
+done
+[[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR && ! -L $XDG_RUNTIME_DIR ]] || usage
+dir=$XDG_RUNTIME_DIR/grassfield/store
+mkdir -p -- "$dir" 9>&- && chmod 700 -- "$dir" 9>&- || usage
+[[ -d $dir && ! -L $dir && -O $dir ]] || usage
+[[ ! -e $dir/$op.exit && ! -e $dir/$op.started ]] || usage # an operation id runs once
+omarchy=${OMARCHY_PATH:-/usr/share/omarchy}
+omarchy=${omarchy%/}
+
+# The exit file, by rename, then the exit (the lock goes with this process). Omarchy's launcher says "Done!" after it.
+finish() { # code [message]
+  [[ -n ${2:-} ]] && printf '\n%s\n' "$2"
+  printf '%s\n' "$1" >|"$dir/.$op.exit" && mv -f -- "$dir/.$op.exit" "$dir/$op.exit" 9>&-
+  exit "$1"
+}
+
+# 1. The deadline (60 s after the Store asked).
+(($(date +%s 9>&-) <= deadline)) || finish 6 "This request came too late: nothing was run. Ask again in Grassfield Store."
+
+# 2. Omarchy's update lock.
+exec 9>>"$XDG_RUNTIME_DIR/omarchy-update.lock" || finish 3 "Cannot open Omarchy's update lock."
+flock -n 9 || finish 3 "Another installation or an Omarchy update is running. Try again when it has finished."
+
+# 3. Started: its pid and start time (field 22 of /proc/<pid>/stat; the command name before it may hold spaces).
+read -r stat </proc/$$/stat || finish 1 "Cannot read /proc/$$/stat."
+rest=${stat##*) }
+read -r -a fields <<<"$rest"
+printf '%s %s\n' "$$" "${fields[19]-}" >|"$dir/.$op.started" && mv -f -- "$dir/.$op.started" "$dir/$op.started" 9>&- ||
+  finish 1 "Cannot write $dir/$op.started."
+
+# Ctrl+C stops the recipe (its default action there) and is answered here with 130 and the exit file. A handler, not an
+# ignored signal: an ignored SIGINT would be ignored by the recipe too.
+stopped=0
+trap 'stopped=1' INT
+
+# 4. Checked again, under the lock.
+dbpath=$(pacman-conf DBPath 9>&-) || finish 1 "pacman-conf DBPath failed."
+[[ ! -e ${dbpath%/}/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left its lock). Try again when it has finished."
+while IFS= read -r line; do
+  [[ -z $line || $line == *' [ignored]' ]] && continue
+  finish 4 "The last system update did not finish ($line). Finish it in Software Update, then try again."
+done < <(pacman -Qu 2>/dev/null 9>&-)
+program=$omarchy/bin/$recipe
+[[ -f $program && -x $program ]] || finish 5 "Omarchy's $recipe is not installed: nothing was run."
+pins=$dir/$op.pins
+[[ -f $pins && ! -L $pins && -O $pins ]] || finish 5 "The Store's pins for this setup are missing: nothing was run."
+count=0 recipe_pinned=0
+while IFS= read -r line; do
+  [[ $line =~ ^([0-9a-f]{64})\ \ ([A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+){0,7})$ ]] || finish 5 "The Store's pins cannot be read: nothing was run."
+  want=${BASH_REMATCH[1]} rel=${BASH_REMATCH[2]}
+  [[ /$rel/ != */./* && /$rel/ != */../* ]] || finish 5 "The Store's pins cannot be read: nothing was run."
+  [[ $rel == "bin/$recipe" ]] && recipe_pinned=1
+  have=$(sha256sum -- "$omarchy/$rel" 2>/dev/null 9>&-) || have=missing
+  [[ ${have%% *} == "$want" ]] ||
+    finish 5 "This setup was checked against another version of Omarchy ($rel differs): nothing was run. The Store offers it again once its catalog has checked your Omarchy."
+  count=$((count + 1))
+done <"$pins"
+((count > 0 && recipe_pinned)) || finish 5 "The Store's pins do not name $recipe: nothing was run."
+
+# 5. The recipe, without the lock's descriptor.
+echo "Grassfield Store runs Omarchy's $recipe $*"
+echo
+"$program" "$@" 9>&-
+code=$?
+((stopped || code == 130)) && finish 130 "Stopped. Part of it may be installed: Grassfield Store reads what is there."
+((code == 0)) && finish 0
+finish 1 "$recipe stopped with exit code $code."
