@@ -1,0 +1,162 @@
+// The Store's operations (ADR-0037 b, f; spec SR17-SR21): one at a time, in a queue the user fills (Get, Uninstall), each
+// ending with an exit code the Store receives, and success being that code 0 AND the system's state matching the plan.
+//   helper  repository packages: pkexec grassfield-store-helper <verb> <op-id> <names> (b.1), a direct, waited-for child
+//           in a session of its own (no terminal's signal reaches it), while the Store holds Omarchy's update lock (opened
+//           close-on-exec: neither pkexec nor pacman inherits it); the helper's files in /run/grassfield-store/ say when it
+//           started and how it ended, and pacman's log gives the progress ("[ALPM] installed" lines against the plan)
+//   webapp  Omarchy's omarchy-webapp-install / -remove as the Store's own child (b.3), 10 minutes at most
+// Before an operation starts, it is written to store.json; on the next start a record still there is compared with what is
+// there (recover): done, still running (followed again), interrupted (a part there), or not finished. The Store never
+// signals pacman, the helper or Omarchy's commands, except a web app command past its limit, and pkexec while it still
+// waits for the password (before the helper started, pkexec is the user's process).
+#pragma once
+
+#include "plancheck.h"
+
+#include <QDateTime>
+#include <QHash>
+#include <QJsonObject>
+#include <QList>
+#include <QObject>
+#include <QPointer>
+#include <QProcess>
+#include <QString>
+#include <QStringList>
+#include <QTimer>
+#include <QVariantList>
+
+#include <functional>
+#include <optional>
+
+namespace grassfield::store {
+
+// What store.json keeps of the operation in flight (version 1, key "operation").
+struct OperationRecord {
+    QString id;      // 32 lowercase hexadecimal digits
+    QString kind;    // install, remove
+    QString path;    // helper, webapp
+    QString app;     // the app's id
+    QString name;    // the app's name, for the messages
+    QStringList packages;         // helper: the names given to it
+    QList<PlannedPackage> plan;   // helper: what must be there after an install (name, version), gone after a removal
+    QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
+    QDateTime startedAt;
+
+    QJsonObject toJson() const;
+    static std::optional<OperationRecord> fromJson(const QJsonObject &o);
+};
+
+QString newOperationId();
+bool isOperationId(const QString &id);
+
+// The helper's files (ADR-0037 b.1): the exit code, when written.
+std::optional<int> helperExitCode(const QString &statusDir, const QString &id);
+// Its started file names a process that still runs: the pid with the same start time (/proc/<pid>/stat, field 22).
+bool helperRunning(const QString &statusDir, const QString &id);
+// pacman's log since `offset`: the "[ALPM] installed <name> (" (or "removed") lines of the plan's packages.
+int countLogged(const QByteArray &logTail, const QString &verb, const QStringList &names);
+
+// How an operation ended, from its exit code (nullopt: none came) and what is there now (`present` of `total` planned
+// packages installed, for an install; removed, for a removal).
+enum class Outcome { Done, Interrupted, NotFinished };
+Outcome judge(std::optional<int> exitCode, int present, int total);
+
+struct OperationsConfig {
+    QString pkexec;     // /usr/bin/pkexec, or a fake one (dev plumbing GRASSFIELD_STORE_PKEXEC)
+    QString helper;     // /usr/lib/grassfield/grassfield-store-helper
+    QString statusDir;  // /run/grassfield-store
+    QString updateLock; // ${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock
+    QString dbLock;     // /var/lib/pacman/db.lck
+    QString pacmanLog;  // /var/log/pacman.log
+    QString pacman;     // for the state after an operation
+    QString stateFile;  // store.json
+    QString applications; // ~/.local/share/applications: the web apps' launchers
+    // The argument vector that runs one of Omarchy's commands: its own program, or a fake one (GRASSFIELD_STORE_INSTALLER).
+    std::function<QStringList(const QString &command, const QStringList &args)> omarchy;
+    // The limits (ADR-0037 b.1, b.3; spec SR19), shorter in the tests.
+    int authorizationMs = 120 * 1000;
+    qint64 helperMs = 2LL * 3600 * 1000;
+    int webAppMs = 10 * 60 * 1000;
+    int pollMs = 500;
+};
+
+class Operations : public QObject
+{
+    Q_OBJECT
+
+public:
+    enum class State { Waiting, Authorizing, Running, Checking };
+
+    struct Item {
+        OperationRecord record;
+        State state = State::Waiting;
+        bool blocked = false; // waiting for the locks (another installation or an update)
+        int done = 0;         // the plan's packages pacman's log counted so far
+    };
+
+    // How the last operation of an app ended, while it says something (a failure; "done" is said by the button).
+    struct Result {
+        QString app, kind;
+        QString outcome; // cancelled, failed, interrupted, notFinished, lostTrack, timedOut, busy, unfinished, outdated,
+                         // refused, notApp, didNotStart
+        int present = 0, total = 0;
+        QString details; // pacman's message (the helper's log), pkexec's or Omarchy's output
+        OperationRecord record;
+    };
+
+    explicit Operations(const OperationsConfig &config, QObject *parent = nullptr);
+    ~Operations() override;
+
+    void enqueue(const OperationRecord &record);
+    // A waiting operation leaves the queue (the running one cannot: it ends in pacman, the helper or Omarchy's command).
+    bool removeWaiting(const QString &id);
+    // A failure's line goes (the user read it, or tries again).
+    void dismiss(const QString &app);
+    // The record left in store.json by an earlier run of the Store, compared with what is there.
+    void recover();
+
+    bool running() const { return m_current.has_value(); }
+    bool queued(const QString &app) const;
+    QList<Item> items() const;
+    QHash<QString, Result> results() const { return m_results; }
+    // [{id, app, name, kind, state: waiting | authorizing | running | checking, blocked, done, total}] for QML.
+    QVariantList list() const;
+
+signals:
+    void changed();
+    // An operation ended (whatever its outcome): the system changed, read it again.
+    void finished(const QString &app);
+    // The last running operation ended and nothing waits.
+    void idle();
+
+private:
+    void startNext();
+    void startHelper(Item &item);
+    void startWebApp(Item &item);
+    void poll();
+    void processEnded(int exitCode, QProcess::ExitStatus status);
+    void conclude(std::optional<int> exitCode, const QString &output);
+    void writeRecord(const OperationRecord &record);
+    void clearRecord();
+    QString helperLog(const QString &id) const;
+    // The state after an operation, off the GUI thread; `then` runs back here with (present, total).
+    void readState(const OperationRecord &record, std::function<void(int, int)> then);
+    bool takeUpdateLock();
+    void releaseUpdateLock();
+
+    OperationsConfig m_config;
+    QList<Item> m_queue;          // waiting, in order
+    std::optional<Item> m_current; // running
+    QHash<QString, Result> m_results;
+    QPointer<QProcess> m_process;
+    QByteArray m_output;
+    QTimer m_poll;
+    QTimer m_retry;
+    QDateTime m_runningSince;
+    qint64 m_logOffset = 0;
+    int m_lockFd = -1;
+    bool m_concluding = false;
+    bool m_followOnly = false; // recover(): a helper of an earlier run is followed, not owned
+};
+
+} // namespace grassfield::store

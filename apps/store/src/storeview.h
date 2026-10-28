@@ -25,6 +25,9 @@ namespace grassfield::store::view {
 // "repo", "aur", "setup", "webapp" or "flatpak".
 QString sourceKind(CatalogSource::Kind kind);
 
+// A size as `locale` writes it ("12.4 MB", « 12,4 Mo »); "" for a negative one.
+QString sizeText(qint64 bytes, const QLocale &locale);
+
 // A day as the locale writes it in full, without the weekday ("October 27, 2026", « 27 octobre 2026 »); without the year
 // when `year` is false ("October 27", « 27 octobre »). "" for an invalid date.
 QString dayText(const QDate &date, const QLocale &locale, bool year = true);
@@ -69,6 +72,7 @@ struct WebAppEntry {
     QString name;
     QString url;
     QString icon; // an absolute file path, or ""
+    QString file; // its file's name without ".desktop" (what omarchy-webapp-remove takes), set by the folder's reader
 };
 std::optional<WebAppEntry> parseWebAppEntry(const QByteArray &desktopFile);
 

@@ -7,7 +7,12 @@
 //                                 swcatalog/ (fake AppStream data) and grassfield.conf; the Store reads nothing of the
 //                                 system's package manager then
 //   GRASSFIELD_STORE_OFFLINE      "1": the Store counts as offline whatever the network says (the offline captures and tests)
-// GRASSFIELD_STORE_INSTALLER and GRASSFIELD_STORE_PKEXEC (the fake programs of the queue) come with step 3.
+//   GRASSFIELD_STORE_PKEXEC       the program run in pkexec's place for the helper's operations (ADR-0037 b.1): a fake one
+//                                 that writes the helper's files under <fixture>/run/grassfield-store
+//   GRASSFIELD_STORE_INSTALLER    the program run in place of Omarchy's commands (web apps, b.3; Open, SR21): it gets the
+//                                 command's name, then its arguments
+// Without the last two a dev session runs no operation and opens nothing ("dev: not applied", SR30). With a fixture, the
+// helper's files, pacman's lock and log, Omarchy's package lists and pacman-conf are the fixture's too.
 #pragma once
 
 #include "runmode.h"
@@ -82,6 +87,72 @@ inline QString swcatalogRoot()
 {
     const QString f = fixture();
     return f.isEmpty() ? QStringLiteral("/usr/share/swcatalog") : f + QStringLiteral("/swcatalog");
+}
+
+// The step-3 paths (ADR-0037 b): the helper and its status folder, pacman's lock and log, Omarchy's package lists and its
+// update lock, the system's application entries.
+inline const QString helperPath = QStringLiteral("/usr/lib/grassfield/grassfield-store-helper");
+
+inline QString inFixture(const QString &relative, const QString &system)
+{
+    const QString f = fixture();
+    return f.isEmpty() ? system : f + relative;
+}
+
+inline QString statusDir()
+{
+    return inFixture(QStringLiteral("/run/grassfield-store"), QStringLiteral("/run/grassfield-store"));
+}
+
+inline QString dbLock()
+{
+    return inFixture(QStringLiteral("/db.lck"), QStringLiteral("/var/lib/pacman/db.lck"));
+}
+
+inline QString pacmanLog()
+{
+    return inFixture(QStringLiteral("/pacman.log"), QStringLiteral("/var/log/pacman.log"));
+}
+
+inline QString pacmanConf()
+{
+    return inFixture(QStringLiteral("/bin/pacman-conf"), QStringLiteral("/usr/bin/pacman-conf"));
+}
+
+inline QString omarchyLists()
+{
+    return inFixture(QStringLiteral("/omarchy/install"), QStringLiteral("/usr/share/omarchy/install"));
+}
+
+inline QString systemApplications()
+{
+    return inFixture(QStringLiteral("/applications"), QStringLiteral("/usr/share/applications"));
+}
+
+// Omarchy's update lock (omarchy-update-lock): ${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock.
+inline QString updateLock()
+{
+    const QString run = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    return (run.isEmpty() ? QStringLiteral("/tmp") : run) + QStringLiteral("/omarchy-update.lock");
+}
+
+// pkexec: the system's, or in a dev session the fake one ("" without it: no operation).
+inline QString pkexec()
+{
+    return apps::runmode::dev() ? apps::runmode::devValue("STORE_PKEXEC") : QStringLiteral("/usr/bin/pkexec");
+}
+
+// The fake program standing for Omarchy's commands in a dev session ("" outside one, or without it).
+inline QString installer()
+{
+    return apps::runmode::devValue("STORE_INSTALLER");
+}
+
+// Where one of Omarchy's commands is: ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<name> (ADR-0037 e.5).
+inline QString omarchyCommand(const QString &name)
+{
+    const QString root = qEnvironmentVariable("OMARCHY_PATH");
+    return (root.isEmpty() ? QStringLiteral("/usr/share/omarchy") : root) + QStringLiteral("/bin/") + name;
 }
 
 inline const QString gpgv = QStringLiteral("/usr/bin/gpgv");

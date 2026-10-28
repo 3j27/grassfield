@@ -1,8 +1,8 @@
 # ADR-0037: Grassfield Store: an app that installs, opens and uninstalls apps through pacman and Omarchy, with a signed catalog
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
 PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. Later questions follow the
-owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD5),
-checked by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
+owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD5,
+then SD6 to SD10 with step 2 and SD11 to SD17 with step 3a), checked by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
 "Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD5), integrator (merge after the
 opus PASS) · Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs and 0036 tiling are merged)
 
@@ -264,13 +264,33 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
   names of e.5); a line that does not match is shown as polkit gives it (SD2). Each operation asks once: a queue of three
   operations asks three times.
 - Verbs, its argument vector only: `install <op-id> <package>…` and `remove <op-id> <package>…` (1 to 64 names). It reads no
-  environment variable except `PKEXEC_UID`, which pkexec sets; it sets its own `PATH` and `umask 022`; it refuses unless its
-  effective uid is 0.
+  environment variable at all (as `grassfield-channel-helper`: `bash -p`, then itself again under `env -i` while its
+  environment holds anything, so not even `PKEXEC_UID`); it sets its own `PATH`, `LC_ALL=C` and `umask 022`; it refuses
+  unless its effective uid is 0. An operation id is used once (its log is created exclusively).
 - It runs exactly `pacman -S --needed --noconfirm --noprogressbar -- <names>` or `pacman -Rns --noconfirm --noprogressbar --
   <names>`. Never `-y`, `--overwrite`, `-dd`, `-U`, a file path, a hook, or anything else. It installs from the repositories
-  only (names, not files).
-- Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12); every name
-  matches the pattern of e.5 and, for `install`, resolves in a repository.
+  only (names, not files). Before an install it reads the whole plan first, `pacman -S --needed --print --print-format
+  '%n %v %l' -- <names>`: every line must be a package, and no installed package may change in it, which would be a partial
+  upgrade or downgrade (5). A package IgnorePkg holds back (`pacman -Qu` shows it "[ignored]") is one pacman asks about,
+  and under `--noconfirm` installs anyway: the plan is read without `--noconfirm`, the question reads `/dev/null` and the
+  plan fails ("could not satisfy dependencies"); an older version a dependency asks for comes with no question, and the
+  plan names an installed package (integrator's review of 19d2e9e; the Store refuses the same plans, e.4). It then applies
+  SD1 itself (SD12): `pacman -Sw --noconfirm --noprogressbar -- <names not installed>` downloads them into pacman's cache
+  and checks their signatures as an install does, the plan names each one's file, and `pacman -Qlpq -- <that file>` must
+  list an application entry (`/usr/share/applications/<id>.desktop`); an installed name is read from pacman's database
+  (`pacman -Qlq`). A name that owns none is refused before anything is installed.
+- Before pacman, it checks again (MAJOR 1): no `db.lck`; `pacman -Qu` lists nothing that is not "[ignored]" (S12), and an
+  install names nothing it lists at all: a name IgnorePkg holds back is refused by name (5), whatever pacman would answer
+  about it, since `pacman -S --noconfirm` would update it (re-review of 64cdaa9); every name
+  matches the pattern of e.5 and is a package a repository has by that exact name (`pacman -Slq`; a name only provided by
+  another package, such as `sh`, is refused). One run at a time: a lock only root can open (`/run/grassfield-store/helper.lock`,
+  0600), refused at once when held. Its descriptor is closed for every program the helper starts (`9<&-`), so neither pacman
+  nor a process a package's scriptlet leaves running holds it after the helper ends.
+- Its exit code says what happened (the Store's words for each, spec SR19): 0 done; 1 pacman failed (its message in the
+  log); 2 usage, or an operation id used before; 3 busy (another run, or `db.lck`); 4 the last system update did not finish;
+  5 a name no repository has, a plan pacman cannot resolve, or one that would change an installed package; 6 a removal the
+  rule refuses; 7 an install of a package that
+  owns no application entry. pkexec's own are 126 (not authorized, or the dialog dismissed) and 127 (authentication failed).
 - **`remove` takes apps only (counter-review MAJOR; S16).** Every name must be a package of a repository (`pacman -Si`; a
   package no repository has is removed through b.2), installed explicitly (`pacman -Qqe`), the owner of an application entry
   (a file `/usr/share/applications/<id>.desktop` in `pacman -Qlq`), and not denied. Denied:
@@ -290,7 +310,8 @@ is not enough (S6: an interrupted pacman exits 0); the state alone is not enough
 - Its own descriptors go to `/dev/null` and to a log, never to the pipe it was started with, and it ignores SIGHUP and SIGPIPE:
   the Store quitting cannot kill pacman through a closed pipe (S6 shows what a killed pacman leaves). It writes, in the
   root-owned `/run/grassfield-store/` (0755): `<op-id>.started` (its pid and start time), `<op-id>.log` (pacman's output, 0644,
-  at most 8 MiB, for the progress and the error), `<op-id>.exit` (the exit code, written by rename).
+  at most 8 MiB, for the progress and the error), `<op-id>.exit` (the exit code, written by rename). The files of the 16
+  newest operations are kept (the Store needs the last one after a crash; `/run` is emptied at boot).
 - While it runs, the Store holds Omarchy's update lock (the same file, opened with close-on-exec, so neither pkexec nor
   pacman inherits it): `omarchy update` cannot start meanwhile, and Software Update, which reads the same lock (ADR-0033
   d.5), shows "Update in progress" until the operation ends. The same holds while `grassfield-store-run` holds it (b.2).
@@ -685,6 +706,13 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD8 | The app's button before step 3 can install or open (step 2) | shown with its state ("Get", "Open", "Installed"), disabled, a tooltip saying installing comes in a later version · hidden until step 3 | shown, disabled, with the tooltip | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) every macOS page has the button in its place, so the measured layout is the one step 3 fills; (b) the tooltip says why nothing happens, with no step to take |
 | SD9 | When the Store is packaged and shows in Apps (step 2) | with step 3, when it can install · now, read only | with step 3 (the CMake install rules, the desktop entry and the icon are ready) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) a Store whose every button is disabled would send the user elsewhere to install; step 2 runs in dev sessions and captures only |
 | SD10 | The AUR and Flathub in the UI, and the Sources switches (step 2) | with step 3, with their install paths and the AUR warning · the switches now, without effect | with step 3; the settings window shows the switches' state, read only | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) a switch that changes nothing would be a step for nothing; macOS has no such sources, so nothing is lost against the reference meanwhile |
+| SD11 | How step 3 is delivered | in three parts, each complete for its sources and reviewed on its own: 3a repository packages (the root helper and its policy, the polkit sheet's names) and web apps; 3b Omarchy's terminal (setups, with the pins of the installed Omarchy, and the AUR with its warning and switch); 3c Flathub (its switch, `flatpak --user`, the measured cancel) · one PR for everything | three parts | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the root helper and its policy get a review of their own (e.9), and each part leaves no button that does nothing (SD8's tooltip stays on the sources still to come); the user's path is the same at the end |
+| SD12 | SD1 in the helper's install (the integrator's note at step 0's PASS: "applied, or the gap accepted in writing") | the helper downloads the packages (pacman checks their signatures), reads each one's file list and refuses one without an application entry, before installing anything · the gap accepted (the Store offers only apps; a direct `pkexec` call with the administrator's password could install a tool the Store then cannot remove) | applied | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) whatever the helper installs, the Store can remove again, without a terminal; the extra commands are pacman's own (`-Sw`, `-Sp`, `-Qlp`), as root on files pacman has just checked; no root right is added |
+| SD13 | The Store's window closes (Ctrl+W, Ctrl+Q, its close button) while an operation runs | the window closes, the Store stays without a window until the operation ends (it keeps Omarchy's lock and records the outcome), then quits; waiting ones are dropped · quit at once (the helper goes on; Omarchy's lock is let go) | stays until it ends | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's installs go on after the store's window closes; (b) `omarchy update` cannot start in the middle of an install the user cannot see |
+| SD14 | Where "Open Software Update" (a plan refused until the system is updated, SR15) goes while Settings has no Software Update pane of its own | Settings at General, where ADR-0033 puts Software Update · the shell's update indicator · nothing (the sheet's text alone) | Settings at General | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS sends there; (b) one click to where the update is, never a terminal |
+| SD15 | The web apps in Installed that our catalog does not list (Omarchy's own, the user's) | Open and Uninstall… like the catalog's (the user's own launchers, b.3) · Open only | Open and Uninstall… | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) Omarchy's menu already removes any web app; a launcher in the user's files is the user's to remove, with the sheet alone (ST3) |
+| SD16 | The polkit dialog left unanswered (the 120 s of b.1) | the Store ends pkexec (still the user's process until it starts the helper, a root process no user can signal) and says the request timed out · it keeps waiting | ends pkexec | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the queue does not stay stuck behind a dialog the user may not see; nothing is ever signalled after the helper started |
+| SD17 | The form of SD2's sheet for the Store's action (the integrator's note at step 0's PASS: "keeps Action: <id> and the helper path") | "Install xterm, gimp" (or "Remove …") in place of polkit's message, every name shown (past eight lines the list scrolls: wheel, drag, its scroll bar, Tab then the arrow keys), then "Enter your password to allow this.", "Action: org.grassfield.store.manage-packages" and "Program: /usr/lib/grassfield/grassfield-store-helper" · the message as polkit gives it | the plain words, then the action and the program | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's authorization sheet says what is asked in plain words; the action and the program stay for whoever checks; the names come from polkit's own message, read by a strict pattern for this action id only (a message that does not match is shown as polkit gives it) |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -746,7 +774,27 @@ irreversible action on the owner's machine. The integrator checks each row in th
   S16's cases as tests, the plan check), the polkit sheet's names for this action (SD2), `grassfield-store-run` (b.2), web
   apps and Flatpaks (b.3); container tests with real pacman installs, a real recipe, a real `flatpak install --user` of a
   small app and an interrupted one (throwaway container), fake programs everywhere else; opus security review; the owner
-  checks the real polkit dialog, sudo in Omarchy's terminal and a closed terminal in a real session.
+  checks the real polkit dialog, sudo in Omarchy's terminal and a closed terminal in a real session. In three parts (SD11):
+  - **3a (delivered for review, 2026-10-27):** repository packages and web apps. `packaging/store/grassfield-store-helper`
+    and `org.grassfield.store.policy` (b.1, SD12); the polkit sheet's plain words for this action (SD2, SD17;
+    `shell/security/polkit/AuthDialogModel.qml`); the plan check (`apps/store/src/plancheck.*`: pacman -Qu, -S --print,
+    the first file's HEAD, the locks; -Rs --print and its dependents), the removal rule as the user
+    (`removal.*`, held to the helper's answers by `tests/fixtures/store/removal-vectors.json`), the queue
+    (`operations.*`: one at a time, pkexec in a session of its own while the Store holds Omarchy's lock, the helper's files,
+    pacman's log for the count, store.json's record and the recovery at start, SD13, SD16), web apps through Omarchy's
+    commands as the Store's children, Open (`uwsm-app -- <id>`, `omarchy-launch-webapp <url>`), Installed's other web apps
+    (SD15); the confirmation sheet, the button's ring and the queue in the toolbar, Uninstall… in the product page's menu
+    and in Installed's context menu with the reasons, how an operation ended (Try Again, Details…), a lock pacman left
+    (Arch's way, as text); the window's keys gated on the key window, as Files (the integrator's note at step 2's merge);
+    the package `grassfield-store` (SD9). Tests: `tests/integration/store_helper.sh` (the real helper, policy, polkitd
+    and pkexec, a local repository of test packages and xterm from Arch's mirror, in a throwaway container),
+    `tests/unit/store/tst_{plancheck,removal,operations}.cpp` (fake pkexec, pacman and Omarchy commands),
+    `tests/unit/tst_storeoperations.qml`, `tests/security/tst_authdialog{,model}.qml`; the window's keys under a real
+    Wayland compositor (`docs/audits/store-2026-10-27/tools/wayland-keys.sh`, sway headless).
+  - **3b:** `grassfield-store-run` and Omarchy's terminal (b.2): the setups (refused when the installed Omarchy's files
+    differ from the catalog's pins) and the AUR (its switch, its warning, its RPC); the next catalog change of
+    grassfield-packages (task: find's -exec and run-parts in the scan).
+  - **3c:** Flathub (its switch, `flatpak --user`, its metadata, the measured cancel).
 - **Step 4:** the Updates page (system updates through ADR-0033's checker and its `otherPackages`, SD3; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
   Store's own (ST8).
 - **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
@@ -873,3 +921,30 @@ Counter-review of f978601 (integrator, 2026-10-27): PASS; the integrator's neste
   own (two lines of fcc9a30's screenshot gate went into it); the history is not rewritten (CLAUDE.md), so a bisect skips
   it (`git bisect skip be35a43`): be35a43 and fcc9a30 build together.
 
+
+Opus security review of step 3a at 19d2e9e (integrator, 2026-10-28): PASS, no BLOCKER or MAJOR; four fixes asked before
+merge, each answered here:
+- **The explicit-only rule had no test of its own** (a mutant without it survived): `tests/integration/store_helper.sh`
+  removes `gs-orphan`, an app with an application entry installed as a dependency that nothing needs, and expects exit 6.
+- **IgnorePkg and a partial upgrade:** the helper reads the whole plan before anything is downloaded, without
+  `--noconfirm`, and refuses one that fails or that would change an installed package (b.1, exit 5). The test installs
+  `gs-newer`, which needs a `gs-app` IgnorePkg holds back (pacman's question gets no answer: the plan fails), and
+  `gs-wants-old`, which needs a `gs-pinned` older than the installed one (no question: the plan names it); both exit 5 with
+  nothing changed.
+- **The polkit sheet could hide names** past its eight lines while the helper takes 64 names of 128 characters: the Store's
+  request now shows every name, scrolling past eight lines (SD17, the security spec's "Polkit details";
+  `tst_authdialog` test_13_storeRequestNamesEveryPackage).
+- **The lock's descriptor reached pacman:** every program the helper starts gets `9<&-`; the test checks that only the
+  helper holds the lock while pacman and a scriptlet run, and that a process a scriptlet leaves running neither holds it nor
+  makes the next run busy.
+
+Opus security re-review of 19d2e9e..64cdaa9 (integrator, 2026-10-28): PASS, one MINOR left before merge, answered here:
+- **An app IgnorePkg holds back, asked for by name** (a direct pkexec call with the admin password): its "[ignored]" line
+  passes the `-Qu` check, and `pacman -S --noconfirm` would update it past the hold. The review read from pacman's source
+  that `pacman -S --print` skips such a target with an empty plan. Measured on archlinux:base (pacman 7.1), with the
+  question reading `/dev/null` the plan lists the target at the new version, so 64cdaa9's installed-package check already
+  refused it (exit 5, "would replace the installed gs-app with 2-1 alone", `gs-app` unchanged). The helper now refuses an
+  install of any name `pacman -Qu` lists, "[ignored]" included, by name and before the plan (b.1, exit 5), so the refusal
+  no longer depends on how pacman answers; `store_helper.sh` installs `gs-app` by name while IgnorePkg holds it at 1 with 2
+  in the repository and expects exit 5, `gs-app` unchanged and that reason in the log. The sheet's scroll reset on a new
+  request, the one mutant the re-review saw survive, has its check in `tst_authdialog` test_13.

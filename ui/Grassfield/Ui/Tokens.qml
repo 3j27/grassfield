@@ -3092,6 +3092,24 @@ QtObject {
     readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
     // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeButtonDisabledOpacity: 0.45
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSize: 26
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real storeRingStroke: 2.5
+    // estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingSweep: 100
+    // estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingTurnMs: 1100
+    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
+    readonly property int storeRingStopSize: 8
+    // estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeRingStopRadius: 2
+    // estimate: the package rows an install or uninstall sheet shows before it scrolls [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetListMaxRows: 8
+    // estimate: one package row of that list [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeSheetRowHeight: Math.round(20 * Appearance.textScale)
+    // estimate: the line under an app's button saying how its last operation ended [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int storeResultGap: 6
     // estimate: a category tile [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeCategoryHeight: 64
     // estimate: a column of category tiles: three at the reference width [ref: docs/audits/store-2026-10-27/parity.md]
