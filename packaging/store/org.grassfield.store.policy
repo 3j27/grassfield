@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Grassfield Store (ADR-0037 b.1, owner decision ST4): the one action that lets the Store run grassfield-store-helper as
+     root through pkexec. The helper accepts only `install|remove <op-id> <package>...` and runs pacman on repository
+     packages that are apps. An administrator's password at every operation, never kept (auth_admin: counter-review MAJOR,
+     S18); never for an inactive or remote session. polkitd replaces $(command_line) with the helper's argument vector as
+     pkexec reports it, so the message names the packages from polkit, not from the Store; Grassfield's polkit sheet shows
+     "Install" or "Remove" and those names for this action (SD2). -->
+<policyconfig>
+  <vendor>Grassfield</vendor>
+  <action id="org.grassfield.store.manage-packages">
+    <description>Install or remove apps</description>
+    <description xml:lang="fr">Installer ou supprimer des apps</description>
+    <message>Authentication is required to install or remove apps: $(command_line)</message>
+    <message xml:lang="fr">Une authentification est nécessaire pour installer ou supprimer des apps : $(command_line)</message>
+    <icon_name>org.grassfield.Store</icon_name>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/grassfield/grassfield-store-helper</annotate>
+  </action>
+</policyconfig>

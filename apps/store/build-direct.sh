@@ -27,10 +27,11 @@ if [[ ${1:-} == "--tests" ]]; then
     suffix="-asan"
   fi
   "$moc" "$here/src/storebackend.h" -o "$out/moc_storebackend$suffix.cpp"
+  "$moc" "$here/src/operations.h" -o "$out/moc_operations$suffix.cpp"
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -I"$here/.." -I"$root/ui/i18n" \
     "-DSTORE_FIXTURES=\"$root/tests/fixtures/store\"" $(pkg-config --cflags Qt6Core Qt6Gui Qt6Network zlib) \
-    "${backend[@]}" "$out/moc_storebackend$suffix.cpp" "$root"/tests/unit/store/tst_*.cpp \
+    "${backend[@]}" "$out/moc_storebackend$suffix.cpp" "$out/moc_operations$suffix.cpp" "$root"/tests/unit/store/tst_*.cpp \
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Network zlib) -lgtest -lgtest_main -pthread -o "$out/store-unit-tests$suffix"
   echo "built $out/store-unit-tests$suffix"
   exit 0
@@ -41,18 +42,19 @@ if [[ ${1:-} != "--install-paths" ]]; then
   defs+=("-DGRASSFIELD_STORE_QML_DIR=\"$here/qml\"")
 fi
 "$moc" "$here/src/storebackend.h" -o "$out/moc_storebackend.cpp"
+"$moc" "$here/src/operations.h" -o "$out/moc_operations.cpp"
 qtver=$(pkg-config --modversion Qt6Gui)
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" "${defs[@]}" \
   -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
   $(pkg-config --cflags Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) $(pkg-config --cflags wayland-client) \
   -I"/usr/include/qt6/QtGui/$qtver" -I"/usr/include/qt6/QtGui/$qtver/QtGui" -I"/usr/include/qt6/QtCore/$qtver" \
-  "${backend[@]}" "$here/src/main.cpp" "$here/src/screenshotprovider.cpp" "$out/moc_storebackend.cpp" \
+  "${backend[@]}" "$here/src/main.cpp" "$here/src/screenshotprovider.cpp" "$out/moc_storebackend.cpp" "$out/moc_operations.cpp" \
   $(pkg-config --libs Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) -lwayland-client \
   -o "$out/grassfield-store"
 echo "built $out/grassfield-store"
 
-# The Store is not packaged before step 3 (ADR-0037 SD9): a dev session (scripts/dev/devenv.sh puts .dev/share first in
+# The packaged Store installs its entry and icon (grassfield-store, ADR-0037 SD9); a dev session (scripts/dev/devenv.sh puts .dev/share first in
 # XDG_DATA_DIRS) finds its desktop entry and icon here, so the menu bar and Apps name it "Grassfield Store", and Apps starts
 # this build. Only under .dev/share, never in the owner's data directories.
 if [[ ${1:-} != "--install-paths" ]]; then

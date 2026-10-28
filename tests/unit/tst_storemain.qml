@@ -243,10 +243,14 @@ TestCase {
         tryVerify(() => findAll(t.win.page, i => i.Accessible.role === Accessible.Button && i.Accessible.name === "Get Paint").length === 1);
         verify(findAll(t.win.page, i => i.Accessible.name === "Open Photo Lab").length === 1);
         verify(findAll(t.win.page, i => i.Accessible.name === "Paint, Arch Linux · extra, Paint does one thing well").length === 1);
-        // Installing comes with step 3: the buttons are there, disabled, and say why.
+        // Get acts (step 3); a Get the Store cannot act on is disabled and says why (a dev session without the fake programs).
         const get = findAll(t.win.page, i => i.Accessible.name === "Get Paint")[0];
+        verify(get.enabled);
+        compare(get.Accessible.description, "");
+        t.backend.blocks = {"org.example.Paint": {get: "dev"}};
+        t.backend.revision++;
         verify(!get.enabled);
-        compare(get.Accessible.description, "Installing and opening apps from the Store come in a later version.");
+        compare(get.Accessible.description, "dev: not applied");
         t.win.openPage("app:org.example.Tool");
         verify(findAll(t.win.page, i => i.Accessible.name === "Pack Tool is installed").length === 1, "installed without a launcher");
     }
@@ -254,7 +258,7 @@ TestCase {
     // Offline (SR29), and a catalog older than 30 days.
     function test_notices() {
         const t = make();
-        const notice = find(t.win.contentItem, i => i.Accessible.role === Accessible.AlertMessage && i.text !== undefined && i.radius !== undefined);
+        const notice = find(t.win.contentItem, i => i.objectName === "offlineNotice");
         verify(notice);
         compare(notice.text, "");
         verify(!notice.visible);
@@ -334,6 +338,33 @@ TestCase {
         tryVerify(() => t.win.active, 2000);
         keyClick(Qt.Key_2, Qt.ControlModifier);
         compare(t.win.current.tab, t.win.sidebarItems[1].key);
+    }
+
+    // A key belongs to the key window alone (Files' rule): Ctrl+W typed in the settings window closes it, not the Store
+    // (Qt also matches the Store window's Shortcuts and menu keys while its transient child has the keyboard), and Esc or
+    // Ctrl+W typed in the Store leave the settings window open.
+    function test_keysBelongToTheKeyWindow() {
+        const t = make({globalMenu: true});
+        keyClick(Qt.Key_Comma, Qt.ControlModifier);
+        const settings = t.win.settingsWindow;
+        tryVerify(() => settings && settings.visible && settings.active, 2000, "Ctrl+, opened the settings window");
+        t.backend.focusWindow = settings;
+        verify(t.win.childIsKey);
+        keyClick(Qt.Key_W, Qt.ControlModifier);
+        tryVerify(() => !settings.visible, 2000, "Ctrl+W closed the settings window");
+        verify(t.win.visible, "and not the Store");
+
+        t.win.openSettings();
+        tryVerify(() => settings.visible);
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        t.backend.focusWindow = t.win;
+        verify(!t.win.childIsKey);
+        keyClick(Qt.Key_Escape);
+        keyClick(Qt.Key_F, Qt.ControlModifier);
+        verify(t.win.searchField.activeFocus, "Ctrl+F works in the Store");
+        verify(settings.visible, "Esc typed in the Store leaves the settings window open");
+        settings.close();
     }
 
     // Nothing to show (no catalog in use, no app data from Arch): the page says why and offers Try Again, never a blank

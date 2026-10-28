@@ -1,15 +1,19 @@
-// The Store window's backend (ADR-0037 step 2; spec SR1-SR12, SR23, SR24 read-only, SR26-SR29): what the QML reads, and the
+// The Store window's backend (ADR-0037 steps 2 and 3; spec SR1-SR23, SR24 read-only, SR26-SR29): what the QML reads, and the
 // work behind it off the GUI thread. Each load builds one immutable Snapshot in a worker (pacman's lists, Arch's AppStream,
 // the cached catalog checked again, the web apps' launchers, the merged model) and the window swaps it in whole; a fetch
 // (the catalog when its copy is older than 6 hours or on Ctrl+R, its icons, Arch's AppStream package when none is
-// installed) runs only online, and never on a metered connection without Ctrl+R. Nothing here installs, removes or opens
-// an app (step 3); a link opens in the browser, https only, never in a dev session.
+// installed) runs only online, and never on a metered connection without Ctrl+R. Get and Uninstall… plan first (the plan
+// check, plancheck.h, on a worker), then queue an operation (operations.h) once the sheet's default button is pressed;
+// Open starts the app (ADR-0011). A link opens in the browser, https only, never in a dev session.
 #pragma once
 
 #include "appstreamsource.h"
 #include "catalogstore.h"
 #include "channel.h"
+#include "operations.h"
 #include "pacman.h"
+#include "plancheck.h"
+#include "removal.h"
 #include "storemodel.h"
 #include "storeview.h"
 
@@ -43,6 +47,8 @@ struct Snapshot {
     QList<SyncPackage> sync;
     QSet<QString> explicitPackages;
     QSet<QString> foreignWithEntry; // packages no repository has that own an application entry
+    QHash<QString, QStringList> entries; // package -> the desktop ids of its entries in /usr/share/applications
+    DenyList deny;                       // what is never removed (removal.h)
     QList<view::WebAppEntry> webApps;
     QList<StoreApp> apps;
     QHash<QString, int> index; // app id -> apps
@@ -82,6 +88,17 @@ class StoreBackend : public QObject
     // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on, step 3 writes them) and the switch of
     // the screenshots (owner ST6: on).
     Q_PROPERTY(QVariantMap sources READ sources CONSTANT)
+    // The key window (QGuiApplication::focusWindow), null while no window of the Store has the keyboard. Qt matches a
+    // window's Shortcuts and its global menu's keys while one of its transient children has the keyboard too, so a key
+    // belongs to the key window alone (as Files' FilesApp.focusWindow).
+    Q_PROPERTY(QObject *focusWindow READ focusWindow NOTIFY focusWindowChanged)
+    // The queue (spec SR18): [{id, app, name, kind, state, blocked, done, total}], the running one first.
+    Q_PROPERTY(QVariantList operations READ operations NOTIFY operationsChanged)
+    // How the last operation of an app ended, while it says something: app id -> {kind, name, outcome, present, total,
+    // details}.
+    Q_PROPERTY(QVariantMap results READ results NOTIFY operationsChanged)
+    // pacman stopped mid-way and left its lock (db.lck there, no pacman running): SR20's explanation, then Arch's recovery.
+    Q_PROPERTY(bool staleLock READ staleLock NOTIFY operationsChanged)
 
 public:
     explicit StoreBackend(QObject *parent = nullptr);
@@ -107,6 +124,10 @@ public:
     QVariantMap appDataStatus() const;
     QVariantMap user() const { return m_user; }
     QVariantMap sources() const;
+    QObject *focusWindow() const;
+    QVariantList operations() const;
+    QVariantMap results() const;
+    bool staleLock() const { return m_staleLock; }
 
     // Discover (the catalog's, else the built-in one) and the catalog's other sections, in order.
     Q_INVOKABLE QVariantList sections() const;
@@ -129,6 +150,26 @@ public:
     Q_INVOKABLE bool openLink(const QString &url);
     // The image source of a screenshot ("" while screenshots are off or the Store is offline).
     Q_INVOKABLE QString screenshotSource(const QString &url) const;
+    // Get and Uninstall… (SR14, SR22): what the operation would do, answered by planReady(app, kind, plan): {refusal: "" |
+    // busy | unfinished | outdated | offline | dependency | protected | failed | unavailable, packages [{name, version, repo,
+    // size}], download, installed, unfinished, upgrades, dependents, protected, detail}. kind: install or remove.
+    Q_INVOKABLE void plan(const QString &id, const QString &kind);
+    // What the app's buttons may do now: {installed, launcher, get: "" or why not, uninstall: "" or why not} (getBlock,
+    // uninstallBlock). Read again with `revision` and `operations`.
+    Q_INVOKABLE QVariantMap actions(const QString &id) const;
+    // The sheet's default button: the operation joins the queue, with the plan made last for this app (false when there is
+    // none, or the app cannot be installed or removed).
+    Q_INVOKABLE bool install(const QString &id);
+    Q_INVOKABLE bool uninstall(const QString &id);
+    Q_INVOKABLE bool removeWaiting(const QString &operationId);
+    Q_INVOKABLE void dismiss(const QString &id);
+    // Open (SR21): the app's entry through uwsm (ADR-0011), a web app by omarchy-launch-webapp; false when it did not start.
+    Q_INVOKABLE bool open(const QString &id);
+    // Ctrl+Q: quits at once, or once the running operation ended (the window closes meanwhile; waiting ones are dropped).
+    Q_INVOKABLE void quitWhenIdle();
+    // "Open Software Update" of a refused plan (SR15): Settings at General, where Software Update lives (ADR-0033); false
+    // when it did not start (in a dev session only through the fake program).
+    Q_INVOKABLE bool openSoftwareUpdate();
 
     // The first load; the window calls it once its first frame is up.
     void start();
@@ -143,7 +184,10 @@ signals:
     void dataChanged();
     void loadingChanged();
     void networkChanged();
+    void focusWindowChanged();
     void packageInfo(const QString &name, const QVariantMap &facts); // "package" is a reserved word in QML
+    void planReady(const QString &app, const QString &kind, const QVariantMap &plan);
+    void operationsChanged();
 
 private:
     struct Job {
@@ -157,6 +201,18 @@ private:
     void readNetwork();
     bool catalogStale() const;
     QLocale formats() const { return m_formats; }
+    const StoreApp *storeApp(const QString &id) const;
+    // A web app of Installed that our catalog does not list ("webapp:<its launcher's file name>"): opened and removed too.
+    std::optional<view::WebAppEntry> otherWebApp(const QString &id) const;
+    // Why `a` cannot be installed now, or "": dev (no fake program in a dev session), missing (Omarchy's commands or the
+    // helper are not there), offline, icon (a web app's icon not cached yet), source (its source cannot install yet).
+    QString getBlock(const StoreApp &a) const;
+    // "" when "Uninstall…" is offered for `a`, else why not (SR22): system, omarchy, grassfield, dependency, notApp,
+    // notFromRepository, listsMissing, notInstalled, source, dev, missing.
+    QString uninstallBlock(const StoreApp &a) const;
+    QVariantMap withActions(QVariantMap map, const StoreApp &a) const;
+    PlanTools planTools() const;
+    void checkStaleLock();
 
     QString m_language = QStringLiteral("en");
     QLocale m_formats;
@@ -186,6 +242,11 @@ private:
     std::optional<Job> m_pendingJob;
     std::shared_ptr<std::atomic_bool> m_cancel;
     std::shared_ptr<std::atomic_bool> m_screenshotGate = std::make_shared<std::atomic_bool>(true);
+    std::unique_ptr<Operations> m_operations;
+    QHash<QString, InstallPlan> m_installPlans; // app id -> the plan its sheet showed
+    QHash<QString, RemovePlan> m_removePlans;
+    bool m_staleLock = false;
+    bool m_quitWhenIdle = false;
     QThreadPool m_pool; // last member: waits for the jobs while the rest is still there
 };
 

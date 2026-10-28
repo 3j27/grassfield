@@ -17,6 +17,14 @@ ScrollPage {
     readonly property string factsPackage: root.app.package ? root.app.package : (root.app.packages && root.app.packages.length > 0 ? root.app.packages[0] : "")
 
     signal linkRequested(string url)
+    signal uninstallRequested(var app)
+    signal detailsRequested(string id)
+    signal tryAgainRequested(var app, string kind)
+
+    // What the buttons may do (StoreBackend::actions), the app's operation and how its last one ended (spec SR13, SR19, SR22).
+    readonly property var actions: root.app.id && root.backend.revision >= 0 ? root.backend.actions(root.app.id) : ({})
+    readonly property bool busy: (root.backend.operations || []).some(o => o.app === root.app.id)
+    readonly property var result: root.app.id ? (root.backend.results || {})[root.app.id] : undefined
 
     title: ""
     headerHeight: Tokens.storeProductTop
@@ -110,6 +118,58 @@ ScrollPage {
                     large: true
                 }
 
+                // "…": Uninstall… for an installed app (SR22), dimmed with the reason when the Store may not remove it.
+                Item {
+                    id: more
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.actions.installed === true
+                    width: Tokens.storeButtonLargeHeight
+                    height: Tokens.storeButtonLargeHeight
+                    activeFocusOnTab: visible
+                    Accessible.role: Accessible.ButtonMenu
+                    Accessible.name: qsTr("More for %1").arg(root.app.name || "")
+                    Accessible.onPressAction: more.openMenu()
+
+                    function openMenu(): void {
+                        moreMenu.items = [{id: "uninstall", text: qsTr("Uninstall…"), destructive: true,
+                                           enabled: root.actions.uninstall === "" && !root.busy}];
+                        moreMenu.focusBack = more;
+                        moreMenu.openAt(0, more.height + Tokens.spacingXs);
+                    }
+
+                    Keys.onPressed: event => {
+                        if (ActivationKeys.activation(event.key)) {
+                            more.openMenu();
+                            event.accepted = true;
+                        }
+                    }
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: "ellipsis-circle"
+                        size: Tokens.storeButtonLargeHeight
+                        color: Appearance.windowSecondary
+                    }
+
+                    FocusRing {
+                        shapeRadius: more.width / 2
+                        visible: more.activeFocus
+                    }
+
+                    TapHandler {
+                        onTapped: more.openMenu()
+                    }
+
+                    MenuPopup {
+                        id: moreMenu
+                        accessibleName: more.Accessible.name
+                        onChosen: id => {
+                            if (id === "uninstall")
+                                root.uninstallRequested(root.app);
+                        }
+                    }
+                }
+
                 SourceBadge {
                     anchors.verticalCenter: parent.verticalCenter
                     kind: root.app.kind || ""
@@ -125,6 +185,54 @@ ScrollPage {
                     font.pixelSize: Tokens.storeBadgeSize
                     font.letterSpacing: Appearance.tracking(Tokens.storeBadgeSize)
                 }
+            }
+
+            // How its last operation ended (SR19), with Try Again and Details….
+            Row {
+                visible: !!root.result && Store.resultText(root.result) !== ""
+                width: parent.width
+                spacing: Tokens.storeProductButtonRowGap
+                topPadding: Tokens.storeResultGap
+
+                Text {
+                    width: Math.min(implicitWidth, parent.width - links.width - parent.spacing)
+                    textFormat: Text.PlainText
+                    text: Store.resultText(root.result)
+                    wrapMode: Text.Wrap
+                    color: Appearance.colors.danger
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.storeBadgeSize
+                    Accessible.role: Accessible.AlertMessage
+                    Accessible.name: text
+                }
+
+                Row {
+                    id: links
+                    spacing: Tokens.storeProductButtonRowGap
+
+                    LinkText {
+                        visible: Store.canTryAgain(root.result)
+                        text: qsTr("Try Again")
+                        onActivated: root.tryAgainRequested(root.app, root.result.kind)
+                    }
+
+                    LinkText {
+                        text: qsTr("Details…")
+                        onActivated: root.detailsRequested(root.app.id)
+                    }
+                }
+            }
+
+            // Why the Store does not offer to uninstall it (SR22: part of Omarchy, of Grassfield, of the system, …).
+            Text {
+                width: parent.width
+                visible: root.actions.installed === true && text !== ""
+                textFormat: Text.PlainText
+                text: Store.uninstallReasonText(root.actions.uninstall || "")
+                wrapMode: Text.Wrap
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.storeBadgeSize
             }
 
             Text {
