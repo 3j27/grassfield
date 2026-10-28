@@ -12,7 +12,8 @@
 #                                 whole plan (-s takes unneeded dependencies along) that names no denied package (S16)
 # 1 to 64 package names; the operation id is 32 lowercase hexadecimal digits the Store made. Both verbs refuse while
 # another run of this helper or pacman (db.lck) is running, and while pacman -Qu lists a package not "[ignored]" (an
-# update that did not finish: the databases are newer than the system, S12). Never -y, --overwrite, -dd, -U, a file.
+# update that did not finish: the databases are newer than the system, S12); install also refuses a name pacman -Qu
+# lists at all, "[ignored]" included (IgnorePkg holds it back). Never -y, --overwrite, -dd, -U, a file.
 # The lock's descriptor (9) is closed for every program it starts: pacman, its scriptlets and hooks never hold the lock.
 # Exit: 0 done; 1 failed (pacman's message is in the log); 2 usage, or an operation id used before; 3 busy (another run
 # of this helper, or pacman's db.lck); 4 the last system update did not finish; 5 a name no repository has, a plan
@@ -114,9 +115,12 @@ dbpath=${dbpath%/}
 [[ -n $dbpath ]] || finish 1 "pacman's database folder is unknown"
 [[ ! -e $dbpath/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left $dbpath/db.lck)"
 
-# The last system update finished: pacman -Qu lists nothing but packages the user holds with IgnorePkg (S12).
+# The last system update finished: pacman -Qu lists nothing but packages the user holds with IgnorePkg (S12). Those are
+# kept by name ("<name> <old> -> <new> [ignored]"): install refuses them below.
+declare -A held=()
 while IFS= read -r line; do
-  [[ -z $line || $line == *' [ignored]' ]] && continue
+  [[ -z $line ]] && continue
+  [[ $line == *' [ignored]' ]] && { held[${line%% *}]=1; continue; }
   finish 4 "the last system update did not finish ($line): update the system first"
 done < <(pacman -Qu 2>/dev/null 9<&-)
 
@@ -139,13 +143,18 @@ pacman_logged() {
 }
 
 if [[ $verb == install ]]; then
-  # The whole plan first, what pacman -S --needed would install (S10), before anything is downloaded: no installed
-  # package may change in it, which would be a partial upgrade (or downgrade) that only a whole system update may bring.
-  # A package IgnorePkg holds back (pacman -Qu shows it "[ignored]", above) is one pacman asks about, and under
-  # --noconfirm installs anyway: here, without --noconfirm, its question reads /dev/null and the plan fails (S10's
-  # "could not satisfy dependencies"). An older version a dependency asks for comes with no question: the plan names an
-  # installed package. The Store refuses the same plans (plancheck.cpp); this holds for any caller. Every line must be a
-  # package, or nothing installs.
+  # No installed package may change, which would be a partial upgrade (or downgrade) that only a whole system update may
+  # bring. A package IgnorePkg holds back is one pacman asks about, and under --noconfirm installs anyway:
+  # - asked for by name (pacman -Qu showed it "[ignored]", above): refused here by name, whatever pacman answers. (With its
+  #   question reading /dev/null, pacman 7.1's plan below lists it at the new version, so the installed-package check
+  #   refuses it too: measured, store_helper.sh.)
+  for name in "$@"; do
+    [[ -z ${held[$name]-} ]] || finish 5 "$name is held back by IgnorePkg and newer in the repositories: it is not updated alone"
+  done
+  # - needed as a dependency: the whole plan, read first and without --noconfirm (S10), fails, its question reading
+  #   /dev/null ("could not satisfy dependencies"). An older version a dependency asks for comes with no question: the plan
+  #   names an installed package. The Store refuses the same plans (plancheck.cpp); this holds for any caller. Every line
+  #   must be a package, or nothing installs.
   plan=$(pacman -S --needed --print --print-format '%n %v %l' -- "$@" 9<&-) || finish 5 "pacman cannot install $*: update the system first"
   declare -A installed=() url=()
   while IFS= read -r line; do installed[$line]=1; done < <(pacman -Qq 2>/dev/null 9<&-)

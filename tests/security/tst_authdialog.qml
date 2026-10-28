@@ -377,6 +377,11 @@ TestCase {
             compare(view.contentY, view.lineStep);
             keyClick(Qt.Key_PageDown);
             compare(view.contentY, view.lineStep + view.height);
+            // Another request of the Store starts at its first line.
+            flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper remove 0123456789abcdef0123456789abcdef " + names.slice(0, 40).join(" ");
+            waitForRendering(dialog);
+            verify(view.scrolls);
+            compare(view.contentY, 0, "a new request starts at its first line");
             dialog.inputEnabled = false;
             verify(!view.activeFocus, "no focus while AuthAgent keeps the keys");
             view.forceActiveFocus();

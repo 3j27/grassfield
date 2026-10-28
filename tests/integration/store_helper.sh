@@ -209,6 +209,13 @@ expect "install gs-wants-old, whose plan puts gs-pinned 1 back over 2 -> exit 5,
   bash -c "test $rc == 5 && test \"\$(pacman -Q gs-pinned)\" == 'gs-pinned 2-1' && ! pacman -Q gs-wants-old >/dev/null 2>&1"
 tail -n 1 "$D/$op.log" | sed 's/^/    /'
 expect "  the log names the installed package" grep -q 'would replace the installed gs-pinned with 1-1 alone' "$D/$op.log"
+# gs-app itself, asked for by name while IgnorePkg holds it back (installed 1, the repository has 2): pacman -S --noconfirm
+# would update it. Refused by its "[ignored]" line in pacman -Qu, before the plan (which, its question reading /dev/null,
+# lists gs-app 2-1: the installed-package check would refuse it too).
+op=$(newop); helper install "$op" gs-app >/dev/null; rc=$?
+expect "install gs-app by name (1 installed, held by IgnorePkg, 2 in the repository) -> exit 5, gs-app stays 1" \
+  bash -c "test $rc == 5 && test \"\$(pacman -Q gs-app)\" == 'gs-app 1-1' && grep -q 'held back by IgnorePkg' $D/$op.log"
+printf '    exit %s, %s; %s\n' "$rc" "$(pacman -Q gs-app)" "$(tail -n 1 "$D/$op.log")"
 
 say "A6b remove: apps the user installed, never the system's (S16)"
 quiet pacman -S --noconfirm gs-app-fw grassfield-gs gs-omarchy-app gs-held
