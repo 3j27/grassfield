@@ -44,6 +44,16 @@ FocusScope {
             Qt.callLater(TilingSuggest.dismiss);
     }
 
+    // A refused pick (the zone was taken meanwhile) changes nothing: the suggestion stays and takes a pick again (TL28).
+    Connections {
+        target: Compositor
+
+        function onTilingNotice(notice: var): void {
+            if (notice.reason === "invalid" || notice.reason === "locked")
+                root.picked = false;
+        }
+    }
+
     function choose(index: int): void {
         if (root.picked || index < 0 || index >= root.windows.length)
             return;
