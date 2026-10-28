@@ -398,7 +398,7 @@ Answer: A (see "Answers").
 ### Answers (2026-10-28, AskUserQuestion; the options as asked in French, in the order above)
 | Question | Answer | Consequence |
 |---|---|---|
-| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the English name only: L1 keeps Preview's shipped French name « Visionneuse » (main b6763c2; review of e3882de; the owner is told in the reply to the review) |
+| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the English name only: L1 keeps Preview's shipped French name « Visionneuse » (main b6763c2; review of e3882de; the owner is told in the reply to the review). **Confirmed again by the owner on 2026-10-28** with the corrected precedent in view (relayed by the integrator on pull request #40): the name stays in both languages, at the owner's risk; it still needs legal review (visual review section 7) |
 | AQ2 network per process | « TCP seulement, étiqueté » (Recommandé) → A | AM43: the four columns headed "(TCP)" and the line under the table |
 | AQ3 energy per process | « Indice « Impact énergétique » » (Recommandé) → A | AM36 to AM39; weights calibrated by an owner L2 run on the laptop |
 | AQ4 other users' processes | « Visibles en lecture seule » → **B** (not the recommended A) | c above, AD25, AD26; the brief's "sees only the user's processes" is amended by the owner for seeing; stopping stays the user's own processes only |
@@ -609,4 +609,4 @@ root, no polkit action, no new dependency; the IPC never kills; A1 supports AQ4;
 | "A0 to A8" (ADR header, spec header) and the cost column's figures | A0 to A10; the column gives A10's figures in C, A8's for `smaps_rollup` only |
 | AQ1's option A still calls the Preview precedent « Aperçu » | the option text stays as asked, annotated: Preview ships « Visionneuse », so the precedent holds for the English name only |
 | `sampcost.c`'s Energy label | "(+ io + a fifth of the threads + a tenth of the descriptor lists)", as its formula already counted |
-| the owner confirms AQ1 again (question 14) | asked in the session reply of step 1; the answer is recorded in "Answers" when given |
+| the owner confirms AQ1 again (question 14) | asked in the session reply of step 1; confirmed by the owner on 2026-10-28 (relayed by the integrator on pull request #40): the name stays, owner-accepted risk; recorded in "Answers" and in the visual review's section 7 |
