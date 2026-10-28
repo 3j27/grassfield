@@ -2,12 +2,15 @@
 // section 1): over a real KIO listing of a scratch folder, the files a panel cannot take are dimmed and never selected, a
 // panel that takes one item keeps one, a folder panel dims every file, and the Applications location dims every application.
 // Part of files-kio-tests (a scratch home).
+#include "filesapp.h"
 #include "foldermodel.h"
 
 #include <QCoreApplication>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJSEngine>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
@@ -141,4 +144,44 @@ TEST(FolderChooserApplications, EveryApplicationIsDimmedInAPanel)
     model.setChooser({{QStringLiteral("foldersOnly"), true}});
     EXPECT_TRUE(model.data(model.index(row, 0), FolderModel::DimmedRole).toBool());
     QFile::remove(entry.fileName());
+}
+
+// New Folder of a Save panel (FilesApp::makeFolder): a taken name, a folder's or a file's, is told by KIO's own error, since
+// the panels never look at the disk on the GUI thread first (ADR-0035 4b-18; re-review of 6b26afc); a new name is made; an
+// invalid one is refused at once.
+TEST(PanelNewFolder, ATakenNameIsToldByKio)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("taken")));
+    QFile file(dir.filePath(QStringLiteral("a file")));
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    file.close();
+    FilesApp app(QList<QUrl>{});
+    QJSEngine engine;
+    engine.globalObject().setProperty(QStringLiteral("out"), engine.newArray());
+    const QJSValue record = engine.evaluate(QStringLiteral("(function (url, error) { out.push({url: url, error: error}); })"));
+    ASSERT_TRUE(record.isCallable());
+    const auto make = [&](const QString &name) {
+        const int before = engine.globalObject().property(QStringLiteral("out")).property(QStringLiteral("length")).toInt();
+        app.makeFolder(QUrl::fromLocalFile(dir.path()), name, record);
+        QDeadlineTimer deadline(10000);
+        while (engine.globalObject().property(QStringLiteral("out")).property(QStringLiteral("length")).toInt() == before && !deadline.hasExpired()) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        }
+        return engine.globalObject().property(QStringLiteral("out")).property(quint32(before));
+    };
+    const QString takenMessage = QStringLiteral("The name “%1” is already taken. Please choose a different name.");
+    QJSValue answer = make(QStringLiteral("taken"));
+    EXPECT_EQ(answer.property(QStringLiteral("url")).toString(), QString());
+    EXPECT_EQ(answer.property(QStringLiteral("error")).toString(), takenMessage.arg(QStringLiteral("taken")));
+    answer = make(QStringLiteral("a file"));
+    EXPECT_EQ(answer.property(QStringLiteral("error")).toString(), takenMessage.arg(QStringLiteral("a file")));
+    answer = make(QStringLiteral("fresh"));
+    EXPECT_EQ(answer.property(QStringLiteral("error")).toString(), QString());
+    EXPECT_EQ(QUrl(answer.property(QStringLiteral("url")).toString()), QUrl::fromLocalFile(dir.filePath(QStringLiteral("fresh"))));
+    EXPECT_TRUE(QFileInfo(dir.filePath(QStringLiteral("fresh"))).isDir());
+    answer = make(QStringLiteral("a/b"));
+    EXPECT_TRUE(answer.property(QStringLiteral("error")).toString().startsWith(QStringLiteral("The name “a/b” can’t be used.")));
 }

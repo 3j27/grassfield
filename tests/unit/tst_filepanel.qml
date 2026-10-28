@@ -409,8 +409,10 @@ TestCase {
         return -1;
     }
 
+    // Every test starts with a disk that answers (a test that fails half-way must not leave a folder hung for the next).
     function cleanup(): void {
         fakeManager.testAnswer = "";
+        fakeHost.slow = [];
     }
 
     // PanelLogic.js --------------------------------------------------------------------------------------------------------
@@ -566,14 +568,14 @@ TestCase {
         tab.focusView();
         tryVerify(() => tab.view && tab.view.activeFocus !== undefined);
         keyClick(Qt.Key_Return);
-        tryCompare(fakeHost.answers, "length", 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/a.txt"]);
     }
 
     function test_escape_cancels(): void {
         const panel = test.openPanel({currentFolder: "file:///home/u/Documents", currentName: ""});
         keyClick(Qt.Key_Escape);
-        tryCompare(fakeHost.answers, "length", 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].response, 1);
         compare(fakeHost.remembered.length, 1, "a cancel keeps the folder too");
     }
@@ -646,7 +648,7 @@ TestCase {
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet !== null);
         sheet.confirm();
-        tryCompare(fakeHost.answers, "length", 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/a.txt"]);
     }
 
@@ -667,8 +669,24 @@ TestCase {
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet.title.indexOf("a.txt") >= 0);
         sheet.confirm();
-        tryCompare(fakeHost.answers, "length", 1);
+        tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/a.txt", "file:///home/u/Documents/c.txt"]);
+    }
+
+    // SaveFiles into a folder that does not answer: the folder is not responding, never a replace question, nothing answered
+    // (re-review of 6b26afc, Q22).
+    function test_save_files_into_a_folder_that_does_not_answer(): void {
+        const panel = test.openPanel({kind: "saveFiles", files: ["a.txt", "c.txt"], currentFolder: "file:///home/u/Documents"});
+        fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1};
+        fakeHost.slow = ["file:///home/u/Documents/c"];
+        panel.pressDefault();
+        tryVerify(() => panel.sheetShown);
+        const sheet = test.findSheet(panel.contentItem, true);
+        compare(sheet.title, "“Documents” isn’t responding.");
+        compare(sheet.confirmText, "OK", "a message, not the replace question");
+        sheet.confirm();
+        tryVerify(() => !panel.sheetShown);
+        compare(fakeHost.answers.length, 0);
     }
 
     function test_the_panels_menus_change_no_file(): void {
