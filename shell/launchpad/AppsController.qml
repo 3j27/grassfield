@@ -200,8 +200,9 @@ Scope {
             // NoDisplay, OnlyShowIn and NotShowIn: the shared list in the Apps service.
             if (!Apps.isListed(e))
                 continue;
-            raw.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
-                keywords: Array.from(e.keywords), icon: e.icon, entry: e, category: Model.categoryOf(e.categories)});
+            // Name, generic name, comment and keywords in the shell's language (Apps.localized).
+            raw.push({id: e.id, name: Apps.displayName(e), genericName: Apps.displayGenericName(e), comment: Apps.displayComment(e),
+                keywords: Apps.displayKeywords(e), icon: e.icon, entry: e, category: Model.categoryOf(e.categories)});
         }
         // Two apps of one name are told apart (Files and Files (GNOME)); nothing is hidden.
         const recs = Model.disambiguate(raw);

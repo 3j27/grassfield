@@ -1,9 +1,11 @@
 [Desktop Entry]
 # Listed in SDDM by /etc/sddm.conf.d/grassfield.conf only (SessionDir), never in /usr/share/wayland-sessions.
-# The name contains "uwsm" because Omarchy's greeter theme selects the first session whose name does (GF-015); it is
-# a launcher: grassfield-login starts Grassfield or, by the user's choice, the unmodified Omarchy session.
+# The name contains "uwsm" because Omarchy's greeter theme selects the first session whose name does (GF-015), the French
+# one too; it is a launcher: grassfield-login starts Grassfield or, by the user's choice, the unmodified Omarchy session.
 Name=Grassfield (uwsm)
+Name[fr]=Grassfield (uwsm)
 Comment=Grassfield Desktop; Omarchy remains available with: grassfield-login set omarchy
+Comment[fr]=Bureau Grassfield. Omarchy reste disponible avec la commande grassfield-login set omarchy
 Exec=/usr/lib/grassfield/grassfield-login
 TryExec=/usr/lib/grassfield/grassfield-login
 Type=Application
