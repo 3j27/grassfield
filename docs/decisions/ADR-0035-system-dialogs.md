@@ -119,12 +119,16 @@ patching any upstream package (D1).
   opts in. Apps that capture through the screen-cast portal ask there (P7, P10; Settings' privacy pane, PR #10, lists what
   was allowed); a native Wayland client can capture through wlr-screencopy or hyprland-toplevel-export with no prompt, as in
   the Omarchy session today (known limitation; integrator review of PR #17).
-- Config errors: `debug.suppress_errors = true`; the shell reads `hyprctl -j configerrors` once at start and after Hyprland's
-  `configreloaded` event (`src/config/lua/ConfigManager.cpp:854`) and shows one Grassfield notice per new error set ("Some
-  settings could not be applied"), as it does for the Omarchy include (`config/hypr/session.lua:23-29`). Hyprland's
-  emergency mode (no binding left) stays Hyprland's: the same switch would hide its banner too
-  (`ConfigManager.cpp:773-801`), so it is set only once Grassfield's bindings are in (decision 3-7; the plan said, wrongly,
-  that the switch left the banner alone). The notice lists the error lines itself, with no "Show Details" (decision 3-6).
+- Config errors: the plan was `debug.suppress_errors = true` with the shell reading `hyprctl -j configerrors` once at start
+  and after Hyprland's `configreloaded` event (`src/config/lua/ConfigManager.cpp:854`) and showing one Grassfield notice per
+  new error set ("Some settings could not be applied"). **Not done on Hyprland 0.56.2** (decision 3-15, integrator nested
+  pass of 2f352b8): under the Lua config `configerrors` is empty while Hyprland's bar shows the errors, measured for a
+  failing `require`, a type error, an unknown section, a nil call and a bad monitor mode, at start and after a reload.
+  Source: every `hyprctl dispatch` is an `eval` (`src/debug/HyprCtl.cpp:1131-1134`), and `eval` clears the errors first
+  (`src/config/lua/ConfigManager.cpp:880-886`); the shell itself dispatches at start and after each reload (its blur and
+  motion pushes). So Hyprland's bar stays on, the shell's notice (`ConfigErrors.qml`, built and tested) waits for a source,
+  and a report upstream is the owner's call. Also read in the source: the same switch would hide Hyprland's emergency-mode
+  banner (no binding left), contrary to the plan (`ConfigManager.cpp:773-801`; decision 3-7).
 - Toasts without a switch (plugin load failure, monitor mode fallback, overlapping layout, xdph's Qt error) stay Hyprland's;
   they are rare and listed as a known limitation. `misc.disable_scale_notification` is already set.
 - Cost: small (one option, one shell service function, one test with a fake `hyprctl`). Risk: an error is hidden when the
@@ -187,11 +191,12 @@ patching any upstream package (D1).
   pid that no longer owns a window of the chosen class (the Force Quit panel: the selected window's; the Dock: the app's
   windows') is not killed, and a notice says "The application had already quit."; the others are.
 - `looknfeel.lua`: `misc.anr_missed_pings = 3` (Hyprland's default is 5, 7.5 s).
-- D-2: `core.lua` sets `debug.suppress_errors = true` once `grassfield.bindings` loaded (decision 3-7);
+- D-2: Hyprland's error bar stays on: no Grassfield file sets `debug.suppress_errors` (decision 3-15).
   `shell/platform/ConfigErrors.qml` and `ConfigErrors.js` read `hyprctl -j configerrors` at the shell's start and after each
   `configreloaded` event (once more when one came during a read); the shell root posts "Some settings could not be applied"
   with the first three lines as text (Lua's "<eof>" escaped for the notification's markup), then "and N more", for each new
-  set, and withdraws it when a reload leaves none.
+  set, and withdraws it when a reload leaves none. On 0.56.2 under the Lua config that answer is always empty, so the notice
+  does not show today; it is kept, tested, for a Hyprland whose `configerrors` answers.
 - Tests: `tests/shell/hyprland_dialog.sh` (46 checks: en and fr calls; titles with " - ", a leading "-", a newline or
   none; a class with " - "; an app named to match another split; every fallback with the same pid and arguments, including
   two processes, a refusal, no shell and a shell that hangs past 1 s; spawned by a double fork as Hyprland spawns it, the
@@ -200,8 +205,7 @@ patching any upstream package (D1).
   `NotResponding` in an offscreen Quickshell against a fake Hyprland: mark, clear, the shell's own ambiguity and instance
   refusals, a rename that lifts the ambiguity, direct calls), `tests/shell/config_errors.sh` (`ConfigErrors.qml` under the real Quickshell with reload events: one notice per
   new set, clear, the read after a read), `tests/unit/tst_notresponding.qml`, `tests/unit/tst_configerrors.qml` (with the
-  notification sanitizer), `tests/shell/session_input.sh` (the PATH order, `suppress_errors` with the bindings in and out
-  under Hyprland's own `require`), `tests/shell/shell_unit.sh` (the stand-in's shell selector),
+  notification sanitizer), `tests/shell/session_input.sh` (the PATH order; no Grassfield file sets `suppress_errors`), `tests/shell/shell_unit.sh` (the stand-in's shell selector),
   `tests/shell/session_services.sh` (the installed path), `tests/security/ipc_inventory.sh` (target `anr`), and the nested
   scenario `tests/shell/anr_nested.sh` (A-NR2: a SIGSTOP'd foot is marked, SIGCONT and a kill clear the mark).
 
@@ -239,6 +243,7 @@ patching any upstream package (D1).
   `grassfield.bindings` loaded, read from Hyprland's `require`, which answers `true` for a module that ran and an empty table
   for one that failed (measured on the installed 0.56.2). **Choice: (c)**: a broken binding file keeps Hyprland's bar and
   banner; any other error gets the Grassfield notice. A parse that stops before `core.lua` ends keeps the bar too.
+  **Superseded by 3-15**: the switch is not set at all.
 - **3-8. Reading Hyprland's client list.** Options: (a) `jq` (not a dependency of grassfield-desktop); (b) `python3 -I`
   (already one). **Choice: (b)**: no new dependency.
 - **3-9. Where `session-bin` goes in PATH.** Only Hyprland runs `hyprland-dialog`, so this step adds the directory to the
@@ -274,6 +279,14 @@ patching any upstream package (D1).
   journal, where it helps; the stand-in only needs to know it must run the stock dialog. This hides nothing: a caller with
   valid arguments can still tell "ok" from "refused", and any local process reads `hyprctl -j clients` anyway
   (counter-review, NIT 3).
+- **3-15. Hyprland's config-error bar stays on** (integrator nested pass of 2f352b8, BLOCKER). Measured in a nested
+  Hyprland 0.56.2: `hyprctl configerrors` is empty under the Lua config while the bar lists the errors (every dispatch is an
+  `eval`, which clears them, and the shell dispatches at start and after each reload). With the switch of 3-7, an error in
+  any file but `bindings.lua` was shown nowhere. Options: (a) keep the switch (errors hidden from the user); (b) no switch:
+  Hyprland's bar shows them, the shell's notice waits for a source; (c) read the errors elsewhere (Hyprland's log: a new
+  parser of a format that is not an interface). **Choice: (b)**: the user must see what went wrong without a terminal, and
+  Hyprland's bar does that today; the macOS look of that one surface waits for a source that works. Recorded for the owner:
+  an upstream report (`eval` clearing the config errors) is theirs to decide.
 
 ### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
 - **Two processes, two bus names** (review of PR #13, MAJOR 4): the frontend chooses a backend from its `.portal` files when
@@ -1126,7 +1139,8 @@ requests #8, #9 and #10 are merged (owner).
    shell unit's `UnsetEnvironment` line, and the GTK themes' selection colours follow the highlight colour that #10 adds to
    the settings schema (`accent.highlight`).
 3. **Not responding and Hyprland's notices** (D-3, D-2): `session-bin/hyprland-dialog`, IPC `anr`, Force Quit and Dock
-   marks (the app menu keeps Quit, Q16), `debug.suppress_errors` with the shell's notice. After #8–#10.
+   marks (the app menu keeps Quit, Q16), `debug.suppress_errors` with the shell's notice (not on 0.56.2: decision 3-15).
+   After #8–#10.
 4. **Open and Save panels** (D-4) and **KIO's dialogs in Files** (D-12 a): the Files library split, Grassfield's KIO delegate
    extensions for Files and the panel, `grassfield-portal` with the FileChooser interface. Coordinated with the open Files pull
    request #7 (views).

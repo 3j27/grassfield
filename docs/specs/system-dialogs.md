@@ -1,7 +1,8 @@
 # System dialogs spec · shell-engineer, platform-engineer, apps-engineer, security-engineer · 1.0 (ADR-0035)
 
 Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
-(steps 2b and 2c) and §4 and §4b (step 3); the other sections are not built yet. Decisions and delivery order:
+(steps 2b and 2c) and §4 (step 3); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not
+built yet. Decisions and delivery order:
 `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
 `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
 owner's decisions recorded in the ADR.
@@ -267,29 +268,32 @@ lists the app. A Hyprland release that changes the texts makes the stand-in fall
 without an app id (class "(unknown)") or a window that cannot be told apart. A nested Hyprland that crashes while an app hangs
 leaves the stand-in waiting (it holds nothing) until logout; the real session's unit takes it down with Hyprland.
 
-## 4b. Hyprland's config errors (H8, H9; ADR-0035 D-2; built in step 3)
+## 4b. Hyprland's config errors (H8, H9; ADR-0035 D-2; the notice built in step 3, not active on Hyprland 0.56.2)
 
 ### macOS reference behavior
 macOS has no user-edited compositor configuration; a setting that cannot be applied is reported in words in a notification,
 never as a red bar over the screen.
 
 ### Functional requirements
-- CE1 Hyprland's error bar is off (`debug.suppress_errors`, set by `core.lua`) once Grassfield's bindings loaded; a binding
-  file that fails keeps Hyprland's bar and its emergency-mode banner (ADR-0035 decision 3-7).
+- CE1 Hyprland's error bar stays on: no Grassfield file sets `debug.suppress_errors` (ADR-0035 decision 3-15). Under the Lua
+  config of Hyprland 0.56.2 `hyprctl configerrors` is empty (measured: every dispatch is an `eval`, which clears the
+  errors, and the shell dispatches at start and after each reload), so the shell has no source to show them instead.
 - CE2 the shell reads `hyprctl -j configerrors` when it starts and after every `configreloaded` event; each new non-empty
-  set of errors posts one notice "Some settings could not be applied" whose body lists the first three lines, then "and N
-  more"; the same set after a reload posts nothing; a reload that leaves no error withdraws the notice. No terminal, no
-  journal (decision 3-6); the shell logs the count, never the lines.
+  set of errors posts one notice "Some settings could not be applied" whose body lists the first three lines as text, then
+  "and N more"; the same set after a reload posts nothing; a reload that leaves no error withdraws the notice. No terminal,
+  no journal (decision 3-6); the shell logs the count, never the lines. On 0.56.2 the answer is always empty and no notice
+  shows.
 
 ### Acceptance criteria
 - A-CE1 (L0, `tests/unit/tst_configerrors.qml`, `tests/shell/config_errors.sh`) Hyprland's reply parsed (none: `[""]`),
   anything else ignored; one notice per new set, withdrawn when empty, three lines shown as text ("<eof>" kept); a reload
   during a read is read once more.
-- A-CE2 (L0, `tests/shell/session_input.sh`) `suppress_errors` set with the bindings in, not set when `bindings.lua` fails
-  under Hyprland's own `require`.
+- A-CE2 (L0, `tests/shell/session_input.sh`) no Grassfield config file sets `suppress_errors`. (L1, integrator) a broken
+  config line in the nested session shows Hyprland's bar.
 
 ### Known limitations
-Hyprland's runtime Lua errors (a binding's callback that fails) and its other toasts stay Hyprland's (ADR-0035 D-2).
+Hyprland's bar, not a Grassfield notice, shows config errors on 0.56.2 (CE1); its runtime Lua errors (a binding's callback
+that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 
 ## 5. Password prompts (gcr, udiskie, NetworkManager, KIO; S1–S4, S6, S8, K1; ADR-0035 D-9, D-12; owner decisions Q1, Q10–Q12)
 Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12), applied in step 9 after the integrator's
