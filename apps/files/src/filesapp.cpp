@@ -8,6 +8,7 @@
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
+#include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
 #include "taglogic.h"
@@ -49,7 +50,6 @@
 #include <KIO/PasteJob>
 #include <KIO/RestoreJob>
 #include <KIO/SimpleJob>
-#include <KUrlMimeData>
 
 namespace
 {
@@ -60,11 +60,11 @@ FolderModel *asFolder(QObject *object)
     return qobject_cast<FolderModel *>(object);
 }
 
-// KIO's delegate provides its conflict ("file exists") and Open With dialogs; errors are shown by the
-// app itself (operationFailed), so automatic error dialogs stay off.
+// Grassfield's delegate asks KIO's questions (a name that exists, an item to skip, a certificate…) as the window's sheets
+// (ADR-0035 D-12 a, kioprompts.h); errors are shown by the app itself (operationFailed), so automatic error dialogs stay off.
 void attachDelegate(KJob *job)
 {
-    job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingDisabled, nullptr));
+    job->setUiDelegate(KioDialogs::createDelegate(KJobUiDelegate::AutoHandlingDisabled));
 }
 
 QUrl childUrl(const QUrl &directory, const QString &name)
@@ -140,16 +140,15 @@ QString countText(const QString &one, const QString &many, qsizetype n)
     return n == 1 ? one : many.arg(n);
 }
 
-QList<QUrl> clipboardUrls()
-{
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data ? KUrlMimeData::urlsFromMimeData(data) : QList<QUrl>();
-}
 } // namespace
 
 FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     : QObject(parent)
     , m_initialUrls(initialUrls)
+    , m_prompts(KioDialogs::install(new KioPrompts(this),
+                                    [this](const QString &message) {
+                                        emit operationFailed(message);
+                                    }))
     , m_places(new PlacesModel(this))
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
@@ -312,6 +311,11 @@ QObject *FilesApp::places() const
     return m_places;
 }
 
+QObject *FilesApp::prompts() const
+{
+    return m_prompts;
+}
+
 QString FilesApp::homePath() const
 {
     return QDir::homePath();
@@ -339,13 +343,12 @@ QString FilesApp::redoText() const
 
 bool FilesApp::canPaste() const
 {
-    const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    return data && KIO::canPasteMimeData(data);
+    return !KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).isEmpty();
 }
 
 int FilesApp::clipboardCount() const
 {
-    return int(clipboardUrls().size());
+    return int(KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData()).size());
 }
 
 QString FilesApp::viewMode() const
@@ -890,10 +893,12 @@ void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)
 void FilesApp::paste(const QUrl &destination, QObject *folder)
 {
     const QMimeData *data = QGuiApplication::clipboard()->mimeData();
-    if (!data || !KIO::canPasteMimeData(data))
+    // Items only, as the Finder: text or an image would go to KIO's own file-name dialogs (KioDialogs::pastableItems).
+    // The checks below and KIO::paste see the same list: KIO's own (local URLs first, valid ones).
+    const QList<QUrl> urls = KioDialogs::pastableItems(data);
+    if (urls.isEmpty())
         return;
     const bool cut = KIO::isClipboardDataCut(data);
-    const QList<QUrl> urls = KUrlMimeData::urlsFromMimeData(data);
     // Copying items into their own folder makes "name copy" duplicates instead of a conflict.
     if (!cut && !urls.isEmpty()) {
         bool sameFolder = true;
@@ -907,9 +912,17 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
     if (refuseTwin(this, destination, urls))
         return;
     // KIO::paste records the copy or move in FileUndoManager itself.
-    KIO::PasteJob *job = KIO::paste(data, destination, KIO::HideProgressInfo);
-    if (!job)
+    // KIO::paste reads its data when the job starts, after this returns: the items checked above, owned by the job, not
+    // the clipboard's data, which may change or go meanwhile.
+    auto *items = new QMimeData;
+    items->setUrls(urls);
+    KIO::setClipboardDataCut(items, cut);
+    KIO::PasteJob *job = KIO::paste(items, destination, KIO::HideProgressInfo);
+    if (!job) {
+        delete items;
         return;
+    }
+    items->setParent(job);
     attachDelegate(job);
     QPointer<QObject> target = folder;
     // What the job really created: a Rename or Skip answer in the conflict dialog puts a folder elsewhere than
