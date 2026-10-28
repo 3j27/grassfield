@@ -879,6 +879,27 @@ TEST(TilingHover, AnotherLightStartsOverAndLeavesTheFirst) {
     h.update(3, 3 * kHoverDelay);
     EXPECT_FALSE(h.update(3, 3 * kHoverDelay + 1).leave.has_value()) << "a light never entered leaves nothing";
     EXPECT_EQ(h.remaining(4 * kHoverDelay + 7), 0U) << "overdue: due now";
+    // Integrator review of 4ead6fb: a light the pointer leaves before the delay was never entered, so no leave is posted,
+    // neither for another light nor for none.
+    CHoverDwell early;
+    early.update(8, 0);
+    auto c2 = early.update(9, kHoverDelay - 1);
+    EXPECT_FALSE(c2.leave.has_value()) << "another light before the delay: nothing to leave";
+    EXPECT_FALSE(c2.enter.has_value());
+    EXPECT_FALSE(early.update(std::nullopt, kHoverDelay).leave.has_value()) << "off every light before the delay: nothing to leave";
+}
+
+// TL22, TL34 (integrator review of 4ead6fb): nothing of the hover over the lock, under a foreign Exclusive layer or under a layer.
+TEST(TilingHover, CoveredLightsAreNoHover) {
+    EXPECT_FALSE(hoverCovered(HoverCover{})) << "nothing covers the lights";
+    EXPECT_TRUE(hoverCovered(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = false})) << "the session is locked";
+    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {}, .layerUnderPointer = true})) << "a layer is under the pointer";
+    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-polkit"}, .layerUnderPointer = false}))
+        << "the polkit sheet (any Exclusive layer but the shell's popups)";
+    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}, "grassfield-search"}, .layerUnderPointer = false}));
+    EXPECT_FALSE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = false}))
+        << "the shell's popup layer on another output: its own pointer test covers its output";
+    EXPECT_TRUE(hoverCovered(HoverCover{.locked = false, .exclusiveNamespaces = {""}, .layerUnderPointer = false})) << "a nameless Exclusive layer";
 }
 
 TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {
@@ -928,6 +949,7 @@ TEST(TilingMoveTo, AFreeWindowKeepsItsPlaceOnTheOtherOutput) {
     // Off its old area: clamped to the near edge.
     EXPECT_EQ(moveToArea(Rect{-200, 24, 800, 500}, from, to), (Rect{1440, 24, 800, 500}));
     EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).w, 1) << "never smaller than 1 x 1";
+    EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).h, 1) << "never smaller than 1 x 1";
 }
 
 TEST(TilingMoveTo, OutputNamesAreStrict) {

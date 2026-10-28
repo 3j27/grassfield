@@ -41,6 +41,7 @@
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
 
 #include <drm_fourcc.h>
 #include <linux/input-event-codes.h>
@@ -434,13 +435,58 @@ namespace {
 
     void armZoomTimer(uint64_t ms);
 
+    // A Top or Overlay layer surface, or a layer popup, is under `pos`: Hyprland's own pointer order puts it above every
+    // window (CInputManager::mouseMoveUnified, as DesktopFocus's underCursor reads it), so a light there is covered.
+    bool layerUnderPointer(const Vector2D& pos) {
+        if (!Desktop::viewState() || !State::monitorState())
+            return false;
+        const auto mon = State::monitorState()->query().vec(pos).run();
+        if (!mon)
+            return false;
+        Vector2D   local;
+        PHLLS      layer;
+        const auto tester = Desktop::viewState()->hitTest();
+        if (tester.layerPopupSurfaceAt(pos, mon, &local, &layer))
+            return true;
+        for (const auto level : {ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP}) {
+            if (tester.layerSurfaceAt(pos, &mon->m_layerSurfaceLayers[level], &local, &layer))
+                return true;
+        }
+        return false;
+    }
+
+    // TL22, TL34 (integrator review of 4ead6fb): nothing of the hover over the lock, under a foreign Exclusive layer or under a
+    // layer (core hoverCovered). Read only: Hyprland's lists are never changed.
+    bool zoomLightsCovered(const Vector2D& pos) {
+        gf::tiling::HoverCover cover{.locked = gf::deferredFocus::sessionLocked(), .exclusiveNamespaces = {}, .layerUnderPointer = false};
+        if (g_pInputManager) {
+            for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
+                const auto ls = ref.lock();
+                if (ls && ls->m_mapped)
+                    cover.exclusiveNamespaces.push_back(ls->m_namespace);
+            }
+        }
+        if (!gf::tiling::hoverCovered(cover))
+            cover.layerUnderPointer = layerUnderPointer(pos); // the hit test only when nothing else covers the lights
+        return gf::tiling::hoverCovered(cover);
+    }
+
     // TL22: the zoom light under the pointer now (pointer motion, the hover delay's timer). No button may be held: a press
-    // ends the hover until the pointer leaves the light (CHoverDwell::press).
+    // ends the hover until the pointer leaves the light (CHoverDwell::press). Covered lights (zoomLightsCovered) count as a
+    // press too: a hover that began ends, and that light waits until the pointer has left it, so a popover the user closed
+    // over the light does not come back by itself, and the popover's own layer never hands the hover to a light under it.
     void updateZoomHover() {
         auto& input = pointerInput();
         if (!g_pInputManager)
             return;
-        const auto at     = g_pInputManager->hasHeldButtons() ? std::nullopt : zoomLightAt(g_pInputManager->getMouseCoordsInternal());
+        const Vector2D pos = g_pInputManager->getMouseCoordsInternal();
+        if (zoomLightsCovered(pos)) {
+            postHover(input.zoomHover.press(), nullptr, CBox{});
+            if (input.zoomTimer)
+                input.zoomTimer->updateTimeout(std::nullopt);
+            return;
+        }
+        const auto at     = g_pInputManager->hasHeldButtons() ? std::nullopt : zoomLightAt(pos);
         const auto w      = at ? at->first : nullptr;
         const auto now    = nowMs();
         const auto change = input.zoomHover.update(w ? std::optional{addressOf(w)} : std::nullopt, now);

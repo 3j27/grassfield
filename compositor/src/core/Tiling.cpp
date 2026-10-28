@@ -136,6 +136,11 @@ namespace gf::tiling {
         m_held    = false;
     }
 
+    bool hoverCovered(const HoverCover& cover) {
+        return cover.locked || cover.layerUnderPointer ||
+            std::ranges::any_of(cover.exclusiveNamespaces, [](const std::string& name) { return name != kShellPopupNamespace; });
+    }
+
     // ---- geometry ----
 
     std::optional<Zone> zoneOf(Place place) {

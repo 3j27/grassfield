@@ -135,6 +135,20 @@ namespace gf::tiling {
         bool                    m_held    = false; // pressed: no hover on this light until the pointer leaves it
     };
 
+    // The shell's popup layer (shell/overlay/Overlay.qml): mapped Exclusive while a shell popup is open, the tiling popover
+    // included, on the output of that popup only.
+    inline constexpr std::string_view kShellPopupNamespace = "grassfield-overlay";
+    // What hides every zoom light from the hover now (TL22, TL34; integrator review of 4ead6fb): the session is locked; an
+    // Exclusive layer other than the shell's popup layer is mapped anywhere (the polkit sheet, Search, Apps, the Overview, the
+    // switcher, the Notification Center, the Dock's keyboard mode, a third-party one); or a Top or Overlay layer, or a layer
+    // popup, is under the pointer (the light is covered, the shell's own popup layer too).
+    struct HoverCover {
+        bool                     locked = false;
+        std::vector<std::string> exclusiveNamespaces; // of the mapped Exclusive layers
+        bool                     layerUnderPointer = false;
+    };
+    bool hoverCovered(const HoverCover& cover);
+
     // The `tile-hover` event (gfc/1). enter: the pointer rested on the window's zoom light (TL22); leave: it left that light;
     // open: hl.plugin.grassfield.tile_popover asked for the popover with the keyboard (Super+Ctrl+L, TL26). enter and open
     // carry the light's box (layout coordinates) and whether the window can be tiled (TL9: the shell greys the glyphs):

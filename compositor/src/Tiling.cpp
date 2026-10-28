@@ -1093,7 +1093,7 @@ namespace gf::tiler {
         g_layoutManager->setTargetGeom(surface, w->layoutTarget());
         followOutput(w); // its middle is on `to` now: that output's Desktop, as after Hyprland's own move (TL21, D9)
         const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
-        if (tiled) {
+        if (tiled && where) {
             s.book.placed(idOf(w), toRect(current), toRect(surface), band, *where, to->m_name, workspace, 0); // a group stays on its output
             notify(tiling::Reason::Placed);
         } else if (r) {
