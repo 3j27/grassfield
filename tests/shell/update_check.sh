@@ -178,6 +178,8 @@ check("available: Grassfield 1.0.0-1 -> 1.0.1-1, Omarchy 4.0.4-1 -> 4.0.6-1",
       r["state"] == "available" and (gf["installed"], gf["available"]) == ("1.0.0-1", "1.0.1-1")
       and (r["omarchy"]["installed"], r["omarchy"]["available"]) == ("4.0.4-1", "4.0.6-1"), r)
 check("others: linux only (grassfield-icons belongs to the Grassfield release)", r["others"] == 1, r)
+check("otherPackages: the list behind the count, with its versions", r["otherPackages"] == [
+      {"name": "linux", "installed": "6.18.1-1", "available": "6.18.2-1"}] and "otherPackagesTruncated" not in r, r)
 check("notes: only the releases above the installed one and up to the available one", [n["version"] for n in gf["notes"]] == ["1.0.1-1"], gf)
 check("notes: control and bidirectional characters removed, line feeds kept, fr kept",
       gf["notes"] and gf["notes"][0]["notes"] == {"en": "Fixes.\nTabbed[31m red", "fr": "Corrections."}, gf)
@@ -185,6 +187,41 @@ setup(); put("updates", "grassfield-desktop 1.0.0-1 -> 1.0.2-1\n"); notes([R101,
 r = run()
 check("notes newest first", [n["version"] for n in r["grassfield"]["notes"]] == ["1.0.2-1", "1.0.1-1"], r)
 check("omarchy installed but not updated -> no Omarchy release", r["omarchy"]["available"] is None and r["omarchy"]["installed"] == "4.0.4-1", r)
+
+setup(); put("updates", "zstd 1.5.6-1 -> 1.5.7-1\nomarchy-dev 4.0.4-1 -> 4.0.6-1\nglibc 2.42-1 -> 2.42-2\ngrassfield-store 1.0.0-1 -> 1.0.1-1\n")
+r = run()
+check("otherPackages sorted by name; omarchy-dev (not installed) is another package; grassfield-* never listed",
+      [p["name"] for p in r["otherPackages"]] == ["glibc", "omarchy-dev", "zstd"] and r["others"] == 3, r)
+
+# -- the 256 KiB cap (ADR-0033 d.3.5): the list of other updates is cut first, then the notes; the counts stay
+def emitted(result):
+    import contextlib, io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        m.emit(result)
+    text = out.getvalue()
+    return len(text.encode("utf-8")), json.loads(text)
+def big(packages, notes):
+    pkgs = [{"name": "package-%05d-%s" % (i, "x" * 40), "installed": "1.0-1", "available": "1.1-1"} for i in range(packages)]
+    rel = [{"version": "1.0.%d-1" % i, "date": "2026-11-02", "notes": {"en": "e" * 8000, "fr": "f" * 8000}} for i in range(notes)]
+    return {"version": 1, "state": "available", "grassfield": {"installed": "1.0.0-1", "available": "1.0.9-1", "notes": rel,
+            "notesError": None}, "omarchy": {"installed": None, "available": None}, "others": packages, "otherPackages": pkgs}
+n, out = emitted(big(100, 2))
+check("under the cap: nothing cut", out["others"] == 100 and len(out["otherPackages"]) == 100 and len(out["grassfield"]["notes"]) == 2
+      and "otherPackagesTruncated" not in out, n)
+n, out = emitted(big(5000, 2))
+check("a long list: cut first, flagged; notes and counts kept; the line within 256 KiB (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["otherPackagesTruncated"] is True and 0 < len(out["otherPackages"]) < 5000
+      and out["otherPackages"][0]["name"].startswith("package-00000") and out["others"] == 5000
+      and len(out["grassfield"]["notes"]) == 2 and out["grassfield"]["notesError"] is None, (n, len(out["otherPackages"])))
+n, out = emitted(big(10, 20))
+check("notes alone past the cap: the notes go (notesError), the whole list stays, not flagged (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["grassfield"]["notes"] == [] and out["grassfield"]["notesError"] == "unavailable"
+      and len(out["otherPackages"]) == 10 and "otherPackagesTruncated" not in out and out["others"] == 10, n)
+n, out = emitted(big(5000, 20))
+check("both past the cap: notes gone, the list cut to what fits, flagged (%d bytes)" % n,
+      n <= m.OUTPUT_CAP and out["grassfield"]["notes"] == [] and out["otherPackagesTruncated"] is True
+      and 0 < len(out["otherPackages"]) < 5000 and out["others"] == 5000, n)
 
 def notes_refused(desc, prepare, **where):
     setup(**where); put("updates", "grassfield-desktop 1.0.0-1 -> 1.0.1-1\n"); notes([R101])
