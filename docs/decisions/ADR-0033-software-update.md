@@ -522,7 +522,7 @@ Rejected:
 ### Dev sessions (ADR-0019)
 The checker runs in a dev session read-only, with its cache under the dev state. "Update Now", "Set Up…", "Repair…", "Turn
 Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FIXTURE`, `GRASSFIELD_UPDATE_CHECK_CMD`,
-`GRASSFIELD_UPDATE_LAUNCHER`, `GRASSFIELD_UPDATE_PKEXEC`.
+`GRASSFIELD_UPDATE_PKEXEC` (`GRASSFIELD_UPDATE_LAUNCHER` was dropped in step 2: "Step 2 as built").
 
 ## Owner decisions (2026-10-27; O1-O16 confirmed again after the first review)
 | Id | Question | Options | Answer |
@@ -686,6 +686,68 @@ Where it goes further than this ADR's text:
 - A deliberate rollback (h.2) also withdraws the newer release builds from what the publisher reads, and puts them back if
   the publisher refuses it.
 - Nothing is published: publishing jobs are written and disabled, and every key in its tests is a throwaway one.
+
+## Step 2 as built (2026-10-28, branch `claude/software-update-step2`)
+Landed in this repository, in three parts:
+- **The checker** lists the other updates beside their count (`otherPackages`, d.3.5), cut first at the 256 KiB cap.
+- **The shell** (`shell/services/SoftwareUpdate.qml`, its pure decisions in `ui/Grassfield/Ui/SoftwareUpdateLogic.js`):
+  the one-shot checker with `--offline` from the shell's connectivity, one check at a time (a request joins the running one),
+  the waiter of d.5 (`--after-update-lock`) when the answer is `update-running`, `software-update.json` (0600 in a 0700
+  folder, atomic, `version` 1, the announced versions, the last success kept as `previous` through `failed`, `blocking` and
+  `update-running`, GF-083's pending logout), the automatic schedule (`updates.automaticCheck`, schema-generated: 10 minutes
+  after the start, then every 6 hours, the checker's `retryAt` first, skipped while offline or metered: one `nmcli` query),
+  the IPC target `update check <user|omarchy>` (`docs/specs/security.md`'s inventory), the shim's forward of
+  `omarchy.system-update refresh|clear`, one notification per new version or `blocking` episode (never for a check the user
+  asked for; its click opens the pane), the Dock count on Settings and "1 update" after the Grassfield menu's Settings…
+- **Settings** (`apps/settings/qml/SoftwareUpdate{State,Page,Sheet}.qml`, `CountBadge.qml`): General > Software Update with
+  the red count on the sidebar's General row and on General's row, the Backend's new doors (below), and the shell's Search
+  lists the pane.
+
+Choices made within this ADR:
+- One logic for both readers: `SoftwareUpdateLogic.js` moved from the shell to the shared `Grassfield.Ui` module (as
+  `WallpaperConfig.js` is shared), so the shell's badge and Settings' count the same releases (O3) from the same file.
+- Settings asks the shell first (d.7): `qs ipc -p <shell dir> call update check user` (`apps/runmode.h` `shellIpcArgs`, the
+  `QS_*` variables removed, so the installed shell or, in a dev session, only the one `GRASSFIELD_SHELL_DIR` names); an
+  answer other than `ok` (no shell, a refusal) runs the checker in Settings, whose answer stays in memory: the shell remains
+  the only writer of `software-update.json`. Settings does not know the connectivity, so its own check passes no `--offline`
+  (Known limitations).
+- The pane waits for the shell's answer by the file's `checkedAt` (a pending logout written alone is no answer), at most the
+  checker's 200 s backstop; it checks when it opens unless a check finished less than 60 s ago (U8), and after a channel
+  change that succeeded (U12).
+- The channel shown is what `grassfield-channel-set` prints with no argument (a read-only query, also in a dev session),
+  read again whenever `/etc/pacman.d/grassfield.conf` changes; never stored per user (U12).
+- Whether the build can set updates up is `grassfield-channel-set`'s own rule (`require_build`) applied to the installed
+  `repository.conf`: without a key, or with the `.invalid` base, Set Up… is hidden and the pane says Software Update is not
+  available in this build (Refusals).
+- The Backend's doors (`apps/settings/src/systemguard.cpp`, opus review): `grassfield-channel-set stable|beta|repair|off`
+  joins the action allowlist (exactly one verb; never the helper itself), as an action that may wait for a password (one per
+  tag, 130 s, `pendingActions`: "Waiting for permission…"); a new `Backend::launch` starts, detached and in the session's own
+  environment and language, exactly `omarchy-launch-floating-terminal-with-presentation omarchy-update` (Update Now) or
+  `/usr/lib/grassfield/grassfield-session-end logout|restart` (`isLaunch`); `askShellToCheck` and `runUpdateChecker` build
+  their commands themselves. A dev session runs none of the actions or launches (SystemService and the Backend both refuse).
+  Nothing new runs as root: the only root code stays the helper behind the polkit action of c, which
+  `grassfield-channel-set` asks for.
+- Update Now (U11): 5 s after the launch (`softwareUpdate.launchCheckMs`) the pane asks for a check, which finds Omarchy's
+  update lock held and goes to the waiter, so the button stays disabled until the update ends; the pane says "An update is
+  running in Omarchy's terminal" (d.5's "Update in progress"). When the terminal is not up by then, the button comes back and
+  the check that `omarchy-update-status` sends from inside the update disables it again. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »
+- While `blocking`, Update Now is disabled with a sentence: every `omarchy update` fails at its first sync then (a2), so the
+  pane's one action is Turn Off Grassfield Updates…. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »
+- Log Out… and Restart… (U14) ask first in a sheet with the Grassfield menu's words, then Settings starts
+  `grassfield-session-end` itself, as the shell's Power service does: the existing session-end path, with no new IPC
+  function. Restart… is offered when Omarchy's `reboot-required` marker exists or the running kernel's modules folder is gone
+  (`omarchy-update-restart`'s rule, pinned in `docs/upstream/omarchy.lock`); a restart covers the log out. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »
+- The other updates (`otherPackages`) are listed in an (i) sheet of the "N other updates" row (name, installed → available),
+  with a line when the checker cut the list. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »
+- `GRASSFIELD_UPDATE_LAUNCHER` is not used: a dev session suppresses Update Now like every action, and its exact command is
+  held by `tst_systemguard` (`LaunchGuard`), `tst_backend` and the pane's test with a fake backend. It leaves ADR-0019's
+  table. `GRASSFIELD_UPDATE_PKEXEC` stays `grassfield-channel-set`'s (step 1).
+
+Evidence (the branch's PR): the C++ tests of Settings (103, `apps/settings/build-direct.sh --tests`), the QML suite (2036,
+none failed, no runtime warning), `tests/shell/software_update_service.sh`, `tests/security/ipc_inventory.sh` and the shim's
+cases, `scripts/dev/upstream-drift.sh --require` against Omarchy v4.0.4, `check-i18n`, captures in
+`docs/audits/settings-parity-2026-10-26/software-update*.png`. Not verified here: measured parity against a macOS capture
+(none on this machine), a nested shot, and the real polkit, terminal and session-end flows (A12, the owner's L2).
 
 ## Review history
 First opus review of PR #11 (integrator, 2026-10-27): FAIL, no blocker, 5 MAJOR. Each finding and where it is answered:

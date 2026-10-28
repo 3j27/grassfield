@@ -1,9 +1,10 @@
 # Software Update spec · platform-engineer (client, channel), shell-engineer (pane, badge, menu, banner) · owner brief 2026-10-27
 Status: step 0 (this spec and ADR-0033), revised after the first opus review (FAIL, 5 MAJOR); every owner decision of
 2026-10-27 (ADR-0033 O1-O20) is included; revised again after the second review. Step 1 (built; ADR-0033 "Step 1 as
-built") has the checker, the channel command and its root helper, the persistence and the container test. Step 2 builds
-the shell service (schedule, waiter, `software-update.json`, `updates.automaticCheck`, the shim's forward), the pane, the
-badge, the menu count and the notification, after the Settings PRs (#8, #9, #10) merge.
+built") has the checker, the channel command and its root helper, the persistence and the container test. Step 2 (built;
+ADR-0033 "Step 2 as built") has the shell service (schedule, waiter, `software-update.json`, `updates.automaticCheck`, the
+shim's forward), the pane, the badges, the menu count and the notification. Measured parity and the real flows (A12) are
+still open.
 Decisions and evidence: `docs/decisions/ADR-0033-software-update.md` (the contract with grassfieldhq/grassfield-packages,
 probes P0–P13, Q0–Q8 and R0–R5). UI names: "Software Update" (fr « Mise à jour de logiciels »), "Beta Updates" (fr « Mises à jour bêta »),
 "Update Now" (fr « Mettre à jour maintenant »).
@@ -99,7 +100,9 @@ When it runs (shell)
 Actions (never in a dev session)
 - U11. "Update Now" runs exactly `omarchy-launch-floating-terminal-with-presentation omarchy-update`, in Omarchy's floating
   terminal. Omarchy asks "Continue with update?" there; the user can cancel. While the update lock is held the button is
-  disabled and the pane says the update runs in the terminal. The pane checks again when the lock is released.
+  disabled and the pane says the update runs in the terminal. The pane checks again when the lock is released: 5 s after the
+  launch it asks for a check, which finds the lock held and waits for it (U4). While `blocking` (U22) the button is disabled
+  with a sentence, since every Omarchy update fails then.
 - U12. "Beta Updates" (Off / Grassfield Beta) runs `grassfield-channel-set beta` or `grassfield-channel-set stable` as a child
   process of Settings, with no terminal. The polkit dialog asks for the administrator's password; the row says "Waiting for
   permission…" meanwhile, up to 120 s. A refusal or a cancel shows one line ("Beta updates were not changed: not allowed"),
@@ -110,7 +113,8 @@ Actions (never in a dev session)
   `grassfield-channel-set off`. All work as U12 does.
 - U14. After a Grassfield update in this session (GF-083's `updatePending`), the pane shows "Log out to finish updating
   Grassfield" with "Log Out…". When Omarchy's `~/.local/state/omarchy/reboot-required` exists or the running kernel's modules
-  are gone, it shows "Restart to finish updating" with "Restart…" instead. Both use the existing session-end path.
+  are gone, it shows "Restart to finish updating" with "Restart…" instead. Both use the existing session-end path: the pane
+  asks first in a sheet, then Settings starts `grassfield-session-end logout|restart` (never in a dev session).
 
 `grassfield-channel-set`, `grassfield-channel-helper`, `grassfield-channel-scriptlet` (ADR-0033 a–c; owner decision O1: polkit)
 - U15. `grassfield-channel-set` (the user's command; it refuses to run as root):
@@ -200,7 +204,7 @@ Pane (step 2)
 | A `[grassfield]` database unsigned, badly signed or signed by a revoked key, or a server offline with no mirror answering | pacman refuses the database (P5, P7, P8, P13, Q1) and every `omarchy update` fails; the checker reports `blocking` and offers "Turn Off…" (U22) |
 | Notes unsigned, badly signed, revoked signer, over 64 KiB, not UTF-8, invalid JSON, not https | not shown (U6); the update is still offered |
 | A first installation from downloaded files (`pacman -U ./…`) | not verified by pacman (`LocalFileSigLevel = Optional`, Q0); not a documented procedure. The verified one is ADR-0033 b.3a (out-of-band fingerprint, `--lsign-key`, install from the repository). The owner accepted the residual risk of the helper's bootstrap (O17). |
-| A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…" and the beta switch log `dev guard: … suppressed` and do nothing; `GRASSFIELD_UPDATE_LAUNCHER` and `GRASSFIELD_UPDATE_PKEXEC` may record the commands |
+| A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…", the beta switch, "Log Out…" and "Restart…" log `dev guard: … suppressed` and do nothing (Settings refuses them, and its Backend again); `grassfield-channel-set` run by hand honours `GRASSFIELD_UPDATE_PKEXEC` (step 1) |
 | A second check while one runs | joins the running one |
 
 ## Acceptance criteria (each mapped to a test; level)
@@ -223,9 +227,9 @@ Pane (step 2)
 | A7i | rollback by a new snapshot; a pointer moved back fails for clients already updated (R4) | grassfield-packages end-to-end | L0 |
 | A7f | update lock: a request under the lock waits and checks after the release; a stale `db.lck` is removed (Q8) | checker tests | L0 |
 | A8 | notes: good, rogue, changed, revoked signer, oversize, bad JSON | checker unit tests (Python, fixtures) | L0 |
-| A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml` with `GRASSFIELD_UPDATE_FIXTURE` | L0 |
+| A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml`; `tests/shell/software_update_service.sh` (the service under Quickshell with a fake checker, its IPC); `tests/unit/tst_settingssoftwareupdate.qml` (the dev guard) | L0 |
 | A10 | grassfield-packages' real packages: stable install, update, beta and back, bad signature, the client sees each update | grassfield-packages end-to-end (step 1b) | L0 |
-| A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | offscreen tests and captures with the fake backend (step 2) | L0/L1 |
+| A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | `tests/unit/tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`, `tst_dockmodel.qml`; the Backend's doors in `tests/unit/settings/tst_systemguard.cpp` and `tst_backend.cpp`; captures `docs/audits/settings-parity-2026-10-26/software-update*.png` (offscreen; nested: visual NOT verified) | L0/L1 |
 | A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update Now in Omarchy's floating terminal | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
@@ -301,4 +305,8 @@ owner decision O22). Omarchy's commands used:
   anyway. In an Omarchy session the dialog is Omarchy's agent, not Grassfield's sheet.
 - Nothing is published: until the owner enables hosting, the base is the `.invalid` placeholder and "Set Up…" is hidden
   (Refusals).
-- "Software Update" is a descriptive name, as on macOS; it goes on the legal review list with the pane (step 2).
+- "Software Update" is a descriptive name, as on macOS; it is on the legal review list with the pane
+  (`docs/legal/visual-review.md` E37, question 13).
+- Without a shell, Settings runs the checker itself without `--offline` (it does not know the connectivity): a failure while
+  offline then counts towards `blocking` like one online.
+- Measured parity with macOS is not verified: no capture of the pane is on the machine that built it.
