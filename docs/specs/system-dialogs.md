@@ -596,40 +596,58 @@ nothing is accepted silently.
 Agent precedence with another agent that also asks to be the default is BlueZ's (the last one to ask wins); legacy devices
 with fixed PINs need the user to know the PIN.
 
-## 9. KIO's dialogs in Files and the panel (inventory K3–K7; ADR-0035 D-12 a, owner decision Q11)
+## 9. KIO's dialogs in Files and the panel (inventory K3–K7, K9; ADR-0035 D-12 a, owner decision Q11; built in step 4a for Files)
 
 ### macOS reference behavior
 Finder's own alerts: "An item named “X” already exists in this location. Do you want to replace it with the one you're
-moving?" with Keep Both / Stop / Replace and "Apply to All"; "The operation can't be completed because you don't have
-permission…" with Skip / Stop; the certificate sheet ("… can't verify the identity of the server “X”", Show Certificate,
-Cancel / Continue); Open With > Other… opens the Choose Application panel.
+moving?" ("An older item named…" or "A newer item named…" when the dates tell) with Keep Both / Stop / Replace, Skip and
+"Apply to All" for several items; "The operation can't be completed because you don't have permission…" with Skip / Stop;
+the certificate sheet ("… can't verify the identity of the server “X”", Show Certificate, Cancel / Continue); Open With >
+Other… opens the Choose Application panel. No progress window opens for Undo.
 
 ### Functional requirements
-- KD1 Files and `grassfield-portal` set Grassfield's UI delegate, with Grassfield's KIO delegate extensions as its children, on
-  every job they start, in place of `KIO::createDefaultJobUiDelegate`'s widgets (`apps/files/src/filesapp.cpp:62-67`); sub-jobs
-  find it through their parent or composite job (`KIO::delegateExtension`, KIO `src/core/jobuidelegatefactory.h:102-126`).
-  Never `KIO::setDefaultJobUiDelegateFactory` (Internal, set by KIOWidgets itself, `:85-92`):
-  - `AskUserActionInterface`: rename/overwrite (Keep Both / Stop / Replace, Apply to All, the two items' sizes and dates),
-    skip (Skip / Skip All / Stop), delete and trash confirmations KIO asks for, `requestUserMessageBox` as Grassfield alerts,
-    `askIgnoreSslErrors` as the certificate sheet (Show Certificate lists the chain as text): Cancel is the default button
-    (Return and Esc cancel); Continue accepts for 30 minutes, as KIO's "Current Session only" (`src/widgets/sslui.cpp:96-106`);
-    a permanent rule is stored only when the user ticks "Always trust “host”", unticked at every opening;
-  - `OpenWithHandlerInterface`: the Choose Application sheet of section 2 (the same component);
-  - `UntrustedProgramHandlerInterface`, `OpenOrExecuteFileInterface`: answer "do not run" (Files' `LaunchGuard` decides first and
-    never hands an executable to KIO, `docs/specs/security.md` § Files never runs what it opens; this is the second guard).
-- KD2 every answer is the KIO answer the widget dialog would give for the same choice (`RenameDialog_Result`,
-  `SkipDialog_Result`), so jobs behave exactly as today.
-- KD3 the sheets attach to the Files window or the panel that started the job (a sheet of the window), keyboard as common rule 3.
+- KD1 Files (and, from step 4b, `grassfield-portal`) sets Grassfield's UI delegate, KIO's own `KIO::JobUiDelegate` class with
+  Grassfield's KIO delegate extensions as its children, on every job it starts, and makes it KIO's default delegate factory
+  while it runs (ADR-0035 4a-2: KIO gives its own sub-jobs and Undo's jobs a default delegate of their own, which
+  `KIO::delegateExtension` reads before the parent's, `src/core/jobuidelegatefactory.h:102-126`; KIO's factory comes back when
+  Files' prompts go):
+  - `AskUserActionInterface`: rename/overwrite (Keep Both / Skip at the leading edge, Stop / Replace at the trailing edge,
+    "Merge" for a folder onto a folder, Apply to All for several items; Keep Both names the new item as KIO does,
+    `KFileUtils::suggestName`), skip (Skip / Stop, Try Again, or Rename for characters the destination refuses, Apply to
+    All), the permanent deletions KIO asks about (a plain move to the Trash is not asked), `requestUserMessageBox` as a sheet
+    with the worker's buttons (Show Details for its details), `askIgnoreSslErrors` as the certificate sheet (Show Certificate
+    lists the chain as text: subject, issuer, validity, SHA-256, the problems found): Cancel is the default button (Return
+    and Esc cancel); Continue accepts for 30 minutes, KIO's "Current Session only"; a permanent rule ("Forever") only when
+    the user ticks "Always trust “host”", shown with the certificate and unticked at every opening (ADR-0035 4a-6);
+  - `OpenWithHandlerInterface`: a notice that names the document and points to Open With until step 5's Choose Application
+    sheet (section 2) replaces it (4a-5);
+  - `UntrustedProgramHandlerInterface`: refuses with a notice (Files' `LaunchGuard` decides first and never hands an
+    executable to KIO, `docs/specs/security.md` § Files never runs what it opens; this is the second guard).
+    `OpenOrExecuteFileInterface` has no installed header in KIO 6.31: Files never enables the job option that asks it (4a-4).
+- KD2 every answer is the KIO answer the widget dialog gives for the same choice (`RenameDialog_Result`, `SkipDialog_Result`,
+  `KIO::WorkerBase::ButtonCode`), so jobs behave exactly as before.
+- KD3 the sheets show in the Files window the user last worked in when the question came, one at a time, and stay there
+  until answered (in another window if that one closes); a question whose job ends goes away unanswered; keyboard as common
+  rule 3 (4a-9).
+- KD4 errors and warnings KIO shows by itself (where KIO turns its automatic handling on) are notice sheets; Undo reports its
+  errors on the window's error line, keeps a copy changed since it was made and says so (4a-11), and opens no progress window
+  (4a-12).
 
 ### Acceptance criteria
-- A-KD1 (L0) a copy onto an existing name, a skip, a certificate error and an Open With request from a fake KIO worker each
-  show the Grassfield sheet and return the KIO result codes the widget handler returns for the same choices (table test).
-- A-KD2 (L0) no `KIO::RenameDialog`, `SkipDialog`, `KOpenWithDialog` or `KSslInfoDialog` is created in Files or the panel:
-  every job they start, and its sub-jobs, resolves the extensions to Grassfield's (a test that fails on a job left with
-  KIOWidgets' delegate).
-- A-KD4 (L0) certificate: Return and Esc cancel; Continue stores a rule that expires within 30 minutes; only the ticked
-  "Always trust" stores a permanent one.
+- A-KD1 (L0) every choice of the conflict, skip and message sheets gives the KIO answer the widget dialog gives
+  (`tests/unit/files/tst_kioprompts.cpp`, table test); real KIO copy and move jobs through KIO's file worker in a scratch home,
+  answered as the sheets answer, do what that answer says (Replace, Keep Both, Stop, Skip with Apply to All asked once, a
+  folder merged, a sheet's reply, a withdrawn question; `tests/unit/files/tst_kiodialogs.cpp`); the sheets' texts, buttons and
+  replies (`tests/unit/tst_fileskiosheets.qml`); the window that shows a question (`tests/unit/tst_filesbrowser.qml`).
+- A-KD2 (L0) no widget is created by those jobs, KIO's own jobs resolve Grassfield's extensions, an error KIO reports itself
+  is a notice, Undo of a changed copy keeps it with no progress window, and Files' sources hold no KIO or Qt widget dialog,
+  set no other delegate and never enable "open or execute" (`tst_kiodialogs.cpp`).
+- A-KD4 (L0) certificate: Return and Esc cancel; Continue answers KIO's follow-up with "Current Session only" (30 minutes),
+  and with "Forever" only when "Always trust" was ticked (`tst_kioprompts.cpp`, `tst_fileskiosheets.qml`).
 - A-KD3 F1 against Finder's conflict alert and certificate sheet captures.
 
 ### Known limitations
-KF6 apps other than Files keep KIO's own dialogs (inventory K8, themed by D-8); network passwords are section 5's (SC9).
+- KF6 apps other than Files keep KIO's own dialogs (inventory K8, themed by D-8); network passwords are section 5's (SC9).
+- While a sheet is open, the window's menu commands and keys stay live (as with Files' other sheets, Go to Folder and the
+  deletion confirmations); macOS disables them under a sheet.
+- The certificate path is tested on KIO's answers (table and sheet), not against a live https server with a bad certificate.
