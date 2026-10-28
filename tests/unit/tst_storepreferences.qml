@@ -43,24 +43,25 @@ TestCase {
 
     // The read-set-write path: an unreadable file is never replaced, a refused one is left as it is.
     function test_setThroughTheBackend() {
+        // The fake backend's state in closure variables (qmllint knows no member of a plain object through `this`).
+        let file = {exists: true, ok: true, text: '{"version":1,"dock":{"size":48}}\n'};
+        let written = null;
         const backend = {
-            file: {exists: true, ok: true, text: '{"version":1,"dock":{"size":48}}\n'},
-            written: null,
-            readConfig() { return this.file; },
-            writeConfig(text) { this.written = text; return ""; }
+            readConfig() { return file; },
+            writeConfig(text) { written = text; return ""; }
         };
         compare(Preferences.set(backend, "store.sources.aur", true), "");
-        compare(JSON.parse(backend.written), {version: 1, dock: {size: 48}, store: {sources: {aur: true}}});
+        compare(JSON.parse(written), {version: 1, dock: {size: 48}, store: {sources: {aur: true}}});
 
-        backend.written = null;
-        backend.file = {exists: true, ok: false, text: ""};
+        written = null;
+        file = {exists: true, ok: false, text: ""};
         compare(Preferences.set(backend, "store.sources.aur", true), "unreadable");
-        compare(backend.written, null);
-        backend.file = {exists: true, ok: true, text: '{"version":2}'};
+        compare(written, null);
+        file = {exists: true, ok: true, text: '{"version":2}'};
         verify(Preferences.set(backend, "store.sources.aur", true) !== "");
-        compare(backend.written, null);
-        backend.file = {exists: false, ok: false, text: ""};
+        compare(written, null);
+        file = {exists: false, ok: false, text: ""};
         compare(Preferences.set(backend, "store.screenshots", false), "");
-        compare(JSON.parse(backend.written), {version: 1, store: {screenshots: false}});
+        compare(JSON.parse(written), {version: 1, store: {screenshots: false}});
     }
 }
