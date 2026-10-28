@@ -93,9 +93,22 @@ int main(int argc, char *argv[])
         options.uiDeadlineMs = ms;
     if (const int ms = runmode::devValue("PORTAL_IDLE_MS").toInt(); ms > 0)
         options.idleQuitMs = ms;
+    const QString serviceName = QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield");
     grassfield::portal::FileChooser chooser(bus, options);
     new grassfield::portal::FileChooserAdaptor(&chooser);
-    QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), &QCoreApplication::quit);
+    // Idle: the name goes first, so a call on its way starts a new instance (D-Bus activation) instead of reaching one that is
+    // quitting; a call that reached this one before (it comes ahead of ReleaseName's reply) is served, the name taken back.
+    // Under systemd the unit (Type=dbus) stops once the name goes, which takes such a call with it: response 2, the window a
+    // few microseconds every idle period (review of step 4b, MINOR 6).
+    QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), [&]() {
+        bus.unregisterService(serviceName);
+        QMetaObject::invokeMethod(app.get(), [&]() {
+            if (chooser.pending() == 0)
+                QCoreApplication::quit();
+            else
+                bus.registerService(serviceName);
+        }, Qt::QueuedConnection);
+    });
 
     // The panels' UI is made at the first request (the frontend starts every backend when it starts; an idle start costs
     // no QML). The Files backend outlives the engine: bindings that run while the engine tears the windows down still see it.
@@ -136,12 +149,13 @@ int main(int argc, char *argv[])
         std::fputs("grassfield-portal: cannot export the FileChooser object\n", stderr);
         return 1;
     }
-    if (!bus.registerService(QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield"))) {
+    if (!bus.registerService(serviceName)) {
         std::fputs("grassfield-portal: the bus name is taken\n", stderr);
         return 1;
     }
     const int code = app->exec();
-    // Requests still open end with an error before the panels go (FileChooser's destructor answers them).
+    // The panels go, then the Files backend they used; requests still open end with an error after them, at the return, when
+    // FileChooser's destructor answers them.
     engine.reset();
     files.reset();
     return code;

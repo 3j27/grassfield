@@ -89,6 +89,11 @@ struct Reply {
     QVariantMap results;
 };
 
+// The waits of the fixture's backend: the deadline far above a loaded machine's latency between the call and opened(), the
+// "well before the deadline" waits half of it (review of step 4b, NIT 12).
+constexpr int kDeadlineMs = 1500;
+constexpr int kIdleMs = 200;
+
 class FileChooserTest : public ::testing::Test
 {
 protected:
@@ -104,8 +109,8 @@ protected:
 
         FileChooser::Options options;
         options.gtkService = QString::fromLatin1(kFakeGtk);
-        options.uiDeadlineMs = 300;
-        options.idleQuitMs = 200;
+        options.uiDeadlineMs = kDeadlineMs;
+        options.idleQuitMs = kIdleMs;
         options.state = &state;
         chooser = std::make_unique<FileChooser>(*backendBus, options);
         new FileChooserAdaptor(chooser.get());
@@ -219,6 +224,34 @@ TEST_F(FileChooserTest, OpenFileOverTheBusGivesThePanelsAnswer)
     EXPECT_FALSE(backendBus->objectRegisteredAt(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/t1")));
 }
 
+// Options of the wrong D-Bus type, as any process on the session bus can send them to the backend's name (the frontend checks
+// types, a direct caller does not): no option, never a crash; the backend goes on (review of step 4b, MINOR 3).
+TEST_F(FileChooserTest, OptionsOfTheWrongTypeAreNoOptions)
+{
+    chooser->setUiLoader([] { return true; });
+    const QList<Pair> pairs{{QStringLiteral("a"), QStringLiteral("b")}};
+    const QVariantMap options{{QStringLiteral("filters"), QVariant::fromValue(pairs)},
+                              {QStringLiteral("current_filter"), QVariant::fromValue(QList<Choice>{{QStringLiteral("c"), QStringLiteral("C"), {}, {}}})},
+                              {QStringLiteral("choices"), QVariant::fromValue(filters())},
+                              {QStringLiteral("current_folder"), QStringLiteral("/tmp")},
+                              {QStringLiteral("multiple"), QStringLiteral("yes")}};
+    auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/w1"), options);
+    ASSERT_TRUE(waitFor([&] { return !opened.isEmpty(); }));
+    const QVariantMap request = opened.first().second;
+    EXPECT_TRUE(request.value("filters").toList().isEmpty());
+    EXPECT_TRUE(request.value("choices").toList().isEmpty());
+    chooser->answer(opened.first().first, 1);
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_EQ(reply->response, 1u);
+
+    // SaveFiles' names as pairs: no names, so the request ends at once.
+    auto names = call(QStringLiteral("SaveFiles"), QStringLiteral("/r/w2"), {{QStringLiteral("files"), QVariant::fromValue(pairs)}});
+    ASSERT_TRUE(waitFor([&] { return names->done; }));
+    EXPECT_FALSE(names->error);
+    EXPECT_EQ(names->response, 2u);
+    EXPECT_EQ(opened.size(), 1);
+}
+
 TEST_F(FileChooserTest, CancelAndCloseEndTheRequest)
 {
     chooser->setUiLoader([] { return true; });
@@ -287,7 +320,7 @@ TEST_F(FileChooserTest, APanelThatShowsIsNotForwarded)
     window.resize(200, 100);
     chooser->present(opened.first().first, &window);
     EXPECT_TRUE(window.isVisible());
-    QTest::qWait(600); // twice the deadline
+    QTest::qWait(kDeadlineMs + 500); // past the deadline
     EXPECT_TRUE(gtk.calls.isEmpty());
     EXPECT_FALSE(reply->done);
     chooser->answer(opened.first().first, 1);
@@ -302,7 +335,7 @@ TEST_F(FileChooserTest, APanelThatCannotBeMadeGoesToGtkAtOnce)
     auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/7"), {});
     ASSERT_TRUE(waitFor([&] { return !opened.isEmpty(); }));
     chooser->fail(opened.first().first);
-    ASSERT_TRUE(waitFor([&] { return reply->done; }, 250)); // before the deadline
+    ASSERT_TRUE(waitFor([&] { return reply->done; }, kDeadlineMs / 2)); // well before the deadline
     EXPECT_EQ(reply->response, 0u);
 }
 
@@ -357,11 +390,11 @@ TEST_F(FileChooserTest, IdleOnlyWithoutRequests)
     ASSERT_TRUE(waitFor([&] { return !opened.isEmpty(); }));
     QQuickWindow window;
     chooser->present(opened.first().first, &window);
-    QTest::qWait(500); // past the idle time and the deadline, a panel open: no idle, no forward
+    QTest::qWait(kDeadlineMs + 300); // past the idle time and the deadline, a panel open: no idle, no forward
     EXPECT_EQ(idle.count(), 0);
     EXPECT_TRUE(gtk.calls.isEmpty());
     chooser->answer(opened.first().first, 1);
-    ASSERT_TRUE(idle.wait(1000));
+    ASSERT_TRUE(idle.wait(kIdleMs + 1000));
     EXPECT_TRUE(reply->done || waitFor([&] { return reply->done; }));
 }
 

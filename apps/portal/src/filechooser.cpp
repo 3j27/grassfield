@@ -282,7 +282,7 @@ void FileChooser::forward(int id)
         const QVariantList args = reply.arguments();
         uint response = 2;
         QVariantMap results;
-        if (reply.type() == QDBusMessage::ReplyMessage && args.size() == 2) {
+        if (reply.type() == QDBusMessage::ReplyMessage && reply.signature() == QLatin1String("ua{sv}")) {
             response = args.at(0).toUInt();
             results = chooser::relayed(qdbus_cast<QVariantMap>(args.at(1)));
         } else {
