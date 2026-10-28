@@ -16,12 +16,15 @@ dfd8e994bd774b9d6d5375f1380a51db1813ce2c060a37c3519c75f0c089dde6 shell/plugins/p
 e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyprland-session-locked shell/security/lock/Lock.qml
 # Software Update (ADR-0033 step 1): the Omarchy commands and template the [grassfield] client relies on (identical in
 # v4.0.6, except pacman-stable.conf, whose 4.0.6 version puts [omarchy] first: ADR-0033 a.1 keeps [grassfield] last either
-# way). Step 2 pins omarchy-update-status (the shim forwards its `omarchy.system-update refresh|clear`) and
-# omarchy-launch-floating-terminal-with-presentation (the pane's "Update Now" runs it with omarchy-update).
+# way). Step 2 pins omarchy-update-status (the shim forwards its `omarchy.system-update refresh|clear`),
+# omarchy-launch-floating-terminal-with-presentation (the pane's "Update Now" runs it with omarchy-update) and
+# omarchy-update-restart (its reboot rule, which the pane reads: the reboot-required marker, the running kernel's modules).
 8bf29b263940ee4c96a2079ba1ac65359f8497be8cb37c657124e5f739d57a26 bin/omarchy-refresh-pacman packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set
 c64ea844feb1849375e7cd43dde98933293b0e0f0f522e1ba2c6572d86386c7b bin/omarchy-hook packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set
-cd1b703031a7456b2bd1302166a2cd29a1db8007f15bed954f64e742502aa552 bin/omarchy-update packaging/bin/grassfield-update-check
+cd1b703031a7456b2bd1302166a2cd29a1db8007f15bed954f64e742502aa552 bin/omarchy-update packaging/bin/grassfield-update-check,apps/settings/src/systemguard.cpp
 9448e1748b10e46bb4310be37d69d0eba6090f69c71264cce4fc6f344278cb7d bin/omarchy-update-lock packaging/bin/grassfield-update-check,packaging/bin/grassfield-channel-set
 257387ccfcca6211f7bc6bf2cc500bd07d4066c8354f7b869400bc5153e6d645 bin/omarchy-update-available packaging/bin/grassfield-update-check
 f8d1b779b71c76b4f3b36fd1a90e891aee38ff362c1c2a9953f85363150ac4f5 default/pacman/pacman-stable.conf packaging/pacman/grassfield-channel.sh
 f2d76f443b3b6b553790a766cf39aef48ae457cae670538d4390d9457cfa40cc bin/omarchy-update-status packaging/shims/omarchy-shell
+01c6af7dcc7d76c23b5f95f594516195d569ede9f0f8f48f932ec5ff3531a08f bin/omarchy-launch-floating-terminal-with-presentation apps/settings/src/systemguard.cpp,apps/settings/qml/SoftwareUpdateState.qml
+7bc95f8a0a3ae35cfd81453e08194f5660c27cf59528c7d95b4345f362030b60 bin/omarchy-update-restart apps/settings/qml/SoftwareUpdateState.qml

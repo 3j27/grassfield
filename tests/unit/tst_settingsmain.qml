@@ -33,6 +33,8 @@ TestCase {
             readonly property string bindingsFile: "/home/u/.config/hypr/bindings.lua"
             readonly property string stateDir: "/home/u/.local/state"
             readonly property string homeDir: "/home/u"
+            readonly property string softwareUpdateFile: "/home/u/.local/state/grassfield/software-update.json"
+            readonly property bool omarchyUpdate: true
             readonly property var applicationDirs: ["/home/u/.local/share/applications", "/usr/share/applications"]
             property var files: ({})
             property var busQueries: []
@@ -66,6 +68,11 @@ TestCase {
             // Storage > All Volumes… (Backend::volumes).
             function volumes(): var {
                 return [];
+            }
+            // Software Update: the shell is asked (the answer comes through the file).
+            function askShellToCheck(tag: string): void {
+            }
+            function runUpdateChecker(tag: string): void {
             }
         }
     }
@@ -153,6 +160,64 @@ TestCase {
         desk.backend.files = {"/proc/bus/input/devices": testCase.mouse};
         desk.win.readPointers();
         compare(desk.win.selectedId, "mouse");
+    }
+
+    // `find` through the views too (a list's delegates sit in its contentItem).
+    function findDeep(item, pred) {
+        if (!item)
+            return null;
+        if (pred(item))
+            return item;
+        const kids = (item.children || []).concat(item.contentItem && item.contentItem !== item ? [item.contentItem] : []);
+        for (let i = 0; i < kids.length; i++) {
+            const hit = findDeep(kids[i], pred);
+            if (hit)
+                return hit;
+        }
+        return null;
+    }
+
+    // Software Update (U19): the releases the shell found show as a red count on the sidebar's General row and on the hub's
+    // Software Update row; the pane's (i), More Info… and Log Out… open their sheets.
+    function test_softwareUpdateBadgeAndSheets() {
+        const backend = fakeBackend.createObject(testCase);
+        backend.files = {
+            "/proc/bus/input/devices": testCase.touchpad,
+            "/home/u/.local/state/grassfield/software-update.json": JSON.stringify({version: 1, state: "available", channel: "stable", checkedAt: new Date().toISOString(),
+                grassfield: {installed: "1.0.0-1", available: "1.0.1-1", notes: [], notesError: null}, omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 0, otherPackages: []})
+        };
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/Main.qml"));
+        const win = createTemporaryObject(comp, testCase, {backend: backend, globalMenu: false});
+        tryVerify(() => findDeep(win.contentItem, i => i.modelData !== undefined && i.modelData.id === "general") !== null);
+        const general = findDeep(win.contentItem, i => i.modelData !== undefined && i.modelData.id === "general");
+        compare(general.Accessible.name, "General, 2 updates", "the sidebar's General row says it");
+        verify(findDeep(general, i => i.count === 2 && i.spoken !== undefined && i.visible), "and draws it");
+        const appearance = findDeep(win.contentItem, i => i.modelData !== undefined && i.modelData.id === "appearance");
+        compare(appearance.Accessible.name, "Appearance", "on General only");
+        win.select("general");
+        tryVerify(() => findDeep(win.contentItem, i => i.text === "Software Update" && i.badge === 2));
+        win.select("software-update");
+        compare(win.sectionTitle, "Software Update");
+        const pane = find(win.contentItem, i => i.infoRequested !== undefined && i.endSessionRequested !== undefined);
+        verify(pane);
+        for (const topic of ["automatic", "beta", "notes", "others"]) {
+            for (const x of win.sheets)
+                x.close();
+            pane.infoRequested(topic);
+            const shown = shownSheet(win);
+            verify(shown !== null, topic);
+            compare(shown.topic, topic);
+        }
+        for (const x of win.sheets)
+            x.close();
+        pane.endSessionRequested("logout");
+        compare(shownSheet(win).confirmText, "Log Out");
+        shownSheet(win).close();
+        pane.endSessionRequested("restart");
+        compare(shownSheet(win).confirmText, "Restart");
+        // Accepted in a dev session: nothing ends (SystemService's guard).
+        shownSheet(win).confirm();
+        verify(shownSheet(win) === null);
     }
 
     // A page's request opens its sheet; the sheet's answer reaches the page.

@@ -156,6 +156,7 @@
  {"path": "tests/unit/tst_updatenotice.qml", "layer": "headless"},
  {"path": "tests/unit/tst_notresponding.qml", "layer": "headless"},
  {"path": "tests/unit/tst_softwareupdate.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_settingssoftwareupdate.qml", "layer": "headless"},
  {"path": "tests/unit/tst_configerrors.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsdisplays.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingskeyboard.qml", "layer": "headless"},

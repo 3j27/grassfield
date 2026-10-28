@@ -4,7 +4,8 @@ import "../../ui/Grassfield/Ui/SoftwareUpdateLogic.js" as Logic
 
 // Software Update step 2 (ADR-0033 d; docs/specs/updates.md A9): the checker's answers read, the last success kept through a
 // failure, the releases counted for the badge, each new version and `blocking` episode announced once, versions as people
-// read them, the checker's arguments and the automatic schedule (fake clock).
+// read them, the checker's arguments and the automatic schedule (fake clock); and what Settings' pane reads from them: the
+// file, the channel, whether the build can set updates up, the notes in the session's language, the pane's view.
 TestCase {
     name: "SoftwareUpdate"
 
@@ -157,5 +158,84 @@ TestCase {
         verify(!Logic.metered("no\n"));
         verify(!Logic.metered("unknown\n"));
         verify(!Logic.metered(""), "an unreadable answer is not metered");
+    }
+
+    function test_settingsReadsTheShellsFile() {
+        const f = Logic.fromText(JSON.stringify(Object.assign(available("1.0.1-1"), {announced: ["grassfield 1.0.1-1"], logoutPending: true})));
+        compare(f.state, "available");
+        compare(f.announced, ["grassfield 1.0.1-1"]);
+        compare(f.logoutPending, true);
+        compare(Logic.releases(f), 1);
+        compare(Logic.fromText("").state, "", "no file yet");
+        compare(Logic.fromText("{").state, "", "half written");
+        compare(Logic.fromText("[]").state, "");
+        compare(Logic.fromText(undefined).state, "");
+        compare(Logic.fromText("{\"version\":1,\"state\":\"up-to-date\",\"x\":\"" + "a".repeat(1100 * 1024) + "\"}").state, "", "longer than the shell's file can be");
+    }
+
+    function test_theChannelAsPrinted() {
+        for (const c of ["stable", "beta", "custom", "repair", "off"])
+            compare(Logic.channelOf(c + "\n"), c);
+        compare(Logic.channelOf("  beta  "), "beta");
+        compare(Logic.channelOf("grassfield-channel-set: missing /usr/share/grassfield/pacman/repository.conf"), "");
+        compare(Logic.channelOf(""), "");
+        compare(Logic.channelOf("Beta"), "");
+    }
+
+    function test_aBuildWithoutKeyOrHostCannotSetUp() {
+        const conf = (base, fp) => "# comment\nGRASSFIELD_REPO_BASE=" + base + "\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_SIGNING_FINGERPRINT=" + fp + "\n";
+        const fp = "0123456789ABCDEF0123456789ABCDEF01234567";
+        verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", "")), "this repository's own placeholder");
+        verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", fp)), "a key but no host");
+        verify(!Logic.buildReady(conf("https://packages.example.org", "")), "a host but no key");
+        verify(!Logic.buildReady(conf("https://invalid/x", fp)));
+        verify(!Logic.buildReady(conf("http://packages.example.org", fp)), "https only");
+        verify(Logic.buildReady(conf("https://packages.example.org", fp)));
+        verify(Logic.buildReady(conf("https://packages.example.org:8443/grassfield", fp)));
+        verify(Logic.buildReady(conf("file:///srv/repo", fp)), "the container tests' base");
+        verify(!Logic.buildReady(""), "no repository.conf");
+        verify(!Logic.buildReady(undefined));
+    }
+
+    function test_notesInTheSessionsLanguage() {
+        const gf = {installed: "1.0.0-1", available: "1.0.2-1", notes: [
+                {version: "1.0.2-1", date: "2026-11-02", notes: {en: "Faster Dock.", fr: "Dock plus rapide."}},
+                {version: "1.0.1-1", date: "2026-10-30", notes: {en: "Fixes."}},
+                {version: "1.0.0-9", date: "x", notes: "junk"}, null]};
+        compare(Logic.notesFor(gf, "fr_FR"), [{version: "1.0.2-1", date: "2026-11-02", text: "Dock plus rapide."}, {version: "1.0.1-1", date: "2026-10-30", text: "Fixes."}],
+            "French where it is given, English otherwise, newest first");
+        compare(Logic.notesFor(gf, "en_GB")[0].text, "Faster Dock.");
+        compare(Logic.notesFor(gf, "de")[0].text, "Faster Dock.");
+        compare(Logic.notesFor({notes: []}, "fr"), []);
+        compare(Logic.notesFor(null, "fr"), []);
+    }
+
+    function test_thePanesView() {
+        let v = Logic.view(Logic.normalize(null), false);
+        compare(v.kind, "never");
+        compare(v.grassfield, null);
+        compare(Logic.view(Logic.normalize(null), true).kind, "checking");
+        v = Logic.view(available("1.0.1-1", "4.0.6-1"), false);
+        compare([v.kind, v.grassfield.available, v.omarchy.available, v.others, v.otherPackages.length, v.channel], ["available", "1.0.1-1", "4.0.6-1", 2, 2, "stable"]);
+        compare(v.installed, {grassfield: "1.0.0-1", omarchy: "4.0.4-1"});
+        verify(!v.repair);
+        // A failure keeps what the last success found, with its time.
+        const failed = Logic.combine(Logic.combine(Logic.normalize(null), available("1.0.1-1")), answer("failed", {error: "offline", checkedAt: "2026-10-28T12:00:00Z"}));
+        v = Logic.view(failed, false);
+        compare([v.kind, v.error, v.grassfield.available, v.lastSuccessAt, v.checkedAt], ["failed", "offline", "1.0.1-1", Date.UTC(2026, 9, 28, 10, 0, 0), Date.UTC(2026, 9, 28, 12, 0, 0)]);
+        compare(Logic.view(answer("failed"), false).error, "unavailable");
+        v = Logic.view(answer("up-to-date", {channel: "custom", grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}}), false);
+        compare([v.kind, v.repair, v.grassfield, v.others], ["up-to-date", true, null, 0], "a custom channel is repaired");
+        verify(Logic.view(answer("repair"), false).repair);
+        compare(Logic.view(answer("busy"), false).kind, "never", "busy is no state of the pane");
+        compare(Logic.view(answer("update-running"), false).kind, "update-running");
+    }
+
+    function test_aNewAnswerEndsTheWait() {
+        const before = answer("up-to-date");
+        verify(!Logic.answered(before, Object.assign({}, before, {logoutPending: true})), "the pending logout written alone");
+        verify(Logic.answered(before, answer("available", {checkedAt: "2026-10-28T10:05:00Z"})));
+        verify(Logic.answered(Logic.normalize(null), before), "the first answer");
+        verify(!Logic.answered(before, Logic.normalize(null)));
     }
 }

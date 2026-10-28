@@ -1619,6 +1619,8 @@ QtObject {
     readonly property int settingsDeviceGlyphInset: 10
     // the (i) button: a 16.5-pt ring, the glyph's ring is 20/24 of its box [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoSize: 20
+    // estimate: the red count of available updates on the sidebar's General row and General's Software Update row (U19), a capsule at the 11-pt caption size [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int settingsCountBadgeSize: 16
     // the (i) box's right edge 10 from the group edge (its ring 12) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsInfoInset: 10
     // the (i) box's top 12 below the row top (its ring 14, beside the name) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
@@ -3235,4 +3237,6 @@ QtObject {
     readonly property int softwareUpdateRecheckMs: 1800000
     // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateMeteredTimeoutMs: 10000
+    // estimate: after Update Now the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    readonly property int softwareUpdateLaunchCheckMs: 5000
 }

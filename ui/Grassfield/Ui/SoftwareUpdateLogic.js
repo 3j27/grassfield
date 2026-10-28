@@ -1,14 +1,18 @@
 .pragma library
 
-// Software Update (ADR-0033 d; docs/specs/updates.md U2, U4, U7, U18, U20, U22): the decisions of SoftwareUpdate.qml, pure
-// (unit-tested by tests/unit/tst_softwareupdate.qml). The shell runs grassfield-update-check, a one-shot child, and keeps
-// its last answer in software-update.json (version 1, ADR-0020) with the versions already announced.
+// Software Update (ADR-0033 d; docs/specs/updates.md U2, U4, U7, U18-U22): the decisions of the shell's SoftwareUpdate.qml and
+// of Settings' Software Update pane, pure (unit-tested by tests/unit/tst_softwareupdate.qml). The shell runs
+// grassfield-update-check, a one-shot child, and keeps its last answer in software-update.json (version 1, ADR-0020) with the
+// versions already announced; Settings reads that file.
 
 const STATES = ["not-set-up", "repair", "blocking", "up-to-date", "available", "failed", "update-running", "busy"];
 const SUCCESS = ["up-to-date", "available"];
 // The checker caps its line at 256 KiB; anything longer is not one of its answers.
 const MAX_TEXT = 300 * 1024;
 const MAX_ANNOUNCED = 32;
+// software-update.json holds one answer and the last success kept beside it: anything much longer is not the shell's file.
+const MAX_FILE = 1024 * 1024;
+const CHANNELS = ["stable", "beta", "custom", "repair", "off"];
 
 function isObject(v) {
     return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -169,4 +173,92 @@ function nextAutomatic(startedAt, lastCheckedAt, retryAt, firstMs, intervalMs) {
 // included, is not.
 function metered(text) {
     return /^yes/m.test(String(text || ""));
+}
+
+// software-update.json's text as Settings reads it: its object (normalize), or an empty file when the text is missing, too
+// long or not JSON.
+function fromText(text) {
+    if (typeof text !== "string" || text.length === 0 || text.length > MAX_FILE)
+        return normalize(null);
+    try {
+        return normalize(JSON.parse(text));
+    } catch (e) {
+        return normalize(null);
+    }
+}
+
+// What `grassfield-channel-set` printed (its first line): stable, beta, custom, repair or off; "" for anything else.
+function channelOf(text) {
+    const c = String(text || "").split("\n")[0].trim();
+    return CHANNELS.indexOf(c) >= 0 ? c : "";
+}
+
+// The build can set Grassfield updates up (grassfield-channel-set's require_build, docs/specs/updates.md Refusals): its
+// repository.conf names a signing key and a base that is file:// or a host outside .invalid.
+function buildReady(repositoryConf) {
+    const value = key => {
+        for (const line of String(repositoryConf || "").split("\n")) {
+            if (line.indexOf(key + "=") === 0)
+                return line.substring(key.length + 1).trim();
+        }
+        return "";
+    };
+    const base = value("GRASSFIELD_REPO_BASE");
+    if (value("GRASSFIELD_SIGNING_FINGERPRINT") === "" || base === "")
+        return false;
+    if (base.indexOf("file://") === 0)
+        return true;
+    const m = /^https:\/\/([^/:]+)/.exec(base);
+    return m !== null && m[1] !== "invalid" && !/\.invalid$/.test(m[1]);
+}
+
+// The release notes in the session's language (U6): [{version, date, text}], newest first as the checker lists them; French
+// when the UI is French and the release has it, English otherwise.
+function notesFor(grassfield, uiLanguage) {
+    const notes = isObject(grassfield) && Array.isArray(grassfield.notes) ? grassfield.notes : [];
+    const french = String(uiLanguage || "").indexOf("fr") === 0;
+    const out = [];
+    for (const r of notes) {
+        if (!isObject(r) || !isObject(r.notes))
+            continue;
+        const text = french && typeof r.notes.fr === "string" && r.notes.fr !== "" ? r.notes.fr : r.notes.en;
+        if (typeof text === "string" && text !== "")
+            out.push({version: String(r.version || ""), date: String(r.date || ""), text: text});
+    }
+    return out;
+}
+
+// What Settings' pane shows (U2, U21, U22): `kind` is the file's state, or "checking" while a check runs, or "never" before a
+// first answer; the releases come from the last success (kept through a failure, an update and `blocking`);
+// `repair` is true in the repair state and on a custom channel (U13).
+function view(file, checking) {
+    const f = normalize(file);
+    const s = lastSuccess(f);
+    const known = STATES.indexOf(f.state) >= 0 && f.state !== "busy";
+    const channel = s && s.channel ? s.channel : (f.channel || "");
+    const others = s && typeof s.others === "number" && s.others > 0 ? s.others : 0;
+    return {
+        kind: checking ? "checking" : known ? f.state : "never",
+        error: f.state === "failed" ? String(f.error || "unavailable") : "",
+        message: typeof f.message === "string" ? f.message : "",
+        checkedAt: timeOf(f.checkedAt),
+        lastSuccessAt: s ? timeOf(s.checkedAt) : 0,
+        channel: channel,
+        repair: f.state === "repair" || channel === "custom",
+        grassfield: s && s.state === "available" && isObject(s.grassfield) && s.grassfield.available ? s.grassfield : null,
+        omarchy: s && s.state === "available" && isObject(s.omarchy) && s.omarchy.available ? s.omarchy : null,
+        installed: {
+            grassfield: s && isObject(s.grassfield) ? String(s.grassfield.installed || "") : "",
+            omarchy: s && isObject(s.omarchy) ? String(s.omarchy.installed || "") : ""
+        },
+        others: s && s.state === "available" ? others : 0,
+        otherPackages: s && s.state === "available" && Array.isArray(s.otherPackages) ? s.otherPackages : [],
+        otherPackagesTruncated: s && s.otherPackagesTruncated === true
+    };
+}
+
+// The file holds a new answer: its checkedAt is not the one it had before (a pending logout written alone is no answer).
+function answered(before, after) {
+    const a = normalize(after).checkedAt;
+    return typeof a === "string" && a !== "" && a !== normalize(before).checkedAt;
 }
