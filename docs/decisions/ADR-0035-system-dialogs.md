@@ -458,6 +458,15 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   without the frontend's type checks, and reading it as its type would crash the process (review of step 4b, MINOR 3). A
   panel's answer is read as QML prints a URL, a space as it is (review of step 4b, BLOCKER 1: a strict reading refused any
   path with a space).
+- **4b-16. Files' Applications location in a panel** (FP-26, merged from main during step 4b). Question: what does a panel
+  do with the Applications location (`grassfield-apps:/`, whose items are launchers, not files)? Options: (a) leave it out of
+  the panel's sidebar; (b) keep it, as the sidebar of a macOS panel keeps Applications, with every application dimmed,
+  never started, and the default button off there; (c) answer an application's desktop entry file. **Choice: (b)**: a
+  panel's sidebar is the Finder's, and an application here is not a file the asking application can open, so a panel
+  neither starts one nor answers one; (c) would hand over a launcher file nobody asked for. Cmd-Shift-A (Go to
+  Applications) stays out of the panels: nothing there can be chosen. The portal runs Files' icon decoder child and its
+  `image://appicon` provider as Files does (an application's icon file is decoded in a child of the portal itself, which
+  answers `--decode-icon` before anything else).
 
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.

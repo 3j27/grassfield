@@ -95,7 +95,7 @@ LibreOffice (ADR-0035 D-8); remote (KIO network) results; Tags editing in the Sa
   portal that waits on it.
 - FC8 over the lock: no panel while locked (common rule 6); a request that arrives then waits for the unlock.
 
-Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decisions are ADR-0035 4b-1 to 4b-15):
+Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decisions are ADR-0035 4b-1 to 4b-16):
 - FC1–FC3 as written; an Open panel's default button chooses the selection, opens a selected folder in a file panel, and
   chooses the shown folder in a folder panel; SaveFiles asks about every name that exists in the chosen folder in one alert;
   a Save name that is a folder's is refused with a message (4b-6).
@@ -159,10 +159,11 @@ given.
 ### Known limitations
 Not a true sheet (a modal child window dimming its parent, not a card inside it); remote locations refused (4b-10); apps that
 draw their own dialog in-process are not covered (D-8). Step 4b also leaves out: the Save panel's Tags field (the panel would
-tag a file the application has not written yet) and "Hide extension" (4b-6); Tab completion in Go to Folder; Cmd-Shift-A (Files
-has no Applications place); a drop on a panel answers Copy to its source though nothing is copied (the item is only shown);
-the keyboard moves over dimmed items (they are passed, never selected). Verified offscreen and on a private bus only: the
-parent attachment, the dimming of the parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pass.
+tag a file the application has not written yet) and "Hide extension" (4b-6); Tab completion in Go to Folder; Cmd-Shift-A
+(Files' Applications location holds launchers, which a panel shows dimmed and never chooses or starts, 4b-16); a drop on a
+panel answers Copy to its source though nothing is copied (the item is only shown); the keyboard moves over dimmed items
+(they are passed, never selected). Verified offscreen and on a private bus only: the parent attachment, the dimming of the
+parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pass.
 
 ## 2. Open With and permission alerts (AppChooser, Access; P4–P7; ADR-0035 D-5)
 
