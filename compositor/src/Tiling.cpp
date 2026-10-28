@@ -1264,9 +1264,9 @@ namespace gf::tiler {
         }
         if (!Desktop::windowState())
             return;
-        std::vector<uint64_t> stack; // bottom to top
+        std::vector<uint64_t> stack; // the windows on screen, bottom to top: a minimized or hidden one is on a special workspace
         for (const auto& o : Desktop::windowState()->windows()) {
-            if (o && o->m_isMapped && !o->isHidden())
+            if (o && o->m_isMapped && !o->isHidden() && o->m_workspace && !o->m_workspace->m_isSpecialWorkspace)
                 stack.push_back(idOf(o));
         }
         const auto order = tiling::groupRaiseOrder(s.book.records(), idOf(w), stack);

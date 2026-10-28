@@ -135,10 +135,12 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   notice that announced it): any later change ends it. Feature `tiling-layouts`, advertised together with
   `tiling-arrange`.
 - Window tiling, step 4b (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL29): verb `group_front(address)`: the
-  members of the window's tile group on screen on its Desktop (Tiled or being resized; not minimized, full screen or
-  hidden) come forward in their stacking order, above every other window, then the window itself when it is on screen;
-  the shell calls it right before it activates the window (a window brought forward from the Dock, the app switcher or
-  the Overview), so the window ends in front whichever of the two reaches the compositor first. It
+  members of the window's tile group on screen on its Desktop (Tiled or being resized; not minimized, full screen, zoomed
+  or hidden) come forward in their stacking order, above every other window, then the window itself when it is on screen,
+  whatever its state (zoomed or full screen included; integrator review of cd74af2); the shell sends it after it
+  activates or restores the window (a window brought forward from the Dock, its menu, the menu bar's Window menu, the app
+  switcher or the Overview), only for a window in a group, so the window ends in front whichever of the two reaches the
+  compositor first (a window on a special workspace is not raised: its restore raises it). It
   changes no tile record and posts no notice; a window without a group changes nothing. Refused while the session is
   locked (`tiling` notice `reason:"locked"`) and for an unknown window (`reason:"invalid"`). The groups themselves are the
   `group` of each window in the `hyprctl grassfield-tiling` reply (step 1). Feature `tiling-groups`, advertised with

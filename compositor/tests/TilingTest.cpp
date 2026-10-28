@@ -1127,8 +1127,11 @@ TEST(TilingGroups, TheGroupComesForwardInItsStackingOrder) {
     ASSERT_TRUE(book.suspend(3));
     ASSERT_TRUE(book.beginResize(1));
     EXPECT_EQ(groupRaiseOrder(book.records(), 2, stack), (std::vector<uint64_t>{1, 2}));
-    // A suspended chosen one (minimized: its activation restores it) brings the others, itself not raised.
-    EXPECT_EQ(groupRaiseOrder(book.records(), 3, stack), (std::vector<uint64_t>{1, 2}));
+    // A suspended chosen one on screen (zoomed or full screen, focused: the activation changes nothing) still ends in front
+    // of the others (integrator review of cd74af2); minimized or hidden it is in no stack (a special workspace) and its
+    // restore raises it.
+    EXPECT_EQ(groupRaiseOrder(book.records(), 3, stack), (std::vector<uint64_t>{1, 2, 3}));
+    EXPECT_EQ(groupRaiseOrder(book.records(), 3, std::vector<uint64_t>{9, 1, 2}), (std::vector<uint64_t>{1, 2}));
     book.endResize(1, any);
     book.setWorkspace(1, 2);
     EXPECT_TRUE(groupRaiseOrder(book.records(), 2, stack).empty());

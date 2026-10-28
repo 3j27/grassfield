@@ -95,7 +95,9 @@ namespace gf::tiler {
 
     // hl.plugin.grassfield.group_front(address) (TL29): the members of the window's tile group on screen on its Desktop come
     // forward, in their stacking order (core groupRaiseOrder), above every other window, the window itself last when it is
-    // on screen (the shell's activation that follows may reach the compositor first). Nothing for a window without a group. Untrusted: the address is compared with the live
+    // on screen, zoomed or full screen included (the shell's activation may reach the compositor first, and changes nothing
+    // for the focused window). A minimized or hidden window's restore raises it, before or after this request. Nothing for a
+    // window without a group. Untrusted: the address is compared with the live
     // windows. Refused while locked (reason "locked") and for an unknown window (reason "invalid"); the tile records do not
     // change (no notice otherwise).
     void groupFrontRequest(std::string_view address);

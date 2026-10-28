@@ -1089,8 +1089,9 @@ namespace gf::tiling {
                 (r->state == TileState::Tiled || r->state == TileState::Resizing))
                 out.push_back(id);
         }
-        // The chosen one last, over its group: the shell's activation can reach the compositor before this request.
-        if (!out.empty() && (self->state == TileState::Tiled || self->state == TileState::Resizing) && std::ranges::find(stack, chosen) != stack.end())
+        // The chosen one last, over its group, whatever its state (zoomed or full screen it is Suspended but on screen): the
+        // shell's activation can reach the compositor before this request, and does nothing for the focused window.
+        if (!out.empty() && std::ranges::find(stack, chosen) != stack.end())
             out.push_back(chosen);
         return out;
     }
