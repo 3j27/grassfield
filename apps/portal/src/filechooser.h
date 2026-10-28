@@ -101,6 +101,7 @@ private:
     struct Request;
     void finish(int id, uint response, const QVariantMap &results);
     void forward(int id);
+    void closeForwarded(int id, int tries);
     void armIdle();
 
     QDBusConnection m_bus;

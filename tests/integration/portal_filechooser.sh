@@ -107,6 +107,8 @@ choose() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" choose "$@"; }
 impl() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" impl "$@"; }
 value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(json.dumps(eval(sys.argv[1], {}, {"d": d})))' "$1"; }
 starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
+# The backend's process is gone (or a zombie): backend.sh writes its pid before it execs the backend.
+exited() { [[ ! -e /proc/$1 ]] || grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null; }
 
 # Preflight: libdbus reaches a private bus.
 mkdir -p "$tmp/pre/services"
@@ -131,8 +133,11 @@ desc="1 OpenFile of a folder: the panel opens where the application's last panel
 check test "$got" = "[0, [\"file://$d/home/My%20Documents\"]]"
 desc="1 the backend was started once, by D-Bus activation, and outlived its panels, each of which drew [$(starts) start(s), $(grep -c 'panel shown' "$d/backend.log") panel(s): $(grep -o 'panel shown in [0-9]* ms' "$d/backend.log" | tr '\n' ';')]"
 check test "$(starts) $(grep -c 'panel shown' "$d/backend.log")" = "1 2"
-desc="1 idle, the backend quits by itself (5 s here)"
+pid=$(cat "$d/backend.pid")
+desc="1 idle, the backend gives up its name by itself (5 s here)"
 check wait_until 15 unowned "$name"
+desc="1 ... and its process ends [pid $pid]"
+check wait_until 5 exited "$pid"
 desc="1 the panels kept the application's last folder (portal-filechooser.json)"
 check grep -qF "\"folder\":\"file://$d/home/My%20Documents\"" "$d/state/portal-filechooser.json"
 stop_bus

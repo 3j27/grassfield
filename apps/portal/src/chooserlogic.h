@@ -73,7 +73,7 @@ inline constexpr int kMaxChoiceOptions = 64;
 inline constexpr int kMaxFiles = 4096;
 inline constexpr int kMaxTextLength = 1024;
 // The patterns of one filter together: matching an item costs at most its name's length times this (FileLogic::passesFilter
-// goes back only to the last '*'), so no filter can stall the panels, which share one thread.
+// goes back only to the last '*'), so no filter can hang the panels, which share one thread.
 inline constexpr int kMaxFilterPatternLength = 4096;
 
 void registerTypes();

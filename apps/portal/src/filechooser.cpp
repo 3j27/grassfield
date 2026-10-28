@@ -26,6 +26,9 @@ namespace {
 constexpr auto kPath = "/org/freedesktop/portal/desktop";
 constexpr auto kInterface = "org.freedesktop.impl.portal.FileChooser";
 constexpr auto kRequestInterface = "org.freedesktop.impl.portal.Request";
+// A Close to x-d-p-gtk that finds no Request object yet is sent again this often, this many times (closeForwarded).
+constexpr int kCloseRetryMs = 100;
+constexpr int kCloseTries = 50;
 } // namespace
 
 struct FileChooser::Request {
@@ -188,14 +191,32 @@ void FileChooser::close(const QString &handle)
         if (r->handle != handle)
             continue;
         if (r->state == Request::State::Forwarded) {
-            // x-d-p-gtk ends its own dialog; its answer comes back through the forwarded call.
-            m_bus.send(QDBusMessage::createMethodCall(m_options.gtkService, handle, QString::fromLatin1(kRequestInterface),
-                                                      QStringLiteral("Close")));
+            closeForwarded(r->id, kCloseTries);
             return;
         }
         finish(r->id, 2, {});
         return;
     }
+}
+
+// x-d-p-gtk ends its own dialog; its answer comes back through the forwarded call. GDBus routes a call to an object path as
+// soon as it reads it, which can be before x-d-p-gtk's handler of the forwarded call has exported that call's Request
+// object (both queued while D-Bus activation starts it): a Close that finds no object is sent again shortly, while the
+// request is still forwarded (counter-review of step 4b, NIT-4).
+void FileChooser::closeForwarded(int id, int tries)
+{
+    const auto r = m_requests.value(id);
+    if (!r || r->state != Request::State::Forwarded)
+        return;
+    const QDBusMessage close = QDBusMessage::createMethodCall(m_options.gtkService, r->handle, QString::fromLatin1(kRequestInterface),
+                                                              QStringLiteral("Close"));
+    auto *watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(close), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, id, tries](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        const QDBusError::ErrorType error = w->error().type();
+        if (tries > 1 && (error == QDBusError::UnknownMethod || error == QDBusError::UnknownObject || error == QDBusError::UnknownInterface))
+            QTimer::singleShot(kCloseRetryMs, this, [this, id, tries] { closeForwarded(id, tries - 1); });
+    });
 }
 
 QVariantMap FileChooser::memory(const QString &appId) const

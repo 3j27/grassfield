@@ -355,6 +355,29 @@ TEST_F(FileChooserTest, CloseOfAForwardedRequestReachesGtk)
     EXPECT_EQ(reply->response, 2u);
 }
 
+// The app's Close can reach x-d-p-gtk before x-d-p-gtk has exported the Request object of the call forwarded just before
+// (GDBus routes a call when it reads it): the Close is sent again until it finds the object (counter-review of step 4b, NIT-4).
+TEST_F(FileChooserTest, ACloseBeforeGtkExportsItsRequestIsSentAgain)
+{
+    chooser->setUiLoader([] { return false; });
+    gtk.hold = true;
+    FakeGtkRequest gtkRequest;
+    int closes = 0;
+    gtkRequest.onClose = [&] {
+        ++closes;
+        gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(uint(2)), QVariantMap()}));
+    };
+    auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/8b"), {});
+    ASSERT_TRUE(waitFor([&] { return gtk.held.type() == QDBusMessage::MethodCallMessage; }));
+    closeRequest(QStringLiteral("/r/8b"));
+    QTest::qWait(350); // the first Closes find nothing
+    EXPECT_FALSE(reply->done);
+    ASSERT_TRUE(gtkBus->registerObject(QStringLiteral("/r/8b"), &gtkRequest, QDBusConnection::ExportScriptableSlots));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_EQ(reply->response, 2u);
+    EXPECT_EQ(closes, 1);
+}
+
 TEST_F(FileChooserTest, GtkMissingEndsTheRequestWithAnError)
 {
     chooser->setUiLoader([] { return false; });

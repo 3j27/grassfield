@@ -250,12 +250,12 @@ TEST_F(ChooserLogic, TheFilterReturnedIsTheOneGiven)
 // filter beyond the bound is dropped, never matched (review of step 4b, MINOR 8).
 TEST_F(ChooserLogic, AFilterIsBounded)
 {
-    QList<FilterRule> rules;
-    for (int i = 0; i < kMaxFilterPatternLength / 16; ++i)
-        rules.append({0, QString(15, u'*') + QLatin1Char('a')});
+    // At the bound: 4096 characters in 4 patterns of 1024; beyond: one more character, few rules, each pattern short enough.
+    QList<FilterRule> rules(kMaxFilterPatternLength / kMaxTextLength, {0, QString(kMaxTextLength - 1, u'*') + QLatin1Char('a')});
     const Filter atBound = filter(QStringLiteral("At the bound"), rules);
     rules.append({0, QStringLiteral("b")});
     const Filter beyond = filter(QStringLiteral("Beyond"), rules);
+    ASSERT_LE(beyond.rules.size(), kMaxRules);
     const Request r = parse(Kind::Open, {}, {}, {}, {{QStringLiteral("filters"), wire(QList<Filter>{atBound, beyond})}});
     ASSERT_EQ(r.filters.size(), 1);
     EXPECT_EQ(r.filters[0].name, QStringLiteral("At the bound"));
