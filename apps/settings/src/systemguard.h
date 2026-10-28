@@ -18,6 +18,7 @@ bool devSession();
 //   wpctl      2 fixed (status, status -n), the Sound page; Wi-Fi and Bluetooth are read over D-Bus (systembus.h), not by commands
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
+//   grassfield-channel-set (no argument: it prints the channel)                                Software Update pane
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
@@ -47,8 +48,8 @@ bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
 // & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays, lpoptions for Printers: the user's own CUPS
-// defaults). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system changes and adding or removing a printer
-// are D-Bus calls (Backend::busAct).
+// defaults; grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
+// changes and adding or removing a printer are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
 // A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
@@ -73,16 +74,27 @@ bool isPrinterUri(const QString &uri);
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
 // exactly `-q -d <backlight> set <0-100>%`, for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
 // `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
-// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions).
+// ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set
+// exactly one of `stable`, `beta`, `repair`, `off` (ADR-0033 c.3; docs/specs/updates.md U12, U13: it runs as the user and asks
+// for the administrator's password itself, through pkexec and the polkit action org.grassfield.packages.set-channel).
 bool isAllowedAction(const QStringList &argv);
 
-// An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt). Backend::act runs one per
-// tag at a time (busjobs.h InFlight), as busAct does for the polkit actions of ADR-0030 (privilegedAction).
+// An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt; grassfield-channel-set: the
+// polkit dialog of its helper). Backend::act runs one per tag at a time (busjobs.h InFlight), as busAct does for the polkit
+// actions of ADR-0030 (privilegedAction).
 bool asksForPassword(const QStringList &argv);
 
-// How long an allowed action may run: `requested`, or 130 s for Omarchy's language switch, which may wait for its own
-// pkexec prompt (a locale to generate) as long as a polkit call of ADR-0030 waits for the user.
+// How long an allowed action may run: `requested`, or 130 s for an action that asks for a password (asksForPassword), which may
+// wait for its prompt as long as a polkit call of ADR-0030 waits for the user.
 int actionTimeoutMs(const QStringList &argv, int requested);
+
+// A program Settings starts and leaves running (Backend::launch: detached, never stopped by a timeout or by Settings closing):
+//   omarchy-launch-floating-terminal-with-presentation omarchy-update   Software Update > Update Now (U11): Omarchy's update in
+//                                                                       its floating terminal, where Omarchy asks first
+//   /usr/lib/grassfield/grassfield-session-end logout|restart            Software Update > Log Out…, Restart… (U14), after the
+//                                                                       pane's own confirmation: the path of the Grassfield menu
+// Exactly these argument vectors, nothing else.
+bool isLaunch(const QStringList &argv);
 
 // The one file Login Items may write or remove (Backend::writeAutostart, removeAutostart): <autostartDir>/<plain name>.desktop
 // that is not a symbolic link (a write would go through the link to the file it names: a dotfile manager's file, or one outside

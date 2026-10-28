@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileSystemWatcher>
+#include <QProcessEnvironment>
 
 #include <functional>
 #include <memory>
@@ -52,6 +53,12 @@ class Backend : public QObject
     Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
     // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
     Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
+    // Software Update (ADR-0033 d; docs/specs/updates.md U10): the shell's software-update.json (runmode.h stateDir), read
+    // through readText() (bounded) and watch(); the shell is its only writer.
+    Q_PROPERTY(QString softwareUpdateFile READ softwareUpdateFile CONSTANT)
+    // Update Now (U11): Omarchy's floating-terminal launcher and its update command are installed (found on PATH, not run);
+    // without them (not an Omarchy system) the pane disables Update Now and says why.
+    Q_PROPERTY(bool omarchyUpdate READ omarchyUpdate CONSTANT)
     // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
     // one per tag, busjobs.h InFlight). A page shows its waiting state from it, also when it is opened again while the dialog
     // is up.
@@ -85,6 +92,8 @@ public:
         return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
     }
     bool omarchyLanguage() const;
+    QString softwareUpdateFile() const;
+    bool omarchyUpdate() const;
     QVariantMap pendingActions() const { return m_actions.map(); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
@@ -106,6 +115,18 @@ public:
     // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started. An action that may wait
     // for a password is refused (false) while one of its tag still runs (pendingActions); busAct does the same for polkit.
     Q_INVOKABLE bool act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs = 15000);
+    // A program started and left running (systemguard.h isLaunch: Software Update's Update Now, Log Out…, Restart…): detached,
+    // in the session's own environment and language, never stopped by Settings. In a dev session nothing runs (one "dev
+    // guard: <what> suppressed" line, suppressed(what), false). Returns true when it started.
+    Q_INVOKABLE bool launch(const QString &what, const QStringList &argv);
+    // Software Update's check (docs/specs/updates.md U8, U10). askShellToCheck asks the running shell over its IPC
+    // (`qs ipc -p <shell> call update check user`, runmode.h shellIpcArgs; QS_* variables removed): finished(tag, true, "ok")
+    // when the shell runs (or joins) a check, whose answer then reaches software-update.json; anything else (no shell, a dev
+    // session without GRASSFIELD_SHELL_DIR, a refusal) is finished(tag, false, ...). runUpdateChecker runs the checker itself
+    // (no shell, U10): finished(tag, ok, its one JSON line); in a dev session GRASSFIELD_UPDATE_FIXTURE is the answer,
+    // GRASSFIELD_UPDATE_CHECK_CMD the checker, and its cache lies under the dev state (ADR-0033 "Dev sessions").
+    Q_INVOKABLE void askShellToCheck(const QString &tag);
+    Q_INVOKABLE void runUpdateChecker(const QString &tag);
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
     // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and
@@ -163,6 +184,8 @@ private:
     // What a process ends when it finishes: nothing, its query (m_queries) or its action (m_actions).
     enum class Track { None, Query, Action };
     void start(const QStringList &argv, const QString &tag, int timeoutMs, Track track);
+    // The same with its own environment (Software Update's check and the shell's IPC).
+    void start(const QStringList &argv, const QString &tag, int timeoutMs, Track track, const QProcessEnvironment &env);
     void runBus(const QString &tag, std::function<QString(grassfield::settings::BusCaller &, QString *)> job, int timeoutMs, bool session = false,
                 bool action = false);
     bool beginAction(const QString &tag, const QString &what);

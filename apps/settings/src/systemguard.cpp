@@ -137,6 +137,10 @@ bool isReadOnlyQuery(const QStringList &argv)
             || args == QStringList{QStringLiteral("-l"), QStringLiteral("-e")};
     if (program == QLatin1String("lpoptions"))
         return args.size() == 3 && args.at(0) == QLatin1String("-p") && isPrinterName(args.at(1)) && args.at(2) == QLatin1String("-l");
+    // Software Update (ADR-0033 c.3): the channel, which grassfield-channel-set prints with no argument (read-only: it reads
+    // pacman.conf, the included file and the build's repository.conf).
+    if (program == QLatin1String("grassfield-channel-set"))
+        return args.isEmpty();
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     return false;
@@ -315,7 +319,8 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
-        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions");
+        || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions")
+        || program == QLatin1String("grassfield-channel-set");
 }
 
 bool isBacklightName(const QString &name)
@@ -366,13 +371,20 @@ bool isDisplayLine(const QString &line)
 
 bool asksForPassword(const QStringList &argv)
 {
-    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language");
+    return !argv.isEmpty() && (argv.first() == QLatin1String("omarchy-language") || argv.first() == QLatin1String("grassfield-channel-set"));
 }
 
 int actionTimeoutMs(const QStringList &argv, int requested)
 {
     constexpr int kPromptMs = 130000;
-    return !argv.isEmpty() && argv.first() == QLatin1String("omarchy-language") ? std::max(requested, kPromptMs) : requested;
+    return asksForPassword(argv) ? std::max(requested, kPromptMs) : requested;
+}
+
+bool isLaunch(const QStringList &argv)
+{
+    static const QString sessionEnd = QStringLiteral("/usr/lib/grassfield/grassfield-session-end");
+    return argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-update")}
+        || argv == QStringList{sessionEnd, QStringLiteral("logout")} || argv == QStringList{sessionEnd, QStringLiteral("restart")};
 }
 
 bool isAllowedAction(const QStringList &argv)
@@ -405,6 +417,11 @@ bool isAllowedAction(const QStringList &argv)
             return id.match(argv.at(2)).hasMatch() && (argv.at(3) == QLatin1String("0") || argv.at(3) == QLatin1String("1"));
         return false;
     }
+    // Software Update: set up, switch, repair or turn off Grassfield's updates (the polkit dialog asks for the password).
+    if (argv.first() == QLatin1String("grassfield-channel-set"))
+        return argv.size() == 2
+            && (argv.at(1) == QLatin1String("stable") || argv.at(1) == QLatin1String("beta") || argv.at(1) == QLatin1String("repair")
+                || argv.at(1) == QLatin1String("off"));
     // Printers: the user's default printer, or one queue's paper size (~/.cups/lpoptions).
     if (argv.first() == QLatin1String("lpoptions"))
         return (argv.size() == 3 && argv.at(1) == QLatin1String("-d") && isPrinterName(argv.at(2)))
