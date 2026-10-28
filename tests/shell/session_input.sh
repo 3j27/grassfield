@@ -244,18 +244,6 @@ elseif case:match("^session") or case:match("^dev") then
   package.preload["grassfield.compositor"] = function()
     return { choose = function() return nil, "none" end, verifying = function() return true end, remember = function() end }
   end
-  -- Hyprland's own require (0.56.2 ConfigManager.cpp:315-356): a module that fails is recorded as a config error and
-  -- answers an empty table; the parse goes on.
-  if os.getenv("HYPRLAND_REQUIRE") == "1" then
-    local lua_require = require
-    require = function(name)
-      local ok, value = pcall(lua_require, name)
-      if ok then return value end
-      print("config error: require(\"" .. name .. "\"): " .. tostring(value))
-      package.loaded[name] = {}
-      return {}
-    end
-  end
   local entry = case:match("^session") and "session" or "dev"
   if entry == "session" then fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "us" } })\n') end
   local ok, err = pcall(dofile, os.getenv("TREE") .. "/" .. entry .. ".lua")
@@ -412,8 +400,8 @@ gestures_off session; gestures_off session-broken; gestures_off dev; gestures_of
 out=$(run session TREE="$root/config/hypr" OMARCHY_PATH="$tmp/session/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session/cfg")
 desc="session.lua runs whole under Hyprland's Lua: lock key, lid switch, pointer defaults, no problem"
 check grep -q "^session ran true lock true lid true pointer true problems 0 " <<<"$out"
-desc="ADR-0035 D-2: with the bindings in, Hyprland's config-error bar is off (the shell shows the notice)"
-check grep -q "^session .* suppress true gestures " <<<"$out"
+desc="ADR-0035 D-2 (decision 3-15): Hyprland's config-error bar stays on, debug.suppress_errors is never set"
+check grep -q "^session .* suppress false gestures " <<<"$out"
 desc="session.lua: Settings > Trackpad > More Gestures applies in the real session (Spaces swipe off; grassfield.input stays loaded for bindings.lua)"
 check grep -q "^session .* gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
 out=$(run session-broken TREE="$tmp/broken" OMARCHY_PATH="$tmp/session-broken/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session-broken/cfg")
@@ -421,10 +409,10 @@ desc="session.lua with an input.lua that cannot load: the parse goes on, the loc
 check grep -q "^session-broken ran true lock true lid true pointer false " <<<"$out"
 desc="session.lua with an input.lua that cannot load: the failure is logged (and announced as an Omarchy include problem)"
 check grep -q "^grassfield: Omarchy include: pointer defaults: .*input.lua broken on purpose" <<<"$out"
-check grep -q "^session-broken .* problems 1 suppress true gestures 3:down 3:horizontal 3:up 4:pinchin 4:pinchout$" <<<"$out"
+check grep -q "^session-broken .* problems 1 suppress false gestures 3:down 3:horizontal 3:up 4:pinchin 4:pinchout$" <<<"$out"
 out=$(run dev TREE="$root/config/hypr" GRASSFIELD_CONFIG_DIR="$root/config/hypr" GRASSFIELD_CONFIG_HOME="$tmp/dev/cfg")
 desc="dev.lua runs whole under Hyprland's Lua: lock key, pointer defaults, the Settings gestures (no lid: real session only)"
-check grep -q "^dev ran true lock true lid false pointer true problems 0 suppress true gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
+check grep -q "^dev ran true lock true lid false pointer true problems 0 suppress false gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
 desc="dev.lua: the repository's session-bin (hyprland-dialog's stand-in) is first in the nested compositor's PATH"
 check grep -q "^PATH $root/packaging/session-bin:" <<<"$out"
 out=$(run dev-broken TREE="$tmp/broken" GRASSFIELD_CONFIG_DIR="$tmp/broken" GRASSFIELD_CONFIG_HOME="$tmp/dev-broken/cfg")
@@ -432,20 +420,9 @@ desc="dev.lua with an input.lua that cannot load: logged, the lock key is still 
 check grep -q "^dev-broken ran true lock true lid false pointer false " <<<"$out"
 check grep -q "^grassfield: input: .*input.lua broken on purpose" <<<"$out"
 
-# ADR-0035 D-2: a bindings.lua that fails (Hyprland's require records the error and goes on) leaves no binding; the error
-# bar stays Hyprland's, as does its emergency-mode banner, which the same switch would hide.
-cp -r "$root/config/hypr" "$tmp/nobind"
-printf 'error("bindings.lua broken on purpose")\n' >"$tmp/nobind/grassfield/bindings.lua"
-out=$(run session-nobind HYPRLAND_REQUIRE=1 TREE="$tmp/nobind" OMARCHY_PATH="$tmp/session-nobind/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session-nobind/cfg")
-desc="session.lua with a bindings.lua that fails: the parse goes on, nothing is bound, the error bar is not suppressed"
-check grep -q "^session-nobind ran true lock false lid .* suppress false " <<<"$out"
-check grep -q "^config error: require(\"grassfield.bindings\"): .*bindings.lua broken on purpose" <<<"$out"
-out=$(run dev-nobind HYPRLAND_REQUIRE=1 TREE="$tmp/nobind" GRASSFIELD_CONFIG_DIR="$tmp/nobind" GRASSFIELD_CONFIG_HOME="$tmp/dev-nobind/cfg")
-desc="dev.lua with a bindings.lua that fails: the error bar is not suppressed either"
-check grep -q "^dev-nobind ran true lock false .* suppress false " <<<"$out"
-out=$(run session-hyprreq HYPRLAND_REQUIRE=1 TREE="$root/config/hypr" OMARCHY_PATH="$tmp/session-hyprreq/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session-hyprreq/cfg")
-desc="control: under Hyprland's require the whole tree still suppresses the bar (a module that ran answers true)"
-check grep -q "^session-hyprreq ran true lock true lid true .* suppress true " <<<"$out"
+# ADR-0035 D-2 (decision 3-15): no Grassfield config file turns Hyprland's error bar off.
+desc="no file of config/hypr sets suppress_errors"
+check bash -c '! grep -rn "suppress_errors *=" "$1/config/hypr"' _ "$root"
 
 if [[ -e $tmp/stopped ]]; then echo "FAIL: a case stopped on a Lua error (above)"; fail=1; fi
 exit $fail

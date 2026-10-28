@@ -1,8 +1,8 @@
 .pragma library
 
 // Hyprland's config errors (ADR-0035 D-2, step 3): the decisions of ConfigErrors.qml, pure (unit-tested by
-// tests/unit/tst_configerrors.qml). The session hides Hyprland's red error bar (`debug.suppress_errors`, core.lua) and the
-// shell shows one notice per new set of errors instead.
+// tests/unit/tst_configerrors.qml). The shell shows one notice per new set of errors. Hyprland's red error bar stays on: on
+// 0.56.2 under the Lua config `hyprctl configerrors` is always empty (ADR-0035 decision 3-15), so no notice shows there.
 
 // The most error lines a notice lists; the rest are counted ("and 2 more").
 const shownLines = 3;

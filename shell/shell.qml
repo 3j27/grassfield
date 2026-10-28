@@ -334,7 +334,8 @@ ShellRoot {
         }
     }
 
-    // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar is off, config/hypr/grassfield/core.lua).
+    // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar stays: on 0.56.2 the source is empty,
+    // decision 3-15).
     // The lines are the details (no terminal: decision 3-6); the notice goes once they are gone.
     ConfigErrors {
         property string noticeKey: ""

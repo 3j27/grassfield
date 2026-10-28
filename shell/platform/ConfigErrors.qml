@@ -4,10 +4,10 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import "ConfigErrors.js" as Logic
 
-// Hyprland's config errors (ADR-0035 D-2, step 3). The session hides Hyprland's red error bar once Grassfield's bindings
-// are in (`debug.suppress_errors`, config/hypr/grassfield/core.lua); this reads `hyprctl -j configerrors` when the shell
-// starts and after each config reload, and the shell root shows one notice per new set of errors ("Some settings could
-// not be applied", the lines in its body) and withdraws it once they are gone. The decisions are ConfigErrors.js.
+// Hyprland's config errors (ADR-0035 D-2, step 3). This reads `hyprctl -j configerrors` when the shell starts and after
+// each config reload, and the shell root shows one notice per new set of errors ("Some settings could not be applied", the
+// lines in its body) and withdraws it once they are gone. The decisions are ConfigErrors.js. Hyprland's red error bar stays
+// on: on 0.56.2 under the Lua config the answer is always empty (every dispatch clears the errors; decision 3-15).
 Item {
     id: root
 

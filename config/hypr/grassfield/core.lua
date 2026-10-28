@@ -19,15 +19,10 @@ require("grassfield.windows")
 require("grassfield.privacy")
 require("grassfield.placement")
 require("grassfield.stacking")
--- Hyprland's require answers `true` for a module that ran to its end (bindings.lua returns nothing) and an empty table for
--- one that failed, after recording the error (Hyprland 0.56.2 src/config/lua/ConfigManager.cpp:315-356).
-local bindings_loaded = require("grassfield.bindings") == true
+require("grassfield.bindings")
 require("grassfield.forwarding")
 
--- ADR-0035 D-2: Hyprland's red config-error bar gives way to the shell's notice, "Some settings could not be applied"
--- (shell/platform/ConfigErrors.qml). Only once the bindings are in: an error that leaves no binding trips Hyprland's
--- emergency mode, whose banner the same switch would hide (ConfigManager.cpp:773-801), and a parse that stops before
--- this line keeps Hyprland's bar.
-if bindings_loaded then
-  hl.config({ debug = { suppress_errors = true } })
-end
+-- ADR-0035 D-2: Hyprland's config-error bar stays on (no debug.suppress_errors). Under the Lua config of Hyprland 0.56.2
+-- `hyprctl configerrors` is empty as soon as anything dispatches (every dispatch is an eval, which clears the errors:
+-- src/debug/HyprCtl.cpp:1131-1134, src/config/lua/ConfigManager.cpp:880-886), so the shell has no source to show them
+-- instead (decision 3-15, integrator nested pass of 2f352b8).
