@@ -53,11 +53,13 @@ struct FileChooser::ProbeShared {
     FileChooser *receiver = nullptr;
 };
 
-// One probe call: the kind of each URL given (kNotResponding until its path answers), the URLs of each path.
+// One probe call: the kind of each URL given (kNotResponding until its path answers), the URLs of each path, and how long
+// since the last answer.
 struct FileChooser::Probe {
     QVariantMap kinds;
     QHash<QString, QStringList> urlsOf;
     int waiting = 0;
+    QElapsedTimer quiet;
     std::function<void(int, const QVariantMap &)> done;
 };
 
@@ -148,9 +150,12 @@ void FileChooser::handle(chooser::Kind kind, const QDBusObjectPath &handle, cons
     // is passed over, as one that does not exist is.
     QVariantMap qml = chooser::toQml(parsed);
     const QVariantMap places = placeUrls();
-    QStringList folders{qml.value(QStringLiteral("currentFolder")).toString(), memory(parsed.appId).value(QStringLiteral("folder")).toString()};
-    for (const QVariant &place : places)
-        folders << place.toString();
+    // One job reads them in this order: the places (under the home folder) first, the application's folder last, so a
+    // folder of the application's on a hung mount holds up none of the others.
+    QStringList folders;
+    for (const char *place : {"home", "documents", "desktop", "downloads"})
+        folders << places.value(QLatin1String(place)).toString();
+    folders << memory(parsed.appId).value(QStringLiteral("folder")).toString() << qml.value(QStringLiteral("currentFolder")).toString();
     folders.removeAll(QString());
     startProbe(folders, [this, id, qml, places](int, const QVariantMap &kinds) mutable {
         const auto shown = m_requests.value(id);
@@ -313,6 +318,9 @@ int FileChooser::startProbe(const QStringList &urls, std::function<void(int, con
     const int token = m_nextProbe++;
     auto p = std::make_shared<Probe>();
     p->done = std::move(done);
+    // Every job's thread is busy (reads that hang): this call's new paths are not responding.
+    const bool canRead = m_jobs < kMaxProbeJobs;
+    QStringList toRead;
     for (const QString &text : urls) {
         if (p->kinds.contains(text))
             continue;
@@ -330,22 +338,32 @@ int FileChooser::startProbe(const QStringList &urls, std::function<void(int, con
             continue;
         auto reading = m_reading.find(path);
         if (reading == m_reading.end()) {
-            if (m_reading.size() >= kMaxProbeThreads)
-                continue; // that many paths are stuck already: this one is not responding
+            if (!canRead)
+                continue;
             reading = m_reading.insert(path, {});
-            std::thread([shared = m_shared, path, stat = m_options.statPath] {
-                const int kind = stat ? stat(path) : pathKindOf(path);
-                const QMutexLocker lock(&shared->mutex);
-                if (FileChooser *receiver = shared->receiver)
-                    QMetaObject::invokeMethod(receiver, [receiver, path, kind] { receiver->probeAnswered(path, kind); }, Qt::QueuedConnection);
-            }).detach();
+            toRead << path;
         }
         reading->append(token);
         ++p->waiting;
     }
+    if (!toRead.isEmpty()) {
+        ++m_jobs;
+        std::thread([shared = m_shared, toRead, stat = m_options.statPath] {
+            for (const QString &path : toRead) {
+                const int kind = stat ? stat(path) : pathKindOf(path);
+                const QMutexLocker lock(&shared->mutex);
+                if (FileChooser *receiver = shared->receiver)
+                    QMetaObject::invokeMethod(receiver, [receiver, path, kind] { receiver->probeAnswered(path, kind); }, Qt::QueuedConnection);
+            }
+            const QMutexLocker lock(&shared->mutex);
+            if (FileChooser *receiver = shared->receiver)
+                QMetaObject::invokeMethod(receiver, [receiver] { --receiver->m_jobs; }, Qt::QueuedConnection);
+        }).detach();
+    }
     m_probes.insert(token, p);
+    p->quiet.start();
     // Always answered later, never from inside probe(): QML connects to probed before it can arrive.
-    QTimer::singleShot(p->waiting == 0 ? 0 : m_options.probeDeadlineMs, this, [this, token] { finishProbe(token); });
+    QTimer::singleShot(p->waiting == 0 ? 0 : m_options.probeDeadlineMs, this, [this, token] { checkProbe(token); });
     return token;
 }
 
@@ -358,9 +376,24 @@ void FileChooser::probeAnswered(const QString &path, int kind)
             continue;
         for (const QString &url : p->urlsOf.value(path))
             p->kinds.insert(url, kind);
+        p->quiet.restart();
         if (--p->waiting == 0)
             finishProbe(token);
     }
+}
+
+// The deadline counts from the last answer: a job still answering is waited for, one silent for probeDeadlineMs is stuck.
+void FileChooser::checkProbe(int token)
+{
+    const auto p = m_probes.value(token);
+    if (!p)
+        return;
+    const qint64 silent = p->quiet.elapsed();
+    if (p->waiting > 0 && silent < m_options.probeDeadlineMs) {
+        QTimer::singleShot(int(m_options.probeDeadlineMs - silent), this, [this, token] { checkProbe(token); });
+        return;
+    }
+    finishProbe(token);
 }
 
 void FileChooser::finishProbe(int token)

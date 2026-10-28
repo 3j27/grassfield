@@ -133,6 +133,11 @@ desc="1 OpenFile of a folder: the panel opens where the application's last panel
 check test "$got" = "[0, [\"file://$d/home/My%20Documents\"]]"
 desc="1 the backend was started once, by D-Bus activation, and outlived its panels, each of which drew [$(starts) start(s), $(grep -c 'panel shown' "$d/backend.log") panel(s): $(grep -o 'panel shown in [0-9]* ms' "$d/backend.log" | tr '\n' ';')]"
 check test "$(starts) $(grep -c 'panel shown' "$d/backend.log")" = "1 2"
+names=$(python3 -I -c 'import json; print(json.dumps(["name %d.txt" % i for i in range(20)]))')
+out=$(choose SaveFiles "{\"files\": $names, \"current_folder\": \"$d/home/My Documents\"}" 20)
+got=$(value '[d.get("response"), len(d.get("results", {}).get("uris") or []), (d.get("results", {}).get("uris") or [""])[-1]]' <<<"$out")
+desc="1 SaveFiles with 20 names (one probe job, more names than the job bound) is answered on a healthy folder [$got]"
+check test "$got" = "[0, 20, \"file://$d/home/My%20Documents/name%2019.txt\"]"
 pid=$(cat "$d/backend.pid")
 desc="1 idle, the backend gives up its name by itself (5 s here)"
 check wait_until 15 unowned "$name"

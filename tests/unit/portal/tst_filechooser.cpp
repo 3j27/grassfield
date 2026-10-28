@@ -101,11 +101,18 @@ constexpr int kSlowMs = 2500;
 constexpr int kProbeMs = 400;
 std::atomic<int> kSlowReads{0};
 
+// A share that is slow but answering: each read under /slowish takes kSlowishMs, under the probe's deadline.
+constexpr int kSlowishMs = 250;
+
 int slowStat(const QString &path)
 {
     if (path.startsWith(QLatin1String("/slowmnt"))) {
         ++kSlowReads;
         QThread::msleep(kSlowMs);
+        return 2;
+    }
+    if (path.startsWith(QLatin1String("/slowish"))) {
+        QThread::msleep(kSlowishMs);
         return 2;
     }
     return FileChooser::pathKindOf(path);
@@ -311,7 +318,8 @@ TEST_F(FileChooserTest, WithoutAUiEveryCallGoesToGtkAndItsAnswerIsRelayed)
 {
     chooser->setUiLoader([] { return false; });
     gtk.answer = {{QStringLiteral("uris"), QStringList{QStringLiteral("file:///tmp/from-gtk.txt")}},
-                  {QStringLiteral("choices"), QVariant::fromValue(QList<Pair>{{QStringLiteral("ro"), QStringLiteral("true")}})}};
+                  {QStringLiteral("choices"), QVariant::fromValue(QList<Pair>{{QStringLiteral("ro"), QStringLiteral("true")}})},
+                  {QStringLiteral("writable"), false}};
     auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/4"), {{QStringLiteral("multiple"), true}}, QStringLiteral("Pick"));
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_TRUE(opened.isEmpty());
@@ -319,6 +327,9 @@ TEST_F(FileChooserTest, WithoutAUiEveryCallGoesToGtkAndItsAnswerIsRelayed)
     EXPECT_EQ(reply->response, 0u);
     EXPECT_EQ(reply->results.value("uris").toStringList(), QStringList{QStringLiteral("file:///tmp/from-gtk.txt")});
     EXPECT_EQ(qdbus_cast<QList<Pair>>(reply->results.value("choices")), (QList<Pair>{{QStringLiteral("ro"), QStringLiteral("true")}}));
+    // x-d-p-gtk's read-only answer stays read-only (re-review of 6b26afc, C21).
+    ASSERT_TRUE(reply->results.contains("writable"));
+    EXPECT_FALSE(reply->results.value("writable").toBool());
 }
 
 TEST_F(FileChooserTest, APanelWithoutAFrameInTimeGoesToGtk)
@@ -447,21 +458,124 @@ TEST_F(FileChooserTest, AHungFolderStallsNoOtherRequest)
     ASSERT_TRUE(waitFor([&] { return slow->done && quick->done; }));
 }
 
-// Beyond kMaxProbeThreads paths being read, a new path is not responding at once: stuck reads cannot pile up threads.
-TEST_F(FileChooserTest, StuckReadsAreBounded)
+// Beyond kMaxProbeJobs jobs whose read hangs, a new call's paths are not responding at once: stuck reads cannot pile up
+// threads (one job per call).
+TEST_F(FileChooserTest, StuckJobsAreBounded)
 {
     const int readsBefore = kSlowReads;
-    QStringList urls;
-    for (int i = 0; i <= FileChooser::kMaxProbeThreads; ++i)
-        urls << QStringLiteral("file:///slowmnt/bounded-%1").arg(i);
     QSignalSpy probed(chooser.get(), &FileChooser::probed);
+    for (int i = 0; i < FileChooser::kMaxProbeJobs; ++i)
+        chooser->probe({QStringLiteral("file:///slowmnt/bounded-%1").arg(i)});
+    QDir().mkpath(dir.filePath(QStringLiteral("healthy")));
+    const QString healthy = QUrl::fromLocalFile(dir.filePath(QStringLiteral("healthy"))).toString();
+    const int last = chooser->probe({QStringLiteral("file:///slowmnt/bounded-more"), healthy});
+    ASSERT_TRUE(waitFor([&] { return probed.size() == FileChooser::kMaxProbeJobs + 1; }, kSlowMs));
+    for (const QList<QVariant> &answer : std::as_const(probed)) {
+        if (answer.at(0).toInt() != last)
+            continue;
+        EXPECT_EQ(answer.at(1).toMap().value(QStringLiteral("file:///slowmnt/bounded-more")).toInt(), FileChooser::kNotResponding);
+        EXPECT_EQ(answer.at(1).toMap().value(healthy).toInt(), FileChooser::kNotResponding) << "no thread left for it";
+    }
+    EXPECT_EQ(kSlowReads - readsBefore, FileChooser::kMaxProbeJobs);
+}
+
+// SaveFiles' names, as many as a panel takes, are one job: 17 names (past the job bound) and 4096 (the interface's bound)
+// are all answered on a healthy disk (re-review of 6b26afc, MAJOR 1: 17 names were never answered).
+TEST_F(FileChooserTest, ManyNamesAreOneJob)
+{
+    QDir().mkpath(dir.filePath(QStringLiteral("out")));
+    QFile taken(dir.filePath(QStringLiteral("out/name-3.txt")));
+    ASSERT_TRUE(taken.open(QIODevice::WriteOnly));
+    taken.close();
+    for (int count : {17, 4096}) {
+        QStringList urls;
+        for (int i = 0; i < count; ++i)
+            urls << QUrl::fromLocalFile(dir.filePath(QStringLiteral("out/name-%1.txt").arg(i))).toString();
+        QSignalSpy probed(chooser.get(), &FileChooser::probed);
+        chooser->probe(urls);
+        ASSERT_TRUE(probed.wait(kSlowMs)) << count;
+        const QVariantMap kinds = probed.at(0).at(1).toMap();
+        ASSERT_EQ(kinds.size(), count);
+        int existing = 0;
+        for (const QString &u : urls) {
+            const int kind = kinds.value(u).toInt();
+            EXPECT_TRUE(kind == 0 || kind == 1) << qPrintable(u) << " " << kind;
+            existing += kind == 1;
+        }
+        EXPECT_EQ(existing, 1) << count;
+    }
+}
+
+// The deadline counts from the last answer: a share that is slow but answering (3 reads of 250 ms, 750 ms in all, past the
+// 400-ms deadline) is waited for.
+TEST_F(FileChooserTest, ASlowButAnsweringShareIsWaitedFor)
+{
+    QSignalSpy probed(chooser.get(), &FileChooser::probed);
+    const QStringList urls{QStringLiteral("file:///slowish/a"), QStringLiteral("file:///slowish/b"), QStringLiteral("file:///slowish/c")};
     chooser->probe(urls);
     ASSERT_TRUE(probed.wait(kSlowMs));
-    const QVariantMap kinds = probed.at(0).at(1).toMap();
     for (const QString &u : urls)
-        EXPECT_EQ(kinds.value(u).toInt(), FileChooser::kNotResponding) << qPrintable(u);
-    QTest::qWait(50);
-    EXPECT_EQ(kSlowReads - readsBefore, FileChooser::kMaxProbeThreads);
+        EXPECT_EQ(probed.at(0).at(1).toMap().value(u).toInt(), 2) << qPrintable(u);
+}
+
+// A backend that goes while a read hangs: the read ends later and posts nothing to it (the shared mutex and the receiver it
+// clears; re-review of 6b26afc, MINOR 2, C18). The sanitized build (portal-unit-tests-asan) catches a use after free.
+TEST_F(FileChooserTest, ABackendThatGoesLeavesItsReadsHarmless)
+{
+    FileChooser::Options options;
+    options.gtkService = QString::fromLatin1(kFakeGtk);
+    options.probeDeadlineMs = kProbeMs;
+    options.statPath = [](const QString &) {
+        QThread::msleep(200);
+        return 0;
+    };
+    {
+        FileChooser gone(*backendBus, options);
+        gone.probe({QStringLiteral("file:///anything/at/all"), QStringLiteral("file:///and/another")});
+    }
+    QTest::qWait(600); // both reads end after it went
+    QCoreApplication::processEvents();
+    SUCCEED();
+}
+
+// A request forwarded to x-d-p-gtk while its folders are being probed never gets a panel (re-review of 6b26afc, C19). A
+// second backend, its UI deadline shorter than the probe, on a connection and a name of its own.
+TEST_F(FileChooserTest, AForwardedRequestGetsNoPanel)
+{
+    QDBusConnection bus2 = QDBusConnection::connectToBus(g_address, QStringLiteral("early"));
+    ASSERT_TRUE(bus2.isConnected());
+    FileChooser::Options options;
+    options.gtkService = QString::fromLatin1(kFakeGtk);
+    options.uiDeadlineMs = 100; // the forward comes before the probe's answer
+    options.probeDeadlineMs = kProbeMs;
+    options.statPath = slowStat;
+    {
+        FileChooser early(bus2, options);
+        new FileChooserAdaptor(&early);
+        ASSERT_TRUE(bus2.registerObject(QStringLiteral("/org/freedesktop/portal/desktop"), &early, QDBusConnection::ExportAdaptors));
+        ASSERT_TRUE(bus2.registerService(QStringLiteral("org.test.early")));
+        early.setUiLoader([] { return true; });
+        gtk.hold = true; // the request stays forwarded while the probe answers
+        QSignalSpy opened(&early, &FileChooser::opened);
+        QDBusMessage m = QDBusMessage::createMethodCall(QStringLiteral("org.test.early"), QStringLiteral("/org/freedesktop/portal/desktop"),
+                                                        QStringLiteral("org.freedesktop.impl.portal.FileChooser"), QStringLiteral("OpenFile"));
+        m << QVariant::fromValue(QDBusObjectPath(QStringLiteral("/r/c19"))) << QStringLiteral("org.example.App") << QString() << QStringLiteral("Open")
+          << QVariantMap{{QStringLiteral("current_folder"), QByteArray("/slowmnt/c19\0", 13)}};
+        auto reply = std::make_shared<Reply>();
+        auto *w = new QDBusPendingCallWatcher(frontendBus->asyncCall(m, std::numeric_limits<int>::max()));
+        QObject::connect(w, &QDBusPendingCallWatcher::finished, w, [reply](QDBusPendingCallWatcher *watcher) {
+            watcher->deleteLater();
+            reply->done = true;
+        });
+        ASSERT_TRUE(waitFor([&] { return gtk.calls.contains(QStringLiteral("OpenFile /r/c19 Open")); }));
+        QTest::qWait(kProbeMs + 300);
+        EXPECT_EQ(opened.count(), 0) << "no panel for a forwarded request";
+        gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(uint(1)), QVariantMap()}));
+        EXPECT_TRUE(waitFor([&] { return reply->done; })) << "x-d-p-gtk's answer relayed";
+        bus2.unregisterService(QStringLiteral("org.test.early"));
+        bus2.unregisterObject(QStringLiteral("/org/freedesktop/portal/desktop"));
+    }
+    QDBusConnection::disconnectFromBus(QStringLiteral("early"));
 }
 
 // What a local path names (integrator review of bd78424, MINOR 3): a dangling symbolic link is a file (saving over it asks

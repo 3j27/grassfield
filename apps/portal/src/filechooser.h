@@ -82,16 +82,19 @@ public:
     Q_INVOKABLE void remember(const QString &appId, const QVariantMap &entry);
     // The panels' questions to the disk, never asked on the GUI thread (FC7; integrator review of bd78424, MAJOR 1): a hung
     // mount (an NFS or SMB share gone, a sleeping disk) must not stall this panel, another application's panel or the 3-s
-    // forward, which all run on that thread. What each URL names is answered by probed(token, {url: kind}) once every path
-    // has answered or after probeDeadlineMs: kNotResponding for a path that has not, -1 for anything but a local file URL,
-    // else pathKindOf's. Each path is read on a thread of its own; a path still being read (stuck) is not read twice, and
-    // beyond kMaxProbeThreads paths in flight a new one is not responding at once. Returns the token.
+    // forward, which all run on that thread. What each URL names is answered by probed(token, {url: kind}): kNotResponding
+    // for a path not answered, -1 for anything but a local file URL, else pathKindOf's. One job per call: its paths are read
+    // in order on one thread of their own (SaveFiles' 4096 names too, re-review of 6b26afc), each answer posted as it comes;
+    // the call is answered once every path has answered, or once no answer has come for probeDeadlineMs (a share that is slow
+    // but answering is waited for, a stuck one is not). A path another job is reading is not read again. At most
+    // kMaxProbeJobs jobs at once, a stuck one counting while its read hangs: beyond, a new call's paths are not responding at
+    // once, so stuck reads cannot pile up threads. Returns the token.
     Q_INVOKABLE int probe(const QStringList &urls);
     // What a local path names now: 0 nothing, 1 a file (anything but a folder, a dangling symbolic link too), 2 a folder.
     // It reads the disk: never on the GUI thread (probe).
     static int pathKindOf(const QString &path);
     static constexpr int kNotResponding = -2;
-    static constexpr int kMaxProbeThreads = 16;
+    static constexpr int kMaxProbeJobs = 16;
     // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
     // has no entry.
     Q_INVOKABLE QString appName(const QString &appId) const;
@@ -121,6 +124,7 @@ private:
     void finish(int id, uint response, const QVariantMap &results);
     int startProbe(const QStringList &urls, std::function<void(int token, const QVariantMap &kinds)> done);
     void probeAnswered(const QString &path, int kind);
+    void checkProbe(int token);
     void finishProbe(int token);
     QVariantMap placeUrls() const;
     void forward(int id);
@@ -136,8 +140,9 @@ private:
     QTimer m_idle;
     int m_nextProbe = 1;
     QHash<int, std::shared_ptr<Probe>> m_probes;
-    // Paths being read now (a thread each), and the probes waiting on each.
+    // Paths a job reads or will read, and the probes waiting on each; the jobs whose thread runs.
     QHash<QString, QList<int>> m_reading;
+    int m_jobs = 0;
     std::shared_ptr<ProbeShared> m_shared;
 };
 
