@@ -67,6 +67,8 @@ check-shell:
     python3 -I tests/ci/qmldir_types.py
     python3 -I tests/ci/ui_names.py --selftest
     python3 -I tests/ci/ui_names.py
+    python3 -I tests/ci/desktop_names.py --selftest
+    python3 -I tests/ci/desktop_names.py
     python3 -I tests/ci/import_graph.py --selftest
     python3 -I tests/ci/import_graph.py
     python3 -I tests/ci/run_mode.py --selftest
