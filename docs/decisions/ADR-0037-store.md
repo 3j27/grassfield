@@ -332,7 +332,10 @@ and the recipes call sudo themselves and write in the user's home, so the helper
   code is 130, waits for a key after it ("Done! Press any key to close"): the window stays to show what happened, and the
   Store's Details do not have that output.
 - `grassfield-store-run` (`packaging/store/grassfield-store-run`) is Grassfield's script, run as the user inside that
-  terminal. It checks its arguments (exit 2, nothing written, an operation id used once), then:
+  terminal. It refuses to run as root, checks its arguments (exit 2, nothing written, an operation id used once), and
+  runs every program with `PATH=<Omarchy's folder>/bin:/usr/bin`, without `BASH_ENV` or the caller's exported shell
+  functions (`bash -p` reads neither for itself; the recipe gets an environment without them), so the commands a recipe
+  names are Omarchy's pinned ones and the system's, whatever the caller's environment holds. Then:
   1. refuses to start after `<deadline>` (Unix seconds, 60 s after the Store asked: the terminal opened too late): exit 6;
   2. takes Omarchy's update lock (`$XDG_RUNTIME_DIR/omarchy-update.lock`, the file `omarchy-update-lock` locks, so
      `omarchy update` says it is already running) with `flock -n` on a descriptor of its own, closed for every program it
@@ -341,12 +344,15 @@ and the recipes call sudo themselves and write in the user's home, so the helper
      process holding the lock for the recipe dies on Ctrl+C before the recipe has stopped and lets the lock go while pacman
      may still run, and ignoring SIGINT in it would pass to the recipe: one process holds it for its whole life instead;
   3. writes `<op-id>.started` (its pid and start time), by rename;
-  4. checks again, under the lock: no `db.lck` (exit 3); `pacman -Qu` lists nothing that is not "[ignored]" (S12; exit 4);
+  4. checks again, under the lock: no `db.lck` (exit 3); `pacman -Qu` answers (exit 0 or 1; anything else is exit 1) and
+     lists nothing that is not "[ignored]" (S12; exit 4);
      the recipe is an executable file of `${OMARCHY_PATH:-/usr/share/omarchy}/bin/`, and `<op-id>.pins` (the user's own
      file, not a link) has only lines that parse, paths without `.` or `..` segments, each matching the installed file's
      SHA-256, one of them the recipe (exit 5, nothing run);
-  5. runs the recipe with its arguments, as an argument vector. Ctrl+C in the terminal stops the recipe (SIGINT's own
-     action there; the script catches it rather than ignoring it, which the recipe would inherit) and is answered with 130;
+  5. runs the recipe with its arguments, as an argument vector. Ctrl+C in the terminal, from the script's start, is
+     answered with 130: before the recipe nothing of it runs (a check Ctrl+C cut short is not passed), during it the
+     recipe stops (SIGINT's own action there; the script catches it rather than ignoring it, which the recipe would
+     inherit);
   6. writes `<op-id>.exit` with the code (by rename) and exits with it: 0 done, 1 the recipe failed, 130 stopped.
 - The Store follows the files (every 500 ms). An `exit` file before the `started` one is a refusal: 3 "Another installation
   or an update is running", 4 "Finish the system update first", 5 "This setup hasn't been checked with your version of

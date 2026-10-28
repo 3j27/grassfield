@@ -134,9 +134,10 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   code, Omarchy's update lock is free and `db.lck` is absent. The running one shows progress: indeterminate while
   downloading, then "n of N" from pacman's log; in Omarchy's terminal it also says so ("Opening Terminal…" « Ouverture du
   Terminal… » until the script started, then "Installing in Terminal…" « Installation dans le Terminal… » or "Uninstalling
-  in Terminal…" until pacman's log counts). While an operation runs, the Store holds Omarchy's update lock: `omarchy update` cannot
-  start, and Software Update, which reads the same lock, shows "Update in progress" (ADR-0033 d.5, in its own words) until the
-  operation ends.
+  in Terminal…" until pacman's log counts). While an operation runs, Omarchy's update lock is held, by the Store for the
+  helper's and by `grassfield-store-run` for a setup's (ADR-0037 b.2; the Store only checks it is free before it asks for
+  the terminal): `omarchy update` cannot start, and Software Update, which reads the same lock, shows "Update in progress"
+  (ADR-0033 d.5, in its own words) until the operation ends.
 - SR19. Every operation ends with an exit code the Store receives (ADR-0037 b): pkexec's (b.1), the `exit` file of
   `grassfield-store-run` (b.2), the child's (b.3). Success is that code being 0 **and** the system's state matching the plan
   (the packages present at the planned versions, the web app's entry present, the Flatpak listed). Then the button becomes
