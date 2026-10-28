@@ -253,6 +253,13 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   or revealed bar, its hit slop) or a Grassfield app's light (TL24); one event channel, the latest state wins. The shell
   (services/TilingHover) opens the popover under the light, the light `tiling.popoverLightInset` in from its left edge
   (D20), above it when the output has no room below; an `enter` never replaces another open popup, an `open` does (D23).
+  Never over the lock or another surface (integrator review of 4ead6fb): the plugin counts no light while the session is
+  locked, while an Exclusive layer other than the shell's popup layer is mapped (the polkit sheet, Search, Apps, the
+  Overview, the switcher, the Notification Center, the Dock's keyboard mode, any third-party one) or while a Top or Overlay
+  layer or a layer popup is under the pointer (core `hoverCovered`; a hover that began ends, and the light waits until the
+  pointer has left it, as after a press); the shell refuses the popover while locked (first decision), while the polkit
+  sheet, a full-attention surface (FocusReturn's holders) or the Dock's keyboard mode is up (`WindowTiling.hoverRefusedBy`),
+  and closes the open popover before opening another window's.
   While it is open the overlay holds the pointer, so the plugin's `leave` is ignored: the popover itself closes after
   `tiling.hoverDelay` away from the light and from it, counted only once the overlay saw the pointer. It also closes when
   the window enters or leaves full screen or goes away, and with the feature.
@@ -290,7 +297,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Super+Ctrl+L opens the popover on the focused window with keyboard focus (arrows between glyphs and rows, Return, Esc;
   with Layouts, a number picks a layout and a second number a zone). Super+Z is not used: Super plays Command, so it is
   ⌘Z, Undo.
-  Step 3 as built: `bindings.lua` (the descriptions in Settings > Keyboard, translated), IPC `windows arrange <layout>`,
+  Step 3 as built: `bindings.lua` (the descriptions in Settings > Keyboard, translated; Super+Ctrl+L by key position too,
+  keycode 46), IPC `windows arrange <layout>`,
   `windows tilePopover`, `windows nextOutput left|right` (D22: by position, wrapping), each refused while locked first.
   The popover's arrows move between glyphs and rows (overlay/TilingNav). The number keys come with Layouts (step 4).
 

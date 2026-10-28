@@ -387,7 +387,10 @@ shell no longer relies on that alone:
   plugin checks the lock again when it would tile after such a release and then moves nothing. Tiling step 3:
   `hl.plugin.grassfield.move_to` refuses while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves); the `tile-hover` event and `hl.plugin.grassfield.tile_popover` (which only posts that event) change nothing by
-  themselves: the shell refuses the popover.
+  themselves: the shell refuses the popover (`TilingHover.show` asks `SessionState.refuses` first, and refuses it over the
+  polkit sheet, a full-attention surface and the Dock's keyboard mode), and the plugin posts no hover while the session is
+  locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
+  review of 4ead6fb).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
