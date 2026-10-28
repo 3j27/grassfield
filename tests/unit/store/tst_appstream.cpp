@@ -68,6 +68,40 @@ TEST(AppStream, ComponentsAndTheirPlainTexts)
     EXPECT_EQ(find(list, QStringLiteral("org.example.Cli"))->type, QStringLiteral("console-application"));
 }
 
+// Flathub's AppStream (step 3c): a component needs no pkgname when its bundle is a Flatpak app's; its runtime and the
+// verified-developer flag are read, a runtime attribute that is not one is dropped, other bundles are not Flatpaks.
+TEST(AppStream, FlathubComponents)
+{
+    const QList<AppStreamComponent> list = parseAppStream(storetest::readFixture(QStringLiteral("appstream-flathub.xml")));
+    const AppStreamComponent *notes = find(list, QStringLiteral("org.example.Notes"));
+    ASSERT_TRUE(notes);
+    EXPECT_TRUE(notes->pkgname.isEmpty());
+    EXPECT_EQ(notes->origin, QStringLiteral("flatpak"));
+    EXPECT_EQ(notes->flatpak, QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(notes->runtime, QStringLiteral("org.gnome.Platform/x86_64/50"));
+    EXPECT_TRUE(notes->verified);
+    EXPECT_EQ(notes->name.fr, QStringLiteral("Notes d'exemple"));
+    EXPECT_EQ(notes->developer.en, QStringLiteral("Example Developers"));
+    EXPECT_EQ(notes->desktopId, QStringLiteral("org.example.Notes.desktop"));
+    EXPECT_EQ(notes->cachedIcon, QStringLiteral("128x128/org.example.Notes.png"));
+    const AppStreamComponent *paint = find(list, QStringLiteral("org.example.Paint"));
+    ASSERT_TRUE(paint);
+    EXPECT_EQ(paint->flatpak, QStringLiteral("org.example.Paint"));
+    EXPECT_TRUE(paint->runtime.isEmpty()); // "…/25.08;rm" is not a runtime
+    EXPECT_FALSE(paint->verified);         // "false", and another key saying "true"
+    EXPECT_FALSE(find(list, QStringLiteral("org.example.Platform"))); // a runtime's bundle: no app
+    EXPECT_FALSE(find(list, QStringLiteral("notanid")));
+    EXPECT_FALSE(find(list, QStringLiteral("org.example.Packaged"))); // not a Flatpak bundle, and no pkgname
+    EXPECT_TRUE(isFlatpakRuntime(QStringLiteral("org.freedesktop.Platform/x86_64/25.08")));
+    EXPECT_FALSE(isFlatpakRuntime(QStringLiteral("org.freedesktop.Platform/x86_64")));
+    EXPECT_FALSE(isFlatpakRuntime(QStringLiteral("../x/x86_64/1")));
+    // Arch's components keep their own rule: a pkgname, no Flatpak fields.
+    const AppStreamComponent *gimp = find(parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml"))), QStringLiteral("org.gimp.GIMP"));
+    ASSERT_TRUE(gimp);
+    EXPECT_TRUE(gimp->flatpak.isEmpty());
+    EXPECT_FALSE(gimp->verified);
+}
+
 TEST(AppStream, ReadsEveryCatalogOfAFolder)
 {
     QTemporaryDir root;
