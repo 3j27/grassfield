@@ -391,9 +391,12 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions and duration. A window closed meanwhile is
   left out, the others go on. Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
   and group). During the drag DesktopFocus and the titlebars ignore the pointer. Feature `tiling-shared-edge`, with
-  `tiling-arrange`. The spike's measurement (D34): tests/visual/presented-frames.sh `shared-edge` (two live windows, three
-  glides with the button held) gives P3 in nested; the fallback of the release with placeholders is built only if it
-  fails there.
+  `tiling-arrange`. The spike's measurement (D34, amended by the integrator): tests/visual/presented-frames.sh
+  `shared-edge` (two live windows, three glides with the button held) kept 64.9 % and 58.6 % of frames within 20 ms in a
+  loaded nested instance, every long frame paced by a client and none by the compositor (render CPU p95 6.1 and 5.3 ms):
+  the neighbours stay live (macOS's live resize, each app redrawing at its own pace) and Windows' placeholders are not
+  built; the shared edge's P3 is no long frame caused by the compositor (frame-attribution.py --gate), the share on time
+  information.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
@@ -516,8 +519,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **Owner (L2):** trackpad drags, a HiDPI or portrait output, the real Dock and switcher.
 
 ## Performance (gates affected)
-- P3: popover and suggestions open within one frame budget; the shared-edge drag keeps ≥ 95 % of frames under 16.7 ms
-  with two live neighbours; the neighbours are configured at most once per output refresh.
+- P3: popover and suggestions open within one frame budget; the shared-edge drag causes no long frame in the compositor
+  with two live neighbours (ADR-0036 D34 as amended: its share of frames on time follows the apps' redraw and is reported
+  as information); the neighbours are configured at most once per output refresh.
 - C1: the soak gains tiling actions (arrange, drag to edges, popover open and close, shared-edge drags).
 
 ## Accessibility
