@@ -463,7 +463,7 @@ Variants {
                         id: titleText
                         x: titleRow.plated ? Tokens.notificationTitlePlatePadding : Tokens.notificationTitleInset
                         y: 0
-                        text: qsTr("Notification Center")
+                        text: qsTr("Notifications")
                         textFormat: Text.PlainText
                         color: titleRow.plated ? Appearance.colors.text : titleRow.ink
                         font.family: Appearance.fontFamilyFor(Tokens.notificationTitleSize)

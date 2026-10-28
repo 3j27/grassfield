@@ -1,10 +1,11 @@
 // The plan check (apps/store/src/plancheck.h; ADR-0037 e.4; spec SR15, SR22; acceptance A5) with a fake pacman: pacman -Qu
 // with and without "[ignored]" lines, a plan that upgrades an installed package, a plan that does not resolve, a first file
 // the mirror no longer has, the locks (db.lck, Omarchy's update lock held by another process), and an uninstall that breaks
-// a dependency or takes a protected package along.
+// a dependency or takes a protected package along; a setup's recipe and pins against a made-up Omarchy folder (b.2, g).
 #include "plancheck.h"
 #include "storetest.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
@@ -159,4 +160,74 @@ TEST(PlanCheck, RemovePlan)
     EXPECT_EQ(checkRemove({QStringLiteral("nothing")}, deny, f.tools, false).refusal, Refusal::Failed);
     storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
     EXPECT_EQ(checkRemove({QStringLiteral("xterm")}, deny, f.tools, false).refusal, Refusal::Unfinished);
+}
+
+TEST(PlanCheck, Setups)
+{
+    Fixture f;
+    const QString root = f.dir.filePath(QStringLiteral("omarchy"));
+    QDir().mkpath(root + QStringLiteral("/bin"));
+    QDir().mkpath(root + QStringLiteral("/install/helpers"));
+    storetest::script(root + QStringLiteral("/bin/omarchy-install-xterm"), "omarchy-pkg-add xterm");
+    storetest::script(root + QStringLiteral("/bin/omarchy-remove-xterm"), "omarchy-pkg-drop xterm");
+    const QString helper = root + QStringLiteral("/install/helpers/x.sh");
+    storetest::writeFile(helper, "true\n");
+    const auto sha = [&root](const QString &path) {
+        QFile file(root + QLatin1Char('/') + path);
+        return file.open(QIODevice::ReadOnly) ? QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex()) : QString();
+    };
+    const QList<std::pair<QString, QString>> pins{
+        {QStringLiteral("bin/omarchy-install-xterm"), sha(QStringLiteral("bin/omarchy-install-xterm"))},
+        {QStringLiteral("bin/omarchy-remove-xterm"), sha(QStringLiteral("bin/omarchy-remove-xterm"))},
+        {QStringLiteral("install/helpers/x.sh"), sha(QStringLiteral("install/helpers/x.sh"))}};
+    const SetupCheck install{root, QStringLiteral("omarchy-install-xterm"), pins};
+    const SetupCheck remove{root, QStringLiteral("omarchy-remove-xterm"), pins};
+    DenyList deny;
+    deny.omarchy = {QStringLiteral("btop")};
+
+    // Every pin matches: the plan of its packages, as for a repository app.
+    EXPECT_EQ(omarchyDifference(root, pins), QString());
+    InstallPlan p = checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::None);
+    EXPECT_EQ(p.packages.size(), 2);
+    RemovePlan r = checkSetupRemove({QStringLiteral("xterm")}, remove, deny, f.tools, false);
+    EXPECT_EQ(r.refusal, Refusal::None);
+    EXPECT_EQ(r.packages.size(), 2);
+
+    // A file the recipe sources changed (an Omarchy update the catalog has not checked yet): refused before pacman, the file
+    // named; the same once it is gone.
+    storetest::writeFile(helper, "true # changed\n");
+    p = checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(p.detail, QStringLiteral("install/helpers/x.sh"));
+    EXPECT_TRUE(p.packages.isEmpty());
+    r = checkSetupRemove({QStringLiteral("xterm")}, remove, deny, f.tools, false);
+    EXPECT_EQ(r.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(r.detail, QStringLiteral("install/helpers/x.sh"));
+    QFile::remove(helper);
+    EXPECT_EQ(omarchyDifference(root, pins), QStringLiteral("install/helpers/x.sh"));
+    storetest::writeFile(helper, "true\n");
+    EXPECT_EQ(omarchyDifference(root, pins), QString());
+
+    // A recipe the pins do not name, one that is not executable or not there, one of the wrong pattern; no pins at all.
+    SetupCheck unpinned = install;
+    unpinned.pins.removeFirst();
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, unpinned, f.tools, true, false).detail, QStringLiteral("bin/omarchy-install-xterm"));
+    QFile::setPermissions(root + QStringLiteral("/bin/omarchy-install-xterm"), QFile::ReadOwner | QFile::WriteOwner);
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+    QFile::setPermissions(root + QStringLiteral("/bin/omarchy-install-xterm"), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    SetupCheck missing = install;
+    missing.recipe = QStringLiteral("omarchy-install-missing");
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, missing, f.tools, true, false).detail, QStringLiteral("bin/omarchy-install-missing"));
+    SetupCheck odd = install;
+    odd.recipe = QStringLiteral("../omarchy-install-xterm");
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, odd, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(omarchyDifference(root, {}), QStringLiteral("(no pins)"));
+    SetupCheck none = install;
+    none.pins.clear();
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, none, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+
+    // With the pins matching again, the other refusals are the repository's.
+    storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false).refusal, Refusal::Unfinished);
 }

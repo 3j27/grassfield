@@ -1,12 +1,15 @@
 import QtQuick
 
 // General (macOS 27): a hub. The header card, then rows that open the sub-panes; the toolbar's back button returns here.
-// Not built (docs/specs/settings.md § macOS 27 parity inventory): Software Update, Sharing and the Apple-only rows.
+// Not built (docs/specs/settings.md § macOS 27 parity inventory): Sharing and the Apple-only rows.
 SettingsPage {
     id: root
 
     // Opens a sub-pane by its section id (Main.qml).
     signal open(string id)
+
+    // Available updates (Software Update's red count, U19).
+    property int updateCount: 0
 
     title: qsTr("General")
 
@@ -22,6 +25,12 @@ SettingsPage {
             text: qsTr("About")
             glyph: "laptop"
             onClicked: root.open("about")
+        }
+        NavigationRow {
+            text: qsTr("Software Update")
+            glyph: "gear"
+            badge: root.updateCount
+            onClicked: root.open("software-update")
         }
         NavigationRow {
             text: qsTr("Storage")

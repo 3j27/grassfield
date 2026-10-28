@@ -126,7 +126,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
-  registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
+  registered; with it, `tiling-arrange` when `arrange`, `hyprctl grassfield-tiling` and the tiling listeners registered and
+  `tile-hover` when `tile_popover` and `move_to` registered (`docs/specs/tiling.md` TL6, TL22-TL26); `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
   registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered;
   `keyboard-focus` (FR20) with `appmenu`; `stages` only while its flag is on
   (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times","keyboard-focus"]`
@@ -601,8 +602,13 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   goes, on unload); a later drag of a tiled window gives that size back under the pointer at the same relative place
   (like the un-zoom, `unzoomedDragBox`). `hl.plugin.grassfield.tile(address, place)` places a window the same way for
   the Window menu (Fill, Center, Move & Resize: halves, quarters) and the keys Super+Ctrl+arrows; place `previous`
-  returns to the remembered box (Return to Previous Size, Super+Ctrl+R; centred on the window's output now when the old box lies off every output). The output is the one under the window's middle (Hyprland does not see the plugin's own drags, R13; since tiling step 1 the end of such a drag, and a tile onto another output, give the window the Desktop of the output under its middle, as Hyprland's own move does, tiling.md TL21). Since tiling step 1 (`docs/specs/tiling.md` TL1-TL15) every placement uses the work area read at that moment (Stages strip column left out), edges on the output's device-pixel grid, the window's limits, a half beside a tiled neighbour, and a tile record per window that follows the TL10 state machine (a user resize through Hyprland keeps it; a move, an app's own configure or a keyboard move ends it); `hl.plugin.grassfield.arrange(json)` fills a layout of the catalogue (TL6) and `hyprctl grassfield-tiling` returns the records. Untrusted: fixed-size strings, the address
-  compared with live windows, the place from a fixed list.
+  returns to the remembered box (Return to Previous Size, Super+Ctrl+R; centred on the window's output now when the old box lies off every output). The output is the one under the window's middle (Hyprland does not see the plugin's own drags, R13; since tiling step 1 the end of such a drag, and a tile onto another output, give the window the Desktop of the output under its middle, as Hyprland's own move does, tiling.md TL21). Since tiling step 1 (`docs/specs/tiling.md` TL1-TL15) every placement uses the work area read at that moment (Stages strip column left out), edges on the output's device-pixel grid, the window's limits, a half beside a tiled neighbour, and a tile record per window that follows the TL10 state machine (a user resize through Hyprland keeps it; a move, an app's own configure or a keyboard move ends it); `hl.plugin.grassfield.arrange(json)` fills a layout of the catalogue (TL6) and `hyprctl grassfield-tiling` returns the records. Since tiling step 3 (TL22-TL26) the pointer resting on a window's zoom
+  light (the titlebar's, or a Grassfield app's own at its token place) for `tiling.hoverDelay` posts `tile-hover` (enter,
+  then leave; no light counts while the session is locked, while an Exclusive layer other than the shell's popups is mapped
+  or while a Top or Overlay layer covers the pointer), `hl.plugin.grassfield.tile_popover(address)` posts it as `open` for the keyboard, and
+  `hl.plugin.grassfield.move_to(address, output)` moves a window onto another output (a tiled one into the same tile
+  there; refused while locked). Untrusted: fixed-size strings, the address
+  compared with live windows, the place from a fixed list, the output name checked and compared with the live outputs.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default): `windows.tilingEdges` ("Drag windows to screen
   edges to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"), `windows.tilingMargins` ("Tiled
   windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",

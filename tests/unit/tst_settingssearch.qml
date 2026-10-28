@@ -5,7 +5,9 @@ import "../../apps/settings/qml" as SettingsQml
 
 // Settings > Search as macOS 27 lays out its Spotlight pane (docs/audits/settings-parity-2026-10-26.md § Search): one switch
 // per kind of result, each writing its search.show* key, and Delete Search History…, which only asks (Main confirms, then
-// writes search.historyResetAt). The store is a fake.
+// writes search.historyResetAt). The clipboard history's group (ADR-0034 step 3): Results from Clipboard, the time the history
+// is available, Keep clipboard history after logging out (both inactive while the history is off), and Clear Clipboard
+// History…, which only asks; clearClipboard writes the clear keys in one write. The store is a fake.
 TestCase {
     id: testCase
     name: "SettingsSearch"
@@ -122,5 +124,58 @@ TestCase {
         compare(asked, 1);
         // Only asks: nothing is forgotten before Main's confirmation.
         compare(t.store.writes.length, writes);
+    }
+    function test_clipboardSwitch() {
+        const t = make();
+        const toggle = named(t.page.contentItem, "Results from Clipboard");
+        verify(toggle);
+        verify(!toggle.checked, "off by default (CB-3)");
+        const retention = named(t.page.contentItem, "Clipboard history is available in Search for");
+        const keep = named(t.page.contentItem, "Keep clipboard history after logging out");
+        verify(retention && keep);
+        verify(!retention.enabled && !keep.enabled, "inactive while the history is off");
+        toggle.toggled(true);
+        compare(last(t.store), {"search.clipboard.enabled": true});
+        verify(toggle.checked && retention.enabled && keep.enabled);
+    }
+
+    function test_clipboardRetention() {
+        const t = make();
+        t.store.set("search.clipboard.enabled", true);
+        const retention = named(t.page.contentItem, "Clipboard history is available in Search for");
+        compare(retention.value, "8h", "8 hours by default");
+        compare(retention.model.map(c => c.id).join(" "), "30m 8h 7d");
+        retention.picked("7d");
+        compare(last(t.store), {"search.clipboard.retention": "7d"});
+        compare(retention.value, "7d");
+    }
+
+    function test_clipboardKeepOnDisk() {
+        const t = make();
+        t.store.set("search.clipboard.enabled", true);
+        const keep = named(t.page.contentItem, "Keep clipboard history after logging out");
+        verify(!keep.checked, "off by default");
+        keep.toggled(true);
+        compare(last(t.store), {"search.clipboard.keepOnDisk": true});
+    }
+
+    function test_clearClipboardHistory() {
+        const t = make();
+        let asked = 0;
+        t.page.clipboardClearRequested.connect(() => asked++);
+        const button = find(t.page.contentItem, i => i.text === "Clear Clipboard History…" && i.clicked !== undefined);
+        verify(button);
+        verify(button.enabled, "available while the history is off: pinned items stay");
+        const writes = t.store.writes.length;
+        button.clicked();
+        compare(asked, 1);
+        compare(t.store.writes.length, writes, "only asks");
+        // Confirmed: the unpinned items, in one write; with "Also delete pinned items", the pinned ones in the same write.
+        t.page.clearClipboard(false);
+        compare(Object.keys(last(t.store)).join(), "search.clipboard.clearedAt");
+        verify(last(t.store)["search.clipboard.clearedAt"] > 0);
+        t.page.clearClipboard(true);
+        compare(Object.keys(last(t.store)).sort().join(), "search.clipboard.clearedAt,search.clipboard.pinnedClearedAt");
+        compare(last(t.store)["search.clipboard.clearedAt"], last(t.store)["search.clipboard.pinnedClearedAt"]);
     }
 }

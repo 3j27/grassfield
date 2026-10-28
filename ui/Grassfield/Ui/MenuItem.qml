@@ -6,7 +6,11 @@ Item {
 
     property string text: ""
     property string shortcut: ""
+    // Plain text in the right-hand column, before the shortcut: the Grassfield menu's "Settings…  1 update" (ADR-0033 U19).
+    property string detail: ""
     property string iconName: ""
+    // A tiling glyph ({zones, own}: TileGlyph) in the icon's place, or null (Window > Move & Resize, docs/specs/tiling.md TL25).
+    property var glyph: null
     property bool highlighted: false
     property bool checked: false
     property bool hasSubmenu: false
@@ -25,7 +29,7 @@ Item {
 
     // Where the icon (if any) and the label start: the check column or the plain inset, then the icon and its gap.
     readonly property real iconX: root.checkColumn || root.checked ? Tokens.menuCheckInset : Tokens.menuItemPadding
-    readonly property real labelX: root.iconX + (root.iconName !== "" ? Tokens.menuIconSize + Tokens.spacingSm : 0)
+    readonly property real labelX: root.iconX + (root.iconName !== "" || root.glyph ? Tokens.menuIconSize + Tokens.spacingSm : 0)
 
     // The shortcut and the chevron sit in their own right-aligned column (macOS model, docs/specs/ui.md); the
     // minimum gap to the label is unchanged. Whole pixels, so that the menu's edges and right-aligned shortcuts are sharp.
@@ -33,7 +37,7 @@ Item {
     implicitHeight: Tokens.menuItemHeight
     Accessible.role: Accessible.MenuItem
     Accessible.name: root.text
-    Accessible.description: root.shortcut
+    Accessible.description: root.detail !== "" && root.shortcut !== "" ? root.detail + ", " + root.shortcut : root.detail + root.shortcut
     Accessible.checkable: root.checked
     Accessible.checked: root.checked
     Accessible.focusable: true
@@ -68,6 +72,16 @@ Item {
         color: root.foreground
     }
 
+    TileGlyph {
+        visible: !!root.glyph
+        x: root.iconX
+        y: Math.round((root.height - height) / 2)
+        width: Tokens.menuIconSize
+        zones: root.glyph ? root.glyph.zones : []
+        own: root.glyph && root.glyph.own !== undefined ? root.glyph.own : 0
+        color: root.foreground
+    }
+
     Text {
         textFormat: Text.PlainText
         id: label
@@ -89,6 +103,18 @@ Item {
             verticalCenter: parent.verticalCenter
         }
         spacing: Tokens.spacingSm
+
+        Text {
+            textFormat: Text.PlainText
+            visible: root.detail !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.detail
+            color: root.highlighted && root.enabled ? root.foreground : Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+            font.weight: Tokens.typographySmallWeight
+        }
 
         Text {
             textFormat: Text.PlainText

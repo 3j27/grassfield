@@ -26,6 +26,7 @@
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/plugins/PluginSystem.hpp>
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
@@ -105,6 +106,11 @@ namespace {
             gf::guarded("tiling motion", [] { gf::tiler::beforePointerMotion(); });
             CGrassfieldTitlebar::onGlobalMouseMove();
         }));
+        // The zoom light's hover starts over across the session lock (tiling.md TL22, D24; integrator nested rerun of 25e757c).
+        if (g_pSessionLockManager) {
+            l.push_back(g_pSessionLockManager->m_events.lock.listen([] { CGrassfieldTitlebar::onSessionLock(true); }));
+            l.push_back(g_pSessionLockManager->m_events.unlock.listen([] { CGrassfieldTitlebar::onSessionLock(false); }));
+        }
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
         // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before

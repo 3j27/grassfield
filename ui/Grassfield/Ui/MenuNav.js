@@ -1,10 +1,11 @@
 .pragma library
 
 // Keyboard navigation model of a popup menu (pure functions, unit-tested).
-// An item is {text, enabled?, separator?, submenu?}; enabled defaults to true.
+// An item is {text, enabled?, separator?, header?, submenu?}; enabled defaults to true. A header names the section below it
+// (macOS Window > Move & Resize: Halves, Quarters, Arrange) and is never selected.
 
 function selectable(item) {
-    return item !== undefined && item !== null && !item.separator && item.enabled !== false;
+    return item !== undefined && item !== null && !item.separator && !item.header && item.enabled !== false;
 }
 
 // Next selectable index from `index` in direction dir (+1/-1), wrapping; -1 if none.

@@ -1,7 +1,7 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
-Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 on its branch (drags, TL16-TL21: plugin and
-tokens; no shell, Settings or config/hypr change). Steps 3-6 are not built. Below, "Today" is the state before step 1. A requirement
+Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 on its
+branch (popover, Window menu and keys, TL22-TL26: plugin, shell, tokens, `config/hypr` bindings). Steps 4-6 are not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -248,19 +248,52 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   captures gs-068-161, gs-069-175), shifted sideways or placed above when the output has no room. It closes on Esc, a
   click outside, an action, the window closing or losing its tile eligibility, a capabilities change without the
   feature, and when the pointer has been outside both the light and the popover for `tiling.hoverDelay`.
+  Step 3 as built: core `CHoverDwell` (the light under the pointer, its delay, a press ends a hover until the pointer left
+  the light) and an event loop timer post `enter` once the delay passed with no button held; the titlebar's light (shown
+  or revealed bar, its hit slop) or a Grassfield app's light (TL24); one event channel, the latest state wins. The shell
+  (services/TilingHover) opens the popover under the light, the light `tiling.popoverLightInset` in from its left edge
+  (D20), above it when the output has no room below; an `enter` never replaces another open popup, an `open` does (D23).
+  Never over the lock or another surface (integrator review of 4ead6fb): the plugin counts no light while the session is
+  locked, while an Exclusive layer other than the shell's popup layer is mapped (the polkit sheet, Search, Apps, the
+  Overview, the switcher, the Notification Center, the Dock's keyboard mode, any third-party one) or while a Top or Overlay
+  layer or a layer popup is under the pointer (core `hoverCoverEffect`, D24: under the lock or a foreign Exclusive layer a
+  hover that began ends and the light is forgotten, so the hover starts over once the desktop is back; under a layer, the
+  shell's open popover included, it ends and the light waits until the pointer has left it, as after a press, so a popover
+  closed over the light does not come back by itself). The session lock's own events end the hover too, and the unlock
+  looks at the light under the pointer again from the event loop: a pointer resting on a light through the lock gives a
+  hover `tiling.hoverDelay` after the unlock, with no pointer motion (integrator nested rerun of 25e757c). The shell
+  refuses the popover while locked (first decision), while the polkit sheet, a full-attention surface (FocusReturn's
+  holders) or the Dock's keyboard mode is up (`WindowTiling.hoverRefusedBy`), and closes the open popover before opening
+  another window's.
+  While it is open the overlay holds the pointer, so the plugin's `leave` is ignored: the popover itself closes after
+  `tiling.hoverDelay` away from the light and from it, counted only once the overlay saw the pointer. It also closes when
+  the window enters or leaves full screen or goes away, and with the feature.
 - **TL23** Popover content (M19-M21, M23), in this order: "Move & Resize" (Left, Right, Top, Bottom), "Fill & Arrange"
   (Fill, Left & Right, Left & Quarters, Quarters), "Layouts" (T1a, the output's class, T1f), "Full Screen ›" (Entire
   Screen; Left of Screen and Right of Screen from step 6, T4), then one "Move to <output name>" row per other output
   (after Full Screen, as in the owner's captures). With Alt held: Center instead of Fill, the quarters instead of the
   halves, Right & Left and Right & Quarters. In full screen: Exit Full Screen only. Glyphs not available for the window
   (TL9) are greyed.
+  Step 3 as built: AppMenuModel `tilingPopover` (shared with the Window menu's rows, glyphs and texts) and
+  overlay/TilingPopover (glass `menu`, `tiling.popoverWidth` wide, glyphs `tiling.glyph*` on a `tiling.glyphPitch` pitch,
+  the TileGlyph component of Grassfield.Ui). Layouts waits for step 4 (D16); the Full Screen row enters full screen until
+  step 6 turns it into Full Screen › (D17); the arrangements are greyed without `tiling-arrange`. Move to <display> rows
+  name the output as Settings > Displays does (Built-in Display, its model, else its connector) and call `move_to` (D18,
+  D22).
 - **TL24** Client chrome (M25): on windows tagged `grassfield-client-chrome` whose app is a Grassfield app, the plugin
   hit-tests the zoom light at its token position (ADR-0015 `WindowControls`) to post the same hover; spike first in step 3
   (full-screen and zoomed windows, right-to-left layouts). Third-party client chrome gets no popover.
+  Step 3 as built (D23): an `org.grassfield.*` window with the client-chrome tag, not in full screen: its xdg-toplevel tag
+  names the row, `info` the titlebar row (`window.titlebarLightInset`), any other role the unified toolbar row
+  (`window.unifiedLightCentre`); zoomed windows keep their lights there; Grassfield apps never mirror their lights.
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
   shows the "& Quarters" alternates in place. Shortcut texts come from the one table that mirrors `bindings.lua`.
+  Step 3 as built: Minimize, Zoom, Fill, Center, —, Move & Resize ›, one Move to <display> row per other output (D21), —,
+  Enter Full Screen, …; Full Screen Tile › waits for step 6 (D17). PopupMenu gained section headers, glyph rows and Alt
+  alternates (`alternate`, also in a submenu opened by the pointer: it follows the Alt of the menu that opened it). Arrange
+  needs `tiling-arrange`.
 - **TL26** Keyboard (T2 option A as amended by T2a and T2b): Super+Ctrl+arrows always give the half, as on macOS (the same
   key again does nothing); Super+Ctrl+U, I, J, K the top-left, top-right, bottom-left and bottom-right quarters, bound by
   key position (`code:` bindings, as `bindings.lua` does for the key above Tab) so they sit in the same place on AZERTY;
@@ -269,6 +302,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Super+Ctrl+L opens the popover on the focused window with keyboard focus (arrows between glyphs and rows, Return, Esc;
   with Layouts, a number picks a layout and a second number a zone). Super+Z is not used: Super plays Command, so it is
   ⌘Z, Undo.
+  Step 3 as built: `bindings.lua` (the descriptions in Settings > Keyboard, translated; Super+Ctrl+L by key position too,
+  keycode 46), IPC `windows arrange <layout>`,
+  `windows tilePopover`, `windows nextOutput left|right` (D22: by position, wrapping), each refused while locked first.
+  The popover's arrows move between glyphs and rows (overlay/TilingNav). The number keys come with Layouts (step 4).
 
 ### Windows features (step 4; T1 takes TL27-TL30, refuses TL31)
 - **TL27** Layouts (T1a, T1f): the popover's Layouts section shows the catalogue of the window's output class as miniature
@@ -355,7 +392,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **Plugin verbs (gfc/1, additive):** `tile(address, place)` with the TL4 places; `arrange(json)`
   `{"layout":"<catalogue id>","windows":["0x…",…],"output":"<name>"?}` (at most 4 windows, 4 KiB); `config` keys
   `tilingOptionDrag`, `tilingLayouts`, `tilingSuggestions`, `tilingGroups` and `titlebarDoubleClick` = `fill`.
-- **Plugin events:** `tiling` notice `{gen, reason}` (bounded); `tile-hover` `{address, state: enter|leave, x, y, w, h}`.
+- **Plugin events:** `tiling` notice `{gen, reason}` (bounded); `tile-hover` `{address, state: enter|leave|open, x, y, w,
+  h, tileable}` (step 3; `open` answers `tile_popover(address)`; `move_to(address, output)` moves a window to another output).
 - **Plugin reply:** `hyprctl grassfield-tiling`: per output the work area, the tiled windows (address, place, layout and
   zone or the sides an edge double-click extended, group, box) and, from step 4, a pending suggestion.
 - **Features:** `window-tiling` (today) plus one per capability (layouts and arrangements, hover, groups, shared edge),
@@ -390,8 +428,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   transition, a user resize keeping the record and the group); the work area read at placement with Stages on and the
   strip hidden; keys (halves, U I J K quarters, next output); drag zones with and without Alt; the token copies equal
   (`gen-tokens.py --check`).
-- **Unit (L0, QML):** `tst_appmenumodel` (the full Window menu, alternates, greying); a pure popover model test (sections,
-  Alt alternates, full screen, outputs); suggestion and group models.
+- **Unit (L0, QML):** `tst_appmenumodel` (the full Window menu, alternates, greying, and the popover model: sections, Alt
+  alternates, full screen, outputs), `tst_windowtiling` (the tile-hover parser, the popover's anchor, the outputs and the
+  next output), `tst_tilingnav` (the popover's keys), `tst_tileglyph`, `tst_popupmenu` and `tst_menunav` (headers,
+  alternates), `tst_minimized` (the verbs' calls); suggestion and group models.
 - **Nested (L1, `tests/compositor/tiling.sh` grown; the integrator runs them, never on the owner's session):**
   1. step 1: arrange with 2, 3, 4 windows on GF-REF; a test client with a large minimum; margins toggled re-place; output
      removal with tiled windows; Stages on (area beside the strip); minimize and restore to the zone;
@@ -433,7 +473,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 
 ## Known limitations (honest, user-visible gaps vs macOS)
 - Third-party apps that draw their own title bar (Chromium, GTK header bars, Electron) get no popover on their green
-  button; the Window menu, the keys and the drags work for them.
+  button; the Window menu, the keys and the drags work for them. Super+Ctrl+L opens their popover at the top-left corner
+  of the window's frame.
+- While the popover is open the overlay holds the pointer: the window under it gets no hover or click until it closes (as
+  under any menu); a click on the zoom light itself then closes the popover instead of zooming.
 - Hyprland tells every xdg window it is tiled and maximized (TILED_* and MAXIMIZED states, H21), floating or not; no
   per-window change.
 - X11 windows: their minimum comes from size hints and Hyprland's commit clamp does not apply to them.

@@ -57,6 +57,9 @@ Scope {
     // malformed or unreadable. Consumers that act destructively on "the settings are the defaults" wait for this, not for
     // `loaded` (which is also true for a malformed file, whose values are then only the last good ones).
     property bool validRead: false
+    // True while the file read last was empty or only whitespace (validRead is true then: every key reads its default). A
+    // consumer that deletes data on a default value waits for a file that says so: an empty file is what a cut write leaves.
+    property bool emptyFile: false
     // True while the file on disk is valid JSON that cannot be rewritten safely (JsonSafety.unsafeReason): its values are
     // not used, the defaults are (see read()).
     property bool unsafeFile: false
@@ -139,6 +142,7 @@ Scope {
         root.unsafeFile = false;
         root.writeBlocked = false;
         root.validRead = false;
+        root.emptyFile = false;
         root.parsedFileRevision++;
         root.reapplyDirty();
         // A change made while the file could not be used waits no longer: the next write creates the file.
@@ -153,6 +157,7 @@ Scope {
             console.warn("settings: " + root.filePath + " is " + reason + "; keeping the file untouched, changes will not be saved until it is fixed");
         root.writeBlocked = true;
         root.validRead = false;
+        root.emptyFile = false;
         root.unsafeFile = false;
         // The sentinel no signature equals: whichever read found the file unusable (the load, or the read before a write), the poll
         // reads it again (at once when the signature changed, else with a growing pause), so the store recovers when the file or
@@ -199,6 +204,8 @@ Scope {
     readonly property bool clipboardKeepOnDisk: read("search.clipboard.keepOnDisk")
     readonly property real clipboardClearedAt: read("search.clipboard.clearedAt")
     readonly property real clipboardPinnedClearedAt: read("search.clipboard.pinnedClearedAt")
+    // Software Update's automatic checks (ADR-0033 d.5): on by default; opening the pane checks whatever this says.
+    readonly property bool updatesAutomaticCheck: read("updates.automaticCheck")
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
     // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.
@@ -765,6 +772,7 @@ Scope {
             console.warn("settings: " + root.filePath + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
         writeBlocked = !ok;
         validRead = ok;
+        emptyFile = text.trim() === "";
         if (!ok)
             saveTimer.stop();
     }

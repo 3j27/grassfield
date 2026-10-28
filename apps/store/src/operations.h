@@ -4,11 +4,16 @@
 //           in a session of its own (no terminal's signal reaches it), while the Store holds Omarchy's update lock (opened
 //           close-on-exec: neither pkexec nor pacman inherits it); the helper's files in /run/grassfield-store/ say when it
 //           started and how it ended, and pacman's log gives the progress ("[ALPM] installed" lines against the plan)
+//   terminal  an Omarchy setup's recipe: omarchy-launch-floating-terminal-with-presentation "grassfield-store-run <op-id>
+//           <deadline> setup <recipe> [<arg>...]" (b.2), detached; the script runs as the user in Omarchy's terminal, takes
+//           Omarchy's update lock itself (the Store only checks it is free before), checks the pins the Store wrote in
+//           $XDG_RUNTIME_DIR/grassfield/store/<op-id>.pins, and its <op-id>.started and <op-id>.exit there say when it
+//           started and how it ended; pacman's log gives the progress as for the helper
 //   webapp  Omarchy's omarchy-webapp-install / -remove as the Store's own child (b.3), 10 minutes at most
 // Before an operation starts, it is written to store.json; on the next start a record still there is compared with what is
 // there (recover): done, still running (followed again), interrupted (a part there), or not finished. The Store never
-// signals pacman, the helper or Omarchy's commands, except a web app command past its limit, and pkexec while it still
-// waits for the password (before the helper started, pkexec is the user's process).
+// signals pacman, the helper, the terminal or Omarchy's commands, except a web app command past its limit, and pkexec while
+// it still waits for the password (before the helper started, pkexec is the user's process).
 #pragma once
 
 #include "plancheck.h"
@@ -34,11 +39,15 @@ namespace grassfield::store {
 struct OperationRecord {
     QString id;      // 32 lowercase hexadecimal digits
     QString kind;    // install, remove
-    QString path;    // helper, webapp
+    QString path;    // helper, terminal, webapp
     QString app;     // the app's id
     QString name;    // the app's name, for the messages
-    QStringList packages;         // helper: the names given to it
-    QList<PlannedPackage> plan;   // helper: what must be there after an install (name, version), gone after a removal
+    QStringList packages;         // helper: the names given to it; terminal: the setup's packages
+    QList<PlannedPackage> plan;   // helper, terminal: what must be there after an install (name, version), gone after a removal
+    QString recipe;               // terminal: omarchy-install-… or omarchy-remove-…
+    QStringList args;             // terminal: the recipe's arguments
+    // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
+    QList<std::pair<QString, QString>> pins;
     QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
     QDateTime startedAt;
 
@@ -49,9 +58,16 @@ struct OperationRecord {
 QString newOperationId();
 bool isOperationId(const QString &id);
 
-// The helper's files (ADR-0037 b.1): the exit code, when written.
+// A setup's recipe and its arguments as ADR-0037 e.5 allows them (the terminal's command string is built from them).
+bool isRecipe(const QString &recipe);
+bool isRecipeArgs(const QStringList &args);
+// grassfield-store-run's command string, the one argument of Omarchy's terminal launcher (b.2): "" when a token is invalid.
+QString terminalCommand(const QString &run, const QString &id, qint64 deadline, const QString &recipe, const QStringList &args);
+
+// The helper's files (ADR-0037 b.1), and grassfield-store-run's (b.2, the same names): the exit code, when written.
 std::optional<int> helperExitCode(const QString &statusDir, const QString &id);
 // Its started file names a process that still runs: the pid with the same start time (/proc/<pid>/stat, field 22).
+// (`statusDir` is grassfield-store-run's folder for a terminal operation.)
 bool helperRunning(const QString &statusDir, const QString &id);
 // pacman's log since `offset`: the "[ALPM] installed <name> (" (or "removed") lines of the plan's packages.
 int countLogged(const QByteArray &logTail, const QString &verb, const QStringList &names);
@@ -71,12 +87,19 @@ struct OperationsConfig {
     QString pacman;     // for the state after an operation
     QString stateFile;  // store.json
     QString applications; // ~/.local/share/applications: the web apps' launchers
+    QString run;          // /usr/lib/grassfield/grassfield-store-run
+    QString runDir;       // $XDG_RUNTIME_DIR/grassfield/store ("": no setup runs)
     // The argument vector that runs one of Omarchy's commands: its own program, or a fake one (GRASSFIELD_STORE_INSTALLER).
     std::function<QStringList(const QString &command, const QStringList &args)> omarchy;
     // The limits (ADR-0037 b.1, b.3; spec SR19), shorter in the tests.
     int authorizationMs = 120 * 1000;
     qint64 helperMs = 2LL * 3600 * 1000;
     int webAppMs = 10 * 60 * 1000;
+    // The terminal (b.2): the script must start within terminalStartMs (its deadline; the Store waits 15 s more for its
+    // started file, the script being past the deadline check by then), and is followed up to terminalMs.
+    int terminalStartMs = 60 * 1000;
+    int terminalGraceMs = 15 * 1000;
+    qint64 terminalMs = 3LL * 3600 * 1000;
     int pollMs = 500;
 };
 
@@ -85,7 +108,7 @@ class Operations : public QObject
     Q_OBJECT
 
 public:
-    enum class State { Waiting, Authorizing, Running, Checking };
+    enum class State { Waiting, Authorizing, Opening, Running, Checking }; // Opening: the terminal, before the script started
 
     struct Item {
         OperationRecord record;
@@ -98,7 +121,7 @@ public:
     struct Result {
         QString app, kind;
         QString outcome; // cancelled, failed, interrupted, notFinished, lostTrack, timedOut, busy, unfinished, outdated,
-                         // refused, notApp, didNotStart
+                         // refused, notApp, didNotStart, omarchyChanged, terminalDidNotOpen
         int present = 0, total = 0;
         QString details; // pacman's message (the helper's log), pkexec's or Omarchy's output
         OperationRecord record;
@@ -119,7 +142,8 @@ public:
     bool queued(const QString &app) const;
     QList<Item> items() const;
     QHash<QString, Result> results() const { return m_results; }
-    // [{id, app, name, kind, state: waiting | authorizing | running | checking, blocked, done, total}] for QML.
+    // [{id, app, name, kind, path, state: waiting | authorizing | opening | running | checking, blocked, done, total}]
+    // for QML.
     QVariantList list() const;
 
 signals:
@@ -133,6 +157,13 @@ private:
     void startNext();
     void startHelper(Item &item);
     void startWebApp(Item &item);
+    void startTerminal(Item &item);
+    void pollTerminal(Item &item, qint64 elapsed);
+    // The plan's packages pacman's log counted since the operation started.
+    void countProgress(Item &item);
+    // The terminal's files of operations other than `keep`, older than its 3 h (an operation the Store concluded, or
+    // one of an earlier run).
+    void pruneRunDir(const QString &keep);
     void poll();
     void processEnded(int exitCode, QProcess::ExitStatus status);
     void conclude(std::optional<int> exitCode, const QString &output);

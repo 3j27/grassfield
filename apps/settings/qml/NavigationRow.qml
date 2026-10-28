@@ -3,7 +3,7 @@ import QtQuick.Templates as T
 import Grassfield.Ui
 
 // One row of a hub pane that opens a sub-pane (macOS 27 General): a coloured tile, the sub-pane's name and a chevron; an
-// optional value sits before the chevron. A click, Space or Return opens it (clicked). Inside a SettingsGroup, with the
+// optional value, or a red count (`badge`: Software Update's available updates, U19), sits before the chevron. A click, Space or Return opens it (clicked). Inside a SettingsGroup, with the
 // group's separators (docs/audits/settings-parity-2026-10-26.md § General). `compact` is the list hub's smaller row (macOS 27
 // Accessibility: 42 tall, a 23-pt tile; § Accessibility).
 T.AbstractButton {
@@ -12,6 +12,7 @@ T.AbstractButton {
     property string glyph: ""
     property string tileColor: "graphite"
     property string value: ""
+    property int badge: 0
     property bool compact: false
 
     width: parent ? parent.width : implicitWidth
@@ -24,7 +25,7 @@ T.AbstractButton {
     focusPolicy: Qt.StrongFocus
     hoverEnabled: true
     Accessible.role: Accessible.Button
-    Accessible.name: root.value !== "" ? root.text + ", " + root.value : root.text
+    Accessible.name: root.badge > 0 ? root.text + ", " + countBadge.spoken : root.value !== "" ? root.text + ", " + root.value : root.text
     Accessible.onPressAction: if (root.visible && root.enabled)
         root.clicked()
 
@@ -94,7 +95,7 @@ T.AbstractButton {
             anchors {
                 left: parent.left
                 leftMargin: root.compact ? Tokens.settingsNavCompactLabelInset : Tokens.settingsNavLabelInset
-                right: valueLabel.left
+                right: countBadge.visible ? countBadge.left : valueLabel.left
                 rightMargin: Tokens.spacingSm
                 verticalCenter: parent.verticalCenter
                 verticalCenterOffset: root.separator / 2
@@ -120,6 +121,17 @@ T.AbstractButton {
             color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
+        }
+
+        CountBadge {
+            id: countBadge
+            anchors {
+                right: chevron.left
+                rightMargin: Tokens.settingsNavValueGap
+                verticalCenter: parent.verticalCenter
+                verticalCenterOffset: root.separator / 2
+            }
+            count: root.badge
         }
 
         Icon {

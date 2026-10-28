@@ -177,6 +177,10 @@ int Helper::start()
     cleanup();
     ::mkdir(runtime.constData(), 0700);
 
+    // Clears asked in the settings while no helper ran: carried out before anything is loaded, shown or recorded (review of
+    // f7cd664).
+    m_clears = applyClears(m_options.stateDir, m_options.clearedAtMs, m_options.pinnedClearedAtMs);
+
     // The pinned items always (Q5), the history only with the opt-in store (Q2).
     const DiskStore::Loaded pinned = m_pinnedDisk.load();
     if (pinned.status == DiskStore::Status::Deleted)
@@ -256,6 +260,50 @@ int Helper::clearHistoryStore(const QString &stateDir)
     DiskStore store(stateDir + QStringLiteral("/history"));
     store.deleteAll();
     return 0;
+}
+
+DiskStore::Clears Helper::applyClears(const QString &stateDir, qint64 clearedAtMs, qint64 pinnedClearedAtMs)
+{
+    const DiskStore::Clears record = DiskStore::readClears(stateDir);
+    DiskStore::Clears next = record;
+    next.known = true;
+    const auto carryOut = [&](const char *name, qint64 asked, qint64 applied, bool pinned, qint64 *slot) {
+        DiskStore store(stateDir + QLatin1Char('/') + QLatin1String(name));
+        switch (ClipLogic::clearAction(asked, applied, record.known)) {
+        case ClipLogic::ClearAction::Keep:
+            break;
+        case ClipLogic::ClearAction::DeleteAll:
+            store.deleteAll();
+            std::fprintf(stderr, "grassfield-clipboard: a clear asked while no helper ran was carried out (the %s store)\n", name);
+            break;
+        case ClipLogic::ClearAction::DropOlder: {
+            // No record: only what was there when the clear was asked goes.
+            const DiskStore::Loaded loaded = store.load();
+            if (loaded.status != DiskStore::Status::Loaded || store.readOnly())
+                break;
+            const QList<ClipLogic::Item> kept = ClipLogic::keptAfterClear(loaded.items, asked, pinned);
+            if (kept.size() == loaded.items.size())
+                break;
+            if (kept.isEmpty()) {
+                store.deleteAll();
+            } else {
+                for (const ClipLogic::Item &it : loaded.items) {
+                    if (!std::any_of(kept.cbegin(), kept.cend(), [&](const ClipLogic::Item &k) { return k.id == it.id; }))
+                        store.removeItem(it.id, kept);
+                }
+            }
+            std::fprintf(stderr, "grassfield-clipboard: a clear asked before the record existed was carried out (the %s store)\n", name);
+            break;
+        }
+        }
+        if (asked > 0)
+            *slot = asked;
+    };
+    carryOut("history", clearedAtMs, record.history, false, &next.history);
+    carryOut("pinned", pinnedClearedAtMs, record.pinned, true, &next.pinned);
+    if (!record.known || next.history != record.history || next.pinned != record.pinned)
+        DiskStore::writeClears(stateDir, next);
+    return next;
 }
 
 void Helper::cleanup()
@@ -584,10 +632,20 @@ void Helper::command(const QByteArray &line)
         setHistoryStore(arg == "1");
     } else if (verb == "E") {
         expire();
-    } else if (verb == "CH") {
-        clearHistory();
-    } else if (verb == "CP") {
-        clearPinnedItems();
+    } else if (verb == "CH" || verb == "CP") {
+        // `CH <ms>` / `CP <ms>`: Settings asked the clear at that time; it is recorded, so the next start does not carry it out
+        // again. Without a time (Search's Clear History) only the clear.
+        if (verb == "CH")
+            clearHistory();
+        else
+            clearPinnedItems();
+        bool ok = false;
+        const qint64 at = arg.toLongLong(&ok);
+        if (ok && at > 0) {
+            (verb == "CH" ? m_clears.history : m_clears.pinned) = at;
+            m_clears.known = true;
+            DiskStore::writeClears(m_options.stateDir, m_clears);
+        }
     } else if (verb == "X") {
         remove(arg);
     } else if (verb == "PIN") {

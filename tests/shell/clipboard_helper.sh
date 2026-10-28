@@ -467,6 +467,80 @@ else
 fi
 stop_helper g
 
+# --- 10c. Clears asked while no helper ran (review of f7cd664) ----------------------------------------------------------------
+# Settings writes search.clipboard.clearedAt and .pinnedClearedAt whether a helper runs or not; the shell passes them at start
+# (--cleared-at, --pinned-cleared-at) or, with the history off, runs --apply-clears. The helper records what it carried out in
+# <state>/clears and carries out at start, before anything is loaded or shown, any value it has not.
+s6=$tmp/state6
+copy_in() { # <helper> <offers seen before> <text>: copies <text>, approves it, prints its id
+  srv main "SELECT text/plain;charset=utf-8|hex:$(hex "$3")"
+  approve "$1" "$2" x >/dev/null
+  field "$(waitline "$tmp/$1.out" "^I\\|[0-9a-f]+\\|text\\|.*\\|$3\\|" 3)" 2
+}
+start_helper k "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at 0 --pinned-cleared-at 0
+waitline "$tmp/k.out" '^S\|ok' 5 >/dev/null || bad "helper k did not start"
+hlp k R
+sleep 0.3
+copy_in k 0 'cleared while stopped' >/dev/null
+pin6=$(copy_in k 1 'pinned before')
+hlp k PIN "$pin6"
+waitline "$tmp/k.out" "^I\\|$pin6\\|text\\|[^|]*\\|[0-9]+\\|[0-9]+\\|[1-9]" 3 >/dev/null || bad "the pin was not reported"
+stop_helper k
+check "the clears record: 0600, the values carried out" "600 GFCLEARS1 0 0" "$(mode "$s6/clears") $(cat "$s6/clears" 2>/dev/null)"
+# Clear Clipboard History written while no helper ran: the next start never shows the history; the pin stays.
+start_helper m "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at 5000 --pinned-cleared-at 0
+waitline "$tmp/m.out" "^I\\|$pin6\\|" 5 >/dev/null && pass "a history clear asked while stopped spares the pin" || bad "the pin is gone"
+waitline "$tmp/m.out" '^S\|ok' 5 >/dev/null || bad "helper m did not start"
+check "a history clear asked while stopped: the history is never shown" 0 "$(count "$tmp/m.out" '\|cleared while stopped\|')"
+check "...the record says it was carried out" "GFCLEARS1 5000 0" "$(cat "$s6/clears" 2>/dev/null)"
+grep -a -q "a clear asked while no helper ran was carried out (the history store)" "$tmp/m.err" && pass "...logged by reason" || bad "the clear at start is not logged"
+stop_helper m
+# Also delete pinned items, written while the history is off (the shell runs --apply-clears).
+env -i PATH=/usr/bin:/bin "$helper" --apply-clears --state "$s6" --cleared-at 5000 --pinned-cleared-at 6000 </dev/null >/dev/null 2>&1
+check "--apply-clears: exit 0, the pins gone, the record updated" "0 no GFCLEARS1 5000 6000" \
+  "$? $([[ -e $s6/pinned ]] && echo yes || echo no) $(cat "$s6/clears" 2>/dev/null)"
+env -i PATH=/usr/bin:/bin "$helper" --apply-clears --state "$s6" --cleared-at 5x00 </dev/null >/dev/null 2>&1
+check "--apply-clears refuses a time that is not digits" 2 "$?"
+# The same values again (the shell restarting): nothing is cleared again.
+start_helper n "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at 5000 --pinned-cleared-at 6000
+waitline "$tmp/n.out" '^S\|ok' 5 >/dev/null || bad "helper n did not start"
+hlp n R
+sleep 0.3
+pin7=$(copy_in n 0 'pinned after')
+hlp n PIN "$pin7"
+waitline "$tmp/n.out" "^I\\|$pin7\\|text\\|[^|]*\\|[0-9]+\\|[0-9]+\\|[1-9]" 3 >/dev/null || bad "the new pin was not reported"
+copy_in n 1 'history after' >/dev/null
+stop_helper n
+start_helper p "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at 5000 --pinned-cleared-at 6000
+waitline "$tmp/p.out" '\|history after\|' 5 >/dev/null && pass "clears already carried out are not carried out again (history kept)" || bad "history cleared again"
+check "...nor the pins" 1 "$(count "$tmp/p.out" "^I\\|$pin7\\|")"
+# Settings' Clear while the helper runs: CH with its time clears and is recorded, so the next start keeps what came after.
+hlp p R
+sleep 0.3
+hlp p CH 7000
+waitline "$tmp/p.out" '^X\|' 3 >/dev/null || bad "CH 7000 cleared nothing"
+sleep 0.2
+check "CH with the setting's time is recorded" "GFCLEARS1 7000 6000" "$(cat "$s6/clears" 2>/dev/null)"
+copy_in p 0 'after the clear' >/dev/null
+hlp p CH
+sleep 0.2
+check "CH without a time (Search's Clear History) leaves the record" "GFCLEARS1 7000 6000" "$(cat "$s6/clears" 2>/dev/null)"
+copy_in p 1 'after search clear' >/dev/null
+stop_helper p
+start_helper q "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at 7000 --pinned-cleared-at 6000
+waitline "$tmp/q.out" '\|after search clear\|' 5 >/dev/null && pass "a clear carried out while running is not carried out again" || bad "history cleared again at start"
+stop_helper q
+# No record (a store from before it existed): only what came before the clear goes. The pin (pinned now) is after a pinned clear
+# at 1 ms; the history item (copied now) is before a clear an hour ahead.
+rm -f "$s6/clears"
+later=$(($(date +%s) * 1000 + 3600000))
+start_helper r "$tmp/main.sock" --state "$s6" --history-store 1 --cleared-at "$later" --pinned-cleared-at 1
+waitline "$tmp/r.out" "^I\\|$pin7\\|" 5 >/dev/null && pass "no record: a pin made after the pinned clear stays" || bad "no record: the pin went"
+waitline "$tmp/r.out" '^S\|ok' 5 >/dev/null || bad "helper r did not start"
+check "no record: the history from before the clear goes" 0 "$(count "$tmp/r.out" '\|after search clear\|')"
+check "...and the record is written" "GFCLEARS1 $later 1" "$(cat "$s6/clears" 2>/dev/null)"
+stop_helper r
+
 # --- 11. No content in the logs, unsupported compositors -----------------------------------------------------------------
 if grep -a -q -- "$canary" "$tmp"/*.err; then bad "a copied text reached a log"; else pass "no copied text in any log"; fi
 start_server nolock --no-lock-notifier

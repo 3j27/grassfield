@@ -41,7 +41,8 @@ from pathlib import Path
 ADR = "docs/decisions/ADR-0007-shell-plugin-ipc.md"
 IMPLICIT = {"v", "type"}
 # switch functions of the event builders -> the field they name
-ENUM_FUNCS = {"reasonName": "reason", "phaseName": "state", "outcomeName": "outcome", "targetName": "target"}
+ENUM_FUNCS = {"reasonName": "reason", "phaseName": "state", "outcomeName": "outcome", "targetName": "target",
+              "hoverStateName": "state"}
 
 
 # ---- loading ----
@@ -172,12 +173,17 @@ def code_model(files):
                 m["events"].setdefault(t, set()).update(set() if path.endswith("/Ipc.cpp") else json_fields(body))
         for t in types:
             m["events"].setdefault(t, set())
-        if len(types) == 1:
-            t = next(iter(types))
-            for n, field in ENUM_FUNCS.items():
-                if n in by_name:
-                    vals = {v for v in re.findall(r'return "([a-z][a-z-]*)";', by_name[n])}
-                    m["enums"].setdefault(t + "." + field, set()).update(vals)
+        for n, field in ENUM_FUNCS.items():
+            if n not in by_name:
+                continue
+            vals = {v for v in re.findall(r'return "([a-z][a-z-]*)";', by_name[n])}
+            # the file's one event type, or with several (core/Tiling.cpp: tiling, tile-hover) the types of the event
+            # builders that call the switch
+            owners = types if len(types) == 1 else {
+                t for _, body in bodies if re.search(r"\b%s\(" % n, body)
+                for t in re.findall(r'"type":"([a-z][a-z-]*)"', body)}
+            for t in owners:
+                m["enums"].setdefault(t + "." + field, set()).update(vals)
     # the hyprctl reply is the capabilities event plus a trailing "version"; its failure reply is the type "error"
     ipc = files.get("compositor/src/Ipc.cpp", "")
     if re.search(r'R"\(,"version":"\)"', ipc) and "capabilities" in m["events"]:
@@ -621,6 +627,34 @@ Item {
     }
 }
 '''
+FIX_TWO_CPP = '''
+    std::string_view reasonName(Reason reason) {
+        switch (reason) {
+            case Reason::Placed: return "placed";
+        }
+        return "";
+    }
+    std::string noticeJson(uint64_t generation, Reason reason) {
+        out += std::format(R"(","type":"tiling","gen":{})", generation);
+        out += reasonName(reason);
+        return out;
+    }
+    std::string_view hoverStateName(HoverState state) {
+        switch (state) {
+            case HoverState::Enter: return "enter";
+        }
+        return "enter";
+    }
+    std::string tileHoverJson(uint64_t address, HoverState state) {
+        out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
+        return out;
+    }
+'''
+FIX_TWO_ADR = """event tiling: gen
+event tile-hover: address state
+enum tiling.reason: placed
+enum tile-hover.state: enter
+"""
 FIX_ADR = '''# ADR
 ```gfc1
 event capabilities: features
@@ -780,6 +814,15 @@ def selftest():
     errs = run_fixture(clean)
     if errs:
         failures.append("a helper fed from a reply (not an event) is flagged: %s" % errs)
+
+    # two event types in one file: each name switch belongs to the builder that calls it
+    two = dict(base)
+    two["compositor/src/core/Tiling.cpp"] = FIX_TWO_CPP
+    two[ADR] = FIX_ADR.replace("verb hello", FIX_TWO_ADR + "verb hello")
+    expect("two types in one file", run_fixture(two), None)
+    uncalled = dict(two)
+    uncalled["compositor/src/core/Tiling.cpp"] = FIX_TWO_CPP.replace("hoverStateName(state)", '"enter"')
+    expect("switch no builder calls", run_fixture(uncalled), "enums: documented but not in code: tile-hover.state")
 
     # a docs block that cannot be read
     expect("no block", run_fixture({**base, ADR: "# no table\n"}), "no ```gfc1 block")

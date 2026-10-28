@@ -111,7 +111,8 @@ Scope {
         {id: "trackpad", title: qsTr("Trackpad"), keywords: [qsTr("touchpad"), qsTr("tracking speed"), qsTr("tap to click"), qsTr("gestures")]},
         {id: "printers", title: qsTr("Printers"), keywords: [qsTr("printer"), qsTr("paper size"), qsTr("print")]},
         {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys")]},
-        {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]}
+        {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]},
+        {id: "software-update", title: qsTr("Software Update"), keywords: [qsTr("update"), qsTr("upgrade"), qsTr("new version"), qsTr("beta")]}
     ].map(p => Object.assign({icon: SettingsPages.PAGES.find(d => d.id === p.id).icon}, p))
 
     // Latency log (P4): timestamps taken at the IPC call and at the keystroke.
