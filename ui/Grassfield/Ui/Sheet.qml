@@ -1,8 +1,11 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
 
-// Modal sheet over its window: a title, a message, an optional text field and Cancel / confirm buttons. Return confirms,
-// Esc cancels, a click outside the panel is swallowed. Used for Go to Folder and for irreversible actions (Empty Trash).
+// Modal sheet over its window: a title, a message, an optional text field and Cancel / confirm buttons, with more buttons
+// at the leading edge when asked (macOS: "Keep Both", "Show Certificate"). Return confirms (or cancels: returnCancels),
+// Esc cancels, a click outside the panel is swallowed. Used for Go to Folder, for irreversible actions (Empty Trash) and
+// for KIO's questions in Files (apps/files/qml/KioSheets.qml).
 // Declare it as a child of the window's content; it fills it. The panel is a QtQuick.Templates Pane on the frosted material.
 Item {
     id: root
@@ -23,6 +26,12 @@ Item {
     property bool showCancel: true
     // The cancel button's text (Displays' countdown sheet says "Revert").
     property string cancelText: qsTr("Cancel")
+    // Buttons at the leading edge of the button row, [{id, text}]: a click emits extra(id) and leaves the sheet open (the
+    // host closes it, or changes it: "Show Certificate"). Where the row is too narrow they take a row of their own above.
+    property var extraButtons: []
+    // Return cancels and the cancel button is the default one: for a choice the user should not take by habit (connect
+    // to a server whose identity can't be verified).
+    property bool returnCancels: false
     // Content between the text and the buttons.
     default property alias body: bodySlot.data
     readonly property alias fieldText: field.text
@@ -30,6 +39,7 @@ Item {
 
     signal accepted
     signal canceled
+    signal extra(string id)
 
     anchors.fill: parent
     visible: false
@@ -97,7 +107,10 @@ Item {
                 root.cancel();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.confirm();
+                if (root.returnCancels)
+                    root.cancel();
+                else
+                    root.confirm();
                 event.accepted = true;
             }
         }
@@ -170,21 +183,49 @@ Item {
                     Accessible.name: root.errorText
                 }
 
-                Row {
-                    anchors.right: parent.right
-                    spacing: Tokens.spacingSm
+                Item {
+                    id: buttonRow
+                    // The extra buttons on a row of their own when the two groups don't fit side by side.
+                    readonly property bool stacked: root.extraButtons.length > 0 && extraRow.implicitWidth + Tokens.spacingLg + mainRow.implicitWidth > width
+                    width: parent.width
+                    height: buttonRow.stacked ? extraRow.implicitHeight + Tokens.spacingSm + mainRow.implicitHeight : Math.max(extraRow.implicitHeight, mainRow.implicitHeight)
 
-                    Button {
-                        visible: root.showCancel
-                        text: root.cancelText
-                        onClicked: root.cancel()
+                    Row {
+                        id: extraRow
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        spacing: Tokens.spacingSm
+
+                        Repeater {
+                            model: root.extraButtons
+
+                            Button {
+                                required property var modelData
+                                text: modelData.text
+                                onClicked: root.extra(modelData.id)
+                            }
+                        }
                     }
 
-                    Button {
-                        text: root.confirmText
-                        primary: !root.destructive
-                        destructive: root.destructive
-                        onClicked: root.confirm()
+                    Row {
+                        id: mainRow
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        spacing: Tokens.spacingSm
+
+                        Button {
+                            visible: root.showCancel
+                            text: root.cancelText
+                            primary: root.returnCancels
+                            onClicked: root.cancel()
+                        }
+
+                        Button {
+                            text: root.confirmText
+                            primary: !root.destructive && !root.returnCancels
+                            destructive: root.destructive
+                            onClicked: root.confirm()
+                        }
                     }
                 }
             }
