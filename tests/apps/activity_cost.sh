@@ -12,8 +12,10 @@
 #   Exit 0 every tab within its threshold (or SKIP without g++), 1 a tab over, 2 usage or a refused run.
 #
 # Run as the user the app will run as, never as root: root reads every process's io and descriptors, which is not the
-# user's cost. The thresholds are those of the spec (A10's worst run plus about 30 %, measured on the cloud machine of
-# step 0); step 1 records this script's numbers on the reference machine, and the integrator sets them again if they differ.
+# user's cost. The thresholds are those of the spec (AM-P2): the integrator set them on the reference machine (i5-10400H,
+# 8 threads, kernel 7.2.5, the owner's live session, load 2.0, outside any sandbox) on 2026-10-28 from probe A10's worse of
+# two runs at idle plus about 30 % (A10: CPU 13.0, Memory 19.1, Energy 30.8, Disk 13.3, Network 34.6 ms; pull request #40,
+# the integrator's comment of 18:59 UTC). Step 0's limits, from the cloud machine, were 6, 10, 13, 7 and 7 ms.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd "$root"
@@ -35,7 +37,7 @@ done
 [[ $(id -u) != 0 ]] || { echo "refused: run as the app's user, not root (root's reads are not the user's cost)"; exit 2; }
 command -v g++ >/dev/null || { echo "SKIP: g++ is not installed"; exit 0; }
 
-declare -A limit=([cpu]=6 [memory]=10 [energy]=13 [disk]=7 [network]=7) # ms per sample, AM-P2
+declare -A limit=([cpu]=17 [memory]=25 [energy]=40 [disk]=17 [network]=45) # ms per sample, AM-P2 (reference machine)
 
 apps/activity/build-direct.sh --bench >/dev/null || { echo "FAIL: building activity-sampler-bench"; exit 1; }
 bench=$root/.dev/build/activity-sampler-bench

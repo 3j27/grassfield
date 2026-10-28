@@ -213,12 +213,15 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   update frequency. Nothing else wakes the app.
 - **Budget (AM-P1 to AM-P4, `tests/apps/activity_cost.sh`).** One sample's CPU time on the sampler's thread
   (`CLOCK_THREAD_CPUTIME_ID`) for the reference fixture of A10 (about 600 processes, 1 600 threads, 6 800 descriptors, 220
-  TCP sockets): **CPU ≤ 6 ms, Memory ≤ 10 ms, Disk ≤ 7 ms, Energy ≤ 13 ms, Network ≤ 7 ms**, A10's worst run (4.7, 7.7, 5.1,
-  10.3 and 5.2 ms) plus about 30 %. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
+  TCP sockets): **CPU ≤ 17 ms, Memory ≤ 25 ms, Disk ≤ 17 ms, Energy ≤ 40 ms, Network ≤ 45 ms** on the reference machine,
+  A10's worse of two runs there at idle (13.0, 19.1, 13.3, 30.8 and 34.6 ms) plus about 30 %, set by the integrator on
+  2026-10-28 (pull request #40; step 1). Step 0's limits, from the cloud machine (6, 10, 7, 13 and 7 ms), were 3 to 6 times
+  below the reference machine's costs. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
   sec) on every tab; at Very Often (1 sec) ≤ 1.5 % on CPU, Memory, Disk and Network and ≤ 2 % on Energy; ≤ 0.1 % minimized
-  with a Dock graph at 5 s; PSS ≤ 120 MB after 10 minutes and < 5 MB of growth over an hour. A10 ran on this cloud machine:
-  step 1 measures the same fixture on the reference machine (i5-10400H) and the integrator sets the thresholds again from
-  those numbers if they differ. The app lists itself, as macOS does, so the user sees its cost too.
+  with a Dock graph at 5 s; PSS ≤ 120 MB after 10 minutes and < 5 MB of growth over an hour (AM-P1 to AM-P4 are step 2's
+  gates, measured on the whole app; on the reference machine, 0.5 % of a core at 5 s is 25 ms a sample and 1.5 % at 1 s is
+  15 ms, below some AM-P2 limits, so the integrator sets them again with step 2's measures). The app lists itself, as macOS
+  does, so the user sees its cost too.
 - **Step 1, measured** (`tests/apps/activity_cost.sh --model` on the product sampler, as an unprivileged user in a throwaway
   container on this cloud machine, 608 processes of which 404 own, 1 600 threads, 100 TCP connections; median of 101
   samples, then probe A10 on the same fixture in the same run): after the review of 949fc98, CPU 2.6–2.8 ms, Memory

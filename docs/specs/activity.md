@@ -483,17 +483,23 @@ contention.
 
 ## Performance (gates; one threshold per tab, from ADR-0038 A10, review of e3882de)
 The reference fixture is A10's: about 600 processes (400 of the user with 4 threads and about 17 descriptors each, 200 of
-another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. The thresholds below are A10's worst run plus
-about 30 %, on the cloud machine that ran it; step 1 runs the same fixture on the reference machine (i5-10400H) and the
-integrator sets them again from those numbers if they differ. Each is measured per tab, the window visible on that tab.
+another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. The AM-P2 thresholds below are A10's worse of
+two runs plus about 30 % on the reference machine, set by the integrator on 2026-10-28 (i5-10400H, 8 threads, kernel
+7.2.5, the owner's live session at idle, load average 2.0, outside any sandbox; pull request #40, the integrator's comment
+of 18:59 UTC). Step 0's thresholds came from the cloud machine (A10 there: 4.7, 7.7, 10.3, 5.1 and 5.2 ms; limits 6, 10,
+13, 7 and 7 ms), 3 to 6 times faster than the reference machine. Each is measured per tab, the window visible on that tab.
 
-| Tab | One sample (AM-P2), sampler thread's CPU time | A10 worst run | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
+| Tab | One sample (AM-P2), sampler thread's CPU time | A10 worse run, reference machine | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
 |---|---|---|---|---|
-| CPU | ≤ 6 ms | 4.7 ms | ≤ 0.5 % of one core | ≤ 1.5 % |
-| Memory | ≤ 10 ms | 7.7 ms | ≤ 0.5 % | ≤ 1.5 % |
-| Energy | ≤ 13 ms | 10.3 ms | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 7 ms | 5.1 ms | ≤ 0.5 % | ≤ 1.5 % |
-| Network | ≤ 7 ms | 5.2 ms | ≤ 0.5 % | ≤ 1.5 % |
+| CPU | ≤ 17 ms | 13.0 ms | ≤ 0.5 % of one core | ≤ 1.5 % |
+| Memory | ≤ 25 ms | 19.1 ms (`status` every sample, step 0's reads) | ≤ 0.5 % | ≤ 1.5 % |
+| Energy | ≤ 40 ms | 30.8 ms | ≤ 0.5 % | ≤ 2 % |
+| Disk | ≤ 17 ms | 13.3 ms | ≤ 0.5 % | ≤ 1.5 % |
+| Network | ≤ 45 ms | 34.6 ms | ≤ 0.5 % | ≤ 1.5 % |
+
+The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
+sample, and 1.5 % (2 % on Energy) at Very Often (1 sec) is 15 ms (20 ms): below AM-P2's limits for some tabs. AM-P1 is
+measured on the whole app at step 2, and the integrator sets it again then (open, step 1).
 
 - **AM-P1** The app's whole CPU (Δ utime + stime of its own `stat` over 10 minutes, sampler and window together) with the
   window visible on the tab, at the rates above.
