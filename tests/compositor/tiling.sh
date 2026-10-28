@@ -772,12 +772,30 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     fx=$((x + w / 2 - mx)) fy=$((y + h / 2 - my))
     with_mod logo $(($3 + 1800)) abs "$fx" "$fy" sleep 100 down sleep 150 drag $(((fx + tx) / 2)) $(((fy + ty) / 2)) sleep 150 drag "$tx" "$ty" sleep "$3" up
   }
-  # The foot window Free at its size from before, at (300, 200) on GF-REF, focused.
+  # The foot window Free at its size from before, at (300, 200) on GF-REF, focused; waits until it is there (the next case
+  # reads its box: under load a fixed pause read the box before the move, integrator nested pass of ce82fd3).
   free_foot() {
+    local _ x y _w _h _a
     nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
     nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
-    sleep 0.8
+    for _ in $(seq 1 30); do
+      read -r x y _w _h _a < <(geometry)
+      (( ${x:-0} - mx - 300 <= 1 && mx + 300 - ${x:-0} <= 1 && ${y:-0} - my - 200 <= 1 && my + 200 - ${y:-0} <= 1 )) && break
+      sleep 0.1
+    done
+    sleep 0.3
+  }
+  # The foot window's box reaches X Y W H (surface, 1 px slack) within 3 s: a gesture's own result, not a fixed pause; is_box
+  # logs the last look.
+  box_reached() { # x y w h
+    local _ x y w h _a
+    for _ in $(seq 1 30); do
+      read -r x y w h _a < <(geometry)
+      (( x - $1 <= 1 && $1 - x <= 1 && y - $2 <= 1 && $2 - y <= 1 && w - $3 <= 1 && $3 - w <= 1 && h - $4 <= 1 && $4 - h <= 1 )) && break
+      sleep 0.1
+    done
+    is_box "$@"
   }
   delay=$(jq -r '.tiling.previewDelay.value' "$root/ui/tokens/tokens.json")
   say "step 2: preview delay $delay ms (token tiling.previewDelay)"
@@ -828,8 +846,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   read -r x y w h _a < <(geometry)
   bx=$((x + w + 3 - mx)) by=$((y + h / 2 - my)) # 3 px right of the surface: Hyprland's border grab (resize_on_border)
   pointer abs $((bx + 40)) "$by" sleep 150 abs "$bx" "$by" sleep 200 click sleep 120 click
-  sleep 0.8
-  check "edge: a double-click on the right border extends the right side to the work area's edge" is_box "$x" "$y" $((ax + aw - m - x)) "$h"
+  check "edge: a double-click on the right border extends the right side to the work area's edge" box_reached "$x" "$y" $((ax + aw - m - x)) "$h"
   check "edge: the window is tiled with its right side extended (sides \"right\")" sides_are "$addr" right
 
   free_foot
@@ -837,7 +854,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   read -r x y w h _a < <(geometry)
   cx=$((x + w + 3 - mx)) cy=$((y + h + 3 - my))
   with_mod alt 2600 abs $((cx + 40)) $((cy + 40)) sleep 150 abs "$cx" "$cy" sleep 200 click sleep 120 click
-  check "alt-corner: an Alt double-click on the bottom-right corner fills the work area" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
+  check "alt-corner: an Alt double-click on the bottom-right corner fills the work area" box_reached $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
   free_foot
 
   if command -v chromium >/dev/null; then
