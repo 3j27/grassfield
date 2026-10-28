@@ -106,8 +106,10 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   to install from it.") or when a repository has its name ("A repository has this package: the Store installs it from
   there, from its own page."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
   a square in it while the operation waits in the queue, which takes it out.
-- SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »), "Install from the AUR"
-  (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
+- SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »). For the AUR the button is
+  "Install from the AUR" (« Installer depuis l'AUR ») and the default is Cancel: Return and Esc close the sheet, the
+  install takes a click or Tab and Space (common rule 3: the build runs the package's script before any password; the
+  integrator's decision at 3b2's review). It lists: source, licence, sizes, every package the plan adds (from `pacman -S
   --print` as the user), for a setup first what it changes (our catalog's text) and that Omarchy's recipe (named, with its
   arguments) runs in a Terminal window that asks for the password, for the AUR the warning (SR16), for a Flatpak what it
   can reach and the runtimes it pulls. For the AUR (ADR-0037 SD22) the list has what yay builds, marked "AUR", then what
@@ -238,7 +240,10 @@ Settings window (Ctrl+, ; step 2 reads, step 3 writes)
   `grassfield.json` (`store.sources.aur`, `store.sources.flathub`, `store.screenshots`), written by the Store with the
   settings contract's rules as Settings writes its own keys, until the shell is the single writer (ADR-0020 item 4,
   ADR-0037 SD20); a change made elsewhere is followed while the Store runs. Turning the AUR off hides its results, pages
-  and group at once.
+  and group at once. "What the Store Fetches" names what the AUR is sent whether it is on or off (read before turning it
+  on); while it is on, its closing line says that Return sends the search to the AUR and that a metered connection
+  still lets through what the user asks for (Refresh, Return, an AUR page); nothing is asked by itself there (the
+  foreign packages' names wait for an unmetered connection).
 
 Offline
 - SR29. ADR-0037 "Offline": the bar "You're offline. The catalog is from 27 October." (« Vous êtes hors ligne. Le catalogue date
@@ -310,6 +315,7 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A catalog without valid Omarchy pins, or a setup whose recipes they do not name | the setup is dropped (ADR-0037 g) |
 | An AUR install while the AUR source is off | not offered: "Turn on the AUR in the Store's settings to install from it." |
 | An AUR package whose name a repository has | not offered from the AUR (its repository page installs it); the plan and `grassfield-store-run` refuse it too (ADR-0037 b.2, exit 7) |
+| An AUR name a repository resolves otherwise (a package that provides it, a group) | the plan refuses it: "A repository has this package, or one that provides it: the Store installs it from there, without building it."; `grassfield-store-run` too (`pacman -Sp`, exit 7) |
 | An AUR package, or one of its dependencies, that neither the repositories nor the AUR have | the sheet: "The AUR doesn't have this package (anymore)." or "It needs …, which neither the repositories nor the AUR have."; nothing runs |
 | A catalog that does not pin the AUR's two commands, or an installed Omarchy that differs from its pins | every AUR Get and Uninstall… dimmed with "Installing from the AUR hasn't been checked with your version of Omarchy yet" (SD21); `grassfield-store-run` refuses it too (exit 5) |
 | The system changed between the sheet and the terminal (a repository has the name now; a package now protected, needed or no longer installed explicitly) | `grassfield-store-run` refuses it under the lock (exit 7), nothing run; "The installation was refused: the system changed since the Store checked it. Try again from its page." (SD23) |
@@ -353,7 +359,8 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 - Environment: `GRASSFIELD_STORE_QML` (the QML directory, as the other apps' `_QML`; the installed one by default). Dev
   plumbing, honoured only in a dev session and inert in a packaged one (ADR-0019, `apps/store/src/storeenv.h`):
   `GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`, `GRASSFIELD_STORE_OFFLINE` (`1`:
-  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession). Command line:
+  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession; step 3b2:
+  `metered` online on a metered connection, `0` online and unmetered, used by StoreBackend.TheAur). Command line:
   `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
   Step 3a adds `GRASSFIELD_STORE_PKEXEC` (the program run in pkexec's place for the helper's operations) and
   `GRASSFIELD_STORE_INSTALLER` (the program run in place of Omarchy's commands and of Open's launchers: it gets the command's

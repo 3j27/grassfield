@@ -371,9 +371,13 @@ and the recipes call sudo themselves and write in the user's home, so the helper
   `grassfield-store-run <op-id> <deadline> aur omarchy-pkg-aur-add <name>` to install (yay builds, sudo installs, in the
   user's terminal) and `... aur omarchy-pkg-drop <name>` to remove (`sudo pacman -Rns`). The Store passes one package per
   operation, the one the user chose (SD22); the script accepts 1 to 4 names. The command is checked like a setup's recipe:
-  an executable file of Omarchy's `bin/`, one of the catalog's pins, every pin matching (exit 5). Then, under the lock,
-  the script checks the AUR's plan again (exit 7, nothing run): an install only of names no repository has (`pacman -Slq`:
-  yay would install a repository's package of that name); a removal only of packages installed explicitly (`-Qqe`) from
+  an executable file of Omarchy's `bin/`, one of the catalog's pins (for `omarchy-pkg-aur-add`, with the
+  `omarchy-pkg-missing` it calls first; the Store asks the same of the catalog), every pin matching (exit 5). The script's
+  checks run in the C locale, as the Store's and the helper's children (bash's `[a-z]` follows the locale's collation:
+  under en_US.UTF-8 "exämple" would pass), the recipe in the user's own. Then, under the lock, the script checks the AUR's
+  plan again (exit 7, nothing run): an install only of names pacman does not resolve from the repositories (`pacman -Sp`,
+  as the user: a package of that name, a provider of it or a group is what yay would install; the Store's plan asks the
+  same); a removal only of packages installed explicitly (`-Qqe`) from
   outside the repositories (`-Qqm`), that b.1's deny list does not name (the helper's case list, copied as it is, Omarchy's
   two lists read from `$OMARCHY_PATH/install`, `HoldPkg`), and whose whole `pacman -Rs --print` plan names no denied
   package (read one name a line, never as words or patterns). No application entry is needed: the user installed it from
@@ -427,7 +431,8 @@ nothing ever signals pacman.
   through dev plumbing), a 15 s transfer timeout (5 minutes for the AppStream package) and a size cap (catalog 1 MiB, icon
   256 KiB, screenshot 4 MiB, AUR answer 512 KiB, AppStream package 64 MiB, its signature 4 KiB). Nothing that identifies
   the user or the machine leaves it: no installed-app list, no identifier, no telemetry, no search query to Grassfield's host (search is local; AUR
-  searches go to the AUR, ST7). Metered connections: no automatic fetch.
+  searches go to the AUR, ST7). Metered connections: no automatic fetch (the AUR's names of the foreign packages included,
+  3b2's review); what the user asks for (Refresh, Return, a page opened) goes.
 - **Cache (bounded, ADR-0020 classes).** `$XDG_CACHE_HOME/grassfield/store/` (regenerable): the verified catalog per channel
   with its ETag, catalog icons (32 MiB, least recently used first), screenshots (128 MiB, 30 days), AUR answers (4 MiB, 1 h),
   the fetched AppStream (one version, at most 64 MiB); AUR answers are files of `aur/` (`info/<name>.json`, `search/<key>`,
@@ -503,10 +508,14 @@ nothing ever signals pacman.
    package, installed, or fetched and checked by its own signature with pacman's keyring (S17); AUR answers, Flathub data
    and screenshots are third-party: bounded, never executed, never rendered as rich text. An AUR package's PKGBUILD is
    shown as plain text on request, never run by the Store (yay builds it, in Omarchy's terminal).
-7. **The AUR warning** before every AUR install (the sheet's first paragraph, every time; its default button "Install from
-   the AUR"), and the AUR's facts on the product page: maintainer (or "orphaned"), votes, popularity, last change,
-   out-of-date flag, and "View Build Script" (the PKGBUILD as plain text). The sheet lists what yay builds (marked "AUR")
-   and what pacman adds from the repositories, and says when a dependency could not be read (the build may install more).
+7. **The AUR warning** before every AUR install (the sheet's first paragraph, every time), and the AUR's facts on the
+   product page: maintainer (or "orphaned"), votes, popularity, last change, out-of-date flag, and "View Build Script" (the
+   PKGBUILD as plain text, saying that yay fetches it again when it builds and that the package's other files, such as
+   its install script run with administrator rights, are not shown). The sheet lists what yay builds (marked "AUR") and
+   what pacman adds from the repositories, and says when a dependency could not be read (the build may install more). Its
+   default button is **Cancel** (the integrator's decision at 3b2's review, common rule 3: the build runs the package's
+   script as the user before any password, so Return never starts it); "Install from the AUR" takes a click, or Tab and
+   Space (`Sheet.returnCancels`, as the certificate-override sheet of `system-dialogs.md`).
 8. **Dev sessions (ADR-0019)** never install, uninstall or start Omarchy's commands, pkexec or flatpak operations: the queue
    runs fake programs only (dev plumbing `GRASSFIELD_STORE_INSTALLER` for b.2 and b.3, `GRASSFIELD_STORE_PKEXEC` for b.1;
    both come with step 3);
@@ -772,8 +781,8 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD19 | What the catalog's Omarchy pins guard in the Store (3b1) | the whole set: any pinned file of the installed Omarchy that differs or is missing refuses every setup, until a catalog checked with that Omarchy comes · each setup's own files only (the files it runs or reads, transitively) | the whole set | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the pins record what a person read for one Omarchy release (g); which file each setup reaches is the scan's reading, not part of the signed file, and shared helpers (the 32-bit drivers of the game setups) differ for several setups at once; Omarchy's updates replace its files together. (b) one reason for every setup, nothing to do but wait for the next catalog (each run of the Store reads the system again); a setup never runs a file no one has read |
 | SD20 | Who writes the Store's preferences (`store.sources.aur`, `store.screenshots`, then `store.sources.flathub` in 3c) in `grassfield.json` (3b2) | the Store itself, as the Settings app writes its own keys today: the file read whole, every other key kept in its order, a malformed, unsafe or newer file never written, an atomic replace (`QSaveFile`, 1 MiB at most); until the shell's single writer of ADR-0020 item 4 exists · wait for that writer, the switches read only · a file of the Store's own | the Store, with the contract's rules | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's App Store settings take effect when switched; (b) nothing to edit by hand. The keys are in the schema and the generated contract, read with its rule (not a boolean: the default); when the single writer comes, the Store sends its keys there like Settings (C6/C7) |
 | SD21 | Which Omarchy commands the AUR runs, and what vouches for them (3b2) | Omarchy's own `omarchy-pkg-aur-add` and `omarchy-pkg-drop` (Omarchy's menu installs and removes AUR packages with them), pinned by the catalog always, whether or not it lists an AUR app; every AUR operation refused ("not checked with your version of Omarchy yet") while the catalog does not pin both or the installed Omarchy differs (SD19's rule) · `yay` and `pacman -Rns` run by the script itself · the commands unpinned | Omarchy's two commands, pinned always | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) the AUR installs as in Omarchy's own menu, in Omarchy's terminal; (b) nothing to configure. The same control as the setups: a person read the files for that Omarchy release (grassfield-packages' scan and pins, ADR-0037 g), the script checks them again |
-| SD22 | How much one AUR operation does, its plan and its success (3b2) | one AUR package per operation, the one the user chose; the plan before the sheet: no repository has the name (else the repository's page installs it), the AUR knows it, the dependencies the system lacks (`pacman -T`) split into those pacman resolves (checked as any install: `pacman -S --print`, never an upgrade, the first file on the mirror) and those asked of the AUR in turn (at most 25 packages in 6 rounds; one the AUR does not have refuses the plan, one it cannot read marks it incomplete); success by name for what yay builds · several packages per operation · no plan, yay's own prompts | one package, the plan, success by name | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) the sheet lists what the operation adds before anything runs, as for every source; (b) yay's questions never reach the user (`--noconfirm`, Omarchy's own flags), and an AUR package's version is whatever its build makes, unknown before it |
-| SD23 | The script's AUR checks and their exit code (3b2) | `grassfield-store-run` kind `aur`: the add refuses a name a repository has; the drop requires a package installed explicitly from outside the repositories, not denied, whose whole `-Rs` plan names no denied package; a refusal is exit 7, nothing run (the Store says "The installation was refused: the system changed since the Store checked it. Try again from its page.", or for a removal "This app can't be uninstalled from the Store.") · the Store's checks only | the script checks again, exit 7 | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the state can change between the sheet and the terminal (another window, Omarchy's menu); a check under the lock refuses what the plan no longer matches, the same way for every path (b.1's helper checks again too) |
+| SD22 | How much one AUR operation does, its plan and its success (3b2) | one AUR package per operation, the one the user chose; the plan before the sheet: pacman does not resolve the name from the repositories (`pacman -Sp`: a package of that name, a provider of it or a group; else the repositories install it), the AUR knows it, the dependencies the system lacks (`pacman -T`) split into those pacman resolves (checked as any install: `pacman -S --print`, never an upgrade, the first file on the mirror) and those asked of the AUR in turn (at most 25 packages in 6 rounds; one the AUR does not have refuses the plan, one it cannot read marks it incomplete); success by name for what yay builds · several packages per operation · no plan, yay's own prompts | one package, the plan, success by name | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) the sheet lists what the operation adds before anything runs, as for every source; (b) yay's questions never reach the user (`--noconfirm`, Omarchy's own flags), and an AUR package's version is whatever its build makes, unknown before it |
+| SD23 | The script's AUR checks and their exit code (3b2) | `grassfield-store-run` kind `aur`: the add refuses a name pacman resolves from the repositories (the package, a provider, a group); the drop requires a package installed explicitly from outside the repositories, not denied, whose whole `-Rs` plan names no denied package; a refusal is exit 7, nothing run (the Store says "The installation was refused: the system changed since the Store checked it. Try again from its page.", or for a removal "This app can't be uninstalled from the Store.") · the Store's checks only | the script checks again, exit 7 | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the state can change between the sheet and the terminal (another window, Omarchy's menu); a check under the lock refuses what the plan no longer matches, the same way for every path (b.1's helper checks again too) |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -1031,3 +1040,25 @@ Opus security re-review of 19d2e9e..64cdaa9 (integrator, 2026-10-28): PASS, one 
   no longer depends on how pacman answers; `store_helper.sh` installs `gs-app` by name while IgnorePkg holds it at 1 with 2
   in the repository and expects exit 5, `gs-app` unchanged and that reason in the log. The sheet's scroll reset on a new
   request, the one mutant the re-review saw survive, has its check in `tst_authdialog` test_13.
+
+Integrator review of step 3b2 (grassfield PR #36 at 48e2463, opus security; 2026-10-28): FAIL, one gate failure. Each
+finding and what changed:
+- MAJOR, gate Q1: qmllint flagged `tst_storepreferences.qml` (`this.file`, `this.written` on a plain object); the fake
+  backend keeps its state in closure variables. The audit's lint had covered only the Store's own QML: the Store's QML
+  tests are now linted with the script's flags too.
+- Decided by the integrator: the AUR sheet's default button is Cancel (common rule 3); e.7 and SR14 say so; `Sheet` gains
+  `returnCancels` (worded as the one PR #33 adds, so the two meet without conflict).
+- MINOR: the script's name and token checks followed the locale (bash's ranges): it runs its checks with `LC_ALL=C` and
+  gives the recipe the user's own locale back; `store_run.sh` generates en_US.UTF-8 and checks "exämple", "ﬁle", "ab²"
+  and an operation id with "á" (exit 2) and the recipe's locale.
+- MINOR: the foreign names were asked of the AUR on a metered connection: no longer (c); dev plumbing
+  `GRASSFIELD_STORE_OFFLINE=metered` (and `0`, online whatever the network) makes it testable.
+- MINOR: the settings window's privacy lines: the AUR's line shows whether the AUR is on or off, and the closing line
+  says what leaves while it is on.
+- MINOR: the repository check matched exact names; the Store's plan and the script now refuse whatever pacman resolves
+  (`-Sp`: a provider, a group), a pacman that does not answer is no answer.
+- MINOR, test gaps: the gates of the AUR's requests, the foreign-names ask, `storeApp`, the explicit-only removal, the
+  plan's resolution and the catalog's `aurOff` and `aurUnchecked` each have a test that fails without them.
+- INFO: View Build Script now says that yay fetches the script again and that the package's other files are not shown.
+- From grassfield-packages #12's note: `omarchy-pkg-missing`, which `omarchy-pkg-aur-add` calls, must be pinned too; the
+  Store (`requiredPins`) and the script require it.
