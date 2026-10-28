@@ -155,7 +155,10 @@ QString localPath(const QString &uri)
     const QUrl url(uri, QUrl::StrictMode);
     if (!url.isValid() || url.scheme() != QLatin1String("file") || !url.host().isEmpty() || url.hasQuery() || url.hasFragment())
         return {};
-    const QString path = url.toLocalFile();
+    QString path = url.toLocalFile();
+    // A folder may come with a trailing "/" (KIO's places): the same folder.
+    if (path.size() > 1 && path.endsWith(u'/'))
+        path.chop(1);
     if (!path.startsWith(u'/') || QDir::cleanPath(path) != path || path.contains(QChar(u'\0')))
         return {};
     return path;

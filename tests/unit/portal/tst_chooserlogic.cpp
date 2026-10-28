@@ -108,6 +108,11 @@ TEST_F(ChooserLogic, AnswersThatBreakTheInterfaceAreRefused)
     EXPECT_FALSE(results(one, {{QStringLiteral("uris"), QVariantList{"file:///tmp/../etc/passwd"}}}).ok);
     EXPECT_FALSE(results(one, {{QStringLiteral("uris"), QVariantList{"relative/path"}}}).ok);
     EXPECT_TRUE(results(one, {{QStringLiteral("uris"), QVariantList{"file:///tmp/a"}}}).ok);
+    // A folder with a trailing "/" is that folder.
+    EXPECT_EQ(results(parse(Kind::Open, {}, {}, {}, {{QStringLiteral("directory"), true}}), {{QStringLiteral("uris"), QVariantList{"file:///tmp/dir/"}}})
+                  .map.value("uris").toStringList(),
+              QStringList{QStringLiteral("file:///tmp/dir")});
+    EXPECT_FALSE(results(one, {{QStringLiteral("uris"), QVariantList{"file:///tmp//a"}}}).ok);
 
     // A choice value the choice does not allow is its initial value; a filter index out of range is the current filter.
     const Request c = parse(Kind::Open, {}, {}, {},
