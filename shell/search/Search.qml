@@ -243,8 +243,9 @@ Scope {
         for (const e of list) {
             if (!Apps.isListed(e))
                 continue;
-            out.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
-                keywords: Array.from(e.keywords), icon: e.icon, entry: e});
+            // Name, generic name, comment and keywords in the shell's language (Apps.localized).
+            out.push({id: e.id, name: Apps.displayName(e), genericName: Apps.displayGenericName(e), comment: Apps.displayComment(e),
+                keywords: Apps.displayKeywords(e), icon: e.icon, entry: e});
         }
         // Two apps of one name are told apart (Files and Files (GNOME)), as in Apps; nothing is hidden.
         appRecords = Model.disambiguate(out);
