@@ -6,7 +6,10 @@
 // versions already announced; Settings reads that file.
 
 const STATES = ["not-set-up", "repair", "blocking", "up-to-date", "available", "failed", "update-running", "busy"];
-const SUCCESS = ["up-to-date", "available"];
+// A check that worked: `not-set-up` too, which lists the system's updates without Grassfield's (ADR-0033 "Step 2 as built").
+const SUCCESS = ["up-to-date", "available", "not-set-up"];
+// The answers that carry releases.
+const LISTING = ["available", "not-set-up"];
 // The checker caps its line at 256 KiB; anything longer is not one of its answers.
 const MAX_TEXT = 300 * 1024;
 const MAX_ANNOUNCED = 32;
@@ -73,7 +76,7 @@ function successPart(a) {
 
 // The file after an answer: the answer, the announced versions and the pending logout kept, and, when the answer is a
 // failure (failed, blocking, update-running), the last successful answer as `previous`, so what was found stays shown with
-// its time. not-set-up and repair keep nothing: no Grassfield repository is checked then. A busy answer (another run of
+// its time. not-set-up (a success without Grassfield's repository) and repair keep nothing. A busy answer (another run of
 // the checker holds its lock) changes nothing: null.
 function combine(file, answer) {
     if (!isObject(answer) || answer.state === "busy")
@@ -92,10 +95,11 @@ function combine(file, answer) {
     return out;
 }
 
-// The number of releases available (owner decision O3: Grassfield's and Omarchy's, 0 to 2), from the last success.
+// The number of releases available (owner decision O3: Grassfield's and Omarchy's, 0 to 2), from the last success; with
+// Grassfield updates off (not-set-up), Omarchy's still counts.
 function releases(file) {
     const s = lastSuccess(file);
-    if (!s || s.state !== "available")
+    if (!s || LISTING.indexOf(s.state) < 0)
         return 0;
     return (isObject(s.grassfield) && s.grassfield.available ? 1 : 0) + (isObject(s.omarchy) && s.omarchy.available ? 1 : 0);
 }
@@ -105,7 +109,7 @@ function releases(file) {
 function news(file, answer) {
     const announced = normalize(file).announced;
     const out = [];
-    if (isObject(answer) && answer.state === "available") {
+    if (isObject(answer) && LISTING.indexOf(answer.state) >= 0) {
         for (const kind of ["grassfield", "omarchy"]) {
             const r = answer[kind];
             if (isObject(r) && r.available)
@@ -237,6 +241,7 @@ function view(file, checking) {
     const known = STATES.indexOf(f.state) >= 0 && f.state !== "busy";
     const channel = s && s.channel ? s.channel : (f.channel || "");
     const others = s && typeof s.others === "number" && s.others > 0 ? s.others : 0;
+    const listing = s !== null && LISTING.indexOf(s.state) >= 0;
     return {
         kind: checking ? "checking" : known ? f.state : "never",
         error: f.state === "failed" ? String(f.error || "unavailable") : "",
@@ -245,14 +250,14 @@ function view(file, checking) {
         lastSuccessAt: s ? timeOf(s.checkedAt) : 0,
         channel: channel,
         repair: f.state === "repair" || channel === "custom",
-        grassfield: s && s.state === "available" && isObject(s.grassfield) && s.grassfield.available ? s.grassfield : null,
-        omarchy: s && s.state === "available" && isObject(s.omarchy) && s.omarchy.available ? s.omarchy : null,
+        grassfield: listing && isObject(s.grassfield) && s.grassfield.available ? s.grassfield : null,
+        omarchy: listing && isObject(s.omarchy) && s.omarchy.available ? s.omarchy : null,
         installed: {
             grassfield: s && isObject(s.grassfield) ? String(s.grassfield.installed || "") : "",
             omarchy: s && isObject(s.omarchy) ? String(s.omarchy.installed || "") : ""
         },
-        others: s && s.state === "available" ? others : 0,
-        otherPackages: s && s.state === "available" && Array.isArray(s.otherPackages) ? s.otherPackages : [],
+        others: listing ? others : 0,
+        otherPackages: listing && Array.isArray(s.otherPackages) ? s.otherPackages : [],
         otherPackagesTruncated: s && s.otherPackagesTruncated === true
     };
 }

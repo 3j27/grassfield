@@ -14,7 +14,9 @@ usage error or when started as root.
 
 What it does, in order (its own lock first: a second run answers `busy`):
   1. `pacman-conf --repo-list`: no [grassfield] -> `repair` when /etc/pacman.d/grassfield.conf exists, else `not-set-up`;
-     the [grassfield] lines without that file, or twice (pacman cannot run then) -> `repair` too;
+     the [grassfield] lines without that file, or twice (pacman cannot run then) -> `repair` too. `not-set-up` (never set
+     up, or turned off) still lists the system's updates: steps 4 and 5 run without [grassfield] (macOS always offers its
+     system updates; ADR-0033 "Step 2 as built", the integrator's decision of 2026-10-28);
   2. the channel: the file's first Server is <base>/stable/$arch or <base>/beta/$arch for this build's base, else `custom`;
   3. a sync of [grassfield] alone, under fakeroot, in its own database ($XDG_CACHE_HOME/grassfield/health-db) with
      checkupdates' --disable-sandbox-filesystem. A failure while online is counted: a second failure at least 15
@@ -305,8 +307,12 @@ class Checker:
         if rc != 0:
             return self.failed("unavailable", "pacman's configuration cannot be read")
         if "grassfield" not in out.split():
-            self.result["state"] = "repair" if conf_text is not None else "not-set-up"
-            return self.result
+            if conf_text is not None:
+                self.result["state"] = "repair"
+                return self.result
+            # Grassfield's own updates are off: its repository is not checked, the system's updates still are.
+            self.clear_stale_locks()
+            return self.system_updates("not-set-up", set())
         if conf_text is None:
             return self.failed("unavailable", f"{GRASSFIELD_CONF} cannot be read")
 
@@ -315,12 +321,7 @@ class Checker:
         if read_text(self.path("servers")) != signature:
             self.drop_grassfield()
             write_text(self.path("servers"), signature)
-        # Only one checker runs (its lock): a db.lck left in its own folders is stale (Q8).
-        for db in (self.checkup, self.health):
-            try:
-                os.unlink(os.path.join(db, "db.lck"))
-            except FileNotFoundError:
-                pass
+        self.clear_stale_locks()
 
         if not self.health_sync():
             return self.health_failed()
@@ -329,6 +330,21 @@ class Checker:
         except FileNotFoundError:
             pass
 
+        rc, names, _ = self.children.run(["pacman", "--config", self.path("health.conf"), "--dbpath", self.health,
+                                          "-Sql", "grassfield"], env=child_env())
+        return self.system_updates(None, set(names.split()) if rc == 0 else set())
+
+    def clear_stale_locks(self):
+        """Only one checker runs (its lock): a db.lck left in its own folders is stale (Q8)."""
+        for db in (self.checkup, self.health):
+            try:
+                os.unlink(os.path.join(db, "db.lck"))
+            except FileNotFoundError:
+                pass
+
+    def system_updates(self, state, grassfield):
+        """Steps 4 and 5: checkupdates, split into Grassfield's release, Omarchy's and the rest. `state`: the state of a
+        success (None: `available` or `up-to-date`); `grassfield`: the names [grassfield] lists."""
         rc, out, err = self.children.run(["checkupdates", "--nocolor"], env=child_env(CHECKUPDATES_DB=self.checkup))
         if rc not in (0, 2):
             return self.failed("offline" if self.offline else "unavailable",
@@ -338,14 +354,12 @@ class Checker:
             m = UPDATE_LINE.match(line.strip())
             if m:
                 updates[m.group(1)] = (m.group(2), m.group(3))
-        rc, names, _ = self.children.run(["pacman", "--config", self.path("health.conf"), "--dbpath", self.health,
-                                          "-Sql", "grassfield"], env=child_env())
-        grassfield = set(names.split()) if rc == 0 else set()
         omarchy = "omarchy-dev" if self.installed("omarchy-dev") else "omarchy"
 
         gf = self.result["grassfield"]
         gf["installed"] = self.installed("grassfield-desktop")
-        if "grassfield-desktop" in updates:
+        # Not set up: no Grassfield release is offered (its repository is not configured; another source's would not be ours).
+        if "grassfield-desktop" in updates and state != "not-set-up":
             gf["installed"], gf["available"] = updates["grassfield-desktop"]
         om = self.result["omarchy"]
         om["installed"] = self.installed(omarchy)
@@ -354,7 +368,7 @@ class Checker:
         others = sorted(n for n in updates if n not in grassfield and n != omarchy and not n.startswith("grassfield-"))
         self.result["others"] = len(others)
         self.result["otherPackages"] = [{"name": n, "installed": updates[n][0], "available": updates[n][1]} for n in others]
-        self.result["state"] = "available" if gf["available"] or om["available"] else "up-to-date"
+        self.result["state"] = state or ("available" if gf["available"] or om["available"] else "up-to-date")
         write_text(self.path("last-success"), str(int(self.now)))
         self.result["lastSuccessAt"] = iso(int(self.now))
         if gf["available"]:

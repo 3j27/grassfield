@@ -147,6 +147,21 @@ R102 = {"version": "1.0.2-1", "date": "2026-11-09", "notes": {"en": "Later."}}
 # -- states
 setup(listed=False, conf=False); r = run()
 check("no [grassfield] and no file -> not-set-up", r["state"] == "not-set-up" and r["channel"] is None, r)
+# Turned off (or never set up): the system's updates are still listed, without any [grassfield] sync (integrator decision
+# of 2026-10-28: macOS always offers its system updates; ADR-0033 "Step 2 as built").
+setup(listed=False, conf=False)
+put("updates", "omarchy 4.0.4-1 -> 4.0.6-1\nlinux 6.18.1-1 -> 6.18.2-1\ngrassfield-desktop 1.0.0-1 -> 1.0.1-1\n")
+r = run()
+check("not-set-up lists Omarchy's release and the other updates",
+      r["state"] == "not-set-up" and r["omarchy"]["available"] == "4.0.6-1" and r["others"] == 1
+      and [p["name"] for p in r["otherPackages"]] == ["linux"] and r["lastSuccessAt"] is not None, r)
+check("not-set-up: no [grassfield] sync, no Grassfield release, no notes fetched", not os.path.exists(S + "/fakeroot.log")
+      and r["grassfield"]["available"] is None and r["grassfield"]["notes"] == [], r)
+setup(listed=False, conf=False); put("checkupdates-fail", ""); r = run()
+check("not-set-up, checkupdates failing -> failed (not counted towards blocking)",
+      r["state"] == "failed" and r["error"] == "unavailable" and r["episode"] is None and r["retryAt"] is None, r)
+setup(listed=False, conf=False); put("checkupdates-fail", ""); r = run(offline=True)
+check("not-set-up, offline -> failed/offline", r["state"] == "failed" and r["error"] == "offline", r)
 setup(listed=False); r = run()
 check("the file without the [grassfield] lines -> repair (channel read from the file)", r["state"] == "repair" and r["channel"] == "stable", r)
 setup(); put("conf-broken", ""); r = run()

@@ -60,8 +60,24 @@ TestCase {
         compare(f.previous, undefined, "a success replaces it");
         compare(Logic.releases(f), 0);
         f = Logic.combine(Logic.combine(f, available("1.0.2-1")), answer("not-set-up"));
-        compare(f.previous, undefined, "turned off: nothing is checked any more, nothing kept");
+        compare(f.previous, undefined, "turned off: Grassfield's release is no longer checked, nothing kept");
         compare(Logic.releases(f), 0);
+    }
+
+    // Grassfield updates off (not-set-up) still lists the system's updates (the integrator's decision of 2026-10-28): Omarchy's
+    // release counts, is announced, shows in the pane, and stays through a failure.
+    function test_turnedOffStillListsTheSystemsUpdates() {
+        const off = answer("not-set-up", {channel: null, grassfield: {installed: "1.0.0-1", available: null, notes: [], notesError: null},
+            omarchy: {installed: "4.0.4-1", available: "4.0.6-1"}, others: 1, otherPackages: [{name: "linux", installed: "6.18.1-1", available: "6.18.2-1"}]});
+        let f = Logic.combine(Logic.normalize(null), off);
+        compare(Logic.releases(f), 1, "Omarchy's release");
+        compare(Logic.news(Logic.normalize(null), off).map(n => n.id), ["omarchy 4.0.6-1"]);
+        const v = Logic.view(f, false);
+        compare([v.kind, v.omarchy.available, v.grassfield, v.others, v.otherPackages.length], ["not-set-up", "4.0.6-1", null, 1, 1]);
+        f = Logic.combine(f, answer("failed", {error: "offline"}));
+        compare(f.previous.state, "not-set-up", "a failure keeps what the last check found");
+        compare(Logic.releases(f), 1);
+        compare(Logic.view(f, false).omarchy.available, "4.0.6-1");
     }
 
     function test_aBusyAnswerChangesNothing() {
