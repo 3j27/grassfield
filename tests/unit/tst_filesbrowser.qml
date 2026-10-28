@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../apps/files/qml"
 
 // The real Files windows offscreen (Main.qml, BrowserWindow.qml, BrowserTab.qml, InfoWindow.qml, CustomizeFolderWindow.qml,
@@ -148,6 +149,7 @@ TestCase {
         property var hiddenTags: []
         property string homePath: "/sandbox"
         property var places: places
+        property var prompts: fakePrompts
         // FilesApp.focusWindow is QGuiApplication::focusWindow(), which QML cannot read: the test sets it wherever it moves
         // the keyboard (test.giveKeys), as the compositor and Qt do in the app.
         property var focusWindow: null
@@ -218,6 +220,20 @@ TestCase {
         }
         function uriList(urls: var): string {
             return "";
+        }
+    }
+
+    // FilesApp.prompts (src/kioprompts.h): KIO's question on screen, and the replies.
+    QtObject {
+        id: fakePrompts
+        property var current: ({})
+        property var replies: []
+        function reply(id: int, answer: var): void {
+            fakePrompts.replies = fakePrompts.replies.concat([{
+                    id: id,
+                    button: answer.button
+                }]);
+            fakePrompts.current = ({});
         }
     }
 
@@ -452,6 +468,149 @@ TestCase {
         compare(files.windows.length, 1, "the browser window is still open");
         compare(browser.tabs.length, 1, "with its tab");
         test.verifyBrowserKeys(browser, false, true, "Customize Folder closed");
+    }
+
+    // The sheet of `browser`'s KioSheets (KIO's questions).
+    function kioSheet(browser: var): var {
+        const walk = item => {
+            if (item instanceof KioSheets) {
+                for (let i = 0; i < item.children.length; i++) {
+                    if (item.children[i] instanceof Sheet)
+                        return item.children[i];
+                }
+            }
+            for (let i = 0; i < item.children.length; i++) {
+                const found = walk(item.children[i]);
+                if (found)
+                    return found;
+            }
+            return null;
+        };
+        return walk(browser.contentItem);
+    }
+
+    // KIO's question (Main.qml placePrompt, KioSheets.qml) shows in the window the user last worked in, stays there when
+    // another window becomes the key window, and moves to another window when its own closes; Return answers it there.
+    function test_kioQuestionWindow() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        const first = files.windows[0];
+        const second = files.newWindow("file:///sandbox", null);
+        tryCompare(files.windows, "length", 2);
+        test.giveKeys(second);
+        compare(files.lastActiveWindow, second);
+
+        fakePrompts.current = {
+            id: 5,
+            kind: "notice",
+            title: "“Tool” wasn’t opened.",
+            text: "Files doesn’t run programs."
+        };
+        compare(files.promptWindow, second, "the window last worked in");
+        tryVerify(() => test.kioSheet(second).visible, 1000, "its sheet shows the question");
+        verify(!test.kioSheet(first).visible, "the other window shows nothing");
+        compare(test.kioSheet(second).title, "“Tool” wasn’t opened.");
+
+        test.giveKeys(first);
+        compare(files.promptWindow, second, "the question stays where it is");
+        verify(!test.kioSheet(first).visible);
+
+        second.close();
+        tryCompare(files.windows, "length", 1);
+        compare(files.promptWindow, first, "its window closed: the question moves");
+        tryVerify(() => test.kioSheet(first).visible, 1000);
+        tryVerify(() => !test.kioSheet(first).holdInput, 2000);
+        test.giveKeys(first);
+        verify(waitForPolish(first, 1000));
+        test.type(Qt.Key_Return, Qt.NoModifier);
+        compare(fakePrompts.replies, [{id: 5, button: "ok"}]);
+        verify(!test.kioSheet(first).visible);
+        compare(files.promptWindow, null);
+    }
+
+    // With no browser window left, a question gets its safe answer at once ("stop": Stop, Cancel, Don't Delete).
+    function test_kioQuestionWithNoWindow() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        files.windows[0].close();
+        tryCompare(files.windows, "length", 0);
+        fakePrompts.current = {
+            id: 9,
+            kind: "conflict",
+            name: "a.txt",
+            folder: "dest",
+            mode: "copy",
+            merge: false,
+            replace: true,
+            keepBoth: true,
+            skip: false,
+            applyToAll: false
+        };
+        compare(fakePrompts.replies, [{id: 9, button: "stop"}]);
+        compare(files.promptWindow, null);
+    }
+
+    // One sheet at a time in a window (AppKit queues them): KIO's question waits while Go to Folder is open, out of sight and
+    // out of the keyboard's reach, and shows once it closes.
+    function test_kioQuestionWaitsForTheWindowsSheet() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        browser.goToFolder();
+        verify(waitForPolish(browser, 1000));
+        fakePrompts.current = {
+            id: 6,
+            kind: "notice",
+            title: "“Tool” wasn’t opened.",
+            text: "Files doesn’t run programs."
+        };
+        compare(files.promptWindow, browser);
+        wait(50);
+        verify(!test.kioSheet(browser).visible, "behind Go to Folder: not shown");
+        compare(fakePrompts.replies, []);
+        // Esc closes Go to Folder (the keyboard is still its own), then the question shows.
+        test.type(Qt.Key_Escape, Qt.NoModifier);
+        tryVerify(() => test.kioSheet(browser).visible, 1000, "Go to Folder closed: the question shows");
+        tryVerify(() => !test.kioSheet(browser).holdInput, 2000);
+        verify(waitForPolish(browser, 1000));
+        test.type(Qt.Key_Return, Qt.NoModifier);
+        compare(fakePrompts.replies, [{id: 6, button: "ok"}]);
+    }
+
+    // A menu open by the keyboard holds the question too (AppKit holds sheets during menu tracking): Return and Esc stay
+    // the menu's. Once the question shows, a view that takes the keyboard a moment later gives it back to the sheet.
+    function test_kioQuestionWaitsForTheMenu() {
+        fakePrompts.current = ({});
+        fakePrompts.replies = [];
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        let chosen = "";
+        browser.menuLayer.open([{id: "one", text: "One"}, {id: "two", text: "Two"}], 20, 20, id => chosen = id, browser.tab.view, true);
+        verify(browser.menuLayer.visible);
+        fakePrompts.current = {
+            id: 7,
+            kind: "notice",
+            title: "“Tool” wasn’t opened.",
+            text: "Files doesn’t run programs."
+        };
+        wait(50);
+        verify(!test.kioSheet(browser).visible, "behind the menu: not shown");
+        test.type(Qt.Key_Escape, Qt.NoModifier);
+        verify(!browser.menuLayer.visible, "Esc closed the menu");
+        compare(fakePrompts.replies, [], "Esc was the menu's");
+        tryVerify(() => test.kioSheet(browser).visible, 1000, "the menu closed: the question shows");
+        tryVerify(() => !test.kioSheet(browser).holdInput, 2000);
+        // The view takes the keyboard after the sheet opened (BrowserTab.focusView, queued by a navigation): the sheet
+        // takes it back.
+        browser.tab.focusView();
+        wait(50);
+        verify(waitForPolish(browser, 1000));
+        test.type(Qt.Key_Return, Qt.NoModifier);
+        compare(fakePrompts.replies, [{id: 7, button: "ok"}]);
+        compare(chosen, "");
     }
 
     // BrowserTab.dragView: while a system drag started from the tab's view runs, that view stays (Qt Quick uses the item

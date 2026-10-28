@@ -53,10 +53,11 @@ Item {
     function close(): void {
         if (!root.visible)
             return;
-        root.visible = false;
-        menu.openIndex = -1;
+        // The focus goes back first: hiding may open the window's waiting sheet (a KIO question), which then takes it.
         if (root.focusBack)
             root.focusBack.forceActiveFocus();
+        root.visible = false;
+        menu.openIndex = -1;
     }
 
     MouseArea {

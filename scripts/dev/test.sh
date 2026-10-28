@@ -212,8 +212,9 @@ gtest_suite() {
   ((rc == 0)) || status=1
   record logic "$label" "$([[ $rc == 0 ]] && echo pass || echo fail)"
 }
-# Grassfield Files pure logic (sort keys, sizes, dates, path segments, names).
-gtest_suite tests/unit/files "apps/files/build-direct.sh --tests" ".dev/build/files-unit-tests --gtest_brief=1"
+# Grassfield Files pure logic (sort keys, sizes, dates, path segments, names), and its KIO dialogs (ADR-0035 D-12 a: the
+# logic, and real KIO jobs answered as the sheets answer, in a scratch home).
+gtest_suite tests/unit/files "apps/files/build-direct.sh --tests" ".dev/build/files-unit-tests --gtest_brief=1" ".dev/build/files-kio-tests --gtest_brief=1"
 # Grassfield Preview pure logic (URL validation, size caps, file-type routing).
 gtest_suite tests/unit/preview "apps/preview/build-direct.sh --tests" ".dev/build/preview-unit-tests --gtest_brief=1"
 # grassfield-wallpaper (ADR-0016) logic: untrusted pictures (huge, corrupt, EXIF, FIFO, fit modes), listing, cache: built
