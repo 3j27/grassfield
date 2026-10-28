@@ -366,6 +366,9 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
     }
     p.sockets.clear();
     p.drmFds.clear();
+    p.drmRead.clear();
+    p.drmKeys.clear();
+    p.drmPicked = false;
     int count = 0;
     char target[512];
     while (dirent *e = readdir(d)) {
@@ -386,6 +389,7 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
         }
     }
     closedir(d);
+    std::sort(p.drmFds.begin(), p.drmFds.end()); // /proc's order; a client's first descriptor is its lowest
     p.openFiles = count;
     p.scanned = true;
 }
@@ -393,23 +397,62 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
 void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::string, GpuDevice> &devices,
                       std::unordered_set<std::string> &clientsSeen)
 {
+    // One read per client (AM45). A client can show through several descriptors: Mesa's pipe loader and iris's buffer
+    // manager each duplicate the descriptor they are given, and a duplicate is the same client; each fdinfo read has the
+    // driver go over the client's objects. The first read after a descriptor turn reads every DRM descriptor and keeps
+    // the first of each client; until the next turn only those are read, and one that fails or names another client (its
+    // number closed and reused) brings the full read back at once (the integrator's AM-P2 run of f68789c on the i5).
+    std::string fbuf;
+    auto readClient = [&](int fd, DrmClient &client, std::string &key) {
+        ++c.fdinfoReads;
+        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true) || !parseDrmFdinfo(fbuf, client)
+            || client.engineNs.empty())
+            return false;
+        key = client.pdev + '|' + std::to_string(client.clientId);
+        return true;
+    };
+    std::vector<DrmClient> clients;
+    std::vector<std::string> keys;
+    bool picked = p.drmPicked;
+    for (size_t i = 0; picked && i < p.drmRead.size(); ++i) {
+        DrmClient client;
+        std::string key;
+        if (!readClient(p.drmRead[i], client, key) || key != p.drmKeys[i]) {
+            picked = false;
+            clients.clear();
+            keys.clear();
+            break;
+        }
+        clients.push_back(std::move(client));
+        keys.push_back(std::move(key));
+    }
+    if (!picked) {
+        p.drmRead.clear();
+        p.drmKeys.clear();
+        for (int fd : p.drmFds) {
+            DrmClient client;
+            std::string key;
+            if (!readClient(fd, client, key) || std::find(keys.begin(), keys.end(), key) != keys.end())
+                continue; // no client, or the same client through another descriptor
+            p.drmRead.push_back(fd);
+            p.drmKeys.push_back(key);
+            clients.push_back(std::move(client));
+            keys.push_back(std::move(key));
+        }
+        p.drmPicked = true;
+    }
+
     std::map<std::string, uint64_t> nowNs;
     std::map<std::string, double> perEngine; // "<pdev>|<engine>" → this process's share
     uint64_t total = 0;
     bool any = false;
     const double dt = p.haveGpu ? now - p.gpuTime : 0;
-    std::string fbuf;
     std::vector<std::string> pdevs;
-    for (int fd : p.drmFds) {
-        ++c.fdinfoReads;
-        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true))
-            continue;
-        DrmClient client;
-        if (!parseDrmFdinfo(fbuf, client) || client.engineNs.empty())
-            continue;
-        const std::string key = client.pdev + '|' + std::to_string(client.clientId);
+    for (size_t i = 0; i < clients.size(); ++i) {
+        const DrmClient &client = clients[i];
+        const std::string &key = keys[i];
         if (!clientsSeen.insert(key).second)
-            continue; // the same client through another descriptor (or a process that shares it)
+            continue; // a client this sample already counted in another process (inherited or passed)
         any = true;
         if (std::find(pdevs.begin(), pdevs.end(), client.pdev) == pdevs.end())
             pdevs.push_back(client.pdev);

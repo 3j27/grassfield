@@ -8,7 +8,8 @@ PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built a
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
 "step 1" here. Revised after the integrator's opus review of 949fc98 (FAIL: four MAJORs, five MINORs, five surviving
 mutants), answered in "Review history"; each changed place says "review of 949fc98". Revised again after the re-review of
-f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". · Date: 2026-10-28 · Decider: owner
+f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". Step 1 merged (pull request #40,
+opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. · Date: 2026-10-28 · Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
 
@@ -192,7 +193,10 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
     while the socket lives); the dump leaves out listeners, TIME_WAIT and closed sockets, which carry no bytes or no owner
     (review of f68789c: the dump is most of this tab's cost);
   - the GPU columns: the descriptor lists in the same turn (one tenth per sample, new processes at once), then each sample
-    only the `fdinfo` of the DRM descriptors found;
+    only the `fdinfo` of one descriptor per client: the first read after a turn reads every DRM descriptor found and keeps
+    the first of each (`drm-pdev`, `drm-client-id`), and one that fails or names another client brings the full read back
+    at once (the integrator's AM-P2 run of f68789c: Mesa's pipe loader and iris's buffer manager each duplicate their DRM
+    descriptor, a duplicate is the same client, and each `fdinfo` read has the driver go over the client's objects);
   - `smaps_rollup` never in the table (6.6 ms for a 1 GiB process, A8), only in Inspect.
   - The turns (a fifth, a tenth) go by each process's order of arrival, not by its pid, so each sample reads as many lists
     whatever the pids are (review of 949fc98). An own process's `cgroup` is read when it is first seen and again in its
@@ -680,3 +684,14 @@ and its answer:
 | MINOR: two exec-detection gaps | a `prctl(PR_SET_NAME)` rename is no exec for the user's processes (their code addresses decide; `AProcessThatRenamesItselfKeepsItsName`); an exec into the same program at the same addresses (non-PIE, or randomization off) stays a known limit (d; spec Known limitations) |
 | MINOR: surviving mutants N06, N10, N13 (N03 without effect) | `AnExecIsSeenByItsCodeEndAlone` (N06); the real uid behind a root-owned directory read again in the owner's turn, `TheRealUidBehindARootDirectoryIsReadAgainInItsTurn` (N10); `ThePeakIsNeverBelowTheResidentSet` (N13) |
 | Network has no headroom (45.2–46.6 ms in a loaded sandbox) | the dump leaves out listeners, TIME_WAIT and closed sockets (fewer sockets on a real machine; none on the fixture, whose 200 sockets are established); the verdict waits on the integrator's idle run |
+
+**Integrator's AM-P2 runs on the reference machine, and the review of 19f5d4c: PASS, merged (2026-10-28).** On f68789c
+(load 3.5 to 5, a review build running) every tab passed: CPU 16.5 ms (limit 17), Memory 12.9 (25), Energy 32.8 (40), Disk
+10.9 (17), Network 35.8 (45). On 19f5d4c, at the merge (load 3.0 to 3.9): CPU 16.7, Memory 13.0, Energy 32.5, Disk 11.0,
+Network 36.0, at 1.39, 1.22, 1.24, 1.31 and 1.07 × A10's step-1 plan. Network is settled; the follow-ups go with step 2:
+| Note | Answer |
+|---|---|
+| 1. CPU passes with 0.3 ms to spare, at 1.39 × the step-1 plan, 14.5 ms of it in the kernel (f68789c): find the cut that brings it near 1.1 ×; does it read anything per process beyond `stat` that it does not show? | beyond `stat`, the CPU tab reads the owner (a tenth per sample, the User column), the descriptor lists (a tenth per sample: the GPU clients; Open Files comes with them), the real uid behind a root-owned directory (a tenth), and at every sample the `fdinfo` of every DRM descriptor found. Only that last read is outside A10, and this cloud machine has no GPU to measure it. A client is now read through one of its descriptors between two turns (d; spec AM45; `ADrmClientIsReadThroughOneOfItsDescriptors`), and A10 measures the DRM reads (every descriptor, one per client) and counts them in its step-1 CPU and Energy plans. The rest of the cut: open |
+| 2. A pause right after the first Memory sample is missed (`memoryInterval_` is 0 after a full read): use the configured interval | open |
+| 3. Mutant R13: `parseIo` accepts a line with one of its two byte fields | open |
+| 4. Carried from step 1: AM47's GPU name, AM38, AM39 | step 2 |

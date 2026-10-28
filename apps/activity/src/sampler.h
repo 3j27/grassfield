@@ -258,6 +258,10 @@ private:
         bool scanned = false;
         int openFiles = -1;
         std::vector<int> drmFds;
+        // One descriptor per client, read between two descriptor turns (AM45), and the client each one gave.
+        std::vector<int> drmRead;
+        std::vector<std::string> drmKeys;
+        bool drmPicked = false;
         std::vector<uint64_t> sockets;
         std::map<std::string, uint64_t> engineNs; // "<pdev>|<client>|<engine>" → ns at the last sample
         double gpuTime = 0;

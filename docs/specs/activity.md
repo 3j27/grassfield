@@ -226,7 +226,8 @@ items (Settings does it); a background collector; any network access.
   (one tenth of the processes' descriptor lists per sample, a new process at its first sample); at each sample only the
   `fdinfo` of the DRM descriptors found is read: keys `drm-driver`, `drm-pdev`, `drm-client-id`, `drm-engine-<name>`,
   `drm-engine-capacity-<name>`, `drm-memory-<region>`; one client per (`drm-pdev`, `drm-client-id`) even when several
-  descriptors share it.
+  descriptors share it. Between two descriptor turns only one descriptor per client is read (its lowest), and every DRM
+  descriptor again as soon as one of those fails or names another client (ADR-0038 d).
 - **AM46** Engine share of a client = Δ`drm-engine-<name>` (ns) ÷ (Δt × capacity); % GPU of a process = its busiest engine
   (Σ over its clients, capped at 100); GPU Time = Σ of its engines' times.
 - **AM47** A system GPU's engine share = Σ over the user's clients on that `drm-pdev`, capped at 100 (the compositor is one of

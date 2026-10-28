@@ -81,7 +81,7 @@ done <<<"$out"
 if ((model)); then
   modelOut=$("$probe" measure "$samples") || { echo "FAIL: probe A10 failed"; exit 1; }
   echo "probe A10 on the same fixture:"
-  grep -E "raised|listed|could not be opened|per tab|^    (CPU|Memory|Disk|Energy|Network|step 1)" <<<"$modelOut"
+  grep -E "raised|listed|could not be opened|per tab|^    (CPU|Memory|Disk|Energy|Network|step 1|fdinfo of)" <<<"$modelOut"
   # The ratios compare the same reads: the product against A10's step-1 plan (review of f68789c); the step-0 lines above
   # are the limits' source.
   declare -A modelMs=(

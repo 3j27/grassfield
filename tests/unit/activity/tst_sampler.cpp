@@ -462,9 +462,12 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     f.link("/dev/dri/renderD128", "proc/100/fd/7");
     f.link("/dev/dri/renderD128", "proc/100/fd/8"); // the same client through a second descriptor: counted once
     f.link("/dev/dri/card1", "proc/200/fd/9");
+    f.process(300, "helper", kMe, 1, 1, nul({"helper"}), "/");
+    f.link("/dev/dri/renderD128", "proc/300/fd/5"); // the game's client, inherited: counted once, with the game
     client(100, 7, 1, 0, 0);
     client(100, 8, 1, 0, 0);
     client(200, 9, 2, 0, 0);
+    client(300, 5, 1, 0, 0);
     Options o = options(f);
     o.descriptorTurns = 1;
     Sampler s(o);
@@ -474,6 +477,7 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     client(100, 7, 1, 500000000, 1000000000); // render 0.5 s in 1 s: 50 %; video 1 s on a capacity of 2: 50 %
     client(100, 8, 1, 500000000, 1000000000);
     client(200, 9, 2, 300000000, 0);
+    client(300, 5, 1, 500000000, 1000000000);
     const Snapshot snap = s.sample(reads, 2.0);
     const ProcessRow *game = row(snap, 100);
     ASSERT_TRUE(game->hasGpu);
@@ -481,6 +485,7 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     EXPECT_DOUBLE_EQ(game->gpuPercent, 50.0); // the busiest engine (AM46)
     EXPECT_EQ(game->gpuNs, 1500000000u);       // every engine's time
     EXPECT_DOUBLE_EQ(row(snap, 200)->gpuPercent, 30.0);
+    EXPECT_FALSE(row(snap, 300)->hasGpu);
     ASSERT_EQ(snap.gpus.size(), 1u);
     const GpuDevice &gpu = snap.gpus[0];
     EXPECT_EQ(gpu.pdev, "0000:00:02.0");
@@ -494,7 +499,62 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     }
     EXPECT_DOUBLE_EQ(render, 80.0); // the two clients summed (AM47)
     EXPECT_DOUBLE_EQ(video, 50.0);
-    EXPECT_EQ(snap.counters.fdinfoReads, 3u);
+    EXPECT_EQ(snap.counters.fdinfoReads, 4u);
+}
+
+// AM45: a client is read through one of its descriptors between two descriptor turns (the integrator's AM-P2 run of
+// f68789c: the CPU tab at 0.5 ms from its limit on the i5). Mesa duplicates its DRM descriptor; a duplicate is the same
+// client.
+TEST(Sampler, ADrmClientIsReadThroughOneOfItsDescriptors)
+{
+    Fixture f;
+    auto client = [&](int fd, int clientId, unsigned long long render) {
+        f.write("proc/100/fdinfo/" + std::to_string(fd), "pos:\t0\ndrm-driver:\ti915\ndrm-pdev:\t0000:00:02.0\ndrm-client-id:\t"
+                    + std::to_string(clientId) + "\ndrm-engine-render:\t" + std::to_string(render) + " ns\n");
+    };
+    f.process(100, "game", kMe, 1, 1, nul({"game"}), "/");
+    for (int fd : {7, 8, 9})
+        f.link("/dev/dri/renderD128", "proc/100/fd/" + std::to_string(fd));
+    client(7, 1, 0);
+    client(8, 1, 0); // 7 duplicated: the same client
+    client(9, 2, 0);
+    Options o = options(f);
+    o.descriptorTurns = 3; // pid 100 arrives first: its turns are samples 1, 4, 7...
+    Sampler s(o);
+    const unsigned reads = readsForTab(Tab::Cpu);
+    EXPECT_EQ(s.sample(reads, 1.0).counters.fdinfoReads, 3u); // the turn: every descriptor
+    client(7, 1, 200000000);
+    client(8, 1, 200000000);
+    client(9, 2, 100000000);
+    Snapshot snap = s.sample(reads, 2.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 2u); // one per client
+    EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 30.0); // render: 20 % + 10 %
+    EXPECT_EQ(row(snap, 100)->gpuNs, 300000000u);
+
+    // Descriptor 7 closed and its number taken by another client: every descriptor is read again at once.
+    client(7, 3, 0);
+    client(8, 1, 400000000);
+    client(9, 2, 200000000);
+    snap = s.sample(reads, 3.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 4u); // 7, which no longer gives client 1; then 7, 8 and 9
+    EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 30.0); // client 1 through 8, client 2; client 3 has no rate yet
+    EXPECT_EQ(row(snap, 100)->gpuNs, 600000000u);
+
+    // A client opened since, through two descriptors: found at the next turn, which reads every descriptor again.
+    for (int fd : {10, 11}) {
+        f.link("/dev/dri/renderD128", "proc/100/fd/" + std::to_string(fd));
+        client(fd, 4, 0);
+    }
+    snap = s.sample(reads, 4.0); // the turn
+    EXPECT_EQ(snap.counters.fdinfoReads, 5u);
+    client(7, 3, 100000000);
+    client(8, 1, 600000000);
+    client(9, 2, 300000000);
+    client(10, 4, 100000000);
+    client(11, 4, 100000000);
+    snap = s.sample(reads, 5.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 4u); // 7 to 10
+    EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0); // 10 % + 20 % + 10 % + 10 %
 }
 
 TEST(Sampler, UserAndSystemAsMacOSMeansThem)
