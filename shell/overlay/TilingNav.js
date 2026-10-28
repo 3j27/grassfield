@@ -66,3 +66,30 @@ function step(entries, index, key) {
     }
     return index;
 }
+
+// The number keys of the Layouts section (TL26, TL27): a first digit picks a layout (1 the first of the section), a second
+// a zone of it (1 its first zone). layouts: [{zones: [...], enabled}] in section order; picked: the index of the layout
+// picked so far, -1 for none; digit: 1 to 9. {picked, zone}: zone -1 until a zone is chosen (the caller then places the
+// window there); a digit with no layout or zone of that number, or a greyed layout, changes nothing.
+function numberPick(layouts, picked, digit) {
+    const none = {picked: picked, zone: -1};
+    if (!Array.isArray(layouts) || !Number.isInteger(digit) || digit < 1 || digit > 9)
+        return none;
+    if (picked < 0 || picked >= layouts.length) {
+        const layout = layouts[digit - 1];
+        return layout && layout.enabled !== false ? {picked: digit - 1, zone: -1} : {picked: -1, zone: -1};
+    }
+    const zones = layouts[picked].zones;
+    return Array.isArray(zones) && digit <= zones.length ? {picked: picked, zone: digit - 1} : none;
+}
+
+// The digit 1 to 9 of a key press for numberPick, 0 for any other key: the digit keys by their character (Qt.Key_1 to
+// Qt.Key_9, the keypad's too), or the top row by position (xkb keycodes 10 to 18, evdev KEY_1 to KEY_9 plus 8), so that the
+// number keys work on AZERTY, where that row types symbols without Shift.
+function digitOf(key, nativeScanCode) {
+    if (key >= 0x31 && key <= 0x39)
+        return key - 0x30;
+    if (nativeScanCode >= 10 && nativeScanCode <= 18)
+        return nativeScanCode - 9;
+    return 0;
+}

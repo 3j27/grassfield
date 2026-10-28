@@ -867,6 +867,17 @@ namespace gf::minimizer {
         startAnimation(std::move(a), elapsed);
     }
 
+    std::vector<uint64_t> minimizedFrom(std::string_view monitor) {
+        std::vector<uint64_t> out;
+        const auto&           all = st().places;
+        for (auto it = all.rbegin(); it != all.rend(); ++it) {
+            const auto w = it->window.lock();
+            if (w && w->m_isMapped && onMinimizedWorkspace(w) && it->place.monitor == monitor)
+                out.push_back(reinterpret_cast<uintptr_t>(w.get()));
+        }
+        return out;
+    }
+
     void restore(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
         if (!w || !w->m_isMapped) {
