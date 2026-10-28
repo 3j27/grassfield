@@ -111,7 +111,10 @@
 #   still-focused      no motion after the unmap, then the release
 #   still-unfocused    the focus moved first, no motion after the unmap, then the release
 #   shared-edge        (with tiling-shared-edge) the victim one of two windows arranged left and right, unmapped while the
-#                      plugin drags their shared edge: it leaves the drag (logged), the other follows to the end, Tiled again
+#                      plugin drags their shared edge: it leaves the drag (logged) but still bounds it: the other follows,
+#                      dragged far toward the victim it stops at the victim's minimum, inside the work area; Tiled again
+# With them (tiling-shared-edge; xdgact windows), not a C1 case: the left one of two xdgact windows arranged left and right
+# opens an xdg popup over the handle; the drag there reaches the popup and moves neither window (TL30, D35).
 # Hyprland must answer after each, the plugin must log its guarded path ("closed or unmapped"), and coredumpctl must list no
 # new Hyprland core dump. A/B against an older build (the integrator's proof that the cases reach the crash):
 #   tests/compositor/tiling.sh --c1 --plugin /path/to/439e1f2/grassfield-compositor.so   (expected: FAIL, Hyprland gone)
@@ -367,9 +370,11 @@ run_c1() { # name focused|unfocused moving|still
   sleep 0.3
 }
 # The shared edge's drag (TL30, integrator review of a6d04df): the victim and the other xdgact window arranged left and
-# right (one group), the handle dragged 40 px, the victim unmapped (alive) with the button held, 60 px more, the release.
-# Hyprland answers, the plugin logs that the victim left the drag (8965f85's guard: setTargetGeom never reaches its missing
-# space), the other window followed the whole drag alone and is Tiled again (the drag ended: its one `resized`).
+# right (one group), the handle dragged 40 px, the victim unmapped (alive) with the button held, then dragged far left, past
+# the victim, and released. Hyprland answers, the plugin logs that the victim left the drag (8965f85's guard: setTargetGeom
+# never reaches its missing space), the other window followed but stopped where the victim's minimum (20 px, its frame from
+# the press) puts the edge: a window that leaves the drag still bounds it (integrator re-review of ce82fd3: without it the
+# other window went off the work area), and it is Tiled again (the drag ended: its one `resized`).
 run_c1_edge() {
   local tb=$GF_TB_HEIGHT lx ly lw lh rx rw rx1 rw1 hx hy p
   close_shell_popup "C1 shared-edge"
@@ -388,7 +393,7 @@ run_c1_edge() {
     return
   fi
   hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
-  pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 40)) "$hy" sleep 2200 drag $((hx + 100)) "$hy" sleep 300 up &
+  pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 40)) "$hy" sleep 2200 drag 2 "$hy" sleep 300 up &
   p=$!
   sleep 1.2
   kill -USR2 "$xdg_pid" 2>/dev/null
@@ -404,9 +409,10 @@ run_c1_edge() {
   }
   check "C1 shared-edge: the plugin logged that the victim left the drag" c1_edge_guarded
   read -r rx1 rw1 < <(nestctl clients -j | jq -r --arg a "$c1_other" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
-  say "  the other window ${rw1:-?} px wide at ${rx1:-?} (was $rw at $rx)"
-  check "C1 shared-edge: the other window followed the whole drag (100 px), its right side kept" \
-    test $((${rx1:-0} - rx)) -ge 99 -a $((${rx1:-0} - rx)) -le 101 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -ge -1 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -le 1
+  local stop=$((lx + 20 + rx - lx - lw)) # the victim's left side + its 20 px floor + the gap
+  say "  the other window ${rw1:-?} px wide at ${rx1:-?} (was $rw at $rx; the victim's minimum puts its left side at $stop)"
+  check "C1 shared-edge: dragged past the gone victim, the other window stops at the victim's minimum, its right side kept" \
+    test $((${rx1:-0} - stop)) -ge -1 -a $((${rx1:-0} - stop)) -le 1 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -ge -1 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -le 1
   c1_edge_tiled() {
     local st
     st=$(nestctl grassfield-tiling 2>>"$log" | jq -r --arg a "${c1_other#0x}" '[.outputs[].windows[] | select(.address == $a)][0].state // "none"')
@@ -415,6 +421,47 @@ run_c1_edge() {
   }
   check "C1 shared-edge: the other window is Tiled again (the drag ended)" c1_edge_tiled
   kill "$xdg_pid" 2>/dev/null
+  sleep 0.3
+}
+# A popup in front of the handle gets the click (TL30, ADR-0036 D35; integrator re-review of ce82fd3): two xdgact windows
+# arranged left and right, the left one opens an xdg popup on the middle of its right edge (SIGHUP), over the handle. The drag
+# there reaches the popup (xdgact prints "popup pressed") and moves neither window.
+run_edge_popup() {
+  local tb=$GF_TB_HEIGHT a b apid bpid lx ly lw lh rx rw l1 r1 hx hy mark
+  close_shell_popup "shared-edge popup"
+  open_xdg gf-edge-popup-a
+  a=$xdg_addr apid=$xdg_pid
+  open_xdg gf-edge-popup-b
+  b=$xdg_addr bpid=$xdg_pid
+  if [[ -z $a || -z $b ]]; then
+    check "shared-edge popup: the two xdgact windows opened" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$a\",\"$b\"]}')" >>"$log" 2>&1
+  sleep 0.8
+  read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r rx rw < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  if [[ -z ${lx:-} || -z ${rx:-} ]] || ((rx <= lx + lw)); then
+    check "shared-edge popup: the two windows are arranged left and right (${lx:-?}+${lw:-?}, ${rx:-?})" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  mark=$(grep -ac "" "$run/xdgact.out" 2>/dev/null || echo 0)
+  kill -HUP "$apid" 2>/dev/null
+  popup_line() { tail -n +"$((mark + 1))" "$run/xdgact.out" 2>/dev/null | grep -aq -- "$1"; }
+  for _ in $(seq 1 30); do popup_line "popup mapped gf-edge-popup-a" && break; sleep 0.1; done
+  check "shared-edge popup: the left window's popup is mapped" popup_line "popup mapped gf-edge-popup-a"
+  sleep 0.3
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+  for _ in $(seq 1 20); do popup_line "popup pressed gf-edge-popup-a" && break; sleep 0.1; done
+  check "shared-edge popup: the popup in front of the handle gets the press" popup_line "popup pressed gf-edge-popup-a"
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  left window $l1 (was $lx $ly $lw $lh), right window $r1 (was $rx $rw)"
+  check "shared-edge popup: neither window moved" test "$l1" = "$lx $ly $lw $lh" -a "$r1" = "$rx $rw"
+  kill "$apid" "$bpid" 2>/dev/null
   sleep 0.3
 }
 c1_cases() {
@@ -429,8 +476,9 @@ c1_cases() {
   run_c1 still-unfocused unfocused still
   if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
     run_c1_edge
+    run_edge_popup
   else
-    say "SKIP: C1 shared-edge (the plugin does not advertise tiling-shared-edge)"
+    say "SKIP: C1 shared-edge and the popup over the handle (the plugin does not advertise tiling-shared-edge)"
   fi
   if command -v coredumpctl >/dev/null 2>&1; then
     dumps1=$(dumps)
@@ -1394,11 +1442,21 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
     check "shared-edge after the unlock: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
     # The lock during a drag ends it at once (TL34; integrator review of a6d04df): the button held, 30 px, then the lock,
-    # then 60 px more and the release. The windows keep the frames of the motions before the lock, both Tiled again.
-    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 30)) "$hy" sleep 9000 drag $((hx + 90)) "$hy" sleep 200 up &
+    # then 60 px more and the release. The lock itself ends the drag: both records are Tiled while still locked, before any
+    # motion follows (integrator re-review of ce82fd3: the next motion would end it too); the windows keep the frames of the
+    # motions before the lock. The hold (12 s) outlasts the locker's start (lock_session waits up to 6 s).
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 30)) "$hy" sleep 12000 drag $((hx + 90)) "$hy" sleep 200 up &
     held_pid=$!
     sleep 1.5
     if lock_session; then
+      locked_tiled() {
+        local a b
+        a=$(record_of "$addr" | jq -r '.state // "none"')
+        b=$(record_of "$addr3" | jq -r '.state // "none"')
+        say "  while locked, before the next motion: first $a, third $b"
+        [[ $a == tiled && $b == tiled ]]
+      }
+      check "shared-edge lock mid-drag: the lock itself ended the drag (both Tiled while locked, before the next motion)" locked_tiled
       wait "$held_pid"
       check "shared-edge lock mid-drag: the left window kept the frame of before the lock" box_of tiling-foot3 "$lx" "$ly" $((lw + 30)) "$lh"
       check "shared-edge lock mid-drag: the right one too" box_of tiling-foot $((rx0 + 30)) "$ry0" $((rw0 - 30)) "$rh0"
