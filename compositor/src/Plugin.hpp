@@ -58,7 +58,8 @@ namespace gf {
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;
-        // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingMargins): macOS defaults, all on.
+        // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingOptionDrag / tilingMargins): macOS
+        // defaults, all on.
         tiling::DragOptions tilingDrag;
         bool                tilingMargins = true;
         // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.

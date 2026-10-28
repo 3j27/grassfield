@@ -18,7 +18,8 @@
 #      P3 it can be grabbed again: a drag down by 200 px moves it down by 200 px.
 #   C  Chromium's browser window (client chrome: its own tab strip, Hyprland's interactive move from xdg_toplevel.move):
 #      C0 while the button is held its top is under the menu bar (Hyprland's move has no hook; the pointer goes onto the
-#         menu bar, which only the plugin's own titlebar drags take as a tiling place, FR47);
+#         menu bar; since tiling step 2 Hyprland's moves tile there too, docs/specs/tiling.md TL16, so the case turns
+#         "Drag windows to menu bar to fill screen" off while it runs and the clamp stays what it measures);
 #      C1 after the release its top is at the menu bar's bottom (the clamp after Hyprland ended the drag);
 #      C2 it can be grabbed again by its tab strip: a drag down moves it down.
 #   R  foot placed with its titlebar under the menu bar (as an app or a script may place it), then resized from its
@@ -86,6 +87,7 @@ cleanup() {
   local p
   for p in "${pids[@]}"; do pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; done
   pkill -f -- "--user-data-dir=$work/chromium-profile" 2>/dev/null
+  ctl dispatch 'hl.plugin.grassfield.config("tilingMenuBar", "true")' >/dev/null 2>&1 # the load default, also after a failed run
 }
 trap cleanup EXIT
 
@@ -177,6 +179,7 @@ if command -v chromium >/dev/null; then
     say "  chromium at ($cx0,$cy0), width $cw, tags '$tags'"
     grab_x=$((cx0 + cw * 3 / 4)) grab_y=$((cy0 + 18)) # empty tab strip
     click_at "$grab_x" "$grab_y" # focus first: Chromium may take the first press on an unfocused window for itself
+    ctl dispatch 'hl.plugin.grassfield.config("tilingMenuBar", "false")' >>"$log" 2>&1 # no Fill at the release (TL16)
     # Hyprland's move (no tiling on this path): the pointer goes onto the menu bar, so the window's top ends under it
     # whatever Chromium's own drag threshold leaves as the grab offset.
     drag_bg "$grab_x" "$grab_y" "$grab_x" 2 1500
@@ -198,6 +201,7 @@ if command -v chromium >/dev/null; then
     (( cy2 >= cy1 + 150 ))
     check "C2 it can be grabbed again by its tab strip: a drag down moves it down" $? "top $cy1 -> $cy2"
     grep -a "top clamp" "$log" >/dev/null 2>&1 || true
+    ctl dispatch 'hl.plugin.grassfield.config("tilingMenuBar", "true")' >>"$log" 2>&1
   else
     check "C chromium mapped" 1 "$(ctl clients -j | jq -c '[.[].class]')"
   fi
