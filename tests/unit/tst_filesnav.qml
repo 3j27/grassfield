@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../apps/files/qml/Nav.js" as Nav
+import "../../apps/files/qml/IconSource.js" as IconSource
 
 // grassfield-files pure navigation logic: grid and list keyboard moves, history, type-to-select,
 // header sort clicks, rubber band hit testing, column view prefix, per-folder view and arrangement (F-3).
@@ -78,6 +79,15 @@ TestCase {
         compare(h.entries, ["file:///home/u", "file:///home/u/Documents"]);
         // The location has no stored view yet: the tab's own view and sort stay.
         compare(Nav.viewFor("icons", undefined, "list"), "icons");
+    }
+
+    // A theme name goes to the synchronous theme provider on the GUI thread, an absolute path (an Icon= file) to the provider
+    // that decodes off it and in a child process (src/imageproviders.h): the two are never mixed.
+    function test_iconSourceRouting() {
+        compare(IconSource.url("folder"), "image://icon/folder");
+        compare(IconSource.url("application-x-executable"), "image://icon/application-x-executable");
+        compare(IconSource.url("/usr/share/pixmaps/app.png"), "image://appicon//usr/share/pixmaps/app.png");
+        compare(IconSource.url("pixmaps/app.png"), "image://icon/pixmaps/app.png", "a relative name is a theme name");
     }
 
     function test_typeahead() {

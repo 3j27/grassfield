@@ -25,6 +25,7 @@ TestCase {
         property int currentRow: -1
         property int selectedCount: 0
         property bool loading: false
+        property bool isApplications: false
         property string error: ""
         property url url: "file:///sandbox"
         property int made: 0
@@ -182,5 +183,40 @@ TestCase {
         view.reveal(listing.count - 1);
         waitForRendering(view);
         tryVerify(() => listing.asked[listing.count - 1] === true, 2000, "the revealed item is made");
+    }
+
+    // Every MouseArea of the cells that can drag (left and right buttons, a drag target).
+    function dragAreas(item: Item): var {
+        const found = [];
+        const stack = [item];
+        while (stack.length) {
+            const it = stack.pop();
+            if (it.drag !== undefined && it.acceptedButtons === (Qt.LeftButton | Qt.RightButton))
+                found.push(it);
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        return found;
+    }
+
+    // Nothing is dragged out of the Applications location (read-only: the permission refusal of Finder); a folder of files
+    // lets its cells drag.
+    function test_nothingIsDraggedOutOfApplications() {
+        fill(3, 4);
+        const files = createTemporaryObject(viewComponent, test);
+        verify(files !== null);
+        waitForRendering(files);
+        const filesAreas = dragAreas(files);
+        verify(filesAreas.length > 0, "cells that can drag were found");
+        verify(filesAreas.some(a => a.drag.target !== null), "a folder of files drags");
+        files.destroy();
+        listing.isApplications = true;
+        const apps = createTemporaryObject(viewComponent, test);
+        verify(apps !== null);
+        waitForRendering(apps);
+        const appAreas = dragAreas(apps);
+        verify(appAreas.length > 0, "cells that can drag were found in Applications too");
+        verify(appAreas.every(a => a.drag.target === null), "no cell of Applications drags");
+        listing.isApplications = false;
     }
 }

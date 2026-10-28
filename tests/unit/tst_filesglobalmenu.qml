@@ -64,8 +64,9 @@ TestCase {
         function colorTagStates(urls: var): var {
             return [];
         }
+        // Applications that could open the files: always one, so that only the menu's own rule can empty the list.
         function applicationsFor(urls: var): var {
-            return [];
+            return [{storageId: "editor", name: "Editor"}];
         }
     }
 
@@ -134,6 +135,46 @@ TestCase {
         compare(bar.customizeEnabled, true, "two folders");
         select([], {});
         compare(bar.customizeEnabled, false, "nothing again");
+    }
+
+    // The Applications location: the items are applications, not files. Open With offers nothing (a desktop entry is not a file to
+    // open with another application) and Glance is off, in a folder of files both are there.
+    function test_applicationsOffersNoOpenWithAndNoGlance() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        select([0], {0: false});
+        compare(bar.inApplications, false);
+        compare(bar.openWithApps.length, 1, "a file of a folder has Open With");
+        folder.isApplications = true;
+        compare(bar.inApplications, true);
+        compare(bar.openWithApps.length, 0, "no Open With in Applications");
+        const glance = findItem(bar, "Glance");
+        verify(glance !== null, "the Glance item is found");
+        compare(glance.enabled, false, "no Glance in Applications");
+        folder.isApplications = false;
+        compare(glance.enabled, true, "Glance in a folder of files");
+    }
+
+    // The menu item whose text starts with `prefix`, below `item`: through the menus' `menus` and `items` (the items hold their
+    // menu, so every object is visited once).
+    function findItem(item: var, prefix: string): var {
+        const stack = [item];
+        const seen = [];
+        while (stack.length > 0 && seen.length < 2000) {
+            const it = stack.pop();
+            if (it === null || it === undefined || seen.indexOf(it) >= 0)
+                continue;
+            seen.push(it);
+            if (it.shortcut !== undefined && it.text !== undefined && String(it.text).startsWith(prefix))
+                return it;
+            for (const list of [it.menus, it.items]) {
+                if (list !== undefined && list !== null && list.length !== undefined) {
+                    for (let i = 0; i < list.length; i++)
+                        stack.push(list[i]);
+                }
+            }
+        }
+        return null;
     }
 
     // File > Eject (Ctrl+E) follows the window's canEject and ejects through the window: the keyboard path to the sidebar's

@@ -26,6 +26,9 @@ TestCase {
             property string error: ""
             property real freeSpace: -1
             property bool isTrash: false
+            // The Applications location: the rows are applications, opened by launchApplication.
+            property bool isApplications: false
+            property var selected: []
             property bool writable: true
             property bool isSearch: false
             property bool searchLimited: false
@@ -42,10 +45,10 @@ TestCase {
             property int selectedCount: 0
             signal redirected(url url)
             function selectedRows(): var {
-                return [];
+                return folder.selected;
             }
             function selectedUrls(): var {
-                return [];
+                return folder.selected.map(r => folder.urlAt(r));
             }
             function isSelected(row: int): bool {
                 return false;
@@ -71,7 +74,7 @@ TestCase {
                 return "";
             }
             function urlAt(row: int): url {
-                return folder.url;
+                return folder.isApplications ? "grassfield-app:/app" + row : folder.url;
             }
             function expect(target: url, rename: bool): void {
             }
@@ -213,6 +216,15 @@ TestCase {
         function applicationsFor(urls: var): var {
             return [];
         }
+        // What opened what (BrowserTab.activate and openSelection): applications start, files open.
+        property var launched: []
+        property var opened: []
+        function launchApplication(target: url): void {
+            fakeApp.launched = fakeApp.launched.concat([String(target)]);
+        }
+        function open(urls: var): void {
+            fakeApp.opened = fakeApp.opened.concat(urls.map(u => String(u)));
+        }
         function baseNameLength(name: string, isDir: bool): int {
             return name.length;
         }
@@ -327,6 +339,36 @@ TestCase {
         compare(live, [], what + ": no Shortcut of the browser is live");
         const liveItems = items.filter(i => i.enabled).map(i => String(i.shortcut));
         compare(liveItems, [], what + ": no keyed item of the global menu is live");
+    }
+
+    // Opening in the Applications location starts the application (double-click, File > Open, Ctrl+Down) and never hands the
+    // virtual url to FilesApp.open; in a folder of files nothing is launched.
+    function test_applicationsLaunchAndFilesOpen() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const folder = tab.folder;
+        fakeApp.launched = [];
+        fakeApp.opened = [];
+        folder.isApplications = true;
+        tab.activate(2, folder, 0);
+        compare(fakeApp.launched, ["grassfield-app:/app2"], "a double-click starts the application");
+        compare(fakeApp.opened, [], "never opened as a file");
+        folder.selected = [0, 1];
+        tab.openSelection();
+        compare(fakeApp.launched, ["grassfield-app:/app2", "grassfield-app:/app0", "grassfield-app:/app1"], "File > Open starts each");
+        compare(fakeApp.opened, []);
+        folder.selected = [];
+        for (let i = 0; i < 12; i++)
+            folder.selected = folder.selected.concat([i]);
+        fakeApp.launched = [];
+        tab.openSelection();
+        compare(fakeApp.launched.length, 10, "at most ten at once");
+        folder.isApplications = false;
+        folder.selected = [3];
+        fakeApp.launched = [];
+        tab.openSelection();
+        compare(fakeApp.launched, [], "a folder of files launches nothing");
+        compare(fakeApp.opened, [String(folder.url)], "the file is opened");
     }
 
     function test_closeInfoKeepsTheBrowser_data() {
