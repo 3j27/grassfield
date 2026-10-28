@@ -53,10 +53,17 @@ bool guiAvailable()
 int main(int argc, char *argv[])
 {
     namespace runmode = grassfield::apps::runmode;
+    // D-4's start-up loop: a platform theme that reads the portal (gtk3 with GTK_USE_PORTAL=1) could wait on the frontend that
+    // waits on this process. The panels draw with Grassfield.Ui and need none (the unit clears it too).
+    qunsetenv("QT_QPA_PLATFORMTHEME");
     const bool gui = guiAvailable();
     // QApplication (not QGuiApplication): KIO's widgets library (KDirLister, its job delegate class) expects one; its
     // dialogs are not used (Grassfield's sheets, ADR-0035 D-12 a).
     std::unique_ptr<QCoreApplication> app(gui ? new QApplication(argc, argv) : new QCoreApplication(argc, argv));
+    // It quits when idle (FileChooser::idle), never because its last panel closed or KIO's last job released its quit lock.
+    QCoreApplication::setQuitLockEnabled(false);
+    if (gui)
+        QGuiApplication::setQuitOnLastWindowClosed(false);
     QCoreApplication::setApplicationName(QStringLiteral("grassfield-portal"));
     QCoreApplication::setOrganizationName(QStringLiteral("Grassfield"));
     QCoreApplication::setApplicationVersion(QStringLiteral(GRASSFIELD_VERSION));

@@ -1,0 +1,39 @@
+# The Open and Save panels of the Grassfield session (ADR-0035 D-4, step 4b): xdg-desktop-portal's FileChooser for every
+# portal client (GTK with GTK_USE_PORTAL=1, GTK 4, Electron, Chromium, Firefox, Flatpak), drawn as the Files browser. Started
+# by D-Bus activation (org.freedesktop.impl.portal.desktop.grassfield), never by the session's autostart; it quits by itself
+# 60 s after its last request.
+[Unit]
+Description=Grassfield: the Open and Save panels (FileChooser portal backend)
+Documentation=file:///usr/share/doc/grassfield/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.grassfield
+# It owns its name before it loads any panel (the QML waits for the first request): the frontend, which starts it when it
+# starts itself, never waits long.
+TimeoutStartSec=10
+ExecStart=/usr/lib/grassfield/grassfield-portal
+Slice=app.slice
+# No Restart=: it quits when idle, and D-Bus activation starts it again at the next call, after a crash too (the request in
+# flight then ends with an error, response 2).
+# D-4's start-up loop: a Qt process with the gtk3 platform theme and GTK_USE_PORTAL could wait on the portal that waits on it.
+# The panels draw with Grassfield.Ui (the program clears QT_QPA_PLATFORMTHEME as well).
+UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME
+# Hardened (ADR-0035 D-4, the section 5.8 checklist): it runs as the user and returns only what the user picked; it never opens
+# or runs a file. The home, the runtime directory, /tmp and the removable media stay writable (New Folder in a Save panel,
+# KIO's caches and sockets); the network stays open for KIO's network places. No MemoryDenyWriteExecute: the QML engine's JIT
+# needs it.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=-%h -%t -/tmp -/var/tmp -/run/media -/media -/mnt
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+# Its budget (ADR-0035 D-4): 80 MB while a panel is open, nothing when idle (it quits); the limit is far above it.
+MemoryMax=1G
+TasksMax=128
