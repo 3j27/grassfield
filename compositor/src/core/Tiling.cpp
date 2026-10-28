@@ -1096,6 +1096,130 @@ namespace gf::tiling {
         return out;
     }
 
+    // ---- shared edge ----
+
+    namespace {
+        constexpr double kEdgeTolerance = 1; // logical px: frames sit on the grid, a margin is a whole number of px
+
+        // The facing sides and the stretch along the edge of a window, for one axis.
+        double nearSide(const Rect& r, bool vertical) {
+            return vertical ? r.x : r.y;
+        }
+        double farSide(const Rect& r, bool vertical) {
+            return vertical ? r.x + r.w : r.y + r.h;
+        }
+        double alongStart(const Rect& r, bool vertical) {
+            return vertical ? r.y : r.x;
+        }
+        double alongEnd(const Rect& r, bool vertical) {
+            return vertical ? r.y + r.h : r.x + r.w;
+        }
+
+        const EdgeWindow* windowOf(std::span<const EdgeWindow> windows, uint64_t id) {
+            const auto it = std::ranges::find_if(windows, [id](const EdgeWindow& w) { return w.id == id; });
+            return it == windows.end() ? nullptr : &*it;
+        }
+    }
+
+    std::vector<SharedEdge> sharedEdges(std::span<const EdgeWindow> windows, double maxGap, double handleLength, double band) {
+        std::vector<SharedEdge> edges;
+        for (const bool vertical : {true, false}) {
+            for (const auto& b : windows) {
+                for (const auto& a : windows) {
+                    if (&a == &b || b.group == 0 || a.group != b.group)
+                        continue;
+                    const double at  = farSide(b.frame, vertical);
+                    const double gap = nearSide(a.frame, vertical) - at;
+                    const double s0  = std::max(alongStart(b.frame, vertical), alongStart(a.frame, vertical));
+                    const double s1  = std::min(alongEnd(b.frame, vertical), alongEnd(a.frame, vertical));
+                    if (gap < -kEdgeTolerance || gap > maxGap + kEdgeTolerance || s1 - s0 <= kEdgeTolerance)
+                        continue;
+                    auto edge = std::ranges::find_if(edges, [&](const SharedEdge& e) {
+                        return e.vertical == vertical && e.group == b.group && std::abs(e.at - at) <= kEdgeTolerance && std::abs(e.gap - gap) <= kEdgeTolerance;
+                    });
+                    if (edge == edges.end())
+                        edge = edges.insert(edges.end(), SharedEdge{.vertical = vertical, .group = b.group, .at = at, .gap = std::max(0.0, gap), .before = {}, .after = {}, .handles = {}});
+                    if (std::ranges::find(edge->before, b.id) == edge->before.end())
+                        edge->before.push_back(b.id);
+                    if (std::ranges::find(edge->after, a.id) == edge->after.end())
+                        edge->after.push_back(a.id);
+                    const double length = std::min(handleLength, s1 - s0);
+                    const double middle = (s0 + s1) / 2;
+                    const double across = std::max(edge->gap, band);
+                    const double from   = edge->at + edge->gap / 2 - across / 2;
+                    edge->handles.push_back(vertical ? Rect{from, middle - length / 2, across, length} : Rect{middle - length / 2, from, length, across});
+                }
+            }
+        }
+        return edges;
+    }
+
+    std::optional<SharedEdge> edgeAt(std::span<const SharedEdge> edges, double x, double y) {
+        for (const auto& e : edges) {
+            for (const auto& h : e.handles) {
+                if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h)
+                    return e;
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::vector<std::pair<uint64_t, Rect>> dragEdge(const SharedEdge& edge, std::span<const EdgeWindow> windows, double delta, const Grid& grid) {
+        const bool   v   = edge.vertical;
+        const double inf = std::numeric_limits<double>::infinity();
+        // The range of moves that keeps every window within its limits (its length along the axis, frame terms).
+        double lo = -inf, hi = inf;
+        const auto limits = [v, inf](const EdgeWindow& w) {
+            const double band = v ? 0 : w.limits.band;
+            const double min  = (v ? w.limits.minW : w.limits.minH) + band;
+            const double max  = (v ? w.limits.maxW : w.limits.maxH) > 0 ? (v ? w.limits.maxW : w.limits.maxH) + band : inf;
+            return std::pair{min, max};
+        };
+        for (const auto id : edge.before) {
+            if (const auto* w = windowOf(windows, id)) {
+                const auto [min, max] = limits(*w);
+                const double len      = v ? w->frame.w : w->frame.h;
+                lo                    = std::max(lo, min - len);
+                hi                    = std::min(hi, max - len);
+            }
+        }
+        for (const auto id : edge.after) {
+            if (const auto* w = windowOf(windows, id)) {
+                const auto [min, max] = limits(*w);
+                const double len      = v ? w->frame.w : w->frame.h;
+                lo                    = std::max(lo, len - max);
+                hi                    = std::min(hi, len - min);
+            }
+        }
+        // The edge on the grid line nearest the pointer, else the last line inside the range; no move when none is.
+        const double origin = v ? grid.originX : grid.originY;
+        const int    step   = std::max(1, grid.step);
+        double       line   = snapNearest(edge.at + std::clamp(delta, std::min(lo, 0.0), std::max(hi, 0.0)), origin, step);
+        if (line - edge.at < lo)
+            line = snapUp(edge.at + lo, origin, step);
+        if (line - edge.at > hi)
+            line = snapDown(edge.at + hi, origin, step);
+        const double moved = line - edge.at < lo - kSlack || line - edge.at > hi + kSlack ? 0 : line - edge.at;
+
+        std::vector<std::pair<uint64_t, Rect>> out;
+        for (const auto id : edge.before) {
+            if (const auto* w = windowOf(windows, id)) {
+                Rect r = w->frame;
+                (v ? r.w : r.h) += moved;
+                out.emplace_back(id, r);
+            }
+        }
+        for (const auto id : edge.after) {
+            if (const auto* w = windowOf(windows, id)) {
+                Rect r = w->frame;
+                (v ? r.x : r.y) += moved;
+                (v ? r.w : r.h) -= moved;
+                out.emplace_back(id, r);
+            }
+        }
+        return out;
+    }
+
     // ---- suggestions ----
 
     std::vector<int> zonesHeld(std::span<const TileRecord> records, const TileRecord& asker) {

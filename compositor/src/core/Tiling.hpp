@@ -55,6 +55,10 @@ namespace gf::tiling {
     inline constexpr double kCorner = theme::tokens::kTilingCornerBand;
     // Gap around and between tiled windows when margins are on (token tiling.margin; macOS "Tiled windows have margins").
     inline constexpr double kMargin = theme::tokens::kTilingMargin;
+    // The shared-edge handle (TL30): the middle of a shared stretch where a drag moves the whole edge, and its least width
+    // across the edge (tokens tiling.handleLength, tiling.handleBand).
+    inline constexpr double kHandleLength = theme::tokens::kTilingHandleLength;
+    inline constexpr double kHandleBand   = theme::tokens::kTilingHandleBand;
     // Centre: the window keeps its size, at most this fraction of the free area (token tiling.centerMaxFraction).
     inline constexpr double kCenterMaxFraction = theme::tokens::kTilingCenterMaxFraction;
 
@@ -466,6 +470,51 @@ namespace gf::tiling {
     // `chosen` is not in `stack`: its restore raises it, before or after this request. Empty when no member comes forward
     // (`chosen` has no group, or none on screen beside it).
     std::vector<uint64_t> groupRaiseOrder(std::span<const TileRecord> records, uint64_t chosen, std::span<const uint64_t> stack);
+
+    // ---- shared edge (TL30) ----
+
+    // A Tiled member of a group on one output's Desktop as the shared edge sees it: its frame (titlebar band included) and
+    // its limits (its surface's minimum and maximum, `band` the titlebar band; X11 increments are not applied during a drag,
+    // as Hyprland's own floating resize does not apply them).
+    struct EdgeWindow {
+        uint64_t    id    = 0;
+        uint64_t    group = 0;
+        Rect        frame;
+        Constraints limits;
+    };
+
+    // An edge the windows of one group share. Vertical (side by side): the windows `before` it (left) have their right side
+    // on `at`, those `after` it (right) their left side `gap` further (the margin between them, 0 without margins);
+    // horizontal (stacked) likewise with the bottom and top sides. Only windows that face one across the edge are in it, and
+    // every such window of the group along that line is. `handles`: one per pair of facing windows, the middle
+    // `handleLength` of the stretch they share (all of it when shorter), at least `band` across (the gap, widened equally
+    // into both windows when narrower: without margins the windows touch).
+    struct SharedEdge {
+        bool                  vertical = true;
+        uint64_t              group    = 0;
+        double                at       = 0;
+        double                gap      = 0;
+        std::vector<uint64_t> before;
+        std::vector<uint64_t> after;
+        std::vector<Rect>     handles;
+    };
+
+    // The shared edges of `windows` (the Tiled group members of one output's Desktop). Two windows face each other when
+    // they are in the same group (never group 0), the gap between their facing sides is from -1 to `maxGap` + 1 logical px
+    // (the margin; frames sit on the grid) and they overlap along the edge by more than 1 px; an edge gathers the pairs of
+    // one group on the same line (`at` and `gap` within 1 px).
+    std::vector<SharedEdge> sharedEdges(std::span<const EdgeWindow> windows, double maxGap, double handleLength, double band);
+
+    // The edge one of whose handles holds the point (x, y) (the first in `edges`), or nullopt.
+    std::optional<SharedEdge> edgeAt(std::span<const SharedEdge> edges, double x, double y);
+
+    // A drag of `edge` by `delta` logical px along its axis (x for a vertical edge) from the frames at the press
+    // (`windows`, which hold every window of the edge): the before windows' far side and the after windows' near side move
+    // together and the gap stays; the edge lands on the grid line nearest the pointer; it never takes a window under its
+    // minimum or over its maximum (heights count the titlebar band), stopping on the last grid line that keeps every window
+    // within them, and does not move when no line does. Returns the new frames, the before windows then the after ones in
+    // the edge's order (a window `windows` lacks is left out).
+    std::vector<std::pair<uint64_t, Rect>> dragEdge(const SharedEdge& edge, std::span<const EdgeWindow> windows, double delta, const Grid& grid);
 
     // ---- suggestions (TL28) ----
 
