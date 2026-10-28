@@ -3180,6 +3180,8 @@ QtObject {
     readonly property int tilingMargin: 8
     // Center keeps the window's size, at most this fraction of the work area (kCenterMaxFraction before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property real tilingCenterMaxFraction: 0.9
+    // estimate until measured in nested against the owner's captures: a drag's tiling preview shows after the pointer rests this long on a place (ms); Alt shows it at once (parity row M08: macOS shows a short delay, U) [ref: docs/specs/tiling.md § Drags; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPreviewDelay: 250
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property var tilingLayoutLeftRight: [[0, 0, 6, 12], [6, 0, 6, 12]]
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]

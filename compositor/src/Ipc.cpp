@@ -333,8 +333,10 @@ namespace gf::ipc {
                         CGrassfieldTitlebar::onAppearanceChanged();
                     return;
                 }
-                // Window tiling (core/Tiling.hpp): Settings windows.tilingEdges / tilingMenuBar / tilingMargins.
-                if (key.ok && value.ok && (key.view() == tiling::kConfigEdges || key.view() == tiling::kConfigMenuBar || key.view() == tiling::kConfigMargins)) {
+                // Window tiling (core/Tiling.hpp): Settings windows.tilingEdges / tilingMenuBar / tilingOptionDrag / tilingMargins.
+                if (key.ok && value.ok &&
+                    (key.view() == tiling::kConfigEdges || key.view() == tiling::kConfigMenuBar || key.view() == tiling::kConfigAltDrag ||
+                     key.view() == tiling::kConfigMargins)) {
                     const auto on = tiling::parseBool(value.view());
                     if (!on) {
                         logRequest(Log::WARN, "config: rejected ({} = true|false)", key.view());
@@ -345,6 +347,8 @@ namespace gf::ipc {
                         state().tilingDrag.edges = *on;
                     else if (key.view() == tiling::kConfigMenuBar)
                         state().tilingDrag.menuBar = *on;
+                    else if (key.view() == tiling::kConfigAltDrag)
+                        state().tilingDrag.altDrag = *on;
                     else if (state().tilingMargins != *on) {
                         state().tilingMargins = *on;
                         tiler::marginsChanged(); // every tiled window placed again (tiling.md TL2)

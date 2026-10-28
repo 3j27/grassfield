@@ -31,6 +31,15 @@ PopupMenu {
         return {ref: t, title: t.title, minimized: w.minimized, stamp: w.stamp};
     }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()), appId())
 
+    // The app's processes that do not respond (NotResponding, ADR-0035 D-3): the menu starts with "Application Not
+    // Responding" and offers Force Quit in place of Quit, for those processes only (macOS).
+    readonly property var notResponding: NotResponding.markedAmong((info.windows ? info.windows : []).map(t => Compositor.pidOf(t)))
+    // The classes Hyprland reports for the app's windows: the confirmation checks that each pid still owns a window of one.
+    readonly property var appClasses: (info.windows ? info.windows : []).map(t => {
+        const top = Compositor.hyprlandToplevel(t);
+        return top && top.lastIpcObject && top.lastIpcObject.class ? top.lastIpcObject.class : "";
+    }).filter((c, i, all) => c !== "" && all.indexOf(c) === i)
+
     readonly property bool isTrash: info.kind === "trash"
     readonly property bool isFolder: info.kind === "folder"
     // The documents this app used (macOS lists them in the app's Dock menu), newest first.
@@ -86,6 +95,9 @@ PopupMenu {
         if (isTrash)
             return [{id: "trashOpen", text: qsTr("Open")}, {id: "trashEmpty", text: qsTr("Empty Trash…"), enabled: !Trash.empty}];
         const items = [];
+        // macOS: an app that does not respond says so first, greyed out.
+        if (notResponding.length > 0)
+            items.push({id: "notResponding", text: qsTr("Application Not Responding"), enabled: false}, {separator: true});
         // macOS: the app's windows come first (a check on the front window, a mark on minimized ones), then a separator.
         if (windowRows.length > 0) {
             for (const w of windowRows)
@@ -117,12 +129,13 @@ PopupMenu {
         items.push({separator: true});
         items.push({id: "showall", text: qsTr("Show All Windows")});
         // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
+        // An app that does not respond offers Force Quit without Option.
         if (altHeld) {
             items.push({id: "hideOthers", text: qsTr("Hide Others"), enabled: Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
             items.push({id: "forcequit", text: qsTr("Force Quit")});
         } else {
             items.push({id: "hide", text: qsTr("Hide")});
-            items.push({id: "quit", text: qsTr("Quit")});
+            items.push(notResponding.length > 0 ? {id: "forcequitHung", text: qsTr("Force Quit")} : {id: "quit", text: qsTr("Quit")});
         }
         return items;
     }
@@ -261,14 +274,16 @@ PopupMenu {
             Popups.confirm(qsTr("Are you sure you want to permanently erase the items in the Trash?"), qsTr("You can’t undo this action."), qsTr("Empty Trash"), "emptytrash", {}, true);
             return;
         }
-        if (item.id === "forcequit") {
-            const pids = Launch.forceQuitPids(data.windows.map(t => Compositor.pidOf(t)));
+        if (item.id === "forcequit" || item.id === "forcequitHung") {
+            // Without Option, an app that does not respond: only its processes that do not respond (ADR-0035 decision 3-5).
+            // With Option: every process of the app.
+            const pids = item.id === "forcequitHung" ? root.notResponding : Launch.forceQuitPids(data.windows.map(t => Compositor.pidOf(t)));
             if (pids.length === 0) {
                 console.warn("grassfield-shell: force quit refused, no process id for", appId);
                 Popups.close();
                 return;
             }
-            Popups.confirm(qsTr("Force quit “%1”?").arg(Apps.nameFor(appId)), qsTr("Unsaved changes in this application will be lost."), qsTr("Force Quit"), "forcequit", {pid: pids[0], pids: pids}, true);
+            Popups.confirm(qsTr("Force quit “%1”?").arg(Apps.nameFor(appId)), qsTr("Unsaved changes in this application will be lost."), qsTr("Force Quit"), "forcequit", {pid: pids[0], pids: pids, cls: root.appClasses}, true);
             return;
         }
         Popups.close();

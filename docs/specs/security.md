@@ -132,7 +132,8 @@ environment:
   dev plumbing, honoured only in a dev session (`GRASSFIELD_DEV` exactly `1` and `GRASSFIELD_SESSION` not `1`):
   `GRASSFIELD_LID_LOCK`, `GRASSFIELD_LID_FALLBACK`, `GRASSFIELD_DRM` (a fake connected display skipped the fallback)
   and `GRASSFIELD_LID_PROC` in `grassfield-lid`, `GRASSFIELD_LID_TOOL` in the clamshell stand-in, and
-  `GRASSFIELD_SHELL_DIR` in `bindings.lua`. `config/hypr/session.lua` takes its modules from its own directory and
+  `GRASSFIELD_SHELL_DIR` in `bindings.lua` and in `packaging/session-bin/hyprland-dialog` (ADR-0035 D-3; checked by
+  `tests/shell/hyprland_dialog.sh`). `config/hypr/session.lua` takes its modules from its own directory and
   the stand-ins from `/usr/lib/grassfield/omarchy-shims`, never from `GRASSFIELD_CONFIG_DIR` or `GRASSFIELD_SHIM_DIR`
   (another config could drop the lock key and the lid lock; another shim directory would hand Omarchy's sleep-lock
   Omarchy's own `omarchy-shell`). `lock_request_env.sh` sets hostile values in a real session (with a leaked
@@ -173,11 +174,11 @@ display. Offscreen, gtk3 exits 1 for lack of one, with or without the list.
 ## IPC surface (GF-AUDIT-001 SEC-04)
 Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under
 `$XDG_RUNTIME_DIR`; Flatpak sandboxes cannot reach it). Classes: **action** = called by Grassfield's own bindings,
-gestures or screen corners (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`), available in a
-real session, never returns private state; **dev** = test hook, refused outside a dev session (the dev rule: the relative
-`RunMode.dev` call in the security modules, `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing,
-others answer `refused`); **fixtures** = dev session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`,
-`VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
+gestures, screen corners or session helpers (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`,
+`packaging/bin`, `packaging/shims`, `packaging/session-bin`), available in a real session, never returns private state;
+**dev** = test hook, refused outside a dev session (the dev rule: the relative `RunMode.dev` call in the security modules,
+`Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing, others answer `refused`); **fixtures** = dev
+session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`, `VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
 approves polkit. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
 one that does not exist, when an action has no real-session caller or is gated, and when a dev or fixtures function
 does not check its gate.
@@ -196,6 +197,8 @@ does not check its gate.
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
 | search | filter | fixtures | visual tests |
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
+| anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
+| anr | status | dev | returns the marked apps' window titles |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
@@ -377,7 +380,9 @@ shell no longer relies on that alone:
   `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
-  moves).
+  moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
+  Super+drag) and the double-click on a resize border are pointer gestures Hyprland does not start on a locked session; the
+  plugin checks the lock again when it would tile after such a release and then moves nothing.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

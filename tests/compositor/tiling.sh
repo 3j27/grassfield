@@ -28,6 +28,20 @@
 #                  from before (TL10)
 #   locked         while the foreign locker fixture holds the session lock (tests/security/foreign_locker, released over
 #                  its IPC, nothing typed), tile and arrange move nothing and leave the records unchanged (TL34, D4)
+# Step 2 (docs/specs/tiling.md TL16-TL20; only with tiling-arrange: Hyprland's moves need the tiling listeners). Super is
+# held with scripts/dev/keys.sh (Super+drag is Hyprland's move, bindings.lua), Alt likewise:
+#   super-drag     Hyprland's move released at the free edge after the preview delay: that half, a tile record
+#   super-out      Hyprland's move of that tiled window to the middle: its size from before, the grip kept under the
+#                  pointer (the drag ended and begun again), Free
+#   delay          released at the edge before the preview delay (Hyprland's move, then the titlebar drag): no tile
+#   alt-drag       the titlebar drag released in the middle with Alt held (no delay): the half on the pointer's side
+#   menu-bar-move  Hyprland's move released on the menu bar: Fill (the top clamp leaves the window to the tile)
+#   edge           a double-click on the right resize border: the right side at the work area's edge, `sides` "right"
+#   alt-corner     an Alt double-click on the bottom-right corner: Fill
+#   chromium       Chromium (client chrome: its tab strip asks Hyprland's move) dragged to the free edge: that half, the
+#                  preview captured while held; dragged out by its tab strip: its size from before (skipped without it)
+#   unload         the plugin unloaded in the middle of Hyprland's move: Hyprland alive, the drag goes on as Hyprland's
+#                  own; loaded again
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -273,16 +287,21 @@ area_now() {
 area_now
 say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
-# drag WHERE_X WHERE_Y [hold-capture-name] (layout coordinates): press on the titlebar's middle, glide to the point,
-# release there. pointer.sh takes coordinates relative to GF-REF.
+# drag WHERE_X WHERE_Y [hold-capture-name hold-place] (layout coordinates): press on the titlebar's middle, glide to the
+# point, release there. pointer.sh takes coordinates relative to GF-REF. With a capture name, the capture is taken once the
+# plugin logged that the preview of HOLD-PLACE shows for this window (it waits for the preview delay since tiling step 2,
+# TL17; integrator nested pass of 412b42e: a capture taken at a fixed 1.6 s could precede it), one frame later.
 drag() {
-  local tx=$(($1 - mx)) ty=$(($2 - my)) shot=${3:-} x y w h _a
+  local tx=$(($1 - mx)) ty=$(($2 - my)) shot=${3:-} place=${4:-} x y w h _a
   read -r x y w h _a < <(geometry)
   local px=$((x + w / 2 - mx)) py=$((y - GF_TB_MID - my))
   if [[ -n $shot ]]; then
     pointer abs "$px" "$py" down sleep 150 drag $(((px + tx) / 2)) $(((py + ty) / 2)) sleep 150 drag "$tx" "$ty" sleep 2500 up &
     local p=$!
-    sleep 1.6
+    if ! plugin_logged "tiling preview ${addr#0x}: $place on "; then
+      say "  no \"tiling preview ${addr#0x}: $place\" line within 3 s: the capture is taken anyway"
+    fi
+    sleep 0.3
     "$root/scripts/dev/shot.sh" "$shot" "$out" >>"$log" 2>&1 && cp "$dev/shots/$shot.png" "$run/" 2>/dev/null
     wait "$p"
   else
@@ -341,7 +360,7 @@ if [[ -n $pattern_addr ]]; then
   "$root/scripts/dev/shot.sh" tiling-pattern-baseline "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-pattern-baseline.png" "$run/" 2>/dev/null
 fi
 area_now
-drag "$edge_x" $((my + mh / 2)) "tiling-preview-$side"
+drag "$edge_x" $((my + mh / 2)) "tiling-preview-$side" "$side"
 if [[ -n $pattern_addr ]]; then
   d0=$(detail "$run/tiling-pattern-baseline.png")
   d1=$(detail "$run/tiling-preview-$side.png")
@@ -369,7 +388,7 @@ else
   say "SKIP: shared-edge (no output touches $out)"
 fi
 area_now
-drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill
+drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill fill
 check "menu-bar: released on the menu bar, the free area is filled" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
 drag $((mx + mw / 2)) $((my + mh / 2))
 check "drag-out after fill: ${w0}x${h0} again" size_is "$w0" "$h0"
@@ -543,6 +562,172 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   fi
 else
   say "SKIP: step 1 cases (the plugin does not advertise tiling-arrange)"
+fi
+
+# ---- step 2: drags (see the header) ----
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange")' >/dev/null 2>&1; then
+  tiling_state() { nestctl grassfield-tiling 2>>"$log"; }
+  record_field() { # address field ("none": no record)
+    tiling_state | jq -r --arg a "${1#0x}" --arg f "$2" '[.outputs[].windows[] | select(.address == $a)][0][$f] // "none"'
+  }
+  record_is() { local got; got=$(record_field "$1" state); say "  record of $1: $got (want $2)"; [[ $got == "$2" ]]; }
+  sides_are() { local got; got=$(record_field "$1" sides); say "  sides of $1: $got (want $2)"; [[ $got == "$2" ]]; }
+  keys() { "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
+  # A pointer gesture with a modifier held through it (keys.sh in the background): <wtype modifier> <hold ms> <pointer args>
+  with_mod() {
+    local mod=$1 ms=$2 k
+    shift 2
+    keys -M "$mod" -s "$ms" -m "$mod" &
+    k=$!
+    sleep 0.3
+    pointer "$@"
+    wait "$k" 2>/dev/null
+    sleep 0.8
+  }
+  # Super+drag (Hyprland's move) from the window's middle to TO_X TO_Y (layout coordinates), held HOLD ms there.
+  super_drag() { # to_x to_y hold_ms
+    local x y w h _a fx fy tx=$(($1 - mx)) ty=$(($2 - my))
+    read -r x y w h _a < <(geometry)
+    fx=$((x + w / 2 - mx)) fy=$((y + h / 2 - my))
+    with_mod logo $(($3 + 1800)) abs "$fx" "$fy" sleep 100 down sleep 150 drag $(((fx + tx) / 2)) $(((fy + ty) / 2)) sleep 150 drag "$tx" "$ty" sleep "$3" up
+  }
+  # The foot window Free at its size from before, at (300, 200) on GF-REF, focused.
+  free_foot() {
+    nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.8
+  }
+  delay=$(jq -r '.tiling.previewDelay.value' "$root/ui/tokens/tokens.json")
+  say "step 2: preview delay $delay ms (token tiling.previewDelay)"
+
+  free_foot
+  area_now
+  super_drag "$edge_x" $((my + mh / 2)) $((delay + 400))
+  check "super-drag: Hyprland's move released at the free $side edge after the delay tiles the $side half" is_box "$tx" "$ry" "$halfw" "$fullh"
+  check "super-drag: the window has a tile record" record_is "$addr" tiled
+
+  super_drag $((mx + mw / 2)) $((my + mh / 2)) 300
+  check "super-out: Hyprland's move takes the tiled window out at its size from before (${w0}x${h0})" size_is "$w0" "$h0"
+  grip_kept() {
+    local x y w h _a px=$((mx + mw / 2)) py=$((my + mh / 2))
+    read -r x y w h _a < <(geometry)
+    say "  pointer at $px,$py; window ${w}x${h} at $x,$y"
+    (( px - x - w / 2 <= 12 && x + w / 2 - px <= 12 && py > y && py < y + h ))
+  }
+  check "super-out: the grip stays under the pointer (the window's middle, as pressed on the tile)" grip_kept
+  check "super-out: the window is Free" record_is "$addr" none
+
+  free_foot
+  super_drag "$edge_x" $((my + mh / 2)) 40
+  check "delay: Hyprland's move released at the edge before the delay does not tile (${w0}x${h0} kept)" size_is "$w0" "$h0"
+  # Back at (300, 200) first: Hyprland's move above left the window's middle on the edge, and a titlebar drag pressed there
+  # rests on the place from the press (integrator nested pass of 412b42e).
+  free_foot
+  read -r x y w h _a < <(geometry)
+  px=$((x + w / 2 - mx)) py=$((y - GF_TB_MID - my))
+  pointer abs "$px" "$py" down sleep 150 drag $(((px + edge_x - mx) / 2)) $(((py + mh / 2) / 2)) sleep 150 drag $((edge_x - mx)) $((mh / 2)) sleep 40 up
+  sleep 0.8
+  check "delay: the titlebar drag released at the edge before the delay does not tile either" size_is "$w0" "$h0"
+
+  free_foot
+  area_now
+  read -r x y w h _a < <(geometry)
+  px=$((x + w / 2 - mx)) py=$((y - GF_TB_MID - my)) qx=$((ax - mx + aw * 2 / 5)) qy=$((ay - my + ah / 2))
+  with_mod alt 2600 abs "$px" "$py" sleep 100 down sleep 150 drag $(((px + qx) / 2)) $(((py + qy) / 2)) sleep 150 drag "$qx" "$qy" sleep 100 up
+  check "alt-drag: released in the middle with Alt held, at once, the left half (the pointer left of the middle)" is_box $((ax + m)) "$ry" "$halfw" "$fullh"
+
+  free_foot
+  area_now
+  super_drag $((mx + mw / 2)) $((my + 2)) $((delay + 400))
+  check "menu-bar-move: Hyprland's move released on the menu bar fills the free area (not the top clamp's box)" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
+
+  free_foot
+  area_now
+  read -r x y w h _a < <(geometry)
+  bx=$((x + w + 3 - mx)) by=$((y + h / 2 - my)) # 3 px right of the surface: Hyprland's border grab (resize_on_border)
+  pointer abs $((bx + 40)) "$by" sleep 150 abs "$bx" "$by" sleep 200 click sleep 120 click
+  sleep 0.8
+  check "edge: a double-click on the right border extends the right side to the work area's edge" is_box "$x" "$y" $((ax + aw - m - x)) "$h"
+  check "edge: the window is tiled with its right side extended (sides \"right\")" sides_are "$addr" right
+
+  free_foot
+  area_now
+  read -r x y w h _a < <(geometry)
+  cx=$((x + w + 3 - mx)) cy=$((y + h + 3 - my))
+  with_mod alt 2600 abs $((cx + 40)) $((cy + 40)) sleep 150 abs "$cx" "$cy" sleep 200 click sleep 120 click
+  check "alt-corner: an Alt double-click on the bottom-right corner fills the work area" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
+  free_foot
+
+  if command -v chromium >/dev/null; then
+    dead_proxy=127.0.0.1:9
+    rm -rf "$run/chromium-profile"
+    http_proxy=http://$dead_proxy https_proxy=http://$dead_proxy all_proxy=http://$dead_proxy no_proxy='' \
+      env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" GDK_BACKEND=wayland setsid "$root/scripts/dev/isolated.sh" --name tiling-chromium -- \
+      chromium --user-data-dir="$run/chromium-profile" --no-first-run --no-default-browser-check --password-store=basic --disable-background-networking \
+      --disable-component-update --disable-sync --proxy-server="$dead_proxy" --ozone-platform=wayland --window-size=1000,640 about:blank \
+      >>"$run/chromium.out" 2>&1 </dev/null &
+    pids+=("$!")
+    chrome() { nestctl clients -j | jq -r '[.[] | select(.class == "chromium")][0] | select(. != null) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.address)"'; }
+    for _ in $(seq 1 80); do [[ -n $(chrome) ]] && break; sleep 0.25; done
+    read -r _ _ _ _ caddr < <(chrome)
+    if [[ -n ${caddr:-} ]]; then
+      sleep 2
+      nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 250)), window = 'address:$caddr' })" >>"$log" 2>&1
+      sleep 0.8
+      read -r cx0 cy0 cw0 ch0 _ < <(chrome)
+      chrome_box() { # x y w h (client chrome: no titlebar band), 1 px slack
+        local x y w h _a
+        read -r x y w h _a < <(chrome)
+        say "  chromium ${w}x${h} at $x,$y (want ${3}x${4} at $1,$2)"
+        (( x - $1 <= 1 && $1 - x <= 1 && y - $2 <= 1 && $2 - y <= 1 && w - $3 <= 1 && $3 - w <= 1 && h - $4 <= 1 && $4 - h <= 1 ))
+      }
+      gx=$((cx0 + cw0 * 3 / 4 - mx)) gy=$((cy0 + 18 - my)) # empty tab strip
+      pointer abs "$gx" $((gy + 3)) sleep 120 abs "$gx" "$gy" sleep 200 click sleep 700 # focus first
+      area_now
+      pointer abs "$gx" "$gy" sleep 200 down sleep 150 drag $(((gx + edge_x - mx) / 2)) "$gy" sleep 150 drag $((edge_x - mx)) $((mh / 2)) sleep 1800 up &
+      p=$!
+      sleep 1.4
+      "$root/scripts/dev/shot.sh" tiling-chromium-preview "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-chromium-preview.png" "$run/" 2>/dev/null
+      wait "$p"
+      sleep 0.8
+      check "chromium: dragged by its tab strip (Hyprland's move) to the free $side edge, the $side half" chrome_box "$tx" $((ay + m)) "$halfw" $((ah - 2 * m))
+      read -r tcx tcy tcw _ _ < <(chrome)
+      gx=$((tcx + tcw * 3 / 4 - mx)) gy=$((tcy + 18 - my))
+      pointer abs "$gx" "$gy" sleep 200 down sleep 150 drag $((gx - 200)) $((gy + 150)) sleep 150 drag $((mw / 2)) $((mh / 2)) sleep 300 up
+      sleep 0.8
+      chrome_size() { local _x _y w h _a; read -r _x _y w h _a < <(chrome); say "  chromium ${w}x${h} (want ${cw0}x${ch0})"; (( w == cw0 && h == ch0 )); }
+      check "chromium: dragged out by its tab strip, its size from before (the restarted move keeps the app's grab)" chrome_size
+    else
+      check "chromium: mapped" false
+    fi
+    pkill -f -- "--user-data-dir=$run/chromium-profile" 2>/dev/null
+  else
+    say "SKIP: chromium (not installed): the client-chrome drag case is NOT VERIFIED here"
+  fi
+
+  current_plugin=${plugin_path:-$default_plugin}
+  free_foot
+  read -r x y w h _a < <(geometry)
+  fx=$((x + w / 2 - mx)) fy=$((y + h / 2 - my))
+  keys -M logo -s 5200 -m logo &
+  k=$!
+  sleep 0.3
+  pointer abs "$fx" "$fy" sleep 100 down sleep 150 drag $((fx + 100)) "$fy" sleep 2600 drag $((fx + 220)) "$fy" sleep 300 up &
+  p=$!
+  sleep 1.6
+  nestctl plugin unload "$current_plugin" >>"$log" 2>&1
+  wait "$p"
+  wait "$k" 2>/dev/null
+  sleep 0.8
+  check "unload: Hyprland alive after the plugin unloaded in the middle of Hyprland's move" alive
+  moved_on() { local x1 _y _w _h _a; read -r x1 _y _w _h _a < <(geometry); say "  x $x -> ${x1:-?} (want about +220)"; [[ -n ${x1:-} ]] && (( x1 - x >= 150 )); }
+  check "unload: the drag went on as Hyprland's own" moved_on
+  nestctl plugin load "$current_plugin" >>"$log" 2>&1
+  sleep 1.5
+  check "unload: loaded again, the plugin advertises window-tiling" bash -c "timeout 10 '$root/scripts/nestctl' -j grassfield 2>/dev/null | jq -e '.features | index(\"window-tiling\")' >/dev/null"
+else
+  say "SKIP: step 2 cases (the plugin does not advertise tiling-arrange)"
 fi
 
 c1_cases

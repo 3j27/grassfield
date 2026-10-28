@@ -104,6 +104,12 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   and the tiling listeners registered. `config("titlebarDoubleClick", "fill")` joins the allowlist (the shell sends it in
   step 5). A refused `arrange` posts the notice with `reason:"invalid"` and changes nothing; `tile` and `arrange` are
   refused while the session is locked (`reason:"locked"`, TL34).
+- Window tiling, step 2 (2026-10-27, additive, ADR-0036, docs/specs/tiling.md TL16-TL20): no new event, verb or feature.
+  The `config` allowlist gains `tilingOptionDrag` ∈ true|false (true at load: with Alt held a drag tiles into the nearest
+  half, quarter or fill, TL18). Each window of the `hyprctl grassfield-tiling` reply gains `sides`: the sides a double-click
+  on its resize border extended ("top", "bottom", "left", "right" joined by "-" in that order, e.g. "top-left"; "" for a
+  place or a layout zone, TL20). Drags by Hyprland's own move (an app's toolbar, Super+drag) post the same notices as the
+  plugin's titlebar drag (`moved` when a tiled window leaves its tile, `placed` at a release that tiles).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -134,7 +140,7 @@ event frames: clock marks monitors name presented refreshHz renders t total unit
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone group
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
