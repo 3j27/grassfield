@@ -480,9 +480,15 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   a thread of its own with a deadline (`FileChooser::probe`, 1 s), the GUI thread never waiting. **Choice: (b).** A folder
   that has not answered in time is passed over when a panel opens (the next of the application's folder, the remembered
   one, Documents, Home), and Save, SaveFiles and Go to Folder say "“name” isn't responding." with "Choose another folder,
-  or try again later.", as the Finder says of a server that went away; the panel stays open. A path still being read is not
-  read twice, and beyond 16 paths in flight a new one is not responding at once, so stuck reads cannot pile up threads. New
-  Folder asks KIO (its job runs off the GUI thread) and learns a taken name from KIO's error instead of a look first.
+  or try again later.", as the Finder says of a server that went away; the panel stays open. One job per call: the call's
+  paths are read in order on one thread of their own (a panel's start folders with the places first and the application's
+  folder last; SaveFiles' names, up to 4096, in one job), each answer posted as it comes, and the call answered once every
+  path has, or once none has come for 1 s, so a share that is slow but answering is waited for and a stuck one is not. A
+  path another job is reading is not read again, and at most 16 jobs run at once (a stuck one counts while its read hangs):
+  beyond, a new call's paths are not responding at once, so stuck reads cannot pile up threads under the unit's
+  `TasksMax`. (A first version read each path on a thread of its own with a bound of 16 paths in flight: SaveFiles with 17
+  names or more was never answered on a healthy disk, re-review of 6b26afc, MAJOR 1.) New Folder asks KIO (its job runs off
+  the GUI thread) and learns a taken name from KIO's error instead of a look first.
   Left on the GUI thread: Files' own per-item reads once a listing has arrived (tags, folder looks), the panels' state
   file in the state directory, and the application's desktop entry (KService's cache).
 
