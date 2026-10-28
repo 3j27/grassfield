@@ -5693,6 +5693,22 @@
         <translation>«&#xa0;%1&#xa0;» n’a pas pu être ouverte.</translation>
     </message>
     <message>
+        <source>The build script could not be fetched. Try again later.</source>
+        <translation>Le script de construction n&apos;a pas pu être récupéré. Réessayez plus tard.</translation>
+    </message>
+    <message>
+        <source>Build Script of “%1”</source>
+        <translation>Script de construction de « %1 »</translation>
+    </message>
+    <message>
+        <source>The script yay runs to build this package, as the AUR has it. Read it before you install it.</source>
+        <translation>Le script que yay exécute pour construire ce paquet, tel que l&apos;AUR le fournit. Lisez-le avant de l&apos;installer.</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
         <source>Details</source>
         <translation>Détails</translation>
     </message>
@@ -6494,6 +6510,14 @@
         <translation>Ces paquets seront installés&#xa0;:</translation>
     </message>
     <message>
+        <source>AUR</source>
+        <translation>AUR</translation>
+    </message>
+    <message>
+        <source>“%1” is in a repository</source>
+        <translation>« %1 » est dans un dépôt</translation>
+    </message>
+    <message>
         <source>Omarchy&apos;s “%1” runs in a Terminal window, which asks for your password.</source>
         <translation>La commande «&#xa0;%1&#xa0;» d’Omarchy s’exécute dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
     </message>
@@ -6504,6 +6528,18 @@
     <message>
         <source>These packages will be removed:</source>
         <translation>Ces paquets seront supprimés&#xa0;:</translation>
+    </message>
+    <message>
+        <source>It is removed in a Terminal window, which asks for your password.</source>
+        <translation>Il est supprimé dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>The packages marked AUR are built on this computer in a Terminal window, which asks for your password.</source>
+        <translation>Les paquets marqués AUR sont construits sur cet ordinateur dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>Some of what the AUR lists for it could not be read: the build may install more than this.</source>
+        <translation>Une partie de ce que l&apos;AUR indique pour lui n&apos;a pas pu être lue : la construction peut installer davantage.</translation>
     </message>
     <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
@@ -6530,6 +6566,18 @@
         <translation>Désinstaller «&#xa0;%1&#xa0;» retirerait aussi %2, dont le système, Omarchy ou Grassfield a besoin. Elle reste installée.</translation>
     </message>
     <message>
+        <source>A repository has this package: the Store installs it from there, from its own page, without building it.</source>
+        <translation>Un dépôt propose ce paquet : le Store l&apos;installe depuis ce dépôt, à partir de sa propre page, sans le construire.</translation>
+    </message>
+    <message>
+        <source>The AUR doesn&apos;t have this package (anymore).</source>
+        <translation>L&apos;AUR ne propose pas (ou plus) ce paquet.</translation>
+    </message>
+    <message>
+        <source>It needs %1, which neither the repositories nor the AUR have.</source>
+        <translation>Il a besoin de %1, que ni les dépôts ni l&apos;AUR ne proposent.</translation>
+    </message>
+    <message>
         <source>The Store could not read what this would change.</source>
         <translation>Le Store n’a pas pu lire ce que cela changerait.</translation>
     </message>
@@ -6540,6 +6588,10 @@
     <message>
         <source>Install</source>
         <translation>Installer</translation>
+    </message>
+    <message>
+        <source>Install from the AUR</source>
+        <translation>Installer depuis l&apos;AUR</translation>
     </message>
     <message>
         <source>Open Software Update</source>
@@ -6568,6 +6620,10 @@
     <message>
         <source>Download</source>
         <translation>Téléchargement</translation>
+    </message>
+    <message>
+        <source>Download from the repositories</source>
+        <translation>Téléchargement depuis les dépôts</translation>
     </message>
     <message>
         <source>Installed size</source>
@@ -7244,6 +7300,34 @@
         <translation>Version</translation>
     </message>
     <message>
+        <source>Maintainer</source>
+        <translation>Mainteneur</translation>
+    </message>
+    <message>
+        <source>Orphaned</source>
+        <translation>Orphelin</translation>
+    </message>
+    <message>
+        <source>Votes</source>
+        <translation>Votes</translation>
+    </message>
+    <message>
+        <source>Popularity</source>
+        <translation>Popularité</translation>
+    </message>
+    <message>
+        <source>Last Updated</source>
+        <translation>Dernière mise à jour</translation>
+    </message>
+    <message>
+        <source>Flagged Out of Date</source>
+        <translation>Signalé comme obsolète</translation>
+    </message>
+    <message>
+        <source>Yes</source>
+        <translation>Oui</translation>
+    </message>
+    <message>
         <source>Download Size</source>
         <translation>Taille du téléchargement</translation>
     </message>
@@ -7290,6 +7374,14 @@
     <message>
         <source>Bug Tracker</source>
         <translation>Signaler un problème</translation>
+    </message>
+    <message>
+        <source>View Build Script</source>
+        <translation>Voir le script de construction</translation>
+    </message>
+    <message>
+        <source>The AUR doesn&apos;t have this package anymore.</source>
+        <translation>L&apos;AUR ne propose plus ce paquet.</translation>
     </message>
 </context>
 <context>
@@ -8134,8 +8226,40 @@
         <translation>Résultats pour «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
+        <source>Press Return to search the AUR too.</source>
+        <translation>Appuyez sur Entrée pour chercher aussi dans l&apos;AUR.</translation>
+    </message>
+    <message>
+        <source>Searching the AUR…</source>
+        <translation>Recherche dans l&apos;AUR…</translation>
+    </message>
+    <message>
+        <source>The AUR can&apos;t be searched while you&apos;re offline.</source>
+        <translation>L&apos;AUR ne peut pas être consulté lorsque vous êtes hors ligne.</translation>
+    </message>
+    <message>
+        <source>Type at least two characters to search the AUR.</source>
+        <translation>Tapez au moins deux caractères pour chercher dans l&apos;AUR.</translation>
+    </message>
+    <message>
+        <source>The AUR has too many results for “%1”: type more of the name.</source>
+        <translation>L&apos;AUR a trop de résultats pour « %1 » : tapez une plus grande partie du nom.</translation>
+    </message>
+    <message>
+        <source>The AUR could not be searched. Try again later.</source>
+        <translation>La recherche dans l&apos;AUR a échoué. Réessayez plus tard.</translation>
+    </message>
+    <message>
+        <source>The AUR has nothing for “%1”.</source>
+        <translation>L&apos;AUR n&apos;a rien pour « %1 ».</translation>
+    </message>
+    <message>
         <source>No Results for “%1”</source>
         <translation>Aucun résultat pour «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>From the AUR (not reviewed)</source>
+        <translation>Depuis l&apos;AUR (non vérifié)</translation>
     </message>
 </context>
 <context>
@@ -8481,12 +8605,20 @@
         <translation>Les captures d’écran, aux adresses de la description de chaque app, quand sa page s’ouvre.</translation>
     </message>
     <message>
+        <source>From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, the names of the packages installed from outside the repositories, and a build script when you ask to see it.</source>
+        <translation>Depuis l&apos;AUR (aur.archlinux.org), tant qu&apos;il est activé : ce que vous cherchez après avoir appuyé sur Entrée, les pages que vous ouvrez, les noms des paquets installés hors des dépôts, et un script de construction lorsque vous demandez à le voir.</translation>
+    </message>
+    <message>
         <source>Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer.</source>
         <translation>Rien sur une connexion limitée, sauf si vous choisissez Actualiser. Ce que vous recherchez reste sur cet ordinateur.</translation>
     </message>
     <message>
-        <source>Turning the sources and the screenshots on and off comes in a later version.</source>
-        <translation>L’activation des sources et des captures d’écran arrive dans une prochaine version.</translation>
+        <source>This setting could not be saved (%1).</source>
+        <translation>Ce réglage n&apos;a pas pu être enregistré (%1).</translation>
+    </message>
+    <message>
+        <source>Turning Flathub on comes in a later version.</source>
+        <translation>L&apos;activation de Flathub arrivera dans une version ultérieure.</translation>
     </message>
 </context>
 <context>
@@ -9248,12 +9380,40 @@
         <translation>L’icône de cette app web n’a pas encore été téléchargée. Actualisez le Store, puis réessayez.</translation>
     </message>
     <message>
+        <source>Turn on the AUR in the Store&apos;s settings to install from it.</source>
+        <translation>Activez l&apos;AUR dans les réglages du Store pour installer depuis celui-ci.</translation>
+    </message>
+    <message>
+        <source>A repository has this package: the Store installs it from there, from its own page.</source>
+        <translation>Un dépôt propose ce paquet : le Store l&apos;installe depuis ce dépôt, à partir de sa propre page.</translation>
+    </message>
+    <message>
         <source>Installing apps from this source comes in a later version of the Store.</source>
         <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
     </message>
     <message>
+        <source>Installing from the AUR hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>L&apos;installation depuis l&apos;AUR n&apos;a pas encore été vérifiée avec votre version d&apos;Omarchy. Le Store la propose de nouveau dès que son catalogue l&apos;a été.</translation>
+    </message>
+    <message>
         <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
         <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
+    </message>
+    <message>
+        <source>1 vote</source>
+        <translation>1 vote</translation>
+    </message>
+    <message>
+        <source>%1 votes</source>
+        <translation>%1 votes</translation>
+    </message>
+    <message>
+        <source>%1 · Flagged out of date</source>
+        <translation>%1 · Signalé comme obsolète</translation>
+    </message>
+    <message>
+        <source>AUR packages are made by users and reviewed by no one, neither Arch Linux nor Grassfield. Their build script runs on this computer and the package is then installed with administrator rights. Install only what you trust.</source>
+        <translation>Les paquets de l&apos;AUR sont faits par des utilisateurs et ne sont vérifiés par personne, ni Arch Linux ni Grassfield. Leur script de construction s&apos;exécute sur cet ordinateur, puis le paquet est installé avec les droits d&apos;administrateur. N&apos;installez que ce en quoi vous avez confiance.</translation>
     </message>
     <message>
         <source>Waiting for another installation or an update to finish</source>
@@ -9352,6 +9512,10 @@
         <translation>Cette app ne peut pas être désinstallée depuis le Store.</translation>
     </message>
     <message>
+        <source>The installation was refused: the system changed since the Store checked it. Try again from its page.</source>
+        <translation>L&apos;installation a été refusée : le système a changé depuis que le Store l&apos;a vérifiée. Réessayez depuis sa page.</translation>
+    </message>
+    <message>
         <source>This package isn&apos;t an app: the Store installs only apps.</source>
         <translation>Ce paquet n’est pas une app&#xa0;: le Store n’installe que des apps.</translation>
     </message>
@@ -9398,6 +9562,10 @@
     <message>
         <source>This computer can&apos;t uninstall apps from the Store: Omarchy&apos;s commands or Grassfield&apos;s installer are missing.</source>
         <translation>Cet ordinateur ne peut pas désinstaller d’apps depuis le Store&#xa0;: il manque les commandes d’Omarchy ou l’installateur de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Turn on the AUR in the Store&apos;s settings to uninstall it from the Store.</source>
+        <translation>Activez l&apos;AUR dans les réglages du Store pour le désinstaller depuis le Store.</translation>
     </message>
     <message>
         <source>Open</source>
