@@ -1,0 +1,176 @@
+#pragma once
+
+#include <QList>
+#include <QObject>
+#include <QVariantMap>
+
+#include <functional>
+
+#include <KIO/AskUserActionInterface>
+#include <KIO/FileUndoManager>
+#include <KIO/JobUiDelegate>
+#include <KIO/JobUiDelegateFactory>
+#include <KIO/OpenWithHandlerInterface>
+#include <KIO/UntrustedProgramHandlerInterface>
+
+#include <optional>
+
+// Grassfield's KIO dialogs in Files (ADR-0035 D-12 a; docs/specs/system-dialogs.md section 9). KIO's jobs ask through the
+// delegate extensions of their UI delegate (KIO::delegateExtension, src/core/jobuidelegatefactory.h): Files gives every job
+// KIO's own delegate class with Grassfield's extensions as its children, so KIO never creates its widget dialogs
+// (RenameDialog, SkipDialog, KMessageDialog, KOpenWithDialog, KSslInfoDialog). The questions go to KioPrompts, which the
+// browser window shows one at a time as Grassfield sheets (qml/KioSheets.qml). Every answer is the KIO answer the widget
+// dialog gives for the same choice (KioPromptLogic).
+
+// The questions KIO's jobs ask in Files, in the order they were asked; the first one is shown.
+class KioPrompts : public QObject
+{
+    Q_OBJECT
+    // The question on screen: {id, kind, ...} (kinds and fields: qml/KioSheets.qml), {} when there is none.
+    Q_PROPERTY(QVariantMap current READ current NOTIFY currentChanged)
+
+public:
+    using Answer = std::function<void(const QVariantMap &reply)>;
+
+    explicit KioPrompts(QObject *parent = nullptr);
+
+    // Queues a question; `answer` runs once with the sheet's reply ({button, applyToAll, alwaysTrust}). The question stands
+    // while `owner` exists, and, when the owner is a job, while it runs (KIO closes its own dialog when the job ends); then
+    // it goes unanswered. KIO's questions without a job (a worker's message box, a certificate) are owned by the extension
+    // that asked, which lives as long as its job's delegate. No owner: it waits for the user.
+    int ask(const QVariantMap &request, QObject *owner, const Answer &answer);
+    // A sheet with only OK: nothing waits for its answer.
+    void tell(const QString &title, const QString &text);
+    Q_INVOKABLE void reply(int id, const QVariantMap &reply);
+    QVariantMap current() const;
+
+    // Tests: every question is answered by `responder` (no sheet), after the call that asked it returns.
+    void setResponder(const std::function<QVariantMap(const QVariantMap &request)> &responder);
+
+signals:
+    void currentChanged();
+
+private:
+    struct Pending {
+        int id = 0;
+        QVariantMap request;
+        Answer answer;
+    };
+    void withdraw(int id);
+    QList<Pending> m_queue;
+    int m_next = 1;
+    std::function<QVariantMap(const QVariantMap &)> m_responder;
+};
+
+// KIO's questions about files: conflicts, skips, deletions, worker message boxes, certificates.
+class GrassfieldAskUserAction : public KIO::AskUserActionInterface
+{
+    Q_OBJECT
+
+public:
+    GrassfieldAskUserAction(KioPrompts *prompts, QObject *parent = nullptr);
+
+    void askUserRename(KJob *job,
+                       const QString &title,
+                       const QUrl &src,
+                       const QUrl &dest,
+                       KIO::RenameDialog_Options options,
+                       KIO::filesize_t sizeSrc,
+                       KIO::filesize_t sizeDest,
+                       const QDateTime &ctimeSrc = {},
+                       const QDateTime &ctimeDest = {},
+                       const QDateTime &mtimeSrc = {},
+                       const QDateTime &mtimeDest = {}) override;
+    void askUserSkip(KJob *job, KIO::SkipDialog_Options options, const QString &errorText) override;
+    void askUserDelete(const QList<QUrl> &urls, DeletionType deletionType, ConfirmationType confirmationType, QWidget *parent = nullptr) override;
+    void requestUserMessageBox(MessageDialogType type,
+                               const QString &text,
+                               const QString &title,
+                               const QString &primaryActionText,
+                               const QString &secondaryActionText,
+                               const QString &primaryActionIconName = {},
+                               const QString &secondaryActionIconName = {},
+                               const QString &dontAskAgainName = {},
+                               const QString &details = {},
+                               QWidget *parent = nullptr) override;
+    void askIgnoreSslErrors(const QVariantMap &sslErrorData, QWidget *parent) override;
+
+private:
+    KioPrompts *m_prompts;
+    // After "Continue" on the certificate sheet: KIO's http worker asks at once, on this job, whether to accept the
+    // certificate forever or for 30 minutes; the sheet's "Always trust" box answers (KioPromptLogic::certificateFollowUpAnswer).
+    std::optional<bool> m_alwaysTrust;
+    qint64 m_alwaysTrustUntil = 0;
+};
+
+// KIO asks for an application when none is set for a document's type: Files says so (Open With lists the applications).
+class GrassfieldOpenWithHandler : public KIO::OpenWithHandlerInterface
+{
+    Q_OBJECT
+
+public:
+    GrassfieldOpenWithHandler(KioPrompts *prompts, QObject *parent = nullptr);
+    void promptUserForApplication(KJob *job, const QList<QUrl> &urls, const QString &mimeType) override;
+
+private:
+    KioPrompts *m_prompts;
+};
+
+// KIO asks before running a program it does not trust: Files never runs one (its LaunchGuard decides first; this is the
+// second guard, docs/specs/security.md "Files never runs what it opens").
+class GrassfieldUntrustedProgramHandler : public KIO::UntrustedProgramHandlerInterface
+{
+    Q_OBJECT
+
+public:
+    GrassfieldUntrustedProgramHandler(KioPrompts *prompts, QObject *parent = nullptr);
+    void showUntrustedProgramWarning(KJob *job, const QString &programName) override;
+
+private:
+    KioPrompts *m_prompts;
+};
+
+// KIO's own delegate class (clipboard updates and the rest stay KIO's), with Grassfield's extensions. KIO's fourth,
+// OpenOrExecuteFileInterface, has no installed header in KIO 6.31; it is only asked when a job enables
+// setShowOpenOrExecuteDialog, which Files never does (tests/unit/files/tst_kiodialogs.cpp checks the sources).
+// Files' jobs report their errors themselves (automatic handling off); where KIO turns it on for a job of its own, the
+// error or warning is a sheet too, not KIO's message box.
+class GrassfieldJobUiDelegate : public KIO::JobUiDelegate
+{
+    Q_OBJECT
+
+public:
+    GrassfieldJobUiDelegate(KioPrompts *prompts, KJobUiDelegate::Flags flags = AutoHandlingDisabled, QWidget *window = nullptr);
+    void showErrorMessage() override;
+
+protected Q_SLOTS:
+    void slotWarning(KJob *job, const QString &message) override;
+
+private:
+    KioPrompts *m_prompts;
+};
+
+// Undo and redo (KIO's FileUndoManager) report through their own interface (KIO's shows KMessageBox): an error goes to the
+// window's error line, and a copy changed since it was made is not deleted by an undo (KIO asks, synchronously; Grassfield
+// keeps the file and says so). No progress window either. The jobs an undo starts get Grassfield's delegate from the
+// default factory.
+class GrassfieldUndoUi : public KIO::FileUndoManager::UiInterface
+{
+public:
+    explicit GrassfieldUndoUi(const std::function<void(const QString &)> &reportError);
+    void jobError(KIO::Job *job) override;
+    bool copiedFileWasModified(const QUrl &src, const QUrl &dest, const QDateTime &srcTime, const QDateTime &destTime) override;
+
+private:
+    std::function<void(const QString &)> m_reportError;
+};
+
+namespace KioDialogs
+{
+// Called once at start: every KIO delegate Files gets from now on is Grassfield's, also for the sub-jobs KIO gives a default
+// delegate of their own (DirectCopyJob, src/core/job.cpp:282), which the delegate of the job Files starts would not reach;
+// undo and redo ask through Grassfield's interface.
+void install(KioPrompts *prompts, const std::function<void(const QString &)> &reportError);
+// The delegate for a job Files starts (explicit, so it does not depend on the default factory).
+KJobUiDelegate *createDelegate(KJobUiDelegate::Flags flags = KJobUiDelegate::AutoHandlingDisabled);
+} // namespace KioDialogs

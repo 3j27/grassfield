@@ -27,6 +27,7 @@
 class FolderModel;
 class KJob;
 class PlacesModel;
+class KioPrompts;
 
 // Application services for the QML windows. Every file operation is a KIO job (copy, move, trash,
 // restore, mkdir, rename, delete, empty trash, paste), recorded in KIO::FileUndoManager where KIO
@@ -36,6 +37,8 @@ class FilesApp : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QObject *places READ places CONSTANT)
+    // KIO's questions (conflicts, skips, certificates…), shown as sheets by the browser window (ADR-0035 D-12 a).
+    Q_PROPERTY(QObject *prompts READ prompts CONSTANT)
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
@@ -106,6 +109,7 @@ public:
     ~FilesApp() override;
 
     QObject *places() const;
+    QObject *prompts() const;
     QString homePath() const;
     QList<QUrl> initialUrls() const { return m_initialUrls; }
     bool dark() const { return m_dark; }
@@ -335,6 +339,7 @@ private:
 
     QList<QUrl> m_initialUrls;
     PlacesModel *m_places = nullptr;
+    KioPrompts *m_prompts = nullptr;
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
     bool m_dark = true;

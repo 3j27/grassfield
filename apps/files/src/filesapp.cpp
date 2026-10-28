@@ -8,6 +8,7 @@
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
+#include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
 #include "taglogic.h"
@@ -60,11 +61,11 @@ FolderModel *asFolder(QObject *object)
     return qobject_cast<FolderModel *>(object);
 }
 
-// KIO's delegate provides its conflict ("file exists") and Open With dialogs; errors are shown by the
-// app itself (operationFailed), so automatic error dialogs stay off.
+// Grassfield's delegate asks KIO's questions (a name that exists, an item to skip, a certificate…) as the window's sheets
+// (ADR-0035 D-12 a, kioprompts.h); errors are shown by the app itself (operationFailed), so automatic error dialogs stay off.
 void attachDelegate(KJob *job)
 {
-    job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingDisabled, nullptr));
+    job->setUiDelegate(KioDialogs::createDelegate(KJobUiDelegate::AutoHandlingDisabled));
 }
 
 QUrl childUrl(const QUrl &directory, const QString &name)
@@ -151,10 +152,14 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     : QObject(parent)
     , m_initialUrls(initialUrls)
     , m_places(new PlacesModel(this))
+    , m_prompts(new KioPrompts(this))
     , m_settings(QStringLiteral("Grassfield"), QStringLiteral("Files"))
     , m_folderViews(grassfield::apps::runmode::stateDir() + QStringLiteral("/files-views.json"))
 {
     m_rotations.setMaxThreadCount(1);
+    KioDialogs::install(m_prompts, [this](const QString &message) {
+        emit operationFailed(message);
+    });
     auto *undo = KIO::FileUndoManager::self();
     connect(undo, &KIO::FileUndoManager::undoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
@@ -310,6 +315,11 @@ QObject *FilesApp::focusWindow() const
 QObject *FilesApp::places() const
 {
     return m_places;
+}
+
+QObject *FilesApp::prompts() const
+{
+    return m_prompts;
 }
 
 QString FilesApp::homePath() const
