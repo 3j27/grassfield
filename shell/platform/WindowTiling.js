@@ -212,3 +212,63 @@ function gridStep(index, count, columns, key) {
     }
     return index;
 }
+
+// After a pick of the suggestions (TL28) the panel takes no second pick until the plugin's next suggestion; the `tiling`
+// notice of a refusal (reason "invalid": the zone was taken meanwhile; "locked") changed nothing: it takes a pick again.
+function pickPending(pending, reason) {
+    return pending === true && reason !== "invalid" && reason !== "locked";
+}
+
+// ---- tile groups (TL29; step 4b) ----
+
+// gfc1-reply: grassfield-tiling
+// The tile groups of the reply of `hyprctl grassfield-tiling`: {groupOf: {address: group}, members: {group: [address]}}
+// (addresses lower-case hex without 0x, in the reply's order; group the plugin's number as a string). Every window with a
+// group counts, a suspended one (minimized) too; a group of fewer than two windows is left out. null when the reply is
+// malformed.
+function parseGroups(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling" || !Array.isArray(msg.outputs))
+        return null;
+    const members = {};
+    for (const o of msg.outputs) {
+        for (const w of (o && Array.isArray(o.windows) ? o.windows : [])) {
+            const address = w ? hexAddress(w.address) : "";
+            if (address === "" || !finite(w.group) || w.group <= 0)
+                continue;
+            const key = String(w.group);
+            members[key] = (members[key] || []).concat([address]);
+        }
+    }
+    const groupOf = {};
+    for (const key of Object.keys(members)) {
+        if (members[key].length < 2) {
+            delete members[key];
+            continue;
+        }
+        for (const a of members[key])
+            groupOf[a] = key;
+    }
+    return {groupOf: groupOf, members: members};
+}
+
+// The Dock menu's Show Tile Group rows of an app (TL29): the groups `groups` (parseGroups) that hold one of the app's
+// windows `addresses`, each once, in the order of the app's windows: [{group, members, own}] where `own` is the app's
+// first window in that group (the one the row brings forward).
+function tileGroupRows(addresses, groups) {
+    const rows = [];
+    if (!groups || !Array.isArray(addresses))
+        return rows;
+    for (const a of addresses) {
+        const key = groups.groupOf[hexAddress(a)];
+        if (key === undefined || rows.some(r => r.group === key))
+            continue;
+        rows.push({group: key, members: groups.members[key].slice(), own: hexAddress(a)});
+    }
+    return rows;
+}

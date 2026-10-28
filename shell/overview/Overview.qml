@@ -327,6 +327,9 @@ Scope {
             return;
         restoreAfter = choice && choice.kind === "minimized" ? choice.toplevel : null;
         const target = V2.closeTarget(choice, previous, stayOnSpace);
+        // A window chosen brings its tile group forward (TL29); the focus that follows raises it last.
+        if (target.kind === "window" && !locked)
+            Compositor.groupForward(target.address);
         focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);
         pending = target;
         releaseSettled = false;

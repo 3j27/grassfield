@@ -7,7 +7,7 @@
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
 var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages", "arrange",
-    "tile_popover", "move_to"];
+    "tile_popover", "move_to", "group_front"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -76,6 +76,13 @@ function zoneCall(address, layout, zone, withAddress) {
         request.with = "0x" + other;
     // Only validated pieces: the JSON holds no quote or backslash to escape for Lua but the JSON's own quotes.
     return guardedPluginCall("arrange", ["\"" + JSON.stringify(request).replace(/"/g, "\\\"") + "\""]);
+}
+
+// hl.plugin.grassfield.group_front(address) (capability "tiling-groups", TL29): the window's tile group comes forward (called
+// right before the window is activated). "" when the address is invalid.
+function groupFrontCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("group_front", ["\"0x" + hex + "\""]);
 }
 
 // hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of

@@ -8,6 +8,7 @@ import qs.services
 import "../dock/DockModel.js" as DockModel
 import "../dock/Launch.js" as Launch
 import "../dock/Stacks.js" as Stacks
+import "../platform/WindowTiling.js" as WindowTiling
 import "../services/AppLaunch.js" as AppLaunch
 
 // Dock item context menu. Payload (Popups.data): key, entry (DesktopEntry or null),
@@ -30,6 +31,20 @@ PopupMenu {
         const w = Compositor.windowInfo(t);
         return {ref: t, title: t.title, minimized: w.minimized, stamp: w.stamp};
     }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()), appId())
+
+    // The app's tile groups (TL29): one Show Tile Group row per group that holds one of its windows, after Show All Windows.
+    readonly property var tileGroupRows: Compositor.canGroups ? WindowTiling.tileGroupRows(windowRows.map(w => Compositor.addressOf(w.ref)), TilingLink.groups) : []
+
+    // A Show Tile Group row's text: the other members' apps name the group when the app has several.
+    function tileGroupText(row: var): string {
+        if (tileGroupRows.length < 2)
+            return qsTr("Show Tile Group");
+        const names = row.members.filter(a => a !== row.own).map(a => {
+            const t = Compositor.toplevelByAddress(a);
+            return t ? Apps.nameFor(t.appId) : "";
+        }).filter((n, i, all) => n !== "" && all.indexOf(n) === i);
+        return names.length > 0 ? qsTr("Show Tile Group with %1").arg(names.join(", ")) : qsTr("Show Tile Group");
+    }
 
     // The app's processes that do not respond (NotResponding, ADR-0035 D-3): the menu starts with "Application Not
     // Responding" and offers Force Quit in place of Quit, for those processes only (macOS).
@@ -128,6 +143,8 @@ PopupMenu {
             return items;
         items.push({separator: true});
         items.push({id: "showall", text: qsTr("Show All Windows")});
+        for (const g of tileGroupRows)
+            items.push({id: "tileGroup", ref: Compositor.toplevelByAddress(g.own), members: g.members, text: root.tileGroupText(g)});
         // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
         // An app that does not respond offers Force Quit without Option.
         if (altHeld) {
@@ -264,8 +281,9 @@ PopupMenu {
     onActivated: item => {
         const data = root.info;
         const appId = root.appId();
-        // A window chosen from the list is the focus the user wants: nothing hands it back to the previous window.
-        if (item.id === "window")
+        // A window chosen from the list (or a tile group) is the focus the user wants: nothing hands it back to the previous
+        // window.
+        if (item.id === "window" || item.id === "tileGroup")
             FocusReturn.skip();
         // Force Quit asks first (the same confirmation and kill path as the Grassfield menu's Force Quit…): the confirmation
         // replaces this menu, nothing is killed before its button.
@@ -310,9 +328,14 @@ PopupMenu {
             Trash.refresh();
             break;
         case "window":
-            // Restores a minimized window and switches to its Desktop (the same call as a Dock click), once this menu's
-            // Exclusive overlay surface is gone: Hyprland refuses to focus a window while it exists.
+            // Restores a minimized window and switches to its Desktop (the same call as a Dock click), its tile group coming
+            // forward with it (TL29), once this menu's Exclusive overlay surface is gone: Hyprland refuses to focus a window
+            // while it exists.
             Compositor.activateAfterLayer(item.ref, "grassfield-overlay");
+            break;
+        case "tileGroup":
+            // The group's minimized members come back and the group comes forward, the app's window in front (TL29).
+            Compositor.showTileGroupAfterLayer(item.ref, "grassfield-overlay", item.members);
             break;
         case "open":
         case "new":

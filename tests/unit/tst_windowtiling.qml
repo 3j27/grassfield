@@ -188,6 +188,16 @@ TestCase {
         compare(WindowTiling.suggestionGrid(3, 10, 10, 1.6, 24, 12, 280).columns, 0, "no room");
     }
 
+    // Integrator review of 3714f47 (LOW, carried): a refused pick gives the panel back.
+    function test_pickPendingEndsOnARefusal() {
+        compare(WindowTiling.pickPending(true, "invalid"), false, "the zone was taken meanwhile");
+        compare(WindowTiling.pickPending(true, "locked"), false);
+        compare(WindowTiling.pickPending(true, "placed"), true, "the next suggestion follows the placed notice's reply");
+        compare(WindowTiling.pickPending(true, "forgotten"), true);
+        compare(WindowTiling.pickPending(false, "placed"), false);
+        compare(WindowTiling.pickPending(false, "invalid"), false);
+    }
+
     function test_gridStepMovesThroughTheTiles() {
         // 7 tiles in rows of 3: 0 1 2 / 3 4 5 / 6
         compare(WindowTiling.gridStep(-1, 7, 3, "down"), 0, "the first key chooses the first tile");
@@ -203,5 +213,44 @@ TestCase {
         compare(WindowTiling.gridStep(1, 7, 3, "end"), 6);
         compare(WindowTiling.gridStep(2, 7, 3, "other"), 2);
         compare(WindowTiling.gridStep(0, 0, 3, "right"), -1, "no tile");
+    }
+
+    // ---- step 4b: tile groups (TL29) ----
+
+    function stateReply(windows: var): string {
+        return JSON.stringify({v: "gfc/1", type: "tiling", gen: 5, outputs: [{name: "GF-REF", windows: windows.slice(0, 3)}, {name: "DP-1", windows: windows.slice(3)}], suggestion: null});
+    }
+
+    function test_parseGroupsReadsTheGroupsOfTheReply() {
+        const g = WindowTiling.parseGroups(stateReply([
+            {address: "A1", group: 2, state: "tiled"}, {address: "b2", group: 0, state: "tiled"}, {address: "c3", group: 2, state: "suspended"},
+            {address: "d4", group: 7, state: "tiled"}, {address: "0xE5", group: 7, state: "resizing"}, {address: "f6", group: 9, state: "tiled"}
+        ]));
+        compare(JSON.stringify(g.members), JSON.stringify({"2": ["a1", "c3"], "7": ["d4", "e5"]}), "groups of two or more, a suspended member counts");
+        compare(g.groupOf["a1"], "2");
+        compare(g.groupOf["e5"], "7");
+        compare(g.groupOf["b2"], undefined, "no group");
+        compare(g.groupOf["f6"], undefined, "a group of one is left out");
+        compare(JSON.stringify(WindowTiling.parseGroups(stateReply([]))), JSON.stringify({groupOf: {}, members: {}}));
+        for (const text of ["", "x", JSON.stringify({v: "gfc/1", type: "tiling"}), JSON.stringify({v: "gfc/2", type: "tiling", outputs: []}), JSON.stringify({v: "gfc/1", type: "stages", outputs: []})])
+            compare(WindowTiling.parseGroups(text), null, text);
+        // Malformed windows are skipped, not fatal.
+        const skipped = WindowTiling.parseGroups(stateReply([{address: "zz", group: 3}, {address: "a1", group: "3"}, {address: "a2", group: 3}, null, {address: "a3", group: 3}]));
+        compare(JSON.stringify(skipped.members), JSON.stringify({"3": ["a2", "a3"]}));
+    }
+
+    function test_tileGroupRowsListTheAppsGroupsOnce() {
+        const groups = {groupOf: {"a1": "2", "c3": "2", "d4": "7", "e5": "7"}, members: {"2": ["a1", "c3"], "7": ["d4", "e5"]}};
+        const rows = WindowTiling.tileGroupRows(["0xC3", "x9", "a1", "e5"], groups);
+        compare(rows.length, 2);
+        compare(rows[0].group, "2");
+        compare(rows[0].own, "c3", "the app's first window in that group");
+        compare(JSON.stringify(rows[0].members), JSON.stringify(["a1", "c3"]));
+        compare(rows[1].group, "7");
+        compare(rows[1].own, "e5");
+        compare(WindowTiling.tileGroupRows(["x9"], groups).length, 0, "no window of the app in a group");
+        compare(WindowTiling.tileGroupRows(["a1"], null).length, 0);
+        rows[0].members.push("zz");
+        compare(groups.members["2"].length, 2, "the rows copy the members");
     }
 }
