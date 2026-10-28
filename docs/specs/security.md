@@ -553,9 +553,12 @@ gets (double-click, File > Open, Ctrl+Down, the context menu; Return renames), b
   icon. The decode itself runs OUT OF PROCESS (`AppIcons::loadIsolated`): the checked bytes go to a child of the Files binary
   (`grassfield-files --decode-icon <w> <h>`, stdin to a PNG on stdout) with RLIMIT_AS 3 GiB, RLIMIT_CPU 10 s, no core file and
   PDEATHSIG; the parent only decodes the PNG its child made. A decode that has not ended after 3 s is killed (generic icon, not
-  tried again in the run) so a slow icon cannot starve the others; `aboutToQuit` and an `atexit` hook kill every child and wait
-  at most 1.5 s for the 3 workers, so a quit never races a decode (an in-process decode crashed Files at exit, SIGSEGV in
-  QtSvg, round 4 review). SVG work is bounded too: at most 5000 elements, and no `url()` inside a `<marker>` or `<pattern>`
+  tried again in the run) so a slow icon cannot starve the others; `aboutToQuit` kills every child and waits at most 3.5 s
+  for the 3 workers (a start's 2 s plus the 1 s after the kill), and joins the Applications listing thread within the same
+  bound. An `atexit` hook does the same for an exit that skips `aboutToQuit`; it is registered again after the first decoder
+  starts, so it runs before the statics a decode creates. That narrows the exit race without removing it; Files never calls
+  `exit()`, so a normal quit goes through `aboutToQuit` (an in-process decode crashed Files at exit, SIGSEGV in QtSvg, round 4
+  review). SVG work is bounded too: at most 5000 elements, and no `url()` inside a `<marker>` or `<pattern>`
   (a marker using a marker took 7.5 s at 300 x 300 vertices and over 2 minutes at 3000 x 3000). Limits that are NOT static: other
   multipliers pass the allowlist (a mask under 60 `<use>`, filters, deep gradients); only the child's 3 s deadline, 10 s CPU limit
   and memory limit bound them, by design. The child reads the icon to EOF (up to the 4 MiB cap), so icons over the 64 KiB

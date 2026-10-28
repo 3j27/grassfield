@@ -644,8 +644,9 @@ TEST(FolderViews, ManyShortEntriesLoadInLinearTime)
     views.load();
     const qint64 loadMs = timer.elapsed();
     const bool loadedBudgetMissed = loadMs >= 2000 && machineLoaded();
-    if (!loadedBudgetMissed)
+    if (!loadedBudgetMissed) {
         EXPECT_LT(loadMs, 2000) << "load of 68,000 entries";
+    }
     RecordProperty("loadMs", int(loadMs));
     EXPECT_FALSE(views.readOnly());
     EXPECT_EQ(views.count(), FolderViews::kMaxEntries);
@@ -656,8 +657,9 @@ TEST(FolderViews, ManyShortEntriesLoadInLinearTime)
     ASSERT_EQ(views.set(QStringLiteral("a:new"), entry(QStringLiteral("gallery"))), kWritten);
     const qint64 writeMs = timer.elapsed();
     const bool writeBudgetMissed = writeMs >= 2000 && machineLoaded();
-    if (!writeBudgetMissed)
+    if (!writeBudgetMissed) {
         EXPECT_LT(writeMs, 2000) << "first write after the load";
+    }
     RecordProperty("writeMs", int(writeMs));
     FolderViews check(file);
     check.load();
