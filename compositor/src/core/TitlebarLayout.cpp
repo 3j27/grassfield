@@ -37,6 +37,13 @@ namespace gf::titlebar {
         };
     }
 
+    Rect appZoomLight(bool titlebarRow) {
+        if (titlebarRow)
+            return buttonRect(Button::Zoom, Metrics{.height = theme::tokens::kWindowTitlebarHeight, .insetLeft = theme::tokens::kWindowTitlebarLightInset});
+        const double d = theme::tokens::kWindowLightDiameter;
+        return buttonRect(Button::Zoom, Metrics{.height = theme::tokens::kWindowUnifiedHeight, .insetLeft = theme::tokens::kWindowUnifiedLightCentre - (d / 2.0)});
+    }
+
     double buttonsRightEdge(const Metrics& m) {
         const Rect last = buttonRect(kButtonOrder.back(), m);
         return last.x + last.w;

@@ -97,6 +97,16 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // The titlebar of this full-screen window is revealed.
     bool revealed() const;
 
+    // TL22, TL24 (docs/specs/tiling.md): the zoom light of `w` in global layout coordinates: its titlebar's while the bar is
+    // shown or revealed, or the light a Grassfield app draws itself (the client-chrome tag on an org.grassfield.* window,
+    // its row named by its xdg-toplevel tag: "info" the titlebar row, any other role the unified toolbar row); nullopt for
+    // any other window (third-party client chrome: no popover on hover).
+    static std::optional<CBox> zoomLightOf(const PHLWINDOW& w);
+
+    // hl.plugin.grassfield.tile_popover(address) (TL26): a tile-hover "open" event for that window, with its zoom light, or
+    // the top-left corner of its frame when it has no known light. Untrusted: the address is compared with the live windows.
+    static void popoverRequest(std::string_view address);
+
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
     CBox revealBox() const; // the revealed bar of a full-screen window, global logical coordinates (P6)

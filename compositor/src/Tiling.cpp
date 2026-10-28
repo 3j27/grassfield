@@ -1038,6 +1038,71 @@ namespace gf::tiler {
         return tiling::movable(factsOf(w));
     }
 
+    bool tileable(const PHLWINDOW& w) {
+        return placeable(w);
+    }
+
+    void moveToRequest(std::string_view addressText, std::string_view outputName) {
+        if (gf::deferredFocus::sessionLocked()) {
+            logRequest(Log::WARN, "move_to: refused: the session is locked");
+            notify(tiling::Reason::Locked);
+            return;
+        }
+        const auto refuse = [](std::string_view why) {
+            logRequest(Log::WARN, "move_to: refused: {}", why);
+            notify(tiling::Reason::Invalid);
+        };
+        const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
+        const auto     w       = address != 0 ? windowById(address) : nullptr;
+        if (!w || !g_layoutManager) {
+            refuse("no such window");
+            return;
+        }
+        if (!tiling::outputNameOk(outputName)) {
+            refuse("not an output name");
+            return;
+        }
+        const auto to   = monitorByName(outputName);
+        const auto from = monitorOf(w);
+        if (!to || !to->m_enabled || !from || to == from || showsSpecial(to) || !to->m_activeWorkspace) {
+            refuse("no other output of that name with a Desktop shown");
+            return;
+        }
+        if (!movable(w) || !w->m_isFloating || w->m_pinned || fullscreenNow(w) || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace) {
+            refuse("the window cannot move to another output");
+            return;
+        }
+        auto& s = st();
+        catchUp();
+        const CBox         current  = w->layoutTarget()->position();
+        const auto         band     = gf::chrome::bandOf(w);
+        const auto         toArea   = areaFor(to);
+        const tiling::Rect frame    = tiling::frameOf(toRect(current), band);
+        const tiling::Rect relative = tiling::moveToArea(frame, areaFor(from).box, toArea.box);
+        const auto         r        = s.book.find(idOf(w));
+        std::optional<tiling::Placement> where;
+        std::optional<tiling::Rect>      tiled;
+        if (r && r->state == tiling::TileState::Tiled && placeable(w)) {
+            where = r->where; // a copy: the book changes below
+            if (where->sides != 0)
+                tiled = tiling::extendFrame(relative, where->sides, constraintsOf(w), toArea);
+            else
+                tiled = placementFrame(w, *where, toArea, to->m_name, to->m_activeWorkspace->m_id);
+        }
+        const CBox surface = toCBox(tiling::surfaceOf(tiled.value_or(relative), band));
+        g_layoutManager->setTargetGeom(surface, w->layoutTarget());
+        followOutput(w); // its middle is on `to` now: that output's Desktop, as after Hyprland's own move (TL21, D9)
+        const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
+        if (tiled) {
+            s.book.placed(idOf(w), toRect(current), toRect(surface), band, *where, to->m_name, workspace, 0); // a group stays on its output
+            notify(tiling::Reason::Placed);
+        } else if (r) {
+            s.book.forget(idOf(w)); // not tiled (or not tileable any more): Free on the other output
+            notify(tiling::Reason::Forgotten);
+        }
+        logRequest(Log::DEBUG, "move_to {:x}: {} -> {}{}", idOf(w), from->m_name, to->m_name, tiled ? " (in the same tile)" : "");
+    }
+
     void followOutput(const PHLWINDOW& w) {
         const auto facts = factsOf(w);
         if (!g_layoutManager || !w)

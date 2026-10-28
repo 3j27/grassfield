@@ -42,6 +42,16 @@
 #                  preview captured while held; dragged out by its tab strip: its size from before (skipped without it)
 #   unload         the plugin unloaded in the middle of Hyprland's move: Hyprland alive, the drag goes on as Hyprland's
 #                  own; loaded again
+# Step 3 (docs/specs/tiling.md TL22-TL26; only with tile-hover). The plugin's events are read on Hyprland's socket2 (socat);
+# the shell's popover, when the shell runs, is closed with Esc after each case:
+#   popover-verb   tile_popover(address) posts tile-hover "open" for the window, tileable, its light in the titlebar's band
+#   hover          the pointer on that light: no "enter" before tiling.hoverDelay, "enter" after it; moving away posts
+#                  "leave"
+#   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
+#                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
+#                  output)
+#   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
+# The locked case above also calls move_to when the plugin has it (TL34): nothing moves.
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -548,8 +558,12 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
       gen_l0=$(tiling_state | jq -r '.gen')
       tile_ipc "$addr" left
       arrange "{\"layout\":\"quarters\",\"windows\":[\"$addr\"]}"
+      # move_to (tiling step 3): refused before the output is even looked up.
+      lock_other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // "NO-SUCH-OUTPUT"')
+      nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$lock_other\")" >>"$log" 2>&1
+      sleep 0.8
       gen_l1=$(tiling_state | jq -r '.gen')
-      check "locked: tile and arrange move nothing while the session is locked" box_of tiling-foot "$lx" "$ly" "$lw" "$lh"
+      check "locked: tile, arrange and move_to move nothing while the session is locked" box_of tiling-foot "$lx" "$ly" "$lw" "$lh"
       check "locked: the records are unchanged (generation $gen_l0 -> $gen_l1)" test "$gen_l0" = "$gen_l1"
     else
       check "locked: the foreign locker holds the session lock (${locked:-no answer})" false
@@ -728,6 +742,134 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   check "unload: loaded again, the plugin advertises window-tiling" bash -c "timeout 10 '$root/scripts/nestctl' -j grassfield 2>/dev/null | jq -e '.features | index(\"window-tiling\")' >/dev/null"
 else
   say "SKIP: step 2 cases (the plugin does not advertise tiling-arrange)"
+fi
+
+# ---- step 3: the zoom light's popover and move_to (see the header) ----
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >/dev/null 2>&1; then
+  events=$run/events.log
+  socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$DEV_NESTED_SIG/.socket2.sock" STDOUT >"$events" 2>>"$log" </dev/null &
+  pids+=("$!")
+  sleep 0.3
+  tiling_state() { nestctl grassfield-tiling 2>>"$log"; }
+  record_is() { # address state ("none": no record)
+    local got
+    got=$(tiling_state | jq -r --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0].state // "none"')
+    say "  record of $1: $got (want $2)"
+    [[ $got == "$2" ]]
+  }
+  keys() { "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
+  close_popover() { keys -k Escape; sleep 0.5; }
+  move_to() { nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$1\")" >>"$log" 2>&1; sleep 0.8; }
+  free_foot() {
+    nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.8
+  }
+  ev_mark=0
+  mark_events() { ev_mark=$(grep -ac "" "$events" 2>/dev/null || echo 0); }
+  # The gfc/1 events (JSON, one per line) posted since mark_events that match the jq filter FILTER.
+  events_since() { tail -n +"$((ev_mark + 1))" "$events" 2>/dev/null | sed -n 's/^grassfield>>//p' | jq -cR "fromjson? | select($1)" 2>/dev/null; }
+  # The latest such event, waited for up to 3 s.
+  event_came() { # filter
+    local _ line
+    for _ in $(seq 1 30); do
+      line=$(events_since "$1" | tail -n 1)
+      [[ -n $line ]] && { last_event=$line; return 0; }
+      sleep 0.1
+    done
+    return 1
+  }
+  hover_filter() { echo ".type == \"tile-hover\" and .address == \"${addr#0x}\" and .state == \"$1\""; }
+  hover_delay=$(jq -r '.tiling.hoverDelay.value' "$root/ui/tokens/tokens.json")
+  say "step 3: hover delay $hover_delay ms (token tiling.hoverDelay)"
+
+  free_foot
+  mark_events
+  nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
+  last_event=""
+  check "popover-verb: tile_popover posts tile-hover open for the window" event_came "$(hover_filter open)"
+  open_event=$last_event
+  say "  event: $open_event"
+  light_on_bar() {
+    local x y w h _a lx ly lw lh
+    read -r x y w h _a < <(geometry)
+    read -r lx ly lw lh < <(jq -r '"\(.x) \(.y) \(.w) \(.h)"' <<<"$open_event" 2>/dev/null)
+    say "  light ${lw:-?}x${lh:-?} at ${lx:-?},${ly:-?}; surface at $x,$y, titlebar $tb"
+    [[ -n ${lh:-} ]] && awk -v lx="$lx" -v ly="$ly" -v lw="$lw" -v lh="$lh" -v x="$x" -v y="$y" -v tb="$tb" \
+      'BEGIN { cy = ly + lh / 2; exit !(lw > 0 && lh > 0 && lx >= x && lx + lw <= x + 120 && cy > y - tb && cy < y) }'
+  }
+  check "popover-verb: the light is the zoom light, at the left of the window's titlebar" light_on_bar
+  check "popover-verb: the window can be tiled (tileable)" bash -c "jq -e '.tileable == true' <<<'$open_event' >/dev/null 2>&1"
+  close_popover
+
+  if [[ -n $open_event ]]; then
+    read -r lcx lcy < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$open_event")
+    pointer abs $((lcx - mx + 200)) $((lcy - my + 150)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 300
+    no_early_enter() { [[ -z $(events_since "$(hover_filter enter)") ]]; }
+    check "hover: no enter before tiling.hoverDelay" no_early_enter
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "hover: the pointer resting on the zoom light posts tile-hover enter" event_came "$(hover_filter enter)"
+    check "hover: the enter carries the same light" bash -c "jq -e --argjson o '$open_event' '.x == \$o.x and .y == \$o.y' <<<'${last_event:-null}' >/dev/null 2>&1"
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 300
+    check "hover: leaving the light posts tile-hover leave" event_came "$(hover_filter leave)"
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 300) / 1000 }')" # the shell's popover closes by itself
+    close_popover
+  else
+    check "hover: needs the light from the open event" false
+  fi
+
+  other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // ""')
+  if [[ -n $other ]]; then
+    free_foot
+    area_now
+    nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"left\")" >>"$log" 2>&1
+    sleep 0.8
+    move_to "$other"
+    read -r oax oay oaw oah < <(area_of "$other")
+    check "move-to: the tiled window takes the left half of $other" is_box $((oax + m)) $((oay + m + tb)) $(((oaw - 3 * m) / 2)) $((oah - 2 * m - tb))
+    check "move-to: still tiled" record_is "$addr" tiled
+    on_desktop_of() { # output
+      local ws want
+      ws=$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id')
+      want=$(nestctl monitors -j | jq -r --arg o "$1" '.[] | select(.name == $o) | .activeWorkspace.id')
+      say "  Desktop $ws (want $want, $1's)"
+      [[ -n $ws && $ws == "$want" ]]
+    }
+    check "move-to: it is on $other's Desktop" on_desktop_of "$other"
+    area_now
+    move_to "$out"
+    check "move-to: back on $out, its left half" is_box $((ax + m)) "$ry" "$halfw" "$fullh"
+    free_foot
+    read -r _ _ fw fh _ < <(geometry)
+    move_to "$other"
+    free_on_other() {
+      local x y w h _a
+      read -r x y w h _a < <(geometry)
+      say "  ${w}x${h} at $x,$y (want ${fw}x${fh}, at most ${oaw}x${oah}, its middle on $other at $oax,$oay)"
+      (( x + w / 2 >= oax && x + w / 2 < oax + oaw && y + h / 2 >= oay && y + h / 2 < oay + oah )) &&
+        (( (w == fw || w <= oaw) && (h == fh || h <= oah) ))
+    }
+    check "move-to: a Free window keeps its size and lands on $other" free_on_other
+    check "move-to: still Free" record_is "$addr" none
+    move_to "$out"
+  else
+    say "SKIP: move-to (one output: the Move to <display> rows are not shown either)"
+  fi
+
+  free_foot
+  read -r bx by bw bh _ < <(geometry)
+  mark_events
+  move_to "NO-SUCH-OUTPUT"
+  check "move-invalid: an unknown output is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  mark_events
+  move_to "$out"
+  check "move-invalid: the window's own output is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  check "move-invalid: nothing moved" is_box "$bx" "$by" "$bw" "$bh"
+else
+  say "SKIP: step 3 cases (the plugin does not advertise tile-hover)"
 fi
 
 c1_cases

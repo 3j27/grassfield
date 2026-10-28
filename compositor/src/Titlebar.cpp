@@ -8,9 +8,11 @@
 #include "Tiling.hpp"
 #include "TopClamp.hpp"
 #include "core/ClientChrome.hpp"
+#include "core/Minimize.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
+#include "core/Tiling.hpp"
 
 #include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
@@ -26,6 +28,8 @@
 #include <hyprland/src/layout/supplementary/DragController.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
@@ -42,6 +46,7 @@
 #include <linux/input-event-codes.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -87,6 +92,8 @@ namespace {
         gf::chrome::CHeldButtons          heldButtons;       // the buttons Hyprland holds, as the bus shows them (P6)
         CGrassfieldTitlebar*              revealArmed = nullptr; // its light pressed, activated on release over it
         std::optional<tb::Button>         revealLight;
+        gf::tiling::CHoverDwell           zoomHover; // TL22: the zoom light under the pointer, a hover after tiling.hoverDelay
+        SP<CEventLoopTimer>               zoomTimer; // posts the hover once the delay passed (code of this library: removed at unload)
     };
 
     bool sessionLocked() {
@@ -374,6 +381,86 @@ namespace {
         return nullptr;
     }
 
+    uint64_t nowMs() {
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
+    uint64_t addressOf(const PHLWINDOW& w) {
+        return reinterpret_cast<uintptr_t>(w.get());
+    }
+
+    // The topmost window under `pos` whose zoom light contains it (TL22, TL24), and that light. The windows are walked as
+    // titlebarHoveredAt walks them (geometry only, from the top); a revealed full-screen bar is over every window.
+    std::optional<std::pair<PHLWINDOW, CBox>> zoomLightAt(const Vector2D& pos) {
+        const auto  inLight = [&pos](const CBox& light) {
+            CBox hit = light;
+            hit.expand(theme::kButtonHitSlop); // the click's own slop (core hitTest)
+            return hit.containsPoint(pos);
+        };
+        for (auto* deco : gf::state().titlebars) {
+            if (deco->revealed() && deco->barContains(pos)) {
+                const auto w     = deco->window();
+                const auto light = w ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
+                return light && inLight(*light) ? std::optional{std::pair{w, *light}} : std::nullopt;
+            }
+        }
+        if (!Desktop::windowState())
+            return std::nullopt;
+        const auto& windows = Desktop::windowState()->windows();
+        for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+            const auto& w = *it;
+            if (!w || !w->m_isMapped || w->isHidden() || !w->m_workspace || !w->m_workspace->isVisible())
+                continue;
+            const auto& all   = gf::state().titlebars;
+            const auto  deco  = std::ranges::find_if(all, [&w](const CGrassfieldTitlebar* d) { return d->window() == w; });
+            const bool  onBar = deco != all.end() && (*deco)->barContains(pos);
+            if (!onBar && !w->getWindowMainSurfaceBox().containsPoint(pos))
+                continue; // not under the pointer: a window further down may be
+            const auto light = drawnInPlace(w) ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
+            return light && inLight(*light) ? std::optional{std::pair{w, *light}} : std::nullopt;
+        }
+        return std::nullopt;
+    }
+
+    // Posts what the hover tracker decided (event channel TileHover: the latest state wins).
+    void postHover(const gf::tiling::HoverChange& change, const PHLWINDOW& w, const CBox& light) {
+        const gf::events::Key key{.channel = gf::events::Channel::TileHover, .id = 0};
+        if (change.leave)
+            gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.leave, gf::tiling::HoverState::Leave));
+        if (change.enter && w)
+            gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.enter, gf::tiling::HoverState::Enter, gf::tiling::Rect{light.x, light.y, light.w, light.h},
+                                                              gf::tiler::tileable(w)));
+    }
+
+    void armZoomTimer(uint64_t ms);
+
+    // TL22: the zoom light under the pointer now (pointer motion, the hover delay's timer). No button may be held: a press
+    // ends the hover until the pointer leaves the light (CHoverDwell::press).
+    void updateZoomHover() {
+        auto& input = pointerInput();
+        if (!g_pInputManager)
+            return;
+        const auto at     = g_pInputManager->hasHeldButtons() ? std::nullopt : zoomLightAt(g_pInputManager->getMouseCoordsInternal());
+        const auto w      = at ? at->first : nullptr;
+        const auto now    = nowMs();
+        const auto change = input.zoomHover.update(w ? std::optional{addressOf(w)} : std::nullopt, now);
+        postHover(change, w, at ? at->second : CBox{});
+        if (const auto wait = input.zoomHover.remaining(now))
+            armZoomTimer(*wait);
+    }
+
+    void armZoomTimer(uint64_t ms) {
+        auto& input = pointerInput();
+        if (!g_pEventLoopManager)
+            return;
+        if (!input.zoomTimer) {
+            input.zoomTimer = makeShared<CEventLoopTimer>(
+                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("titlebar zoom hover", [] { updateZoomHover(); }); }, nullptr);
+            g_pEventLoopManager->addTimer(input.zoomTimer);
+        }
+        input.zoomTimer->updateTimeout(std::chrono::milliseconds(ms));
+    }
+
     // Pointer motion: the glyphs follow the pointer onto and off the lights. Only the titlebars that change are damaged.
     void updateHover() {
         auto& input = pointerInput();
@@ -469,6 +556,48 @@ bool CGrassfieldTitlebar::revealable() const {
 
 bool CGrassfieldTitlebar::revealed() const {
     return m_revealed;
+}
+
+std::optional<CBox> CGrassfieldTitlebar::zoomLightOf(const PHLWINDOW& w) {
+    if (!w)
+        return std::nullopt;
+    const auto& all  = gf::state().titlebars;
+    const auto  deco = std::ranges::find_if(all, [&w](const CGrassfieldTitlebar* d) { return d->window() == w; });
+    if (deco != all.end() && (*deco)->barShown()) {
+        const CBox bar   = (*deco)->barBox();
+        const auto light = tb::buttonRect(tb::Button::Zoom);
+        return CBox{bar.x + light.x, bar.y + light.y, light.w, light.h};
+    }
+    // TL24: a Grassfield app draws its lights itself at the tokens' places (ADR-0015 WindowControls), not in full screen.
+    if (!gf::chrome::isClientChrome(w) || !w->m_class.starts_with("org.grassfield.") || fullscreenMode(w) == Fullscreen::FSMODE_FULLSCREEN)
+        return std::nullopt;
+    const auto  role    = w->xdgTag();
+    const auto  light   = tb::appZoomLight(role && *role == "info");
+    const CBox  surface = w->getWindowMainSurfaceBox();
+    return CBox{surface.x + light.x, surface.y + light.y, light.w, light.h};
+}
+
+void CGrassfieldTitlebar::popoverRequest(std::string_view address) {
+    const auto id = gf::minimize::parseAddress(address);
+    if (!id || !Desktop::windowState()) {
+        gf::logRequest(Log::WARN, "tile_popover: rejected: invalid window address");
+        return;
+    }
+    PHLWINDOW w;
+    for (const auto& candidate : Desktop::windowState()->windows()) {
+        if (candidate && candidate->m_isMapped && addressOf(candidate) == *id)
+            w = candidate;
+    }
+    if (!w) {
+        gf::logRequest(Log::WARN, "tile_popover: no mapped window {:x}", *id);
+        return;
+    }
+    // Without a known light: the top-left corner of the frame, where the lights of a third-party title bar usually are.
+    const CBox surface = w->getWindowMainSurfaceBox();
+    const double band  = gf::chrome::bandOf(w);
+    const CBox light   = zoomLightOf(w).value_or(CBox{surface.x, surface.y - band, theme::kTitlebarHeight, theme::kTitlebarHeight});
+    gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::TileHover, .id = 0},
+                       gf::tiling::tileHoverJson(*id, gf::tiling::HoverState::Open, gf::tiling::Rect{light.x, light.y, light.w, light.h}, gf::tiler::tileable(w)));
 }
 
 SDecorationPositioningInfo CGrassfieldTitlebar::getPositioningInfo() {
@@ -943,6 +1072,10 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
     gf::guarded("titlebar onGlobalMouseButton", [&] {
         auto& input = pointerInput();
         if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+            // TL22: a press ends the zoom light's hover (its click zooms the window) until the pointer leaves the light.
+            postHover(input.zoomHover.press(), nullptr, CBox{});
+            if (input.zoomTimer)
+                input.zoomTimer->updateTimeout(std::nullopt);
             // A press while a gesture is active: its release was lost (e.g. the pressing device went away)
             // or another button was pressed. End the gesture where it is; this press goes wherever
             // Hyprland sends it, and its release with it.
@@ -1009,6 +1142,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
 void CGrassfieldTitlebar::onGlobalMouseMove() {
     gf::guarded("titlebar reveal", [] { updateReveal(); }); // before the hover: a bar just revealed shows its glyphs
     gf::guarded("titlebar hover", [] { updateHover(); });
+    gf::guarded("titlebar zoom hover", [] { updateZoomHover(); });
     gf::guarded("titlebar onGlobalMouseMove", [] {
         auto& input = pointerInput();
         if (!input.presses.gestureButton())
@@ -1046,6 +1180,12 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
         input.heldButtons.reset();
         input.revealArmed = nullptr;
         input.revealLight.reset();
+        input.zoomHover.reset(); // the shell drops the popover with the feature (unload) or on its own close rules
+        if (input.zoomTimer) {
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(input.zoomTimer); // its callback is code of this library
+            input.zoomTimer.reset();
+        }
         for (auto* deco : gf::state().titlebars) {
             deco->damageRevealed();
             deco->m_revealed = false;

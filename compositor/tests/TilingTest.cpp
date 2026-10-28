@@ -841,3 +841,101 @@ TEST(TilingRecord, AnEdgePlacementIsItsOwnPlacement) {
     EXPECT_EQ(r.before, (Rect{2000, 300, 800, 500})) << "Return to Previous Size has a box to go back to";
     EXPECT_EQ(book.takeBefore(7), (Rect{2000, 300, 800, 500}));
 }
+
+// ---- step 3: the hover on the zoom light (TL22) ----
+
+TEST(TilingHover, TheZoomLightIsAHoverAfterTheDelay) {
+    ASSERT_GT(kHoverDelay, 1U);
+    CHoverDwell h;
+    EXPECT_FALSE(h.remaining(0).has_value()) << "no light under the pointer";
+    auto c = h.update(7, 1000);
+    EXPECT_FALSE(c.enter.has_value());
+    EXPECT_FALSE(c.leave.has_value());
+    EXPECT_EQ(h.remaining(1000), kHoverDelay);
+    EXPECT_FALSE(h.update(7, 1000 + kHoverDelay - 1).enter.has_value());
+    EXPECT_EQ(h.remaining(1000 + kHoverDelay - 1), 1U);
+    c = h.update(7, 1000 + kHoverDelay);
+    EXPECT_EQ(c.enter, 7U);
+    EXPECT_EQ(h.entered(), 7U);
+    EXPECT_FALSE(h.remaining(1000 + kHoverDelay).has_value()) << "entered: nothing to wait for";
+    EXPECT_FALSE(h.update(7, 9000).enter.has_value()) << "enter once";
+    c = h.update(std::nullopt, 9001);
+    EXPECT_EQ(c.leave, 7U) << "off the light: leave";
+    EXPECT_FALSE(c.enter.has_value());
+    EXPECT_FALSE(h.entered().has_value());
+    EXPECT_FALSE(h.update(std::nullopt, 9002).leave.has_value()) << "leave once";
+}
+
+TEST(TilingHover, AnotherLightStartsOverAndLeavesTheFirst) {
+    CHoverDwell h;
+    h.update(1, 0);
+    h.update(1, kHoverDelay);
+    auto c = h.update(2, kHoverDelay + 5);
+    EXPECT_EQ(c.leave, 1U);
+    EXPECT_FALSE(c.enter.has_value()) << "the other light waits for its own delay";
+    EXPECT_EQ(h.remaining(kHoverDelay + 5), kHoverDelay);
+    c = h.update(2, 2 * kHoverDelay + 5);
+    EXPECT_EQ(c.enter, 2U);
+    h.update(3, 3 * kHoverDelay);
+    EXPECT_FALSE(h.update(3, 3 * kHoverDelay + 1).leave.has_value()) << "a light never entered leaves nothing";
+    EXPECT_EQ(h.remaining(4 * kHoverDelay + 7), 0U) << "overdue: due now";
+}
+
+TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {
+    CHoverDwell h;
+    h.update(4, 0);
+    EXPECT_FALSE(h.press().leave.has_value()) << "pressed before the delay: nothing to leave";
+    EXPECT_FALSE(h.remaining(1).has_value()) << "held: no timer";
+    EXPECT_FALSE(h.update(4, 10 * kHoverDelay).enter.has_value()) << "held while the pointer stays";
+    h.update(std::nullopt, 10 * kHoverDelay + 1);
+    h.update(4, 10 * kHoverDelay + 2);
+    EXPECT_EQ(h.update(4, 11 * kHoverDelay + 2).enter, 4U) << "back on the light after leaving: a hover again";
+    EXPECT_EQ(h.press().leave, 4U) << "a press during the hover leaves";
+    EXPECT_FALSE(h.entered().has_value());
+    EXPECT_FALSE(h.update(4, 20 * kHoverDelay).enter.has_value());
+    EXPECT_FALSE(h.press().leave.has_value()) << "a second press leaves nothing";
+    CHoverDwell off;
+    EXPECT_FALSE(off.press().leave.has_value()) << "no light: a press changes nothing";
+    EXPECT_EQ(off.update(5, 0).enter, std::nullopt);
+    EXPECT_EQ(off.update(5, kHoverDelay).enter, 5U) << "a press with no light under the pointer holds nothing";
+    off.reset();
+    EXPECT_FALSE(off.entered().has_value());
+    EXPECT_FALSE(off.remaining(0).has_value());
+}
+
+TEST(TilingHover, TheEventIsSmall) {
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Enter, Rect{1500, 40, 18.6667, 18.6667}, true),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true})")
+        << "one decimal, as the state reply";
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, false),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false})");
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Leave, Rect{1, 2, 3, 4}, true), R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"leave"})")
+        << "leave carries no box";
+    EXPECT_LT(tileHoverJson(UINT64_MAX, HoverState::Enter, Rect{-99999.5, -99999.5, 99999.5, 99999.5}, true).size(), 200U);
+}
+
+TEST(TilingMoveTo, AFreeWindowKeepsItsPlaceOnTheOtherOutput) {
+    const Rect from{0, 24, 1440, 794};
+    const Rect to{1440, 24, 1920, 974};
+    // Left-aligned stays left-aligned; centred stays centred; the size is kept.
+    EXPECT_EQ(moveToArea(Rect{0, 24, 800, 500}, from, to), (Rect{1440, 24, 800, 500}));
+    EXPECT_EQ(moveToArea(Rect{320, 171, 800, 500}, from, to), (Rect{1440 + 560, 24 + 237, 800, 500})) << "centred: 640 / 2 and 294 / 2 of the free space";
+    EXPECT_EQ(moveToArea(Rect{640, 318, 800, 500}, from, to), (Rect{1440 + 1120, 24 + 474, 800, 500})) << "against the far edges";
+    // Larger than the target area: at most its size, at its origin.
+    EXPECT_EQ(moveToArea(Rect{1440 + 0, 24, 1920, 974}, to, from), (Rect{0, 24, 1440, 794}));
+    // As large as its old area: centred on the larger one.
+    EXPECT_EQ(moveToArea(Rect{0, 24, 1440, 794}, from, to), (Rect{1440 + 240, 24 + 90, 1440, 794}));
+    // Off its old area: clamped to the near edge.
+    EXPECT_EQ(moveToArea(Rect{-200, 24, 800, 500}, from, to), (Rect{1440, 24, 800, 500}));
+    EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).w, 1) << "never smaller than 1 x 1";
+}
+
+TEST(TilingMoveTo, OutputNamesAreStrict) {
+    EXPECT_TRUE(outputNameOk("GF-REF"));
+    EXPECT_TRUE(outputNameOk("DP-1.2_a"));
+    EXPECT_FALSE(outputNameOk(""));
+    EXPECT_FALSE(outputNameOk("bad name"));
+    EXPECT_FALSE(outputNameOk("a\"b"));
+    EXPECT_TRUE(outputNameOk(std::string(kMaxOutputName, 'a')));
+    EXPECT_FALSE(outputNameOk(std::string(kMaxOutputName + 1, 'a')));
+}
