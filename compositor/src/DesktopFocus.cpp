@@ -3,6 +3,7 @@
 #include "DeferredFocus.hpp"
 #include "Plugin.hpp"
 #include "Surfaces.hpp"
+#include "Tiling.hpp"
 #include "Titlebar.hpp"
 #include "core/DesktopFocus.hpp"
 
@@ -401,7 +402,14 @@ namespace gf::desktopFocus {
         auto& ev = bus->m_events;
         auto& l  = st().listeners;
         // Observed, never cancelled (FR13).
-        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) { gf::guarded("desktop-focus press", [&] { onPress(e); }); }));
+        // A press on a shared edge's handle is the tiling's drag (cancelled by the plugin's first listener, tiling.md TL30):
+        // the desktop under the margin is not the target.
+        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
+            gf::guarded("desktop-focus press", [&] {
+                if (!gf::tiler::edgeOwnsPointer())
+                    onPress(e);
+            });
+        }));
         l.push_back(ev.layer.opened.listen([](const PHLLS& ls) { gf::guarded("desktop-focus layer.opened", [&] { attach(ls); }); }));
         l.push_back(ev.layer.closed.listen([](const PHLLS& ls) { gf::guarded("desktop-focus layer.closed", [&] { detach(ls); }); }));
         // Any other path that moves the keyboard drops a waiting desktop grant (key bindings and dispatches, activation

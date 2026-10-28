@@ -198,13 +198,18 @@ namespace gf::ipc {
         return tilingArrangeAvailable() && state().luaGroupFrontRegistered;
     }
 
+    bool sharedEdgeAvailable() {
+        return tilingArrangeAvailable(); // the pointer listeners are the plugin's own (main.cpp), the drag the tile records'
+    }
+
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 tilingAvailable(), layerPointer::ready(), state().luaConfigRegistered, chrome::ready(),
                                                 frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
-                                                appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable(), tilingGroupsAvailable());
+                                                appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable(), tilingGroupsAvailable(),
+                                                sharedEdgeAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
