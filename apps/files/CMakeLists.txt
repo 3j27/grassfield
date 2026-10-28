@@ -32,13 +32,11 @@ if(GTest_FOUND)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus Qt6::Test GTest::gtest GTest::gtest_main)
     add_test(NAME files-unit-tests COMMAND files-unit-tests)
-    # Grassfield's KIO dialogs (ADR-0035 D-12 a): the logic and real KIO jobs; its own main (a scratch home, offscreen).
+    # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): real KIO jobs and
+    # listings against the Files library; its own main (a scratch home, offscreen).
     add_executable(files-kio-tests ../../tests/unit/files/tst_kioprompts.cpp ../../tests/unit/files/tst_kiodialogs.cpp
-        src/kioprompts.cpp src/kioprompts.h src/kiopromptlogic.cpp src/filelogic.cpp)
-    target_include_directories(files-kio-tests PRIVATE src ..)
-    target_compile_definitions(files-kio-tests PRIVATE KF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00
-        FILES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_link_libraries(files-kio-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
-        KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons GTest::gtest)
+        ../../tests/unit/files/tst_folderchooser.cpp)
+    target_compile_definitions(files-kio-tests PRIVATE FILES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(files-kio-tests PRIVATE grassfield-files-core GTest::gtest)
     add_test(NAME files-kio-tests COMMAND files-kio-tests)
 endif()

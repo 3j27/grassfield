@@ -221,6 +221,9 @@ public:
     // The UI confirms first. Never called by automated tests.
     Q_INVOKABLE void emptyTrash();
     Q_INVOKABLE void newFolder(const QUrl &directory, QObject *folder);
+    // New Folder of the Save panel (grassfield-portal): a folder named `name` in `directory`, then callback(url, error): the
+    // new folder's URL, or "" and why it was not made (an invalid or taken name, KIO's error).
+    Q_INVOKABLE void makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback);
     Q_INVOKABLE void rename(const QUrl &url, const QString &newName, QObject *folder);
     Q_INVOKABLE void duplicate(const QList<QUrl> &urls, QObject *folder);
     // Drag and drop: move on the same filesystem, copy across filesystems or with Ctrl/Alt held.

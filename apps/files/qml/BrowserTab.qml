@@ -17,13 +17,17 @@ FocusScope {
     property int tabId: 0
     // A closed tab's snapshot() to reopen (File > Reopen Closed Tab): its location, history, view and arrangement.
     property var restore: null
+    // The Open or Save panel this tab browses for (grassfield-portal, FilePanel.qml); null in Files. Then a double-click on
+    // a file, Return and Esc are the panel's, items the panel cannot take are dimmed (FolderModel.chooser), the menus have
+    // no file operation, a drop shows the item instead of moving it, and the view is the panel's own for its application.
+    property var chooser: null
 
     property url url
     property var history: []
     property int historyIndex: -1
     // The view and the arrangement of the shown folder (its own when chosen for it, else the defaults: Nav.viewFor,
     // Nav.sortFor, FilesApp.folderView). Keep Folders on Top and Show Hidden Files stay global.
-    property string viewMode: root.restore ? Nav.normalizeViewMode(root.restore.viewMode) : Nav.viewFor("", root.app.folderView(root.startUrl).mode, root.app.viewMode)
+    property string viewMode: root.restore ? Nav.normalizeViewMode(root.restore.viewMode) : root.chooser ? Nav.normalizeViewMode(root.chooser.viewMode || root.app.viewMode) : Nav.viewFor("", root.app.folderView(root.startUrl).mode, root.app.viewMode)
     property int sortKey: root.app.sortKey
     property bool sortDescending: root.app.sortDescending
     // View > Group By of the shown folder (FileLogic::GroupBy, 0: no groups; its own when chosen for it). Groups show in
@@ -69,6 +73,16 @@ FocusScope {
         m.showHidden = root.app.showHidden;
         m.previewSize = Tokens.filesIconSize * Tokens.filesThumbnailOversample;
         m.largePreviewSize = Tokens.filesGalleryPreviewSize * Tokens.filesThumbnailOversample;
+        if (root.chooser)
+            m.chooser = root.chooser.filter;
+    }
+
+    // The panel's filter changed (its Format pop-up): every listing of the tab dims again.
+    function applyChooser(): void {
+        if (root.folder)
+            root.applyPrefs(root.folder);
+        if (root.view && root.view.applyPrefs)
+            root.view.applyPrefs();
     }
 
     Connections {
@@ -143,7 +157,9 @@ FocusScope {
         if (root.viewMode === "columns" && root.folder !== null && String(root.url) !== "")
             return;
         const stored = root.app.folderView(target);
-        root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
+        // A panel keeps its application's view in every folder (macOS); the arrangement is the folder's own, as in Files.
+        if (!root.chooser)
+            root.viewMode = Nav.viewFor(String(root.url) === "" && !root.restore ? "" : root.viewMode, stored.mode, root.app.viewMode);
         // Recents opens sorted by Date Last Opened, newest first, until arranged otherwise.
         const recents = root.app.isRecents(target);
         const sort = Nav.sortFor(stored, recents ? root.app.recentsSortKey : root.app.sortKey, recents ? root.app.defaultDescending(root.app.recentsSortKey) : root.app.sortDescending, key => root.app.defaultDescending(key));
@@ -217,7 +233,10 @@ FocusScope {
         const m = Nav.normalizeViewMode(mode);
         const leavingColumns = root.viewMode === "columns" && m !== "columns";
         root.viewMode = m;
-        root.app.setFolderView(root.url, {mode: m});
+        if (root.chooser)
+            root.chooser.viewChosen(m);
+        else
+            root.app.setFolderView(root.url, {mode: m});
         // Column view kept one arrangement for all its columns: the folder now shown alone takes its own.
         if (leavingColumns) {
             const sort = Nav.sortFor(root.app.folderView(root.url), root.app.sortKey, root.app.sortDescending, key => root.app.defaultDescending(key));
@@ -271,6 +290,14 @@ FocusScope {
     function activate(row: int, model: var, modifiers: int): void {
         if (row < 0)
             return;
+        // A panel: a folder opens in it, a file is chosen (when the panel can take it).
+        if (root.chooser) {
+            if (model.isDirAt(row))
+                root.navigate(model.urlAt(row), true);
+            else
+                root.chooser.fileActivated(model, row);
+            return;
+        }
         if (model.isDirAt(row) && (modifiers & Qt.ControlModifier))
             root.win.newTab(model.urlAt(row), null);
         else if (model.isDirAt(row))
@@ -282,6 +309,14 @@ FocusScope {
     function openSelection(): void {
         const m = root.activeFolder;
         const rows = m.selectedRows();
+        if (root.chooser) {
+            // Cmd+Down: one folder opens in the panel; anything else is the panel's default button.
+            if (rows.length === 1 && m.isDirAt(rows[0]))
+                root.navigate(m.urlAt(rows[0]), true);
+            else
+                root.chooser.accept();
+            return;
+        }
         if (rows.length === 0)
             return;
         const files = [];
@@ -344,7 +379,7 @@ FocusScope {
     // Items can be renamed, cut and moved to the Trash in a writable folder, and in a tag search (each item stays in its
     // own folder; KIO reports a refusal). Nothing can be created in a tag search (FolderModel.writable is false).
     function itemsEditable(m: var): bool {
-        return m !== null && !m.isTrash && (m.writable || m.isSearch);
+        return root.chooser === null && m !== null && !m.isTrash && (m.writable || m.isSearch);
     }
 
     function paste(): void {
@@ -402,6 +437,8 @@ FocusScope {
     }
 
     function startRename(model: var, row: int): void {
+        if (root.chooser)
+            return;
         root.renameModel = model;
         root.renameTarget = model.urlAt(row);
     }
@@ -476,6 +513,11 @@ FocusScope {
     function dropUrls(urls: var, destination: url, model: var): void {
         springTimer.stop();
         root.springOrigin = "";
+        // A panel never moves or copies: an item dropped on it is shown and selected there (macOS).
+        if (root.chooser) {
+            root.chooser.reveal(urls);
+            return;
+        }
         root.app.drop(urls, destination, model);
     }
 
@@ -581,11 +623,15 @@ FocusScope {
             return;
         }
         switch (event.key) {
-        // Return renames the selected item (macOS, decision F-4); Cmd+O and Cmd+Down open.
+        // Return renames the selected item (macOS, decision F-4); Cmd+O and Cmd+Down open. In a panel, Return is its
+        // default button.
         case Qt.Key_Return:
         case Qt.Key_Enter:
             if (!ctrl) {
-                root.renameSelection();
+                if (root.chooser)
+                    root.chooser.accept();
+                else
+                    root.renameSelection();
                 event.accepted = true;
             }
             return;
@@ -598,6 +644,8 @@ FocusScope {
         case Qt.Key_Escape:
             if (root.searchText !== "")
                 root.setSearch("");
+            else if (root.chooser)
+                root.chooser.cancel();
             else
                 model.clearSelection();
             event.accepted = true;
@@ -611,6 +659,12 @@ FocusScope {
                 root.contextMenuForKeyboard(model);
                 event.accepted = true;
             }
+            return;
+        }
+        // A panel: "/" or "~" typed in the listing opens Go to Folder with it (macOS panels).
+        if (root.chooser && !ctrl && (event.text === "/" || event.text === "~")) {
+            root.chooser.goToFolder(event.text);
+            event.accepted = true;
             return;
         }
         if (!ctrl && event.text.length === 1 && event.text >= " " && event.key !== Qt.Key_Delete) {
@@ -646,7 +700,7 @@ FocusScope {
             model.select(row, 0);
         if (row < 0)
             model.clearSelection();
-        const items = row >= 0 ? root.itemMenu(model) : root.backgroundMenu(model);
+        const items = root.chooser ? root.chooserMenu(model, row >= 0) : row >= 0 ? root.itemMenu(model) : root.backgroundMenu(model);
         root.win.menuLayer.open(items, x, y, id => root.runAction(id, model), root.view, keyboard);
     }
 
@@ -773,7 +827,36 @@ FocusScope {
     // The toolbar Action menu: item actions for a selection, folder actions otherwise.
     function actionMenu(): var {
         const m = root.activeFolder;
+        if (root.chooser)
+            return root.chooserMenu(m, m.selectedCount > 0);
         return m.selectedCount > 0 ? root.itemMenu(m) : root.backgroundMenu(m);
+    }
+
+    // A panel's menus: no file operation (the application does that with what it gets), only looking and arranging; New
+    // Folder where the panel makes folders (FilePanel.canMakeFolder).
+    function chooserMenu(model: var, onItems: bool): var {
+        const items = [];
+        if (onItems) {
+            const rows = model.selectedRows();
+            const name = rows.length > 0 ? DisplayName.text(model.nameAt(rows[0])) : "";
+            if (rows.length > 0)
+                items.push({id: "glance", text: rows.length === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(rows.length), shortcut: qsTr("Space")});
+            if (root.searchText !== "" || model.isSearch)
+                items.push({id: "enclosing", text: qsTr("Show in Enclosing Folder")});
+            if (items.length > 0)
+                items.push({separator: true});
+        }
+        if (root.chooser.canMakeFolder) {
+            items.push({id: "newFolder", text: qsTr("New Folder"), shortcut: qsTr("Ctrl+Shift+N"), enabled: model.writable});
+            items.push({separator: true});
+        }
+        items.push(root.viewSubmenu());
+        items.push({id: "useGroups", text: qsTr("Use Groups"), shortcut: qsTr("Ctrl+Super+0"), checked: root.groupBy > 0});
+        items.push(root.groupSubmenu());
+        items.push(root.sortSubmenu());
+        items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
+        items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
+        return items;
     }
 
     function runAction(id: string, model: var): void {
@@ -843,7 +926,10 @@ FocusScope {
             root.paste();
             break;
         case "newFolder":
-            root.newFolder();
+            if (root.chooser)
+                root.chooser.newFolder();
+            else
+                root.newFolder();
             break;
         case "enclosing":
             root.showInEnclosingFolder();

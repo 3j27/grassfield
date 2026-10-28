@@ -2,6 +2,7 @@
 
 #include <QCollator>
 #include <QCoreApplication>
+#include <QRegularExpression>
 
 #include <cmath>
 
@@ -431,6 +432,27 @@ QString foldForMatch(const QString &text)
 bool nameMatchesFilter(const QString &name, const QString &filter)
 {
     return foldForMatch(name).contains(foldForMatch(filter));
+}
+
+bool passesFilter(const QString &name, const QStringList &mimeTypes, const QStringList &globs, const QStringList &mimeRules)
+{
+    if (globs.isEmpty() && mimeRules.isEmpty())
+        return true;
+    for (const QString &glob : globs) {
+        const QRegularExpression re(QRegularExpression::wildcardToRegularExpression(glob, QRegularExpression::NonPathWildcardConversion),
+                                    QRegularExpression::CaseInsensitiveOption);
+        if (re.isValid() && re.match(name).hasMatch())
+            return true;
+    }
+    for (const QString &rule : mimeRules) {
+        const bool major = rule.endsWith(QLatin1String("/*"));
+        const QString prefix = major ? rule.left(rule.size() - 1) : QString();
+        for (const QString &type : mimeTypes) {
+            if (major ? type.startsWith(prefix, Qt::CaseInsensitive) : type.compare(rule, Qt::CaseInsensitive) == 0)
+                return true;
+        }
+    }
+    return false;
 }
 
 bool isValidFileName(const QString &name)

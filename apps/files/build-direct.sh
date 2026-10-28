@@ -40,14 +40,15 @@ if [[ ${1:-} == "--tests" ]]; then
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6Qml Qt6DBus Qt6Test) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"
-  # Grassfield's KIO dialogs (ADR-0035 D-12 a): the logic and real KIO jobs, against KIO's libraries; its own main (a
-  # scratch home, offscreen).
-  "$moc" "${kf_includes[@]}" "$here/src/kioprompts.h" -o "$out/moc_tests_kioprompts.cpp"
+  # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): the logic and real KIO
+  # jobs and listings, against the Files library; its own main (a scratch home, offscreen).
+  "$0" --core >/dev/null
+  # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${kfdefs[@]}" "-DFILES_SOURCE_DIR=\"$here/src\"" -I"$here/src" -I"$root/apps" "${kf_includes[@]}" \
-    $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network) \
-    "$root/tests/unit/files/tst_kioprompts.cpp" "$root/tests/unit/files/tst_kiodialogs.cpp" \
-    "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "$here/src/filelogic.cpp" "$out/moc_tests_kioprompts.cpp" \
-    $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
+    $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick) \
+    "$root/tests/unit/files/tst_kioprompts.cpp" "$root/tests/unit/files/tst_kiodialogs.cpp" "$root/tests/unit/files/tst_folderchooser.cpp" \
+    "$out/libgrassfield-files-core.a" \
+    $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick wayland-client) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
   echo "built $out/files-kio-tests"
   exit 0
 fi

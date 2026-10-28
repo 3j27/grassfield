@@ -442,3 +442,25 @@ TEST(WindowSize, OnlyASizeInBoundsIsKept)
     EXPECT_FALSE(keepsWindowSize(920, kMaxKeptWindowSide + 1));
     EXPECT_FALSE(keepsWindowSize(0, 0));
 }
+
+// The Open and Save panels' filters (grassfield-portal, ADR-0035 D-4): globs without regard to case, MIME types with their
+// ancestors and "major/*"; an empty filter passes everything.
+TEST(PanelFilter, GlobsAndMimeTypes)
+{
+    const QStringList text{QStringLiteral("text/plain")};
+    const QStringList markdown{QStringLiteral("text/markdown"), QStringLiteral("text/plain")};
+    const QStringList png{QStringLiteral("image/png")};
+    EXPECT_TRUE(passesFilter(QStringLiteral("a.txt"), text, {}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("REPORT.PDF"), {}, {QStringLiteral("*.pdf")}, {}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("report.pdf.zip"), {}, {QStringLiteral("*.pdf")}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("photo.jpeg"), {}, {QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}, {}));
+    // A glob matches the whole name, never a path ("*" stops at nothing but "/", which names never hold).
+    EXPECT_TRUE(passesFilter(QStringLiteral("Makefile"), {}, {QStringLiteral("Makefile")}, {}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("Makefile.am"), {}, {QStringLiteral("Makefile")}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("notes.md"), markdown, {}, {QStringLiteral("text/plain")}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("image/*")}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("text/*")}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("image/jpeg")}));
+    // Globs or MIME types: either passes.
+    EXPECT_TRUE(passesFilter(QStringLiteral("x.png"), png, {QStringLiteral("*.txt")}, {QStringLiteral("image/png")}));
+}

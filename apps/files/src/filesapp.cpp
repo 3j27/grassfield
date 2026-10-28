@@ -1033,6 +1033,35 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
     });
 }
 
+void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback)
+{
+    QJSValue cb = callback;
+    auto answer = [cb](const QUrl &url, const QString &error) mutable {
+        if (cb.isCallable())
+            cb.call({QJSValue(url.toString()), QJSValue(error)});
+    };
+    if (!FileLogic::isValidFileName(name)) {
+        answer({}, tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(name)));
+        return;
+    }
+    if (nameTaken(directory, name)) {
+        answer({}, tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(name)));
+        return;
+    }
+    const QUrl url = childUrl(directory, name);
+    KIO::MkdirJob *job = KIO::mkdir(url);
+    attachDelegate(job);
+    connect(job, &KJob::result, this, [this, job, url, answer]() mutable {
+        if (job->error()) {
+            answer({}, job->errorString());
+            return;
+        }
+        if (url.isLocalFile())
+            m_folderStyles.dropEntry(url.toLocalFile());
+        answer(url, {});
+    });
+}
+
 void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
 {
     if (newName == url.fileName())
