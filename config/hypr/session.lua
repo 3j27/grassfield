@@ -51,7 +51,8 @@ end
 -- GF-032: the Omarchy shell must never start inside this session (updates, theme and font changes try to start it).
 -- The stand-ins' directory is fixed: a stray GRASSFIELD_SHIM_DIR would have let Omarchy's sleep-lock call Omarchy's own
 -- omarchy-shell instead of the stand-in that asks grassfield-shell to lock (the sleep-lock fallback, D-12).
-omarchy.guard_path("/usr/lib/grassfield/omarchy-shims")
+-- ADR-0035 D-3: Hyprland's "not responding" dialog goes through Grassfield's stand-in (session-bin/hyprland-dialog).
+omarchy.guard_path("/usr/lib/grassfield/omarchy-shims", "/usr/lib/grassfield/session-bin")
 
 hl.env("XDG_SESSION_DESKTOP", "Grassfield")
 hl.env("GRASSFIELD_SESSION", "1")

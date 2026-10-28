@@ -108,6 +108,20 @@ Singleton {
         return data && data.pid ? data.pid : 0;
     }
 
+    // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
+    // from its events)} (NotResponding).
+    function knownWindows(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => {
+            const d = t.lastIpcObject;
+            return {
+                pid: d && d.pid ? d.pid : 0,
+                cls: d && d.class ? d.class : "",
+                title: t.title ?? ""
+            };
+        });
+    }
+
     // Activate (focus, un-minimize) a toplevel through the protocol. A window parked by hide()
     // is first moved back to the focused workspace.
     function activate(toplevel: var): void {
