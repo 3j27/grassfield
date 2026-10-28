@@ -1528,6 +1528,10 @@
         <translation>K</translation>
     </message>
     <message>
+        <source>L</source>
+        <translation>L</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>

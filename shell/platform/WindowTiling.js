@@ -55,6 +55,23 @@ function popoverAnchor(light, screens) {
     };
 }
 
+// What the tiling popover never opens over (TL22, TL34; integrator review of 4ead6fb), first match: the lock ("lock"), the
+// polkit sheet ("authorization"), a full-attention surface holding the keyboard (FocusReturn's holder names: Search, Apps, the
+// Overview, the switcher, the Notification Center, a widget menu; "popup", the popups themselves, is left to the caller), the
+// Dock's keyboard mode ("dock"). state: {locked, authorizing, holders: [name], dockKeyboard}. "" when nothing refuses it.
+function hoverRefusedBy(state) {
+    if (!state || state.locked !== false)
+        return "lock";
+    if (state.authorizing)
+        return "authorization";
+    const holders = Array.isArray(state.holders) ? state.holders.filter(n => n !== "popup") : [];
+    if (holders.length > 0)
+        return String(holders[0]);
+    if (state.dockKeyboard)
+        return "dock";
+    return "";
+}
+
 // The outputs other than `current` ([{name, model, builtIn}], in the order of `screens`: [{name, model}]): the Move to <display>
 // rows (TL23, M23). A built-in panel is the one an eDP, LVDS or DSI connector drives, as Settings > Displays decides.
 function otherOutputs(screens, current) {

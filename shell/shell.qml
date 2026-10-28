@@ -67,6 +67,13 @@ ShellRoot {
         value: saver.shown
     }
 
+    // The Dock's keyboard mode for the tiling popover, which never opens over it (services/TilingHover, TL22).
+    Binding {
+        target: TilingHover
+        property: "dockKeyboard"
+        value: dock.keyboardMode
+    }
+
     // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
     Binding {
         target: SessionState
@@ -390,6 +397,7 @@ ShellRoot {
         onSearchRequested: searchSurface.toggle()
     }
     Dock {
+        id: dock
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}

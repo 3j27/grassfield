@@ -81,8 +81,8 @@ bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mod
 -- compositor plugin places the window (window-tiling); the Window menu's Move & Resize shows the same keys
 -- (docs/specs/tiling.md TL26). The quarters are bound by key position (code: keycodes 30, 31, 44 and 45: U, I, J and K, in
 -- the same place on QWERTY and AZERTY), the arrangements take the window and the next ones of its output (tiling-arrange),
--- Super+Ctrl+Alt+Left/Right move it to the next display and Super+Ctrl+L opens its tiling popover with the keyboard
--- (tile-hover).
+-- Super+Ctrl+Alt+Left/Right move it to the next display and Super+Ctrl+L (keycode 46, by position too, T2a) opens its tiling
+-- popover with the keyboard (tile-hover).
 bind("SUPER + CTRL + LEFT", "Tile the window to the left half", shell("windows", "tile left"))
 bind("SUPER + CTRL + RIGHT", "Tile the window to the right half", shell("windows", "tile right"))
 bind("SUPER + CTRL + UP", "Tile the window to the top half", shell("windows", "tile top"))
@@ -104,7 +104,7 @@ bind("SUPER + CTRL + ALT + SHIFT + UP", "Arrange the windows top and in quarters
 bind("SUPER + CTRL + ALT + SHIFT + DOWN", "Arrange the windows bottom and in quarters", shell("windows", "arrange bottom-quarters"))
 bind("SUPER + CTRL + ALT + LEFT", "Move the window to the display on the left", shell("windows", "nextOutput left"))
 bind("SUPER + CTRL + ALT + RIGHT", "Move the window to the display on the right", shell("windows", "nextOutput right"))
-bind("SUPER + CTRL + L", "Show the tiling options of the window", shell("windows", "tilePopover"))
+bind("SUPER + CTRL + code:46", "Show the tiling options of the window", shell("windows", "tilePopover"))
 bind("SUPER + T", "Toggle floating/tiling", hl.dsp.window.float({ action = "toggle" }))
 bind("SUPER + M", "Minimize window", shell("windows", "minimize"))
 bind("SUPER + H", "Hide app", in_switcher_else("hide", shell("windows", "hide")))

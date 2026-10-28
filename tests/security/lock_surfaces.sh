@@ -96,6 +96,8 @@ for name in ("minimize", "tile", "arrange", "tilePopover", "nextOutput", "hide",
 # The plugin's minimize-request event (the titlebar button and, since GF-056 P8, a tagged window's own minimize button)
 # moves nothing behind the lock either.
 first_decision("shell/platform/Compositor.qml", "minimizeByAddress", R, text=compositor, lines=2)
+# Tiling step 3 (integrator review of 4ead6fb): the plugin's hover event and Super+Ctrl+L open the popover only through here.
+first_decision("shell/services/TilingHover.qml", "show", R)
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
 # Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
 # keyboard) also refuse and close.
@@ -480,7 +482,7 @@ mut=$tmp/mutant
 for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.qml shell/search/Search.qml shell/launchpad/AppsController.qml \
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
-  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml; do
+  shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -493,6 +495,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows arrange")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows tilePopover")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows nextOutput")#false' \
+  'shell/services/TilingHover.qml#SessionState.refuses("tiling popover")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows minimize request")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \

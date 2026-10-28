@@ -22,6 +22,8 @@ const NAMES = {
     // The U, I, J and K keys of the tiling quarters, by keycode (the same place on QWERTY and AZERTY).
     "code:30": QT_TRANSLATE_NOOP("Bindings", "U"), "code:31": QT_TRANSLATE_NOOP("Bindings", "I"),
     "code:44": QT_TRANSLATE_NOOP("Bindings", "J"), "code:45": QT_TRANSLATE_NOOP("Bindings", "K"),
+    // The L key of the tiling popover, by keycode likewise.
+    "code:46": QT_TRANSLATE_NOOP("Bindings", "L"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };

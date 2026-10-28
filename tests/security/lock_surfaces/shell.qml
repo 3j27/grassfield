@@ -155,6 +155,10 @@ ShellRoot {
         if (Popups.active)
             opened.push("notice");
         check("locked: no popup kind opens (" + opened.join(", ") + ")", opened.length === 0);
+        // Tiling step 3 (integrator review of 4ead6fb): the plugin's tile-hover event and Super+Ctrl+L go through here.
+        TilingHover.show({address: "1", state: "open", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
+        TilingHover.show({address: "1", state: "enter", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
+        check("locked: the tiling popover does not open (TilingHover.show)", !Popups.active);
         check("locked: nothing is open at all (" + anyOpen() + ")", anyOpen() === "");
 
         // Unlock: back to normal.

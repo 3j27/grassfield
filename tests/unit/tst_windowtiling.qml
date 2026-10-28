@@ -78,6 +78,21 @@ TestCase {
         compare(WindowTiling.otherOutputs(null, "").length, 0);
     }
 
+    // TL22, TL34 (integrator review of 4ead6fb): never over the lock, the polkit sheet, a full-attention surface or the Dock.
+    function test_hoverRefusedByWhatHoldsTheScreen() {
+        const free = {locked: false, authorizing: false, holders: [], dockKeyboard: false};
+        compare(WindowTiling.hoverRefusedBy(free), "");
+        compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {holders: ["popup"]})), "", "a popup: the caller decides");
+        compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {locked: true})), "lock");
+        compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {authorizing: true})), "authorization");
+        for (const name of ["search", "apps", "overview", "switcher", "notification-center", "widgets-menu-GF-REF"])
+            compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {holders: ["popup", name]})), name, name);
+        compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {dockKeyboard: true})), "dock");
+        compare(WindowTiling.hoverRefusedBy(Object.assign({}, free, {locked: true, authorizing: true})), "lock", "the lock first");
+        compare(WindowTiling.hoverRefusedBy(null), "lock", "unknown: refused");
+        compare(WindowTiling.hoverRefusedBy({authorizing: false, holders: [], dockKeyboard: false}), "lock", "an unknown lock state counts as locked");
+    }
+
     function test_nextOutputGoesByPositionAndWraps() {
         compare(WindowTiling.nextOutput(screens, "eDP-1", "right"), "DP-1");
         compare(WindowTiling.nextOutput(screens, "eDP-1", "left"), "HDMI-A-1");
