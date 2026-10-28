@@ -151,6 +151,43 @@ Window {
     }
 
     // pacman's message and what to do, for the last operation of an app (SR19).
+    // The AUR (SR7): Return on the search field asks it for the query on the page; its answer fills that page's section
+    // when the query has not changed meanwhile.
+    function searchAur(): void {
+        if (pageLoader.page !== "search" || !pageLoader.item || !root.backend.sources.aur)
+            return;
+        const results = pageLoader.item as SearchPage;
+        results.aurState = "asking";
+        results.aurResults = [];
+        root.backend.searchAur(results.query);
+    }
+
+    Connections {
+        target: root.backend
+        function onAurResults(term: string, apps: var, problem: string): void {
+            if (pageLoader.page !== "search" || !pageLoader.item)
+                return;
+            const results = pageLoader.item as SearchPage;
+            if (results.query !== term)
+                return;
+            results.aurResults = apps;
+            results.aurState = problem === "" ? "done" : problem;
+        }
+        function onBuildScript(id: string, text: string, ok: bool): void {
+            if (id === root.buildScriptFor && textSheet.visible)
+                textSheet.text = ok ? text : qsTr("The build script could not be fetched. Try again later.");
+        }
+    }
+
+    // An AUR package's build script (its PKGBUILD, SR11), fetched when asked, shown as plain text (ADR-0037 e.6).
+    property string buildScriptFor: ""
+    function showBuildScript(app: var): void {
+        root.buildScriptFor = app.id;
+        textSheet.show(qsTr("Build Script of “%1”").arg(app.name),
+                       qsTr("The script yay runs to build this package, as the AUR has it. Read it before you install it."), qsTr("Loading…"));
+        root.backend.requestBuildScript(app.id);
+    }
+
     function showDetails(id: string): void {
         const r = root.backend.results[id];
         if (r)
@@ -194,6 +231,10 @@ Window {
         const c = root.nav.current;
         if (!again && c.page === "search" && pageLoader.item && pageLoader.page === "search") {
             const results = pageLoader.item as SearchPage;
+            if (results.query !== c.query) {
+                results.aurState = "";
+                results.aurResults = [];
+            }
             results.query = c.query;
             results.results = root.backend.search(c.query);
             return;
@@ -389,8 +430,10 @@ Window {
         onAccountPicked: root.openInstalled()
         onQueryEdited: text => root.search(text)
         onQueryAccepted: {
-            if (pageLoader.page === "search" && pageLoader.item)
+            if (pageLoader.page === "search" && pageLoader.item) {
+                root.searchAur();
                 (pageLoader.item as SearchPage).focusFirst();
+            }
         }
     }
 
@@ -611,6 +654,7 @@ Window {
             backend: root.backend
             app: root.backend.app(pageLoader.entry.id)
             onLinkRequested: url => root.backend.openLink(url)
+            onBuildScriptRequested: app => root.showBuildScript(app)
             onUninstallRequested: app => root.requestUninstall(app)
             onDetailsRequested: id => root.showDetails(id)
             onTryAgainRequested: (app, kind) => {
@@ -628,6 +672,7 @@ Window {
         SearchPage {
             query: pageLoader.entry.query || ""
             results: root.backend.search(pageLoader.entry.query || "")
+            aurOn: root.backend.sources.aur === true
             onOpened: id => root.openApp(id)
         }
     }

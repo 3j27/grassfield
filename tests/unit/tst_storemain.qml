@@ -160,6 +160,81 @@ TestCase {
         compare(t.win.page.query, "g");
     }
 
+    // The AUR (SR7), while it is on: Return asks it for the query; its results come in their own section with their votes
+    // and the out-of-date flag; an answer for another query is dropped; nothing of it while the AUR is off.
+    function test_aurSearchAfterReturn() {
+        const t = make();
+        t.win.focusSearch();
+        keyClick("e");
+        keyClick("x");
+        verify(!t.win.page.aurOn);
+        keyClick(Qt.Key_Return);
+        verify(t.backend.calls.indexOf("searchAur:ex") < 0, "the AUR off: never asked");
+        verify(findAll(t.win.page, i => i.text === "Press Return to search the AUR too." && i.visible).length === 0);
+
+        t.backend.sources = {aur: true, flathub: false, flatpak: false, screenshots: true};
+        t.win.focusSearch();
+        keyClick(Qt.Key_End);
+        keyClick("a");
+        compare(t.win.page.query, "exa");
+        verify(t.win.page.aurOn);
+        compare(t.win.page.aurLine(), "Press Return to search the AUR too.");
+        keyClick(Qt.Key_Return);
+        verify(t.backend.calls.indexOf("searchAur:exa") >= 0);
+        compare(t.win.page.aurState, "asking");
+        compare(t.win.page.aurLine(), "Searching the AUR…");
+        t.backend.aurResults("ex", [{id: "aur:old", name: "old"}], "");
+        compare(t.win.page.aurResults.length, 0, "an answer for another query is dropped");
+        t.backend.aurResults("exa", [
+            {id: "aur:example-app-bin", name: "example-app-bin", summary: "An example app", icon: "", kind: "aur", repo: "",
+             installed: false, launcher: false, votes: 120, outOfDate: false},
+            {id: "aur:example-tool-git", name: "example-tool-git", summary: "A tool", icon: "", kind: "aur", repo: "",
+             installed: false, launcher: false, votes: 7, outOfDate: true}], "");
+        compare(t.win.page.aurState, "done");
+        compare(t.win.page.title, "Results for “exa”");
+        verify(findAll(t.win.page, i => i.text === "From the AUR (not reviewed)" && i.visible).length === 1);
+        verify(findAll(t.win.page, i => i.text === "AUR · 120 votes").length === 1);
+        verify(findAll(t.win.page, i => i.text === "AUR · 7 votes · Flagged out of date").length === 1);
+        compare(t.win.page.aurLine(), "");
+        // Typing goes on: the AUR's section empties until Return asks again.
+        t.win.focusSearch();
+        keyClick(Qt.Key_End);
+        keyClick("m");
+        compare(t.win.page.aurState, "");
+        compare(t.win.page.aurResults.length, 0);
+        keyClick(Qt.Key_Return);
+        t.backend.aurResults("exam", [], "tooMany");
+        compare(t.win.page.aurLine(), "The AUR has too many results for “exam”: type more of the name.");
+        compare(t.win.page.Accessible.name, "No Results for “exam”");
+    }
+
+    // An AUR page (SR11): the AUR's facts asked when it opens and read again when they come; View Build Script fetches the
+    // PKGBUILD and shows it as text.
+    function test_aurProductPage() {
+        const t = make({startPage: "app:aur:example-app-bin"});
+        tryVerify(() => t.win.pageKind === "app");
+        verify(t.backend.calls.indexOf("requestAur:aur:example-app-bin") >= 0);
+        compare(findAll(t.win.page, i => i.label === "Maintainer")[0].value, "alice");
+        compare(findAll(t.win.page, i => i.label === "Votes")[0].value, "120");
+        compare(findAll(t.win.page, i => i.label === "Version")[0].value, "2.4.1-1");
+        compare(findAll(t.win.page, i => i.label === "Flagged Out of Date").length, 0);
+        t.backend.aurRead = true;
+        t.backend.aurInfo("aur:example-app-bin");
+        compare(findAll(t.win.page, i => i.label === "Flagged Out of Date")[0].value, "October 3, 2026");
+        const view = findAll(t.win.page, i => i.text === "View Build Script" && i.visible)[0];
+        verify(view);
+        view.clicked();
+        verify(t.backend.calls.indexOf("buildScript:aur:example-app-bin") >= 0);
+        const sheet = findAll(t.win.contentItem, i => i.confirmEnabled !== undefined && i.text === "Loading…")[0];
+        verify(sheet && sheet.visible);
+        compare(sheet.title, "Build Script of “example-app-bin”");
+        t.backend.buildScript("aur:other", "not this one", true);
+        compare(sheet.text, "Loading…");
+        t.backend.buildScript("aur:example-app-bin", "pkgname=example-app-bin\n", true);
+        compare(sheet.text, "pkgname=example-app-bin\n");
+        sheet.close();
+    }
+
     // --page and the pages it names.
     function test_openPage() {
         const t = make({startPage: "category:graphics"});

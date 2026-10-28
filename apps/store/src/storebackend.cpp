@@ -936,7 +936,10 @@ QVariantMap StoreBackend::results() const
                                          {QStringLiteral("outcome"), it->outcome},
                                          {QStringLiteral("present"), it->present},
                                          {QStringLiteral("total"), it->total},
-                                         {QStringLiteral("details"), it->details}});
+                                         {QStringLiteral("details"), it->details},
+                                         // "aur" for the AUR's commands: their messages say so (Store.js).
+                                         {QStringLiteral("source"), it->record.recipe == kAurAdd || it->record.recipe == kAurDrop
+                                                                        ? QStringLiteral("aur") : QString()}});
     }
     return out;
 }

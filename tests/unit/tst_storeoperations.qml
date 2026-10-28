@@ -218,6 +218,54 @@ TestCase {
         s.close();
     }
 
+    // The AUR's sheet (SR14, SR16): the warning every time, what yay builds (marked AUR) and what pacman adds, its button
+    // "Install from the AUR"; a plan the AUR cannot complete says so; its refusals.
+    function test_aurSheet() {
+        const t = make({startPage: "app:aur:example-app-bin"});
+        const s = sheet(t);
+        const app = t.backend.find("aur:example-app-bin");
+        t.win.requestGet(app);
+        t.backend.planReady("aur:example-app-bin", "install", {refusal: "", built: [{name: "example-app-bin", version: "2.4.1-1", repo: "aur", size: ""},
+            {name: "example-lib", version: "1.3-2", repo: "aur", size: ""}], packages: [{name: "gtk3", version: "1:3.24.50-1", repo: "extra", size: "7 MB"}],
+            download: "7 MB", installed: "", incomplete: false, detail: ""});
+        compare(s.title, "Install “example-app-bin”?");
+        compare(s.message, "AUR packages are made by users and reviewed by no one, neither Arch Linux nor Grassfield. Their build script runs on "
+                + "this computer and the package is then installed with administrator rights. Install only what you trust.\n\n"
+                + "The packages marked AUR are built on this computer in a Terminal window, which asks for your password.\n\n"
+                + "These packages will be installed:");
+        compare(s.confirmText, "Install from the AUR");
+        const list = find(s, i => i.Accessible.role === Accessible.List);
+        tryCompare(list, "count", 3);
+        tryVerify(() => list.itemAtIndex(0) !== null && list.itemAtIndex(2) !== null);
+        compare(list.itemAtIndex(0).Accessible.name, "example-app-bin, 2.4.1-1, AUR");
+        compare(list.itemAtIndex(2).Accessible.name, "gtk3, 1:3.24.50-1, 7 MB");
+        verify(find(s, i => i.text === "Download from the repositories") !== null);
+        s.confirm();
+        verify(t.backend.calls.indexOf("install:aur:example-app-bin") >= 0);
+
+        t.win.requestGet(app);
+        t.backend.planReady("aur:example-app-bin", "install", {refusal: "", built: [{name: "example-app-bin", version: "2.4.1-1", repo: "aur", size: ""}],
+            packages: [], incomplete: true});
+        verify(s.message.indexOf("Some of what the AUR lists for it could not be read: the build may install more than this.") >= 0);
+        s.close();
+        for (const c of [["repository", "", "“example-app-bin” is in a repository", "A repository has this package: the Store installs it from there, from its own page, without building it."],
+                         ["notOnAur", "python-pytest", "“example-app-bin” can't be installed now", "It needs python-pytest, which neither the repositories nor the AUR have."],
+                         ["omarchyChanged", "bin/omarchy-pkg-aur-add", "“example-app-bin” can't be installed now",
+                          "Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been."]]) {
+            t.win.requestGet(app);
+            t.backend.planReady("aur:example-app-bin", "install", {refusal: c[0], packages: [], detail: c[1]});
+            compare(s.title, c[2]);
+            compare(s.message, c[3]);
+            compare(s.confirmText, "OK");
+            s.close();
+        }
+        t.win.requestUninstall(Object.assign({}, app, {installed: true}));
+        t.backend.planReady("aur:example-app-bin", "remove", {refusal: "", packages: [{name: "example-app-bin", version: "2.4.1-1", repo: "", size: ""}]});
+        compare(s.message, "It is removed in a Terminal window, which asks for your password.\n\nThese packages will be removed. Your files and settings stay.");
+        compare(s.confirmText, "Uninstall");
+        s.close();
+    }
+
     // The button (SR13, SR18): Open opens; while its operation runs, a ring with its count; a waiting one shows a square
     // that takes it out of the queue; the queue's button in the toolbar.
     function test_buttonStatesAndQueue() {

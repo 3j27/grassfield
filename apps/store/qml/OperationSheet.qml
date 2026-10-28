@@ -7,8 +7,10 @@ import "Store.js" as Store
 // default button. While the plan is checked (the backend's plan(), a few pacman queries as the user) the button waits;
 // then the sheet lists the source, the licence, the sizes and every package the operation adds or removes (pacman's plan),
 // or, for a web app, the launcher it adds or removes; for an Omarchy setup, first what it changes (our catalog's text), the
-// recipe Omarchy's terminal runs and, for a removal, the files it deletes (ADR-0037 e.1, b.2). A plan that cannot run says
-// why instead, and offers Software Update when the system must be updated first; Esc or Cancel close it and nothing runs.
+// recipe Omarchy's terminal runs and, for a removal, the files it deletes (ADR-0037 e.1, b.2); for the AUR, its warning every
+// time (SR16), then what yay builds from the AUR and what pacman adds from the repositories, its default button "Install from
+// the AUR". A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
+// or Cancel close it and nothing runs.
 Sheet {
     id: root
 
@@ -21,10 +23,13 @@ Sheet {
     readonly property bool removing: root.kind === "remove"
     readonly property bool webApp: root.app.kind === "webapp"
     readonly property bool setup: root.app.kind === "setup"
+    readonly property bool aur: root.app.kind === "aur"
     readonly property var setupInfo: root.app.setup || ({})
     readonly property string refusal: root.plan ? (root.plan.refusal || "") : ""
     readonly property bool updateFirst: root.refusal === "unfinished" || root.refusal === "outdated"
-    readonly property var packages: root.plan ? (root.plan.packages || []) : []
+    // The AUR's packages yay builds (marked so), then what pacman adds from the repositories.
+    readonly property var packages: root.plan ? (root.plan.built || []).map(p => ({name: p.name, version: p.version, size: qsTr("AUR")}))
+                                                .concat(root.plan.packages || []) : []
     readonly property string appName: root.app.name || ""
 
     function show(app: var, kind: string): void {
@@ -59,6 +64,8 @@ Sheet {
             return qsTr("“%1” can't be uninstalled").arg(root.appName);
         case "protected":
             return qsTr("Uninstalling it would also remove part of the system");
+        case "repository":
+            return qsTr("“%1” is in a repository").arg(root.appName);
         }
         return root.removing ? qsTr("“%1” can't be uninstalled now").arg(root.appName) : qsTr("“%1” can't be installed now").arg(root.appName);
     }
@@ -81,6 +88,18 @@ Sheet {
                 parts.push(root.removing ? qsTr("These packages will be removed:") : qsTr("These packages will be installed:"));
                 return parts.filter(t => t !== "").join("\n\n");
             }
+            if (root.aur) {
+                // yay builds them in Omarchy's terminal and pacman installs them there: the password is asked there (sudo).
+                if (root.removing)
+                    return qsTr("It is removed in a Terminal window, which asks for your password.") + "\n\n"
+                        + qsTr("These packages will be removed. Your files and settings stay.");
+                const parts = [Store.aurWarning(),
+                               qsTr("The packages marked AUR are built on this computer in a Terminal window, which asks for your password.")];
+                if (root.plan.incomplete)
+                    parts.push(qsTr("Some of what the AUR lists for it could not be read: the build may install more than this."));
+                parts.push(qsTr("These packages will be installed:"));
+                return parts.join("\n\n");
+            }
             return root.removing ? qsTr("These packages will be removed. Your files and settings stay.") : qsTr("These packages will be installed:");
         case "unfinished":
             return qsTr("The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.");
@@ -95,15 +114,20 @@ Sheet {
         case "protected":
             return qsTr("Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.").arg(root.appName).arg(root.plan.protected || "");
         case "omarchyChanged":
-            return Store.omarchyChangedText();
+            return Store.omarchyChangedText(root.app.kind);
+        case "repository":
+            return qsTr("A repository has this package: the Store installs it from there, from its own page, without building it.");
+        case "notOnAur":
+            return root.plan.detail === root.app.package ? qsTr("The AUR doesn't have this package (anymore).")
+                                                       : qsTr("It needs %1, which neither the repositories nor the AUR have.").arg(root.plan.detail || "");
         case "unavailable":
-            return Store.getBlockText(root.plan.detail || "") || Store.uninstallReasonText(root.plan.detail || "");
+            return Store.getBlockText(root.plan.detail || "", root.app.kind) || Store.uninstallReasonText(root.plan.detail || "", root.app.kind);
         }
         return qsTr("The Store could not read what this would change.");
     }
     confirmText: {
         if (root.refusal === "")
-            return root.removing ? qsTr("Uninstall") : qsTr("Install");
+            return root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
         return root.updateFirst ? qsTr("Open Software Update") : qsTr("OK");
     }
     destructive: root.removing && root.refusal === ""
@@ -138,8 +162,9 @@ Sheet {
             model: [
                 [qsTr("Source"), Store.sourceLabel(root.app.kind, root.app.repo)],
                 [qsTr("Licence"), root.app.license || qsTr("Licence not stated")],
-                [qsTr("Download"), root.plan && !root.removing ? (root.plan.download || "") : ""],
-                [qsTr("Installed size"), root.plan && !root.removing ? (root.plan.installed || "") : ""]
+                // An AUR package's sizes are its build's, unknown before it: those of the repositories' part only.
+                [root.aur ? qsTr("Download from the repositories") : qsTr("Download"), root.plan && !root.removing ? (root.plan.download || "") : ""],
+                [qsTr("Installed size"), root.plan && !root.removing && !root.aur ? (root.plan.installed || "") : ""]
             ].filter(row => row[1] !== "")
 
             delegate: Row {
@@ -223,7 +248,7 @@ Sheet {
         width: parent.width
         visible: text !== ""
         textFormat: Text.PlainText
-        text: root.plan && root.refusal !== "" && root.refusal !== "unavailable"
+        text: root.plan && root.refusal !== "" && root.refusal !== "unavailable" && root.refusal !== "notOnAur" && root.refusal !== "repository"
               ? (root.refusal === "unfinished" ? (root.plan.unfinished || []).slice(0, 6).join("\n") : (root.plan.detail || "")) : ""
         wrapMode: Text.WrapAnywhere
         maximumLineCount: 6

@@ -100,7 +100,7 @@ class StoreBackend : public QObject
     // The queue (spec SR18): [{id, app, name, kind, state, blocked, done, total}], the running one first.
     Q_PROPERTY(QVariantList operations READ operations NOTIFY operationsChanged)
     // How the last operation of an app ended, while it says something: app id -> {kind, name, outcome, present, total,
-    // details}.
+    // details, source ("aur" for the AUR's commands)}.
     Q_PROPERTY(QVariantMap results READ results NOTIFY operationsChanged)
     // pacman stopped mid-way and left its lock (db.lck there, no pacman running): SR20's explanation, then Arch's recovery.
     Q_PROPERTY(bool staleLock READ staleLock NOTIFY operationsChanged)

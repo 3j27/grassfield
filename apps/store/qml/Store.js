@@ -56,8 +56,8 @@ function buttonState(app, actions, operation) {
     return launcher ? "open" : "installed";
 }
 
-// Why Get is not offered now (the button's tooltip, SR13, SR30).
-function getBlockText(reason) {
+// Why Get is not offered now (the button's tooltip, SR13, SR30). `kind`: the app's source (the AUR's words differ).
+function getBlockText(reason, kind) {
     switch (reason) {
     case "dev":
         return qsTr("dev: not applied");
@@ -68,16 +68,37 @@ function getBlockText(reason) {
     case "icon":
         return qsTr("This web app's icon hasn't been downloaded yet. Refresh the Store, then try again.");
     case "omarchyChanged":
-        return omarchyChangedText();
+        return omarchyChangedText(kind);
+    case "aurUnchecked":
+        return omarchyChangedText("aur");
+    case "aurOff":
+        return qsTr("Turn on the AUR in the Store's settings to install from it.");
+    case "repository":
+        return qsTr("A repository has this package: the Store installs it from there, from its own page.");
     case "source":
         return qsTr("Installing apps from this source comes in a later version of the Store.");
     }
     return "";
 }
 
-// A setup while the installed Omarchy differs from the release the catalog checked (ADR-0037 b.2, g).
-function omarchyChangedText() {
+// A setup, or an AUR app, while the installed Omarchy differs from the release the catalog checked (ADR-0037 b.2, g).
+function omarchyChangedText(kind) {
+    if (kind === "aur")
+        return qsTr("Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
     return qsTr("This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+}
+
+// An AUR result's line (SR7): its votes, and the out-of-date flag; "" for any other app.
+function aurLine(app) {
+    if (!app || app.votes === undefined)
+        return "";
+    const votes = app.votes === 1 ? qsTr("1 vote") : qsTr("%1 votes").arg(app.votes);
+    return app.outOfDate ? qsTr("%1 · Flagged out of date").arg(votes) : votes;
+}
+
+// The AUR's warning, on the sheet of every AUR install (spec SR16, ADR-0037 e.7).
+function aurWarning() {
+    return qsTr("AUR packages are made by users and reviewed by no one, neither Arch Linux nor Grassfield. Their build script runs on this computer and the package is then installed with administrator rights. Install only what you trust.");
 }
 
 // What an operation is doing (its ring's accessible text and the queue's rows, SR18).
@@ -126,13 +147,15 @@ function resultText(result) {
     case "outdated":
         return qsTr("Update your system first.");
     case "refused":
-        return qsTr("This app can't be uninstalled from the Store.");
+        // The AUR's plan checked again in the terminal (a repository has the package now, or it is protected or needed).
+        return removing ? qsTr("This app can't be uninstalled from the Store.")
+                        : qsTr("The installation was refused: the system changed since the Store checked it. Try again from its page.");
     case "notApp":
         return qsTr("This package isn't an app: the Store installs only apps.");
     case "failed":
         return removing ? qsTr("The uninstallation failed.") : qsTr("The installation failed.");
     case "omarchyChanged":
-        return omarchyChangedText();
+        return omarchyChangedText(result.source || "");
     case "terminalDidNotOpen":
         return qsTr("The terminal did not open.");
     }
@@ -145,7 +168,7 @@ function canTryAgain(result) {
 }
 
 // Why "Uninstall…" is not offered (SR22); "" when it is, or when there is nothing to say (not installed).
-function uninstallReasonText(reason) {
+function uninstallReasonText(reason, kind) {
     switch (reason) {
     case "omarchy":
         return qsTr("Part of Omarchy");
@@ -166,7 +189,11 @@ function uninstallReasonText(reason) {
     case "missing":
         return qsTr("This computer can't uninstall apps from the Store: Omarchy's commands or Grassfield's installer are missing.");
     case "omarchyChanged":
-        return omarchyChangedText();
+        return omarchyChangedText(kind);
+    case "aurUnchecked":
+        return omarchyChangedText("aur");
+    case "aurOff":
+        return qsTr("Turn on the AUR in the Store's settings to uninstall it from the Store.");
     }
     return "";
 }
@@ -236,6 +263,8 @@ function groupTitle(group) {
         return qsTr("Omarchy Setups");
     case "webapp":
         return qsTr("Web Apps");
+    case "aur":
+        return qsTr("AUR");
     case "foreign":
         return qsTr("Not from a Repository");
     }
