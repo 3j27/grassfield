@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 
 // A file's picture: its KIO thumbnail when one exists, else the theme icon for its type, plus the
 // symbolic-link emblem.
@@ -38,7 +39,7 @@ Item {
             size: root.size
             oversample: Tokens.filesThumbnailOversample
             overAccent: root.overAccent
-            source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
+            source: root.iconName !== "" ? IconSource.url(root.iconName) : ""
         }
     }
 
@@ -48,7 +49,7 @@ Item {
         FolderIcon {
             size: root.size
             oversample: Tokens.filesThumbnailOversample
-            source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
+            source: root.iconName !== "" ? IconSource.url(root.iconName) : ""
             folderColor: root.folderColor
             folderGlyph: root.folderGlyph
             overAccent: root.overAccent

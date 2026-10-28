@@ -243,3 +243,22 @@ function parseHidden(text) {
 function isHidden(set, id) {
     return set[String(id).replace(/\.desktop$/, "")] === true;
 }
+
+// What entry-names.sh prints ("id<TAB>Name<TAB>GenericName<TAB>Comment<TAB>Keywords" per line) as a map without a
+// prototype: id -> {name, genericName, comment, keywords: [...]}. A line without exactly five fields, an empty id or an
+// empty Name is skipped (Quickshell drops an entry without a name: it never gets one here).
+function parseLocalized(text) {
+    const map = Object.create(null);
+    for (const raw of String(text).split("\n")) {
+        const fields = raw.replace(/\r$/, "").split("\t");
+        if (fields.length !== 5 || fields[0] === "" || fields[1] === "")
+            continue;
+        map[fields[0]] = {
+            name: fields[1],
+            genericName: fields[2],
+            comment: fields[3],
+            keywords: fields[4].split(";").filter(k => k !== "")
+        };
+    }
+    return map;
+}

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import qs.lib
 import Quickshell.Io
+import Grassfield.I18n
 import qs.platform
 import "../launchpad/Model.js" as Model // layering-exception: GF-087
 import "AppLaunch.js" as AppLaunch
@@ -44,7 +45,7 @@ Singleton {
         const list = [];
         for (const e of DesktopEntries.applications.values) {
             if (root.isListed(e))
-                list.push({name: String(e.name).toLowerCase(), src: ThemeIcons.appIcon(e.icon, "application-x-executable")});
+                list.push({name: root.displayName(e).toLowerCase(), src: ThemeIcons.appIcon(e.icon, "application-x-executable")});
         }
         list.sort((a, b) => a.name.localeCompare(b.name));
         root.listedIconSources = list.map(x => x.src);
@@ -68,6 +69,51 @@ Singleton {
             scan.running = true;
     }
 
+    // Each entry's Name, GenericName, Comment and Keywords in the shell's language (Translator.language), for every surface
+    // that shows an app's name: the menu bar, Apps, the Dock, Search, the switcher, Overview, the menus. Quickshell picks a
+    // desktop entry's localized values from LC_MESSAGES or LANG alone, once (desktopentry.cpp Locale::system), while the
+    // shell's language can come from LANGUAGE, LC_ALL or GRASSFIELD_LANG (ui/i18n systemLanguage): a French session showed
+    // "Files" and "Grassfield Settings". The values come from launchpad/entry-names.sh, as the Desktop Entry Specification
+    // picks them (Quickshell's properties cannot be written from QML). id -> {name, genericName, comment, keywords}, no
+    // prototype; an entry that localizes nothing is not in it, and Quickshell's values are its own.
+    property var localized: Object.create(null)
+
+    // An entry's name in the shell's language ("" without an entry); the same for its generic name, comment and keywords.
+    function displayName(entry: var): string {
+        if (!entry)
+            return "";
+        const v = root.localized[entry.id];
+        return v ? v.name : String(entry.name);
+    }
+
+    function displayGenericName(entry: var): string {
+        if (!entry)
+            return "";
+        const v = root.localized[entry.id];
+        return v ? v.genericName : String(entry.genericName);
+    }
+
+    function displayComment(entry: var): string {
+        if (!entry)
+            return "";
+        const v = root.localized[entry.id];
+        return v ? v.comment : String(entry.comment);
+    }
+
+    function displayKeywords(entry: var): var {
+        if (!entry)
+            return [];
+        const v = root.localized[entry.id];
+        return v ? v.keywords : Array.from(entry.keywords);
+    }
+
+    function refreshNames(): void {
+        if (names.running)
+            names.again = true;
+        else
+            names.running = true;
+    }
+
     Connections {
         target: DesktopEntries
 
@@ -77,10 +123,21 @@ Singleton {
         }
     }
 
+    Connections {
+        target: Translator
+
+        function onLanguageChanged(): void {
+            root.refreshNames();
+        }
+    }
+
     Timer {
         id: debounce
         interval: 250
-        onTriggered: root.refreshHidden()
+        onTriggered: {
+            root.refreshHidden();
+            root.refreshNames();
+        }
     }
 
     // In-place edits of an existing .desktop file (not reported by DesktopEntries.applicationsChanged):
@@ -115,7 +172,34 @@ Singleton {
         }
     }
 
-    Component.onCompleted: scan.running = true
+    Process {
+        id: names
+        // Set when entries or the language changed while the script was running: run it once more.
+        property bool again: false
+        command: ["sh", Quickshell.shellPath("launchpad/entry-names.sh"), Translator.language]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const next = Model.parseLocalized(text);
+                if (JSON.stringify(next) === JSON.stringify(root.localized))
+                    return;
+                root.localized = next;
+                root.revision++;
+                if (root.hiddenReady)
+                    root.listChanged();
+            }
+        }
+        onRunningChanged: {
+            if (!running && again) {
+                again = false;
+                running = true;
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        scan.running = true;
+        names.running = true;
+    }
 
     function lookup(id: string): var {
         revision;
@@ -561,12 +645,13 @@ Singleton {
         const seen = {};
         for (const id of Object.keys(mimeData.entries)) {
             const entry = lookup(id);
-            if (!entry || entry.noDisplay || seen[entry.name] || !DockModel.acceptsFiles(entry, paths, mimeData, resolved))
+            const name = root.displayName(entry);
+            if (!entry || entry.noDisplay || seen[name] || !DockModel.acceptsFiles(entry, paths, mimeData, resolved))
                 continue;
-            seen[entry.name] = true;
+            seen[name] = true;
             out.push({
                 id: id,
-                name: entry.name
+                name: name
             });
         }
         return out.sort((a, b) => (b.id === first) - (a.id === first) || a.name.localeCompare(b.name));
@@ -574,6 +659,6 @@ Singleton {
 
     function nameFor(appId: string): string {
         const entry = lookup(appId);
-        return entry ? entry.name : appId;
+        return entry ? root.displayName(entry) : appId;
     }
 }

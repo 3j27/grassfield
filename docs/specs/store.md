@@ -2,7 +2,8 @@
 Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the first opus review (FAIL, 3 MAJOR). Step 1
 (the read-only backend) is merged; step 2 (the UI, read only: SR1 to SR13 shown, buttons disabled, Installed, the Updates
 list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
-(`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3. The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+(`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3 (3a repository packages and web apps,
+3b1 Omarchy's setups, merged; 3b2 the AUR, built: `docs/audits/store-2026-10-27/step3b2.md`; 3c Flathub to come). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -68,7 +69,11 @@ Search (step 2)
   AppStream, the `[omarchy]` list): name, keywords, summary and package name, ranked name-prefix first; Esc clears, then
   leaves the field. Empty result: "No Results for “…”" (« Aucun résultat pour « … » »).
 - SR7. AUR results (only when the AUR source is turned on, ADR-0037 ST2/ST7) appear after Return in their own section "From
-  the AUR (not reviewed)" (« Depuis l'AUR (non vérifié) »), with votes and the out-of-date flag.
+  the AUR (not reviewed)" (« Depuis l'AUR (non vérifié) »), with votes and the out-of-date flag: the AUR's search by name,
+  the most voted first (at most 50), the names a repository has left out (their own pages install them). Until Return,
+  one line says "Press Return to search the AUR too." (« Appuyez sur Entrée pour chercher aussi dans l'AUR. »); then
+  "Searching the AUR…", or why there is nothing: offline, fewer than two characters, too many results ("type more of the
+  name"), the AUR unavailable, or "The AUR has nothing for “…”". An answer for an older query is dropped.
 - SR7b. Flathub apps (only when Flathub is turned on, ST2) are part of the local search (their AppStream is in the user's
   installation), each with the "Flathub" badge.
 
@@ -95,14 +100,23 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
   without a launcher. Disabled with a tooltip when offline, while an update or another package manager runs, or when the source
-  is turned off; until step 3b2 and 3c, an AUR app's and a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037
-  SD11, SD18); a setup's while the installed Omarchy differs from the catalog's pins, with that reason (ADR-0037 g, SD19). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
+  is turned off; until step 3c, a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037 SD11); a setup's, and an AUR
+  app's, while the installed Omarchy differs from the catalog's pins or the catalog does not pin the AUR's two commands,
+  with that reason (ADR-0037 g, SD19, SD21); an AUR app's while the AUR is off ("Turn on the AUR in the Store's settings
+  to install from it.") or when a repository has its name ("A repository has this package: the Store installs it from
+  there, from its own page."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
   a square in it while the operation waits in the queue, which takes it out.
-- SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »), "Install from the AUR"
-  (« Installer depuis l'AUR ») for the AUR. It lists: source, licence, sizes, every package the plan adds (from `pacman -S
+- SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »). For the AUR the button is
+  "Install from the AUR" (« Installer depuis l'AUR ») and the default is Cancel: Return and Esc close the sheet, the
+  install takes a click or Tab and Space (common rule 3: the build runs the package's script before any password; the
+  integrator's decision at 3b2's review). It lists: source, licence, sizes, every package the plan adds (from `pacman -S
   --print` as the user), for a setup first what it changes (our catalog's text) and that Omarchy's recipe (named, with its
   arguments) runs in a Terminal window that asks for the password, for the AUR the warning (SR16), for a Flatpak what it
-  can reach and the runtimes it pulls. Cancel (Esc) closes it and nothing runs.
+  can reach and the runtimes it pulls. For the AUR (ADR-0037 SD22) the list has what yay builds, marked "AUR", then what
+  pacman adds from the repositories; the sizes are the repositories' part only ("Download from the repositories"), and a
+  line says when a dependency could not be read ("the build may install more than this"). Its refusals: a repository has
+  the package; it, or a dependency, is neither in the repositories nor on the AUR (named). Cancel (Esc) closes it and
+  nothing runs.
 - SR15. Before the operation runs, the plan check of ADR-0037 e.4, and again right before it starts (the helper and
   `grassfield-store-run` check under Omarchy's lock):
   - `pacman -Qu` lists a package not marked "[ignored]" (the last system update did not finish, S12) → "Finish the system
@@ -164,7 +178,8 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
   app's item (Open, Show in Store, Uninstall…). Installed's web apps that our catalog does not list (Omarchy's own, the
   user's) open and uninstall too (SD15). Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
-  S10), or the setup's removal recipe (named, in a Terminal window that asks for the password), the user data it deletes
+  S10; for an AUR package the same plan, removed through Omarchy's `omarchy-pkg-drop` in a Terminal window that asks for
+  the password), or the setup's removal recipe (named, in a Terminal window that asks for the password), the user data it deletes
   (our catalog's `removes`, "It also deletes: …" « Elle supprime aussi : … ») and its packages (the same plan; a setup
   whose package the deny list names offers no "Uninstall…"), or the web app's launcher and
   icon, or the Flatpak (its data in `~/.var/app/<app-id>` stays, and the sheet says so). A package other installed packages
@@ -184,8 +199,8 @@ Installed (step 2 read-only, step 3 actions)
 - SR23. The apps installed from the Store's sources that have a launcher or a catalog entry: explicitly installed packages
   (`pacman -Qe`) with an AppStream or catalog entry, setups whose packages are present, Omarchy web apps
   (`~/.local/share/applications/*.desktop` whose Exec is `omarchy-launch-webapp`), packages no repository has (`pacman -Qm`:
-  "Not from a repository" « Hors dépôts », called "AUR" only when the AUR knows the name; Grassfield's own local builds never
-  listed), Flatpaks of the user's installation (`flatpak list --user --app`, when Flathub is on). Each with Open and, unless
+  "Not from a repository" « Hors dépôts »; while the AUR is on, those installed explicitly that the AUR knows form the
+  "AUR" group, with their AUR pages; Grassfield's own local builds never listed), Flatpaks of the user's installation (`flatpak list --user --app`, when Flathub is on). Each with Open and, unless
   protected (SR22), Uninstall…. Grouped by source, sorted by name.
 
 Updates (step 4; ADR-0037 d, owner ST8)
@@ -221,8 +236,14 @@ Settings window (Ctrl+, ; step 2 reads, step 3 writes)
   Flathub, shown only when the `flatpak` package is installed (otherwise the line "Flathub needs the flatpak package" with a
   link to its product page); turning Flathub on adds the Flathub remote to the user's installation
   (`flatpak remote-add --user --if-not-exists`).
-  "Screenshots": the ST6 switch. "Catalog": the channel and the date of the catalog in use, "Refresh". Stored through the
-  settings contract (ADR-0020).
+  "Screenshots": the ST6 switch. "Catalog": the channel and the date of the catalog in use, "Refresh". Stored in
+  `grassfield.json` (`store.sources.aur`, `store.sources.flathub`, `store.screenshots`), written by the Store with the
+  settings contract's rules as Settings writes its own keys, until the shell is the single writer (ADR-0020 item 4,
+  ADR-0037 SD20); a change made elsewhere is followed while the Store runs. Turning the AUR off hides its results, pages
+  and group at once. "What the Store Fetches" names what the AUR is sent whether it is on or off (read before turning it
+  on); while it is on, its closing line says that Return sends the search to the AUR and that a metered connection
+  still lets through what the user asks for (Refresh, Return, an AUR page); nothing is asked by itself there (the
+  foreign packages' names wait for an unmetered connection).
 
 Offline
 - SR29. ADR-0037 "Offline": the bar "You're offline. The catalog is from 27 October." (« Vous êtes hors ligne. Le catalogue date
@@ -292,7 +313,12 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A recipe the installed Omarchy does not have | the setup is hidden |
 | A file the catalog pins differs or is missing in the installed Omarchy (an Omarchy update the catalog has not checked yet) | every setup's Get and Uninstall… dimmed with "This setup hasn't been checked with your version of Omarchy yet" (SD19); the plan check and `grassfield-store-run` refuse it too (exit 5), naming the file |
 | A catalog without valid Omarchy pins, or a setup whose recipes they do not name | the setup is dropped (ADR-0037 g) |
-| An AUR install while the AUR source is off | not offered |
+| An AUR install while the AUR source is off | not offered: "Turn on the AUR in the Store's settings to install from it." |
+| An AUR package whose name a repository has | not offered from the AUR (its repository page installs it); the plan and `grassfield-store-run` refuse it too (ADR-0037 b.2, exit 7) |
+| An AUR name a repository resolves otherwise (a package that provides it, a group) | the plan refuses it: "A repository has this package, or one that provides it: the Store installs it from there, without building it."; `grassfield-store-run` too (`pacman -Sp`, exit 7) |
+| An AUR package, or one of its dependencies, that neither the repositories nor the AUR have | the sheet: "The AUR doesn't have this package (anymore)." or "It needs …, which neither the repositories nor the AUR have."; nothing runs |
+| A catalog that does not pin the AUR's two commands, or an installed Omarchy that differs from its pins | every AUR Get and Uninstall… dimmed with "Installing from the AUR hasn't been checked with your version of Omarchy yet" (SD21); `grassfield-store-run` refuses it too (exit 5) |
+| The system changed between the sheet and the terminal (a repository has the name now; a package now protected, needed or no longer installed explicitly) | `grassfield-store-run` refuses it under the lock (exit 7), nothing run; "The installation was refused: the system changed since the Store checked it. Try again from its page." (SD23) |
 | A web app URL that is not https | not offered (the catalog's CI refuses it too) |
 | Offline / metered | Get and Update All disabled with the reason; no automatic fetch on a metered link |
 | Dev session | no real operation; "dev: not applied" without a fixture installer |
@@ -303,16 +329,16 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A1 | a valid fixture catalog signed by a throwaway key is accepted; a changed byte, another key, a revoked key, a lower serial, an oversized file are refused | unit (C++), throwaway gpg homedir | L0 |
 | A2 | entry rules: each broken rule drops only its entry | unit with vectors shared with grassfield-packages' validator | L0 |
 | A3 | merge: catalog over AppStream over pacman; source precedence; licence fallback | unit with fake AppStream and pacman roots | L0 |
-| A4 | search ranking and the AUR section (fake RPC answers) | unit | L0 |
+| A4 | search ranking and the AUR section (fake RPC answers) | unit (`tst_aur.cpp`: the answers' rules, the cache; `tst_storebackend.cpp` TheAur through `GRASSFIELD_STORE_AUR_URL`; `tst_storemain.qml` the section and its lines) | L0 |
 | A5 | plan check: `pacman -Qu` non-empty (and "[ignored]" lines allowed), a plan with an upgrade, an unresolvable plan, a 404 first package, a held lock → refused with the right message | unit with a fake pacman (`tests/unit/store/tst_plancheck.cpp`; the sheet's words: `tests/unit/tst_storeoperations.qml`) | L0 |
 | A6 | queue: one at a time; success = exit code 0 and state (an exit 0 with a partial install, or the state before the exit file, is not "installed"); time limits; `started`/`exit` files of b.2 | unit with the fake programs (`tst_operations.cpp`; b.2's files: its `Terminal*` cases, step 3b1) | L0 |
 | A6b | `grassfield-store-helper`: verbs, name patterns, refusals (`-Qu`, `db.lck`), the `remove` rule with S16's cases (system packages, a tool without an entry, a dependency, an Omarchy app, a plan taking a boot tool, Omarchy's lists missing, a plan that does not resolve), the policy's `auth_admin` and message, descriptors not on the caller's pipe, status files; `grassfield-store-run`: arguments, deadline, Omarchy's lock on its own descriptor (closed for the recipe), re-check, the pins, Ctrl+C, exit file | container tests, fake pacman and the real one (step 3: `tests/integration/store_helper.sh`, the deny list on `tests/fixtures/store/removal-vectors.json` for the helper and `tst_removal.cpp`; `tests/integration/store_run.sh` for `grassfield-store-run`, step 3b1) | L1 (container) |
 | A7 | recovery: each start case of SR20 | unit with recorded `store.json` (`tst_operations.cpp` RecoveryAtStart; the real helper's files: `store_helper.sh`) | L0 |
-| A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3) | L1 (container) |
+| A8 | real install, open (`uwsm-app` argv; a web app by `omarchy-launch-webapp`), uninstall of a repository package (helper), a web app, a setup and an AUR package (terminal script), a small Flatpak (`--user`); a cancelled Flatpak install measured | throwaway Arch container with Omarchy's scripts (step 3; `tests/integration/store_helper.sh`; the AUR with a stand-in yay, since yay's binary comes from GitHub, which the container's network refuses: yay against the real AUR is the owner's A12) | L1 (container) |
 | A9 | Discover, a product page, search, Categories, Installed, Updates, sheets, offline bar; light and dark; en and fr | offscreen captures with the fake backend, then a nested shot by the integrator | L0/L1 |
 | A10 | F1 geometry and tints against the parity matrix | measurement script on the captures | L1 |
 | A11 | keyboard paths and accessible names | QML tests + checklist | L0/L1 |
-| A12 | the real polkit dialog of the helper, sudo's prompt in Omarchy's terminal, a terminal closed during an install (SIGHUP through sudo, NOT VERIFIED in S6), the absence of a Store badge | owner, real session | L2 |
+| A12 | the real polkit dialog of the helper, sudo's prompt in Omarchy's terminal, a terminal closed during an install (SIGHUP through sudo, NOT VERIFIED in S6), the absence of a Store badge, an AUR package installed and removed with Omarchy's own yay against the real AUR | owner, real session | L2 |
 
 ## Interfaces / contracts (versions)
 - Catalog `grassfield-catalog.v1.json` + `.sig` + `catalog/<sha256>.png` (ADR-0037 g; the contract with grassfield-packages).
@@ -333,7 +359,8 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 - Environment: `GRASSFIELD_STORE_QML` (the QML directory, as the other apps' `_QML`; the installed one by default). Dev
   plumbing, honoured only in a dev session and inert in a packaged one (ADR-0019, `apps/store/src/storeenv.h`):
   `GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`, `GRASSFIELD_STORE_OFFLINE` (`1`:
-  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession). Command line:
+  offline whatever the network says; tested in `tst_storebackend.cpp` StoreEnv.OfflineOnlyInADevSession; step 3b2:
+  `metered` online on a metered connection, `0` online and unmetered, used by StoreBackend.TheAur). Command line:
   `--page` (`discover`, `section:<id>`, `categories`, `category:<id>`, `app:<id>`, `search:<words>`, `installed`, `updates`).
   Step 3a adds `GRASSFIELD_STORE_PKEXEC` (the program run in pkexec's place for the helper's operations) and
   `GRASSFIELD_STORE_INSTALLER` (the program run in place of Omarchy's commands and of Open's launchers: it gets the command's

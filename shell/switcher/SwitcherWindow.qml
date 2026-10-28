@@ -179,7 +179,7 @@ Variants {
                     width: panel.cell
                     height: panel.cell
                     Accessible.role: Accessible.Button
-                    Accessible.name: modelData.name
+                    Accessible.name: modelData.entry ? Apps.displayName(modelData.entry) : modelData.name
                     Accessible.focused: current
                     Accessible.onPressAction: root.controller.click(index)
 
@@ -222,7 +222,9 @@ Variants {
                 x: Math.max(Tokens.switcherPadding, Math.min(panel.width - Tokens.switcherPadding - width, center - width / 2))
                 y: panel.nameTop
                 height: Tokens.switcherNameHeight
-                text: root.controller.apps[win.selected] ? root.controller.apps[win.selected].name : ""
+                // The app's name in the shell's language (Apps.displayName), whatever DockModel copied.
+                readonly property var app: root.controller.apps[win.selected]
+                text: app ? (app.entry ? Apps.displayName(app.entry) : app.name) : ""
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter

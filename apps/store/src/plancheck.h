@@ -5,6 +5,7 @@
 // (fetch.h), and a setup's read the installed Omarchy's pinned files, on a worker thread.
 #pragma once
 
+#include "aur.h"
 #include "removal.h"
 
 #include <QByteArray>
@@ -39,13 +40,19 @@ enum class Refusal {
     Offline,    // an install needs the network
     Dependency, // (uninstall) other installed packages need it
     Protected,  // (uninstall) the plan takes a protected package along
-    OmarchyChanged, // (setup) the installed Omarchy lacks the recipe, or a pinned file differs from the catalog's pin
-    Failed,     // pacman could not be asked
+    OmarchyChanged, // (setup, AUR) the installed Omarchy lacks the recipe, or a pinned file differs from the catalog's pin
+    Repository, // (AUR) a repository has the package: it is installed from there
+    NotOnAur,   // (AUR) the AUR does not know the package, or a dependency is on neither the repositories nor the AUR
+    Failed,     // pacman (or the AUR) could not be asked
 };
 
 struct InstallPlan {
     Refusal refusal = Refusal::None;
     QList<PlannedPackage> packages; // what pacman would add, the app's own first
+    // (AUR) what yay would build from the AUR, the app's own first (repo "aur", the AUR's version), and whether a
+    // dependency the AUR gave could not be read (the plan may then miss a package the build pulls in).
+    QList<PlannedPackage> built;
+    bool incomplete = false;
     qint64 downloadSize = 0;
     qint64 installedSize = 0;
     QStringList unfinished; // Unfinished: pacman -Qu's lines
@@ -81,6 +88,11 @@ struct SetupCheck {
 // when every one matches; "(no pins)" for an empty list (nothing says the files are the ones read).
 QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins);
 
+// The files of Omarchy's folder the catalog must pin for a recipe or one of the AUR's two commands: its own, and for
+// omarchy-pkg-aur-add the omarchy-pkg-missing it calls first (grassfield-packages pins the whole closure; a catalog that
+// does not is treated as one that does not pin the command).
+QStringList requiredPins(const QString &recipe);
+
 // Someone holds `path` with flock (Omarchy's update lock): asked by taking it without waiting and letting it go at once.
 // A missing file is free.
 bool lockHeld(const QString &path);
@@ -94,5 +106,12 @@ RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const 
 // omarchy-pkg-drop).
 InstallPlan checkSetupInstall(const QStringList &packages, const SetupCheck &setup, const PlanTools &tools, bool online, bool ownOperation);
 RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup, const DenyList &deny, const PlanTools &tools, bool ownOperation);
+// An AUR package (b.2, step 3b2): the AUR's command (setup.recipe, omarchy-pkg-aur-add) and the pins first, as a setup's;
+// then no repository may have the name (yay would take the repository's), the AUR must know it, and the dependencies
+// (depends, makedepends, checkdepends) the system lacks (pacman -T) come from the repositories (pacman -S --print: what
+// pacman adds, never an upgrade) or from the AUR, whose own are read in turn: at most 25 packages to build, in 6 rounds.
+// `info` asks the AUR (aur.h aurInfo). The repositories' packages are in `packages`, the AUR's in `built`.
+InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
+                            const PlanTools &tools, bool online, bool ownOperation);
 
 } // namespace grassfield::store

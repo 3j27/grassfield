@@ -60,17 +60,27 @@ Refusal readiness(const PlanTools &tools, bool ownOperation, QStringList *unfini
 // The recipe is an executable file of Omarchy's bin/ that the pins name, and every pinned file matches: "" or what differs.
 QString setupDifference(const SetupCheck &setup)
 {
-    static const QRegularExpression recipe(QStringLiteral(R"(\Aomarchy-(install|remove)-[a-z0-9-]+\z)"));
+    static const QRegularExpression recipe(QStringLiteral(R"(\A(omarchy-(install|remove)-[a-z0-9-]+|omarchy-pkg-aur-add|omarchy-pkg-drop)\z)"));
     const QString path = QStringLiteral("bin/") + setup.recipe;
     const QFileInfo program(setup.root + QLatin1Char('/') + path);
     if (!recipe.match(setup.recipe).hasMatch() || !program.isFile() || !program.isExecutable())
         return path;
-    if (std::none_of(setup.pins.cbegin(), setup.pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
-        return path;
+    for (const QString &required : requiredPins(setup.recipe)) {
+        if (std::none_of(setup.pins.cbegin(), setup.pins.cend(), [&required](const auto &pin) { return pin.first == required; }))
+            return required;
+    }
     return omarchyDifference(setup.root, setup.pins);
 }
 
 } // namespace
+
+QStringList requiredPins(const QString &recipe)
+{
+    QStringList out{QStringLiteral("bin/") + recipe};
+    if (recipe == QLatin1String("omarchy-pkg-aur-add"))
+        out.append(QStringLiteral("bin/omarchy-pkg-missing"));
+    return out;
+}
 
 QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins)
 {
@@ -289,6 +299,151 @@ RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup
         return plan;
     }
     return checkRemove(packages, deny, tools, ownOperation);
+}
+
+InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
+                            const PlanTools &tools, bool online, bool ownOperation)
+{
+    constexpr int kRounds = 6;
+    constexpr int kBuiltMax = 25;
+    InstallPlan plan;
+    if (!isName(name)) {
+        plan.refusal = Refusal::Failed;
+        return plan;
+    }
+    if (const QString differs = setupDifference(setup); !differs.isEmpty()) {
+        plan.refusal = Refusal::OmarchyChanged;
+        plan.detail = differs;
+        return plan;
+    }
+    if (!online) {
+        plan.refusal = Refusal::Offline;
+        return plan;
+    }
+    plan.refusal = readiness(tools, ownOperation, &plan.unfinished, &plan.detail);
+    if (plan.refusal != Refusal::None)
+        return plan;
+    // Whatever pacman resolves the name to (the package, a provider of it, a group of that name): yay would install that
+    // from the repositories, not the AUR's. pacman -Sp, as the user (S10): exit 0 resolved; 1 with "target not found"
+    // (LC_ALL=C, childprocess.cpp) not in the repositories; anything else is not an answer.
+    const ChildResult sp = runChild(tools.pacman, {QStringLiteral("-Sp"), QStringLiteral("--print-format"), QStringLiteral("%n"),
+                                                   QStringLiteral("--"), name});
+    if (!sp.started || sp.timedOut || sp.overflow) {
+        plan.refusal = Refusal::Failed;
+        plan.detail = firstLines(sp.err);
+        return plan;
+    }
+    if (sp.exitCode == 0) {
+        plan.refusal = Refusal::Repository;
+        plan.detail = name;
+        return plan;
+    }
+    if (!sp.err.contains("target not found: " + name.toUtf8())) {
+        plan.refusal = Refusal::Failed;
+        plan.detail = firstLines(sp.err + sp.out);
+        return plan;
+    }
+
+    QStringList pending{name}, repoNames;
+    QSet<QString> seen{name};
+    for (int round = 0; round < kRounds && !pending.isEmpty(); ++round) {
+        const AurAnswer answer = info(pending);
+        if (!answer.ok) {
+            plan.refusal = Refusal::Failed;
+            plan.detail = QStringLiteral("aur.archlinux.org: ") + answer.error;
+            return plan;
+        }
+        QStringList dependencies;
+        for (const QString &n : pending) {
+            const auto it = std::find_if(answer.packages.cbegin(), answer.packages.cend(), [&n](const AurPackage &p) { return p.name == n; });
+            if (it == answer.packages.cend()) {
+                plan.refusal = Refusal::NotOnAur;
+                plan.detail = n;
+                return plan;
+            }
+            PlannedPackage built;
+            built.name = it->name;
+            built.version = it->version;
+            built.repo = QStringLiteral("aur");
+            plan.built.append(built);
+            plan.incomplete = plan.incomplete || it->dependenciesUnread;
+            dependencies += it->depends + it->makeDepends + it->checkDepends;
+        }
+        pending.clear();
+        dependencies.removeDuplicates();
+        if (dependencies.isEmpty())
+            break;
+        // What the system lacks (pacman -T prints those; exit 127 when there are some, 0 when none).
+        const ChildResult t = runChild(tools.pacman, QStringList{QStringLiteral("-T"), QStringLiteral("--")} + dependencies);
+        if (!t.started || t.timedOut || t.overflow || (t.exitCode != 0 && t.exitCode != 127)) {
+            plan.refusal = Refusal::Failed;
+            plan.detail = firstLines(t.err);
+            return plan;
+        }
+        QStringList missing;
+        for (const QByteArray &line : t.out.split('\n')) {
+            const QString dependency = dependencyName(QString::fromUtf8(line).trimmed());
+            if (!dependency.isEmpty() && !seen.contains(dependency) && !repoNames.contains(dependency) && !missing.contains(dependency))
+                missing.append(dependency);
+        }
+        // From the repositories when pacman resolves the name (a package, or one that provides it), else from the AUR.
+        for (int attempt = 0; attempt < 2 && !missing.isEmpty(); ++attempt) {
+            const ChildResult r = runChild(tools.pacman, QStringList{QStringLiteral("-S"), QStringLiteral("--print"), QStringLiteral("--print-format"),
+                                                                     QStringLiteral("%n"), QStringLiteral("--")}
+                                                             + missing);
+            if (r.ok()) {
+                repoNames += missing;
+                missing.clear();
+                break;
+            }
+            QStringList notFound;
+            static const QRegularExpression target(QStringLiteral("^error: target not found: (\\S+)$"));
+            for (const QByteArray &line : r.err.split('\n')) {
+                const QRegularExpressionMatch m = target.match(QString::fromUtf8(line).trimmed());
+                if (m.hasMatch() && missing.contains(m.captured(1)))
+                    notFound.append(m.captured(1));
+            }
+            if (notFound.isEmpty()) {
+                plan.refusal = Refusal::Outdated;
+                plan.detail = firstLines(r.err + r.out);
+                return plan;
+            }
+            for (const QString &n : notFound) {
+                missing.removeAll(n);
+                seen.insert(n);
+                pending.append(n);
+            }
+        }
+        if (!missing.isEmpty()) {
+            plan.refusal = Refusal::Outdated;
+            plan.detail = missing.join(QLatin1Char(' '));
+            return plan;
+        }
+        if (plan.built.size() + pending.size() > kBuiltMax) {
+            plan.refusal = Refusal::Failed;
+            plan.detail = QStringLiteral("more than %1 packages to build from the AUR").arg(kBuiltMax);
+            return plan;
+        }
+    }
+    if (!pending.isEmpty()) {
+        plan.refusal = Refusal::Failed;
+        plan.detail = QStringLiteral("dependencies more than %1 levels deep in the AUR").arg(kRounds);
+        return plan;
+    }
+    // The repositories' part as any install's: what pacman adds, never an upgrade, its first file still on the mirror.
+    if (!repoNames.isEmpty()) {
+        const InstallPlan repo = checkInstall(repoNames, tools, online, true);
+        if (repo.refusal != Refusal::None) {
+            plan.refusal = repo.refusal;
+            plan.detail = repo.detail;
+            plan.upgrades = repo.upgrades;
+            return plan;
+        }
+        plan.packages = repo.packages;
+        plan.downloadSize = repo.downloadSize;
+        plan.installedSize = repo.installedSize;
+    }
+    return plan;
 }
 
 } // namespace grassfield::store

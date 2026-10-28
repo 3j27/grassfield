@@ -31,7 +31,11 @@ Singleton {
 
     readonly property var applications: {
         Apps.revision;
-        return Logic.applications(root.state, root.max, id => Apps.lookup(id));
+        // Named in the shell's language (Apps.displayName).
+        return Logic.applications(root.state, root.max, id => {
+            const entry = Apps.lookup(id);
+            return entry ? {name: Apps.displayName(entry)} : null;
+        });
     }
     readonly property var documents: Logic.documents(root.documentList, root.state, root.max)
 

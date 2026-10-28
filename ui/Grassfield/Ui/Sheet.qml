@@ -30,7 +30,7 @@ Item {
     // host closes it, or changes it: "Show Certificate"). Where the row is too narrow they take a row of their own above.
     property var extraButtons: []
     // Return cancels and the cancel button is the default one: for a choice the user should not take by habit (connect
-    // to a server whose identity can't be verified).
+    // to a server whose identity can't be verified; build and install an AUR package).
     property bool returnCancels: false
     // While shown, the keyboard stays in the sheet: whatever takes it elsewhere in the window (a view that focuses itself a
     // moment later) gives it back. For a sheet with no pop-up of its own (Files' KIO questions).

@@ -1,0 +1,10 @@
+# Maintainer: alice
+pkgname=example-app-bin
+pkgver=2.4.1
+pkgrel=1
+	arch=('x86_64')
+source=("https://example.org/app-$pkgver.tar.gz")
+package() {
+  install -Dm755 app "$pkgdir/usr/bin/example-app"
+}
+[31mcolour[0m
