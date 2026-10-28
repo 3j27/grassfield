@@ -51,6 +51,9 @@
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
 #   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
+#   covered        (integrator review of 4ead6fb) no "enter" while an Exclusive layer is mapped elsewhere on the output, while
+#                  a layer covers the light, or while the session is locked (the foreign locker); after each, the pointer
+#                  moved off and back gives "enter" again. The layer is a tiny Quickshell config written into the run directory.
 # The locked case above also calls move_to when the plugin has it (TL34): nothing moves.
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
@@ -819,6 +822,93 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     close_popover
   else
     check "hover: needs the light from the open event" false
+  fi
+
+  # covered: a layer surface of a tiny Quickshell config (the run directory, never the repository): Exclusive or not, at a
+  # place on GF-REF (layout coordinates x y w h).
+  layer_pid=""
+  start_layer() { # exclusive(0|1) x y w h
+    mkdir -p "$run/layer-fixture"
+    cat >"$run/layer-fixture/shell.qml" <<QML
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+ShellRoot {
+    PanelWindow {
+        screen: Quickshell.screens.find(s => s.name === "$out") ?? null
+        anchors { top: true; left: true }
+        margins { left: $(($2 - mx)); top: $(($3 - my)) }
+        implicitWidth: $4
+        implicitHeight: $5
+        exclusionMode: ExclusionMode.Ignore
+        color: "#40ff0000"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "tiling-test-layer"
+        WlrLayershell.keyboardFocus: $([[ $1 == 1 ]] && echo WlrKeyboardFocus.Exclusive || echo WlrKeyboardFocus.None)
+    }
+}
+QML
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+      setsid "$root/scripts/dev/isolated.sh" --name tiling-layer qs -p "$run/layer-fixture" --no-color >>"$run/layer.log" 2>&1 </dev/null &
+    layer_pid=$!
+    pids+=("$layer_pid")
+    local _
+    for _ in $(seq 1 50); do
+      nestctl layers -j 2>/dev/null | jq -e '[.. | objects | select(.namespace? == "tiling-test-layer")] | length > 0' >/dev/null 2>&1 && break
+      sleep 0.1
+    done
+    sleep 0.3
+  }
+  stop_layer() { [[ -n $layer_pid ]] && kill "$layer_pid" 2>/dev/null; layer_pid=""; sleep 0.5; }
+  no_enter_for() { # seconds: the pointer rests on the light, no enter comes
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$1"
+    [[ -z $(events_since "$(hover_filter enter)") ]]
+  }
+  enter_again() { # off the light and back: the hover works again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    local ok=1
+    events_since "$(hover_filter enter)" | grep -q . && ok=0
+    close_popover
+    return $ok
+  }
+  wait_s=$(awk -v d="$hover_delay" 'BEGIN { print (d + 700) / 1000 }')
+  if [[ -n $open_event ]]; then
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    start_layer 1 $((mx + mw - 160)) $((my + mh - 120)) 120 80
+    check "covered: no enter while an Exclusive layer is mapped elsewhere on the output" no_enter_for "$wait_s"
+    stop_layer
+    check "covered: the Exclusive layer gone, the hover works again" enter_again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    start_layer 0 $((lcx - 20)) $((lcy - 20)) 40 40
+    check "covered: no enter while a layer covers the light" no_enter_for "$wait_s"
+    stop_layer
+    check "covered: the layer gone, the hover works again" enter_again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+      setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
+    locker_pid=$!
+    locked=""
+    for _ in $(seq 1 60); do
+      locked=$(foreign_ipc status)
+      [[ $locked == "locked secure" ]] && break
+      sleep 0.1
+    done
+    if [[ $locked == "locked secure" ]]; then
+      check "covered: no enter while the session is locked" no_enter_for "$wait_s"
+    else
+      check "covered: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    foreign_ipc unlock >/dev/null
+    for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
+    locker_pid=""
+    sleep 0.5
+    check "covered: unlocked, the hover works again" enter_again
   fi
 
   other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // ""')
