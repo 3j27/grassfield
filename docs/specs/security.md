@@ -380,7 +380,9 @@ shell no longer relies on that alone:
   `tilePopover` and `nextOutput` join this list, and close when the lock engages, in the step that adds each of them.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
-  moves).
+  moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
+  Super+drag) and the double-click on a resize border are pointer gestures Hyprland does not start on a locked session; the
+  plugin checks the lock again when it would tile after such a release and then moves nothing.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

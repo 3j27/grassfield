@@ -100,7 +100,8 @@ namespace {
         l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) {
             // The first motion of one of Hyprland's drags: the window's box before it moved (FR56).
             gf::guarded("top clamp motion", [] { gf::topClamp::beforePointerMotion(); });
-            // One of Hyprland's resizes of a tiled window keeps its record (Resizing); a move ends it (tiling.md TL10).
+            // One of Hyprland's resizes of a tiled window keeps its record (Resizing); one of its moves shows the tiling preview
+            // and takes a tiled window out of its tile at its size from before (tiling.md TL10, TL16).
             gf::guarded("tiling motion", [] { gf::tiler::beforePointerMotion(); });
             CGrassfieldTitlebar::onGlobalMouseMove();
         }));
@@ -124,8 +125,10 @@ namespace {
             // The release that ends one of Hyprland's own moves or resizes (an app's move request, a mouse binding): the
             // window's titlebar is held below the menu bar once Hyprland ended the drag (macOS).
             gf::guarded("top clamp release", [&] { gf::topClamp::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
-            // After the top clamp's (its callback runs first): a resize of a tiled window ends with the box it left.
-            gf::guarded("tiling release", [&] { gf::tiler::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // After the top clamp's (its callback runs first): a resize of a tiled window ends with the box it left; a move
+            // released over the place shown tiles there (the top clamp skipped); a double-click on a resize border extends the
+            // window's sides (tiling.md TL16, TL20).
+            gf::guarded("tiling button", [&] { gf::tiler::beforePointerButton(e.button, e.state == WL_POINTER_BUTTON_STATE_PRESSED, e.timeMs); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
             if (CGrassfieldTitlebar::onRevealedBarButton(e))
                 info.cancelled = true;
@@ -135,9 +138,11 @@ namespace {
             if (stage == RENDER_POST_WINDOWS)
                 CGrassfieldTitlebar::drawRevealed();
         }));
-        // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6).
+        // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6) and the place of a
+        // drag (tiling.md TL17, TL18).
         l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) {
             gf::keyPath("titlebar key", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onKey(); }, e, info);
+            gf::keyPath("tiling key", [](const IKeyboard::SKeyEvent& /*e*/, Event::SCallbackInfo& /*info*/) { gf::tiler::onKey(); }, e, info);
         }));
     }
 

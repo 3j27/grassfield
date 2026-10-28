@@ -39,6 +39,59 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
+    Place placeForAltPointer(double x, double y, const Rect& area) {
+        const auto cell = [](double v, double start, double len) { return v < start + len / 3 ? 0 : (v < start + 2 * len / 3 ? 1 : 2); };
+        const int  col  = cell(x, area.x, area.w);
+        const int  row  = cell(y, area.y, area.h);
+        const bool left = x < area.x + area.w / 2;
+        if (row == 0)
+            return col == 0 ? Place::TopLeft : (col == 2 ? Place::TopRight : Place::Fill);
+        if (row == 2 && col != 1)
+            return col == 0 ? Place::BottomLeft : Place::BottomRight;
+        if (col == 1)
+            return left ? Place::Left : Place::Right;
+        return col == 0 ? Place::Left : Place::Right;
+    }
+
+    std::optional<Place> dragPlace(double x, double y, const Output& output, const Rect& area, const DragOptions& options, bool alt) {
+        const Rect& o = output.box;
+        if (o.w <= 0 || o.h <= 0 || x < o.x || x >= o.x + o.w || y < o.y || y >= o.y + o.h)
+            return std::nullopt;
+        if (alt && options.altDrag && area.w > 0 && area.h > 0)
+            return placeForAltPointer(x, y, area);
+        return placeForPointer(x, y, output, options);
+    }
+
+    bool CDwell::update(std::optional<Place> place, std::string_view output, uint64_t nowMs, bool immediate) {
+        if (place != m_place || (place && output != m_output)) {
+            m_place  = place;
+            m_output = place ? std::string{output} : std::string{};
+            m_since  = nowMs;
+            m_shown  = false;
+        }
+        if (m_place && !m_shown && (immediate || nowMs - m_since >= kPreviewDelay))
+            m_shown = true;
+        return m_shown;
+    }
+
+    std::optional<uint64_t> CDwell::remaining(uint64_t nowMs) const {
+        if (!m_place || m_shown)
+            return std::nullopt;
+        const uint64_t waited = nowMs - m_since;
+        return waited >= kPreviewDelay ? 0 : kPreviewDelay - waited;
+    }
+
+    bool CDwell::shown() const {
+        return m_shown; // never without a place: update() clears it whenever the place changes
+    }
+
+    void CDwell::reset() {
+        m_place.reset();
+        m_output.clear();
+        m_since = 0;
+        m_shown = false;
+    }
+
     // ---- geometry ----
 
     std::optional<Zone> zoneOf(Place place) {
@@ -382,6 +435,83 @@ namespace gf::tiling {
         const int    step = stepOf(area);
         return Rect{snapNearest(area.box.x + (area.box.w - w) / 2, area.grid.originX, step), snapNearest(area.box.y + (area.box.h - h) / 2, area.grid.originY, step),
                     w, h};
+    }
+
+    uint8_t sidesAt(double x, double y, const Rect& surface) {
+        uint8_t sides = 0;
+        if (x < surface.x)
+            sides |= kSideLeft;
+        else if (x >= surface.x + surface.w)
+            sides |= kSideRight;
+        if (y < surface.y)
+            sides |= kSideTop;
+        else if (y >= surface.y + surface.h)
+            sides |= kSideBottom;
+        if (sides == 0)
+            sides = (x < surface.x + surface.w / 2 ? kSideLeft : kSideRight) | (y < surface.y + surface.h / 2 ? kSideTop : kSideBottom);
+        return sides;
+    }
+
+    uint8_t extendedSides(uint8_t sides, bool alt) {
+        sides &= kAllSides;
+        if (!alt)
+            return sides;
+        if (sides & (kSideLeft | kSideRight))
+            sides |= kSideLeft | kSideRight;
+        if (sides & (kSideTop | kSideBottom))
+            sides |= kSideTop | kSideBottom;
+        return sides;
+    }
+
+    namespace {
+        // One axis of extendFrame: [start, start + len) with its low / high side moved to [full0, full0 + fullLen) when asked,
+        // then fitted to [minLen, maxLen] (maxLen 0: none) and to the increments (sizes include `band`), the side that did not
+        // move kept; both moved and capped by the maximum: centred, the offset on the grid.
+        void extendAxis(double& start, double& len, bool low, bool high, double full0, double fullLen, const Constraints& c, bool vertical, int step) {
+            if (!low && !high)
+                return;
+            const double end = high ? full0 + fullLen : start + len;
+            if (low)
+                start = full0;
+            len                 = end - start;
+            const double band   = vertical ? c.band : 0.0;
+            const double minLen = vertical ? minHeight(c) : minWidth(c);
+            const double maxLen = vertical ? maxHeight(c) : maxWidth(c);
+            double       want   = std::max(len, minLen);
+            const bool   capped = maxLen > 0 && want > maxLen;
+            if (capped)
+                want = maxLen;
+            want = incremented(want - band, vertical ? c.incH : c.incW, vertical ? c.baseH : c.baseW, std::max(1.0, minLen - band)) + band;
+            if (low && high) {
+                if (capped)
+                    start += floorTo((len - want) / 2, step);
+            } else if (low) {
+                start = end - want;
+            }
+            len = std::max(1.0, want);
+        }
+    } // namespace
+
+    Rect extendFrame(const Rect& frame, uint8_t sides, const Constraints& constraints, const Area& area) {
+        const Rect full = zoneFrame(Zone{}, area);
+        const int  step = stepOf(area);
+        Rect       r    = frame;
+        extendAxis(r.x, r.w, (sides & kSideLeft) != 0, (sides & kSideRight) != 0, full.x, full.w, constraints, false, step);
+        extendAxis(r.y, r.h, (sides & kSideTop) != 0, (sides & kSideBottom) != 0, full.y, full.h, constraints, true, step);
+        return r;
+    }
+
+    std::string sidesName(uint8_t sides) {
+        std::string out;
+        for (const auto& [side, name] :
+             {std::pair{kSideTop, "top"}, std::pair{kSideBottom, "bottom"}, std::pair{kSideLeft, "left"}, std::pair{kSideRight, "right"}}) {
+            if ((sides & side) == 0)
+                continue;
+            if (!out.empty())
+                out += '-';
+            out += name;
+        }
+        return out;
     }
 
     Rect frameOf(const Rect& surface, double titlebar) {
@@ -920,8 +1050,8 @@ namespace gf::tiling {
                 firstWindow = false;
                 out += std::format(R"({{"address":"{:x}","state":"{}","place":"{}","layout":")", r->id, nameOf(r->state), r->where.place ? nameOf(*r->where.place) : "");
                 out += gf::gfc::jsonEscape(r->where.layout);
-                out += std::format(R"(","zone":{},"group":{},"x":{},"y":{},"w":{},"h":{}}})", r->where.zone, r->group, num(r->box.x), num(r->box.y), num(r->box.w),
-                                   num(r->box.h));
+                out += std::format(R"(","zone":{},"sides":"{}","group":{},"x":{},"y":{},"w":{},"h":{}}})", r->where.zone, sidesName(r->where.sides), r->group,
+                                   num(r->box.x), num(r->box.y), num(r->box.w), num(r->box.h));
             }
             out += "]}";
         }
