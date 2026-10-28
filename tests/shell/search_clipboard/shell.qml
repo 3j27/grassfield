@@ -69,6 +69,8 @@ ShellRoot {
     function steps(): var {
         const ids = root.ids;
         return [[() => {
+                    // grassfield.json does not exist yet here: nothing ran on the settings' defaults (review of f7cd664).
+                    check("nothing runs before the settings are read", !Clipboard.initialized && !Clipboard.historyClear.running && !Clipboard.clearsApply.running);
                     check("history off by default", !Clipboard.enabled);
                     search.show("");
                     check("Search opens on the results", search.open && search.view === "" && !search.clipboardView);
@@ -85,9 +87,18 @@ ShellRoot {
                     search.toggleClipboard();
                     check("Super+Ctrl+V opens Search in the view", search.open && search.clipboardView);
                     search.clipAllow();
+                    check("Allow before the file is read back: nothing starts yet (" + Clipboard.state + ")", Clipboard.initialized || Clipboard.state === "off");
                 }, -1] // waits for the setting (below)
             , [() => {
                     check("Allow turns the history on", Clipboard.enabled && !search.clipPrompt);
+                    check("the settings read, the service decided", Clipboard.initialized);
+                    const given = command => {
+                        const i = command.indexOf("--cleared-at");
+                        const j = command.indexOf("--pinned-cleared-at");
+                        return i > 0 && command[i + 1] === Logic.clearTimeArg(Clipboard.clearedAt) && j > 0 && command[j + 1] === Logic.clearTimeArg(Clipboard.pinnedClearedAt);
+                    };
+                    check("the helper is given the settings' clears", given(Clipboard.helper.command));
+                    check("--apply-clears is given them too", Clipboard.clearsApply.command.indexOf("--apply-clears") > 0 && given(Clipboard.clearsApply.command));
                     check("no helper in a dev session without the display", Clipboard.state === "dev-off");
                     Clipboard.handle(item(ids[0], 0, 1000, "alpha"));
                     Clipboard.handle(item(ids[1], 0, 2000, "bravo"));
@@ -212,6 +223,28 @@ ShellRoot {
                     search.show("");
                     check("Search opening again drops the paste", Clipboard.pendingPaste === null && Clipboard.lastPaste === "Search opened again");
                     search.hide();
+                    // The paste keeps its own target: a live pasteTarget that differs changes nothing it checks.
+                    pasteCopied();
+                    Clipboard.pasteTarget = "11111111";
+                    check("a check reads the paste's own target", Logic.pasteStep(Clipboard.pasteState(Clipboard.pendingPaste, "0x" + root.target)) === "send" && Logic.pasteStep(Clipboard.pasteState(Clipboard.pendingPaste, "0x11111111")) === "wait");
+                    Compositor.windowClosed(root.target);
+                }, 4 * Logic.PASTE_POLL_MS], [() => {
+                    check("the paste's own target closing drops it, whatever pasteTarget says (" + Clipboard.lastPaste + ")", Clipboard.pendingPaste === null && Clipboard.lastPaste === "the window closed");
+                    // Another app takes the clipboard (the helper's empty A) while the paste waits: Ctrl+V would paste its item.
+                    pasteCopied();
+                    owned("");
+                }, 4 * Logic.PASTE_POLL_MS], [() => {
+                    check("the clipboard taken by another app drops the paste (" + Clipboard.lastPaste + ")", Clipboard.pendingPaste === null && Clipboard.lastPaste === "the clipboard changed");
+                    // Return, then Copy on another row before the helper answers: the paste is dropped, the copy goes on.
+                    choosePaste();
+                    search.selected = 1;
+                    search.clipCopy(search.selectedClip());
+                    check("a Copy right after Return drops the paste", Clipboard.pendingPaste === null && Clipboard.lastPaste === "another item copied" && Clipboard.pendingCopy === root.ids[1]);
+                    owned(root.ids[2]);
+                    check("the late confirmation of the paste pastes nothing", search.open && Clipboard.pendingPaste === null && !Clipboard.pasteWatch.running);
+                    owned(root.ids[1]);
+                    check("the copy is confirmed", search.open && search.clipCopiedKey === "clip:" + root.ids[1]);
+                    search.hide();
                     // Nothing happens: the deadline drops the paste (the target never became active here).
                     pasteCopied();
                 }, Logic.PASTE_WAIT_MS + 6 * Logic.PASTE_POLL_MS], [() => {
@@ -241,7 +274,7 @@ ShellRoot {
         }
     }
 
-    // Runs the scenario: a wait of -1 waits for Allow's setting to apply (at most 5 s).
+    // Runs the scenario: a wait of -1 waits for Allow's setting to apply and be read back (at most 5 s).
     Timer {
         id: runner
         interval: 200
@@ -249,7 +282,8 @@ ShellRoot {
         onTriggered: {
             if (root.script.length === 0)
                 root.script = root.steps();
-            if (root.next > 0 && root.script[root.next - 1][1] === -1 && !Clipboard.enabled) {
+            // Allow writes grassfield.json; the service decides once the file is read back (it never acts on the defaults).
+            if (root.next > 0 && root.script[root.next - 1][1] === -1 && !(Clipboard.enabled && Clipboard.initialized)) {
                 root.waitedForSetting += interval;
                 if (root.waitedForSetting > 5000) {
                     root.check("Allow applied the setting within 5 s", false);

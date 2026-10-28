@@ -141,6 +141,18 @@ qint64 clampRetention(qint64 ms);
 // limit; 0 means close it now.
 qint64 writerWaitMs(qint64 elapsedMs);
 
+// The clears asked in the settings (search.clipboard.clearedAt and .pinnedClearedAt, ms; 0 never) against the ones this helper
+// last carried out, which it keeps beside its stores (ADR-0034 §6): Settings writes the keys whether a helper runs or not, so a
+// clear written while none ran is carried out at the next start, before anything is loaded, shown or recorded.
+enum class ClearAction { Keep, DeleteAll, DropOlder };
+// asked: the setting (-1 not given, 0 never cleared, left as recorded); applied: the record's value; recordKnown: a record was
+// read. Another value than the one carried out deletes the whole store (also after a clock set back: never fewer deletions);
+// with no record (a store from before it existed, or a record that broke a rule) only the items from before the clear go.
+ClearAction clearAction(qint64 asked, qint64 applied, bool recordKnown);
+// The items a clear at `clearedAtMs` leaves when it is carried out without a record: those whose time (the pin's for the pinned
+// store, the copy's for the history) is after it.
+QList<Item> keptAfterClear(const QList<Item> &items, qint64 clearedAtMs, bool pinned);
+
 // The history (unpinned, newest copy first) and the pinned items (newest pin first).
 class Store
 {

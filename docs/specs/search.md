@@ -70,4 +70,7 @@ Settings > Search (macOS 27's Spotlight pane) chooses which kinds of results Sea
 included. Delete Search History writes `search.historyResetAt` (milliseconds); the shell forgets the results picked before it
 (`Ranking.forgetUsageBefore`), in memory and in `search-usage.json`, also when the deletion happened while it was not running.
 Tests: `tests/shell/search_chips` (the switches and the deletion on the real controller), `tests/unit/tst_searchranking.qml`.
+The clipboard history's group comes last (ADR-0034 step 3, `docs/specs/clipboard.md` CB-13): Results from Clipboard, the time
+the history is available (30 minutes, 8 hours, 7 days), Keep clipboard history after logging out, and Clear Clipboard History…
+(asks first; "Also delete pinned items" deletes the pins too). Test: `tests/unit/tst_settingssearch.qml`.
 

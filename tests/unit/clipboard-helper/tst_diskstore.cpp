@@ -251,3 +251,43 @@ TEST(DiskStore, FilesTheIndexDoesNotNameGoAtLoad)
     EXPECT_TRUE(QFile::exists(dir + QStringLiteral("/00000000000000a7.item")));
     EXPECT_TRUE(QFile::exists(dir + QStringLiteral("/notes.txt"))) << "a file that is not the store's is left";
 }
+
+// The clears carried out, recorded beside the stores (review of f7cd664): 0600, read with the stores' rules, a broken record read
+// as missing and deleted.
+TEST(DiskStore, ClearsRecord)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    ::umask(022);
+    const QString state = tmp.path() + QStringLiteral("/clipboard");
+    EXPECT_FALSE(DiskStore::readClears(state).known) << "none yet";
+    ASSERT_TRUE(DiskStore::writeClears(state, {5000, 7000, true}));
+    EXPECT_EQ(modeOf(state + QStringLiteral("/clears")), mode_t(0600));
+    EXPECT_EQ(modeOf(state), mode_t(0700));
+    const DiskStore::Clears read = DiskStore::readClears(state);
+    EXPECT_TRUE(read.known);
+    EXPECT_EQ(read.history, 5000);
+    EXPECT_EQ(read.pinned, 7000);
+
+    const auto writeRaw = [&](const QByteArray &bytes, QFileDevice::Permissions perms) {
+        QFile f(state + QStringLiteral("/clears"));
+        f.remove();
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(bytes);
+        f.close();
+        f.setPermissions(perms);
+    };
+    const QFileDevice::Permissions owner = QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+    for (const QByteArray &bad : {QByteArray("GFCLEARS1 5000\n"), QByteArray("GFCLEARS1 5000 -1\n"), QByteArray("GFCLEARS2 1 2\n"),
+                                  QByteArray("GFCLEARS1 5000 7000"), QByteArray("GFCLEARS1 5x00 7000\n")}) {
+        writeRaw(bad, owner);
+        EXPECT_FALSE(DiskStore::readClears(state).known) << bad.constData();
+        EXPECT_FALSE(QFile::exists(state + QStringLiteral("/clears"))) << "deleted: " << bad.constData();
+    }
+    writeRaw("GFCLEARS1 1 2\n", owner | QFileDevice::ReadGroup);
+    EXPECT_FALSE(DiskStore::readClears(state).known) << "a mode other than 0600";
+    QFile::remove(state + QStringLiteral("/clears"));
+    QFile::link(tmp.path() + QStringLiteral("/elsewhere"), state + QStringLiteral("/clears"));
+    EXPECT_FALSE(DiskStore::readClears(state).known) << "a link is never read";
+    EXPECT_FALSE(QFileInfo(state + QStringLiteral("/clears")).isSymLink()) << "...and goes";
+}
