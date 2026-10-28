@@ -34,6 +34,17 @@ public:
     bool readOnly() const { return m_readOnly; }
     QString dir() const { return m_dir; }
 
+    // The clears last carried out (ClipLogic::clearAction): <stateDir>/clears, "GFCLEARS1 <history ms> <pinned ms>\n", 0600, read
+    // with the stores' rules (the user's regular file, not a link, that mode, a few bytes). `known` is false when it is missing
+    // or breaks a rule (such a file is deleted).
+    struct Clears {
+        qint64 history = 0;
+        qint64 pinned = 0;
+        bool known = false;
+    };
+    static Clears readClears(const QString &stateDir);
+    static bool writeClears(const QString &stateDir, const Clears &clears);
+
     // Item files (exposed for tests).
     static QByteArray encodeItem(const ClipLogic::Item &item);
     static bool decodeItem(const QByteArray &bytes, ClipLogic::Kind kind, ClipLogic::Item *item);

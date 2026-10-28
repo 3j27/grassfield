@@ -275,7 +275,7 @@ SettingsPage {
         }
     }
 
-    // The push buttons under the groups, right-aligned (macOS 27: Advanced…, Night Shift…).
+    // The push buttons under the groups, right-aligned (macOS 27: Advanced…).
     Item {
         visible: root.monitors.length > 1
         width: parent ? parent.width : implicitWidth

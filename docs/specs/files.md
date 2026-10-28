@@ -35,7 +35,7 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`). Recents and
 selection").
 
 ## Functional requirements
-1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's conflict/Open With/undo dialogs are widgets),
+1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's widgets library expects one; its dialogs are Grassfield sheets, ADR-0035 D-12 a),
    `setDesktopFileName("org.grassfield.Files")`, `grassfield-files [locations...]` opens one window per location
    (default: home). QML from `GRASSFIELD_FILES_QML` or the baked-in directory (installed
    `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`.
@@ -338,8 +338,10 @@ installed (not built here).
 - Preview pane: no Markup (Grassfield has no annotation editor); rotation covers JPEG, PNG and BMP only and is not part
   of Undo; the gallery's preview changes in place without the macOS slide.
 - Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
-- KIO's own dialogs are QWidget dialogs, not Grassfield-styled: file-exists conflicts (paste/drop), the Open With
-  chooser when no application is associated, and the undo confirmation for deleting copied files.
+- KIO's questions are Grassfield sheets since ADR-0035 step 4a (docs/specs/system-dialogs.md section 9): file-exists
+  conflicts, skips, certificates, a worker's messages; a document with no application gets a notice until the Choose
+  Application sheet of ADR-0035 D-5; Undo keeps a copy changed since it was made and says so. Paste takes items only
+  (text or an image on the clipboard is not pasted, as the Finder).
 - Terminal applications (for example `nvim.desktop`, the default for text files here) fail to open: KIO starts them
   through `kdeglobals` `[General] TerminalApplication` (default konsole, not installed on Omarchy). Observed in a
   nested run as the banner "Terminal konsole not found…". Workaround: set `TerminalApplication` (owner config).
@@ -478,7 +480,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-64 | Copy as Pathname ⌥⌘C | missing | none | clipboard | — | 4 |
 | FP-65 | Open With: the list, Other…, Change All… | partial: the list | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
 | FP-66 | Drag modifiers: ⌥ copies, ⌘ moves, ⌥⌘ makes an alias | done (PR 2) | none | `FilesApp.drop` | ⌘ is Ctrl: Ctrl-drag moves, Alt-drag copies, Ctrl+Alt makes a link (PR 2) | 2 |
-| FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | missing: KIO's widget dialog | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
+| FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | done (ADR-0035 step 4a): Keep Both / Skip / Stop / Replace, Merge for folders, Apply to All | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
 | FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | partial: status-bar text | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
 | FP-69 | Print ⌘P | missing | none | the default application's print | — | later |
 | FP-70 | Show Package Contents, Burn to Disc | n/a | — | — | no bundles or optical burning in scope | never |
@@ -500,7 +502,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-78 | Show hidden files ⇧⌘. | partial: Ctrl+H | none | KDirLister | — | 4 |
 | FP-79 | Services > New Terminal at Folder | missing | Finder-Menu (Services) | `xdg-terminal-exec` (decision F-7) | the app menu's Services submenu is the shell's (F-10): the item sits in the context menu's Services submenu | 4 |
 | FP-80 | Terminal applications open (Open With nvim) | missing: KIO looks for konsole | none | `xdg-terminal-exec` (F-7) | — | 5 |
-| FP-81 | KIO's widget dialogs replaced by Grassfield sheets: file exists, Open With chooser, undo confirmation | missing | Finder-Replace | `AskUserActionInterface`, `OpenWithHandlerInterface`, `FileUndoManager::UiInterface` | kiod's password dialog stays (F-9) | 5 |
+| FP-81 | KIO's widget dialogs replaced by Grassfield sheets: file exists, Open With chooser, undo confirmation | done (ADR-0035 step 4a) but the Open With chooser (a notice until ADR-0035 D-5) | Finder-Replace | `AskUserActionInterface`, `OpenWithHandlerInterface`, `FileUndoManager::UiInterface` | kiod's password dialog stays (F-9) | 5 |
 | FP-82 | Network browsing | partial: `remote:/` (smb, sftp) | Finder-Network | kio-extras, avahi | SMB discovery needs wsdd or avahi on the network | 4 |
 
 ### Desktop, accessibility and look

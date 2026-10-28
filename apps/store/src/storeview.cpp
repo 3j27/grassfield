@@ -197,7 +197,9 @@ QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, con
     if (app.entry) {
         const CatalogSource &s = app.entry->source;
         if (s.kind == CatalogSource::Kind::OmarchySetup) {
-            setup = {{QStringLiteral("install"), s.install},
+            // The recipes as the terminal runs them: the name, then its arguments.
+            setup = {{QStringLiteral("install"), (QStringList{s.install} + s.args).join(QLatin1Char(' '))},
+                     {QStringLiteral("remove"), (QStringList{s.remove} + s.removeArgs).join(QLatin1Char(' '))},
                      {QStringLiteral("changes"), s.changes.pick(language)},
                      {QStringLiteral("removes"), s.removes.pick(language)}};
         } else if (s.kind == CatalogSource::Kind::WebApp) {

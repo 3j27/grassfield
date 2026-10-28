@@ -337,7 +337,7 @@ FocusScope {
 
                     Label {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Night Shift")
+                        text: qsTr("Night Light")
                         font.pixelSize: Tokens.typographyCaptionSize
                         color: Appearance.colors.textSecondary
                     }
@@ -345,7 +345,7 @@ FocusScope {
                     Toggle {
                         anchors.verticalCenter: parent.verticalCenter
                         checked: NightShift.on
-                        accessibleName: qsTr("Night Shift")
+                        accessibleName: qsTr("Night Light")
                         onToggled: value => NightShift.setOn(value)
                     }
                 }

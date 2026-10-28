@@ -92,6 +92,56 @@ namespace gf::tiling {
         m_shown = false;
     }
 
+    HoverChange CHoverDwell::update(std::optional<uint64_t> window, uint64_t nowMs) {
+        HoverChange change;
+        if (window != m_window) {
+            if (m_entered)
+                change.leave = m_window;
+            m_window  = window;
+            m_since   = nowMs;
+            m_entered = false;
+            m_held    = false;
+        }
+        if (m_window && !m_entered && !m_held && nowMs - m_since >= kHoverDelay) {
+            m_entered    = true;
+            change.enter = m_window;
+        }
+        return change;
+    }
+
+    HoverChange CHoverDwell::press() {
+        HoverChange change;
+        if (m_entered)
+            change.leave = m_window;
+        m_entered = false;
+        m_held    = m_window.has_value();
+        return change;
+    }
+
+    std::optional<uint64_t> CHoverDwell::remaining(uint64_t nowMs) const {
+        if (!m_window || m_entered || m_held)
+            return std::nullopt;
+        const uint64_t waited = nowMs - m_since;
+        return waited >= kHoverDelay ? 0 : kHoverDelay - waited;
+    }
+
+    std::optional<uint64_t> CHoverDwell::entered() const {
+        return m_entered ? m_window : std::nullopt;
+    }
+
+    void CHoverDwell::reset() {
+        m_window.reset();
+        m_since   = 0;
+        m_entered = false;
+        m_held    = false;
+    }
+
+    HoverCoverEffect hoverCoverEffect(const HoverCover& cover) {
+        if (cover.locked || std::ranges::any_of(cover.exclusiveNamespaces, [](const std::string& name) { return name != kShellPopupNamespace; }))
+            return HoverCoverEffect::Away;
+        return cover.layerUnderPointer ? HoverCoverEffect::Over : HoverCoverEffect::None;
+    }
+
     // ---- geometry ----
 
     std::optional<Zone> zoneOf(Place place) {
@@ -514,6 +564,18 @@ namespace gf::tiling {
         return out;
     }
 
+    Rect moveToArea(const Rect& frame, const Rect& from, const Rect& to) {
+        const auto axis = [](double pos, double len, double fromStart, double fromLen, double toStart, double toLen) {
+            const double size  = std::min(len, toLen);
+            const double space = fromLen - len;
+            const double share = space > 0 ? std::clamp((pos - fromStart) / space, 0.0, 1.0) : 0.5;
+            return std::pair{std::round(toStart + (share * (toLen - size))), std::round(size)};
+        };
+        const auto [x, w] = axis(frame.x, frame.w, from.x, from.w, to.x, to.w);
+        const auto [y, h] = axis(frame.y, frame.h, from.y, from.h, to.y, to.h);
+        return Rect{x, y, std::max(1.0, w), std::max(1.0, h)};
+    }
+
     Rect frameOf(const Rect& surface, double titlebar) {
         return Rect{surface.x, surface.y - titlebar, surface.w, surface.h + titlebar};
     }
@@ -651,6 +713,17 @@ namespace gf::tiling {
 
     uint64_t CTileBook::generation() const {
         return m_generation;
+    }
+
+    uint64_t CTileBook::joinGroup(uint64_t asker) {
+        TileRecord* r = get(asker);
+        if (!r)
+            return 0;
+        if (r->group == 0) {
+            r->group = newGroup();
+            changed();
+        }
+        return r->group;
     }
 
     void CTileBook::changed() {
@@ -888,18 +961,19 @@ namespace gf::tiling {
         constexpr size_t kMaxStringBytes = 64;
         constexpr int    kMaxDepth       = 4;
 
-        bool outputNameOk(std::string_view name) {
-            return !name.empty() && name.size() <= kMaxOutputName &&
-                std::ranges::all_of(name, [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'; });
-        }
     } // namespace
+
+    bool outputNameOk(std::string_view name) {
+        return !name.empty() && name.size() <= kMaxOutputName &&
+            std::ranges::all_of(name, [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'; });
+    }
 
     std::expected<ArrangeRequest, std::string> parseArrange(std::string_view json) {
         if (json.size() > kMaxArrangeBytes)
             return Error{std::format("payload larger than {} bytes", kMaxArrangeBytes)};
         gf::json::CReader in{json, kMaxStringBytes, kMaxDepth};
         ArrangeRequest    request;
-        bool              haveLayout = false, haveWindows = false, haveFill = false, haveZone = false, haveOutput = false;
+        bool              haveLayout = false, haveWindows = false, haveFill = false, haveZone = false, haveWith = false, haveOutput = false;
         const auto        once = [](bool& seen) {
             const bool first = !seen;
             seen             = true;
@@ -953,6 +1027,13 @@ namespace gf::tiling {
                     if (!n || *n != std::floor(*n) || *n < 0 || *n >= static_cast<double>(kMaxZones))
                         return Error{std::format("zone is not an integer in 0..{}", kMaxZones - 1)};
                     request.zone = static_cast<int>(*n);
+                } else if (*key == "with") {
+                    if (!once(haveWith))
+                        return Error{"with given twice"};
+                    const auto text = in.string();
+                    request.with    = text ? gf::minimize::parseAddress(*text) : std::nullopt; // never 0
+                    if (!request.with)
+                        return Error{"with is not 1-16 hex digits (\"0x\" optional), not 0"};
                 } else if (*key == "output") {
                     if (!once(haveOutput))
                         return Error{"output given twice"};
@@ -984,7 +1065,39 @@ namespace gf::tiling {
                 return Error{"zone fills nothing (fill must be false or absent)"};
             request.fill = false;
         }
+        if (request.with) {
+            if (!request.zone)
+                return Error{"with needs a zone"};
+            if (*request.with == request.windows.front())
+                return Error{"with names the window placed"};
+        }
         return request;
+    }
+
+    // ---- suggestions ----
+
+    std::vector<int> zonesHeld(std::span<const TileRecord> records, const TileRecord& asker) {
+        std::vector<int> held;
+        const auto       inInstance = [&asker](const TileRecord& r) {
+            if (r.id != asker.id && (asker.group == 0 || r.group != asker.group))
+                return false;
+            return counts(r.state) && r.where.layout == asker.where.layout && r.output == asker.output && r.workspace == asker.workspace;
+        };
+        for (const auto& r : records) { // a place or extended sides has no zone (-1)
+            if (inInstance(r) && r.where.zone >= 0 && std::ranges::find(held, r.where.zone) == held.end())
+                held.push_back(r.where.zone);
+        }
+        std::ranges::sort(held);
+        return held;
+    }
+
+    std::vector<int> emptyZones(const Layout& layout, std::span<const int> held) {
+        std::vector<int> out;
+        for (int i = 0; i < static_cast<int>(layout.zones.size()); ++i) {
+            if (std::ranges::find(held, i) == held.end())
+                out.push_back(i);
+        }
+        return out;
     }
 
     // ---- the notice and the state ----
@@ -1028,7 +1141,7 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1055,7 +1168,43 @@ namespace gf::tiling {
             }
             out += "]}";
         }
-        out += "]}";
+        out += "]";
+        if (!suggestion) {
+            out += R"(,"suggestion":null})";
+            return out;
+        }
+        out += std::format(R"(,"suggestion":{{"gen":{},"address":"{:x}","layout":")", suggestion->generation, suggestion->asker);
+        out += gf::gfc::jsonEscape(suggestion->layout);
+        out += R"(","output":")";
+        out += gf::gfc::jsonEscape(suggestion->output);
+        out += R"(","zones":[)";
+        for (size_t i = 0; i < suggestion->zones.size() && i < suggestion->frames.size(); ++i) {
+            const auto& f = suggestion->frames[i];
+            out += std::format(R"({}{{"zone":{},"x":{},"y":{},"w":{},"h":{}}})", i == 0 ? "" : ",", suggestion->zones[i], num(f.x), num(f.y), num(f.w), num(f.h));
+        }
+        out += R"(],"windows":[)";
+        for (size_t i = 0; i < suggestion->windows.size() && i < kMaxSuggested; ++i)
+            out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", suggestion->windows[i]);
+        out += "]}}";
+        return out;
+    }
+
+    std::string_view hoverStateName(HoverState state) {
+        switch (state) {
+            case HoverState::Enter: return "enter";
+            case HoverState::Leave: return "leave";
+            case HoverState::Open: return "open";
+        }
+        return "leave";
+    }
+
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable) {
+        std::string out{R"({"v":")"};
+        out += gf::gfc::jsonEscape(gf::gfc::kVersion);
+        out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
+        if (state != HoverState::Leave)
+            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable);
+        out += '}';
         return out;
     }
 

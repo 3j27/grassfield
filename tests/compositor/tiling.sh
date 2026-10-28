@@ -42,6 +42,38 @@
 #                  preview captured while held; dragged out by its tab strip: its size from before (skipped without it)
 #   unload         the plugin unloaded in the middle of Hyprland's move: Hyprland alive, the drag goes on as Hyprland's
 #                  own; loaded again
+# Step 3 (docs/specs/tiling.md TL22-TL26; only with tile-hover). The plugin's events are read on Hyprland's socket2 (socat);
+# the shell's popover, when the shell runs, is closed with Esc after each case:
+#   popover-verb   tile_popover(address) posts tile-hover "open" for the window, tileable, its light in the titlebar's band
+#   hover          the pointer on that light: no "enter" before tiling.hoverDelay, "enter" after it; moving away posts
+#                  "leave"
+#   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
+#                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
+#                  output)
+#   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
+#   covered        (integrator review of 4ead6fb) no "enter" while an Exclusive layer is mapped elsewhere on the output or
+#                  while a layer covers the light; after each, the pointer moved off and back gives "enter" again. The layer
+#                  is a tiny Quickshell config written into the run directory. Locked (integrator nested rerun of 25e757c,
+#                  D24): a hover before the lock, its popover closed with Esc (the shell's own lock closes it; the foreign
+#                  locker does not), then no "enter" while the session is locked, the pointer moved off and back onto the
+#                  light meanwhile; once unlocked, "enter" comes by itself, the pointer resting on the light.
+# The locked case above also calls move_to when the plugin has it (TL34): nothing moves.
+# Both locked cases release the fixture through unlock_session, which checks that Hyprland itself reports the session
+# unlocked (`hyprctl locked`) before the next case (integrator nested pass of ab485fb: a locker killed before its unlock landed
+# would leave the session locked for every later case). A failed C1 log check prints the plugin's own lines for the victim,
+# Hyprland's lock state and the layers on GF-REF.
+# Step 4a (docs/specs/tiling.md TL27, TL28; only with tiling-layouts and tile-hover; the second foot window and a third,
+# closed after the cases). The plugin is driven directly: no shell surface is involved (the shell only shows a suggestion
+# after its own arrangement):
+#   zone           arrange({layout:"thirds", windows:[first], zone:2}): the first window alone in the right third, no group;
+#                  the reply's suggestion belongs to that `placed` notice and offers zones 0 and 1 (frames inside the
+#                  work area) with the other windows, never the first
+#   pick           arrange({…, windows:[second], zone:0, with:first}): the left third, in the first's group; the suggestion
+#                  now offers zone 1
+#   pick-held      a pick into a zone the layout holds is refused (reason invalid): nothing moves, the suggestion stays
+#   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
+#   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
+#                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -174,6 +206,70 @@ pids=()
 locker_pid=""
 foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
 foreign_ipc() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG timeout 5 qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
+# Hyprland's own session-lock state ("true" | "false"): what the plugin reads at each motion (CSessionLockManager).
+hypr_locked() { nestctl locked 2>/dev/null | tr -d '[:space:]'; }
+# The foreign locker fixture (tests/security/foreign_locker) takes the session lock; true once it holds it (secure).
+lock_session() {
+  WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+    setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
+  locker_pid=$!
+  locked=""
+  local _
+  for _ in $(seq 1 60); do
+    locked=$(foreign_ipc status)
+    [[ $locked == "locked secure" ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# Releases it and waits until Hyprland itself reports the session unlocked (integrator nested pass of ab485fb): the unlock
+# is asked again while Hyprland still says locked (a `qs ipc` call can time out under load), and the process is killed only
+# once Hyprland is unlocked or every attempt failed (a locker killed while it holds the lock leaves Hyprland's dead-locker
+# state: the session stays locked and every later case would fail for that reason). True when Hyprland is unlocked.
+unlock_session() {
+  local _ __
+  for _ in $(seq 1 10); do
+    foreign_ipc unlock >/dev/null
+    for __ in $(seq 1 10); do
+      [[ $(hypr_locked) == false ]] && break 2
+      sleep 0.1
+    done
+  done
+  for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
+  kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
+  locker_pid=""
+  say "  hyprctl locked: $(hypr_locked)"
+  [[ $(hypr_locked) == false ]]
+}
+# What may hold the pointer or the keyboard now, for a failed check: Hyprland's session lock and the layers mapped on GF-REF.
+surfaces_state() {
+  say "  hyprctl locked: $(hypr_locked); layers on $out: $(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels // {} | .[][] | .namespace] | join(",")' 2>/dev/null)"
+}
+# A shell popup is open on GF-REF: the shell maps its overlay layer only then (shell/overlay/Overlay.qml), over the whole
+# output, so a press there closes the popup and reaches no window.
+shell_popup_open() {
+  nestctl layers -j 2>/dev/null | jq -e --arg o "$out" '[.[$o].levels // {} | .[][] | select(.namespace == "grassfield-overlay")] | length > 0' >/dev/null 2>&1
+}
+# Closes a shell popup left open on GF-REF (Esc goes to the popup, which holds the keyboard) and says so: a press of the next
+# case would only close it (integrator nested pass of 2765002: the overlay was mapped at each failed C1 check).
+close_shell_popup() { # case name
+  shell_popup_open || return 0
+  say "  $1: a shell popup was open on $out (the overlay is mapped): closed with Esc before the case"
+  "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
+  sleep 0.5
+  shell_popup_open && say "  $1: the popup is still open after Esc"
+  return 0
+}
+# The plugin's last lines naming PATTERN (Hyprland's in-memory log, then its file), for a failed check.
+plugin_lines() { # pattern
+  local lines l
+  lines=$( { nestctl rollinglog 2>/dev/null; tail -n 3000 "$hyprlog" 2>/dev/null; } | grep -a '\[grassfield\]' | grep -a -- "$1" | tail -n 5)
+  if [[ -z $lines ]]; then
+    say "  plugin: no line names $1"
+  else
+    while IFS= read -r l; do say "  plugin: $l"; done <<<"$lines"
+  fi
+}
 cleanup() {
   if [[ -n $locker_pid ]] && kill -0 "$locker_pid" 2>/dev/null; then
     foreign_ipc unlock >/dev/null # never leave the nested session locked
@@ -209,6 +305,7 @@ grip_of() { # address: the middle of its titlebar relative to GF-REF, "px py"
 c1_other=""
 run_c1() { # name focused|unfocused moving|still
   local name=$1 focus=$2 motion=$3 px py p
+  close_shell_popup "C1 $name"
   open_xdg "gf-c1-$name"
   if [[ -z $xdg_addr ]] || ! read -r px py < <(grip_of "$xdg_addr"); then
     check "C1 $name: the victim window opened" false
@@ -229,7 +326,14 @@ run_c1() { # name focused|unfocused moving|still
   wait "$p"
   sleep 0.8
   check "C1 $name: the dragged window unmapped (alive) during the drag ($focus, $motion): Hyprland alive" alive
-  check "C1 $name: the plugin reached its guarded path (\"${xdg_addr#0x} closed or unmapped\") and moved nothing" plugin_logged "${xdg_addr#0x} closed or unmapped"
+  c1_guarded() { # on a failure, the plugin's own lines for the victim and what may have held the pointer
+    plugin_logged "${xdg_addr#0x} closed or unmapped" && return 0
+    plugin_lines "${xdg_addr#0x}"
+    plugin_lines "held back" # the request log budget (20 lines, then 1 per second) dropped lines when this names any
+    surfaces_state
+    return 1
+  }
+  check "C1 $name: the plugin reached its guarded path (\"${xdg_addr#0x} closed or unmapped\") and moved nothing" c1_guarded
   kill "$xdg_pid" 2>/dev/null
   sleep 0.3
 }
@@ -534,30 +638,22 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     check "zone-taken: it is Free" record_is "$addr2" none
     tile_ipc "$addr" previous
 
-    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG GRASSFIELD_FOREIGN_LOCKER=1 DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
-      setsid "$root/scripts/dev/isolated.sh" --name tiling-locker "$root/tests/security/foreign_locker/run.sh" --no-color >>"$run/locker.log" 2>&1 </dev/null &
-    locker_pid=$!
-    locked=""
-    for _ in $(seq 1 60); do
-      locked=$(foreign_ipc status)
-      [[ $locked == "locked secure" ]] && break
-      sleep 0.1
-    done
-    if [[ $locked == "locked secure" ]]; then
+    if lock_session; then
       read -r lx ly lw lh _ < <(geometry_of tiling-foot)
       gen_l0=$(tiling_state | jq -r '.gen')
       tile_ipc "$addr" left
       arrange "{\"layout\":\"quarters\",\"windows\":[\"$addr\"]}"
+      # move_to (tiling step 3): refused before the output is even looked up.
+      lock_other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // "NO-SUCH-OUTPUT"')
+      nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$lock_other\")" >>"$log" 2>&1
+      sleep 0.8
       gen_l1=$(tiling_state | jq -r '.gen')
-      check "locked: tile and arrange move nothing while the session is locked" box_of tiling-foot "$lx" "$ly" "$lw" "$lh"
+      check "locked: tile, arrange and move_to move nothing while the session is locked" box_of tiling-foot "$lx" "$ly" "$lw" "$lh"
       check "locked: the records are unchanged (generation $gen_l0 -> $gen_l1)" test "$gen_l0" = "$gen_l1"
     else
       check "locked: the foreign locker holds the session lock (${locked:-no answer})" false
     fi
-    foreign_ipc unlock >/dev/null
-    for _ in $(seq 1 30); do kill -0 "$locker_pid" 2>/dev/null || break; sleep 0.1; done
-    kill -0 "$locker_pid" 2>/dev/null && kill "$locker_pid" 2>/dev/null
-    locker_pid=""
+    check "locked: released, Hyprland reports the session unlocked" unlock_session
     sleep 0.5
   fi
 else
@@ -728,6 +824,329 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   check "unload: loaded again, the plugin advertises window-tiling" bash -c "timeout 10 '$root/scripts/nestctl' -j grassfield 2>/dev/null | jq -e '.features | index(\"window-tiling\")' >/dev/null"
 else
   say "SKIP: step 2 cases (the plugin does not advertise tiling-arrange)"
+fi
+
+# ---- step 3: the zoom light's popover and move_to (see the header) ----
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >/dev/null 2>&1; then
+  events=$run/events.log
+  socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$DEV_NESTED_SIG/.socket2.sock" STDOUT >"$events" 2>>"$log" </dev/null &
+  pids+=("$!")
+  sleep 0.3
+  tiling_state() { nestctl grassfield-tiling 2>>"$log"; }
+  record_is() { # address state ("none": no record)
+    local got
+    got=$(tiling_state | jq -r --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0].state // "none"')
+    say "  record of $1: $got (want $2)"
+    [[ $got == "$2" ]]
+  }
+  keys() { "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
+  close_popover() { keys -k Escape; sleep 0.5; }
+  move_to() { nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$1\")" >>"$log" 2>&1; sleep 0.8; }
+  free_foot() {
+    nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.8
+  }
+  ev_mark=0
+  mark_events() { ev_mark=$(grep -ac "" "$events" 2>/dev/null || echo 0); }
+  # The gfc/1 events (JSON, one per line) posted since mark_events that match the jq filter FILTER.
+  events_since() { tail -n +"$((ev_mark + 1))" "$events" 2>/dev/null | sed -n 's/^grassfield>>//p' | jq -cR "fromjson? | select($1)" 2>/dev/null; }
+  # The latest such event, waited for up to 3 s.
+  event_came() { # filter
+    local _ line
+    for _ in $(seq 1 30); do
+      line=$(events_since "$1" | tail -n 1)
+      [[ -n $line ]] && { last_event=$line; return 0; }
+      sleep 0.1
+    done
+    return 1
+  }
+  hover_filter() { echo ".type == \"tile-hover\" and .address == \"${addr#0x}\" and .state == \"$1\""; }
+  hover_delay=$(jq -r '.tiling.hoverDelay.value' "$root/ui/tokens/tokens.json")
+  say "step 3: hover delay $hover_delay ms (token tiling.hoverDelay)"
+
+  free_foot
+  mark_events
+  nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
+  last_event=""
+  check "popover-verb: tile_popover posts tile-hover open for the window" event_came "$(hover_filter open)"
+  open_event=$last_event
+  say "  event: $open_event"
+  light_on_bar() {
+    local x y w h _a lx ly lw lh
+    read -r x y w h _a < <(geometry)
+    read -r lx ly lw lh < <(jq -r '"\(.x) \(.y) \(.w) \(.h)"' <<<"$open_event" 2>/dev/null)
+    say "  light ${lw:-?}x${lh:-?} at ${lx:-?},${ly:-?}; surface at $x,$y, titlebar $tb"
+    [[ -n ${lh:-} ]] && awk -v lx="$lx" -v ly="$ly" -v lw="$lw" -v lh="$lh" -v x="$x" -v y="$y" -v tb="$tb" \
+      'BEGIN { cy = ly + lh / 2; exit !(lw > 0 && lh > 0 && lx >= x && lx + lw <= x + 120 && cy > y - tb && cy < y) }'
+  }
+  check "popover-verb: the light is the zoom light, at the left of the window's titlebar" light_on_bar
+  check "popover-verb: the window can be tiled (tileable)" bash -c "jq -e '.tileable == true' <<<'$open_event' >/dev/null 2>&1"
+  close_popover
+
+  if [[ -n $open_event ]]; then
+    read -r lcx lcy < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$open_event")
+    pointer abs $((lcx - mx + 200)) $((lcy - my + 150)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 300
+    no_early_enter() { [[ -z $(events_since "$(hover_filter enter)") ]]; }
+    check "hover: no enter before tiling.hoverDelay" no_early_enter
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "hover: the pointer resting on the zoom light posts tile-hover enter" event_came "$(hover_filter enter)"
+    check "hover: the enter carries the same light" bash -c "jq -e --argjson o '$open_event' '.x == \$o.x and .y == \$o.y' <<<'${last_event:-null}' >/dev/null 2>&1"
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 300
+    check "hover: leaving the light posts tile-hover leave" event_came "$(hover_filter leave)"
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 300) / 1000 }')" # the shell's popover closes by itself
+    close_popover
+  else
+    check "hover: needs the light from the open event" false
+  fi
+
+  # covered: a layer surface of a tiny Quickshell config (the run directory, never the repository): Exclusive or not, at a
+  # place on GF-REF (layout coordinates x y w h).
+  layer_pid=""
+  start_layer() { # exclusive(0|1) x y w h
+    mkdir -p "$run/layer-fixture"
+    cat >"$run/layer-fixture/shell.qml" <<QML
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+ShellRoot {
+    PanelWindow {
+        screen: Quickshell.screens.find(s => s.name === "$out") ?? null
+        anchors { top: true; left: true }
+        margins { left: $(($2 - mx)); top: $(($3 - my)) }
+        implicitWidth: $4
+        implicitHeight: $5
+        exclusionMode: ExclusionMode.Ignore
+        color: "#40ff0000"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "tiling-test-layer"
+        WlrLayershell.keyboardFocus: $([[ $1 == 1 ]] && echo WlrKeyboardFocus.Exclusive || echo WlrKeyboardFocus.None)
+    }
+}
+QML
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$DEV_NESTED_SIG DBUS_SESSION_BUS_ADDRESS="${bus:-disabled:}" \
+      setsid "$root/scripts/dev/isolated.sh" --name tiling-layer qs -p "$run/layer-fixture" --no-color >>"$run/layer.log" 2>&1 </dev/null &
+    layer_pid=$!
+    pids+=("$layer_pid")
+    local _
+    for _ in $(seq 1 50); do
+      nestctl layers -j 2>/dev/null | jq -e '[.. | objects | select(.namespace? == "tiling-test-layer")] | length > 0' >/dev/null 2>&1 && break
+      sleep 0.1
+    done
+    sleep 0.3
+  }
+  stop_layer() { [[ -n $layer_pid ]] && kill "$layer_pid" 2>/dev/null; layer_pid=""; sleep 0.5; }
+  no_enter_for() { # seconds: the pointer rests on the light, no enter comes
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$1"
+    [[ -z $(events_since "$(hover_filter enter)") ]]
+  }
+  enter_again() { # off the light and back: the hover works again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    local ok=1
+    events_since "$(hover_filter enter)" | grep -q . && ok=0
+    ((ok)) && surfaces_state
+    close_popover
+    return $ok
+  }
+  enter_unmoved() { # the pointer rests on the light: an enter comes by itself (since mark_events) within the delay + 2 s
+    local _ ok=1
+    for _ in $(seq 1 $(((hover_delay + 2000) / 100))); do
+      events_since "$(hover_filter enter)" | grep -q . && { ok=0; break; }
+      sleep 0.1
+    done
+    ((ok)) && surfaces_state
+    close_popover
+    return $ok
+  }
+  wait_s=$(awk -v d="$hover_delay" 'BEGIN { print (d + 700) / 1000 }')
+  if [[ -n $open_event ]]; then
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    start_layer 1 $((mx + mw - 160)) $((my + mh - 120)) 120 80
+    check "covered: no enter while an Exclusive layer is mapped elsewhere on the output" no_enter_for "$wait_s"
+    stop_layer
+    check "covered: the Exclusive layer gone, the hover works again" enter_again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    start_layer 0 $((lcx - 20)) $((lcy - 20)) 40 40
+    check "covered: no enter while a layer covers the light" no_enter_for "$wait_s"
+    stop_layer
+    check "covered: the layer gone, the hover works again" enter_again
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "covered: a hover before the lock" event_came "$(hover_filter enter)"
+    close_popover
+    if lock_session; then
+      pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
+      check "covered: no enter while the session is locked" no_enter_for "$wait_s"
+    else
+      check "covered: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    mark_events # the pointer rests on the light from here on
+    check "covered: released, Hyprland reports the session unlocked" unlock_session
+    check "covered: unlocked, the hover works again with the pointer resting on the light" enter_unmoved
+  fi
+
+  other=$(nestctl monitors -j | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // ""')
+  if [[ -n $other ]]; then
+    free_foot
+    area_now
+    nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"left\")" >>"$log" 2>&1
+    sleep 0.8
+    move_to "$other"
+    read -r oax oay oaw oah < <(area_of "$other")
+    check "move-to: the tiled window takes the left half of $other" is_box $((oax + m)) $((oay + m + tb)) $(((oaw - 3 * m) / 2)) $((oah - 2 * m - tb))
+    check "move-to: still tiled" record_is "$addr" tiled
+    on_desktop_of() { # output
+      local ws want
+      ws=$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id')
+      want=$(nestctl monitors -j | jq -r --arg o "$1" '.[] | select(.name == $o) | .activeWorkspace.id')
+      say "  Desktop $ws (want $want, $1's)"
+      [[ -n $ws && $ws == "$want" ]]
+    }
+    check "move-to: it is on $other's Desktop" on_desktop_of "$other"
+    area_now
+    move_to "$out"
+    check "move-to: back on $out, its left half" is_box $((ax + m)) "$ry" "$halfw" "$fullh"
+    free_foot
+    read -r _ _ fw fh _ < <(geometry)
+    move_to "$other"
+    free_on_other() {
+      local x y w h _a
+      read -r x y w h _a < <(geometry)
+      say "  ${w}x${h} at $x,$y (want ${fw}x${fh}, at most ${oaw}x${oah}, its middle on $other at $oax,$oay)"
+      (( x + w / 2 >= oax && x + w / 2 < oax + oaw && y + h / 2 >= oay && y + h / 2 < oay + oah )) &&
+        (( (w == fw || w <= oaw) && (h == fh || h <= oah) ))
+    }
+    check "move-to: a Free window keeps its size and lands on $other" free_on_other
+    check "move-to: still Free" record_is "$addr" none
+    move_to "$out"
+  else
+    say "SKIP: move-to (one output: the Move to <display> rows are not shown either)"
+  fi
+
+  free_foot
+  read -r bx by bw bh _ < <(geometry)
+  mark_events
+  move_to "NO-SUCH-OUTPUT"
+  check "move-invalid: an unknown output is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  mark_events
+  move_to "$out"
+  check "move-invalid: the window's own output is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  check "move-invalid: nothing moved" is_box "$bx" "$by" "$bw" "$bh"
+  close_popover # nothing of the shell's popover left over the windows of the C1 cases
+else
+  say "SKIP: step 3 cases (the plugin does not advertise tile-hover)"
+fi
+
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts") != null and index("tile-hover") != null)' >/dev/null 2>&1 && [[ -n ${addr2:-} ]]; then
+  env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+    foot -T tiling-foot3 -w 600x400 sh -c 'exec sleep 100000' >>"$run/foot.out" 2>&1 </dev/null &
+  foot3_pid=$!
+  pids+=("$foot3_pid")
+  for _ in $(seq 1 100); do [[ -n $(geometry_of tiling-foot3) ]] && break; sleep 0.2; done
+  sleep 1
+  read -r _ _ _ _ addr3 < <(geometry_of tiling-foot3)
+  free_foot
+  nestctl dispatch "hl.plugin.grassfield.tile(\"$addr2\", \"previous\")" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.window.move({ x = $((mx + 500)), y = $((my + 300)), window = 'address:$addr2' })" >>"$log" 2>&1
+  [[ -n ${addr3:-} ]] && nestctl dispatch "hl.dsp.window.move({ x = $((mx + 700)), y = $((my + 350)), window = 'address:$addr3' })" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 0.8
+  suggestion() { tiling_state | jq -c '.suggestion'; }
+  record_of() { tiling_state | jq -c --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0] // null'; }
+  check "step 4a: the third foot window opened" test -n "${addr3:-}"
+
+  area_now
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "zone: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
+  zone_gen=$(jq -r '.gen' <<<"${last_event:-null}")
+  zone_alone() {
+    local r
+    r=$(record_of "$addr")
+    say "  record: $r"
+    jq -e '.state == "tiled" and .layout == "thirds" and .zone == 2 and .group == 0' <<<"$r" >/dev/null
+  }
+  check "zone: the first window alone in the right third, no group" zone_alone
+  first_suggestion() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg a "${addr#0x}" --arg b "${addr2#0x}" --arg o "$out" --argjson gen "${zone_gen:-null}" --argjson ax "$ax" --argjson aw "$aw" \
+      '.gen == $gen and .address == $a and .layout == "thirds" and .output == $o and ([.zones[].zone] == [0, 1])
+       and all(.zones[]; .w > 0 and .h > 0 and .x >= $ax and .x + .w <= $ax + $aw) and (.windows | index($b) != null) and (.windows | index($a) == null)' <<<"$sg" >/dev/null
+  }
+  check "zone: the suggestion of that notice offers zones 0 and 1 with the other windows, not the first" first_suggestion
+
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr2\"],\"zone\":0,\"with\":\"$addr\"}"
+  picked() { # address zone
+    local a b
+    a=$(record_of "$addr")
+    b=$(record_of "$1")
+    say "  first: $a; picked: $b"
+    jq -e -n --argjson a "$a" --argjson b "$b" --argjson z "$2" '$b.state == "tiled" and $b.layout == "thirds" and $b.zone == $z and $b.group > 0 and $b.group == $a.group and $a.zone == 2' >/dev/null
+  }
+  check "pick: the second window takes the left third, in the first's group" picked "$addr2" 0
+  zone_one() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg c "${addr3#0x}" '[.zones[].zone] == [1] and (.windows | index($c) != null)' <<<"$sg" >/dev/null
+  }
+  check "pick: the suggestion now offers zone 1" zone_one
+
+  read -r b3x b3y b3w b3h _ < <(geometry_of tiling-foot3)
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr3\"],\"zone\":2,\"with\":\"$addr\"}"
+  check "pick-held: a pick into a held zone is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+  check "pick-held: nothing moved" box_of tiling-foot3 "$b3x" "$b3y" "$b3w" "$b3h"
+  check "pick-held: the suggestion stays" zone_one
+
+  tile_ipc "$addr2" previous
+  check "stale: another change ends the suggestion" test "$(suggestion)" = null
+
+  nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr3\")" >>"$log" 2>&1
+  sleep 1
+  workspace_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .workspace.name'; }
+  check "minimized: the third window waits on special:minimized" test "$(workspace_of "$addr3")" = special:minimized
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  offers_minimized() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg c "${addr3#0x}" '.windows | index($c) != null' <<<"$sg" >/dev/null
+  }
+  check "minimized: the suggestion offers it" offers_minimized
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr3\"],\"zone\":1,\"with\":\"$addr\"}"
+  on_desktop() {
+    local ws want
+    ws=$(workspace_of "$addr3")
+    want=$(nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | .activeWorkspace.name')
+    say "  Desktop $ws (want $want)"
+    [[ -n $ws && $ws == "$want" ]]
+  }
+  check "minimized: the pick brings it back to $out's Desktop" on_desktop
+  check "minimized: in the middle third, in the first's group" picked "$addr3" 1
+
+  tile_ipc "$addr3" previous
+  free_foot
+  kill "$foot3_pid" 2>/dev/null
+  # The first window is back under the pointer step 3 left on its zoom light: the pointer goes to the wallpaper, left of
+  # every window, and a popover the hover opened meanwhile closes, before the C1 cases.
+  pointer abs 20 $((mh / 2)) sleep 200
+  close_shell_popup "step 4a end"
+  sleep 0.5
+else
+  say "SKIP: step 4a cases (the plugin does not advertise tiling-layouts, or the second window is missing)"
 fi
 
 c1_cases

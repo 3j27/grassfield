@@ -84,6 +84,15 @@ namespace gf::tiler {
     // closed or unmapped during a titlebar drag fails it: Hyprland would dereference null (gate C1).
     bool movable(const PHLWINDOW& w);
 
+    // `w` can be tiled now (TL9): what the tiling popover greys when not (the tile-hover event's "tileable").
+    bool tileable(const PHLWINDOW& w);
+
+    // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
+    // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
+    // the address and the output are compared with the live ones. Refused while locked (reason "locked") and for an
+    // unknown output, the window's own output or a window that cannot move (reason "invalid").
+    void moveToRequest(std::string_view address, std::string_view output);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);

@@ -668,7 +668,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}]})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -840,4 +840,263 @@ TEST(TilingRecord, AnEdgePlacementIsItsOwnPlacement) {
     EXPECT_EQ(r.where.sides, kSideLeft);
     EXPECT_EQ(r.before, (Rect{2000, 300, 800, 500})) << "Return to Previous Size has a box to go back to";
     EXPECT_EQ(book.takeBefore(7), (Rect{2000, 300, 800, 500}));
+}
+
+// ---- step 3: the hover on the zoom light (TL22) ----
+
+TEST(TilingHover, TheZoomLightIsAHoverAfterTheDelay) {
+    ASSERT_GT(kHoverDelay, 1U);
+    CHoverDwell h;
+    EXPECT_FALSE(h.remaining(0).has_value()) << "no light under the pointer";
+    auto c = h.update(7, 1000);
+    EXPECT_FALSE(c.enter.has_value());
+    EXPECT_FALSE(c.leave.has_value());
+    EXPECT_EQ(h.remaining(1000), kHoverDelay);
+    EXPECT_FALSE(h.update(7, 1000 + kHoverDelay - 1).enter.has_value());
+    EXPECT_EQ(h.remaining(1000 + kHoverDelay - 1), 1U);
+    c = h.update(7, 1000 + kHoverDelay);
+    EXPECT_EQ(c.enter, 7U);
+    EXPECT_EQ(h.entered(), 7U);
+    EXPECT_FALSE(h.remaining(1000 + kHoverDelay).has_value()) << "entered: nothing to wait for";
+    EXPECT_FALSE(h.update(7, 9000).enter.has_value()) << "enter once";
+    c = h.update(std::nullopt, 9001);
+    EXPECT_EQ(c.leave, 7U) << "off the light: leave";
+    EXPECT_FALSE(c.enter.has_value());
+    EXPECT_FALSE(h.entered().has_value());
+    EXPECT_FALSE(h.update(std::nullopt, 9002).leave.has_value()) << "leave once";
+}
+
+TEST(TilingHover, AnotherLightStartsOverAndLeavesTheFirst) {
+    CHoverDwell h;
+    h.update(1, 0);
+    h.update(1, kHoverDelay);
+    auto c = h.update(2, kHoverDelay + 5);
+    EXPECT_EQ(c.leave, 1U);
+    EXPECT_FALSE(c.enter.has_value()) << "the other light waits for its own delay";
+    EXPECT_EQ(h.remaining(kHoverDelay + 5), kHoverDelay);
+    c = h.update(2, 2 * kHoverDelay + 5);
+    EXPECT_EQ(c.enter, 2U);
+    h.update(3, 3 * kHoverDelay);
+    EXPECT_FALSE(h.update(3, 3 * kHoverDelay + 1).leave.has_value()) << "a light never entered leaves nothing";
+    EXPECT_EQ(h.remaining(4 * kHoverDelay + 7), 0U) << "overdue: due now";
+    // Integrator review of 4ead6fb: a light the pointer leaves before the delay was never entered, so no leave is posted,
+    // neither for another light nor for none.
+    CHoverDwell early;
+    early.update(8, 0);
+    auto c2 = early.update(9, kHoverDelay - 1);
+    EXPECT_FALSE(c2.leave.has_value()) << "another light before the delay: nothing to leave";
+    EXPECT_FALSE(c2.enter.has_value());
+    EXPECT_FALSE(early.update(std::nullopt, kHoverDelay).leave.has_value()) << "off every light before the delay: nothing to leave";
+}
+
+// TL22, TL34 (integrator review of 4ead6fb): nothing of the hover over the lock, under a foreign Exclusive layer or under a layer.
+// D24 (integrator nested rerun of 25e757c): the lock and a foreign Exclusive layer take the desktop away (the hover starts over
+// once it is back), a layer over the light holds it as a press.
+TEST(TilingHover, CoveredLightsAreNoHover) {
+    using enum HoverCoverEffect;
+    EXPECT_EQ(hoverCoverEffect(HoverCover{}), None) << "nothing covers the lights";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = false}), Away) << "the session is locked";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {}, .layerUnderPointer = true}), Over) << "a layer is under the pointer";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = true, .exclusiveNamespaces = {}, .layerUnderPointer = true}), Away) << "the lock comes first";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-polkit"}, .layerUnderPointer = false}), Away)
+        << "the polkit sheet (any Exclusive layer but the shell's popups)";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {"grassfield-search"}, .layerUnderPointer = true}), Away)
+        << "a foreign Exclusive layer comes before a layer under the pointer";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}, "grassfield-search"}, .layerUnderPointer = false}),
+              Away);
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = false}), None)
+        << "the shell's popup layer on another output: its own pointer test covers its output";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {std::string{kShellPopupNamespace}}, .layerUnderPointer = true}), Over)
+        << "the shell's open popover over the light holds it";
+    EXPECT_EQ(hoverCoverEffect(HoverCover{.locked = false, .exclusiveNamespaces = {""}, .layerUnderPointer = false}), Away) << "a nameless Exclusive layer";
+}
+
+// D24: what the glue does with each effect (Titlebar.cpp updateZoomHover, and the unlock, which forgets the hover and looks
+// again): Away is update with no light, Over is press.
+TEST(TilingHover, TheHoverStartsOverAfterTheLock) {
+    CHoverDwell h;
+    h.update(5, 0);
+    h.update(5, kHoverDelay);
+    ASSERT_EQ(h.entered(), 5U) << "the popover is open";
+    auto c = h.update(std::nullopt, kHoverDelay + 10); // the lock comes, the pointer resting on the light
+    EXPECT_EQ(c.leave, 5U);
+    EXPECT_FALSE(h.remaining(kHoverDelay + 10).has_value()) << "nothing to wait for while locked";
+    c = h.update(5, 5000); // unlocked, the pointer still on that light: no new hover needed
+    EXPECT_FALSE(c.enter.has_value()) << "the delay again";
+    EXPECT_EQ(h.remaining(5000), kHoverDelay) << "the timer the glue arms";
+    EXPECT_EQ(h.update(5, 5000 + kHoverDelay).enter, 5U) << "the hover is back";
+
+    // A light held by a layer over it (Over, as a press), then the lock: the unlock gives that light a hover again.
+    CHoverDwell held;
+    held.update(6, 0);
+    held.update(6, kHoverDelay);
+    EXPECT_EQ(held.press().leave, 6U);
+    EXPECT_FALSE(held.update(6, 3 * kHoverDelay).enter.has_value()) << "held while the pointer stays";
+    EXPECT_FALSE(held.update(std::nullopt, 3 * kHoverDelay + 1).leave.has_value()) << "the lock: nothing entered to leave";
+    held.update(6, 4 * kHoverDelay);
+    EXPECT_EQ(held.update(6, 5 * kHoverDelay).enter, 6U) << "the lock ended the hold";
+
+    // Over, by contrast, keeps the light waiting until the pointer leaves it (a popover closed over the light stays closed).
+    CHoverDwell over;
+    over.update(7, 0);
+    over.update(7, kHoverDelay);
+    over.press();
+    EXPECT_FALSE(over.update(7, 9 * kHoverDelay).enter.has_value());
+    EXPECT_FALSE(over.remaining(9 * kHoverDelay).has_value());
+}
+
+TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {
+    CHoverDwell h;
+    h.update(4, 0);
+    EXPECT_FALSE(h.press().leave.has_value()) << "pressed before the delay: nothing to leave";
+    EXPECT_FALSE(h.remaining(1).has_value()) << "held: no timer";
+    EXPECT_FALSE(h.update(4, 10 * kHoverDelay).enter.has_value()) << "held while the pointer stays";
+    h.update(std::nullopt, 10 * kHoverDelay + 1);
+    h.update(4, 10 * kHoverDelay + 2);
+    EXPECT_EQ(h.update(4, 11 * kHoverDelay + 2).enter, 4U) << "back on the light after leaving: a hover again";
+    EXPECT_EQ(h.press().leave, 4U) << "a press during the hover leaves";
+    EXPECT_FALSE(h.entered().has_value());
+    EXPECT_FALSE(h.update(4, 20 * kHoverDelay).enter.has_value());
+    EXPECT_FALSE(h.press().leave.has_value()) << "a second press leaves nothing";
+    CHoverDwell off;
+    EXPECT_FALSE(off.press().leave.has_value()) << "no light: a press changes nothing";
+    EXPECT_EQ(off.update(5, 0).enter, std::nullopt);
+    EXPECT_EQ(off.update(5, kHoverDelay).enter, 5U) << "a press with no light under the pointer holds nothing";
+    off.reset();
+    EXPECT_FALSE(off.entered().has_value());
+    EXPECT_FALSE(off.remaining(0).has_value());
+}
+
+TEST(TilingHover, TheEventIsSmall) {
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Enter, Rect{1500, 40, 18.6667, 18.6667}, true),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true})")
+        << "one decimal, as the state reply";
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, false),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false})");
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Leave, Rect{1, 2, 3, 4}, true), R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"leave"})")
+        << "leave carries no box";
+    EXPECT_LT(tileHoverJson(UINT64_MAX, HoverState::Enter, Rect{-99999.5, -99999.5, 99999.5, 99999.5}, true).size(), 200U);
+}
+
+TEST(TilingMoveTo, AFreeWindowKeepsItsPlaceOnTheOtherOutput) {
+    const Rect from{0, 24, 1440, 794};
+    const Rect to{1440, 24, 1920, 974};
+    // Left-aligned stays left-aligned; centred stays centred; the size is kept.
+    EXPECT_EQ(moveToArea(Rect{0, 24, 800, 500}, from, to), (Rect{1440, 24, 800, 500}));
+    EXPECT_EQ(moveToArea(Rect{320, 171, 800, 500}, from, to), (Rect{1440 + 560, 24 + 237, 800, 500})) << "centred: 640 / 2 and 294 / 2 of the free space";
+    EXPECT_EQ(moveToArea(Rect{640, 318, 800, 500}, from, to), (Rect{1440 + 1120, 24 + 474, 800, 500})) << "against the far edges";
+    // Larger than the target area: at most its size, at its origin.
+    EXPECT_EQ(moveToArea(Rect{1440 + 0, 24, 1920, 974}, to, from), (Rect{0, 24, 1440, 794}));
+    // As large as its old area: centred on the larger one.
+    EXPECT_EQ(moveToArea(Rect{0, 24, 1440, 794}, from, to), (Rect{1440 + 240, 24 + 90, 1440, 794}));
+    // Off its old area: clamped to the near edge.
+    EXPECT_EQ(moveToArea(Rect{-200, 24, 800, 500}, from, to), (Rect{1440, 24, 800, 500}));
+    EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).w, 1) << "never smaller than 1 x 1";
+    EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).h, 1) << "never smaller than 1 x 1";
+}
+
+TEST(TilingMoveTo, OutputNamesAreStrict) {
+    EXPECT_TRUE(outputNameOk("GF-REF"));
+    EXPECT_TRUE(outputNameOk("DP-1.2_a"));
+    EXPECT_FALSE(outputNameOk(""));
+    EXPECT_FALSE(outputNameOk("bad name"));
+    EXPECT_FALSE(outputNameOk("a\"b"));
+    EXPECT_TRUE(outputNameOk(std::string(kMaxOutputName, 'a')));
+    EXPECT_FALSE(outputNameOk(std::string(kMaxOutputName + 1, 'a')));
+}
+
+// ---- step 4a: the Layouts section and the suggestions (TL27, TL28) ----
+
+TEST(TilingSuggest, WithNamesTheWindowWhoseLayoutTheZoneIs) {
+    const auto pick = parseArrange(R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x1a"})");
+    ASSERT_TRUE(pick.has_value()) << pick.error();
+    EXPECT_EQ(pick->with, 0x1aU);
+    EXPECT_EQ(pick->zone, 1);
+    EXPECT_FALSE(pick->fill);
+    EXPECT_FALSE(parseArrange(R"({"layout":"thirds","windows":["0x9"],"zone":0})")->with.has_value()) << "a zone of the Layouts section alone";
+    for (const char* bad : {
+             R"({"layout":"thirds","windows":["0x9"],"with":"0x1a"})",                    // with needs a zone
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x9"})",           // the window placed itself
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"0x0"})",           // not a window
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"zz"})",            // not hex
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":7})",               // not a string
+             R"({"layout":"thirds","windows":["0x9"],"zone":1,"with":"1","with":"2"})",  // twice
+         })
+        EXPECT_FALSE(parseArrange(bad).has_value()) << bad;
+}
+
+TEST(TilingSuggest, TheZonesHeldAreThoseOfTheLayoutInstance) {
+    CTileBook  book;
+    const Rect any{0, 0, 10, 10};
+    book.placed(1, any, any, 0, inLayout("quarters", 2), "A", 1, 0);
+    const auto held = [&book](uint64_t id) { return zonesHeld(book.records(), *book.find(id)); };
+    book.placed(10, any, any, 0, inLayout("quarters", 1), "A", 1, 0);
+    EXPECT_EQ(held(1), (std::vector<int>{2})) << "alone: its own zone (another window without a group is not its group)";
+    const auto& quarters = *layoutById("quarters");
+    EXPECT_EQ(emptyZones(quarters, held(1)), (std::vector<int>{0, 1, 3}));
+    book.forget(10);
+    // A suggestion joins it: the asker's group (a new one) holds both zones.
+    const uint64_t before = book.generation();
+    const uint64_t group  = book.joinGroup(1);
+    EXPECT_GT(book.generation(), before) << "a change of the records";
+    EXPECT_NE(group, 0U);
+    EXPECT_EQ(book.find(1)->group, group);
+    EXPECT_EQ(book.joinGroup(1), group) << "the same group the next time";
+    book.placed(2, any, any, 0, inLayout("quarters", 0), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2}));
+    EXPECT_EQ(held(2), (std::vector<int>{0, 2})) << "from any member";
+    EXPECT_EQ(emptyZones(quarters, held(2)), (std::vector<int>{1, 3}));
+    // Not counted: another group, another layout, another output or Desktop, a member that is not holding its zone.
+    book.placed(3, any, any, 0, inLayout("quarters", 1), "A", 1, book.newGroup());
+    book.placed(4, any, any, 0, inLayout("quarters", 3), "B", 1, group);
+    book.placed(5, any, any, 0, inLayout("quarters", 3), "A", 2, group);
+    book.placed(6, any, any, 0, inLayout("thirds", 1), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2}));
+    book.placed(7, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    ASSERT_TRUE(book.beginMove(7).has_value());
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2})) << "dragged away: it left the group and its zone";
+    book.placed(8, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    ASSERT_TRUE(book.suspend(8));
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2, 3})) << "suspended (minimized): it comes back to its zone";
+    EXPECT_EQ(emptyZones(quarters, held(1)), (std::vector<int>{1}));
+    EXPECT_EQ(emptyZones(quarters, std::vector<int>{0, 1, 2, 3}), (std::vector<int>{})) << "full: nothing to suggest";
+    // A window placed by a place, not a layout, holds no zone of one.
+    book.placed(9, any, any, 0, at(Place::Left), "A", 1, 0);
+    EXPECT_TRUE(held(9).empty());
+    EXPECT_EQ(book.joinGroup(42), 0U) << "no record";
+    // Two members on one zone count it once; a record without a zone counts none.
+    book.placed(11, any, any, 0, inLayout("quarters", 3), "A", 1, group);
+    book.placed(12, any, any, 0, inLayout("quarters", -1), "A", 1, group);
+    EXPECT_EQ(held(1), (std::vector<int>{0, 2, 3}));
+    // A window being dragged out of its zone holds none.
+    CTileBook moving;
+    moving.placed(20, any, any, 0, inLayout("quarters", 1), "A", 1, 0);
+    ASSERT_TRUE(moving.beginMove(20).has_value());
+    EXPECT_TRUE(zonesHeld(moving.records(), *moving.find(20)).empty());
+}
+
+TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
+    Suggestion sg;
+    sg.generation = 12;
+    sg.asker      = 0xabc;
+    sg.layout     = "thirds";
+    sg.output     = "GF-REF";
+    sg.zones      = {0, 2};
+    sg.frames     = {Rect{8, 64, 629, 926}, Rect{1283, 64, 629, 926}};
+    sg.windows    = {0xd1, 0xd2};
+    const std::array<StateOutput, 0> none{};
+    EXPECT_EQ(stateJson(12, none, &sg),
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":null})");
+    // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
+    for (uint64_t i = 0; i < 20; ++i)
+        sg.windows.push_back(0x100 + i);
+    sg.zones.push_back(1);
+    const auto json = stateJson(12, none, &sg);
+    size_t     quotes = 0;
+    for (size_t at = json.find(R"("windows":[)"); at != std::string::npos && at < json.size(); ++at)
+        quotes += json[at] == '"' ? 1 : 0;
+    EXPECT_EQ(quotes, 2 + 2 * kMaxSuggested) << json;
+    EXPECT_EQ(json.find(R"("zone":1)"), std::string::npos);
 }

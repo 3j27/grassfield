@@ -158,8 +158,11 @@ dock_tile() { # <hex> <since>
   read -r rx ry rw rh < <(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
   [[ -n ${rh:-} ]] || return 1
   cx=$((rx + rw / 2)) cy=$((ry + rh / 2))
+  # The Dock rectangle is in layout (logical) coordinates; `monitors -j` gives each output's mode in device pixels, before the
+  # scale and the rotation (the integrator's note on the merge of PR #28): its logical size is the mode over the scale.
   nestctl monitors -j 2>/dev/null | jq -r --argjson x "$cx" --argjson y "$cy" \
-    '[.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height)][0] | select(. != null) | "\(.name) \($x - .x) \($y - .y)"'
+    '[.[] | (if (.scale // 0) > 0 then .scale else 1 end) as $s | (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end | map(. / $s)) as $size
+      | select($x >= .x and $x < .x + $size[0] and $y >= .y and $y < .y + $size[1])][0] | select(. != null) | "\(.name) \($x - .x) \($y - .y)"'
 }
 pointer_on() { local o=$1; shift; timeout 20 "$root/scripts/dev/pointer.sh" output "$o" "$@" >>"$log" 2>&1; }
 minimized_count() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null | jq '[.[] | select(.workspace.name == "special:minimized")] | length'; }
@@ -292,9 +295,23 @@ visible_anywhere() { # <pid>
 }
 
 counters() { local t out=""; for t in drag abandoned zoom-dblclick zoom-button cancel close minimize restore; do out+="$t ${eff[$t]:-0}/${att[$t]:-0}, "; done; echo "${out%, }"; }
+# A shell popup is open on $out: the shell maps its overlay layer only then, over the whole output, and a press there only
+# closes the popup (integrator nested pass of 2765002 on tiling step 4a: rounds of about 90 s, restore 0 of 1).
+popup_open() {
+  HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j layers 2>/dev/null \
+    | jq -e --arg o "$out" '[.[$o].levels // {} | .[][] | select(.namespace == "grassfield-overlay")] | length > 0' >/dev/null 2>&1
+}
+popups_open=0 # rounds that began with a shell popup open (closed with Esc, counted and reported)
+slow_rounds=0 # rounds that took longer than 10 s (each reported with its action)
 
 while (( $(date +%s) < end_epoch )); do
   round=$((round + 1))
+  round_start=$(date +%s)
+  if popup_open; then
+    popups_open=$((popups_open + 1))
+    "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
+    sleep 0.3
+  fi
 
   if ! kill -0 "$hypr_pid" 2>/dev/null; then
     say "soak: nested Hyprland (pid $hypr_pid) died at round $round"
@@ -467,6 +484,10 @@ while (( $(date +%s) < end_epoch )); do
     fi
   fi
 
+  if (( $(date +%s) - round_start > 10 )); then
+    slow_rounds=$((slow_rounds + 1))
+    ((slow_rounds <= 20)) && say "soak: round $round (action $((round % (7 + minimize_rounds)))) took $(( $(date +%s) - round_start ))s"
+  fi
   if (( round % 100 == 0 )); then
     say "soak: round $round, $(( $(date +%s) - start_epoch ))s, short $short, churn $spawned (unmapped $unmapped), resident ${#resident[@]}, effective/attempted: $(counters), minimize skipped $skipped, stages moves $st_moves swaps $st_swaps, RSS $(rss_kb) kB"
   fi
@@ -478,6 +499,7 @@ elapsed=$(( $(date +%s) - start_epoch ))
 say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned (no window found for $unmapped), effective/attempted: $(counters)"
 ((${cancel_missed:-0} > 0)) && say "soak: cancel: ${cancel_missed} press(es) did not land on the button (harness miss, not counted as attempts)"
 say "soak: drags released on the menu bar to fill (tiling): ${fills:-0} of ${att[drag]:-0}"
+say "soak: a shell popup was open at the start of $popups_open round(s) (closed with Esc); $slow_rounds round(s) took longer than 10 s"
 say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0} (no Dock line from the plugin: ${no_tile_line:-0}; a rectangle off every output: ${no_tile_off:-0}); previous tile reused: ${dock_cached:-0}"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
 

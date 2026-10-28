@@ -181,6 +181,43 @@ TestCase {
         verify(t.backend.calls.indexOf("install:org.example.Mail") >= 0);
     }
 
+    // An Omarchy setup (ADR-0037 b.2): what it changes (our catalog's text), the recipe Omarchy's terminal runs and its password
+    // prompt, the packages; its removal names the files the recipe deletes; a setup the installed Omarchy no longer matches
+    // says so.
+    function test_setupSheet() {
+        const t = make({startPage: "app:org.example.Games"});
+        const s = sheet(t);
+        t.win.requestGet(t.backend.find("org.example.Games"));
+        t.backend.planReady("org.example.Games", "install", {refusal: "", packages: [{name: "gamehub", version: "1-1", repo: "multilib", size: "4 MB"}],
+            download: "4 MB", installed: "12 MB", detail: ""});
+        compare(s.title, "Install “Game Hub”?");
+        compare(s.message, "Installs Game Hub and the 32-bit graphics drivers for your graphics card.\n\n"
+                + "Omarchy's “omarchy-install-gaming-hub” runs in a Terminal window, which asks for your password.\n\n"
+                + "These packages will be installed:");
+        compare(s.confirmText, "Install");
+        tryCompare(find(s, i => i.Accessible.role === Accessible.List), "count", 1);
+        verify(find(s, i => i.text === "Omarchy setup") !== null, "the source");
+        s.confirm();
+        verify(t.backend.calls.indexOf("install:org.example.Games") >= 0);
+
+        t.win.requestUninstall(t.backend.find("org.example.Games"));
+        t.backend.planReady("org.example.Games", "remove", {refusal: "", packages: [{name: "gamehub", version: "1-1", repo: "", size: ""}]});
+        compare(s.title, "Uninstall “Game Hub”?");
+        compare(s.message, "Omarchy's “omarchy-remove-gaming-hub” runs in a Terminal window, which asks for your password.\n\n"
+                + "It also deletes: Game Hub's folders in your home folder, with the games.\n\n"
+                + "These packages will be removed:");
+        verify(s.destructive);
+        s.close();
+
+        t.win.requestGet(t.backend.find("org.example.Games"));
+        t.backend.planReady("org.example.Games", "install", {refusal: "omarchyChanged", packages: [], detail: "install/helpers/gpu.sh"});
+        compare(s.title, "“Game Hub” can't be installed now");
+        compare(s.message, "This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+        compare(s.confirmText, "OK");
+        verify(find(s, i => i.text === "install/helpers/gpu.sh") !== null, "the file that differs, for whoever checks");
+        s.close();
+    }
+
     // The button (SR13, SR18): Open opens; while its operation runs, a ring with its count; a waiting one shows a square
     // that takes it out of the queue; the queue's button in the toolbar.
     function test_buttonStatesAndQueue() {

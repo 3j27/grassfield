@@ -555,6 +555,25 @@ qint64 writerWaitMs(qint64 elapsedMs)
     return std::clamp(kWriterMaxMs - std::max<qint64>(elapsedMs, 0), qint64(0), kWriterIdleMs);
 }
 
+ClearAction clearAction(qint64 asked, qint64 applied, bool recordKnown)
+{
+    if (asked <= 0)
+        return ClearAction::Keep;
+    if (!recordKnown)
+        return ClearAction::DropOlder;
+    return asked != applied ? ClearAction::DeleteAll : ClearAction::Keep;
+}
+
+QList<Item> keptAfterClear(const QList<Item> &items, qint64 clearedAtMs, bool pinned)
+{
+    QList<Item> kept;
+    for (const Item &it : items) {
+        if ((pinned ? it.pinnedAtMs : it.copiedAtMs) > clearedAtMs)
+            kept << it;
+    }
+    return kept;
+}
+
 // --- Store ----------------------------------------------------------------------------------------------------------------
 
 void indexItem(Item &item)

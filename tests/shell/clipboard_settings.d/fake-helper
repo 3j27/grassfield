@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# A stand-in for grassfield-clipboard-helper (tests/shell/clipboard_settings.sh): it touches no clipboard, compositor or store.
+# Each run appends "RUN <arguments>" to $CLIPBOARD_FAKE_LOG. A store job (--clear-history, --apply-clears) then takes 0.3 s, so
+# jobs that overlap show it, and appends "END <its mode>". A helper run prints the helper's "S ok" line, appends "IN <line>" for
+# each line it is sent (the separators shown as spaces) and ends on QUIT with "END helper".
+set -u
+log=${CLIPBOARD_FAKE_LOG:?}
+printf 'RUN %s\n' "$*" >>"$log"
+case ${1:-} in
+--clear-history | --apply-clears)
+  sleep 0.3
+  printf 'END %s\n' "$1" >>"$log"
+  exit 0
+  ;;
+esac
+printf 'S\x1fok\n'
+while IFS= read -r line; do
+  printf 'IN %s\n' "${line//$'\x1f'/ }" >>"$log"
+  [[ $line == QUIT ]] && break
+done
+printf 'END helper\n' >>"$log"

@@ -3202,6 +3202,40 @@ QtObject {
     readonly property real tilingCenterMaxFraction: 0.9
     // estimate until measured in nested against the owner's captures: a drag's tiling preview shows after the pointer rests this long on a place (ms); Alt shows it at once (parity row M08: macOS shows a short delay, U) [ref: docs/specs/tiling.md § Drags; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property int tilingPreviewDelay: 250
+    // estimate until measured in nested against the owner's captures: the pointer rests this long on the zoom light before the tiling popover opens (ms; about a second on macOS, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingHoverDelay: 1000
+    // the tiling popover's width (pt; owner's captures gs-068-161 and gs-069-175, parity row M19: 230 x 251) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPopoverWidth: 230
+    // estimate until measured in nested against the owner's captures: the zoom light's centre from the popover's left edge (pt; about 25 of 230 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingPopoverLightInset: 25
+    // a tiling glyph of the popover, the miniature screen's width (pt; parity row M19: 26-pt glyphs) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphWidth: 26
+    // estimate until measured in nested against the owner's captures: the miniature screen's height (pt; about 26 x 20 in public macOS 27 captures, never committed) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphHeight: 20
+    // between the centres of two glyphs of a popover row (pt; parity row M19: 52 pitch) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphPitch: 52
+    // estimate until measured: the miniature screen's outline at the popover size (pt; thinner glyphs scale it down, never under 1 px) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphStroke: 1.5
+    // estimate until measured: the space between the outline and the zones inside it (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphInset: 1.5
+    // estimate until measured: the space between two zones of an arrangement glyph (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphGap: 1
+    // estimate until measured: the miniature screen's corner radius (pt, at the popover size) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphRadius: 4
+    // the zones of an arrangement glyph other than the window's own (the window's own area dark, the others light: parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphOtherOpacity: 0.35
+    // the Center glyph's window, in twelfths of the miniature screen, one zone [x, y, w, h] (a window smaller than the screen, in its middle) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property var tilingGlyphCenter: [[3, 3, 6, 6]]
+    // estimate until measured: a row of glyphs in the popover (pt; 251 pt in all for two headed rows, Full Screen and the separators, parity row M19) [ref: docs/specs/tiling.md § Popover and Window menu; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingGlyphRowHeight: 44
+    // estimate until measured in nested: a layout of the popover's Layouts section, the miniature screen's width (pt; larger than the 26-pt glyphs so that each zone is a target, a four-column layout keeping zones about 9 pt wide; Windows also draws its snap layouts larger than icons, parity row W02; the height follows glyphHeight / glyphWidth) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingLayoutGlyphWidth: 44
+    // own value: a zone's number, shown once the number keys picked its layout (TL26, TL27), over the zone's smaller side [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingGlyphNumberScale: 0.6
+    // estimate until measured in nested: the widest tile of the suggestions (TL28; a live thumbnail with the app's icon and the window's title under it; Windows' Snap Assist, parity rows W04 and W12) (pt) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property int tilingSuggestTileWidth: 240
+    // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    readonly property real tilingSuggestThumbAspect: 1.6
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     readonly property var tilingLayoutLeftRight: [[0, 0, 6, 12], [6, 0, 6, 12]]
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]

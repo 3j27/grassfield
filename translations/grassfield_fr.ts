@@ -502,8 +502,136 @@
         <translation>Super+Ctrl+Bas</translation>
     </message>
     <message>
+        <source>Super+Ctrl+U</source>
+        <translation>Super+Ctrl+U</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+I</source>
+        <translation>Super+Ctrl+I</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+J</source>
+        <translation>Super+Ctrl+J</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+K</source>
+        <translation>Super+Ctrl+K</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Return</source>
+        <translation>Super+Ctrl+Entrée</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+C</source>
+        <translation>Super+Ctrl+C</translation>
+    </message>
+    <message>
         <source>Super+Ctrl+R</source>
         <translation>Super+Ctrl+R</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Left</source>
+        <translation>Super+Ctrl+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Right</source>
+        <translation>Super+Ctrl+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Up</source>
+        <translation>Super+Ctrl+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Shift+Down</source>
+        <translation>Super+Ctrl+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Left</source>
+        <translation>Super+Ctrl+Alt+Maj+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Right</source>
+        <translation>Super+Ctrl+Alt+Maj+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Up</source>
+        <translation>Super+Ctrl+Alt+Maj+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Alt+Shift+Down</source>
+        <translation>Super+Ctrl+Alt+Maj+Bas</translation>
+    </message>
+    <message>
+        <source>Left &amp; Right</source>
+        <translation>Gauche et droite</translation>
+    </message>
+    <message>
+        <source>Right &amp; Left</source>
+        <translation>Droite et gauche</translation>
+    </message>
+    <message>
+        <source>Top &amp; Bottom</source>
+        <translation>Haut et bas</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Top</source>
+        <translation>Bas et haut</translation>
+    </message>
+    <message>
+        <source>Quarters</source>
+        <translation>Quarts</translation>
+    </message>
+    <message>
+        <source>Left &amp; Quarters</source>
+        <translation>Gauche et quarts</translation>
+    </message>
+    <message>
+        <source>Right &amp; Quarters</source>
+        <translation>Droite et quarts</translation>
+    </message>
+    <message>
+        <source>Top &amp; Quarters</source>
+        <translation>Haut et quarts</translation>
+    </message>
+    <message>
+        <source>Bottom &amp; Quarters</source>
+        <translation>Bas et quarts</translation>
+    </message>
+    <message>
+        <source>Two Thirds &amp; One Third</source>
+        <translation>Deux tiers et un tiers</translation>
+    </message>
+    <message>
+        <source>Thirds</source>
+        <translation>Tiers</translation>
+    </message>
+    <message>
+        <source>Quarter, Half &amp; Quarter</source>
+        <translation>Quart, moitié et quart</translation>
+    </message>
+    <message>
+        <source>Four Columns</source>
+        <translation>Quatre colonnes</translation>
+    </message>
+    <message>
+        <source>Stacked Thirds</source>
+        <translation>Tiers superposés</translation>
+    </message>
+    <message>
+        <source>Built-in Display</source>
+        <translation>Écran intégré</translation>
+    </message>
+    <message>
+        <source>Move to %1</source>
+        <translation>Déplacer vers %1</translation>
+    </message>
+    <message>
+        <source>Fill &amp; Arrange</source>
+        <translation>Remplir et disposer</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
     <message>
         <source>About %1</source>
@@ -596,6 +724,14 @@
     <message>
         <source>Return to Previous Size</source>
         <translation>Revenir à la taille précédente</translation>
+    </message>
+    <message>
+        <source>Arrange</source>
+        <translation>Disposer</translation>
+    </message>
+    <message>
+        <source>Halves</source>
+        <translation>Moitiés</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -1408,6 +1544,26 @@
         <translation>-</translation>
     </message>
     <message>
+        <source>U</source>
+        <translation>U</translation>
+    </message>
+    <message>
+        <source>I</source>
+        <translation>I</translation>
+    </message>
+    <message>
+        <source>J</source>
+        <translation>J</translation>
+    </message>
+    <message>
+        <source>K</source>
+        <translation>K</translation>
+    </message>
+    <message>
+        <source>L</source>
+        <translation>L</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -1454,6 +1610,74 @@
     <message>
         <source>Return the window to its previous size</source>
         <translation>Rendre à la fenêtre sa taille précédente</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-left quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top-right quarter</source>
+        <translation>Placer la fenêtre sur le quart supérieur droit</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-left quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom-right quarter</source>
+        <translation>Placer la fenêtre sur le quart inférieur droit</translation>
+    </message>
+    <message>
+        <source>Fill the screen with the window</source>
+        <translation>Remplir l’écran avec la fenêtre</translation>
+    </message>
+    <message>
+        <source>Center the window</source>
+        <translation>Centrer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and right</source>
+        <translation>Disposer les fenêtres à gauche et à droite</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and left</source>
+        <translation>Disposer les fenêtres à droite et à gauche</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and bottom</source>
+        <translation>Disposer les fenêtres en haut et en bas</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and top</source>
+        <translation>Disposer les fenêtres en bas et en haut</translation>
+    </message>
+    <message>
+        <source>Arrange the windows left and in quarters</source>
+        <translation>Disposer les fenêtres à gauche et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows right and in quarters</source>
+        <translation>Disposer les fenêtres à droite et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows top and in quarters</source>
+        <translation>Disposer les fenêtres en haut et en quarts</translation>
+    </message>
+    <message>
+        <source>Arrange the windows bottom and in quarters</source>
+        <translation>Disposer les fenêtres en bas et en quarts</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the left</source>
+        <translation>Déplacer la fenêtre vers l’écran de gauche</translation>
+    </message>
+    <message>
+        <source>Move the window to the display on the right</source>
+        <translation>Déplacer la fenêtre vers l’écran de droite</translation>
+    </message>
+    <message>
+        <source>Show the tiling options of the window</source>
+        <translation>Afficher les options de disposition de la fenêtre</translation>
     </message>
     <message>
         <source>Minimize window</source>
@@ -2529,10 +2753,6 @@
         <translation>Écran</translation>
     </message>
     <message>
-        <source>Night Shift</source>
-        <translation>Night Shift</translation>
-    </message>
-    <message>
         <source>Display brightness</source>
         <translation>Luminosité de l’écran</translation>
     </message>
@@ -2555,6 +2775,10 @@
     <message>
         <source>Sound</source>
         <translation>Son</translation>
+    </message>
+    <message>
+        <source>Night Light</source>
+        <translation>Éclairage nocturne</translation>
     </message>
     <message>
         <source>Unmute</source>
@@ -4354,6 +4578,42 @@
     </message>
 </context>
 <context>
+    <name>GrassfieldJobUiDelegate</name>
+    <message>
+        <source>The operation can’t be completed.</source>
+        <translation>L’opération ne peut pas être effectuée.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldOpenWithHandler</name>
+    <message>
+        <source>There is no application set to open the document “%1”.</source>
+        <translation>Aucune app n’est définie pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Choose one with Open With, in the File menu or the document’s menu.</source>
+        <translation>Choisissez-en une avec Ouvrir avec, dans le menu Fichier ou le menu du document.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldUndoUi</name>
+    <message>
+        <source>The copy “%1” was changed after it was made, so Undo stopped and kept it. Move it to the Trash if you no longer need it.</source>
+        <translation>La copie «&#xa0;%1&#xa0;» a été modifiée après sa création&#xa0;: l’annulation s’est arrêtée et l’a conservée. Placez-la dans la corbeille si vous n’en avez plus besoin.</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldUntrustedProgramHandler</name>
+    <message>
+        <source>“%1” wasn’t opened.</source>
+        <translation>«&#xa0;%1&#xa0;» n’a pas été ouvert.</translation>
+    </message>
+    <message>
+        <source>Files doesn’t run programs. Open apps from the Dock or from Apps.</source>
+        <translation>Fichiers n’exécute pas de programmes. Ouvrez les apps depuis le Dock ou depuis Apps.</translation>
+    </message>
+</context>
+<context>
     <name>HeroCarousel</name>
     <message>
         <source>Featured</source>
@@ -4847,6 +5107,248 @@
     </message>
 </context>
 <context>
+    <name>KioSheets</name>
+    <message>
+        <source>Hide Certificate</source>
+        <translation>Masquer le certificat</translation>
+    </message>
+    <message>
+        <source>Hide Details</source>
+        <translation>Masquer les détails</translation>
+    </message>
+    <message>
+        <source>Apply to All</source>
+        <translation>Appliquer à tous</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>inconnue</translation>
+    </message>
+    <message>
+        <source>Always trust “%1”</source>
+        <translation>Toujours faire confiance à «&#xa0;%1&#xa0;»</translation>
+    </message>
+</context>
+<context>
+    <name>KioSheetsLogic</name>
+    <message>
+        <source>A folder named “%1” already exists in this location.</source>
+        <translation>Un dossier nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An older item named “%1” already exists in this location.</source>
+        <translation>Un élément plus ancien nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>A newer item named “%1” already exists in this location.</source>
+        <translation>Un élément plus récent nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An item named “%1” already exists in this location.</source>
+        <translation>Un élément nommé «&#xa0;%1&#xa0;» existe déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>Do you want to keep both items?</source>
+        <translation>Voulez-vous conserver les deux éléments&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to merge it with the one you’re moving? Items with the same name are asked about one by one.</source>
+        <translation>Voulez-vous le fusionner avec celui que vous déplacez&#xa0;? Les éléments de même nom vous seront demandés un par un.</translation>
+    </message>
+    <message>
+        <source>Do you want to merge it with the one you’re copying? Items with the same name are asked about one by one.</source>
+        <translation>Voulez-vous le fusionner avec celui que vous copiez&#xa0;? Les éléments de même nom vous seront demandés un par un.</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the newer one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus récent que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the older one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus ancien que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the one you’re moving?</source>
+        <translation>Voulez-vous le remplacer par celui que vous déplacez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the newer one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus récent que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the older one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par l’élément plus ancien que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it with the one you’re copying?</source>
+        <translation>Voulez-vous le remplacer par celui que vous copiez&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to replace it?</source>
+        <translation>Voulez-vous le remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Merge</source>
+        <translation>Fusionner</translation>
+    </message>
+    <message>
+        <source>Replace</source>
+        <translation>Remplacer</translation>
+    </message>
+    <message>
+        <source>Keep Both</source>
+        <translation>Conserver les deux</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Ignorer</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
+        <source>Start Over</source>
+        <translation>Recommencer</translation>
+    </message>
+    <message>
+        <source>Part of “%1” is already in this location.</source>
+        <translation>Une partie de «&#xa0;%1&#xa0;» se trouve déjà à cet emplacement.</translation>
+    </message>
+    <message>
+        <source>An earlier copy of it stopped before the end. Do you want to resume it where it stopped?</source>
+        <translation>Une copie précédente s’est arrêtée avant la fin. Voulez-vous la reprendre là où elle s’est arrêtée&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renommer</translation>
+    </message>
+    <message>
+        <source>Rename replaces the characters the destination doesn’t allow with “_”.</source>
+        <translation>Renommer remplace par «&#xa0;_&#xa0;» les caractères que la destination n’accepte pas.</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>The operation can’t be completed.</source>
+        <translation>L’opération ne peut pas être effectuée.</translation>
+    </message>
+    <message>
+        <source>You can’t undo this action.</source>
+        <translation>Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to permanently erase the items in the Trash?</source>
+        <translation>Voulez-vous vraiment effacer définitivement les éléments de la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Empty Trash</source>
+        <translation>Vider la corbeille</translation>
+    </message>
+    <message>
+        <source>Do you want to move “%1” to the Trash?</source>
+        <translation>Voulez-vous placer «&#xa0;%1&#xa0;» dans la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Do you want to move these %1 items to the Trash?</source>
+        <translation>Voulez-vous placer ces %1 éléments dans la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Move to Trash</source>
+        <translation>Placer dans la corbeille</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be moved to the Trash because the Trash is full.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être placé dans la corbeille, car elle est pleine.</translation>
+    </message>
+    <message>
+        <source>These %1 items can’t be moved to the Trash because the Trash is full.</source>
+        <translation>Ces %1 éléments ne peuvent pas être placés dans la corbeille, car elle est pleine.</translation>
+    </message>
+    <message>
+        <source>Do you want to delete it immediately? You can’t undo this action.</source>
+        <translation>Voulez-vous le supprimer immédiatement&#xa0;? Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Do you want to delete them immediately? You can’t undo this action.</source>
+        <translation>Voulez-vous les supprimer immédiatement&#xa0;? Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be moved to the Trash.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être placé dans la corbeille.</translation>
+    </message>
+    <message>
+        <source>These %1 items can’t be moved to the Trash.</source>
+        <translation>Ces %1 éléments ne peuvent pas être placés dans la corbeille.</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete “%1”?</source>
+        <translation>Voulez-vous vraiment supprimer «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete these %1 items?</source>
+        <translation>Voulez-vous vraiment supprimer ces %1 éléments&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Show Details</source>
+        <translation>Afficher les détails</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Continue</source>
+        <translation>Continuer</translation>
+    </message>
+    <message>
+        <source>Files can’t verify the identity of the server “%1”.</source>
+        <translation>Fichiers ne peut pas vérifier l’identité du serveur «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Its certificate isn’t valid: someone could be pretending to be “%1” to read what you send. Do you want to connect anyway?</source>
+        <translation>Son certificat n’est pas valide&#xa0;: quelqu’un pourrait se faire passer pour «&#xa0;%1&#xa0;» afin de lire ce que vous envoyez. Voulez-vous quand même vous connecter&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Show Certificate</source>
+        <translation>Afficher le certificat</translation>
+    </message>
+    <message>
+        <source>Unnamed certificate</source>
+        <translation>Certificat sans nom</translation>
+    </message>
+    <message>
+        <source>Issued by: %1</source>
+        <translation>Émis par&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Valid from %1 to %2</source>
+        <translation>Valide du %1 au %2</translation>
+    </message>
+    <message>
+        <source>SHA-256: %1</source>
+        <translation>SHA-256&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A certificate that can’t be read</source>
+        <translation>Un certificat illisible</translation>
+    </message>
+</context>
+<context>
     <name>LanguagePage</name>
     <message>
         <source>Language &amp; Region</source>
@@ -5229,6 +5731,10 @@
         <translation>barre des menus horloge date heure secondes 24 heures masquer éléments d’état batterie pourcentage wifi son concentration en cours de lecture arrière-plan transparent</translation>
     </message>
     <message>
+        <source>search results history calculator conversions documents commands clipboard copy paste</source>
+        <translation>recherche résultats historique calculatrice conversions documents commandes presse-papiers copier coller</translation>
+    </message>
+    <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
     </message>
@@ -5283,10 +5789,6 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
-    </message>
-    <message>
-        <source>search results history calculator conversions documents commands</source>
-        <translation>recherche résultats historique calculatrice conversions documents commandes</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -5499,6 +6001,22 @@
     <message>
         <source>Delete</source>
         <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>Clear your clipboard history?</source>
+        <translation>Effacer votre historique du presse-papiers&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The items you copied are deleted from Search. Pinned items stay unless you delete them too.</source>
+        <translation>Les éléments que vous avez copiés sont supprimés de la Recherche. Les éléments épinglés restent, sauf si vous les supprimez aussi.</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
+    </message>
+    <message>
+        <source>Also delete pinned items</source>
+        <translation>Supprimer aussi les éléments épinglés</translation>
     </message>
     <message>
         <source>Search</source>
@@ -6093,10 +6611,6 @@
         <translation>Notifications</translation>
     </message>
     <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
-    </message>
-    <message>
         <source>Clear All</source>
         <translation>Tout effacer</translation>
     </message>
@@ -6340,6 +6854,18 @@
     <message>
         <source>These packages will be installed:</source>
         <translation>Ces paquets seront installés&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s “%1” runs in a Terminal window, which asks for your password.</source>
+        <translation>La commande «&#xa0;%1&#xa0;» d’Omarchy s’exécute dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>It also deletes: %1</source>
+        <translation>Elle supprime aussi&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>These packages will be removed:</source>
+        <translation>Ces paquets seront supprimés&#xa0;:</translation>
     </message>
     <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
@@ -7970,6 +8496,46 @@
         <translation>Commandes système</translation>
     </message>
     <message>
+        <source>Results from Clipboard</source>
+        <translation>Résultats du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Allows Search to find and show items you copied. Personal and sensitive information may appear in the results. Turning it off deletes the items you did not pin.</source>
+        <translation>Permet à la Recherche de trouver et d’afficher les éléments que vous avez copiés. Des informations personnelles et sensibles peuvent apparaître dans les résultats. La désactivation supprime les éléments que vous n’avez pas épinglés.</translation>
+    </message>
+    <message>
+        <source>Clipboard history is available in Search for</source>
+        <translation>L’historique du presse-papiers est disponible dans la Recherche pendant</translation>
+    </message>
+    <message>
+        <source>30 minutes</source>
+        <translation>30 minutes</translation>
+    </message>
+    <message>
+        <source>8 hours</source>
+        <translation>8 heures</translation>
+    </message>
+    <message>
+        <source>7 days</source>
+        <translation>7 jours</translation>
+    </message>
+    <message>
+        <source>Keep clipboard history after logging out</source>
+        <translation>Conserver l’historique après la déconnexion</translation>
+    </message>
+    <message>
+        <source>The items you did not pin are kept on this computer, readable only by you, until they are no longer available.</source>
+        <translation>Les éléments que vous n’avez pas épinglés sont conservés sur cet ordinateur, lisibles par vous seul, jusqu’à ce qu’ils ne soient plus disponibles.</translation>
+    </message>
+    <message>
+        <source>Clipboard History</source>
+        <translation>Historique du presse-papiers</translation>
+    </message>
+    <message>
+        <source>Clear Clipboard History…</source>
+        <translation>Effacer l’historique du presse-papiers…</translation>
+    </message>
+    <message>
         <source>Results for “%1”</source>
         <translation>Résultats pour «&#xa0;%1&#xa0;»</translation>
     </message>
@@ -9092,6 +9658,10 @@
         <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
     </message>
     <message>
+        <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
+    </message>
+    <message>
         <source>Waiting for another installation or an update to finish</source>
         <translation>En attente de la fin d’une autre installation ou d’une mise à jour</translation>
     </message>
@@ -9102,6 +9672,10 @@
     <message>
         <source>Waiting for permission…</source>
         <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Opening Terminal…</source>
+        <translation>Ouverture du Terminal…</translation>
     </message>
     <message>
         <source>Finishing the uninstallation…</source>
@@ -9118,6 +9692,14 @@
     <message>
         <source>Installing: %1 of %2</source>
         <translation>Installation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Uninstalling in Terminal…</source>
+        <translation>Désinstallation dans le Terminal…</translation>
+    </message>
+    <message>
+        <source>Installing in Terminal…</source>
+        <translation>Installation dans le Terminal…</translation>
     </message>
     <message>
         <source>Uninstalling…</source>
@@ -9186,6 +9768,10 @@
     <message>
         <source>The installation failed.</source>
         <translation>L’installation a échoué.</translation>
+    </message>
+    <message>
+        <source>The terminal did not open.</source>
+        <translation>Le terminal ne s’est pas ouvert.</translation>
     </message>
     <message>
         <source>Part of Omarchy</source>
@@ -9727,6 +10313,28 @@
     <message>
         <source>Page %1</source>
         <translation>Page %1</translation>
+    </message>
+</context>
+<context>
+    <name>TilingPopover</name>
+    <message>
+        <source>Window tiling</source>
+        <translation>Disposition de la fenêtre</translation>
+    </message>
+    <message>
+        <source>Layouts</source>
+        <translation>Dispositions</translation>
+    </message>
+    <message>
+        <source>%1, zone %2 of %3</source>
+        <translation>%1, zone %2 sur %3</translation>
+    </message>
+</context>
+<context>
+    <name>TilingSuggestions</name>
+    <message>
+        <source>Choose a window for this zone</source>
+        <translation>Choisir une fenêtre pour cette zone</translation>
     </message>
 </context>
 <context>

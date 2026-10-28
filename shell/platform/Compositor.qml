@@ -14,6 +14,7 @@ import "ScreenChoice.js" as ScreenChoice
 import "SpaceGeometry.js" as SpaceGeometry
 import "showdesktop"
 import "StagesFront.js" as StagesFront
+import "WindowTiling.js" as WindowTiling
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
 // with Capabilities, that talks to the compositor). Event-driven; never polls hyprctl.
@@ -482,6 +483,117 @@ Singleton {
         return dispatchRequest(Minimized.tileCall(addressOf(toplevel), place));
     }
 
+    // Window > Move & Resize > Arrange and its keys (TL6, TL25, TL26): the window into the first zone of a layout, the next
+    // windows of its output in the others. False without the capability.
+    readonly property bool canArrange: Capabilities.has("tiling-arrange")
+
+    function arrange(toplevel: var, layout: string): bool {
+        if (!root.canArrange)
+            return false;
+        const address = addressOf(toplevel);
+        const sent = dispatchRequest(Minimized.arrangeCall(address, layout));
+        if (sent)
+            root.askSuggestion(address);
+        return sent;
+    }
+
+    // The Layouts section and the suggestions (TL27, TL28): a window alone into a zone of a layout, a pick of the suggestions,
+    // the plugin's `tiling` notice. False without the capability.
+    readonly property bool canLayouts: Capabilities.has("tiling-layouts")
+
+    // The class of an output for its Layouts section (WindowTiling.outputClass from its logical size), "" for no such output.
+    function outputClassOf(screenName: string): string {
+        const s = Quickshell.screens.find(o => o.name === screenName);
+        return s ? WindowTiling.outputClass(s.width, s.height) : "";
+    }
+
+    // The plugin's `tiling` change notice (WindowTiling.parseNotice): {gen, reason}.
+    signal tilingNotice(var notice)
+
+    // The window whose arrangement the shell asked last, while its suggestion may still come (TL28: only after a layout or an
+    // arrangement chosen from the popover, the Window menu or the keys): {address, until} (ms since the epoch), or null.
+    property var suggestionAsked: null
+
+    function askSuggestion(address: string): void {
+        root.suggestionAsked = root.canLayouts && address !== "" ? {address: address, until: Date.now() + WindowTiling.suggestionWaitMs} : null;
+    }
+
+    // A zone of the Layouts section (TL27): the window alone into zone `zone` of `layout`.
+    function placeInZone(toplevel: var, layout: string, zone: int): bool {
+        if (!root.canLayouts)
+            return false;
+        const address = addressOf(toplevel);
+        const sent = dispatchRequest(Minimized.zoneCall(address, layout, zone));
+        if (sent)
+            root.askSuggestion(address);
+        return sent;
+    }
+
+    // A pick of the suggestions (TL28): the window `address` into zone `zone` of the layout of the window `withAddress`.
+    function pickSuggestion(address: string, layout: string, zone: int, withAddress: string): bool {
+        if (!root.canLayouts)
+            return false;
+        const sent = dispatchRequest(Minimized.zoneCall(address, layout, zone, withAddress));
+        if (sent)
+            root.askSuggestion(Minimized.normalizeAddress(withAddress));
+        return sent;
+    }
+
+    // The tiling popover of the zoom light (TL22-TL26): the plugin's hover event, its keyboard opening and Move to <display>.
+    readonly property bool canTileHover: Capabilities.has("tile-hover")
+
+    // The plugin's tile-hover event (WindowTiling.parseHover): {address, state: "enter" | "leave" | "open", light, tileable}.
+    signal tileHover(var hover)
+
+    // The window Hyprland names `address` (lower-case hex without 0x), as a foreign-toplevel handle, or null.
+    function toplevelByAddress(address: string): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        for (let i = 0; i < all.length; i++) {
+            if (Minimized.normalizeAddress(all[i].address) === address)
+                return all[i].wayland;
+        }
+        return null;
+    }
+
+    // The screens as WindowTiling takes them ({name, model, x, y, width, height}, logical).
+    function screenList(): var {
+        return Quickshell.screens.map(s => ({name: s.name, model: s.model, x: s.x, y: s.y, width: s.width, height: s.height}));
+    }
+
+    // Where the tiling popover opens for a zoom light (global layout coordinates): WindowTiling.popoverAnchor.
+    function popoverAnchor(light: var): var {
+        return WindowTiling.popoverAnchor(light, root.screenList());
+    }
+
+    // The outputs a window can move to (WindowTiling.otherOutputs: [{name, model, builtIn}]); none without the capability.
+    function otherOutputs(toplevel: var): var {
+        const top = hyprlandToplevel(toplevel);
+        if (!root.canTileHover || !top)
+            return [];
+        return WindowTiling.otherOutputs(root.screenList(), windowScreenName(top));
+    }
+
+    // Super+Ctrl+L (TL26): the plugin answers with the tile-hover "open" event of that window. False when not sent.
+    function openTilingPopover(toplevel: var): bool {
+        if (!root.canTileHover)
+            return false;
+        return dispatchRequest(Minimized.tilePopoverCall(addressOf(toplevel)));
+    }
+
+    // Move to <display> (TL23): the window onto that output, in the same tile when it is tiled. False when not sent.
+    function moveToOutput(toplevel: var, output: string): bool {
+        if (!root.canTileHover)
+            return false;
+        return dispatchRequest(Minimized.moveToCall(addressOf(toplevel), output));
+    }
+
+    // Super+Ctrl+Alt+Left/Right (TL26): the window onto the next output that way (WindowTiling.nextOutput).
+    function moveToNextOutput(toplevel: var, direction: string): bool {
+        const top = hyprlandToplevel(toplevel);
+        const next = top ? WindowTiling.nextOutput(root.screenList(), windowScreenName(top), direction) : "";
+        return next !== "" && root.moveToOutput(toplevel, next);
+    }
+
     Connections {
         target: Capabilities
 
@@ -810,6 +922,24 @@ Singleton {
                 root.tile(root.focusedToplevel, place);
         }
 
+        // Super+Ctrl+Shift+arrows and Super+Ctrl+Alt+Shift+arrows (TL26): the focused window and the next ones into a layout.
+        function arrange(layout: string): void {
+            if (!SessionState.refuses("windows arrange"))
+                root.arrange(root.focusedToplevel, layout);
+        }
+
+        // Super+Ctrl+L (TL26): the tiling popover of the focused window, with the keyboard.
+        function tilePopover(): void {
+            if (!SessionState.refuses("windows tilePopover"))
+                root.openTilingPopover(root.focusedToplevel);
+        }
+
+        // Super+Ctrl+Alt+Left/Right (TL26): the focused window onto the next output ("left" or "right").
+        function nextOutput(direction: string): void {
+            if (!SessionState.refuses("windows nextOutput"))
+                root.moveToNextOutput(root.focusedToplevel, direction);
+        }
+
         function hide(): void {
             if (root.focusedAppId !== "" && !SessionState.refuses("windows hide"))
                 root.hideApp(root.focusedAppId);
@@ -864,6 +994,12 @@ Singleton {
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);
+                const hover = WindowTiling.parseHover(event.data);
+                if (hover)
+                    root.tileHover(hover);
+                const notice = WindowTiling.parseNotice(event.data);
+                if (notice)
+                    root.tilingNotice(notice);
                 return;
             }
             if (event.name === "urgent") {

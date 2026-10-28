@@ -243,15 +243,30 @@ TEST(Protocol, EveryEventStaysUnderHyprlandsSocket2Limit) {
 }
 
 // ADR-0036 step 1: tiling-arrange (hl.plugin.grassfield.arrange, the tiling notice and its hyprctl state) comes only with
-// window-tiling, last in the list.
+// window-tiling, last in the list; step 4a: tiling-layouts (arrange's "with", the reply's suggestion) right after it.
 TEST(Protocol, TilingArrangeComesWithWindowTiling) {
     EXPECT_EQ(kFeatureTilingArrange, "tiling-arrange");
+    EXPECT_EQ(kFeatureTilingLayouts, "tiling-layouts");
     EXPECT_EQ(kLuaArrange, "arrange");
     EXPECT_EQ(kHyprctlTilingCommand, "grassfield-tiling");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
         << "never without window-tiling";
     EXPECT_EQ(luaDispatchRequest(kLuaArrange), "hl.plugin.grassfield.arrange()");
+}
+
+TEST(Protocol, TileHoverComesWithWindowTiling) {
+    EXPECT_EQ(kFeatureTileHover, "tile-hover");
+    EXPECT_EQ(kLuaTilePopover, "tile_popover");
+    EXPECT_EQ(kLuaMoveTo, "move_to");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tile-hover"]})")
+        << "independent of tiling-arrange";
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "never without window-tiling";
 }

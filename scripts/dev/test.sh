@@ -212,13 +212,14 @@ gtest_suite() {
   ((rc == 0)) || status=1
   record logic "$label" "$([[ $rc == 0 ]] && echo pass || echo fail)"
 }
-# Grassfield Files pure logic (sort keys, sizes, dates, path segments, names).
+# Grassfield Files pure logic (sort keys, sizes, dates, path segments, names), and its KIO dialogs (ADR-0035 D-12 a: the
+# logic, and real KIO jobs answered as the sheets answer, in a scratch home).
 # The ASan and UBSan run leaves out MenuShortcuts.*: those tests drive Qt.labs.platform menus with QTest's key events, and the
 # sanitized build stops in Qt's own header (a UBSan downcast in qtestkeyboard.h), and the leak report that follows is the
 # sanitizer's own report of that stopped run: findings about Qt's test code and not about ours. The same tests run
-# unsanitized in the first run.
+# unsanitized in the first run. files-kio-tests is not built sanitized.
 gtest_suite tests/unit/files "apps/files/build-direct.sh --tests >/dev/null && apps/files/build-direct.sh --tests --asan" \
-  ".dev/build/files-unit-tests --gtest_brief=1" ".dev/build/files-unit-tests-asan --gtest_brief=1 --gtest_filter=-MenuShortcuts.*"
+  ".dev/build/files-unit-tests --gtest_brief=1" ".dev/build/files-kio-tests --gtest_brief=1" ".dev/build/files-unit-tests-asan --gtest_brief=1 --gtest_filter=-MenuShortcuts.*"
 # Grassfield Preview pure logic (URL validation, size caps, file-type routing).
 gtest_suite tests/unit/preview "apps/preview/build-direct.sh --tests" ".dev/build/preview-unit-tests --gtest_brief=1"
 # grassfield-wallpaper (ADR-0016) logic: untrusted pictures (huge, corrupt, EXIF, FIFO, fit modes), listing, cache: built
