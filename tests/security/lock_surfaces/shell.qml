@@ -4,6 +4,7 @@ import Quickshell
 import qs.launchpad
 import qs.notifications
 import qs.overview
+import qs.platform
 import qs.search
 import qs.services
 
@@ -142,10 +143,17 @@ ShellRoot {
         check("tiling suggestions: not in place of another popup (" + why + ")", why === "busy" && Popups.kind === "controlcenter");
         Popups.open("tiling", "", 0, 0, "below", {address: "a"});
         why = TilingSuggest.show(suggestion);
-        check("tiling suggestions: control, after the popover (" + why + ")", why === (screenName !== "" ? "opened" : "no output"));
+        check("tiling suggestions: control, after the popover (" + why + ")", why === (Quickshell.screens.length > 0 ? "opened" : "no output"));
         why = TilingSuggest.show(null);
         check("tiling suggestions: no suggestion closes them (" + why + ")", why === "none" && Popups.kind !== "tilingSuggest");
         Popups.close();
+        // The lock ends the suggestion (TilingSuggest drops it when its popup closes): nothing reopens it after the unlock.
+        TilingLink.suggestion = suggestion;
+        check("tiling suggestions: the link's suggestion opens them", Popups.kind === (Quickshell.screens.length > 0 ? "tilingSuggest" : ""));
+        SessionState.locked = true;
+        check("tiling suggestions: the lock closes them and drops the suggestion", Popups.kind !== "tilingSuggest" && TilingLink.suggestion === null);
+        SessionState.locked = false;
+        check("tiling suggestions: nothing reopens after the unlock", Popups.kind !== "tilingSuggest" && TilingLink.suggestion === null);
         Notifications.toggleCenter("");
         check("control: notification center opens unlocked", Notifications.centerOpen);
         Notifications.closeCenter();
