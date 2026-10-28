@@ -79,6 +79,24 @@ TestCase {
         compare(DockModel.tileBadge([], {kind: "files", key: "files"}, {files: {count: 2}}), 0, "only app tiles");
     }
 
+    // ADR-0033 U18: the shell sets Grassfield Settings' count itself (Software Update's releases), kept over what the app set.
+    function test_theShellsOwnCountForSettings() {
+        const settings = {kind: "app", key: "org.grassfield.Settings", entry: {id: "org.grassfield.Settings"}};
+        const id = "org.grassfield.settings";
+        compare(DockModel.tileBadge([{appName: "Settings"}], settings, DockModel.withCount({}, id, 2)), 2);
+        const launcher = {chromium: {count: 3, urgent: false}, "org.grassfield.settings": {progress: 0.5, urgent: true}};
+        const merged = DockModel.withCount(launcher, id, 1);
+        compare(merged[id], {progress: 0.5, urgent: true, count: 1}, "the app's own progress and urgency stay");
+        compare(merged.chromium.count, 3, "other apps untouched");
+        compare(launcher[id].count, undefined, "the launcher state itself is not changed");
+        verify(DockModel.withCount(launcher, id, 0) === launcher, "0: nothing set, the state as it is");
+        verify(DockModel.isApp(settings, id));
+        verify(DockModel.isApp({kind: "app", key: "x", entry: {id: "ORG.GRASSFIELD.SETTINGS"}}, id));
+        verify(!DockModel.isApp({kind: "app", key: "chromium", entry: {id: "chromium"}}, id));
+        verify(!DockModel.isApp({kind: "trash", key: "org.grassfield.settings"}, id));
+        verify(!DockModel.isApp(null, id));
+    }
+
     function test_launcherProgress() {
         const item = {kind: "app", key: "firefox", entry: {id: "firefox"}};
         compare(DockModel.tileProgress({}, item), -1);

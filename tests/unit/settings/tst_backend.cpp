@@ -41,16 +41,55 @@ bool spinUntil(Predicate done, int ms = 5000)
     return done();
 }
 
-// What a Backend answered: finished signals per tag, pendingActionsChanged signals. Declared before the Backend, so it outlives it.
+// What a Backend answered: finished signals per tag (with the last answer and reason), pendingActionsChanged signals,
+// suppressed actions. Declared before the Backend, so it outlives it.
 struct Answers {
     QMap<QString, int> finished;
+    QMap<QString, bool> ok;
+    QMap<QString, QString> output;
+    QMap<QString, QString> reason;
+    QStringList suppressed;
     int pendingChanges = 0;
 
     void listen(Backend &backend)
     {
-        QObject::connect(&backend, &Backend::finished, [this](const QString &tag, bool, const QString &) { ++finished[tag]; });
+        QObject::connect(&backend, &Backend::finished, [this](const QString &tag, bool good, const QString &out) {
+            ++finished[tag];
+            ok[tag] = good;
+            output[tag] = out;
+        });
+        QObject::connect(&backend, &Backend::failed, [this](const QString &tag, const QString &why) { reason[tag] = why; });
         QObject::connect(&backend, &Backend::pendingActionsChanged, [this] { ++pendingChanges; });
+        QObject::connect(&backend, &Backend::suppressed, [this](const QString &what) { suppressed << what; });
     }
+};
+
+// Variables a test sets, put back as they were when it ends.
+class EnvGuard
+{
+public:
+    explicit EnvGuard(std::initializer_list<const char *> names)
+    {
+        for (const char *n : names)
+            m_saved.append({n, qEnvironmentVariableIsSet(n), qgetenv(n)});
+    }
+    ~EnvGuard()
+    {
+        for (const Saved &s : std::as_const(m_saved)) {
+            if (s.set)
+                qputenv(s.name, s.value);
+            else
+                qunsetenv(s.name);
+        }
+    }
+
+private:
+    struct Saved {
+        const char *name;
+        bool set;
+        QByteArray value;
+    };
+    QList<Saved> m_saved;
 };
 
 } // namespace
@@ -88,6 +127,26 @@ protected:
         QFile f(m_dir.filePath(tool + QStringLiteral(".runs")));
         return f.open(QIODevice::ReadOnly) ? f.readAll().count('\n') : 0;
     }
+
+    // A fake command that records its arguments, then the values of QS_CONFIG_PATH and XDG_CACHE_HOME, one line per start
+    // (`recorded`), and prints `answer`.
+    void writeRecorder(const QString &tool, const QByteArray &answer)
+    {
+        QFile f(m_dir.filePath(tool));
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("#!/bin/sh\necho \"$*|${QS_CONFIG_PATH-unset}|${XDG_CACHE_HOME-unset}\" >> '" + QFile::encodeName(m_dir.filePath(tool + QStringLiteral(".args")))
+                + "'\nprintf '%s\\n' '" + answer + "'\n");
+        f.close();
+        ASSERT_TRUE(f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+    }
+
+    QStringList recorded(const QString &tool) const
+    {
+        QFile f(m_dir.filePath(tool + QStringLiteral(".args")));
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts) : QStringList{};
+    }
+
+    QString scratch(const QString &name) const { return m_dir.filePath(name); }
 
 private:
     // A fake command: records its start, answers after a moment (long enough for a second request to find it running).
@@ -221,4 +280,157 @@ TEST_F(BackendTest, AnActionWithoutAPasswordIsNotHeldBack)
     ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) == 2; }));
     EXPECT_EQ(seen.pendingChanges, 0);
     EXPECT_EQ(runs(QStringLiteral("wpctl")), 2);
+}
+
+// ---- Software Update (ADR-0033; docs/specs/updates.md U8, U10-U14) ----
+
+// Beta Updates, Set Up…, Repair…, Turn Off…: only the installed grassfield-channel-set with one verb is an action. The allowed
+// form is never started here (it would ask the machine's polkit); its one-per-tag latch is the one omarchy-language's tests
+// above hold (systemguard asksForPassword names both).
+TEST_F(BackendTest, AChannelChangeIsOnlyTheInstalledCommand)
+{
+    writeRecorder(QStringLiteral("grassfield-channel-set"), "");
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    const QString tag = QStringLiteral("update.channel.act");
+    EXPECT_FALSE(backend.act(QStringLiteral("beta updates"), {QStringLiteral("grassfield-channel-set"), QStringLiteral("beta")}, tag))
+        << "a grassfield-channel-set found on PATH";
+    EXPECT_FALSE(backend.act(QStringLiteral("custom"), {QStringLiteral("/usr/lib/grassfield/grassfield-channel-set"), QStringLiteral("custom")}, tag));
+    EXPECT_TRUE(backend.pendingActions().isEmpty());
+    spinUntil([] { return false; }, 200);
+    EXPECT_TRUE(recorded(QStringLiteral("grassfield-channel-set")).isEmpty());
+    EXPECT_TRUE(seen.finished.isEmpty());
+}
+
+// Update Now: Omarchy's launcher, started and left running (its terminal outlives Settings); only the exact vector.
+TEST_F(BackendTest, UpdateNowStartsOmarchysLauncherDetached)
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    writeRecorder(launcher, "");
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    EXPECT_FALSE(backend.launch(QStringLiteral("update now"), {launcher, QStringLiteral("omarchy-update"), QStringLiteral("-y")}));
+    EXPECT_FALSE(backend.launch(QStringLiteral("update now"), {launcher, QStringLiteral("bash")}));
+    EXPECT_TRUE(backend.launch(QStringLiteral("update now"), {launcher, QStringLiteral("omarchy-update")}));
+    ASSERT_TRUE(spinUntil([&] { return !recorded(launcher).isEmpty(); }));
+    spinUntil([] { return false; }, 200);
+    ASSERT_EQ(recorded(launcher).size(), 1);
+    EXPECT_TRUE(recorded(launcher).at(0).startsWith(QStringLiteral("omarchy-update|")));
+    EXPECT_TRUE(seen.finished.isEmpty()) << "a launch is left running: no answer comes for it";
+
+    // A dev session starts nothing: one suppressed line.
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION"};
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    Backend dev;
+    Answers devSeen;
+    devSeen.listen(dev);
+    EXPECT_FALSE(dev.launch(QStringLiteral("update now"), {launcher, QStringLiteral("omarchy-update")}));
+    EXPECT_EQ(devSeen.suppressed, QStringList{QStringLiteral("update now")});
+    spinUntil([] { return false; }, 300);
+    EXPECT_EQ(recorded(launcher).size(), 1);
+}
+
+// The shell is asked by its directory (never a configuration found through QS_*): `update check user`; "ok" means it checks.
+TEST_F(BackendTest, TheShellIsAskedToCheckByItsDirectory)
+{
+    EnvGuard env{"QS_CONFIG_PATH", "GRASSFIELD_SHELL_DIR"};
+    writeRecorder(QStringLiteral("qs"), "ok");
+    qputenv("QS_CONFIG_PATH", "/home/u/.config/quickshell/other");
+    qputenv("GRASSFIELD_SHELL_DIR", "/work/shell"); // dev plumbing: inert outside a dev session
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    const QString tag = QStringLiteral("update.ask");
+    backend.askShellToCheck(tag);
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(tag));
+    EXPECT_EQ(seen.output.value(tag).trimmed(), QStringLiteral("ok"));
+    const QStringList calls = recorded(QStringLiteral("qs"));
+    ASSERT_EQ(calls.size(), 1);
+    EXPECT_TRUE(calls.at(0).startsWith(QStringLiteral("ipc -p /usr/share/grassfield/shell call update check user|unset|"))) << calls.at(0).toStdString();
+}
+
+// A dev session asks the shell GRASSFIELD_SHELL_DIR names, and no shell at all without it (never the installed one).
+TEST_F(BackendTest, ADevSessionAsksOnlyItsOwnShell)
+{
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_SHELL_DIR"};
+    writeRecorder(QStringLiteral("qs"), "ok");
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_SHELL_DIR");
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.askShellToCheck(QStringLiteral("a"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("a")) >= 1; }));
+    EXPECT_FALSE(seen.ok.value(QStringLiteral("a")));
+    EXPECT_FALSE(seen.reason.value(QStringLiteral("a")).isEmpty());
+    EXPECT_TRUE(recorded(QStringLiteral("qs")).isEmpty());
+
+    qputenv("GRASSFIELD_SHELL_DIR", "/work/shell");
+    backend.askShellToCheck(QStringLiteral("b"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("b")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("b")));
+    ASSERT_EQ(recorded(QStringLiteral("qs")).size(), 1);
+    EXPECT_TRUE(recorded(QStringLiteral("qs")).at(0).startsWith(QStringLiteral("ipc -p /work/shell call update check user|")));
+}
+
+// Without a shell Settings runs the checker itself (U10). In a dev session: the dev checker, its cache under the dev state, or
+// the canned answer; outside one the dev plumbing is inert.
+TEST_F(BackendTest, WithoutAShellTheCheckerRunsHere)
+{
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_UPDATE_CHECK_CMD", "GRASSFIELD_UPDATE_FIXTURE", "GRASSFIELD_STATE_HOME"};
+    const QByteArray answer = R"({"version":1,"state":"up-to-date"})";
+    writeRecorder(QStringLiteral("fake-checker"), answer);
+    qputenv("GRASSFIELD_UPDATE_CHECK_CMD", QFile::encodeName(scratch(QStringLiteral("fake-checker"))));
+    qputenv("GRASSFIELD_STATE_HOME", QFile::encodeName(scratch(QStringLiteral("state"))));
+    qunsetenv("GRASSFIELD_UPDATE_FIXTURE");
+    qunsetenv("GRASSFIELD_SESSION");
+
+    // Outside a dev session neither variable counts: the installed checker, no canned answer (checked without running it).
+    // A GRASSFIELD_DEV=1 that leaked into a packaged session (GRASSFIELD_SESSION=1) is no dev session either.
+    QFile planted(scratch(QStringLiteral("planted.json")));
+    ASSERT_TRUE(planted.open(QIODevice::WriteOnly));
+    planted.write(R"({"version":1,"state":"up-to-date"})");
+    planted.close();
+    qputenv("GRASSFIELD_UPDATE_FIXTURE", QFile::encodeName(planted.fileName()));
+    for (const char *session : {"", "1"}) {
+        if (*session) {
+            qputenv("GRASSFIELD_DEV", "1");
+            qputenv("GRASSFIELD_SESSION", session);
+        } else {
+            qunsetenv("GRASSFIELD_DEV");
+        }
+        EXPECT_EQ(Backend::updateCheckerProgram(), QStringLiteral("/usr/lib/grassfield/grassfield-update-check")) << session;
+        EXPECT_EQ(Backend::updateFixture(), QString()) << session;
+    }
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_UPDATE_FIXTURE");
+    qputenv("GRASSFIELD_DEV", "1");
+    EXPECT_EQ(Backend::updateCheckerProgram(), scratch(QStringLiteral("fake-checker")));
+
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.runUpdateChecker(QStringLiteral("dev"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("dev")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("dev")));
+    EXPECT_EQ(seen.output.value(QStringLiteral("dev")).trimmed(), QString::fromUtf8(answer));
+    EXPECT_EQ(recorded(QStringLiteral("fake-checker")), QStringList{QStringLiteral("|unset|") + scratch(QStringLiteral("state")) + QStringLiteral("/cache")});
+
+    QFile fixture(scratch(QStringLiteral("fixture.json")));
+    ASSERT_TRUE(fixture.open(QIODevice::WriteOnly));
+    fixture.write(R"({"version":1,"state":"available"})");
+    fixture.close();
+    qputenv("GRASSFIELD_UPDATE_FIXTURE", QFile::encodeName(fixture.fileName()));
+    backend.runUpdateChecker(QStringLiteral("fixture"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("fixture")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("fixture")));
+    EXPECT_EQ(seen.output.value(QStringLiteral("fixture")), QStringLiteral(R"({"version":1,"state":"available"})"));
+    EXPECT_EQ(recorded(QStringLiteral("fake-checker")).size(), 1) << "the canned answer runs nothing";
+
+    EXPECT_EQ(backend.softwareUpdateFile(), scratch(QStringLiteral("state")) + QStringLiteral("/software-update.json"));
 }

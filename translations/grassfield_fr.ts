@@ -2594,6 +2594,17 @@
     </message>
 </context>
 <context>
+    <name>CountBadge</name>
+    <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+</context>
+<context>
     <name>CurrentNetworkRow</name>
     <message>
         <source>Secured</source>
@@ -3130,6 +3141,14 @@
     <message>
         <source>%1, folder stack</source>
         <translation>%1, pile de dossier</translation>
+    </message>
+    <message>
+        <source>, 1 update</source>
+        <translation>, 1 mise à jour</translation>
+    </message>
+    <message>
+        <source>, %1 updates</source>
+        <translation>, %1 mises à jour</translation>
     </message>
     <message>
         <source>Remove</source>
@@ -3848,6 +3867,10 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
     </message>
     <message>
         <source>Storage</source>
@@ -5138,10 +5161,6 @@
         <translation>Général</translation>
     </message>
     <message>
-        <source>about storage date time language region login items startup</source>
-        <translation>informations stockage date heure langue région ouverture éléments démarrage</translation>
-    </message>
-    <message>
         <source>Desktop &amp; Dock</source>
         <translation>Bureau et Dock</translation>
     </message>
@@ -5206,6 +5225,10 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
+        <source>about software update storage date time language region login items startup</source>
+        <translation>informations mise à jour logiciels stockage date heure langue région ouverture éléments démarrage</translation>
+    </message>
+    <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
     </message>
@@ -5260,6 +5283,14 @@
     <message>
         <source>About</source>
         <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>software update upgrade new version release notes beta omarchy packages automatic</source>
+        <translation>mise à jour logiciels mettre à niveau nouvelle version notes de version bêta omarchy paquets automatique</translation>
     </message>
     <message>
         <source>Storage</source>
@@ -5384,6 +5415,26 @@
     <message>
         <source>Search settings</source>
         <translation>Rechercher dans les réglages</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to quit all applications and log out now?</source>
+        <translation>Voulez-vous vraiment quitter toutes les applications et fermer la session maintenant&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Open applications will be closed.</source>
+        <translation>Les applications ouvertes seront fermées.</translation>
+    </message>
+    <message>
+        <source>Log Out</source>
+        <translation>Fermer la session</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restart your computer now?</source>
+        <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Restart</source>
+        <translation>Redémarrer</translation>
     </message>
     <message>
         <source>Delete your search history?</source>
@@ -7741,6 +7792,26 @@
         <translation>matériel</translation>
     </message>
     <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>update</source>
+        <translation>mise à jour</translation>
+    </message>
+    <message>
+        <source>upgrade</source>
+        <translation>mettre à niveau</translation>
+    </message>
+    <message>
+        <source>new version</source>
+        <translation>nouvelle version</translation>
+    </message>
+    <message>
+        <source>beta</source>
+        <translation>bêta</translation>
+    </message>
+    <message>
         <source>Recent</source>
         <translation>Récents</translation>
     </message>
@@ -8288,6 +8359,363 @@
     <message>
         <source>Lock the screen before sleep</source>
         <translation>Verrouiller l’écran avant la mise en veille</translation>
+    </message>
+</context>
+<context>
+    <name>SoftwareUpdate</name>
+    <message>
+        <source>1 update</source>
+        <translation>1 mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 updates</source>
+        <translation>%1 mises à jour</translation>
+    </message>
+</context>
+<context>
+    <name>SoftwareUpdatePage</name>
+    <message>
+        <source>Software Update</source>
+        <translation>Mise à jour de logiciels</translation>
+    </message>
+    <message>
+        <source>Today, %1</source>
+        <translation>Aujourd’hui, %1</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation>Recherche de mises à jour…</translation>
+    </message>
+    <message>
+        <source>An update is running in Omarchy&apos;s terminal</source>
+        <translation>Une mise à jour est en cours dans le terminal d’Omarchy</translation>
+    </message>
+    <message>
+        <source>This computer is up to date</source>
+        <translation>Cet ordinateur est à jour</translation>
+    </message>
+    <message>
+        <source>Updates are available</source>
+        <translation>Des mises à jour sont disponibles</translation>
+    </message>
+    <message>
+        <source>Software Update could not check for updates</source>
+        <translation>Mise à jour de logiciels n’a pas pu rechercher de mises à jour</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s package repository cannot be used</source>
+        <translation>Le dépôt de paquets de Grassfield est inutilisable</translation>
+    </message>
+    <message>
+        <source>Grassfield updates need to be repaired</source>
+        <translation>Les mises à jour de Grassfield doivent être réparées</translation>
+    </message>
+    <message>
+        <source>Grassfield updates are not set up</source>
+        <translation>Les mises à jour de Grassfield ne sont pas configurées</translation>
+    </message>
+    <message>
+        <source>Software Update has not checked for updates yet</source>
+        <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour</translation>
+    </message>
+    <message>
+        <source>Software Update checks again when it has finished.</source>
+        <translation>Mise à jour de logiciels vérifiera de nouveau une fois la mise à jour terminée.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1, Omarchy %2</source>
+        <translation>Grassfield %1, Omarchy %2</translation>
+    </message>
+    <message>
+        <source>This computer is offline.</source>
+        <translation>Cet ordinateur est hors ligne.</translation>
+    </message>
+    <message>
+        <source>The checker said: %1</source>
+        <translation>Le vérificateur a répondu&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>The package servers did not answer.</source>
+        <translation>Les serveurs de paquets n’ont pas répondu.</translation>
+    </message>
+    <message>
+        <source>Until it works again, every system update stops, security fixes included. Turn Grassfield updates off to update the system now; you can set them up again later.</source>
+        <translation>Tant qu’il ne fonctionne pas, toutes les mises à jour du système sont bloquées, correctifs de sécurité compris. Désactivez les mises à jour de Grassfield pour mettre le système à jour maintenant&#xa0;; vous pourrez les configurer de nouveau plus tard.</translation>
+    </message>
+    <message>
+        <source>Omarchy rewrote the system&apos;s package configuration, or it was changed by hand. Repair puts Grassfield&apos;s repository back; it asks for an administrator&apos;s password.</source>
+        <translation>Omarchy a réécrit la configuration des paquets du système, ou elle a été modifiée à la main. Réparer remet le dépôt de Grassfield en place&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>Set Up adds Grassfield&apos;s package repository to the system; it asks for an administrator&apos;s password.</source>
+        <translation>Configurer ajoute le dépôt de paquets de Grassfield au système&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>The system&apos;s package configuration points Grassfield updates elsewhere. Repair puts Grassfield&apos;s repository back; it asks for an administrator&apos;s password.</source>
+        <translation>La configuration des paquets du système dirige les mises à jour de Grassfield ailleurs. Réparer remet le dépôt de Grassfield en place&#xa0;; un mot de passe d’administrateur est demandé.</translation>
+    </message>
+    <message>
+        <source>the change failed</source>
+        <translation>la modification a échoué</translation>
+    </message>
+    <message>
+        <source>not allowed</source>
+        <translation>non autorisé</translation>
+    </message>
+    <message>
+        <source>Beta updates were not changed: %1</source>
+        <translation>Les mises à jour bêta n’ont pas été modifiées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not set up: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été configurées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not repaired: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été réparées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Grassfield updates were not turned off: %1</source>
+        <translation>Les mises à jour de Grassfield n’ont pas été désactivées&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Restart to finish updating</source>
+        <translation>Redémarrez pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Log out to finish updating Grassfield</source>
+        <translation>Fermez la session pour terminer la mise à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>Part of the update is used only after the computer restarts.</source>
+        <translation>Une partie de la mise à jour n’est utilisée qu’après le redémarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>The new version of Grassfield starts when you log in again.</source>
+        <translation>La nouvelle version de Grassfield démarre à votre prochaine ouverture de session.</translation>
+    </message>
+    <message>
+        <source>Restart…</source>
+        <translation>Redémarrer…</translation>
+    </message>
+    <message>
+        <source>Log Out…</source>
+        <translation>Fermer la session…</translation>
+    </message>
+    <message>
+        <source>Automatic Updates</source>
+        <translation>Mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>Rechercher les mises à jour</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivées</translation>
+    </message>
+    <message>
+        <source>Automatic Updates details</source>
+        <translation>Détails des mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Beta Updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta</source>
+        <translation>Grassfield bêta</translation>
+    </message>
+    <message>
+        <source>Beta Updates details</source>
+        <translation>Détails des mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Repair…</source>
+        <translation>Réparer…</translation>
+    </message>
+    <message>
+        <source>Turn Off Grassfield Updates…</source>
+        <translation>Désactiver les mises à jour de Grassfield…</translation>
+    </message>
+    <message>
+        <source>Grassfield %1</source>
+        <translation>Grassfield %1</translation>
+    </message>
+    <message>
+        <source>Installed: %1</source>
+        <translation>Version installée&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>More Info…</source>
+        <translation>Plus d’informations…</translation>
+    </message>
+    <message>
+        <source>Omarchy %1</source>
+        <translation>Omarchy %1</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s release notes are on its project page.</source>
+        <translation>Les notes de version d’Omarchy sont sur la page de son projet.</translation>
+    </message>
+    <message>
+        <source>1 other update</source>
+        <translation>1 autre mise à jour</translation>
+    </message>
+    <message>
+        <source>%1 other updates</source>
+        <translation>%1 autres mises à jour</translation>
+    </message>
+    <message>
+        <source>System packages, updated with Omarchy&apos;s update.</source>
+        <translation>Paquets du système, mis à jour par la mise à jour d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Other updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update cannot run while Grassfield&apos;s repository cannot be used.</source>
+        <translation>La mise à jour d’Omarchy ne peut pas s’exécuter tant que le dépôt de Grassfield est inutilisable.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update installs everything listed here.</source>
+        <translation>La mise à jour d’Omarchy installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
+        <source>Update Now needs Omarchy&apos;s update command, which this system does not have.</source>
+        <translation>Mettre à jour maintenant nécessite la commande de mise à jour d’Omarchy, absente de ce système.</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s own updates are not available in this build: it has no package repository or signing key yet.</source>
+        <translation>Les mises à jour propres à Grassfield ne sont pas disponibles dans cette version&#xa0;: elle n’a pas encore de dépôt de paquets ni de clé de signature.</translation>
+    </message>
+    <message>
+        <source>It runs in Omarchy&apos;s terminal and asks before it starts.</source>
+        <translation>Elle s’exécute dans le terminal d’Omarchy et demande confirmation avant de commencer.</translation>
+    </message>
+    <message>
+        <source>Update Now</source>
+        <translation>Mettre à jour maintenant</translation>
+    </message>
+    <message>
+        <source>Last checked: %1</source>
+        <translation>Dernière vérification&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Not checked yet</source>
+        <translation>Pas encore vérifié</translation>
+    </message>
+    <message>
+        <source>Last successful check: %1</source>
+        <translation>Dernière vérification réussie&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Check Now</source>
+        <translation>Vérifier maintenant</translation>
+    </message>
+</context>
+<context>
+    <name>SoftwareUpdateSheet</name>
+    <message>
+        <source>Beta Updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Grassfield %1</source>
+        <translation>Grassfield %1</translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation>Notes de version</translation>
+    </message>
+    <message>
+        <source>Other Updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>Automatic Updates</source>
+        <translation>Mises à jour automatiques</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta gets the next version of Grassfield before its release. Leaving the beta keeps the beta version until a newer stable version comes out: an older version is never installed.</source>
+        <translation>Grassfield bêta reçoit la prochaine version de Grassfield avant sa sortie. Quitter la bêta conserve la version bêta jusqu’à la sortie d’une version stable plus récente&#xa0;: une version plus ancienne n’est jamais installée.</translation>
+    </message>
+    <message>
+        <source>Release notes are not available.</source>
+        <translation>Les notes de version ne sont pas disponibles.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s update installs these packages too.</source>
+        <translation>La mise à jour d’Omarchy installe aussi ces paquets.</translation>
+    </message>
+    <message>
+        <source>Grassfield checks for updates in the background and tells you when one is found. It never downloads or installs anything by itself: Update Now runs Omarchy&apos;s update, which asks before it starts.</source>
+        <translation>Grassfield recherche les mises à jour en arrière-plan et vous prévient quand il en trouve une. Il ne télécharge ni n’installe jamais rien de lui-même&#xa0;: Mettre à jour maintenant lance la mise à jour d’Omarchy, qui demande confirmation avant de commencer.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>Rechercher les mises à jour</translation>
+    </message>
+    <message>
+        <source>Beta updates</source>
+        <translation>Mises à jour bêta</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Set up Grassfield updates first.</source>
+        <translation>Configurez d’abord les mises à jour de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivées</translation>
+    </message>
+    <message>
+        <source>Grassfield Beta</source>
+        <translation>Grassfield bêta</translation>
+    </message>
+    <message>
+        <source>Grassfield updates</source>
+        <translation>Mises à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>Turning them off removes Grassfield&apos;s package repository from the system; nothing installed is removed.</source>
+        <translation>Les désactiver retire le dépôt de paquets de Grassfield du système&#xa0;; rien de ce qui est installé n’est supprimé.</translation>
+    </message>
+    <message>
+        <source>Turn Off Grassfield Updates…</source>
+        <translation>Désactiver les mises à jour de Grassfield…</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 (%2)</source>
+        <translation>Grassfield %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Other updates</source>
+        <translation>Autres mises à jour</translation>
+    </message>
+    <message>
+        <source>%1 → %2</source>
+        <translation>%1 → %2</translation>
+    </message>
+    <message>
+        <source>The list was too long to show in full.</source>
+        <translation>La liste était trop longue pour être affichée en entier.</translation>
     </message>
 </context>
 <context>
@@ -8958,6 +9386,10 @@
     <message>
         <source>timed out</source>
         <translation>Délai dépassé</translation>
+    </message>
+    <message>
+        <source>the answer file cannot be read</source>
+        <translation>le fichier de réponse est illisible</translation>
     </message>
     <message>
         <source>no answer</source>
@@ -10366,6 +10798,30 @@
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>
         <translation>Grassfield a été mis à jour. Fermez la session puis rouvrez-la pour utiliser la nouvelle version.</translation>
+    </message>
+    <message>
+        <source>Updates are stopped</source>
+        <translation>Les mises à jour sont bloquées</translation>
+    </message>
+    <message>
+        <source>Grassfield&apos;s update repository cannot be used, and this stops every system update. Open Software Update to turn Grassfield updates off.</source>
+        <translation>Le dépôt de mises à jour de Grassfield est inutilisable, ce qui bloque toutes les mises à jour du système. Ouvrez Mise à jour de logiciels pour désactiver les mises à jour de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 is available</source>
+        <translation>Grassfield %1 est disponible</translation>
+    </message>
+    <message>
+        <source>See what&apos;s new in Software Update.</source>
+        <translation>Découvrez les nouveautés dans Mise à jour de logiciels.</translation>
+    </message>
+    <message>
+        <source>Omarchy %1 is available</source>
+        <translation>Omarchy %1 est disponible</translation>
+    </message>
+    <message>
+        <source>Update Now in Software Update installs it.</source>
+        <translation>Mettre à jour maintenant, dans Mise à jour de logiciels, l’installe.</translation>
     </message>
     <message>
         <source>and 1 more</source>
