@@ -37,6 +37,8 @@ newop() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
 
 R=/usr/lib/grassfield/grassfield-store-run
 install -Dm755 /src/packaging/store/grassfield-store-run "$R"
+# A UTF-8 locale for the cases where bash's ranges would follow it (made from glibc's own sources: no network).
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen >/dev/null 2>&1
 useradd -m carol
 as_carol() { setpriv --reuid=carol --regid=carol --init-groups -- "$@"; }
 cuid=$(id -u carol)
@@ -63,6 +65,16 @@ if [[ ${1-} == -Qu && -s /run/test/qu ]]; then
 fi
 case ${1-} in
   -Slq) [[ -e /run/test/sl ]] && { cat /run/test/sl; exit 0; } ;;
+  -Sp) # what pacman resolves: a repository's package (/run/test/sl) or one that provides the name (/run/test/provides)
+    [[ -e /run/test/sl ]] && {
+      [[ -e /run/test/sp-fail ]] && { echo "error: failed to init transaction (unable to lock database)" >&2; exit 1; }
+      name=${!#}
+      grep -qx -- "$name" /run/test/sl && { echo "$name"; exit 0; }
+      provider=$(awk -v n="$name" '$1 == n {print $2}' /run/test/provides 2>/dev/null)
+      [[ -n $provider ]] && { echo "$provider"; exit 0; }
+      echo "error: target not found: $name" >&2
+      exit 1
+    } ;;
   -Qqe) [[ -e /run/test/qe ]] && { cat /run/test/qe; exit 0; } ;;
   -Qqm) [[ -e /run/test/qm ]] && { cat /run/test/qm; exit 0; } ;;
   -Rs) [[ -e /run/test/rs ]] && { cat /run/test/rs; [[ ! -e /run/test/rs-fail ]]; exit; } ;;
@@ -280,12 +292,13 @@ expect "its folder a link -> exit 2, the linked folder's mode unchanged" test "$
 rm "$D" && mv "$D.kept" "$D"
 
 say "the AUR (step 3b2): its two commands, their names and their plan checked again"
-recipe omarchy-pkg-aur-add 'echo "aur-add $*" >>"$HOME/marks/aur"'
+recipe omarchy-pkg-aur-add 'echo "aur-add $*" >>"$HOME/marks/aur"; echo "${LC_ALL-unset}" >"$HOME/marks/locale"'
 recipe omarchy-pkg-drop 'echo "aur-drop $*" >>"$HOME/marks/aur"'
+recipe omarchy-pkg-missing 'exit 0'
 printf 'btop\nchromium\ngs-omarchy-app # a comment\n' >"$O/install/omarchy-base.packages"
 chown carol: "$O/install/omarchy-base.packages"
 aurpins() { # op [extra lines]
-  (cd "$O" && sha256sum bin/omarchy-pkg-aur-add bin/omarchy-pkg-drop) >"$D/$1.pins"
+  (cd "$O" && sha256sum bin/omarchy-pkg-aur-add bin/omarchy-pkg-drop bin/omarchy-pkg-missing) >"$D/$1.pins"
   (($# > 1)) && printf '%s\n' "${@:2}" >>"$D/$1.pins"
   chown carol: "$D/$1.pins" && chmod 600 "$D/$1.pins"
 }
@@ -306,6 +319,18 @@ op=$(newop); aurpins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin gimp; rc=$?
 expect "a name a repository has (gimp) -> exit 7, not run, says why" \
   bash -c "test $rc:$(exitfile "$op") == 7:7 && test \$(wc -l <$M/aur) == 1 && grep -q 'A repository has gimp' /tmp/run.out"
+# What pacman resolves is what yay installs: a package that provides the name (zathura provides pdf-viewer) is the
+# repository's too. pacman that does not answer (its database locked) is no answer.
+printf 'pdf-viewer zathura\n' >"$T/provides"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add pdf-viewer; rc=$?
+expect "a name a repository's package provides (pdf-viewer) -> exit 7, not run, says why" \
+  bash -c "test $rc:$(exitfile "$op") == 7:7 && test \$(wc -l <$M/aur) == 1 && grep -q 'A repository has pdf-viewer, or a package that provides it' /tmp/run.out"
+touch "$T/sp-fail"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "pacman -Sp fails otherwise (its database locked) -> exit 1, not run" bash -c "test $rc == 1 && test \$(wc -l <$M/aur) == 1"
+rm -f "$T/sp-fail"
 mv "$T/sl" "$T/sl.kept" && : >"$T/sl"
 op=$(newop); aurpins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
@@ -315,6 +340,30 @@ op=$(newop); pins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
 expect "the pins do not name the AUR's command -> exit 5, says so" \
   bash -c "test $rc == 5 && test \$(wc -l <$M/aur) == 1 && grep -q 'do not name omarchy-pkg-aur-add' /tmp/run.out"
+op=$(newop)
+(cd "$O" && sha256sum bin/omarchy-pkg-aur-add bin/omarchy-pkg-drop) >"$D/$op.pins" && chown carol: "$D/$op.pins" && chmod 600 "$D/$op.pins"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "the pins name the command but not the omarchy-pkg-missing it calls -> exit 5, not run" \
+  bash -c "test $rc == 5 && test \$(wc -l <$M/aur) == 1 && grep -q 'do not name omarchy-pkg-aur-add (or what it calls)' /tmp/run.out"
+# The checks read bytes, whatever the user's locale: under en_US.UTF-8 bash's [a-z] would also take ä, ﬁ or ², and [0-9a-f]
+# an á. The recipe still runs in the user's locale.
+extra=(LC_ALL=en_US.UTF-8)
+for name in exämple ﬁle ab²; do
+  run "$(newop)" "$(soon)" aur omarchy-pkg-aur-add "$name"; rc=$?
+  expect "under en_US.UTF-8, the name '$name' -> exit 2" test "$rc" == 2
+done
+op="á$(newop | cut -c 2-)"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "under en_US.UTF-8, an operation id with á -> exit 2" test "$rc" == 2
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "under en_US.UTF-8, a good name -> exit 0, the recipe in the user's locale" \
+  bash -c "test $rc == 0 && test \"\$(cat $M/locale)\" == en_US.UTF-8"
+extra=()
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "without a locale of the user's, none is given to the recipe (not the checks' C)" \
+  bash -c "test $rc == 0 && test \"\$(cat $M/locale)\" == unset"
 op=$(newop); aurpins "$op"
 echo '# changed' >>"$O/bin/omarchy-pkg-aur-add"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?

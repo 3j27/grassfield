@@ -8,18 +8,19 @@
 # $XDG_RUNTIME_DIR/grassfield/store/<op-id>.started and <op-id>.exit (the terminal is detached: no exit code comes back).
 # It never runs as root, and runs every program with PATH=<Omarchy's folder>/bin:/usr/bin, without BASH_ENV or the
 # caller's exported shell functions (`bash -p` reads neither for itself): the commands the recipe names are Omarchy's
-# pinned ones and the system's. Then it:
+# pinned ones and the system's; its checks run in the C locale, the recipe in the user's own. Then it:
 #   1. refuses to start after <deadline> (Unix seconds: the Store stops waiting for the terminal 60 s after asking);
 #   2. takes Omarchy's update lock (the file omarchy-update-lock locks), on a descriptor of its own that every program it
 #      starts gets closed (9>&-): `omarchy update` says it is already running, and no process the recipe leaves running
 #      keeps the lock (S13); refuses when it is held. The lock goes when this script ends, whatever ends it;
 #   3. writes <op-id>.started (its pid and start time: the Store knows it still runs);
 #   4. checks again: no db.lck, pacman -Qu answers (exit 0 or 1) and lists nothing but "[ignored]" (S12), the recipe is
-#      Omarchy's, and every file the catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is
-#      unchanged in the installed Omarchy; for the AUR (step 3b2), its plan again: an install only of names no repository
-#      has (yay would take a repository's), a removal only of packages installed explicitly from outside the
-#      repositories, that the deny list (the helper's, ADR-0037 b.1) does not name, and whose whole plan (-Rs) names no
-#      denied package;
+#      Omarchy's and pinned (with omarchy-pkg-missing for omarchy-pkg-aur-add, which calls it), and every file the
+#      catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is unchanged in the installed
+#      Omarchy; for the AUR (step 3b2), its plan again: an install only of names pacman does not resolve from the
+#      repositories (a package, a provider, a group: yay would take the repository's), a removal only of packages
+#      installed explicitly from outside the repositories, that the deny list (the helper's, ADR-0037 b.1) does not
+#      name, and whose whole plan (-Rs) names no denied package;
 #   5. runs the recipe, ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<recipe>, with its arguments, as an argument vector;
 #   6. writes <op-id>.exit with the code (by rename, the Store never reads half a file) and exits with it.
 # setup: <recipe> is omarchy-install-<name> or omarchy-remove-<name>, with at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
@@ -27,7 +28,7 @@
 # -Rns), with 1 to 4 package names.
 # Exit: 0 done; 1 the recipe failed; 2 usage; 3 busy (Omarchy's update lock, or pacman's db.lck); 4 the last system update
 # did not finish; 5 the installed Omarchy differs from the catalog's pins (or the recipe is missing); 6 too late (the
-# terminal opened after the deadline); 7 the AUR's plan refused (a repository has the name; a package protected, needed,
+# terminal opened after the deadline); 7 the AUR's plan refused (a repository resolves the name; a package protected, needed,
 # not installed as an app or from a repository); 130 stopped with Ctrl+C (before the recipe: nothing was run). A closed
 # terminal ends it without an exit file (SIGHUP): the Store reads the system then.
 set -uo pipefail
@@ -44,6 +45,11 @@ while IFS= read -r -d '' entry; do
   [[ $entry == BASH_FUNC_* ]] && unexported+=(-u "${entry%%=*}")
 done </proc/$$/environ
 unset BASH_ENV ENV CDPATH GLOBIGNORE
+# The checks run in the C locale: bash's bracket ranges follow the locale's collation (under en_US.UTF-8 "exämple", "ﬁle"
+# or "ab²" would pass [a-z0-9...]), and pacman's words ("[ignored]", "target not found") are read in English, as the
+# Store and the helper read them. The user's own locale comes back for the recipe, which speaks to the user (step 5).
+lc_all_set=${LC_ALL+1} lc_all=${LC_ALL-}
+export LC_ALL=C
 
 usage() {
   echo "grassfield-store-run: ${1:-started by Grassfield Store only}" >&2
@@ -130,21 +136,24 @@ program=$omarchy/bin/$recipe
 [[ -f $program && -x $program ]] || finish 5 "Omarchy's $recipe is not installed: nothing was run."
 pins=$dir/$op.pins
 [[ -f $pins && ! -L $pins && -O $pins ]] || finish 5 "The Store's pins for this setup are missing: nothing was run."
-count=0 recipe_pinned=0
+count=0
+# The recipe's own file, and for the AUR's omarchy-pkg-aur-add the omarchy-pkg-missing it calls first.
+declare -A needed=([bin/$recipe]=1)
+[[ $recipe == omarchy-pkg-aur-add ]] && needed[bin/omarchy-pkg-missing]=1
 checked="This setup was checked"
 [[ $kind == aur ]] && checked="Installing from the AUR was checked"
 while IFS= read -r line; do
   [[ $line =~ ^([0-9a-f]{64})\ \ ([A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+){0,7})$ ]] || finish 5 "The Store's pins cannot be read: nothing was run."
   want=${BASH_REMATCH[1]} rel=${BASH_REMATCH[2]}
   [[ /$rel/ != */./* && /$rel/ != */../* ]] || finish 5 "The Store's pins cannot be read: nothing was run."
-  [[ $rel == "bin/$recipe" ]] && recipe_pinned=1
+  unset 'needed[$rel]'
   have=$(sha256sum -- "$omarchy/$rel" 2>/dev/null 9>&-) || have=missing
   stop
   [[ ${have%% *} == "$want" ]] ||
     finish 5 "$checked against another version of Omarchy ($rel differs): nothing was run. The Store offers it again once its catalog has checked your Omarchy."
   count=$((count + 1))
 done <"$pins"
-((count > 0 && recipe_pinned)) || finish 5 "The Store's pins do not name $recipe: nothing was run."
+((count > 0 && ${#needed[@]} == 0)) || finish 5 "The Store's pins do not name $recipe (or what it calls): nothing was run."
 stop
 
 # The deny list of grassfield-store-helper's remove (ADR-0037 b.1, S16), its case list copied as it is (Omarchy's lists in
@@ -166,13 +175,17 @@ denied() { # name: 0 when the system, Omarchy or Grassfield needs it
 if [[ $kind == aur ]]; then
   refuse() { finish 7 "$1: nothing was run."; }
   if [[ $recipe == omarchy-pkg-aur-add ]]; then
-    # yay installs a name a repository has from that repository: only names no repository has (exact names, as the helper).
-    declare -A sync=()
-    while IFS= read -r line; do [[ -n $line ]] && sync[$line]=1; done < <(pacman -Slq 2>/dev/null 9>&-)
+    # yay installs from the repositories whatever pacman resolves a name to (the package, a provider of it, a group): only
+    # names pacman does not resolve (-Sp, as the user: S10). Exit 0 resolved; 1 with "target not found" not there;
+    # anything else is not an answer. A system whose pacman lists no repository at all is not read as "not there".
+    [[ -n $(pacman -Slq 2>/dev/null 9>&- | head -n 1) ]] || finish 1 "pacman lists no repository: nothing was run."
     stop
-    ((${#sync[@]})) || finish 1 "pacman -Slq failed: nothing was run."
     for name in "$@"; do
-      [[ -z ${sync[$name]-} ]] || refuse "A repository has $name: Grassfield Store installs it from there"
+      out=$(pacman -Sp --print-format '%n' -- "$name" 2>&1 </dev/null 9>&-)
+      code=$?
+      stop
+      ((code == 0)) && refuse "A repository has $name, or a package that provides it: Grassfield Store installs it from there"
+      [[ $out == *"target not found: $name"* ]] || finish 1 "pacman could not read the repositories (exit code $code): nothing was run."
     done
   else
     # What denied() reads: Omarchy's two package lists (in the installed Omarchy), pacman's HoldPkg.
@@ -206,7 +219,8 @@ if [[ $kind == aur ]]; then
 fi
 stop
 
-# 5. The recipe, without the lock's descriptor.
+# 5. The recipe, without the lock's descriptor, in the user's own locale.
+if [[ -n $lc_all_set ]]; then LC_ALL=$lc_all; else unset LC_ALL; fi
 echo "Grassfield Store runs Omarchy's $recipe $*"
 echo
 env "${unexported[@]}" -- "$program" "$@" 9>&-
