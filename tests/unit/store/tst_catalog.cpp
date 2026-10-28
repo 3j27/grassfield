@@ -5,6 +5,9 @@
 
 #include <QJsonArray>
 
+#include <functional>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 using namespace grassfield::store;
@@ -247,8 +250,76 @@ TEST(Catalog, CleanPlainText)
               QStringLiteral("ab") + QString::fromUcs4(&emoji, 1));
 }
 
+// The Omarchy release and pins (ADR-0037 g): read whole; missing or broken, every setup goes; a setup whose recipes are not
+// pinned goes.
+TEST(Catalog, OmarchyPins)
+{
+    CatalogParse p = parseCatalog(storetest::readFixture(QStringLiteral("catalog-good.json")), QStringLiteral("stable"));
+    ASSERT_TRUE(p.catalog && p.catalog->omarchy);
+    EXPECT_EQ(p.catalog->omarchy->tag, QStringLiteral("v4.0.4"));
+    EXPECT_EQ(p.catalog->omarchy->commit, QStringLiteral("c668141e9c42b13c80c9ca4ea108e11708c5e8a5"));
+    ASSERT_EQ(p.catalog->omarchy->files.size(), 3);
+    EXPECT_EQ(p.catalog->omarchy->files.at(0).first, QStringLiteral("bin/omarchy-install-gaming-steam"));
+    EXPECT_EQ(p.catalog->omarchy->files.at(2).first, QStringLiteral("install/helpers/steam.sh"));
+
+    const auto steamGoes = [](const std::function<void(QJsonObject &)> &change, const char *why) {
+        const CatalogParse q = parseCatalog(changedCatalog(change), QStringLiteral("stable"));
+        ASSERT_TRUE(q.catalog) << why;
+        EXPECT_FALSE(app(*q.catalog, QStringLiteral("com.valvesoftware.Steam.desktop"))) << why;
+        EXPECT_TRUE(app(*q.catalog, QStringLiteral("org.gimp.GIMP"))) << why;
+        EXPECT_TRUE(q.dropped.join(u'\n').contains(QLatin1String(why))) << q.dropped.join(u'\n').toStdString();
+    };
+    steamGoes([](QJsonObject &o) { o.remove(QStringLiteral("omarchy")); }, "app com.valvesoftware.Steam.desktop: the catalog has no Omarchy pins");
+    const auto pins = [](QJsonObject &o, const std::function<void(QJsonObject &)> &change) {
+        QJsonObject om = o.value(QStringLiteral("omarchy")).toObject();
+        change(om);
+        o[QStringLiteral("omarchy")] = om;
+    };
+    for (const auto &[label, change] : std::vector<std::pair<const char *, std::function<void(QJsonObject &)>>>{
+             {"tag", [](QJsonObject &om) { om[QStringLiteral("tag")] = QStringLiteral("4.0.4"); }},
+             {"commit", [](QJsonObject &om) { om[QStringLiteral("commit")] = QStringLiteral("c668141e9c42b13c80c9ca4ea108e11708c5e8a5\n"); }},
+             {"files", [](QJsonObject &om) { om[QStringLiteral("files")] = QJsonObject(); }},
+             {"a digest", [](QJsonObject &om) {
+                  QJsonObject f = om.value(QStringLiteral("files")).toObject();
+                  f[QStringLiteral("bin/x")] = QString(64, u'A');
+                  om[QStringLiteral("files")] = f;
+              }},
+             {"513 files", [](QJsonObject &om) {
+                  QJsonObject f;
+                  for (int i = 0; i < 513; ++i)
+                      f[QStringLiteral("bin/x%1").arg(i)] = QString(64, u'a');
+                  om[QStringLiteral("files")] = f;
+              }}}) {
+        steamGoes([&](QJsonObject &o) { pins(o, change); }, "its Omarchy pins are broken");
+        (void)label;
+    }
+    for (const char *path : {"../x", "bin/../x", "/usr/bin/x", "./bin/x", "bin//x", "bin/x y", "bin/x\n", "a/a/a/a/a/a/a/a/a"}) {
+        steamGoes([&](QJsonObject &o) {
+            pins(o, [&](QJsonObject &om) {
+                QJsonObject f = om.value(QStringLiteral("files")).toObject();
+                f[QString::fromLatin1(path)] = QString(64, u'a');
+                om[QStringLiteral("files")] = f;
+            });
+        }, "its Omarchy pins are broken");
+        EXPECT_FALSE(isOmarchyPath(QString::fromLatin1(path))) << path;
+    }
+    steamGoes([&](QJsonObject &o) {
+        pins(o, [](QJsonObject &om) {
+            QJsonObject f = om.value(QStringLiteral("files")).toObject();
+            f.remove(QStringLiteral("bin/omarchy-remove-gaming-steam"));
+            om[QStringLiteral("files")] = f;
+        });
+    }, "app com.valvesoftware.Steam.desktop: its recipes are not pinned");
+    EXPECT_TRUE(isOmarchyPath(QStringLiteral("install/helpers/steam.sh")));
+    EXPECT_TRUE(isOmarchyPath(QStringLiteral("default/.config/x")));
+}
+
 TEST(Catalog, Patterns)
 {
+    // A line feed after a token is not part of the pattern (PCRE's $ alone would let it through, ADR-0037 e.5).
+    EXPECT_FALSE(isPackageName(QStringLiteral("steam\n")));
+    EXPECT_FALSE(isAppId(QStringLiteral("org.gimp.GIMP\n")));
+    EXPECT_FALSE(isDesktopId(QStringLiteral("x.desktop\n")));
     EXPECT_TRUE(isPackageName(QStringLiteral("lib32-vulkan-radeon")));
     EXPECT_TRUE(isPackageName(QStringLiteral("gtk2+extra@1")));
     EXPECT_FALSE(isPackageName(QStringLiteral("-rf")));

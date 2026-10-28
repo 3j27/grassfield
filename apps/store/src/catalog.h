@@ -87,6 +87,14 @@ struct CatalogCategory {
     QStringList freedesktop;
 };
 
+// The Omarchy release the catalog's setups were read against, and its pins (ADR-0037 g): the SHA-256 of every Omarchy
+// file a setup runs or reads, by its path in Omarchy's folder. A setup runs only while the installed files match.
+struct OmarchyPins {
+    QString tag;    // v4.0.4
+    QString commit; // 40 lowercase hexadecimal digits
+    QList<std::pair<QString, QString>> files; // (bin/omarchy-install-browser, sha256), sorted by path
+};
+
 struct Catalog {
     QString channel;
     qint64 serial = 0;
@@ -94,6 +102,7 @@ struct Catalog {
     QList<CatalogSection> sections;
     QList<CatalogCategory> categories;
     QList<CatalogApp> apps;
+    std::optional<OmarchyPins> omarchy; // absent or broken: the catalog's setups are dropped
 };
 
 struct CatalogParse {
@@ -116,6 +125,8 @@ QString cleanPlainText(const QString &text, int limit, bool lineFeeds);
 
 // Patterns of ADR-0037 e.5.
 bool isPackageName(const QString &name);
+// A path in Omarchy's folder as the pins name it: relative, 1 to 8 segments of [A-Za-z0-9_.+-], no "." or "..".
+bool isOmarchyPath(const QString &path);
 bool isAppId(const QString &id);
 bool isDesktopId(const QString &id);
 bool isFlatpakId(const QString &id);

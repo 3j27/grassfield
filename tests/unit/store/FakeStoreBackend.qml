@@ -161,7 +161,10 @@ QtObject {
             homepage: "https://example.org/" + id, bugtracker: "", package: "paint", packages: ["paint"], desktopId: "paint.desktop",
             inCatalog: true, screenshots: ["https://example.org/1.png"], captions: ["The main window"], categories: ["Graphics"],
             releases: [{version: "2.0", date: "October 1, 2026", notes: "Faster."}], languages: ["Deutsch", "français"],
-            rated: true, rating: {social: 3}, setup: ({}), webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: ""});
+            rated: true, rating: {social: 3}, webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: "",
+            setup: a.kind !== "setup" ? ({}) : {install: "omarchy-install-gaming-hub", remove: "omarchy-remove-gaming-hub",
+                changes: "Installs Game Hub and the 32-bit graphics drivers for your graphics card.",
+                removes: "Game Hub's folders in your home folder, with the games."}});
     }
 
     function requestPackageInfo(name) {

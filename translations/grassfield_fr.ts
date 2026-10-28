@@ -6239,6 +6239,18 @@
         <translation>Ces paquets seront installés&#xa0;:</translation>
     </message>
     <message>
+        <source>Omarchy&apos;s “%1” runs in a Terminal window, which asks for your password.</source>
+        <translation>La commande «&#xa0;%1&#xa0;» d’Omarchy s’exécute dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>It also deletes: %1</source>
+        <translation>Elle supprime aussi&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>These packages will be removed:</source>
+        <translation>Ces paquets seront supprimés&#xa0;:</translation>
+    </message>
+    <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
         <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
     </message>
@@ -8608,6 +8620,10 @@
         <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
     </message>
     <message>
+        <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
+    </message>
+    <message>
         <source>Waiting for another installation or an update to finish</source>
         <translation>En attente de la fin d’une autre installation ou d’une mise à jour</translation>
     </message>
@@ -8618,6 +8634,10 @@
     <message>
         <source>Waiting for permission…</source>
         <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Opening Terminal…</source>
+        <translation>Ouverture du Terminal…</translation>
     </message>
     <message>
         <source>Finishing the uninstallation…</source>
@@ -8634,6 +8654,14 @@
     <message>
         <source>Installing: %1 of %2</source>
         <translation>Installation&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Uninstalling in Terminal…</source>
+        <translation>Désinstallation dans le Terminal…</translation>
+    </message>
+    <message>
+        <source>Installing in Terminal…</source>
+        <translation>Installation dans le Terminal…</translation>
     </message>
     <message>
         <source>Uninstalling…</source>
@@ -8702,6 +8730,10 @@
     <message>
         <source>The installation failed.</source>
         <translation>L’installation a échoué.</translation>
+    </message>
+    <message>
+        <source>The terminal did not open.</source>
+        <translation>Le terminal ne s’est pas ouvert.</translation>
     </message>
     <message>
         <source>Part of Omarchy</source>

@@ -3,6 +3,8 @@
 #include "childprocess.h"
 #include "pacman.h"
 
+#include <QCryptographicHash>
+#include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
@@ -17,7 +19,7 @@ namespace {
 
 bool isName(const QString &name)
 {
-    static const QRegularExpression re(QStringLiteral("^[a-z0-9@_+][a-z0-9@._+-]{0,127}$"));
+    static const QRegularExpression re(QStringLiteral(R"(\A[a-z0-9@_+][a-z0-9@._+-]{0,127}\z)"));
     return re.match(name).hasMatch();
 }
 
@@ -55,7 +57,33 @@ Refusal readiness(const PlanTools &tools, bool ownOperation, QStringList *unfini
     return unfinished->isEmpty() ? Refusal::None : Refusal::Unfinished;
 }
 
+// The recipe is an executable file of Omarchy's bin/ that the pins name, and every pinned file matches: "" or what differs.
+QString setupDifference(const SetupCheck &setup)
+{
+    static const QRegularExpression recipe(QStringLiteral(R"(\Aomarchy-(install|remove)-[a-z0-9-]+\z)"));
+    const QString path = QStringLiteral("bin/") + setup.recipe;
+    const QFileInfo program(setup.root + QLatin1Char('/') + path);
+    if (!recipe.match(setup.recipe).hasMatch() || !program.isFile() || !program.isExecutable())
+        return path;
+    if (std::none_of(setup.pins.cbegin(), setup.pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
+        return path;
+    return omarchyDifference(setup.root, setup.pins);
+}
+
 } // namespace
+
+QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins)
+{
+    if (pins.isEmpty())
+        return QStringLiteral("(no pins)");
+    for (const auto &[path, digest] : pins) {
+        QFile f(root + QLatin1Char('/') + path);
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        if (!f.open(QIODevice::ReadOnly) || !hash.addData(&f) || QString::fromLatin1(hash.result().toHex()) != digest)
+            return path;
+    }
+    return {};
+}
 
 QStringList unfinishedUpdates(const QByteArray &pacmanQu)
 {
@@ -237,6 +265,30 @@ RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const 
     if (!plan.protectedPackage.isEmpty())
         plan.refusal = Refusal::Protected;
     return plan;
+}
+
+InstallPlan checkSetupInstall(const QStringList &packages, const SetupCheck &setup, const PlanTools &tools, bool online, bool ownOperation)
+{
+    const QString differs = setupDifference(setup);
+    if (!differs.isEmpty()) {
+        InstallPlan plan;
+        plan.refusal = Refusal::OmarchyChanged;
+        plan.detail = differs;
+        return plan;
+    }
+    return checkInstall(packages, tools, online, ownOperation);
+}
+
+RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup, const DenyList &deny, const PlanTools &tools, bool ownOperation)
+{
+    const QString differs = setupDifference(setup);
+    if (!differs.isEmpty()) {
+        RemovePlan plan;
+        plan.refusal = Refusal::OmarchyChanged;
+        plan.detail = differs;
+        return plan;
+    }
+    return checkRemove(packages, deny, tools, ownOperation);
 }
 
 } // namespace grassfield::store

@@ -6,8 +6,9 @@ import "Store.js" as Store
 // The confirmation sheet of Get and Uninstall… (spec SR14, SR15, SR17, SR22; ADR-0037 e.1): nothing runs without its
 // default button. While the plan is checked (the backend's plan(), a few pacman queries as the user) the button waits;
 // then the sheet lists the source, the licence, the sizes and every package the operation adds or removes (pacman's plan),
-// or, for a web app, the launcher it adds or removes. A plan that cannot run says why instead, and offers Software Update
-// when the system must be updated first; Esc or Cancel close it and nothing runs.
+// or, for a web app, the launcher it adds or removes; for an Omarchy setup, first what it changes (our catalog's text), the
+// recipe Omarchy's terminal runs and, for a removal, the files it deletes (ADR-0037 e.1, b.2). A plan that cannot run says
+// why instead, and offers Software Update when the system must be updated first; Esc or Cancel close it and nothing runs.
 Sheet {
     id: root
 
@@ -19,6 +20,8 @@ Sheet {
     property var plan: null
     readonly property bool removing: root.kind === "remove"
     readonly property bool webApp: root.app.kind === "webapp"
+    readonly property bool setup: root.app.kind === "setup"
+    readonly property var setupInfo: root.app.setup || ({})
     readonly property string refusal: root.plan ? (root.plan.refusal || "") : ""
     readonly property bool updateFirst: root.refusal === "unfinished" || root.refusal === "outdated"
     readonly property var packages: root.plan ? (root.plan.packages || []) : []
@@ -67,6 +70,17 @@ Sheet {
             if (root.webApp)
                 return root.removing ? qsTr("The launcher and its icon are removed from Apps.")
                                      : qsTr("A launcher that opens %1 in your browser is added to Apps, with its icon.").arg(Store.hostOf(root.app.webUrl || ""));
+            if (root.setup) {
+                // Omarchy's recipe, in its terminal: it asks for the password there (sudo), as Omarchy's own menu does.
+                const recipe = root.removing ? (root.setupInfo.remove || "") : (root.setupInfo.install || "");
+                const parts = root.removing ? [] : [root.setupInfo.changes || ""];
+                parts.push(qsTr("Omarchy's “%1” runs in a Terminal window, which asks for your password.").arg(recipe));
+                // The user data the removal recipe deletes, as our catalog says (nothing said when it says nothing).
+                if (root.removing && root.setupInfo.removes)
+                    parts.push(qsTr("It also deletes: %1").arg(root.setupInfo.removes));
+                parts.push(root.removing ? qsTr("These packages will be removed:") : qsTr("These packages will be installed:"));
+                return parts.filter(t => t !== "").join("\n\n");
+            }
             return root.removing ? qsTr("These packages will be removed. Your files and settings stay.") : qsTr("These packages will be installed:");
         case "unfinished":
             return qsTr("The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.");
@@ -80,6 +94,8 @@ Sheet {
             return qsTr("Other apps need it: %1.").arg((root.plan.dependents || []).join(", "));
         case "protected":
             return qsTr("Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.").arg(root.appName).arg(root.plan.protected || "");
+        case "omarchyChanged":
+            return Store.omarchyChangedText();
         case "unavailable":
             return Store.getBlockText(root.plan.detail || "") || Store.uninstallReasonText(root.plan.detail || "");
         }

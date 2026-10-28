@@ -337,6 +337,11 @@ bool isPackageName(const QString &name)
     return matches(name, R"(\A[a-z0-9@_+][a-z0-9@._+-]{0,127}\z)");
 }
 
+bool isOmarchyPath(const QString &path)
+{
+    return path.size() <= 255 && matches(path, R"(\A(?!.*(^|/)\.{1,2}(/|\z))[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+){0,7}\z)");
+}
+
 bool isAppId(const QString &id)
 {
     return matches(id, R"(\A[A-Za-z0-9._-]{1,255}\z)");
@@ -459,6 +464,49 @@ CatalogParse parseCatalog(const QByteArray &json, const QString &expectedChannel
         appIds.insert(app->id);
         catalog.apps.append(*app);
     }
+
+    // The pins (ADR-0037 g): without them, or broken, no setup can be checked against the installed Omarchy and every
+    // setup goes; a setup whose recipes they do not name goes too.
+    const QJsonValue omarchy = top.value(QStringLiteral("omarchy"));
+    QString pinsWhy;
+    if (!omarchy.isUndefined()) {
+        const QJsonObject o = omarchy.toObject();
+        OmarchyPins pins;
+        pins.tag = o.value(QStringLiteral("tag")).toString();
+        pins.commit = o.value(QStringLiteral("commit")).toString();
+        const QJsonObject files = o.value(QStringLiteral("files")).toObject();
+        bool ok = omarchy.isObject() && matches(pins.tag, R"(\Av[0-9]+(\.[0-9]+){0,3}\z)")
+            && matches(pins.commit, R"(\A[0-9a-f]{40}\z)") && o.value(QStringLiteral("files")).isObject()
+            && !files.isEmpty() && files.size() <= 512;
+        for (auto it = files.constBegin(); ok && it != files.constEnd(); ++it) {
+            const QString digest = it.value().toString();
+            ok = isOmarchyPath(it.key()) && matches(digest, R"(\A[0-9a-f]{64}\z)");
+            pins.files.append({it.key(), digest});
+        }
+        if (ok)
+            catalog.omarchy = pins;
+        else
+            pinsWhy = QStringLiteral("its Omarchy pins are broken");
+    } else {
+        pinsWhy = QStringLiteral("the catalog has no Omarchy pins");
+    }
+    QSet<QString> pinned;
+    if (catalog.omarchy) {
+        for (const auto &[path, digest] : catalog.omarchy->files)
+            pinned.insert(path);
+    }
+    catalog.apps.removeIf([&](const CatalogApp &a) {
+        if (a.source.kind != CatalogSource::Kind::OmarchySetup)
+            return false;
+        QString why = pinsWhy;
+        if (why.isEmpty() && (!pinned.contains(QStringLiteral("bin/") + a.source.install) || !pinned.contains(QStringLiteral("bin/") + a.source.remove)))
+            why = QStringLiteral("its recipes are not pinned");
+        if (why.isEmpty())
+            return false;
+        result.dropped.append(QStringLiteral("app %1: %2").arg(a.id, why));
+        appIds.remove(a.id);
+        return true;
+    });
 
     QSet<QString> sectionIds;
     bool first = true;
