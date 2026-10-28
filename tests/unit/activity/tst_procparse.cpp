@@ -86,6 +86,10 @@ TEST(ProcParse, Io)
     EXPECT_EQ(io.syscr, 3u);
     EXPECT_EQ(io.syscw, 4u);
     EXPECT_FALSE(parseIo("rchar: 100\n", io));
+    // Both byte fields or nothing (mutant R13, review of 19f5d4c): one alone, or one twice, is no io.
+    EXPECT_FALSE(parseIo("rchar: 100\nread_bytes: 4096\n", io));
+    EXPECT_FALSE(parseIo("rchar: 100\nwrite_bytes: 8192\n", io));
+    EXPECT_FALSE(parseIo("read_bytes: 4096\nread_bytes: 4096\n", io));
 }
 
 TEST(ProcParse, CgroupV2AndCmdline)

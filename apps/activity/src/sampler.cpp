@@ -544,9 +544,10 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
 
     // The Memory tab's turns hold while it is shown sample after sample; its first sample after another tab, or after a
     // pause longer than two intervals (a hidden window), reads every process's status, so no swap shows older than five
-    // samples (AD32; review of f68789c).
+    // samples (AD32; review of f68789c). The interval is the one set (AM9), not the one measured, which a full read left
+    // at 0 and a pause right after it went unseen (review of 19f5d4c).
     const bool memoryAll = (reads & ReadMemory)
-        && (lastMemoryIndex_ + 1 != index_ || lastMemoryTime_ < 0 || (memoryInterval_ > 0 && now - lastMemoryTime_ > 2 * memoryInterval_));
+        && (lastMemoryIndex_ + 1 != index_ || lastMemoryTime_ < 0 || now - lastMemoryTime_ > 2 * opt_.interval);
 
     if (listed) {
         const uint64_t mark = index_ + 1;
@@ -920,7 +921,6 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
     if (listed)
         lastProcessIndex_ = index_;
     if (listed && (reads & ReadMemory)) {
-        memoryInterval_ = memoryAll ? 0 : now - lastMemoryTime_;
         lastMemoryTime_ = now;
         lastMemoryIndex_ = index_;
     }

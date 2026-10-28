@@ -54,6 +54,7 @@ struct Options {
     int threadTurns = 5;          // AM23
     int statusTurns = 5;          // AM30, AD32: VmSwap and VmHWM from status, one fifth of the processes per sample
     int descriptorTurns = 10;     // AM43, AM45
+    double interval = 5;          // AM9's Update Frequency in seconds (Normally by default); the window sets it
     // The TCP dump (AM43); tests put a function of their own here (a failed dump, the review of 949fc98).
     bool (*tcpDump)(std::vector<TcpCounters> &out) = dumpTcpSockets;
     // The owner of /proc/<name> under the directory `dir` (fstatat when null); tests give a root-owned directory here.
@@ -219,6 +220,9 @@ public:
     // The pids that own a window (the shell's projection, AM60): their processes are Apps (AM65).
     void setWindowOwners(std::unordered_set<int> pids);
 
+    // AM9's Update Frequency, in seconds: a gap of more than two intervals is a pause (AD32).
+    void setInterval(double seconds) { opt_.interval = seconds; }
+
     size_t keptFiles() const { return kept_; }
 
 private:
@@ -309,7 +313,7 @@ private:
     uint64_t lastProcessIndex_ = UINT64_MAX - 1, lastCpuIndex_ = UINT64_MAX - 1;
     // The Memory tab's last samples (AD32): coming back to it after another tab or a pause reads every status once.
     uint64_t lastMemoryIndex_ = UINT64_MAX - 1;
-    double lastMemoryTime_ = -1, memoryInterval_ = 0;
+    double lastMemoryTime_ = -1;
     std::map<std::string, DiskStat> lastDisks_;
     std::map<std::string, NetDev> lastNet_;
     double lastDiskTime_ = -1, lastNetTime_ = -1;

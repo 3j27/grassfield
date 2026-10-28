@@ -529,8 +529,9 @@ Answer: A (see "Answers").
   `VmHWM` come from `status`, a fifth of the processes per sample and every new one at once, so they show at most five
   samples late (25 s at Normally), and the peak never shows below the resident set. The tab's first sample after another
   tab, or after a pause of more than two intervals (a hidden window), reads every process's `status` once, so the bound
-  holds when the user comes back to it (review of f68789c). Swap changes slowly: the column stays macOS's, at the cost of
-  the CPU tab.
+  holds when the user comes back to it (review of f68789c). The interval is the one set (AM9), not the one measured, which
+  a full read left unknown (review of 19f5d4c). Swap changes slowly: the column stays macOS's, at the cost of the CPU
+  tab.
 - **AD33. A process's owner from its directory on arrival, after an exec and in its turn** (c, d; review of 949fc98): six
   hundred `fstatat` a sample bought nothing a running process changes without an exec but its uid, which the turn (a
   tenth per sample) catches; behind a directory owned by root (a non-dumpable process) the turn reads `status`'s real uid
@@ -692,6 +693,6 @@ Network 36.0, at 1.39, 1.22, 1.24, 1.31 and 1.07 × A10's step-1 plan. Network i
 | Note | Answer |
 |---|---|
 | 1. CPU passes with 0.3 ms to spare, at 1.39 × the step-1 plan, 14.5 ms of it in the kernel (f68789c): find the cut that brings it near 1.1 ×; does it read anything per process beyond `stat` that it does not show? | beyond `stat`, the CPU tab reads the owner (a tenth per sample, the User column), the descriptor lists (a tenth per sample: the GPU clients; Open Files comes with them), the real uid behind a root-owned directory (a tenth), and at every sample the `fdinfo` of every DRM descriptor found. Only that last read is outside A10, and this cloud machine has no GPU to measure it. A client is now read through one of its descriptors between two turns (d; spec AM45; `ADrmClientIsReadThroughOneOfItsDescriptors`), and A10 measures the DRM reads (every descriptor, one per client) and counts them in its step-1 CPU and Energy plans. The rest of the cut: open |
-| 2. A pause right after the first Memory sample is missed (`memoryInterval_` is 0 after a full read): use the configured interval | open |
-| 3. Mutant R13: `parseIo` accepts a line with one of its two byte fields | open |
+| 2. A pause right after the first Memory sample is missed (`memoryInterval_` is 0 after a full read): use the configured interval | the pause is told by the interval set, `Options::interval` and `Sampler::setInterval` (AM9, Normally by default; the window sets it at step 2); AD32; spec AM30; `APauseRightAfterTheFirstMemorySampleIsSeen` (your probe: Memory at 5 s, back at 3 605 s, every swap new) |
+| 3. Mutant R13: `parseIo` accepts a line with one of its two byte fields | each byte field is one bit, and both are needed: one alone, or one twice, is no `io` (`ProcParse.Io`) |
 | 4. Carried from step 1: AM47's GPU name, AM38, AM39 | step 2 |

@@ -675,6 +675,34 @@ TEST(Sampler, TheMemoryTabReadsStatmAndStatusInTurns)
         EXPECT_EQ(x.swapped, 900u * 1024) << x.pid;
 }
 
+// Review of 19f5d4c: a full read left the measured interval at 0, so a pause right after it (the window hidden after one
+// Memory sample) went unseen. A pause is told by the interval set (AM9).
+TEST(Sampler, APauseRightAfterTheFirstMemorySampleIsSeen)
+{
+    Fixture f;
+    for (int pid = 100; pid < 110; ++pid) {
+        f.process(pid, "m", kMe, 0, 1, nul({"m"}), "/");
+        f.write("proc/" + std::to_string(pid) + "/statm", "50000 2000 750 10 0 900 0\n");
+    }
+    auto swap = [&](unsigned long kb) {
+        for (int pid = 100; pid < 110; ++pid)
+            f.write("proc/" + std::to_string(pid) + "/status", Fixture::statusText("m", kMe, 3000, kb));
+    };
+    swap(0);
+    Sampler s(options(f)); // Normally (5 sec)
+    const unsigned memory = readsForTab(Tab::Memory);
+    EXPECT_EQ(s.sample(memory, 5.0).counters.statusReads, 10u); // the first: every process
+    swap(4000);
+    const Snapshot back = s.sample(memory, 3605.0); // an hour hidden
+    EXPECT_EQ(back.counters.statusReads, 10u);
+    for (const ProcessRow &r : back.rows)
+        EXPECT_EQ(r.swapped, 4000u * 1024) << r.pid;
+    EXPECT_EQ(s.sample(memory, 3610.0).counters.statusReads, 2u); // one interval: the turns
+    EXPECT_EQ(s.sample(memory, 3618.0).counters.statusReads, 2u); // under two intervals: still the turns
+    s.setInterval(1); // Very Often (1 sec)
+    EXPECT_EQ(s.sample(memory, 3621.0).counters.statusReads, 10u); // three seconds: more than two intervals
+}
+
 TEST(Sampler, TheMemoryTabReadsEveryStatusAfterAnotherTabOrAPause)
 {
     // Review of f68789c: back on the Memory tab after an hour on another, four fifths of the rows showed the old swap.

@@ -159,8 +159,8 @@ items (Settings does it); a background collector; any network access.
   file and shared memory is `RssAnon`; A10: 0.6 µs per process) and `status` of one fifth of them in turn, a new process at
   once, for `VmSwap` and `VmHWM`, which therefore show at most five samples late (AD32, review of 949fc98; step 0 read
   `status` of every process at 6.7–7.6 µs each); the other tabs read neither. The tab's first sample after another tab, or
-  after a pause of more than two intervals, reads every process's `status` once, so the bound holds when the user comes
-  back to it (review of f68789c).
+  after a pause of more than two intervals (as set, AM9; review of 19f5d4c), reads every process's `status` once, so the
+  bound holds when the user comes back to it (review of f68789c).
 - **AM31** Optional: Real Memory (`VmRSS`, `statm`'s resident), Private Memory (`RssAnon`), Shared Memory (`RssFile +
   RssShmem`, `statm`'s shared), Compressed Memory (`VmSwap`; titled Swapped Memory under AM34), Peak Memory (`VmHWM`, never
   shown below Real Memory), Page Ins (`stat` field 12, major faults), Threads, PID.
