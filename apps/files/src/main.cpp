@@ -5,6 +5,7 @@
 #include <QUrl>
 
 #include "translationloader.h"
+#include "applicationslogic.h"
 #include "filesapp.h"
 #include "globalmenu.h"
 #include "windowchrome.h"
@@ -74,7 +75,11 @@ int main(int argc, char *argv[])
         engine.addImportPath(*it);
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
     engine.addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] { AppIconProvider::shutdown(); });
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] {
+        AppIconProvider::shutdown();
+        // A walk of the applications (a link to / can take seconds) must not overlap Qt's shutdown: waited for, bounded like the decoders.
+        ApplicationsLogic::waitForListings(3500);
+    });
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_FILES_QML");

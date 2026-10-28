@@ -21,6 +21,7 @@
 #include <QImage>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QPointer>
 #include <QScopedValueRollback>
 #include <memory>
 #include <QThread>
@@ -411,6 +412,8 @@ FolderModel::~FolderModel()
 {
     stopSearch();
     clearAllPreviews();
+    // A walk of the applications still running needs no wait here (it owns its data and its answer is dropped through the
+    // QPointer); main.cpp joins it at quit.
     // The views go first; nothing may reach them while this object is half destroyed.
     m_seenTimer.stop();
 }
@@ -1501,15 +1504,11 @@ void FolderModel::loadApplications()
         m_loading = true;
         emit loadingChanged();
     }
-    auto result = std::make_shared<QList<ApplicationsLogic::Entry>>();
-    QThread *worker = QThread::create([result] { *result = ApplicationsLogic::listApplications(ApplicationsLogic::processEnvironment()); });
-    // finished() is queued to this object (the result is complete by then); a model gone meanwhile drops the answer.
-    connect(worker, &QThread::finished, this, [this, generation, result] {
-        if (generation == m_appsGeneration && isApplications())
-            applyApplications(*result);
+    QPointer<FolderModel> self(this);
+    ApplicationsLogic::startListing(ApplicationsLogic::processEnvironment(), [self, generation](const QList<ApplicationsLogic::Entry> &entries) {
+        if (self && generation == self->m_appsGeneration && self->isApplications())
+            self->applyApplications(entries);
     });
-    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-    worker->start();
 }
 
 void FolderModel::applyApplications(const QList<ApplicationsLogic::Entry> &entries)

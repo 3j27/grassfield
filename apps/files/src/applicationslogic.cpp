@@ -2,14 +2,17 @@
 
 #include <QCollator>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QLocale>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QThread>
 
 #include <algorithm>
+#include <memory>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -481,6 +484,56 @@ QStringList launchCommand(const QString &exec, bool runInTerminal)
     if (runInTerminal)
         command.prepend(QStringLiteral("xdg-terminal-exec"));
     return command;
+}
+
+namespace
+{
+// Only touched on the GUI thread.
+QList<QThread *> g_listings;
+void forgetListing(QThread *thread)
+{
+    g_listings.removeAll(thread);
+}
+} // namespace
+
+void startListing(const Environment &env, ListingDone done)
+{
+    auto result = std::make_shared<QList<Entry>>();
+    QThread *thread = QThread::create([env, result] { *result = listApplications(env); });
+    g_listings.append(thread);
+    // finished() comes from the worker; the thread object lives here, so the handler runs on the GUI thread.
+    QObject::connect(thread, &QThread::finished, thread, [thread, result, done] {
+        if (!g_listings.contains(thread))
+            return; // waited for at quit (the queued call was already posted): nobody wants the answer, the waiter deletes it
+        forgetListing(thread);
+        thread->deleteLater();
+        if (done)
+            done(*result);
+    });
+    thread->start();
+}
+
+bool waitForListings(int ms)
+{
+    QElapsedTimer clock;
+    clock.start();
+    const QList<QThread *> running = g_listings;
+    bool all = true;
+    for (QThread *thread : running) {
+        const qint64 left = qMax<qint64>(0, ms - clock.elapsed());
+        if (thread->wait(left)) {
+            forgetListing(thread); // finished and waited for: no answer is wanted
+            thread->deleteLater();
+        } else {
+            all = false;
+        }
+    }
+    return all;
+}
+
+int runningListings()
+{
+    return int(g_listings.size());
 }
 
 QStringList iconRoots()

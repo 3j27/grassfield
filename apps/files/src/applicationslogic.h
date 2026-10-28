@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <functional>
+
 // The Applications location of Files (macOS: the Applications folder in the Finder sidebar): the applications the shell's Apps
 // grid lists, by the grid's own behaviour. Qt Core only. The location is virtual and read-only: its items are never files to
 // rename, move or delete, and opening one starts the application (FilesApp::launchApplication).
@@ -85,6 +87,16 @@ void disambiguate(QList<Entry> &entries);
 
 // Every application the grid lists, sorted by name (case-insensitive, numbers by value), then by id.
 QList<Entry> listApplications(const Environment &env);
+
+// The list built on a thread of its own (a slow tree never freezes the window). startListing runs listApplications(env) and,
+// on the calling (GUI) thread once the event loop gets to it, calls `done` with the result. Call it from the GUI thread only.
+// waitForListings is the quit side: it waits up to `ms` for the threads still running (the bound of the icon decoders, 3.5 s)
+// and reports whether none is left, so that none is inside Qt when the static destruction starts. `done` is not called for a
+// thread that was waited for.
+using ListingDone = std::function<void(const QList<Entry> &)>;
+void startListing(const Environment &env, ListingDone done);
+bool waitForListings(int ms);
+int runningListings();
 
 // An Icon= that is an absolute path is handed to the image provider only when it is what the shell's ThemeIcons accepts
 // (shell/services/image-copy.py read_source): at most 4096 characters, no control character, its real path under one of

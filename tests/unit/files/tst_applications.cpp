@@ -10,6 +10,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QTemporaryDir>
 
@@ -414,4 +415,59 @@ TEST(Applications, AFolderLinkToAHugeTreeEndsAtTheFolderLimit)
     EXPECT_LT(timer.elapsed(), 10000);
     EXPECT_TRUE(ids(list).contains(QStringLiteral("deep-d00000-first")));
     EXPECT_FALSE(ids(list).contains(QStringLiteral("deep-d05999-last"))) << "folders past the limit are not walked";
+}
+
+namespace
+{
+// A tree whose walk takes a while: 6000 folders under a link in an applications folder (what a link to / does, smaller).
+Environment slowEnvironment(const QTemporaryDir &tmp)
+{
+    const QString home = tmp.filePath(QStringLiteral("home")), sys = tmp.filePath(QStringLiteral("sys")), wide = tmp.filePath(QStringLiteral("wide"));
+    for (int i = 0; i < 6000; i++)
+        QDir().mkpath(wide + QStringLiteral("/d%1").arg(i, 5, 10, QLatin1Char('0')));
+    write(wide + QStringLiteral("/d00000/first.desktop"), app());
+    QDir().mkpath(home + QStringLiteral("/applications"));
+    QFile::link(wide, home + QStringLiteral("/applications/deep"));
+    QDir().mkpath(sys + QStringLiteral("/applications"));
+    return envFor(home, sys);
+}
+} // namespace
+
+// The list is built on a thread and handed to the caller on the GUI thread.
+TEST(Applications, TheListBuiltOnAThreadReachesTheCaller)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const Environment env = slowEnvironment(tmp);
+    QSet<QString> got;
+    bool called = false;
+    startListing(env, [&](const QList<Entry> &list) {
+        got = ids(list);
+        called = true;
+    });
+    QElapsedTimer timer;
+    timer.start();
+    while (!called && timer.elapsed() < 20000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    ASSERT_TRUE(called);
+    EXPECT_TRUE(got.contains(QStringLiteral("deep-d00000-first")));
+    EXPECT_EQ(runningListings(), 0);
+}
+
+// Quit during a slow walk is clean: waitForListings (aboutToQuit) returns once the thread has ended, no thread is left, and the
+// answer, which nobody wants any more, is not delivered afterwards.
+TEST(Applications, QuitDuringASlowWalkWaitsForItAndIsClean)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const Environment env = slowEnvironment(tmp);
+    bool called = false;
+    startListing(env, [&](const QList<Entry> &) { called = true; });
+    EXPECT_EQ(runningListings(), 1);
+    EXPECT_TRUE(waitForListings(20000));
+    EXPECT_EQ(runningListings(), 0);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    EXPECT_FALSE(called);
+    // Nothing running: an immediate, true answer.
+    EXPECT_TRUE(waitForListings(0));
 }
