@@ -392,9 +392,10 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   window of the process: two applications' panels open at once stay usable. With no usable parent, the panel is a free
   window: every window floats in the session, and Hyprland centres it.
 - **4b-5. Filters.** Items a filter refuses are dimmed (at the disabled opacity) and cannot be selected, not hidden (macOS); a
-  glob matches the whole name without regard to case (a "*.PDF" is a PDF), in one pass with no regular expression, a filter's
-  patterns at most 4096 characters together, so no filter can stall the panels that share one thread (review of step 4b,
-  MINOR 8); a MIME rule matches the type, a type it inherits
+  glob matches the whole name without regard to case (a "*.PDF" is a PDF), with no regular expression, going back only to
+  the last '*', and a filter's patterns are at most 4096 characters together, so an item costs at most its name's length
+  times that (review of step 4b, MINOR 8). A hostile filter can still make one Select All in a folder of thousands of items
+  take seconds (counter-review, NIT-3), never hang the panels, which share one thread; a MIME rule matches the type, a type it inherits
   from, or "major/*". One filter shows no pop-up (nothing to choose); several show one, "Show:" in an Open panel and
   "Format:" in a Save panel, where the name's extension follows the format chosen (macOS).
 - **4b-6. The Save panel.** Compact by default (Save As, Where), expanded to the browser by the disclosure button, as the
@@ -421,12 +422,15 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   panels' QML loads at the first request, not at start: an idle start costs no QML and owns its name at once. The process
   quits only when idle (60 s): Qt's quit at the last window closed and KIO's quit locks are off (found by the integration
   test: it quit as its first panel closed). No `Restart=`: D-Bus activation starts it again at the next call, after a crash
-  too, and the call in flight ends with response 2. Idle, it gives up its bus name before it quits, so a call on its way
-  starts a new process instead of reaching one that is quitting (review of step 4b, MINOR 6); a call that reached it before
-  is served and the name taken back, except under systemd, which stops a `Type=dbus` unit once its name goes: that call ends
-  with response 2, a window of microseconds at the end of each idle period. A Close of a forwarded request reaches x-d-p-gtk
-  after the forwarded call (one connection, D-Bus keeps its order), and x-d-p-gtk exports its Request object while it
-  handles that call, so the Close finds it (review of step 4b, NIT 11).
+  too, and the call in flight ends with response 2. Idle, it gives up its bus name before it quits, so a call the frontend
+  sends once it sees the name go starts a new process instead of reaching one that is quitting (review of step 4b, MINOR 6);
+  a call that reached it before is served and the name taken back, except under systemd, which stops a `Type=dbus` unit once
+  its name goes: that call ends with response 2. So does a call the frontend sends before it sees the name go (its proxy
+  sends to the owner it knows; counter-review, NIT-5): a window of microseconds at the end of each idle period. A Close of a
+  forwarded request reaches x-d-p-gtk after the forwarded call (one connection, D-Bus keeps its order), but GDBus routes a
+  call to an object path as soon as it reads it, which can be before x-d-p-gtk's handler of the forwarded call has exported
+  its Request object (both queued while D-Bus activation starts it): a Close that finds no object is sent again every 100 ms,
+  for at most 5 s, while the request is forwarded (review of step 4b, NIT 11; counter-review, NIT-4).
 - **4b-12. The unit's hardening.** Question: what may the panels write? Options: (a) `ProtectSystem=strict` with a list of
   writable places (the home, the runtime directory, `/tmp`, `/var/tmp`, the removable media) and `UMask=0077`, the first draft;
   (b) `ProtectSystem=full` (`/usr`, `/boot`, `/efi` and `/etc` read-only) and the user's own umask. **Choice: (b)** (review of
