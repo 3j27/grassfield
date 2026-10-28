@@ -443,6 +443,9 @@ esac)");
     ASSERT_TRUE(wait([&infos] { return infos.size() == 2; }));
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("get")), QStringLiteral("repository"));
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-lib")).value(QStringLiteral("uninstall")), QStringLiteral("notInstalled"));
+    // With Omarchy's terminal (the fake program) but no catalog to pin the AUR's commands: refused as unchecked, nothing run.
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    EXPECT_EQ(backend.actions(QStringLiteral("aur:example-app-bin")).value(QStringLiteral("uninstall")), QStringLiteral("omarchyChanged"));
 }
 
 TEST(StoreBackend, FrenchSession)
