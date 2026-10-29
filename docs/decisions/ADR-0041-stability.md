@@ -222,6 +222,35 @@ down, how sleep behaves) is written in the table at the end of this step.
   `session_services.sh` after each move; what the compositor draws during a security-process restart is recorded for
   IQ-T5.
 
+### Step 1a as built (2026-10-29, after the owner's answers; the branch of the stability lane)
+- `packaging/bin/grassfield-shell-failed` (POSIX sh, standard tools) and `packaging/systemd/grassfield-shell-failed.service`
+  (`Type=oneshot`, hardened like the session services, `RuntimeDirectory=grassfield` kept): started by `OnFailure=` of
+  `grassfield-shell.service` next to Omarchy's sleep lock after every failure; keeps the monotonic time of each failure of
+  the last 10 minutes in `$XDG_RUNTIME_DIR/grassfield/shell-failures` (0600) and at the third cancels the pending restart
+  (`systemctl --user stop grassfield-shell.service`) and writes `shell-safe-mode` (the state S5 reads); a logout counts
+  nothing; what it cannot do (no runtime directory, no clock, an unwritable ledger) is logged and counts nothing, so a
+  counter that cannot count never stops the shell. Its one state change is the stop; nothing unlocks, starts or signals.
+- `packaging/systemd/session-gone`: the "compositor certainly gone" test extracted from the sleep-lock gate and shared
+  with the counter (both run it as `$(dirname "$0")/session-gone`; a missing helper reads as "not gone", the safe side for
+  both). The gate's decisions are unchanged (`tests/security/sleep_lock_units.sh` 0 FAIL).
+- `grassfield-shell.service`: `StartLimitIntervalSec=300`, `StartLimitBurst=10` (SQ-2 A's backstop: a loop faster than one
+  crash every 29 s ends at the limit), `OnFailure=omarchy-sleep-lock.service grassfield-shell-failed.service`.
+- Tests: `tests/shell/shell_failures.sh` (logic, 21 cases with stubs: the three failures, the window, the logout, a garbage
+  or symlinked ledger, no runtime directory, an unreadable clock, the test variables, the static wiring; three mutants
+  each change the decisions); `tests/shell/unit_restart_limits.sh` gains the lifetime model
+  (`unit_restart_limits.py`: a loop of one crash every 10 s must end, by the limit or by the counter; the shell's first
+  unit fails it, the unit with the counter passes, a limit a 10 s loop reaches passes); `sleep_lock_units.sh` and
+  `shell_unit.sh` updated for the two `OnFailure=` units and session-gone. Inventory 571.
+- Evidence (this container, no systemd user session): `shell_failures.sh` exit 0 (24 PASS: 21 cases, 3 mutants), `unit_restart_limits.sh` exit 0
+  (and the model rejects the old unit from git: exit 1), `sleep_lock_units.sh` exit 0, `shell_unit.sh` exit 0
+  (`systemd-analyze verify` NOT VERIFIED here: no runtime directory; its "environment refuses" patterns gain that message),
+  `python3 -I tests/ci/inventory.py` ok. NOT VERIFIED: the unit wiring under a real user manager (the integrator's
+  `systemd-analyze --user verify` on the packaged units; the owner's L2 kills: `kill -SEGV` the shell three times within
+  ten minutes while locked: the session stays locked, the restarts stop, `shell-safe-mode` exists; then
+  `systemctl --user start grassfield-shell.service` brings the shell back, and `scripts/gates/r1-restart.sh --journal` reads
+  the first real restarts).
+- Review: opus security (R12: the counter stops the process that holds the lock; the compositor keeps it).
+
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
 of the session, never in a terminal.
