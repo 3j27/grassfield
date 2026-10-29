@@ -442,3 +442,61 @@ TEST(WindowSize, OnlyASizeInBoundsIsKept)
     EXPECT_FALSE(keepsWindowSize(920, kMaxKeptWindowSide + 1));
     EXPECT_FALSE(keepsWindowSize(0, 0));
 }
+
+// The Open and Save panels' filters (grassfield-portal, ADR-0035 D-4): globs without regard to case, MIME types with their
+// ancestors and "major/*"; an empty filter passes everything.
+TEST(PanelFilter, GlobsAndMimeTypes)
+{
+    const QStringList text{QStringLiteral("text/plain")};
+    const QStringList markdown{QStringLiteral("text/markdown"), QStringLiteral("text/plain")};
+    const QStringList png{QStringLiteral("image/png")};
+    EXPECT_TRUE(passesFilter(QStringLiteral("a.txt"), text, {}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("REPORT.PDF"), {}, {QStringLiteral("*.pdf")}, {}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("report.pdf.zip"), {}, {QStringLiteral("*.pdf")}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("photo.jpeg"), {}, {QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}, {}));
+    // A glob matches the whole name, never a path ("*" stops at nothing but "/", which names never hold).
+    EXPECT_TRUE(passesFilter(QStringLiteral("Makefile"), {}, {QStringLiteral("Makefile")}, {}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("Makefile.am"), {}, {QStringLiteral("Makefile")}, {}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("notes.md"), markdown, {}, {QStringLiteral("text/plain")}));
+    EXPECT_TRUE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("image/*")}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("text/*")}));
+    EXPECT_FALSE(passesFilter(QStringLiteral("x.png"), png, {}, {QStringLiteral("image/jpeg")}));
+    // Globs or MIME types: either passes.
+    EXPECT_TRUE(passesFilter(QStringLiteral("x.png"), png, {QStringLiteral("*.txt")}, {QStringLiteral("image/png")}));
+}
+
+// The glob matcher (shell globs, one pass, no regular expression per item): '?', bracket expressions with negation and ranges,
+// '\' quoting, '*' going back as far as it must, all without regard to case; a '[' that closes nowhere is a character.
+TEST(PanelFilter, Globs)
+{
+    const auto matches = [](const char *glob, const char *name) {
+        return passesFilter(QString::fromUtf8(name), {}, {QString::fromUtf8(glob)}, {});
+    };
+    EXPECT_TRUE(matches("*", "anything at all"));
+    EXPECT_TRUE(matches("file?.txt", "file1.txt"));
+    EXPECT_FALSE(matches("file?.txt", "file.txt"));
+    EXPECT_FALSE(matches("file?.txt", "file12.txt"));
+    EXPECT_TRUE(matches("*.[jJ][pP]g", "Photo.JPG"));
+    EXPECT_TRUE(matches("*.[ch]", "main.c"));
+    EXPECT_FALSE(matches("*.[ch]", "main.o"));
+    EXPECT_TRUE(matches("*.[!o]", "main.c"));
+    EXPECT_FALSE(matches("*.[!o]", "main.o"));
+    EXPECT_TRUE(matches("*.[^o]", "main.c"));
+    EXPECT_TRUE(matches("img[0-9].png", "img7.png"));
+    EXPECT_FALSE(matches("img[0-9].png", "imgx.png"));
+    EXPECT_TRUE(matches("[]]x", "]x"));
+    // '\' in a bracket takes the next character as it is (GTK's fnmatch).
+    EXPECT_TRUE(matches("[\\]]x", "]x"));
+    EXPECT_FALSE(matches("[\\]]x", "\\]x"));
+    EXPECT_TRUE(matches("[a\\-z]", "-"));
+    EXPECT_FALSE(matches("[a\\-z]", "m"));
+    EXPECT_TRUE(matches("a[b", "A[B"));
+    EXPECT_TRUE(matches("\\*.txt", "*.txt"));
+    EXPECT_FALSE(matches("\\*.txt", "a.txt"));
+    EXPECT_TRUE(matches("a*b*c", "aXbYbZc"));
+    EXPECT_FALSE(matches("a*b*c", "aXbYbZ"));
+    EXPECT_TRUE(matches("*.tar.*", "backup.TAR.gz"));
+    EXPECT_TRUE(matches("r\u00e9sum\u00e9*", "R\u00c9SUM\u00c9.pdf"));
+    EXPECT_TRUE(matches("?.txt", "\U0001F600.txt"));
+    EXPECT_FALSE(matches("", "a"));
+}

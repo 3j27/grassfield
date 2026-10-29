@@ -2368,52 +2368,12 @@
         <translation>Fichiers</translation>
     </message>
     <message>
-        <source>Navigation</source>
-        <translation>Navigation</translation>
-    </message>
-    <message>
-        <source>Back</source>
-        <translation>Précédent</translation>
-    </message>
-    <message>
-        <source>Forward</source>
-        <translation>Suivant</translation>
-    </message>
-    <message>
-        <source>View</source>
-        <translation>Présentation</translation>
-    </message>
-    <message>
-        <source>as Icons</source>
-        <translation>en icônes</translation>
-    </message>
-    <message>
-        <source>as List</source>
-        <translation>en liste</translation>
-    </message>
-    <message>
-        <source>as Columns</source>
-        <translation>en colonnes</translation>
-    </message>
-    <message>
-        <source>as Gallery</source>
-        <translation>en galerie</translation>
-    </message>
-    <message>
         <source>Group By</source>
         <translation>Grouper par</translation>
     </message>
     <message>
         <source>Action</source>
         <translation>Action</translation>
-    </message>
-    <message>
-        <source>Search in this folder</source>
-        <translation>Rechercher dans ce dossier</translation>
-    </message>
-    <message>
-        <source>Search</source>
-        <translation>Recherche</translation>
     </message>
     <message>
         <source>Dismiss</source>
@@ -3753,6 +3713,169 @@
     <message>
         <source>%1 at %2</source>
         <translation>%1 à %2</translation>
+    </message>
+</context>
+<context>
+    <name>FilePanel</name>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>This location can’t be used</source>
+        <translation>Cet emplacement ne peut pas être utilisé</translation>
+    </message>
+    <message>
+        <source>“%1” can only use items on this computer. Choose an item in a folder on this computer.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut utiliser que des éléments de cet ordinateur. Choisissez un élément dans un dossier de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The application can only use items on this computer. Choose an item in a folder on this computer.</source>
+        <translation>L’app ne peut utiliser que des éléments de cet ordinateur. Choisissez un élément dans un dossier de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The name “%1” can’t be used.</source>
+        <translation>Le nom «&#xa0;%1&#xa0;» ne peut pas être utilisé.</translation>
+    </message>
+    <message>
+        <source>Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.</source>
+        <translation>Un nom ne peut pas être vide, être «&#xa0;.&#xa0;» ou «&#xa0;..&#xa0;», contenir «&#xa0;/&#xa0;» ni dépasser 255 octets.</translation>
+    </message>
+    <message>
+        <source>“%1” is a folder.</source>
+        <translation>«&#xa0;%1&#xa0;» est un dossier.</translation>
+    </message>
+    <message>
+        <source>Choose another name, or open the folder to save in it.</source>
+        <translation>Choisissez un autre nom, ou ouvrez le dossier pour enregistrer dedans.</translation>
+    </message>
+    <message>
+        <source>“%1” already exists. Do you want to replace it?</source>
+        <translation>«&#xa0;%1&#xa0;» existe déjà. Voulez-vous le remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>A file or folder with the same name already exists in the folder “%1”. Replacing it will overwrite its current contents.</source>
+        <translation>Un fichier ou un dossier du même nom existe déjà dans le dossier «&#xa0;%1&#xa0;». Le remplacer écrasera son contenu actuel.</translation>
+    </message>
+    <message>
+        <source>Replace</source>
+        <translation>Remplacer</translation>
+    </message>
+    <message>
+        <source>A folder in “%1” has the name of an item to save.</source>
+        <translation>Un dossier de «&#xa0;%1&#xa0;» porte le nom d’un élément à enregistrer.</translation>
+    </message>
+    <message>
+        <source>and %1 more</source>
+        <translation>et %1 autres</translation>
+    </message>
+    <message>
+        <source>%1 items already exist in “%2”. Do you want to replace them?</source>
+        <translation>%1 éléments existent déjà dans «&#xa0;%2&#xa0;». Voulez-vous les remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Replacing them will overwrite their current contents.</source>
+        <translation>Les remplacer écrasera leur contenu actuel.</translation>
+    </message>
+    <message>
+        <source>“%1” isn’t responding.</source>
+        <translation>«&#xa0;%1&#xa0;» ne répond pas.</translation>
+    </message>
+    <message>
+        <source>Choose another folder, or try again later.</source>
+        <translation>Choisissez un autre dossier ou réessayez plus tard.</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>untitled folder</source>
+        <translation>dossier sans titre</translation>
+    </message>
+    <message>
+        <source>Save As:</source>
+        <translation>Enregistrer sous&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Save As</source>
+        <translation>Enregistrer sous</translation>
+    </message>
+    <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show More</source>
+        <translation>Afficher plus</translation>
+    </message>
+    <message>
+        <source>Where:</source>
+        <translation>Emplacement&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Location: %1</source>
+        <translation>Dossier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Show:</source>
+        <translation>Afficher&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Format:</source>
+        <translation>Format&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Show</source>
+        <translation>Afficher</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>Nouveau dossier</translation>
+    </message>
+    <message>
+        <source>Click the panel to use the keyboard in it.</source>
+        <translation>Cliquez dans la fenêtre pour y utiliser le clavier.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Go to the folder:</source>
+        <translation>Aller au dossier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>~/Documents, /usr/share or trash:/</source>
+        <translation>~/Documents, /usr/share ou trash:/</translation>
+    </message>
+    <message>
+        <source>Go</source>
+        <translation>Aller</translation>
+    </message>
+    <message>
+        <source>The folder “%1” can’t be found.</source>
+        <translation>Le dossier «&#xa0;%1&#xa0;» est introuvable.</translation>
+    </message>
+    <message>
+        <source>Name of new folder:</source>
+        <translation>Nom du nouveau dossier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Create</source>
+        <translation>Créer</translation>
     </message>
 </context>
 <context>
@@ -6471,6 +6594,21 @@
     </message>
 </context>
 <context>
+    <name>NavCapsule</name>
+    <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+</context>
+<context>
     <name>NetworkDetailsSheet</name>
     <message>
         <source>OK</source>
@@ -8592,6 +8730,17 @@
     <message>
         <source>Pinned items are full</source>
         <translation>Le nombre maximal d’éléments épinglés est atteint</translation>
+    </message>
+</context>
+<context>
+    <name>SearchCapsule</name>
+    <message>
+        <source>Search in this folder</source>
+        <translation>Rechercher dans ce dossier</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
     </message>
 </context>
 <context>
@@ -10886,6 +11035,29 @@
     <message>
         <source>Apps from the repositories update with the whole system, in Software Update (Settings &gt; General).</source>
         <translation>Les apps des dépôts se mettent à jour avec tout le système, dans Mise à jour de logiciels (Réglages &gt; Général).</translation>
+    </message>
+</context>
+<context>
+    <name>ViewSwitcher</name>
+    <message>
+        <source>as Icons</source>
+        <translation>en icônes</translation>
+    </message>
+    <message>
+        <source>as List</source>
+        <translation>en liste</translation>
+    </message>
+    <message>
+        <source>as Columns</source>
+        <translation>en colonnes</translation>
+    </message>
+    <message>
+        <source>as Gallery</source>
+        <translation>en galerie</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>Présentation</translation>
     </message>
 </context>
 <context>

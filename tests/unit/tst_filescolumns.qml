@@ -67,7 +67,7 @@ TestCase {
                 const rows = [["Folder", true], ["note.txt", false]];
                 for (const r of rows) {
                     listing.append({name: r[0], url: "file:///sandbox/" + r[0], iconName: "", emblem: "", selected: false, isDir: r[1],
-                                    folderColor: "", folderGlyph: "", hidden: false, tagColors: []});
+                                    folderColor: "", folderGlyph: "", hidden: false, dimmed: false, tagColors: []});
                 }
             }
         }

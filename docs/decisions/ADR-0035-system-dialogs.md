@@ -349,6 +349,163 @@ patching any upstream package (D1).
 - Cost: large (the biggest step): a new binary, a library split of Files, the panel QML, tests with a fake frontend on a
   private bus. Risk: medium (Qt Quick + KIO startup time: the first panel must open in ≤ 300 ms warm; Wayland parent import).
 
+**Delivered in step 4b (the Files library and the Open and Save panels).** `apps/files/files-core.cmake`: Files' sources but
+`main.cpp` as a static library, `grassfield-files-core`, linked by `grassfield-files` and by `grassfield-portal` (one CMake source
+list; `apps/files/build-direct.sh --core`). `apps/portal/src/`: `chooserlogic.{h,cpp}` (every FileChooser option of
+xdg-desktop-portal 1.22.1 checked and mapped for the panels, and the results out), `filechooser.{h,cpp}` (the backend
+interface: a Request object per call, the panel's answer as a delayed reply, the 3-s forward to x-d-p-gtk, the idle quit),
+`panelstate.{h,cpp}` (`portal-filechooser.json`, ADR-0020), `main.cpp`. `apps/files/qml/FilePanels.qml` and `FilePanel.qml`
+(the panels), `PanelLogic.js` (their rules); `BrowserTab.chooser` (a tab that browses for a panel), `FolderModel.chooser` (what
+a panel cannot take is dimmed and never selected), `FileLogic::passesFilter`; the toolbar's capsules and the appearance as
+components shared with the browser window (`NavCapsule`, `ViewSwitcher`, `SearchCapsule`, `FilesAppearance`). Packaging:
+`grassfield.portal`, `grassfield-portal.service`, its D-Bus service file, the session's `hyprland-portals.conf`
+(`FileChooser=grassfield;gtk`), the PKGBUILD; `config/hypr/grassfield/windows.lua` (4b-3). Tests:
+`tests/unit/portal/tst_chooserlogic.cpp`, `tst_panelstate.cpp`, `tst_filechooser.cpp` (the backend on a private dbus-daemon
+with a fake frontend and a fake x-d-p-gtk), `tests/unit/files/tst_folderchooser.cpp` (a real KIO listing),
+`tests/unit/tst_filepanel.qml` (the panel over stand-ins), `tests/integration/portal_filechooser.sh` (the real binary and the
+real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
+
+**Decisions of step 4b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **4b-1. The Files library.** Options: (a) a shared library installed under `/usr/lib/grassfield`; (b) a static library
+  compiled into both programs; (c) the panels as a mode of `grassfield-files`. **Choice: (b)**: one source list and no library
+  ABI to install; D-4's two processes stay two (a crash of Files never takes an open panel along, and the reverse).
+- **4b-2. One QML code base.** The panels live in Files' QML directory and the portal loads them from there, so a panel is the
+  browser itself, not a copy: the views, the sidebar, Glance, Files' KIO sheets (D-12 a). A tab learns it browses for a panel
+  (`BrowserTab.chooser`) and then has no file operation (no Trash, Rename, Copy, Paste, tags or quick actions; the
+  application does what it wants with what it gets; a sidebar tag takes no drop and has no menu, review of step 4b, MINOR 4),
+  a double-click on a file, Return and Esc are the panel's, a drop shows
+  the item instead of moving it, "/" and "~" open Go to Folder; the view is the panel's own for its application (macOS keeps
+  a panel's view apart from Finder's), the arrangement of a folder stays Files'.
+- **4b-3. Whose window a panel is.** Question: which Wayland app id does a panel carry? Options: (a) its own
+  (`org.grassfield.Portal`: a Dock tile with no app behind it); (b) Files' (Files shows as running while an application's
+  panel is open); (c) the application's when the frontend names it (a desktop id), else Files'. **Choice: (c)**: on macOS a
+  panel is a window of its application (Dock, menu bar, Force Quit count it there). Qt reads the app id when it makes the
+  window, so the portal sets it just before (`FileChooser::present`). A panel's class is then any application's, so the
+  session's rule that removes the compositor plugin's titlebar from a window that draws its own frame matches the panel's xdg
+  tag (`file-panel`) whatever its class (`gf-client-chrome-panel`, a `config/hypr` change). This departs from the class list
+  of the 2026-10-23 review (review of step 4b, NIT 13): any client that sets that xdg tag on its own window loses the plugin's
+  titlebar on that window. It changes nothing else (no other window, no privilege; a client already draws what it wants in
+  its own window), and the class list could not name a panel whose class is its application's.
+- **4b-4. Modal to what.** The panel is xdg-dialog's modal (Hyprland dims and blocks the parent) when the application asked
+  (`modal`, true by default) and gave a Wayland parent, imported with xdg-foreign v2 through KWindowSystem
+  (`setMainWindow`, which waits for the toplevel; 4b-13). Qt's window modality without a transient parent blocks no other
+  window of the process: two applications' panels open at once stay usable. With no usable parent, the panel is a free
+  window: every window floats in the session, and Hyprland centres it.
+- **4b-5. Filters.** Items a filter refuses are dimmed (at the disabled opacity) and cannot be selected, not hidden (macOS); a
+  glob matches the whole name without regard to case (a "*.PDF" is a PDF), with no regular expression, going back only to
+  the last '*', and a filter's patterns are at most 4096 characters together, so an item costs at most its name's length
+  times that (review of step 4b, MINOR 8). A hostile filter can still make one Select All in a folder of thousands of items
+  take seconds (counter-review, NIT-3), never hang the panels, which share one thread; a MIME rule matches the type, a type it inherits
+  from, or "major/*". One filter shows no pop-up (nothing to choose); several show one, "Show:" in an Open panel and
+  "Format:" in a Save panel, where the name's extension follows the format chosen (macOS).
+- **4b-6. The Save panel.** Compact by default (Save As, Where), expanded to the browser by the disclosure button, as the
+  application's last panel was left. A file selected in the browser gives its name. Saving over a file asks with the
+  macOS replace alert, Cancel the default; a folder's name is refused with a message (replacing a folder by a file would
+  lose its content); SaveFiles asks about every name that exists in the folder in one alert. Left out, written as known
+  limitations: the Tags field (the panel would have to tag a file the application has not written yet) and "Hide extension"
+  (a Linux file has no hidden-extension attribute, and Files shows every extension).
+- **4b-7. New Folder.** In the panels whose answer is a folder or the place of a new file (Save, a folder Open panel,
+  SaveFiles), and not in a file Open panel (macOS offers it only where the application allows it). macOS's sheet: "Name of new
+  folder:" with "untitled folder", Create; the panel then opens the new folder.
+- **4b-8. Nothing over the lock** (common rule 6). Options: (a) the panel reads the shell's lock state (its crash-recovery
+  marker or its IPC: a security module's internals); (b) the compositor's session lock already covers every output and takes
+  every input (ext-session-lock), so a panel that opens while locked is out of sight and of the keyboard's reach until the
+  unlock; a panel that first gets the keyboard later than `files.panelLateFocusMs` (1.5 s) after it opened (it waited behind
+  the lock, or under another window) takes keys only after a click in it, the polkit hold rule. **Choice: (b)**.
+- **4b-9. The memory budget's measure.** D-4 says 80 MB while a panel is open, without the measure. As decision 2b-11 for the
+  Settings backend: 80 MB of private memory (`RssAnon`); the resident size, which counts the shared Qt Quick and KIO
+  libraries, is reported. Offscreen in the integration test: 28 MB private, 97 MB resident. The nested measure (A-FC3) is
+  the integrator's.
+- **4b-10. A network location.** D-4's known limitation: only `file://` results. A panel refuses one with a message naming
+  the application ("“App” can only use items on this computer. Choose an item in a folder on this computer."), and stays open.
+- **4b-11. Life of the process.** The frontend starts every backend when it starts itself (its proxy auto-starts it), so the
+  panels' QML loads at the first request, not at start: an idle start costs no QML and owns its name at once. The process
+  quits only when idle (60 s): Qt's quit at the last window closed and KIO's quit locks are off (found by the integration
+  test: it quit as its first panel closed). No `Restart=`: D-Bus activation starts it again at the next call, after a crash
+  too, and the call in flight ends with response 2. Idle, it gives up its bus name before it quits, so a call the frontend
+  sends once it sees the name go starts a new process instead of reaching one that is quitting (review of step 4b, MINOR 6);
+  a call that reached it before is served and the name taken back, except under systemd, which stops a `Type=dbus` unit once
+  its name goes: that call ends with response 2. So does a call the frontend sends before it sees the name go (its proxy
+  sends to the owner it knows; counter-review, NIT-5): a window of microseconds at the end of each idle period. A Close of a
+  forwarded request reaches x-d-p-gtk after the forwarded call (one connection, D-Bus keeps its order), but GDBus routes a
+  call to an object path as soon as it reads it, which can be before x-d-p-gtk's handler of the forwarded call has exported
+  its Request object (both queued while D-Bus activation starts it): a Close that finds no object is sent again every 100 ms,
+  for at most 5 s, while the request is forwarded (review of step 4b, NIT 11; counter-review, NIT-4).
+- **4b-12. The unit's hardening.** Question: what may the panels write? Options: (a) `ProtectSystem=strict` with a list of
+  writable places (the home, the runtime directory, `/tmp`, `/var/tmp`, the removable media) and `UMask=0077`, the first draft;
+  (b) `ProtectSystem=full` (`/usr`, `/boot`, `/efi` and `/etc` read-only) and the user's own umask. **Choice: (b)** (review of
+  step 4b, MINOR 5): a Save panel saves, and its New Folder works, wherever the user may write, a disk mounted under `/srv`
+  or `/data` too, and a folder it makes gets the mode one made in Files gets, as an application's panel writes anywhere the
+  user can on macOS; (a) made such a disk read-only and New Folder's folders private. Kept: `NoNewPrivileges`,
+  `RestrictSUIDSGID`, `RestrictRealtime`, `LockPersonality`, `SystemCallArchitectures=native`, `MemoryMax`, `TasksMax`. No
+  `PrivateTmp` (a panel must show the real `/tmp`); no `MemoryDenyWriteExecute` (the QML engine's JIT) and no
+  `SystemCallFilter` (KIO's workers, unverified under systemd in this environment); the network stays open for KIO's
+  network places.
+- **4b-13. The parent window.** Options: (a) KWindowSystem's `setMainWindow` (KDE Frameworks 6.31, LGPL-2.1-or-later, already
+  installed as a dependency of KIO; its Wayland plugin imports the handle with xdg-foreign v2 once the toplevel exists); (b)
+  xdg-foreign written by hand on libwayland-client, as `apps/windowchrome.h` writes xdg-toplevel-tag. **Choice: (a)**: no
+  protocol code of Grassfield's own; a direct dependency of the package now (`kwindowsystem`, `THIRD_PARTY.md`).
+- **4b-14. The application's title.** A sheet shows no title on macOS; NSSavePanel shows the application's message above the
+  browser. The portal has no message, and applications put there what macOS apps put in it ("Select a folder to import"):
+  the title is the panel's message line (one line of plain text) and its window title.
+- **4b-15. What an application may pass.** Its texts are one line of plain text, GTK's mnemonic marker ("_Open") and the bidi
+  embedding, override and isolate controls removed, capped at 1024 characters; at most 64 filters, 16 choices and 4096 file
+  names (more ends the request with response 2, never a part of them: review of step 4b, NIT 10); at most 16 requests open
+  at once (one more ends with response 2). A suggested name is a name (the part after the last "/"), a folder is an absolute
+  path. What comes back is the application's own: the filter returned is the one it gave, byte for byte, and a choice or
+  option id too long to return whole is dropped, never cut (only the panel's copy of a name is made plain; review of step
+  4b, MINOR 7). An option of the wrong D-Bus type is no option: any process on the bus can call the backend directly,
+  without the frontend's type checks, and reading it as its type would crash the process (review of step 4b, MINOR 3). A
+  panel's answer is read as QML prints a URL, a space as it is (review of step 4b, BLOCKER 1: a strict reading refused any
+  path with a space).
+- **4b-16. Files' Applications location in a panel** (FP-26, merged from main during step 4b). Question: what does a panel
+  do with the Applications location (`grassfield-apps:/`, whose items are launchers, not files)? Options: (a) leave it out of
+  the panel's sidebar; (b) keep it, as the sidebar of a macOS panel keeps Applications, with every application dimmed,
+  never started, and the default button off there; (c) answer an application's desktop entry file. **Choice: (b)**: a
+  panel's sidebar is the Finder's, and an application here is not a file the asking application can open, so a panel
+  neither starts one nor answers one; (c) would hand over a launcher file nobody asked for. Cmd-Shift-A (Go to
+  Applications) stays out of the panels: nothing there can be chosen. The portal runs Files' icon decoder child and its
+  `image://appicon` provider as Files does (an application's icon file is decoded in a child of the portal itself, which
+  answers `--decode-icon` before anything else).
+- **4b-17. Write access to what was picked** (integrator review of bd78424, MINOR 4). Question: does a sandboxed application
+  get write access to a file opened through a panel? xdg-desktop-portal 1.22.1 (`src/file-chooser.c`,
+  `send_response_in_thread_func`) starts from `XDG_DOCUMENT_FLAG_WRITABLE` and drops it only for an explicit `writable`
+  false; it has no read-only option to pass on. A missing key is therefore already writable. **Choice:** the panels
+  answer `writable` true explicitly for Open, Save and SaveFiles: macOS gives an application read and write access to what
+  its panel returns, and the access no longer depends on that default.
+- **4b-18. The disk off the GUI thread** (integrator review of bd78424, MAJOR 1: a hung mount froze every application's
+  panel, and the 3-s forward with them). Question: how do the panels ask the disk (the folder a panel starts in, whether a
+  name exists, Go to Folder) when a mount may not answer? Options: (a) the D-Bus side on a thread of its own, the panels
+  still reading the disk on the GUI thread (the forward survives; every panel still freezes); (b) every question asked on
+  a thread of its own with a deadline (`FileChooser::probe`, 1 s), the GUI thread never waiting. **Choice: (b).** A folder
+  that has not answered in time is passed over when a panel opens (the next of the application's folder, the remembered
+  one, Documents, Home), and Save, SaveFiles and Go to Folder say "“name” isn't responding." with "Choose another folder,
+  or try again later.", as the Finder says of a server that went away; the panel stays open. The questions go through
+  `DiskProbe` (Files' library, shared by the portal and Files' sidebar): a call's paths are read in the order given on one
+  thread of its own, each answer posted as it comes; the call ends once every path has answered, once none has for 1 s (a
+  share that is slow but answering is waited for), or after 5 s in all. Each path's answer is its own and goes to every call
+  waiting for it: a path queued behind a hung one in the same call is not responding for that call only and is read again by
+  the next, and a call asking a path another call's thread is reading waits for that read instead of starting one (one read
+  per path: 30 calls on one hung path are one thread, re-review of 24bdf58, MINOR 3). A read still running when a call
+  waiting for it ends is stuck: until it returns, a later call gets "not responding" for that path at once; when it returns,
+  its answer is given late (`answeredLate`). At most 32 threads live at once (a burst, the sidebar's seven calls and a
+  panel's six, is far below it; with 32, a new call's paths are not responding at once), well under the unit's `TasksMax` of
+  128. A panel's start folders are a call each, all at once (the application's folder, the remembered one, Home, Documents,
+  Desktop, Downloads), and where calls answer about the same folder a real answer wins over "not responding", whichever
+  comes first: no hung folder hides another (re-reviews of 65311e0 and 24bdf58, MAJOR 1: a hung remembered folder, then a
+  hung Documents in the places' one call, hid the application's ~/Downloads; the places were read in a hash's order, which
+  changes from one process to the next). Earlier versions: a thread per path and a bound of 16 paths (SaveFiles with 17
+  names was never answered, re-review of 6b26afc); one job per call that kept a path queued behind a hung one as "being
+  read" until the process quit (re-review of 65311e0). Files' sidebar (`PlacesModel`, the same in Files and in a panel)
+  lists the standard folders at once and asks the disk about each in a call of its own: one that is not there leaves the
+  list, one that does not answer stays, dimmed, as the Finder shows a server that went away, and is shown again when its
+  read returns (re-review of 65311e0, MAJOR 2: it read them on the GUI thread, when a panel's UI was made and at every
+  device change; re-review of 24bdf58, MINOR 2: a dimmed folder stayed dimmed). New
+  Folder asks KIO (its job runs off the GUI thread) and learns a taken name from KIO's error instead of a look first. Left on
+  the GUI thread: the files under the home folder's configuration directory (`user-dirs.dirs`, `grassfield.json`, the panels'
+  state file; a hung home folder stops the whole session anyway), Files' own per-item reads once a listing has arrived (tags,
+  folder looks), and the application's desktop entry (KService's cache).
+
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.
   - Open With: the macOS "Choose Application" sheet: the recommended apps for the type first (the candidates the frontend
