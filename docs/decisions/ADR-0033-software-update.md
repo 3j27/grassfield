@@ -1037,8 +1037,9 @@ so that release goes to the terminal; a package update without an Omarchy releas
 - When the run ends while Settings is closed, nothing announces it until Settings opens (the pane's row).
 
 ### s3.9 Evidence (this branch)
-- `tests/integration/update_helper.sh` in a throwaway `archlinux:base` container (pacman 7.1, polkit 128): 72 PASS, 0 FAIL
-  after the integrator's review of a060504 (62 before it; `docs/audits/software-update-2026-10-27/update-helper-2026-10-29.txt`).
+- `tests/integration/update_helper.sh` in a throwaway `archlinux:base` container (pacman 7.1, polkit 128): 76 PASS, 0 FAIL
+  after the integrator's re-review of 1ce7c37 (72 after the review of a060504, 62 before it; the helper of 1ce7c37 fails
+  the new `/tmp` and fail-closed cases; `docs/audits/software-update-2026-10-27/update-helper-2026-10-29.txt`).
   Its `omarchy` package now has Omarchy 4.x's layout (command files in `usr/bin`, links in `usr/share/omarchy/bin`). The real helper, runner and policy; Omarchy
   4.0.4's own `omarchy-migrate`, `omarchy-hook`, `omarchy-update-mise` and update guard (hook and program) in a test
   `omarchy` package; Omarchy's real public key from keys.openpgp.org; real polkitd and pkexec.
