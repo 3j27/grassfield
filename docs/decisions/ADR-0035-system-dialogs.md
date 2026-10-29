@@ -481,19 +481,26 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   that has not answered in time is passed over when a panel opens (the next of the application's folder, the remembered
   one, Documents, Home), and Save, SaveFiles and Go to Folder say "“name” isn't responding." with "Choose another folder,
   or try again later.", as the Finder says of a server that went away; the panel stays open. The questions go through
-  `DiskProbe` (Files' library, shared by the portal and Files' sidebar): a call's paths are read in order on one thread of
-  its own, each answer posted as it comes and its own; the call ends once every path has answered, once none has for 1 s (a
-  share that is slow but answering is waited for), or after 5 s in all. A path queued behind a hung one in the same call is
-  not responding for that call only and is read again by the next; a read still running when its call ends is stuck, and
-  until it returns a later call gets "not responding" for that path at once (it is not read twice); with 16 reads stuck, no
-  new read starts, so stuck reads cannot pile up threads under the unit's `TasksMax`. A panel's start folders are three calls
-  at once (the application's folder, the remembered one, the places), so a hung remembered folder never hides the
-  application's healthy one (re-review of 65311e0, MAJOR 1; a first version read every path of a call behind one another and
-  kept a path queued behind a hung one as "being read" until the process quit; an earlier one had a thread per path and a
-  bound of 16 paths, so SaveFiles with 17 names was never answered, re-review of 6b26afc). Files' sidebar (`PlacesModel`, the
-  same in Files and in a panel) lists the standard folders at once and asks the disk about each in a call of its own: one
-  that is not there leaves the list, one that does not answer stays, dimmed, as the Finder shows a server that went away
-  (re-review of 65311e0, MAJOR 2: it read them on the GUI thread, when a panel's UI was made and at every device change). New
+  `DiskProbe` (Files' library, shared by the portal and Files' sidebar): a call's paths are read in the order given on one
+  thread of its own, each answer posted as it comes; the call ends once every path has answered, once none has for 1 s (a
+  share that is slow but answering is waited for), or after 5 s in all. Each path's answer is its own and goes to every call
+  waiting for it: a path queued behind a hung one in the same call is not responding for that call only and is read again by
+  the next, and a call asking a path another call's thread is reading waits for that read instead of starting one (one read
+  per path: 30 calls on one hung path are one thread, re-review of 24bdf58, MINOR 3). A read still running when a call
+  waiting for it ends is stuck: until it returns, a later call gets "not responding" for that path at once; when it returns,
+  its answer is given late (`answeredLate`). At most 32 threads live at once (a burst, the sidebar's seven calls and a
+  panel's six, is far below it; with 32, a new call's paths are not responding at once), well under the unit's `TasksMax` of
+  128. A panel's start folders are a call each, all at once (the application's folder, the remembered one, Home, Documents,
+  Desktop, Downloads), and where calls answer about the same folder a real answer wins over "not responding", whichever
+  comes first: no hung folder hides another (re-reviews of 65311e0 and 24bdf58, MAJOR 1: a hung remembered folder, then a
+  hung Documents in the places' one call, hid the application's ~/Downloads; the places were read in a hash's order, which
+  changes from one process to the next). Earlier versions: a thread per path and a bound of 16 paths (SaveFiles with 17
+  names was never answered, re-review of 6b26afc); one job per call that kept a path queued behind a hung one as "being
+  read" until the process quit (re-review of 65311e0). Files' sidebar (`PlacesModel`, the same in Files and in a panel)
+  lists the standard folders at once and asks the disk about each in a call of its own: one that is not there leaves the
+  list, one that does not answer stays, dimmed, as the Finder shows a server that went away, and is shown again when its
+  read returns (re-review of 65311e0, MAJOR 2: it read them on the GUI thread, when a panel's UI was made and at every
+  device change; re-review of 24bdf58, MINOR 2: a dimmed folder stayed dimmed). New
   Folder asks KIO (its job runs off the GUI thread) and learns a taken name from KIO's error instead of a look first. Left on
   the GUI thread: the files under the home folder's configuration directory (`user-dirs.dirs`, `grassfield.json`, the panels'
   state file; a hung home folder stops the whole session anyway), Files' own per-item reads once a listing has arrived (tags,
