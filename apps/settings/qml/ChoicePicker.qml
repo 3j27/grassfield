@@ -36,8 +36,62 @@ FocusScope {
         return -1;
     }
 
-    implicitWidth: root.model.length > 0 ? (root.model.length - 1) * root.pitch + root.pictureWidth + 2 * root.ringPad : 0
-    implicitHeight: root.ringPad + root.pictureHeight + root.captionBaseline + Tokens.spacingXs
+    // The widest name (in the chosen weight, the widest one) and the pitch really used: the given one, or more when a longer
+    // language would make two names touch; then the names keep a gap and the row grows to the left (it hangs on the right).
+    property real widestCaption: 0
+    // The room the names may span, the first name's left edge to the last one's right edge (0: no limit): the pitch is capped
+    // to fit and a name wider than its share wraps to a second line, centred under its picture. `naturalWidth` is the width it would have without the limit, for a caller that puts
+    // the picker on its own line when it does not fit beside a title.
+    property real maxWidth: 0
+    readonly property real naturalPitch: Math.max(root.pitch, root.widestCaption + Tokens.settingsChoiceCaptionGap)
+    readonly property real cap: root.maxWidth > 0 && root.model.length > 0 ? Math.max(root.pictureWidth + 2 * root.ringPad, (root.maxWidth + Tokens.settingsChoiceCaptionGap) / root.model.length) : Infinity
+    readonly property real usedPitch: Math.min(root.naturalPitch, root.cap)
+    readonly property real captionWidth: Math.max(root.pictureWidth, root.usedPitch - Tokens.settingsChoiceCaptionGap)
+    // What the names add to the height when some wrap (the tallest name's height beyond one line).
+    property real captionExtra: 0
+    readonly property real naturalWidth: root.model.length > 0 ? (root.model.length - 1) * root.naturalPitch + root.pictureWidth + 2 * root.ringPad : 0
+
+    function measureCaptions(): void {
+        let widest = 0;
+        for (let i = 0; i < measure.count; i++) {
+            const item = measure.itemAt(i);
+            if (item)
+                widest = Math.max(widest, item.implicitWidth);
+        }
+        root.widestCaption = widest;
+    }
+
+    // Each name reports the height it takes and one line's height; the extra is the tallest beyond one line.
+    property var nameHeights: ({})
+
+    function noteHeight(index: int, height: real, line: real): void {
+        const next = Object.assign({}, root.nameHeights);
+        next[index] = Math.max(0, height - line);
+        root.nameHeights = next;
+        root.captionExtra = Math.max(0, ...Object.values(next));
+    }
+
+    // Invisible copies of the names in the bold weight, to know how wide they get.
+    Repeater {
+        id: measure
+        model: root.model
+        onItemAdded: root.measureCaptions()
+        onItemRemoved: root.measureCaptions()
+
+        delegate: Text {
+            required property var modelData
+            visible: false
+            textFormat: Text.PlainText
+            text: modelData.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.settingsCaptionDetailSize
+            font.weight: Tokens.typographyMenuBoldWeight
+            onImplicitWidthChanged: root.measureCaptions()
+        }
+    }
+
+    implicitWidth: root.model.length > 0 ? (root.model.length - 1) * root.usedPitch + root.pictureWidth + 2 * root.ringPad : 0
+    implicitHeight: root.ringPad + root.pictureHeight + root.captionBaseline + root.captionExtra + Tokens.spacingXs
     activeFocusOnTab: true
     Accessible.role: Accessible.RadioButton
     Accessible.name: root.accessibleName
@@ -71,8 +125,16 @@ FocusScope {
             required property var modelData
             required property int index
             readonly property bool selected: cell.index === root.currentIndex
+            readonly property real captionHeight: caption.height
+            onCaptionHeightChanged: root.noteHeight(cell.index, cell.captionHeight, lineMetrics.height)
+            Component.onCompleted: root.noteHeight(cell.index, cell.captionHeight, lineMetrics.height)
 
-            x: root.ringPad + cell.index * root.pitch
+            FontMetrics {
+                id: lineMetrics
+                font: caption.font
+            }
+
+            x: root.ringPad + cell.index * root.usedPitch
             y: root.ringPad
             width: root.pictureWidth
             height: root.pictureHeight + root.captionBaseline
@@ -118,6 +180,9 @@ FocusScope {
             Text {
                 id: caption
                 textFormat: Text.PlainText
+                width: root.captionWidth
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
                 x: Math.round((root.pictureWidth - width) / 2)
                 y: root.pictureHeight + root.captionBaseline - baselineOffset
                 text: cell.modelData.text
