@@ -233,7 +233,8 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 - U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `sudo`, `pkexec`, `su`, `run0`,
   `doas`, `gum` or `/dev/tty`, or an Omarchy command that does (the command files of `usr/bin/omarchy-*` and
   `usr/share/omarchy/bin/`, Omarchy 4.x's layout); a pending migration the scan cannot read (not a regular file, no command
-  file to read, more than 64 pending, a name the helper refuses); Omarchy's key missing; a package conflict or files no
+  file to read, a new package with no migration, a migration or file name outside the scan's forms, more than 64 pending,
+  a name the helper refuses); Omarchy's key missing; a package conflict or files no
   package owns (pacman stops before changing a package). The update stops with nothing installed and the pane says "This update asks
   questions that need Omarchy's terminal." with "Update in Terminal…" (U11's command). A migration that fails anyway leaves
   the update installed and says "Some of Omarchy's last steps need its terminal." with "Finish in Terminal…"

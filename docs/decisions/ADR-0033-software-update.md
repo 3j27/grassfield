@@ -843,9 +843,9 @@ Nothing changes on the system before step 7. Steps 1-6 decide, and every refusal
    last), `last` (the newest operation id, by rename), `helper.lock` (0600). The 16 newest operations are kept.
 2. **One run.** `helper.lock` with `flock -n` (the descriptor closed for every child), the unit's name, and pacman's
    `db.lck`: held open by a process (libalpm keeps its descriptor until it unlocks), it is a running pacman, `busy` (exit 3);
-   held by none, it was left by a pacman that stopped mid-way, which a person clears (exit 7, `needs stalelock`: the pane
-   says "An earlier update stopped before it finished." with Update in Terminal…, where pacman says how). Both before
-   anything is read.
+   held by none a second time a second later (a pacman that unlocks closes the lock before it removes it), it was left by a
+   pacman that stopped mid-way, which a person clears (exit 7, `needs stalelock`: the pane says "An earlier update stopped
+   before it finished." with Update in Terminal…, where pacman says how). Both before anything is read.
 3. **Preconditions** (macOS's and Omarchy's): at least 10 GiB free on `/` (`omarchy-update-requires-free-space`, without
    its `OMARCHY_UPDATE_FORCE`); on battery, at least 50 % (`/sys/class/power_supply`: refused only when no supply is
    online and a battery is discharging below 50 %, macOS's rule).
@@ -862,7 +862,12 @@ Nothing changes on the system before step 7. Steps 1-6 decide, and every refusal
      4.x ships its commands as files in `usr/bin` and links to them in `usr/share/omarchy/bin`), the members taken from
      the package's own list and extracted into a folder only root can read (s3.6, migrations). bsdtar's defaults refuse
      absolute paths, `..` and extraction through a symbolic link (no `-P`); owners and modes are not restored, and the scan
-     reads regular files only.
+     reads regular files only. bsdtar's `-T` reads patterns, so a name is taken only in `[A-Za-z0-9/._+-]` (no pattern
+     character); any other name in those folders fails closed.
+   - **No here-string or here-document** in the helper or the runner: bash writes a large one to a file in `/tmp`, and an
+     unwritable or full `/tmp` would make a list read empty, so a scan would find nothing and the update would go on (the
+     integrator's re-review of 1ce7c37, MAJOR). Lists go through pipes or files in the run's own folder, every write
+     checked; a plan with text but no package read is refused, never "up to date".
 6. **The checks**, in this order: the compatibility check (s3.4); Omarchy's signing key in pacman's keyring and
    `omarchy-keyring` installed (`omarchy-update-keyring`'s test; when it fails, its bootstrap is a trust decision, s3.6:
    after the compatibility check, so an update it refuses is said so, never sent to the terminal); the migrations that
@@ -994,9 +999,10 @@ already pending. A migration needs a person when a line names `sudo`, `pkexec`, 
 or an Omarchy command that does. That set is computed over the regular files of the new package's `usr/bin/omarchy-*` and
 `usr/share/omarchy/bin/` (else the installed `/usr/bin/omarchy-*` and `/usr/share/omarchy/bin/`) until it stops growing,
 starting from the same words and Omarchy's own `omarchy:requires-sudo=true` header. Comments count: the scan is
-conservative. It fails closed: with no command file to read (`needs scan`), for a pending migration that is not a regular
-file, and in the runner for more pending migrations than the helper's 64 names or a name it refuses (`terminal`, no helper
-started). (Integrator's review of a060504, MAJOR: the first version read `usr/share/omarchy/bin` alone, where Omarchy 4.x
+conservative. It fails closed: with no command file to read (`needs scan`), for a new package with no migration at all, for a
+new `*.sh` migration whose name is not `[0-9]{1,20}.sh` (omarchy-migrate runs every `*.sh`) or a member name outside the
+safe charset, for a pending migration that is not a regular file, and in the runner for more pending migrations than the
+helper's 64 names or a name it refuses (`terminal`, no helper started). (Integrator's review of a060504, MAJOR: the first version read `usr/share/omarchy/bin` alone, where Omarchy 4.x
 has only links, so it found no command; on 4.0.6's data the scan now flags six migrations, not three.) Then the
 run stops before any change (exit 7, `needs migration <name>`) and the pane says: "This update asks questions that need
 Omarchy's terminal." with Update in Terminal…, which starts `omarchy update` in Omarchy's terminal (step 2's path). Omarchy
@@ -1049,6 +1055,15 @@ so that release goes to the terminal; a package update without an Omarchy releas
   Omarchy package set), a nested shot. They are the integrator's nested pass and L2 (spec A15).
 
 ## Review history
+Software Update step 3 (PR #44), the integrator's re-review of a060504..1ce7c37 (independent opus): the first round's MAJOR
+and minors confirmed fixed (30 mutants, 30 killed); FAIL on one new MAJOR, answered in the next commits:
+- **MAJOR**, the scan failed open when `/tmp` could not be written: the member list came from a here-string, which bash
+  writes to `/tmp` past a pipe's size. No here-string or here-document is left (s3.2 step 5); a new package without a
+  migration, a migration name omarchy-migrate would run under another form and a member name with a pattern character fail
+  closed; a test runs the helper with `/tmp` replaced by a file on a 3500-file package.
+- **Minors:** the plan's loop has no here-string either, and text without a package is no "up to date"; a lock that looks
+  stale is looked at again a second later; the `-T` names are pattern-free.
+
 Software Update step 3 (PR #44), the integrator's independent opus security review of a060504: FAIL, one MAJOR, no path to
 root escalation. Answered in the next commits:
 - **MAJOR**, the migration scan found no Omarchy command (Omarchy 4.x has only links in `usr/share/omarchy/bin`): the scan
