@@ -500,8 +500,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   the shell's own lock, which closes the picker just before its lock state changes, sends it at the unlock.
   Step 6b as built (ADR-0036 D59, D60, D40 amended): a double-click on the separator (the shared edge between the two
   members, core `splitOfEdge`) puts both back to equal halves of the whole output, its press and release the plugin's; an
-  ordinary group's shared edge keeps TL30's drag only. A member dragged by its titlebar follows the pointer at its size (no
-  un-tile, snap or preview); released over the other half the two swap halves (core `splitDropZone`; each keeps its group
+  ordinary group's shared edge keeps TL30's drag only; the double-click time is the titlebar's (400 ms). A member dragged by
+  its titlebar follows the pointer at its size (no un-tile, snap or preview; its record is kept meanwhile, core
+  `staleRecord`, and read before anything reconciles at the drop); released over the other half the two swap halves (core `splitDropZone`; each keeps its group
   and its box from before), anywhere else, or when the drag ends without its release, it goes back in its half; it never
   takes another output's Desktop that way; nothing swaps while locked. After #48's merge: the picker no longer reads its
   windows before they exist (a TypeError at each open), the window picked has the keyboard on any output whose Desktop shows
