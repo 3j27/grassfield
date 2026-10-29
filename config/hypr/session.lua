@@ -8,6 +8,14 @@ local self_path = debug and debug.getinfo and debug.getinfo(1, "S").source or ""
 local config_dir = self_path:match("^@(.+)/[^/]+$") or "/usr/share/grassfield/hypr"
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- ADR-0001 amendment 2026-10-29: Hyprland's file watcher is off in the real session. A package upgrade unlinks and
+-- recreates the installed files; the watcher reloaded in that window and failed ("cannot open ...session.lua", an error
+-- the files coming back do not clear, or Grassfield's bindings and plugin dropped for a missing module). The installed
+-- files are read again only at the next login or at an explicit reload (the shell's, grassfield-lid's, Omarchy's tools'
+-- and Omarchy's own pacman hook after an omarchy-settings transaction). Set first: a reload resets every option before
+-- it runs this file, so a parse that stops at a missing module still leaves the watcher off. dev.lua keeps the watcher.
+hl.config({ misc = { disable_autoreload = true } })
+
 -- A parse starts with none of Grassfield's modules loaded, so each one runs again on a reload (should Hyprland keep
 -- package.loaded) and a module loaded before core.lua stays loaded for the rest of this parse: bindings.lua reads the
 -- Trackpad gestures from grassfield.input, which omarchy.lua loads.

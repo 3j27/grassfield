@@ -399,6 +399,249 @@
     </message>
 </context>
 <context>
+    <name>ActivityApp</name>
+    <message>
+        <source>CPU</source>
+        <translation>Processeur</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>Mémoire</translation>
+    </message>
+    <message>
+        <source>Energy</source>
+        <translation>Énergie</translation>
+    </message>
+    <message>
+        <source>Disk</source>
+        <translation>Disque</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityColumn</name>
+    <message>
+        <source>Process Name</source>
+        <translation>Nom du processus</translation>
+    </message>
+    <message>
+        <source>% CPU</source>
+        <translation>% processeur</translation>
+    </message>
+    <message>
+        <source>CPU Time</source>
+        <translation>Temps processeur</translation>
+    </message>
+    <message>
+        <source>Threads</source>
+        <translation>Fils d’exécution</translation>
+    </message>
+    <message>
+        <source>Wake Ups</source>
+        <translation>Réveils</translation>
+    </message>
+    <message>
+        <source>% GPU</source>
+        <translation>% GPU</translation>
+    </message>
+    <message>
+        <source>GPU Time</source>
+        <translation>Temps GPU</translation>
+    </message>
+    <message>
+        <source>Open Files</source>
+        <translation>Fichiers ouverts</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Command</source>
+        <translation>Commande</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>Mémoire</translation>
+    </message>
+    <message>
+        <source>Real Memory</source>
+        <translation>Mémoire réelle</translation>
+    </message>
+    <message>
+        <source>Private Memory</source>
+        <translation>Mémoire privée</translation>
+    </message>
+    <message>
+        <source>Shared Memory</source>
+        <translation>Mémoire partagée</translation>
+    </message>
+    <message>
+        <source>Compressed Memory</source>
+        <translation>Mémoire compressée</translation>
+    </message>
+    <message>
+        <source>Peak Memory</source>
+        <translation>Mémoire maximale</translation>
+    </message>
+    <message>
+        <source>Page Ins</source>
+        <translation>Pages entrantes</translation>
+    </message>
+    <message>
+        <source>Energy Impact</source>
+        <translation>Impact énergétique</translation>
+    </message>
+    <message>
+        <source>Avg Energy Impact</source>
+        <translation>Impact énergétique moyen</translation>
+    </message>
+    <message>
+        <source>Preventing Sleep</source>
+        <translation>Empêche la suspension</translation>
+    </message>
+    <message>
+        <source>Bytes Written</source>
+        <translation>Octets écrits</translation>
+    </message>
+    <message>
+        <source>Bytes Read</source>
+        <translation>Octets lus</translation>
+    </message>
+    <message>
+        <source>Read/s</source>
+        <translation>Lus/s</translation>
+    </message>
+    <message>
+        <source>Written/s</source>
+        <translation>Écrits/s</translation>
+    </message>
+    <message>
+        <source>Sent Bytes (TCP)</source>
+        <translation>Octets envoyés (TCP)</translation>
+    </message>
+    <message>
+        <source>Rcvd Bytes (TCP)</source>
+        <translation>Octets reçus (TCP)</translation>
+    </message>
+    <message>
+        <source>Sent Packets (TCP)</source>
+        <translation>Paquets envoyés (TCP)</translation>
+    </message>
+    <message>
+        <source>Rcvd Packets (TCP)</source>
+        <translation>Paquets reçus (TCP)</translation>
+    </message>
+    <message>
+        <source>PID</source>
+        <translation>PID</translation>
+    </message>
+    <message>
+        <source>User</source>
+        <translation>Utilisateur</translation>
+    </message>
+    <message>
+        <source>Swapped Memory</source>
+        <translation>Mémoire en swap</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityFormat</name>
+    <message>
+        <source>1 byte</source>
+        <translation>1 octet</translation>
+    </message>
+    <message>
+        <source>%1 bytes</source>
+        <translation>%1 octets</translation>
+    </message>
+    <message>
+        <source>%1 KB</source>
+        <translation>%1 Ko</translation>
+    </message>
+    <message>
+        <source>%1 MB</source>
+        <translation>%1 Mo</translation>
+    </message>
+    <message>
+        <source>%1 GB</source>
+        <translation>%1 Go</translation>
+    </message>
+    <message>
+        <source>%1 TB</source>
+        <translation>%1 To</translation>
+    </message>
+    <message>
+        <source>%1 PB</source>
+        <translation>%1 Po</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityTable</name>
+    <message>
+        <source>App</source>
+        <translation>App</translation>
+    </message>
+    <message>
+        <source>Session</source>
+        <translation>Session</translation>
+    </message>
+    <message>
+        <source>Background</source>
+        <translation>Arrière-plan</translation>
+    </message>
+    <message>
+        <source>Kernel</source>
+        <translation>Noyau</translation>
+    </message>
+    <message>
+        <source>Yes</source>
+        <translation>Oui</translation>
+    </message>
+    <message>
+        <source>No</source>
+        <translation>Non</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityView</name>
+    <message>
+        <source>All Processes</source>
+        <translation>Tous les processus</translation>
+    </message>
+    <message>
+        <source>My Processes</source>
+        <translation>Mes processus</translation>
+    </message>
+    <message>
+        <source>System Processes</source>
+        <translation>Processus système</translation>
+    </message>
+    <message>
+        <source>Other User Processes</source>
+        <translation>Processus des autres utilisateurs</translation>
+    </message>
+    <message>
+        <source>Active Processes</source>
+        <translation>Processus actifs</translation>
+    </message>
+    <message>
+        <source>Inactive Processes</source>
+        <translation>Processus inactifs</translation>
+    </message>
+    <message>
+        <source>GPU Processes</source>
+        <translation>Processus GPU</translation>
+    </message>
+    <message>
+        <source>Selected Processes</source>
+        <translation>Processus sélectionnés</translation>
+    </message>
+</context>
+<context>
     <name>AddPrinterSheet</name>
     <message>
         <source>Add Printer</source>
@@ -4464,6 +4707,26 @@
         <translation>Copier</translation>
     </message>
     <message>
+        <source>Columns</source>
+        <translation>Colonnes</translation>
+    </message>
+    <message>
+        <source>Update Frequency</source>
+        <translation>Fréquence de mise à jour</translation>
+    </message>
+    <message>
+        <source>Very Often (1 sec)</source>
+        <translation>Très souvent (1 s)</translation>
+    </message>
+    <message>
+        <source>Often (2 sec)</source>
+        <translation>Souvent (2 s)</translation>
+    </message>
+    <message>
+        <source>Normally (5 sec)</source>
+        <translation>Normalement (5 s)</translation>
+    </message>
+    <message>
         <source>Copy %1 Items</source>
         <translation>Copier %1 éléments</translation>
     </message>
@@ -6361,6 +6624,26 @@
         <source>Installations</source>
         <translation>Installations</translation>
     </message>
+    <message>
+        <source>Activity Monitor</source>
+        <translation>Moniteur d’activité</translation>
+    </message>
+    <message>
+        <source>Resource</source>
+        <translation>Ressource</translation>
+    </message>
+    <message>
+        <source>Search processes</source>
+        <translation>Rechercher des processus</translation>
+    </message>
+    <message>
+        <source>Choose the resource the table shows</source>
+        <translation>Choisir la ressource affichée dans le tableau</translation>
+    </message>
+    <message>
+        <source>Search processes by name, user, command or PID</source>
+        <translation>Rechercher des processus par nom, utilisateur, commande ou PID</translation>
+    </message>
 </context>
 <context>
     <name>MediaView</name>
@@ -7810,6 +8093,25 @@
     </message>
 </context>
 <context>
+    <name>ProcessList</name>
+    <message>
+        <source>Sorted descending</source>
+        <translation>Tri décroissant</translation>
+    </message>
+    <message>
+        <source>Sorted ascending</source>
+        <translation>Tri croissant</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>Colonnes</translation>
+    </message>
+    <message>
+        <source>Processes</source>
+        <translation>Processus</translation>
+    </message>
+</context>
+<context>
     <name>ProductPage</name>
     <message>
         <source>More for %1</source>
@@ -8017,6 +8319,10 @@
     <message>
         <source>Open this page first: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;words&gt;, installed or updates.</source>
         <translation>Ouvrir d’abord cette page&#xa0;: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;mots&gt;, installed ou updates.</translation>
+    </message>
+    <message>
+        <source>See the processes and the resources they use.</source>
+        <translation>Voir les processus et les ressources qu’ils utilisent.</translation>
     </message>
 </context>
 <context>

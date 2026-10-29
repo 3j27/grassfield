@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Grassfield Activity Monitor: an original teal tile with three white bar gauges, the tallest topped by a sprout.
+       CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4FA6C4"/>
+      <stop offset="1" stop-color="#1D5C78"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="26" fill="url(#tile)"/>
+  <path d="M30 94h68" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="4" stroke-linecap="round"/>
+  <rect x="35" y="64" width="14" height="24" rx="5" fill="#FFFFFF"/>
+  <rect x="57" y="48" width="14" height="40" rx="5" fill="#FFFFFF"/>
+  <rect x="79" y="72" width="14" height="16" rx="5" fill="#FFFFFF"/>
+  <path d="M64 44V36" fill="none" stroke="#2E8B4E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M64 38c-1-7-6-10-12-9 1 6 5 9 12 9z" fill="#5BC27A"/>
+  <path d="M64 36c1-8 6-12 13-11-1 7-6 11-13 11z" fill="#2E8B4E"/>
+</svg>

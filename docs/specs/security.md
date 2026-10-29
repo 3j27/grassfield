@@ -175,7 +175,8 @@ display. Offscreen, gtk3 exits 1 for lack of one, with or without the list.
 Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under
 `$XDG_RUNTIME_DIR`; Flatpak sandboxes cannot reach it). Classes: **action** = called by Grassfield's own bindings,
 gestures, screen corners or session helpers (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`,
-`packaging/bin`, `packaging/shims`, `packaging/session-bin`), available in a real session, never returns private state;
+`packaging/bin`, `packaging/shims`, `packaging/session-bin`) or by a Grassfield app through `apps/runmode.h`
+`shellIpcArgs()` (`apps/*/src`), available in a real session, never returns private state;
 **dev** = test hook, refused outside a dev session (the dev rule: the relative `RunMode.dev` call in the security modules,
 `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing, others answer `refused`); **fixtures** = dev
 session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`, `VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
@@ -220,6 +221,7 @@ does not check its gate.
 | controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
+| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
 | dock | pinned, dragstate, forceinterrupt, forcehold, noactivate, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, iconrect, stack, addfolder | fixtures | visual tests; `click` launches an app; `iconrect` reads the drawn icon rectangle; `noactivate` makes a Dock activation do nothing (click tests); `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |

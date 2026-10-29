@@ -116,6 +116,23 @@ function splitFiles(apps, lookup) {
     return {files: files, rest: rest};
 }
 
+// The windows of an app's tile, found by the app's desktop id (the fixed Files tile by Files' id), [] when the Dock has no
+// tile for it: what `qs ipc call dock reopen <id>` brings forward when a running app is launched again (ADR-0038 AD34). Ids
+// compare without case and without ".desktop", as the entry lookup does.
+function windowsOf(items, appId) {
+    const norm = id => String(id === undefined || id === null ? "" : id).replace(/\.desktop$/, "").toLowerCase();
+    const want = norm(appId);
+    if (want === "")
+        return [];
+    for (const it of items ? items : []) {
+        if (it.kind === "files" && isFilesId(appId))
+            return it.windows;
+        if (it.kind === "app" && (norm(it.key) === want || (it.entry && norm(it.entry.id) === want)))
+            return it.windows;
+    }
+    return [];
+}
+
 // The two fixed tiles, Files then Apps, before everything else.
 function withFixed(files, items) {
     return [files, {kind: "apps", key: "grid"}].concat(items);
