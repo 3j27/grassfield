@@ -13,6 +13,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDeadlineTimer>
 #include <QTest>
+#include <QTranslator>
 
 #include <functional>
 #include <limits>
@@ -76,6 +77,18 @@ struct Reply {
     bool error = false;
     uint response = 99;
     QVariantMap results;
+};
+
+// A language's catalog for the frontend's texts (the alert's context): each known English text has its own translation.
+class FakeCatalog : public QTranslator
+{
+public:
+    QHash<QString, QString> texts;
+    bool isEmpty() const override { return false; }
+    QString translate(const char *context, const char *source, const char *, int) const override
+    {
+        return qstrcmp(context, "AccessAlert") == 0 ? texts.value(QString::fromUtf8(source)) : QString();
+    }
 };
 
 QList<Choice> twoChoices()
@@ -188,12 +201,12 @@ TEST(AccessToQml, ChecksWhatTheFrontendGives)
     const QVariantMap camera = Access::toQml(QStringLiteral("org.example.App"), QStringLiteral("wayland:abc"),
                                              QStringLiteral("Allow Example\nto Use the Camera?") + QChar(0x202E), QStringLiteral("sub"), QString(),
                                              {{QStringLiteral("icon"), QStringLiteral("camera-web-symbolic")},
-                                              {QStringLiteral("deny_label"), QStringLiteral("_Deny Access")},
+                                              {QStringLiteral("deny_label"), QStringLiteral("_Not Now")},
                                               {QStringLiteral("grant_label"), QStringLiteral("Grant __Access")},
                                               {QStringLiteral("modal"), false},
                                               {QStringLiteral("choices"), QVariant::fromValue(twoChoices())}});
     EXPECT_EQ(camera.value("title").toString(), QStringLiteral("Allow Example to Use the Camera?"));
-    EXPECT_EQ(camera.value("denyLabel").toString(), QStringLiteral("Deny Access"));
+    EXPECT_EQ(camera.value("denyLabel").toString(), QStringLiteral("Not Now"));
     EXPECT_EQ(camera.value("grantLabel").toString(), QStringLiteral("Grant _Access"));
     EXPECT_EQ(camera.value("icon").toString(), QStringLiteral("camera-web-symbolic"));
     EXPECT_TRUE(camera.value("noDefault").toBool());
@@ -230,6 +243,39 @@ TEST(AccessToQml, OptionsOfTheWrongTypeAreNoOptions)
 
 // The alert's answer goes back as response 0 (grant) or 1 (deny), with every choice: the alert's value when the choice allows
 // it, else its initial value.
+// xdg-desktop-portal 1.22.1's own wording comes in English whatever the language (its French catalog is empty): the alert gives
+// it in Grassfield's language with the application's name kept, a wording it does not know as it came, and the frontend's own
+// button labels as the alert's "Don't Allow" and "Allow" (integrator nested pass of 1745c0c, MINOR 6; ADR-0035 5a-9).
+TEST(AccessToQml, TheFrontendsOwnWordingIsInGrassfieldsLanguage)
+{
+    registerTypes();
+    FakeCatalog french;
+    french.texts = {{QStringLiteral("Allow %1 to Use the Camera?"), QStringLiteral("Autoriser %1 à utiliser la caméra ?")},
+                    {QStringLiteral("Allow Apps to Use the Camera?"), QStringLiteral("Autoriser les apps à utiliser la caméra ?")},
+                    {QStringLiteral("%1 wants to use your location"), QStringLiteral("%1 souhaite utiliser votre position")},
+                    {QStringLiteral("This permission can be changed at any time from the privacy settings"), QStringLiteral("Modifiable dans les réglages")},
+                    {QStringLiteral("The \u2018run in background\u2019 permission can be changed at any time from the app settings"), QStringLiteral("Arrière-plan")}};
+    ASSERT_TRUE(QCoreApplication::installTranslator(&french));
+    const auto title = [](const QString &text) { return Access::toQml({}, {}, text, {}, {}, {}).value("title").toString(); };
+    EXPECT_EQ(title(QStringLiteral("Allow Foot to Use the Camera?")), QStringLiteral("Autoriser Foot à utiliser la caméra ?"));
+    EXPECT_EQ(title(QStringLiteral("Allow Apps to Use the Camera?")), QStringLiteral("Autoriser les apps à utiliser la caméra ?"))
+        << "the wording without a name, not \"Apps\" as a name";
+    EXPECT_EQ(title(QStringLiteral("Allow Foot to Fly?")), QStringLiteral("Allow Foot to Fly?")) << "a wording it does not know";
+    const QVariantMap location = Access::toQml({}, {}, {}, QStringLiteral("Map Café wants to use your location"),
+                                               QStringLiteral("This permission can be changed at any time from the privacy settings"),
+                                               {{QStringLiteral("deny_label"), QStringLiteral("Deny Access")}, {QStringLiteral("grant_label"), QStringLiteral("Grant _Access")}});
+    EXPECT_EQ(location.value("subtitle").toString(), QStringLiteral("Map Café souhaite utiliser votre position"));
+    EXPECT_EQ(location.value("body").toString(), QStringLiteral("Modifiable dans les réglages"));
+    EXPECT_EQ(location.value("denyLabel").toString(), QString()) << "the frontend's own label: the alert's own";
+    EXPECT_EQ(location.value("grantLabel").toString(), QString()) << "the frontend's own label, its mnemonic gone";
+    EXPECT_EQ(Access::toQml({}, {}, {}, {}, QString::fromUtf8("The \u2018run in background\u2019 permission can be changed at any time from the app settings"), {})
+                  .value("body").toString(), QStringLiteral("Arrière-plan"));
+    for (const char *known : {"Deny", "Allow", "Don't allow", "_Deny"})
+        EXPECT_EQ(Access::toQml({}, {}, {}, {}, {}, {{QStringLiteral("deny_label"), QString::fromLatin1(known)}}).value("denyLabel").toString(), QString()) << known;
+    QCoreApplication::removeTranslator(&french);
+    EXPECT_EQ(title(QStringLiteral("Allow Foot to Use the Camera?")), QStringLiteral("Allow Foot to Use the Camera?")) << "English: as it came";
+}
+
 TEST_F(AccessTest, TheAlertsAnswerGoesBack)
 {
     access->setUiLoader([] { return true; });

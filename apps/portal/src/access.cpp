@@ -2,6 +2,7 @@
 
 #include <KService>
 
+#include <QCoreApplication>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -21,6 +22,69 @@ bool boolOption(const QVariantMap &options, const QString &key, bool fallback)
 {
     const QVariant value = options.value(key);
     return value.metaType() == QMetaType::fromType<bool>() ? value.toBool() : fallback;
+}
+
+// The text xdg-desktop-portal 1.22.1 asks its questions with (src/camera.c, location.c, screenshot.c, wallpaper.c,
+// background.c), "%s" written "%1": its French catalog is empty, so a French session got English alerts (integrator nested
+// pass of 1745c0c, MINOR 6). The ones without a name come first: "Allow Apps to …" would match "Allow %1 to …" too.
+constexpr char kContext[] = "AccessAlert";
+const char *const kFrontendText[] = {
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow Apps to Use the Camera?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "An app wants to access the camera"),
+    QT_TRANSLATE_NOOP("AccessAlert", "This permission can be changed at any time from the privacy settings"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow Apps to Access Your Location?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "An app wants to use your location"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Location access can be changed at any time from the privacy settings"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow Apps to Take Screenshots?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow to Take a Screenshot?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "An app wants to take screenshots at any time"),
+    QT_TRANSLATE_NOOP("AccessAlert", "An app wants to take a screenshot"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow Apps to Set Backgrounds?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "An app wants to change the background image"),
+    QT_TRANSLATE_NOOP("AccessAlert", "The ‘run in background’ permission can be changed at any time from the app settings"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Use the Camera?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to access the camera"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Access Your Location?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to use your location"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Take Screenshots?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Take a Screenshot?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to take screenshots at any time"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to take a screenshot"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Set Backgrounds?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to change the background image"),
+    QT_TRANSLATE_NOOP("AccessAlert", "Allow %1 to Run in the Background?"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to be started automatically and run in the background"),
+    QT_TRANSLATE_NOOP("AccessAlert", "%1 wants to run in the background"),
+};
+
+// One of the frontend's texts in Grassfield's language, the application's name kept; any other text (another version's
+// wording, or one the frontend translated) as it came.
+QString inLanguage(const QString &text)
+{
+    for (const char *source : kFrontendText) {
+        const QString english = QString::fromUtf8(source);
+        const qsizetype at = english.indexOf(QLatin1String("%1"));
+        if (at < 0) {
+            if (text == english)
+                return QCoreApplication::translate(kContext, source);
+            continue;
+        }
+        const QString before = english.left(at);
+        const QString after = english.mid(at + 2);
+        if (text.size() > before.size() + after.size() && text.startsWith(before) && text.endsWith(after))
+            return QCoreApplication::translate(kContext, source).arg(text.mid(before.size(), text.size() - before.size() - after.size()));
+    }
+    return text;
+}
+
+// The frontend's own button labels (location: "Deny Access" and "Grant Access"; screenshots: "Deny" and "Allow"; running in
+// the background: "Don't allow" and "Allow"): the alert's own "Don't Allow" and "Allow" instead, in Grassfield's language, the
+// words macOS gives every privacy alert (ADR-0035 5a-9).
+bool frontendLabel(const QString &label)
+{
+    static const QSet<QString> known{QStringLiteral("Deny Access"), QStringLiteral("Grant Access"), QStringLiteral("Deny"),
+                                     QStringLiteral("Allow"), QStringLiteral("Don't allow")};
+    return known.contains(label);
 }
 
 } // namespace
@@ -44,12 +108,15 @@ QVariantMap Access::toQml(const QString &appId, const QString &parentWindow, con
     // macOS asks about the camera and screen recording with neither button the default: Return does nothing until a button
     // has the keyboard (AC2). (Its microphone question has no xdg-desktop-portal 1.22.1 counterpart: no icon for it here.)
     static const QSet<QString> noDefault{QStringLiteral("camera-web-symbolic"), QStringLiteral("applets-screenshooter-symbolic")};
-    const auto label = [&](const char *key) { return chooser::oneLine(chooser::withoutMnemonic(stringOption(options, QLatin1String(key)))); };
+    const auto label = [&](const char *key) {
+        const QString text = chooser::oneLine(chooser::withoutMnemonic(stringOption(options, QLatin1String(key))));
+        return frontendLabel(text) ? QString() : text;
+    };
     return {
         {QStringLiteral("appId"), appId},
-        {QStringLiteral("title"), chooser::oneLine(title)},
-        {QStringLiteral("subtitle"), chooser::oneLine(subtitle)},
-        {QStringLiteral("body"), chooser::oneLine(body)},
+        {QStringLiteral("title"), inLanguage(chooser::oneLine(title))},
+        {QStringLiteral("subtitle"), inLanguage(chooser::oneLine(subtitle))},
+        {QStringLiteral("body"), inLanguage(chooser::oneLine(body))},
         {QStringLiteral("denyLabel"), label("deny_label")},
         {QStringLiteral("grantLabel"), label("grant_label")},
         {QStringLiteral("icon"), icon},
