@@ -7,7 +7,7 @@
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
 var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages", "arrange",
-    "tile_popover", "move_to", "group_front"];
+    "tile_popover", "move_to", "group_front", "split", "unsplit"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -83,6 +83,21 @@ function zoneCall(address, layout, zone, withAddress) {
 function groupFrontCall(address) {
     const hex = normalizeAddress(address);
     return hex === "" ? "" : guardedPluginCall("group_front", ["\"0x" + hex + "\""]);
+}
+
+// hl.plugin.grassfield.split(address, side) (capability "tiling-split", docs/specs/tiling.md TL33): Full Screen › Left or Right
+// of Screen, the window in that half of a new Split View Desktop. "" when the address or the side ("left" | "right") is invalid.
+function splitCall(address, side) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || (side !== "left" && side !== "right"))
+        return "";
+    return guardedPluginCall("split", ["\"0x" + hex + "\"", "\"" + side + "\""]);
+}
+
+// hl.plugin.grassfield.unsplit(address) (capability "tiling-split", TL33): Exit Full Screen of a window of a Split View Desktop.
+function unsplitCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("unsplit", ["\"0x" + hex + "\""]);
 }
 
 // hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of

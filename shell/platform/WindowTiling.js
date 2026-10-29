@@ -13,7 +13,8 @@ function finite(v) {
 // {address, state, light: {x, y, w, h} | null, tileable} for a `tile-hover` event, null for anything else (other types,
 // foreign protocol versions, malformed text, an enter or open without a usable light). `address` is lower-case hex without
 // 0x; `light` is the zoom light's rectangle in global layout coordinates (null for leave); `tileable` whether the window can
-// be tiled now (the popover greys its tiles otherwise).
+// be tiled now (the popover greys its tiles otherwise); `splittable` whether it also fits half of its output's Split View
+// (TL33, TL8: the popover greys Left and Right of Screen otherwise).
 function parseHover(data) {
     let msg = null;
     try {
@@ -28,10 +29,10 @@ function parseHover(data) {
         return null;
     const address = hex[1].toLowerCase();
     if (msg.state === "leave")
-        return {address: address, state: "leave", light: null, tileable: false};
+        return {address: address, state: "leave", light: null, tileable: false, splittable: false};
     if (!finite(msg.x) || !finite(msg.y) || !finite(msg.w) || !finite(msg.h) || msg.w <= 0 || msg.h <= 0)
         return null;
-    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true};
+    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true, splittable: msg.splittable === true};
 }
 
 // Where the popover opens for a light (global layout coordinates) among `screens` ([{name, x, y, width, height}], logical):
@@ -189,6 +190,15 @@ function suggestionGrid(count, width, height, aspect, labelHeight, gap, maxWidth
     return best;
 }
 
+// The keyboard's tile of the suggestions among `count` tiles (TL28; #48 nested pass, MINOR D: macOS selects the first window
+// as the picker opens, and a first Return takes it): the first one when `reset` (a new suggestion) or when `index` is out of
+// range (none yet, or the windows changed under it); else `index` stays. -1 when there is no tile.
+function keptSelection(index, count, reset) {
+    if (!(count > 0))
+        return -1;
+    return reset || !(index >= 0 && index < count) ? 0 : index;
+}
+
 // The tile `key` moves to from `index` among `count` tiles in rows of `columns` (TL28: the suggestions are navigable with the
 // arrows): "left"/"right" the previous or next tile (wrapping over the rows), "up"/"down" the tile above or below (staying
 // put at the first or last row), "home"/"end" the first or last; from -1 (none yet) any key chooses the first. -1 when there
@@ -255,6 +265,107 @@ function parseGroups(text) {
             groupOf[a] = key;
     }
     return {groupOf: groupOf, members: members};
+}
+
+// gfc1-reply: grassfield-tiling
+// The Split View Desktops of the reply of `hyprctl grassfield-tiling` (docs/specs/tiling.md TL33): [{workspace, output, home,
+// windows, waiting}] (Hyprland's ids of the Split View Desktop and of the Desktop it came from, its output's name, its members
+// lower-case hex without 0x, whether its one member still waits for its second window), in the reply's order. An entry
+// without positive whole ids or an output name is left out, a malformed member too; null when the reply is malformed (an
+// older plugin's reply, without "splits", lists none).
+function parseSplits(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling")
+        return null;
+    const out = [];
+    for (const d of (Array.isArray(msg.splits) ? msg.splits : [])) {
+        const whole = v => finite(v) && Math.floor(v) === v && v > 0;
+        if (!d || !whole(d.workspace) || !whole(d.home) || typeof d.output !== "string" || d.output === "")
+            continue;
+        const windows = (Array.isArray(d.windows) ? d.windows : []).map(hexAddress).filter(a => a !== "");
+        out.push({workspace: d.workspace, output: d.output, home: d.home, windows: windows, waiting: d.waiting === true});
+    }
+    return out;
+}
+
+// The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
+function splitOfWorkspace(splits, workspace) {
+    return (splits || []).find(d => d.workspace === workspace) || null;
+}
+
+// The Split View Desktop of `splits` window `address` (any address form) is a member of, or null (ADR-0036 D52: another
+// window on that Desktop is none).
+function splitOfWindow(splits, address) {
+    const a = hexAddress(address);
+    return a === "" ? null : (splits || []).find(d => d.windows.indexOf(a) >= 0) || null;
+}
+
+// TL33, ADR-0036 D43 (#48 review, MAJOR 3): the windows to fill their Split View Desktop alone: each the one member of a
+// Desktop of `splits` still waiting for its second window, unless its picker is pending (`pending`: the window the shell
+// waits a suggestion for or shows the suggestions of, "" for none). Its picker dismissed, refused (over the polkit sheet,
+// Search...), timed out or never fetched: it fills, never leaving a half empty.
+function lonelyMembers(splits, pending) {
+    const p = hexAddress(pending);
+    return (splits || []).filter(d => d.waiting && d.windows.length === 1 && d.windows[0] !== p).map(d => d.windows[0]);
+}
+
+// TL33, ADR-0036 D48 (integrator nested pass of 1ee992e, MAJOR B): the picker of a Split View the shell did not start (a
+// key, another client, a test): the reply's `suggestion` (parseSuggestion) when it is the one of a Split View Desktop of
+// `splits` whose one member still waits for its second window, in the "left-right" layout; null otherwise, and for the
+// picker the user dismissed (`declined`: {address, gen} of that suggestion, or null; that window fills instead; a later
+// Split View of the same window has a new generation and its own picker).
+function splitPicker(splits, suggestion, declined) {
+    if (!suggestion || suggestion.layout !== "left-right")
+        return null;
+    const a = hexAddress(suggestion.address); // "" matches no member (parseSplits keeps valid addresses only)
+    if (declined && hexAddress(declined.address) === a && declined.gen === suggestion.gen)
+        return null;
+    return (splits || []).some(d => d.waiting && d.windows.length === 1 && d.windows[0] === a) ? suggestion : null;
+}
+
+// The Desktops `spaces` ([{id, ...}] in id order) as the shell lists them (TL33, ADR-0036 D41): each Split View Desktop of
+// `splits` right after the Desktop it came from (in id order when there are several); one whose home is not among `spaces`
+// stays where its id puts it. Every Desktop is listed once, whatever the reply says (a chain or a loop of homes, which the
+// plugin never makes, keeps id order).
+function desktopOrder(spaces, splits) {
+    const ids = spaces.map(s => s.id);
+    const homeOf = id => {
+        const d = splitOfWorkspace(splits, id);
+        return d && d.home !== id && ids.indexOf(d.home) >= 0 ? d.home : null;
+    };
+    const out = [];
+    const emit = s => {
+        if (out.indexOf(s) >= 0)
+            return;
+        out.push(s);
+        for (const t of spaces) {
+            if (homeOf(t.id) === s.id)
+                emit(t);
+        }
+    };
+    for (const s of spaces) {
+        if (homeOf(s.id) === null)
+            emit(s);
+    }
+    for (const s of spaces)
+        emit(s);
+    return out;
+}
+
+// The Desktops `spaces` (in the order shown) numbered as macOS numbers them (#48 review, MINOR 7): `split` for a Split View
+// Desktop of `splits`, which takes no number (it is named after its apps), `number` the position among the others (1-based,
+// 0 for a Split View Desktop). New objects; `spaces` is left as it is.
+function numberDesktops(spaces, splits) {
+    let n = 0;
+    return spaces.map(s => {
+        const split = splitOfWorkspace(splits, s.id) !== null;
+        return Object.assign({}, s, {split: split, number: split ? 0 : ++n});
+    });
 }
 
 // The members of the tile group of the window `address` (any address form) in `groups` (parseGroups), itself included, in

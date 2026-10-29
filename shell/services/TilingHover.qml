@@ -61,6 +61,7 @@ Singleton {
         Popups.open("tiling", anchor.screen, anchor.x - Tokens.tilingPopoverLightInset, anchor.y, "below", {
             address: hover.address,
             tileable: hover.tileable,
+            splittable: hover.splittable,
             hover: hover.state === "enter",
             light: anchor.light,
             flipY: anchor.flipY

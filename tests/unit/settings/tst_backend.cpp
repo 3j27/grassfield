@@ -392,6 +392,26 @@ TEST_F(BackendTest, ADevSessionAsksOnlyItsOwnShell)
     EXPECT_TRUE(recorded(QStringLiteral("qs")).at(0).startsWith(QStringLiteral("ipc -p /work/shell call update check user|")));
 }
 
+// A refusal comes on a later turn of the event loop, never from inside the call: the Software Update pane asks while it is
+// being built, before its connections to finished() exist, and an answer emitted at once was lost (the pane stayed on
+// "Checking for updates…" for good in a dev session with no shell).
+TEST_F(BackendTest, TheRefusalToAskTheShellIsNeverImmediate)
+{
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_SHELL_DIR"};
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    qunsetenv("GRASSFIELD_SHELL_DIR");
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    const QString tag = QStringLiteral("update.ask");
+    backend.askShellToCheck(tag);
+    EXPECT_EQ(seen.finished.value(tag), 0) << "the answer came from inside askShellToCheck()";
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(tag) >= 1; }));
+    EXPECT_FALSE(seen.ok.value(tag));
+    EXPECT_FALSE(seen.reason.value(tag).isEmpty());
+}
+
 // Without a shell Settings runs the checker itself (U10). In a dev session: the dev checker, its cache under the dev state, or
 // the canned answer; outside one the dev plumbing is inert.
 TEST_F(BackendTest, WithoutAShellTheCheckerRunsHere)
