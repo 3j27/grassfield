@@ -295,6 +295,8 @@ FocusScope {
                 SettingsApp.openSection("wallpaper");
             else if (action === "editWidgets")
                 Notifications.openWidgetGallery(root.screen ? root.screen.name : "");
+            else if (action.startsWith("cleanUp") && !root.ready)
+                return;
             else if (action === "cleanUp")
                 files.setPositions(Logic.arrange(Logic.visualOrder(lay), grid.cols, grid.rows, blocked));
             else if (action.startsWith("cleanUpBy:"))

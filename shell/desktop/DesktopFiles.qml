@@ -412,6 +412,17 @@ Scope {
             return;
         }
         const list = [];
+        // The model starts on the process's working directory (often $HOME) before its folder is set: a row whose parent is not
+        // the desktop folder belongs to that stale listing and is never shown (nor is the listing taken as complete).
+        let stale = dir === "" || String(model.folder) !== String(Qt.url(folderUrl));
+        for (let i = 0; i < model.count && !stale; i++) {
+            if (Logic.dirName(String(model.get(i, "filePath"))) !== dir)
+                stale = true;
+        }
+        if (stale) {
+            entriesListed = false;
+            return;
+        }
         for (let i = 0; i < model.count; i++) {
             const name = String(model.get(i, "fileName"));
             if (name !== "" && name.indexOf("/") < 0)
@@ -422,7 +433,8 @@ Scope {
                 });
         }
         entries = list;
-        entriesListed = dir !== "" && String(model.folder) === String(Qt.url(folderUrl));
+        entriesListed = true;
+        // Names that are not in a complete listing of the real folder are not "gone": nothing is pruned before it.
         if (positionsLoaded) {
             const keep = Logic.prune(positions, names.concat(busy));
             if (Object.keys(keep).length !== Object.keys(positions).length) {
