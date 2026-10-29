@@ -150,6 +150,34 @@ TestCase {
         }
     }
 
+    // TL32: the tiling switches in their order, each writing its key, under the compositor extension's footnote; the
+    // double-click action offers Fill first.
+    function test_windowsRows() {
+        const t = make();
+        const rows = [["Drag windows to left or right edge of screen to tile", "windows.tilingEdges"], ["Drag windows to menu bar to fill screen", "windows.tilingMenuBar"], ["Hold Alt key while dragging windows to tile", "windows.tilingOptionDrag"], ["Tiled windows have margins", "windows.tilingMargins"], ["Show layouts when hovering over the green button", "windows.tilingLayouts"], ["Suggest windows to fill the rest of a layout", "windows.tilingSuggestions"], ["Bring tile groups forward together", "windows.tilingGroups"], ["Rebuild the compositor extension after Hyprland updates", "windows.rebuildExtension"]];
+        let above = -1;
+        for (const [name, key] of rows) {
+            const toggle = named(t.page.contentItem, name);
+            verify(toggle, name);
+            const y = toggle.mapToItem(t.page.contentItem, 0, 0).y;
+            verify(y > above, name + " comes after the row above it");
+            above = y;
+            compare(toggle.checked, SettingsContract.ALL_DEFAULTS[key], name);
+            toggle.toggled(!toggle.checked);
+            const e = {};
+            e[key] = !SettingsContract.ALL_DEFAULTS[key];
+            compare(last(t.store), e, name);
+            compare(toggle.checked, !SettingsContract.ALL_DEFAULTS[key], name + " shows the stored value");
+        }
+        const group = find(t.page.contentItem, i => i.caption === "Windows" && i.footnote !== undefined);
+        verify(group);
+        compare(group.footnote, "Needs the Grassfield compositor extension.");
+        const action = named(t.page.contentItem, "Window title bar double-click action");
+        compare(action.model.map(m => m.id), ["fill", "zoom", "minimize", "none"]);
+        action.picked("fill");
+        compare(last(t.store), {"windows.titlebarDoubleClick": "fill"});
+    }
+
     function test_showItemsOnDesktop() {
         const t = make();
         const box = named(t.page.contentItem, "Show items on the desktop");

@@ -3070,6 +3070,10 @@
         <translation>Rétrécissement</translation>
     </message>
     <message>
+        <source>Fill</source>
+        <translation>Remplir</translation>
+    </message>
+    <message>
         <source>Minimize windows into application icon</source>
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
     </message>
@@ -3130,10 +3134,6 @@
         <translation>Ne rien faire</translation>
     </message>
     <message>
-        <source>Drag windows to screen edges to tile</source>
-        <translation>Faire glisser les fenêtres vers les bords de l’écran pour les disposer en mosaïque</translation>
-    </message>
-    <message>
         <source>Drag windows to menu bar to fill screen</source>
         <translation>Faire glisser les fenêtres vers la barre des menus pour remplir l’écran</translation>
     </message>
@@ -3192,6 +3192,30 @@
     <message>
         <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
         <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield.</translation>
+    </message>
+    <message>
+        <source>Drag windows to left or right edge of screen to tile</source>
+        <translation>Faire glisser les fenêtres vers le bord gauche ou droit de l’écran pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Hold Alt key while dragging windows to tile</source>
+        <translation>Maintenir la touche Alt enfoncée en faisant glisser les fenêtres pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Show layouts when hovering over the green button</source>
+        <translation>Afficher les dispositions au survol du bouton vert</translation>
+    </message>
+    <message>
+        <source>Suggest windows to fill the rest of a layout</source>
+        <translation>Suggérer des fenêtres pour compléter une disposition</translation>
+    </message>
+    <message>
+        <source>Bring tile groups forward together</source>
+        <translation>Faire passer les groupes en mosaïque au premier plan ensemble</translation>
     </message>
     <message>
         <source>Screen Corners…</source>

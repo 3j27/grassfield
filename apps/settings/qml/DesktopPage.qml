@@ -145,7 +145,8 @@ SettingsPage {
             ComboBox {
                 inline: true
                 accessibleName: qsTr("Window title bar double-click action")
-                model: [{id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
+                // Fill (TL32): the window takes the whole usable area of its display, tiled (TL12).
+                model: [{id: "fill", text: qsTr("Fill")}, {id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
                 value: root.store.value("windows.titlebarDoubleClick")
                 onPicked: id => root.store.set("windows.titlebarDoubleClick", id)
             }
@@ -285,13 +286,15 @@ SettingsPage {
         }
     }
 
+    // TL32: the tiling switches in this order; each reaches the plugin once it offers the feature (Compositor.pushPluginConfig).
     SettingsGroup {
         caption: qsTr("Windows")
+        footnote: qsTr("Needs the Grassfield compositor extension.")
 
         SettingsRow {
-            title: qsTr("Drag windows to screen edges to tile")
+            title: qsTr("Drag windows to left or right edge of screen to tile")
             Toggle {
-                accessibleName: qsTr("Drag windows to screen edges to tile")
+                accessibleName: qsTr("Drag windows to left or right edge of screen to tile")
                 checked: root.store.value("windows.tilingEdges")
                 onToggled: c => root.store.set("windows.tilingEdges", c)
             }
@@ -307,11 +310,47 @@ SettingsPage {
         }
 
         SettingsRow {
+            title: qsTr("Hold Alt key while dragging windows to tile")
+            Toggle {
+                accessibleName: qsTr("Hold Alt key while dragging windows to tile")
+                checked: root.store.value("windows.tilingOptionDrag")
+                onToggled: c => root.store.set("windows.tilingOptionDrag", c)
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Tiled windows have margins")
             Toggle {
                 accessibleName: qsTr("Tiled windows have margins")
                 checked: root.store.value("windows.tilingMargins")
                 onToggled: c => root.store.set("windows.tilingMargins", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Show layouts when hovering over the green button")
+            Toggle {
+                accessibleName: qsTr("Show layouts when hovering over the green button")
+                checked: root.store.value("windows.tilingLayouts")
+                onToggled: c => root.store.set("windows.tilingLayouts", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Suggest windows to fill the rest of a layout")
+            Toggle {
+                accessibleName: qsTr("Suggest windows to fill the rest of a layout")
+                checked: root.store.value("windows.tilingSuggestions")
+                onToggled: c => root.store.set("windows.tilingSuggestions", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Bring tile groups forward together")
+            Toggle {
+                accessibleName: qsTr("Bring tile groups forward together")
+                checked: root.store.value("windows.tilingGroups")
+                onToggled: c => root.store.set("windows.tilingGroups", c)
             }
         }
 
