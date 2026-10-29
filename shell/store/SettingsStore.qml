@@ -731,6 +731,17 @@ Scope {
     }
 
     // The file watch is set again on the path after every read: a watch follows the file it was set on, not the path.
+    // The first read starts at once (a missing file is a read like any other), and again for a folder that is set later.
+    property bool started: false
+    onFilePathChanged: {
+        if (root.started)
+            root.readFile();
+    }
+    Component.onCompleted: {
+        root.started = true;
+        root.readFile();
+    }
+
     property string watchPath: ""
     function armWatch(): void {
         const want = watchedDir.ready ? root.filePath : "";
@@ -900,11 +911,11 @@ Scope {
     WatchedDir {
         id: watchedDir
         path: root.configDir
+        // The folder matters for the watch and for writing only: the first read does not wait for its mkdir (Component.onCompleted
+        // below), so `loaded` flips as soon as the bounded read ends. The watch, set now, reports a file created later.
         onReadyChanged: {
-            if (ready) {
+            if (ready)
                 root.armWatch();
-                root.readFile();
-            }
         }
     }
 

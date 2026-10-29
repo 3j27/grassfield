@@ -55,6 +55,8 @@ desc="Store: loaded flips after takeBadFile"
 bad=$(at $S "const level = same ? root.badLevel + 1 : 0;"); tb=$(at $S "root.takeBadFile(root.badReason(read.status));" "${bad:-1}"); ld=$(at $S "root.loaded = true" "${tb:-1}")
 check test -n "$bad" -a -n "$tb" -a -n "$ld" -a "$((tb - bad))" -le 3 -a "$((ld - tb))" -le 2
 
+desc="Store: the first read starts at once, not behind the folder's mkdir"
+check has $S "root.started = true;"
 desc="Desktop: lay is empty until ready"
 check has $V "readonly property var lay: ready ? Logic.layout("
 desc="Desktop: ready waits for the settings, the widgets, the positions and the listing"
