@@ -506,9 +506,13 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   and its box from before), anywhere else, or when the drag ends without its release, it goes back in its half; it never
   takes another output's Desktop that way; nothing swaps while locked. After #48's merge: the picker no longer reads its
   windows before they exist (a TypeError at each open), the window picked has the keyboard on any output whose Desktop shows
-  it, and the tiling popover and the suggestions close with their output instead of moving to another one. Step 6c: the
-  titles hidden and revealed at the top, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full
-  Screen), the Overview's drop targets for a Split View Desktop.
+  it, and the tiling popover and the suggestions close with their output instead of moving to another one. After the
+  integrator's note from an owner report (D61, D62): the overlay holds the keyboard, takes the output's input and stays
+  mapped only while a popup is loaded on it (a stale `open` with no popup lets everything through and unmaps, logged), and a
+  window in full screen is not minimized (Minimize greyed, Super+M nothing). Step 6c: the titles hidden and revealed at the
+  top, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen), the Overview's drop
+  targets for a Split View Desktop, and in full screen (D62) the green button's click acting while its popover is open, the
+  menu bar and the revealed titlebar revealing and hiding together, and the Dock revealing at the bottom edge.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
