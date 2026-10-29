@@ -38,6 +38,13 @@ function reservesSpace(mode) {
     return m === "fullscreen" || m === "never";
 }
 
+// Whether the wallpaper strip under the bar is what the band lies on: the bar reserves space (no window under it) and no
+// full-screen window is on its output. With `always` or `desktop` a maximized window sits under a revealed bar, and over a
+// full-screen window the bar is drawn on that window's content: the wallpaper's strip says nothing then.
+function bandOnWallpaper(mode, fullscreen) {
+    return reservesSpace(mode) && !fullscreen;
+}
+
 // The bar sits on the overlay layer (above Hyprland's full-screen windows; the top layer is below them) while a full-screen
 // window is on its output, the top layer otherwise.
 function overlayLayer(fullscreen) {

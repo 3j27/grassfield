@@ -254,4 +254,73 @@ TestCase {
         verify(Logic.answered(Logic.normalize(null), before), "the first answer");
         verify(!Logic.answered(before, Logic.normalize(null)));
     }
+    // Update Now's run (ADR-0033 "Step 3", s3.5): the runner's state, read strictly.
+    function test_runState() {
+        const op = "0123456789abcdef0123456789abcdef";
+        const good = {version: 1, op: op, pid: 42, startTime: "777", phase: "configuring", result: "", restart: "", snapshot: "made",
+            deferred: ["aur", "x"], startedAt: 1000, finishedAt: 0};
+        const r = Logic.parseRun(JSON.stringify(good));
+        compare(r.op, op);
+        compare(r.pid, 42);
+        compare(r.startTime, "777");
+        compare(r.phase, "configuring");
+        compare(r.snapshot, "made");
+        compare(r.deferred, ["aur"], "only the known deferred steps");
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {phase: "done", result: "done", restart: "restart"}))).restart, "restart");
+        for (const bad of [Object.assign({}, good, {version: 2}), Object.assign({}, good, {op: "x"}), Object.assign({}, good, {phase: "running"}),
+                Object.assign({}, good, {phase: "done", result: "weird"}), Object.assign({}, good, {result: "done"})])
+            compare(Logic.parseRun(JSON.stringify(bad)), null, JSON.stringify(bad));
+        compare(Logic.parseRun("{half"), null);
+        compare(Logic.parseRun(""), null);
+        compare(Logic.parseRun("x".repeat(5000)), null);
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {pid: -1, startTime: "x1"}))).pid, 0);
+        compare(Logic.parseRun(JSON.stringify(good)).synced, false);
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {phase: "done", result: "stalelock", synced: true}))).synced, true);
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {synced: "true"}))).synced, false, "only a JSON true");
+        // The helper `last` names, without a runner's state.
+        compare(Logic.helperRun(op + "\n").op, op);
+        compare(Logic.helperRun(op).phase, "authorizing");
+        for (const bad of ["", "x", op + "0", "../" + op, op.toUpperCase()])
+            compare(Logic.helperRun(bad), null, bad);
+    }
+
+    // The start time of /proc/<pid>/stat, whose command name may hold spaces and parentheses.
+    function test_startTimeOf() {
+        compare(Logic.startTimeOf("42 (bash) S 1 42 42 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 1 0 777 1000 100"), "777");
+        compare(Logic.startTimeOf("42 (a) b) (c) S 1 42 42 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 1 0 888 1000 100"), "888");
+        compare(Logic.startTimeOf("42 (bash) S 1 42"), "");
+        compare(Logic.startTimeOf(""), "");
+    }
+
+    // The helper's progress line and the run's one percentage (0-5 checking, 5-45 downloading, 45-95 installing, 95-100 the end).
+    function test_runProgress() {
+        compare(Logic.parseProgress("downloading 3 10\n"), {phase: "downloading", done: 3, total: 10});
+        compare(Logic.parseProgress("installing 12 10"), {phase: "installing", done: 10, total: 10}, "never more than the total");
+        compare(Logic.parseProgress("checking"), {phase: "checking", done: 0, total: 0});
+        compare(Logic.parseProgress("rm -rf /"), null);
+        compare(Logic.parseProgress(""), null);
+        compare(Logic.percentOf("checking", 0, 0), -1);
+        compare(Logic.percentOf("downloading", 0, 10), 5);
+        compare(Logic.percentOf("downloading", 10, 10), 45);
+        compare(Logic.percentOf("downloading", 0, 0), -1, "nothing to download is not 0 %");
+        compare(Logic.percentOf("installing", 5, 10), 70);
+        compare(Logic.percentOf("installing", 10, 10), 95);
+        compare(Logic.percentOf("finishing", 0, 0), 95);
+        compare(Logic.percentOf("configuring", 0, 0), 97);
+    }
+
+    // What the pane shows of a run.
+    function test_runView() {
+        const run = phase => Logic.parseRun(JSON.stringify({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 42, startTime: "777",
+            phase: phase, result: phase === "done" ? "terminal" : "", restart: "", deferred: [], startedAt: 1, finishedAt: 0}));
+        compare(Logic.runView(null, false, null, false).state, "none");
+        compare(Logic.runView(run("authorizing"), true, null, false).phase, "authorizing");
+        const dl = Logic.runView(run("authorizing"), true, Logic.parseProgress("downloading 1 4"), true);
+        compare([dl.state, dl.phase, dl.done, dl.total, dl.percent], ["running", "downloading", 1, 4, 15]);
+        compare(Logic.runView(run("configuring"), true, Logic.parseProgress("finishing"), false).phase, "configuring");
+        compare(Logic.runView(run("authorizing"), false, null, false).state, "none", "a runner gone, no helper: nothing");
+        compare(Logic.runView(run("authorizing"), false, Logic.parseProgress("installing 1 2"), true).phase, "installing", "the helper outlives the runner");
+        const done = Logic.runView(run("done"), false, null, false);
+        compare([done.state, done.result], ["done", "terminal"]);
+    }
 }

@@ -284,8 +284,30 @@ div = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(r
 check("gate (b): the baseline's window count divides its rate (P13: two resized windows halve it, and the same rate fails)",
       attribution(["x", div[0], div[1], m_none, div[2], "60", "700", "--baseline=edge-baseline", "--resizes=edge-baseline=2"] + gate) == 1)
 
+# Integrator follow-ups of PR #42 (Q3, Q6, Q8 survived): N from a three-window drag; drags of different edges in one
+# scenario; marks outside the scenario's windows; a mark inside the baseline. The baseline spans 1.2 s with one
+# compositor-caused long frame (0.83/s, gate 1.04/s per window) against the drag's 2.5/s: 1.25/s per window with two
+# windows fails, 0.83/s with three passes.
+fe, re_ = scenario(1_000_000, True)
+fb_, rb_ = scenario(3_000_000, True)
+q = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(re_ + rb_)),
+     write(["shared-edge %d 400 0" % (1_000_000 * 1000), "edge-baseline %d 1200 0" % (3_000_000 * 1000)])]
+mk_three = marks_file(["%d edge-drag:3/3" % 1_300_000])
+mk_mixed = marks_file(["%d edge-drag:2/2" % 1_200_000, "%d edge-drag:3/3" % 1_300_000])
+mk_outside = marks_file(["%d edge-drag:1/2" % 900_000, "%d edge-drag:3/3" % 1_300_000, "%d edge-drag:1/2" % 1_450_000])
+mk_in_base = marks_file(["%d edge-drag:3/3" % 1_300_000, "%d edge-drag:1/1" % 3_100_000])
+q_args = ["x", q[0], q[1], None, q[2], "60", "700", "--baseline=edge-baseline", "--drag-mark=edge-drag", "--resizes=edge-baseline=1"] + gate
+check("drag marks (Q3): a three-window drag (3/3) divides by three and passes where two windows would fail",
+      attribution([mk_three if a is None else a for a in q_args]) == 0 and attribution([mk_ok if a is None else a for a in q_args]) == 1)
+check("drag marks (Q6): drags of a two-window and a three-window edge in one scenario fail",
+      attribution([mk_mixed if a is None else a for a in with_marks]) == 1)
+check("drag marks (Q8): marks before the scenario's start or after its end do not count",
+      attribution([mk_outside if a is None else a for a in q_args]) == 0)
+check("drag marks: a mark inside the baseline fails (it is not Hyprland's own resize alone)",
+      attribution([mk_in_base if a is None else a for a in q_args]) == 1)
+
 for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu,
-          mk_ok, mk_half, two, w_two, ev_other, *nob, *div,
+          mk_ok, mk_half, two, w_two, ev_other, *nob, *div, *q, mk_three, mk_mixed, mk_outside, mk_in_base,
           w_small, r_none_long, r_early, s_after, s_hold, w_big, w_ok, *vf, *pw):
     os.unlink(p)
 

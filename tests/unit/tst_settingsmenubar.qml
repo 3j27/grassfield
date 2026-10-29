@@ -50,6 +50,43 @@ TestCase {
         }
     }
 
+    Component {
+        id: backendComponent
+        QtObject {
+            signal fileChanged(string path)
+            property string wallpaperStatusFile: "/state/wallpaper-state.json"
+            property string text: "{}"
+            function watch(path: string): bool {
+                return true;
+            }
+            function readText(path: string): var {
+                return {exists: true, ok: true, text: text};
+            }
+        }
+    }
+
+    // ADR-0016 D1: when the wallpaper forces the band, the pane says so (the shell's status file, block `bar`).
+    function test_bandForcedByTheWallpaperIsExplained() {
+        const store = createTemporaryObject(storeComponent, testCase);
+        const backend = createTemporaryObject(backendComponent, testCase);
+        const page = createTemporaryObject(pageComponent, testCase, {store: store, backend: backend});
+        compare(page.bandForced, false);
+        const note = find(page.contentItem, i => i.footnote !== undefined && i.footnote.indexOf("background is shown") >= 0);
+        compare(note, null);
+        backend.text = JSON.stringify({outputs: {}, bar: {"eDP-1": true}});
+        backend.fileChanged("/state/wallpaper-state.json");
+        compare(page.bandForced, true);
+        verify(find(page.contentItem, i => i.footnote !== undefined && i.footnote.indexOf("background is shown") >= 0));
+        // The switch is on: the band is the user's own, nothing to explain.
+        store.set("menubar.showBackground", true);
+        compare(find(page.contentItem, i => i.footnote !== undefined && i.footnote.indexOf("background is shown") >= 0), null);
+        // The wallpaper no longer forces it.
+        store.set("menubar.showBackground", false);
+        backend.text = JSON.stringify({outputs: {}, bar: {}});
+        backend.fileChanged("/state/wallpaper-state.json");
+        compare(page.bandForced, false);
+    }
+
     function make(battery) {
         const store = createTemporaryObject(storeComponent, testCase);
         const page = createTemporaryObject(pageComponent, testCase, {store: store, hasBattery: battery === true});

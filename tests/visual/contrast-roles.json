@@ -139,7 +139,6 @@
     {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 1},
     {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "alpha", "count": 1},
     {"file": "shell/security/PasswordField.qml", "class": "opacity-dynamic", "count": 2},
-    {"file": "shell/menubar/MenuBar.qml", "class": "alpha", "count": 1},
     {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "alpha", "count": 1},
     {"file": "ui/Grassfield/Ui/Button.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "ui/Grassfield/Ui/CheckBox.qml", "class": "opacity-dynamic", "count": 1},
