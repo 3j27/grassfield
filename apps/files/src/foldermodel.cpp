@@ -678,6 +678,7 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {FolderColorRole, "folderColor"},
         {FolderGlyphRole, "folderGlyph"},
         {GroupRole, "group"},
+        {DimmedRole, "dimmed"},
     };
 }
 
@@ -730,6 +731,8 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
         return m_selected.contains(item.url());
     case HiddenRole:
         return item.isHidden();
+    case DimmedRole:
+        return dimmed(item);
     case CanPreviewRole:
         return previewSupported(item);
     case EmblemRole:
@@ -1058,6 +1061,9 @@ bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParen
 
 void FolderModel::select(int row, int modifiers)
 {
+    // A panel that takes one item: a click with Shift or Ctrl is a plain click.
+    if (m_chooserSingle)
+        modifiers = 0;
     const QUrl url = urlAt(row);
     qCDebug(lcFiles) << "select" << row << url.fileName() << "modifiers" << modifiers;
     if (url.isEmpty())
@@ -1087,6 +1093,8 @@ void FolderModel::select(int row, int modifiers)
 
 void FolderModel::selectAll()
 {
+    if (m_chooserSingle)
+        return;
     QSet<QUrl> next;
     for (int r = 0; r < rowCount(); ++r)
         next.insert(urlAt(r));
@@ -1102,7 +1110,7 @@ void FolderModel::selectUrls(const QList<QUrl> &urls)
 {
     QSet<QUrl> next;
     for (const QUrl &u : urls) {
-        if (rowForUrl(u) >= 0)
+        if (rowForUrl(u) >= 0 && !(m_chooserSingle && !next.isEmpty()))
             next.insert(u);
     }
     applySelection(next);
@@ -1138,8 +1146,55 @@ QList<int> FolderModel::selectedRows() const
     return rows;
 }
 
-void FolderModel::applySelection(const QSet<QUrl> &next)
+void FolderModel::setChooser(const QVariantMap &chooser)
 {
+    if (chooser == m_chooser)
+        return;
+    m_chooser = chooser;
+    m_chooserGlobs = chooser.value(QStringLiteral("globs")).toStringList();
+    m_chooserMimeTypes = chooser.value(QStringLiteral("mimeTypes")).toStringList();
+    m_chooserFoldersOnly = chooser.value(QStringLiteral("foldersOnly")).toBool();
+    m_chooserSingle = chooser.value(QStringLiteral("single")).toBool();
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {DimmedRole});
+    // What the panel can no longer take leaves the selection.
+    applySelection(m_selected);
+    emit chooserChanged();
+}
+
+bool FolderModel::dimmed(const KFileItem &item) const
+{
+    if (m_chooser.isEmpty() || item.isNull())
+        return false;
+    // An application of the Applications location is a launcher, not a file an application can open.
+    if (isApplications())
+        return true;
+    if (item.isDir())
+        return false;
+    if (m_chooserFoldersOnly)
+        return true;
+    if (m_chooserGlobs.isEmpty() && m_chooserMimeTypes.isEmpty())
+        return false;
+    QStringList types;
+    if (!m_chooserMimeTypes.isEmpty()) {
+        const QMimeType type = item.currentMimeType();
+        types = QStringList{type.name()} + type.allAncestors();
+    }
+    return !FileLogic::passesFilter(item.text(), types, m_chooserGlobs, m_chooserMimeTypes);
+}
+
+void FolderModel::applySelection(QSet<QUrl> next)
+{
+    if (!m_chooser.isEmpty()) {
+        for (auto it = next.begin(); it != next.end();) {
+            const int row = rowForUrl(*it);
+            it = row >= 0 && dimmed(itemAt(row)) ? next.erase(it) : std::next(it);
+        }
+        if (m_chooserSingle && next.size() > 1) {
+            const QUrl keep = next.contains(m_current) ? m_current : *next.cbegin();
+            next = {keep};
+        }
+    }
     if (next == m_selected)
         return;
     QSet<QUrl> changed = m_selected;

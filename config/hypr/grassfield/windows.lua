@@ -39,6 +39,11 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- any button).
 hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
 
+-- The Open and Save panels (grassfield-portal, ADR-0035 D-4) draw a sheet's frame and no lights; a panel takes the Wayland app
+-- id of the application it belongs to (its Dock tile, its menu bar), so its xdg tag alone says it is one: no plugin
+-- titlebar on it.
+hl.window_rule({ name = "gf-client-chrome-panel", match = { xdg_tag = "^file-panel$" }, tag = "+grassfield-client-chrome" })
+
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"). macOS 27 has one radius for every window
 -- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 20, the global decoration.rounding (looknfeel.lua).
 hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 20 })
