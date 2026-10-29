@@ -132,6 +132,23 @@ TestCase {
         verify(Qt.colorEqual(squares[0].color, Appearance.colors.activityGraphSystem));
     }
 
+    // AM5, AM8: a value below 0 is a gap: the fill stops there and starts again after it, never drawn as zero.
+    function test_graphGaps() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/activity/qml/Graph.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const g = createTemporaryObject(comp, testCase, {width: 100, height: 50, capacity: 5,
+            graph: {style: "area", max: 1, series: [{values: [0.5, -1, 0.2, 0.4, -1], color: "activityGraphUser"}]}});
+        verify(g);
+        compare(g.lower.length, 2); // [0.5] and [0.2, 0.4]
+        const second = g.lower[1];
+        verify(second.every(p => p.y >= 0 && p.y <= 50));
+        g.graph = {style: "mirrored", max: 10, series: [{values: [5, 10], color: "activityGraphRead"}, {values: [-1, 5], color: "activityGraphWrite"}]};
+        compare(g.lower.length, 1);
+        compare(g.upper.length, 1);
+        verify(g.lower[0].every(p => p.y <= 25.001), "reads above the middle");
+        verify(g.upper[0].every(p => p.y >= 24.999), "writes below it");
+    }
+
     // AM42: the pop-up above the Disk graph; a new sample leaves it in place (the delegates are kept, not rebuilt).
     function test_graphModePopUp() {
         const t = make();
