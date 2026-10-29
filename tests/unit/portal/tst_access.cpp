@@ -218,7 +218,7 @@ TEST_F(AccessTest, TheAlertsAnswerGoesBack)
     EXPECT_EQ(alert.value("title").toString(), QStringLiteral("Allow Example to Use the Camera?"));
     EXPECT_EQ(alert.value("subtitle").toString(), QStringLiteral("Example wants to access the camera"));
     EXPECT_TRUE(alert.value("noDefault").toBool());
-    EXPECT_TRUE(alert.contains("appName") && alert.contains("appIcon"));
+    EXPECT_TRUE(alert.contains("appIcon"));
     access->answer(opened.first().first, true,
                    {QVariantMap{{QStringLiteral("id"), QStringLiteral("remember")}, {QStringLiteral("value"), QStringLiteral("false")}},
                     QVariantMap{{QStringLiteral("id"), QStringLiteral("level")}, {QStringLiteral("value"), QStringLiteral("anything")}}});
@@ -239,8 +239,10 @@ TEST_F(AccessTest, TheAlertsAnswerGoesBack)
     EXPECT_TRUE(waitFor([&] { return access->pending() == 0; }));
 }
 
-// Close ends the request with response 2 and takes the alert away; an answer after it is ignored.
-TEST_F(AccessTest, CloseEndsTheRequest)
+// Close takes the alert away and ends the call with a D-Bus error, never a response: the frontend keeps any response but 0
+// as "no" for a permission not decided yet, and nothing after an error (ADR-0035 5a-3, review of step 5a, MINOR 1). An answer
+// after it is ignored.
+TEST_F(AccessTest, CloseEndsTheRequestWithoutAnAnswer)
 {
     access->setUiLoader([] { return true; });
     auto reply = call(QStringLiteral("/r/c1"), {});
@@ -249,10 +251,49 @@ TEST_F(AccessTest, CloseEndsTheRequest)
     frontendBus->asyncCall(QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/r/c1"),
                                                           QStringLiteral("org.freedesktop.impl.portal.Request"), QStringLiteral("Close")));
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
-    EXPECT_EQ(reply->response, 2u);
+    EXPECT_TRUE(reply->error) << "an error, not response " << reply->response;
     EXPECT_TRUE(closed.contains(id));
     access->answer(id, true);
     EXPECT_EQ(access->pending(), 0);
+}
+
+// A backend that goes with an alert open, and a forward x-d-p-gtk never answers, end the call with an error too.
+TEST_F(AccessTest, NoAnswerIsNeverAResponse)
+{
+    access->setUiLoader([] { return true; });
+    auto open = call(QStringLiteral("/r/n1"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    backendBus->unregisterObject(QStringLiteral("/org/freedesktop/portal/desktop"));
+    access.reset();
+    ASSERT_TRUE(waitFor([&] { return open->done; }));
+    EXPECT_TRUE(open->error) << "response " << open->response;
+
+    make();
+    gtkBus->unregisterService(QString::fromLatin1(kFakeGtk));
+    access->setUiLoader([] { return false; });
+    auto lost = call(QStringLiteral("/r/n2"), {});
+    ASSERT_TRUE(waitFor([&] { return lost->done; }));
+    EXPECT_TRUE(lost->error) << "response " << lost->response;
+}
+
+// The process quits only once every interface has had no request for the idle time: an interface that has just ended its last
+// request holds the other's quit (review of step 5a, MINOR 3).
+TEST_F(AccessTest, QuietOnlyWhenEveryInterfaceIs)
+{
+    Access::Options options;
+    options.idleQuitMs = 200;
+    Access other(*backendBus, options);
+    access->setUiLoader([] { return true; });
+    auto reply = call(QStringLiteral("/r/q1"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    QTest::qWait(250);
+    EXPECT_FALSE(RequestHost::quiet({access.get(), &other}, 200)) << "a request open";
+    access->answer(opened.first().first, false);
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_FALSE(RequestHost::quiet({access.get(), &other}, 200)) << "one just ended its last request";
+    EXPECT_TRUE(waitFor([&] { return RequestHost::quiet({access.get(), &other}, 200); }, 1000));
+    Access late(*backendBus, options);
+    EXPECT_FALSE(RequestHost::quiet({access.get(), &other, &late}, 200)) << "a host quiet for less than the idle time";
 }
 
 // Without a UI every call goes to x-d-p-gtk's Access, and its answer comes back with the choices (a(ss)) only.
@@ -287,7 +328,7 @@ TEST_F(AccessTest, AnAlertWithoutAFrameInTimeGoesToGtk)
     EXPECT_TRUE(closed.contains(opened.first().first)) << "its alert goes";
 }
 
-// At most maxPending requests at once, one request per handle: the others end with response 2 at once.
+// At most maxPending requests at once, one request per handle: the others end at once, with an error (no answer).
 TEST_F(AccessTest, RequestsAreBounded)
 {
     TearDown();
@@ -301,8 +342,8 @@ TEST_F(AccessTest, RequestsAreBounded)
     auto second = call(QStringLiteral("/r/b2"), {});
     auto third = call(QStringLiteral("/r/b3"), {});
     ASSERT_TRUE(waitFor([&] { return twin->done && third->done; }));
-    EXPECT_EQ(twin->response, 2u) << "the same handle twice";
-    EXPECT_EQ(third->response, 2u) << "past the bound";
+    EXPECT_TRUE(twin->error) << "the same handle twice";
+    EXPECT_TRUE(third->error) << "past the bound";
     EXPECT_FALSE(first->done);
     EXPECT_FALSE(second->done);
     EXPECT_EQ(access->pending(), 2);

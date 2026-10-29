@@ -36,7 +36,7 @@ TestCase {
     }
 
     function request(fields: var): var {
-        return Object.assign({appId: "org.example.App", appName: "Example", appIcon: "", title: "Allow Example to Access Your Location?",
+        return Object.assign({appId: "org.example.App", appIcon: "", title: "Allow Example to Access Your Location?",
                               subtitle: "Example wants to use your location", body: "Location access can be changed at any time from the privacy settings",
                               denyLabel: "", grantLabel: "", icon: "find-location-symbolic", modal: true, parented: false, noDefault: false,
                               choices: []}, fields);
@@ -153,6 +153,42 @@ TestCase {
         compare(fakeHost.answers[0].grant, true);
     }
 
+    // ADR-0035 5a-5 (review of step 5a, M2): the keyboard starts on the alert, never on a button: Space typed for another window
+    // never grants; Return grants where Allow is the default.
+    function test_space_never_grants_from_the_start(): void {
+        const alert = test.openAlert({});
+        verify(!test.button(alert, "Allow").activeFocus && !test.button(alert, "Don't Allow").activeFocus, "no button has the keyboard");
+        keyClick(Qt.Key_Space);
+        wait(50);
+        compare(fakeHost.answers.length, 0, "Space answers nothing");
+    }
+
+    // Keys typed on while the alert is not armed start its time again: typing for another window never arms it.
+    function test_keys_typed_on_keep_it_unarmed(): void {
+        const alert = test.openAlert({}, {armMs: 400}, false);
+        for (let i = 0; i < 6; i++) {
+            keyClick(Qt.Key_A);
+            wait(150);
+        }
+        verify(!alert.armed, "still typing: not armed");
+        keyClick(Qt.Key_Return);
+        compare(fakeHost.answers.length, 0);
+        tryVerify(() => alert.armed, 2000);
+    }
+
+    // A close before the alert is armed (one meant for the window before it) is refused; after it, it denies.
+    function test_a_close_before_it_is_armed_is_refused(): void {
+        const alert = test.openAlert({}, {armMs: 3000}, false);
+        alert.close();
+        wait(50);
+        verify(alert.visible, "still shown");
+        compare(fakeHost.answers.length, 0);
+        tryVerify(() => alert.armed, 5000);
+        alert.close();
+        tryVerify(() => fakeHost.answers.length === 1);
+        compare(fakeHost.answers[0].grant, false);
+    }
+
     // AC3: an alert that gets the keyboard late (it opened behind the lock) takes keys only after a click in it.
     function test_an_alert_that_gets_the_keyboard_late_waits_for_a_click(): void {
         const alert = test.openAlert({}, {shownAt: 1});
@@ -166,6 +202,22 @@ TestCase {
         verify(!alert.keysHeld);
         keyClick(Qt.Key_Return);
         tryVerify(() => fakeHost.answers.length === 1);
+    }
+
+    // The click that ends the hold only ends it, even on Allow (review of step 5a, M1: behind the lock, the first click after
+    // the unlock went on to the button under it).
+    function test_the_click_that_ends_the_hold_is_no_answer(): void {
+        const alert = test.openAlert({}, {shownAt: 1});
+        verify(alert.keysHeld);
+        const grant = test.button(alert, "Allow");
+        const at = grant.mapToItem(alert.contentItem, grant.width / 2, grant.height / 2);
+        mouseClick(alert.contentItem, at.x, at.y);
+        wait(50);
+        verify(!alert.keysHeld, "the hold ended");
+        compare(fakeHost.answers.length, 0, "and nothing was answered");
+        mouseClick(grant, grant.width / 2, grant.height / 2);
+        tryVerify(() => fakeHost.answers.length === 1);
+        compare(fakeHost.answers[0].grant, true);
     }
 
     // The frontend's choices: a check box and a pop-up; every choice is answered.
