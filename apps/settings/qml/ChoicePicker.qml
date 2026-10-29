@@ -36,7 +36,41 @@ FocusScope {
         return -1;
     }
 
-    implicitWidth: root.model.length > 0 ? (root.model.length - 1) * root.pitch + root.pictureWidth + 2 * root.ringPad : 0
+    // The widest name (in the chosen weight, the widest one) and the pitch really used: the given one, or more when a longer
+    // language would make two names touch; then the names keep a gap and the row grows to the left (it hangs on the right).
+    property real widestCaption: 0
+    readonly property real usedPitch: Math.max(root.pitch, root.widestCaption + Tokens.settingsChoiceCaptionGap)
+
+    function measureCaptions(): void {
+        let widest = 0;
+        for (let i = 0; i < measure.count; i++) {
+            const item = measure.itemAt(i);
+            if (item)
+                widest = Math.max(widest, item.implicitWidth);
+        }
+        root.widestCaption = widest;
+    }
+
+    // Invisible copies of the names in the bold weight, to know how wide they get.
+    Repeater {
+        id: measure
+        model: root.model
+        onItemAdded: root.measureCaptions()
+        onItemRemoved: root.measureCaptions()
+
+        delegate: Text {
+            required property var modelData
+            visible: false
+            textFormat: Text.PlainText
+            text: modelData.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.settingsCaptionDetailSize
+            font.weight: Tokens.typographyMenuBoldWeight
+            onImplicitWidthChanged: root.measureCaptions()
+        }
+    }
+
+    implicitWidth: root.model.length > 0 ? (root.model.length - 1) * root.usedPitch + root.pictureWidth + 2 * root.ringPad : 0
     implicitHeight: root.ringPad + root.pictureHeight + root.captionBaseline + Tokens.spacingXs
     activeFocusOnTab: true
     Accessible.role: Accessible.RadioButton
@@ -72,7 +106,7 @@ FocusScope {
             required property int index
             readonly property bool selected: cell.index === root.currentIndex
 
-            x: root.ringPad + cell.index * root.pitch
+            x: root.ringPad + cell.index * root.usedPitch
             y: root.ringPad
             width: root.pictureWidth
             height: root.pictureHeight + root.captionBaseline

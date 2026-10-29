@@ -1835,6 +1835,8 @@ QtObject {
     readonly property real settingsSaverThumbPhotoBorder: 0.04
     // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsChoiceRingWidth: 3
+    // Least gap between two choice names when a longer language is wider than the pitch [ref: ADR-0024 spacing scale]
+    readonly property int settingsChoiceCaptionGap: 6
     // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsGlassRowHeight: 232
     // macOS 27: the glass preview's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]

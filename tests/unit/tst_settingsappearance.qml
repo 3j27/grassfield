@@ -216,4 +216,51 @@ TestCase {
         profile.picked("reduced");
         compare(last(t.store), ["material.profile", "reduced"]);
     }
+
+    // The names under the choices never touch, whatever the language: with French names wider than the icon style's pitch,
+    // the picker widens its pitch so each name keeps a gap from the next and stays centred under its own picture.
+    Component {
+        id: pickerComponent
+        SettingsQml.ChoicePicker {
+            model: [{id: "default", text: "Par défaut"}, {id: "dark", text: "Sombre"}, {id: "clear", text: "Transparent"}, {id: "tinted", text: "Teinté"}]
+            value: "default"
+            pictureWidth: Tokens.settingsIconStyleSize
+            pictureHeight: Tokens.settingsIconStyleSize
+            pitch: Tokens.settingsIconStylePitch
+            ringGap: Tokens.settingsAccentRingGap
+            captionBaseline: Tokens.settingsIconStyleCaptionBaseline
+            picture: Component {
+                Rectangle {
+                    property string choice: ""
+                }
+            }
+        }
+    }
+
+    function test_choiceNamesNeverTouch() {
+        const picker = createTemporaryObject(pickerComponent, testCase);
+        verify(picker);
+        waitForRendering(picker);
+        const names = picker.model.map(m => find(picker, i => i.text === m.text && i.visible && i.baselineOffset !== undefined));
+        for (const n of names)
+            verify(n);
+        for (let i = 1; i < names.length; i++) {
+            const a = names[i - 1].mapToItem(picker, 0, 0).x + names[i - 1].width;
+            const b = names[i].mapToItem(picker, 0, 0).x;
+            verify(b - a >= Tokens.settingsChoiceCaptionGap - 1, names[i].text + " starts " + (b - a) + " px after " + names[i - 1].text);
+        }
+        for (let i = 0; i < names.length; i++) {
+            const c = names[i].mapToItem(picker, 0, 0).x + names[i].width / 2;
+            const pic = picker.ringPad + i * picker.usedPitch + picker.pictureWidth / 2;
+            verify(Math.abs(c - pic) <= 1, names[i].text + " is centred under its picture");
+        }
+    }
+
+    // The measured pitch holds when the names are short (English): the audit's 51.5.
+    function test_choicePitchHoldsForShortNames() {
+        const picker = createTemporaryObject(pickerComponent, testCase, {model: [{id: "default", text: "Default"}, {id: "dark", text: "Dark"}, {id: "clear", text: "Clear"}, {id: "tinted", text: "Tinted"}]});
+        verify(picker);
+        waitForRendering(picker);
+        compare(picker.usedPitch, Tokens.settingsIconStylePitch);
+    }
 }
