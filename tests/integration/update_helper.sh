@@ -177,6 +177,14 @@ three=("${omarchy_files[@]}" "${omarchy_commands[@]}" "usr/share/omarchy/migrati
 mkpkg omarchy 4 "${three[@]}" "usr/share/omarchy/migrations/400.sh=read -r answer </dev/tty"
 mkpkg omarchy 5 "${omarchy_files[@]}" "usr/share/omarchy/migrations/300.sh=echo 300" "usr/share/omarchy/migrations/500.sh=echo 500"
 mkpkg omarchy 6 "${three[@]}" "usr/share/omarchy/migrations/600.sh->/usr/share/omarchy/migrations/100.sh"
+mkpkg omarchy 8 "${omarchy_files[0]}" "${omarchy_files[3]}" "${omarchy_commands[@]}"
+# A listing far over a pipe's 64 KiB (as a real Omarchy package's, about 90 KB): a here-string of it would need a file in
+# /tmp (the integrator's re-review of 1ce7c37).
+filler=()
+for i in $(seq 10000 13499); do filler+=("usr/share/omarchy/themes/gu-filler/a-long-file-name-$i.txt=x"); done
+mkpkg omarchy 9 "${omarchy_files[@]}" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/200.sh=omarchy-gu-indirect" "${filler[@]}"
+mkpkg omarchy 10 "${three[@]}" "usr/share/omarchy/migrations/x1.sh=true"
+mkpkg omarchy 11 "${three[@]}" "usr/share/omarchy/migrations/1[2].sh=true"
 seventy=()
 for i in $(seq 1000 1069); do seventy+=("usr/share/omarchy/migrations/$i.sh=true"); done
 mkpkg omarchy 7 "${three[@]}" "${seventy[@]}"
@@ -309,6 +317,18 @@ publish "${cur[@]/omarchy-1/omarchy-5}"; run_helper
 expect "a package with no command file to scan -> exit 7, needs scan (fails closed)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs scan|:1-1"
 publish "${cur[@]/omarchy-1/omarchy-6}"; run_helper
 expect "a migration that is a link -> exit 7, needs migration 600 (fails closed)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 600|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-8}"; run_helper
+expect "a package with commands but no migration -> exit 7, needs scan (fails closed)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs scan|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-10}"; run_helper
+expect "a migration omarchy-migrate would run under another name (x1.sh) -> exit 7, needs scan" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs scan|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-11}"; run_helper
+expect "a migration name with a pattern character (1[2].sh) -> exit 7, needs scan" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs scan|:1-1"
+# /tmp unusable (a file in its place): the scan of a large package still reads its list (pipes and its own folder only).
+publish "${cur[@]/omarchy-1/omarchy-9}"
+mv /tmp /tmp.away && touch /tmp
+run_helper
+rm -f /tmp && mv /tmp.away /tmp
+expect "with /tmp unusable, a 3500-file omarchy package whose migration calls sudo through a command -> exit 7, needs migration 200, not installed" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 200|:1-1"
 publish "${cur[@]/omarchy-1/omarchy-3}"; run_helper 100.sh
 expect "omarchy 3 adds a plain migration, 100 named pending -> exit 0, omarchy 3" test "$rc:$(ver omarchy)" == "0:3-1"
 expect "  the log names the migrations scanned" grep -q 'none needs a person: .*300.sh' "$D/$op.log"

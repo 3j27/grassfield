@@ -39,6 +39,9 @@
 # temporary databases and the extracted files (sync.<op-id>, work.<op-id>), removed when it ends. Only the 16 newest
 # operations' files are kept. Its descriptors are /dev/null and the log, it ignores SIGHUP and SIGPIPE, and the only
 # processes it signals are its own sleep inhibitor's.
+# No here-string or here-document anywhere: bash writes a large one to a file in /tmp, and an unwritable or full /tmp would
+# then make a list read empty (the integrator's re-review of 1ce7c37). Lists come through pipes or files in its own folder,
+# each read checked.
 if IFS= read -r -d '' _ 2>/dev/null </proc/$$/environ; then   # stderr first: without /proc, no message
   exec /usr/bin/env -i /usr/bin/bash -p /usr/lib/grassfield/grassfield-update-helper "$@"
 fi
@@ -148,7 +151,7 @@ progress() { # phase [done total]
 # Its pid and start time (field 22 of /proc/<pid>/stat; the command name before it is in parentheses and may hold spaces).
 read -r stat </proc/$$/stat || finish 1 "cannot read /proc/$$/stat"
 rest=${stat##*) }
-read -r -a fields <<<"$rest"
+read -r -a fields < <(printf '%s\n' "$rest")
 printf '%s %s\n' "$$" "${fields[19]-}" >|"$GU_DIR/.$op.started" && mv -f -- "$GU_DIR/.$op.started" "$GU_DIR/$op.started" ||
   finish 1 "cannot write $GU_DIR/$op.started"
 printf '%s\n' "$op" >|"$GU_DIR/.last" && mv -f -- "$GU_DIR/.last" "$GU_DIR/last"
@@ -175,11 +178,17 @@ dbpath=${dbpath%/}
 [[ $dbpath == /* && -d $dbpath/local ]] || finish 8 "pacman's database folder is unknown"
 # pacman's db.lck: a process that holds it open is a running pacman (libalpm keeps its descriptor until it unlocks); a lock
 # no process holds was left by one that stopped mid-way, which a person clears (Omarchy's terminal shows pacman's advice).
+# A pacman that unlocks closes the lock before it removes it: a lock no process holds is looked at again a second later, and
+# only one still there is stale.
 no_db_lock() {
-  [[ -e $dbpath/db.lck || -L $dbpath/db.lck ]] || return 0
-  if [[ -n $(find /proc/[0-9]*/fd -maxdepth 1 -lname "$dbpath/db.lck" -print -quit 2>/dev/null 9<&-) ]]; then
-    finish 3 "pacman is running ($dbpath/db.lck is held)"
-  fi
+  local try
+  for try in 1 2; do
+    [[ -e $dbpath/db.lck || -L $dbpath/db.lck ]] || return 0
+    if [[ -n $(find /proc/[0-9]*/fd -maxdepth 1 -lname "$dbpath/db.lck" -print -quit 2>/dev/null 9<&-) ]]; then
+      finish 3 "pacman is running ($dbpath/db.lck is held)"
+    fi
+    ((try == 1)) && sleep 1
+  done
   outcome+=("needs stalelock")
   finish 7 "$dbpath/db.lck was left by a pacman that stopped mid-way: nothing was changed"
 }
@@ -237,7 +246,9 @@ while read -r pkg version location extra; do
   after[$pkg]=$version
   url[$pkg]=$location
   count=$((count + 1))
-done <<<"$plan"
+done < <(printf '%s\n' "$plan")
+# A plan with text but no package read is no "up to date".
+[[ $count -gt 0 || -z ${plan//[[:space:]]/} ]] || finish 8 "pacman's plan cannot be read"
 if ((count == 0)); then
   outcome+=("packages 0")
   finish 0 "up to date"
@@ -293,7 +304,7 @@ if ((check_needed)) && [[ -n ${after[grassfield-desktop]-} || -n ${installed[gra
   declare -A built=()
   while read -r name version extra; do
     [[ $name =~ ^[a-z0-9@_+][a-z0-9@._+-]*$ && $version =~ ^[A-Za-z0-9:._+~-]+$ && -z $extra ]] && built[$name]=$version
-  done <<<"$record"
+  done < <(printf '%s\n' "$record")
   refused=()
   for pkg in "${GU_TRACKED[@]}"; do
     now=${after[$pkg]-${installed[$pkg]-}}
@@ -332,13 +343,26 @@ pending=("$@")
 if [[ -n ${after[omarchy]-} ]]; then
   download omarchy
   file=$(cached omarchy) || finish 8 "omarchy's package file is not in pacman's cache"
-  # The members wanted, from the package's own list: a folder the package lacks is no error (the scan then fails closed).
-  listing=$(bsdtar -tf "$file" 9<&-) || finish 8 "cannot read omarchy's package"
-  grep -E '^(usr/share/omarchy/migrations/|usr/share/omarchy/bin/|usr/bin/omarchy-)[^/]+$' <<<"$listing" >"$work/.members"
+  # The members wanted, from the package's own list (written to this run's folder, every write checked): a folder the
+  # package lacks is no error. bsdtar's -T reads patterns, so a name is taken only in a charset with no pattern character
+  # (no * ? [ ] \); any other name there fails closed, as a migration omarchy-migrate would run unscanned.
+  bsdtar -tf "$file" 9<&- >"$work/.listing" || finish 8 "cannot read omarchy's package"
+  : >"$work/.members" || finish 8 "cannot write $work/.members"
+  while IFS= read -r member; do
+    [[ $member =~ ^(usr/share/omarchy/migrations/|usr/share/omarchy/bin/|usr/bin/omarchy-) ]] || continue
+    tail=${member#"${BASH_REMATCH[1]}"}
+    [[ -z $tail || $tail == */* ]] && continue   # the folder itself, or deeper
+    [[ $member =~ ^[A-Za-z0-9/._+-]+$ ]] ||
+      { outcome+=("needs scan"); finish 7 "an Omarchy file name the scan cannot take: nothing was changed"; }
+    printf '%s\n' "$member" >>"$work/.members" || finish 8 "cannot write $work/.members"
+  done <"$work/.listing"
   if [[ -s $work/.members ]]; then
     bsdtar -xf "$file" -C "$work" --no-same-owner --no-same-permissions -T "$work/.members" 9<&- ||
       finish 8 "cannot read omarchy's package"
   fi
+  # Omarchy always ships its migrations: a package without one cannot be scanned against what it brings.
+  [[ -n $(find "$work/usr/share/omarchy/migrations" -maxdepth 1 \( -type f -o -type l \) -name '*.sh' -print -quit 2>/dev/null) ]] ||
+    { outcome+=("needs scan"); finish 7 "the new omarchy package has no migration to read: Omarchy's terminal update runs it"; }
   mig_dir=$work/usr/share/omarchy/migrations
   bin_dirs=("$work/usr/bin" "$work/usr/share/omarchy/bin")
   declare -A had=()
@@ -347,7 +371,10 @@ if [[ -n ${after[omarchy]-} ]]; then
   done < <(pacman -Qlq omarchy 2>/dev/null 9<&-)
   while IFS= read -r path; do
     name=${path##*/}
-    [[ $name =~ ^[0-9]{1,20}\.sh$ && -z ${had[$name]-} ]] && pending+=("$name")
+    [[ -n ${had[$name]-} ]] && continue
+    # omarchy-migrate runs every *.sh: one with another name would run unscanned, so it fails closed.
+    [[ $name =~ ^[0-9]{1,20}\.sh$ ]] || { outcome+=("needs scan"); finish 7 "an Omarchy migration name the scan cannot take: $name"; }
+    pending+=("$name")
   done < <(find "$mig_dir" -maxdepth 1 \( -type f -o -type l \) -name '*.sh' 2>/dev/null)
 fi
 if ((${#pending[@]})); then

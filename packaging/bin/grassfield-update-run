@@ -58,7 +58,7 @@ log=$dir/software-update-run.log
 
 read -r stat </proc/$$/stat || exit 1
 rest=${stat##*) }
-read -r -a fields <<<"$rest"
+read -r -a fields < <(printf '%s\n' "$rest")
 start_time=${fields[19]-0}
 read -r uuid </proc/sys/kernel/random/uuid || exit 1
 op=${uuid//-/}
