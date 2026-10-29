@@ -83,6 +83,9 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
         if (m_state.tab == Tab::Energy)
             requestSample();
     });
+    connect(&m_battery, &BatteryWatch::changed, this, [this] { m_summary.setBattery(m_battery.state()); });
+    m_summary.setDiskMode(m_state.diskGraph);
+    m_summary.setNetworkMode(m_state.networkGraph);
 
     // Appearance follows grassfield.json (read only), like every Grassfield surface (as Preview and the Store).
     m_macDevice = grassfield::apps::macDeviceHere();
@@ -110,6 +113,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
 
     m_table.setView(m_state.view);
     applyTab();
+    m_summary.setTab(m_state.tab);
 }
 
 ActivityApp::~ActivityApp()
@@ -152,6 +156,7 @@ void ActivityApp::setTab(const QString &key)
         return;
     m_state.tab = *tab;
     applyTab();
+    m_summary.setTab(*tab);
     emit tabChanged();
     scheduleSave();
     // The tab reads other files (ADR-0038 d): the next sample comes now, and the interval starts again from it.
@@ -325,6 +330,20 @@ void ActivityApp::saveSize(int width, int height)
     scheduleSave();
 }
 
+void ActivityApp::setGraphMode(const QString &graph, const QString &mode)
+{
+    if (graph == QLatin1String("disk") && (mode == QLatin1String("io") || mode == QLatin1String("data")) && mode != m_state.diskGraph) {
+        m_state.diskGraph = mode;
+        m_summary.setDiskMode(mode);
+        scheduleSave();
+    } else if (graph == QLatin1String("network") && (mode == QLatin1String("packets") || mode == QLatin1String("data"))
+               && mode != m_state.networkGraph) {
+        m_state.networkGraph = mode;
+        m_summary.setNetworkMode(mode);
+        scheduleSave();
+    }
+}
+
 void ActivityApp::setWindowShown(bool shown)
 {
     if (shown == m_shown)
@@ -354,8 +373,10 @@ void ActivityApp::requestSample()
         return;
     }
     m_busy = true;
-    if (m_state.tab == Tab::Energy)
+    if (m_state.tab == Tab::Energy) {
         m_inhibitors.refresh(); // AM38: asked at each sample while the Energy tab is shown
+        m_battery.refresh();    // AM39: the battery's figures and graph, the same way
+    }
     emit sampleRequested(readsForColumns(m_state.tab, tabState().columns), m_state.interval, m_forget);
     m_forget = false;
 }
@@ -371,6 +392,7 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
         m_table.setSwappedMemory(m_swapped);
         emit columnsChanged();
     }
+    m_summary.addSample(*snapshot);
     m_table.setRows(tableRows(*snapshot));
     m_ready = true;
     emit sampled();
@@ -469,6 +491,7 @@ void ActivityApp::readAppearance()
     if (locale != m_formats) {
         m_formats = locale;
         m_table.setLocale(locale);
+        m_summary.setLocale(locale);
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();

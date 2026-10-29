@@ -5,10 +5,12 @@
 #pragma once
 
 #include "activitystate.h"
+#include "battery.h"
 #include "desktopapps.h"
 #include "inhibitors.h"
 #include "processtable.h"
 #include "samplerworker.h"
+#include "summary.h"
 
 #include <QDBusConnection>
 #include <QElapsedTimer>
@@ -47,6 +49,8 @@ class ActivityApp : public QObject
     // AM9: 1, 2 or 5 seconds.
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
     Q_PROPERTY(QObject *table READ table CONSTANT)
+    // The summary under the table: the tab's figures and graphs (AM5).
+    Q_PROPERTY(QObject *summary READ summary CONSTANT)
     // Every column of the tab, in the table's order ({key, title, shown, optional, numeric, width}): View > Columns and the
     // header's menu (AM15). `shownColumns` is the shown ones alone, in order; a width of 0 is the token width.
     Q_PROPERTY(QVariantList columns READ columns NOTIFY columnsChanged)
@@ -91,6 +95,8 @@ public:
     void setInterval(int seconds);
     QObject *table() { return &m_table; }
     ProcessTable &processTable() { return m_table; }
+    QObject *summary() { return &m_summary; }
+    Summary &summaryModel() { return m_summary; }
     QVariantList columns() const;
     QVariantList shownColumns() const;
     QString sortKey() const { return columnKey(tabState().sort); }
@@ -112,6 +118,8 @@ public:
     Q_INVOKABLE void copySelection();
     // AM2: the window's size as it closes.
     Q_INVOKABLE void saveSize(int width, int height);
+    // AM42, AM44: the pop-up above the Disk graph ("io" or "data") or the Network graph ("packets" or "data"), remembered.
+    Q_INVOKABLE void setGraphMode(const QString &graph, const QString &mode);
 
     // The rows of a snapshot as the table shows them (the tests feed snapshots through it).
     std::vector<TableRow> tableRows(const Snapshot &snapshot);
@@ -141,6 +149,8 @@ private:
     QString m_statePath;
     ActivityState m_state;
     ProcessTable m_table;
+    Summary m_summary;
+    BatteryWatch m_battery;
     QThread m_thread;
     SamplerWorker *m_worker = nullptr; // lives on m_thread
     QTimer m_timer, m_saveTimer, m_autoTimer;
