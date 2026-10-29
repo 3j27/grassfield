@@ -43,6 +43,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -99,6 +100,7 @@ namespace gf::tiler {
             uint32_t                                    steps     = 0; // applications that changed a frame
             uint32_t                                    held      = 0; // motions that waited for the next refresh
             std::vector<uint64_t>                       left;          // windows that left it (gate C1): no longer set, still bounds
+            std::vector<uint64_t>                       moved;         // windows set at least once (the frame probe's mark at the end)
             uint64_t                                    workUs    = 0; // the plugin's own time in the drag's motions and frames
             uint64_t                                    maxWorkUs = 0; // the longest of them (one motion or one refresh's frames)
         };
@@ -1067,14 +1069,18 @@ namespace gf::tiler {
             return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & kMods) != 0;
         }
 
-        // An xdg popup of any window shown on a visible Desktop holds the point. Hyprland's windowAt returns the topmost
-        // window whose box (border grab area included) holds the point before it looks at the popups of the windows below,
-        // so a popup reaching over the gap from the lower window of the edge was not seen (integrator nested pass of 3d56d60).
+        // A popup holds the point: an xdg popup of any window shown on a visible Desktop, or an X11 override-redirect window
+        // (an XWayland app's menu, a tooltip) whose box holds it. Hyprland's windowAt returns the topmost window whose box
+        // (border grab area included) holds the point before it looks at the popups of the windows below (integrator nested
+        // pass of 3d56d60), and for an override-redirect window that wants no focus it returns the focused window: an edge
+        // window when the menu is that window's (integrator review of 0c4c8f2).
         bool popupAt(const Vector2D& p) {
             if (!Desktop::windowState())
                 return false;
             for (const auto& w : Desktop::windowState()->windows()) {
-                if (w && w->m_isMapped && !w->isHidden() && !w->m_isX11 && w->m_workspace && w->m_workspace->isVisible() && w->hasPopupAt(p))
+                if (!w || !w->m_isMapped || w->isHidden() || (w->m_workspace && !w->m_workspace->isVisible()))
+                    continue;
+                if (w->m_isX11 ? w->isX11OverrideRedirect() && w->getWindowMainSurfaceBox().containsPoint(p) : w->m_workspace && w->hasPopupAt(p))
                     return true;
             }
             return false;
@@ -1165,6 +1171,8 @@ namespace gf::tiler {
                 }
                 g_layoutManager->setTargetGeom(toCBox(tiling::surfaceOf(f.second, e->limits.band)), t);
                 t->warpPositionSize();
+                if (std::ranges::find(d.moved, id) == d.moved.end())
+                    d.moved.push_back(id);
             }
             for (const uint64_t id : gone) {
                 d.left.push_back(id);
@@ -1222,6 +1230,12 @@ namespace gf::tiler {
             }
             notify(tiling::Reason::Resized);
             edgeCursor(std::nullopt);
+            // The drag's own count for P3 (integrator review of 0c4c8f2: the windows it resized, not a number the harness
+            // assumes): "edge-drag:F/E", F of the edge's E windows followed it (set at least once and never left it).
+            const auto followed = std::ranges::count_if(d.windows, [&d](const tiling::EdgeWindow& e) {
+                return std::ranges::find(d.moved, e.id) != d.moved.end() && std::ranges::find(d.left, e.id) == d.left.end();
+            });
+            gf::frameProbe::mark(std::format("edge-drag:{}/{}", followed, d.windows.size()));
             logRequest(Log::DEBUG, "shared edge: {} window(s), {:+.0f} px, {} step(s) and {} held motion(s) in {} ms, the plugin's work {} us (longest step {} us) ({})",
                        d.windows.size(), d.delta, d.steps, d.held, nowMs() - d.beganMs, d.workUs, d.maxWorkUs, why);
         }
@@ -1247,7 +1261,7 @@ namespace gf::tiler {
                 s.book.beginResize(w.id); // Tiled by edgeScene
             const auto now = nowMs();
             s.edge         = SEdgeDrag{.edge = *edge, .windows = std::move(windows), .grid = grid, .press = p, .monitor = monitorAt(p), .delta = 0, .applied = {},
-                                       .beganMs = now, .appliedMs = now, .steps = 0, .held = 0, .left = {}, .workUs = 0, .maxWorkUs = 0};
+                                       .beganMs = now, .appliedMs = now, .steps = 0, .held = 0, .left = {}, .moved = {}, .workUs = 0, .maxWorkUs = 0};
             s.edgeReleaseOwed = true;
             edgeCursor(edge->vertical);
             return true;

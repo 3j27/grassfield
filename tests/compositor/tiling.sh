@@ -113,8 +113,10 @@
 #   shared-edge        (with tiling-shared-edge) the victim one of two windows arranged left and right, unmapped while the
 #                      plugin drags their shared edge: it leaves the drag (logged) but still bounds it: the other follows,
 #                      dragged far toward the victim it stops at the victim's minimum, inside the work area; Tiled again
-# With them (tiling-shared-edge; xdgact windows), not a C1 case: the left one of two xdgact windows arranged left and right
-# opens an xdg popup over the handle; the drag there reaches the popup and moves neither window (TL30, D35).
+# With them (tiling-shared-edge; xdgact windows), not C1 cases: the left one of two xdgact windows arranged left and right
+# opens an xdg popup over the handle; the drag there reaches the popup and moves neither window (TL30, D35). And an X11
+# override-redirect menu (tests/tools/x11menu, on the nested Hyprland's own X display) over the handle, the left window
+# focused: the plugin does not take the press (the right window keeps its box).
 # Hyprland must answer after each, the plugin must log its guarded path ("closed or unmapped"), and coredumpctl must list no
 # new Hyprland core dump. A/B against an older build (the integrator's proof that the cases reach the crash):
 #   tests/compositor/tiling.sh --c1 --plugin /path/to/439e1f2/grassfield-compositor.so   (expected: FAIL, Hyprland gone)
@@ -481,6 +483,63 @@ run_edge_popup() {
   kill "$apid" "$bpid" 2>/dev/null
   sleep 0.3
 }
+# An X11 menu over the handle keeps the press from it (TL30, D35; integrator review of 0c4c8f2): two xdgact windows arranged
+# left and right, the left one focused (for an override-redirect window that wants no focus Hyprland's windowAt returns the
+# focused window: an edge window, as when the menu is that window's own), and an X11 override-redirect window of type popup
+# menu (tests/tools/x11menu) over the handle. The plugin does not take the press: the right window keeps its box (the edge's
+# drag would move its left side). Hyprland's own routing may then resize the focused left window by its border, as it does
+# without the plugin: logged. Skipped when the nested Hyprland has no X display.
+run_edge_x11menu() {
+  local tb=$GF_TB_HEIGHT a b apid bpid mpid lx ly lw lh rx rw r1 l1 hx hy xdisplay menu
+  nestctl dispatch "hl.dsp.exec_cmd('printf %s \"\$DISPLAY\" > $run/xdisplay')" >>"$log" 2>&1
+  sleep 0.8
+  xdisplay=$(cat "$run/xdisplay" 2>/dev/null || true)
+  if [[ ! $xdisplay =~ ^:[0-9]+$ || $xdisplay == "${DISPLAY:-}" ]]; then
+    say "SKIP: shared-edge X11 menu (the nested Hyprland has no X display of its own: '${xdisplay}')"
+    return
+  fi
+  "$root/tests/tools/x11menu/x11menu.sh" --build >>"$log" 2>&1 || { check "shared-edge X11 menu: tests/tools/x11menu builds" false; return; }
+  close_shell_popup "shared-edge X11 menu"
+  open_xdg gf-edge-x11-a
+  a=$xdg_addr apid=$xdg_pid
+  open_xdg gf-edge-x11-b
+  b=$xdg_addr bpid=$xdg_pid
+  if [[ -z $a || -z $b ]]; then
+    check "shared-edge X11 menu: the two xdgact windows opened" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$a\",\"$b\"]}')" >>"$log" 2>&1
+  sleep 0.8
+  read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r rx rw < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  if [[ -z ${lx:-} || -z ${rx:-} ]] || ((rx <= lx + lw)); then
+    check "shared-edge X11 menu: the two windows are arranged left and right (${lx:-?}+${lw:-?}, ${rx:-?})" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$a' })" >>"$log" 2>&1
+  sleep 0.3
+  : >"$run/x11menu.out"
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/x11menu/x11menu.sh" "$xdisplay" $((mx + hx - 100)) $((my + hy - 60)) 200 120 \
+    >"$run/x11menu.out" 2>&1 </dev/null &
+  mpid=$!
+  pids+=("$mpid")
+  for _ in $(seq 1 30); do grep -aq mapped "$run/x11menu.out" && break; sleep 0.1; done
+  check "shared-edge X11 menu: the override-redirect window is mapped" grep -aq mapped "$run/x11menu.out"
+  sleep 0.5
+  menu=$(nestctl clients -j | jq -r '[.[] | select(.xwayland == true and .size == [200, 120])][0] | select(. != null) | "\(.at[0]) \(.at[1])"')
+  say "  the X11 menu at ${menu:-?} (wanted $((mx + hx - 100)) $((my + hy - 60))), the handle at $((mx + hx)),$((my + hy))"
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 600
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  left window $l1 (was $lx $ly $lw $lh; Hyprland's own border resize may change it), right window $r1 (was $rx $rw), the menu" \
+    "$(grep -aq pressed "$run/x11menu.out" && echo pressed || echo "not pressed")"
+  check "shared-edge X11 menu: the plugin does not take the press (the right window keeps its box)" test "$r1" = "$rx $rw"
+  kill "$mpid" "$apid" "$bpid" 2>/dev/null
+  sleep 0.3
+}
 c1_cases() {
   "$root/tests/tools/xdgact/xdgact.sh" --build >>"$log" 2>&1 || { check "C1: tests/tools/xdgact builds" false; return; }
   local dumps0 dumps1
@@ -494,6 +553,7 @@ c1_cases() {
   if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
     run_c1_edge
     run_edge_popup
+    run_edge_x11menu
   else
     say "SKIP: C1 shared-edge and the popup over the handle (the plugin does not advertise tiling-shared-edge)"
   fi
