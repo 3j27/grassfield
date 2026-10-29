@@ -35,6 +35,8 @@ TestCase {
             readonly property string homeDir: "/home/u"
             readonly property string softwareUpdateFile: "/home/u/.local/state/grassfield/software-update.json"
             readonly property bool omarchyUpdate: true
+            readonly property bool updateRunner: false
+            readonly property string softwareUpdateRunFile: "/run/user/1000/grassfield/software-update-run.json"
             readonly property var applicationDirs: ["/home/u/.local/share/applications", "/usr/share/applications"]
             property var files: ({})
             property var busQueries: []
@@ -218,6 +220,17 @@ TestCase {
         // Accepted in a dev session: nothing ends (SystemService's guard).
         shownSheet(win).confirm();
         verify(shownSheet(win) === null);
+        // Update Now's end (U29): the restart or log out its run asks for, with Later; nothing for another outcome.
+        pane.updates.runFinished("done", "restart");
+        compare([shownSheet(win).cancelText, shownSheet(win).confirmText], ["Restart Later", "Restart"]);
+        compare(shownSheet(win).title, "Restart your computer to finish updating");
+        shownSheet(win).close();
+        pane.updates.runFinished("done", "logout");
+        compare([shownSheet(win).cancelText, shownSheet(win).confirmText], ["Log Out Later", "Log Out"]);
+        shownSheet(win).close();
+        pane.updates.runFinished("terminal", "");
+        pane.updates.runFinished("done", "");
+        verify(shownSheet(win) === null, "no sheet when nothing is to be finished");
     }
 
     // A page's request opens its sheet; the sheet's answer reaches the page.

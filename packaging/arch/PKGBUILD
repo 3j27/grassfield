@@ -38,9 +38,11 @@ license=(MIT)
 # Everything the build compiles against or runs is here: `makepkg -s` installs the global depends and makedepends only,
 # not the depends of the package functions below. Found by the first builds in a clean container (grassfield-packages,
 # ADR-0033 f): hyprwayland-scanner (the plugin's protocol code, compositor/CMakeLists.txt), kio, solid, kcoreaddons and
-# kservice (apps/files), qt6-webengine (QtPdf) and qt6-multimedia (apps/preview).
+# kservice (apps/files), qt6-webengine (QtPdf) and qt6-multimedia (apps/preview). quickshell: the build records the version
+# the shell was built for (BUILD-DEPS, below), which Software Update's compatibility check reads (ADR-0033 s3.4).
 makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools
-             hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia)
+             hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia
+             quickshell)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
@@ -74,10 +76,17 @@ prepare() {
   # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
   # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
   # ${srcdir:?}: an empty $srcdir must stop here, never turn these into paths at the root.
-  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/pacman"
+  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/BUILD-DEPS" "${srcdir:?}/pacman"
   mkdir -p "$srcdir/snapshot"
   git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
+  # BUILD-DEPS (ADR-0033 s3.4): the versions of the toolkit this build compiles and runs against, one `<name> <version>`
+  # per line, read by grassfield-update-helper's compatibility check before an update changes one of them. All of them or
+  # no build: a record that lacks one refuses every update of it.
+  if ! pacman -Q qt6-base quickshell hyprland aquamarine kcoreaddons >"$srcdir/BUILD-DEPS"; then
+    echo "PKGBUILD: the build environment lacks a package BUILD-DEPS records (qt6-base quickshell hyprland aquamarine kcoreaddons)" >&2
+    return 1
+  fi
   if [[ $(tr -d '[:space:]' <"$srcdir/snapshot/VERSION") != "$_ver" ]]; then
     echo "PKGBUILD: VERSION of HEAD ($(<"$srcdir/snapshot/VERSION")) is not the VERSION this PKGBUILD read ($_ver): commit it first" >&2
     return 1
@@ -253,13 +262,15 @@ package_grassfield-desktop() {
   for tool in grassfield-login grassfield-login-check grassfield-nightshift grassfield-channel-set; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
-  # Software Update (ADR-0033 c; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the program of
-  # the polkit action below, run by grassfield-channel-set through pkexec) and grassfield-channel-scriptlet (this
-  # package's pre_remove and post_upgrade) over their shared library, the only Grassfield code that runs as root; the
-  # templates they write /etc/pacman.d/grassfield.conf from; Omarchy's pre-refresh-pacman hook that grassfield-channel-set
-  # links. grassfield-channel-set and grassfield-update-check come from packaging/bin above.
+  # Software Update (ADR-0033 c and "Step 3"; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the
+  # program of the first polkit action below, run by grassfield-channel-set through pkexec), grassfield-update-helper (the
+  # second's, run by grassfield-update-run: Update Now, owner decision SU-M1) and grassfield-channel-scriptlet (this
+  # package's pre_remove and post_upgrade) over their shared library, the Grassfield code of this package that runs as root;
+  # the templates they write /etc/pacman.d/grassfield.conf from; Omarchy's pre-refresh-pacman hook that
+  # grassfield-channel-set links. grassfield-channel-set, grassfield-update-check and grassfield-update-run come from
+  # packaging/bin above.
   install -m755 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel-helper" \
-    "$root/packaging/pacman/grassfield-channel-scriptlet"
+    "$root/packaging/pacman/grassfield-update-helper" "$root/packaging/pacman/grassfield-channel-scriptlet"
   install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
   install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
@@ -339,6 +350,7 @@ package_grassfield-desktop() {
   # Version and build provenance: the shell's About reads VERSION (a sibling of the shell directory).
   install -Dm644 "$root/VERSION" "$pkgdir/usr/share/grassfield/VERSION"
   install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/grassfield/BUILD-COMMIT"
+  install -Dm644 "$srcdir/BUILD-DEPS" "$pkgdir/usr/share/grassfield/BUILD-DEPS"
   install -Dm644 "$root/CHANGELOG.md" "$pkgdir/usr/share/doc/grassfield/CHANGELOG.md"
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"

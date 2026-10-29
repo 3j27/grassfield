@@ -20,11 +20,27 @@ e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyp
 # omarchy-launch-floating-terminal-with-presentation (the pane's "Update Now" runs it with omarchy-update) and
 # omarchy-update-restart (its reboot rule, which the pane reads: the reboot-required marker, the running kernel's modules).
 8bf29b263940ee4c96a2079ba1ac65359f8497be8cb37c657124e5f739d57a26 bin/omarchy-refresh-pacman packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set
-c64ea844feb1849375e7cd43dde98933293b0e0f0f522e1ba2c6572d86386c7b bin/omarchy-hook packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set
-cd1b703031a7456b2bd1302166a2cd29a1db8007f15bed954f64e742502aa552 bin/omarchy-update packaging/bin/grassfield-update-check,apps/settings/src/systemguard.cpp
-9448e1748b10e46bb4310be37d69d0eba6090f69c71264cce4fc6f344278cb7d bin/omarchy-update-lock packaging/bin/grassfield-update-check,packaging/bin/grassfield-channel-set
+c64ea844feb1849375e7cd43dde98933293b0e0f0f522e1ba2c6572d86386c7b bin/omarchy-hook packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set,packaging/bin/grassfield-update-run
+cd1b703031a7456b2bd1302166a2cd29a1db8007f15bed954f64e742502aa552 bin/omarchy-update packaging/bin/grassfield-update-check,apps/settings/src/systemguard.cpp,packaging/pacman/grassfield-update-helper
+9448e1748b10e46bb4310be37d69d0eba6090f69c71264cce4fc6f344278cb7d bin/omarchy-update-lock packaging/bin/grassfield-update-check,packaging/bin/grassfield-channel-set,packaging/bin/grassfield-update-run
 257387ccfcca6211f7bc6bf2cc500bd07d4066c8354f7b869400bc5153e6d645 bin/omarchy-update-available packaging/bin/grassfield-update-check
 f8d1b779b71c76b4f3b36fd1a90e891aee38ff362c1c2a9953f85363150ac4f5 default/pacman/pacman-stable.conf packaging/pacman/grassfield-channel.sh
 f2d76f443b3b6b553790a766cf39aef48ae457cae670538d4390d9457cfa40cc bin/omarchy-update-status packaging/shims/omarchy-shell
 01c6af7dcc7d76c23b5f95f594516195d569ede9f0f8f48f932ec5ff3531a08f bin/omarchy-launch-floating-terminal-with-presentation apps/settings/src/systemguard.cpp,apps/settings/qml/SoftwareUpdateState.qml
-7bc95f8a0a3ae35cfd81453e08194f5660c27cf59528c7d95b4345f362030b60 bin/omarchy-update-restart apps/settings/qml/SoftwareUpdateState.qml
+7bc95f8a0a3ae35cfd81453e08194f5660c27cf59528c7d95b4345f362030b60 bin/omarchy-update-restart apps/settings/qml/SoftwareUpdateState.qml,packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
+# Software Update step 3 (ADR-0033 "Step 3", owner decision SU-M1): the root steps of `omarchy update` that
+# grassfield-update-helper runs itself (the system programs these scripts call with sudo, with their arguments), the guard
+# hook it satisfies, and the user steps grassfield-update-run runs after the transaction. Identical in v4.0.6 except
+# omarchy-update-keyring (4.0.6 adds --needed, which the helper follows).
+50a5ddef021dac5e79f789a53643fa91a6b8d7193b4d27786516d142525eca93 bin/omarchy-update-requires-free-space packaging/pacman/grassfield-update-helper
+22a4b71541270a7d7c6ed85d480f9f2888df059e030d30860caf4c1f9a601dda bin/omarchy-update-pkg-prune packaging/pacman/grassfield-update-helper
+a154bb5fd33ad3288be4783557887a7207176e9d05bc72585c30e27fea8e3e7b bin/omarchy-snapshot packaging/pacman/grassfield-update-helper
+848005a3ae94d0d260476247eb7be90e0581b5ff329ae414c21b686fe8b993ad bin/omarchy-update-stay-awake packaging/pacman/grassfield-update-helper
+1a7277106e9f3de34325d27dac5bc6c8e778a83eabeeebcc4e0b921c66be74de bin/omarchy-update-keyring packaging/pacman/grassfield-update-helper
+5eb31930e2a09c73c33e1ad86baa86e5260f085414d86343e5d38d54e6930d46 bin/omarchy-update-system-pkgs packaging/pacman/grassfield-update-helper
+dae1379216754e372f749ce4a4f3232b20225d08e2d0784d7607bba113ebbc62 bin/omarchy-update-system-pkgs-when-conflicted packaging/pacman/grassfield-update-helper
+aa56714de498170cf9460923dc1047dd89dcc3b08e21809ad2d764ebd1553fed bin/omarchy-update-pacman-guard packaging/pacman/grassfield-update-helper
+d72930596e608ef47004fbf444b2088b5b9a3bf94e4fdfa26b2507eadcedad99 bin/omarchy-update-analyze-logs packaging/pacman/grassfield-update-helper
+0c14cb7853174d5289172496e22c1bd444b20c00c1aefd589e1faa3ae6941abe bin/omarchy-migrate packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
+edc8148e37bf0b43957f59f8aba7d3c6bfaf8b40d43f0199ba7bf05ae5c908a5 bin/omarchy-update-mise packaging/bin/grassfield-update-run
+fa72062dc1aedb99f4e33fcbde98a2d21b7d3ff058fb8148080396c23bcd740d bin/omarchy-update-aur-pkgs packaging/bin/grassfield-update-run
