@@ -780,10 +780,11 @@ TEST(StoreBackend, RealSignedCatalog)
     EXPECT_TRUE(get.isEmpty() || get == QLatin1String("offline")) << qPrintable(get);
     EXPECT_EQ(backend.actions(steam).value(QStringLiteral("uninstall")).toString(), QStringLiteral("notInstalled"));
     // The catalog's AUR app (step 3b2): not in the Store while the AUR is off (the model leaves it out); once it is on, with
-    // Omarchy's terminal there and the pins matching, refused while the catalog does not pin the AUR's command and the
-    // omarchy-pkg-missing it calls (this fixture pins only the Steam setup's files).
+    // Omarchy's terminal there, its package lists and the pins matching, refused while the catalog does not pin the AUR's
+    // command and the omarchy-pkg-missing it calls (this fixture pins only the Steam setup's files).
     const QString aurGame = QStringLiteral("aur-game");
     EXPECT_TRUE(backend.app(aurGame).isEmpty()) << "a catalog AUR app while the AUR is off";
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "btop\n");
     s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
     int changes = 0;
     QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&changes] { ++changes; });
