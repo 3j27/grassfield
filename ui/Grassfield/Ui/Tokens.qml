@@ -2276,6 +2276,8 @@ QtObject {
     readonly property int filesPanelFieldWidth: 300
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
+    // estimate: a permission alert takes no click and no key this long after it drew, so a click or a key meant for what was there before never answers it [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
+    readonly property int portalAlertArmMs: 500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
