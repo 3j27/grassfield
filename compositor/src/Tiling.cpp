@@ -1969,12 +1969,6 @@ namespace gf::tiler {
                 home = State::workspaceState()->create(desk.home, m->m_id); // Hyprland ended it when it emptied
             if (!home || home->m_isSpecialWorkspace)
                 return "its Desktop could not be made again";
-            // Back as an ordinary window: out of a zoom or a full screen of Hyprland's first (re-review of e5bd9d2: a member
-            // zoomed by a key went home still zoomed).
-            if (fullscreenNow(w)) {
-                if (const auto& fs = Fullscreen::controller())
-                    fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false);
-            }
             catchUp();
             const auto*        r      = s.book.find(idOf(w));
             const tiling::Rect before = r ? r->before : toRect(w->layoutTarget()->position());
@@ -1986,6 +1980,12 @@ namespace gf::tiler {
             }
             if (const auto moved = Config::Actions::moveToWorkspace(home, false, w); !moved || w->m_workspace != home)
                 return moved ? std::string{"the window did not reach its Desktop"} : std::format("the move failed: {}", moved.error().message);
+            // Back as an ordinary window: out of a zoom or a full screen of Hyprland's (re-review of e5bd9d2: a member zoomed by
+            // a key went home still zoomed), once the move can no longer be refused (PASS on 1ee992e, NIT: a refusal changed it).
+            if (fullscreenNow(w)) {
+                if (const auto& fs = Fullscreen::controller())
+                    fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false);
+            }
             if (s.book.find(idOf(w)))
                 s.book.forget(idOf(w));
             s.splitHomes.erase(idOf(w));
