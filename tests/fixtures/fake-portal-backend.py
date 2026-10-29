@@ -8,6 +8,10 @@ tests/integration/portal_settings.sh (ADR-0035 D-8).
                                           change as x-d-p-gtk does (SettingChanged: gtk-theme Adwaita, color-scheme 0,
                                           font-name "Cantarell 11"); on SIGUSR2 gtk-theme Grassfield-orange (a value the
                                           Grassfield backend already has)
+                                          It also serves FileChooser as x-d-p-gtk does for grassfield-portal's forward
+                                          (tests/integration/portal_filechooser.sh): every OpenFile, SaveFile and SaveFiles
+                                          answers 0 with uris ["file:///from-gtk/<method>"] and a choice, logged as
+                                          "FileChooser.<method> <handle>"
     fake-portal-backend.py silent-frontend owns org.freedesktop.portal.Desktop and never answers a call
 
 It refuses any bus but a private test bus (GF_TEST_BUS=1, the address under GF_TEST_BUS_DIR), as the other fakes do.
@@ -34,6 +38,10 @@ XML = """<node><interface name="org.freedesktop.impl.portal.Settings">
 <method name="Read"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="out"/></method>
 <signal name="SettingChanged"><arg type="s"/><arg type="s"/><arg type="v"/></signal>
 <property name="version" type="u" access="read"/></interface></node>"""
+CHOOSER_XML = """<node><interface name="org.freedesktop.impl.portal.FileChooser">""" + "".join(
+    """<method name="%s"><arg type="o" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/>
+<arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="u" direction="out"/><arg type="a{sv}" direction="out"/></method>""" % m
+    for m in ("OpenFile", "SaveFile", "SaveFiles")) + "</interface></node>"
 V = GLib.Variant
 VALUES = {"org.freedesktop.appearance": {"color-scheme": V("u", 2), "contrast": V("u", 0)},
           "org.gnome.desktop.interface": {"gtk-theme": V("s", "Adwaita-dark"), "font-name": V("s", "Inter 10")}}
@@ -66,6 +74,14 @@ def main():
             inv.return_dbus_error("org.freedesktop.portal.Error.NotFound", "not found")
         node = Gio.DBusNodeInfo.new_for_xml(XML)
         conn.register_object("/org/freedesktop/portal/desktop", node.interfaces[0], call, lambda *_: V("u", 1), None)
+
+        def choose(conn, sender, path, iface, method, params, inv):
+            with open(args.log, "a") as f:
+                f.write("FileChooser.%s %s\n" % (method, params.unpack()[0]))
+            inv.return_value(V("(ua{sv})", (0, {"uris": V("as", ["file:///from-gtk/" + method]),
+                                                "choices": V("a(ss)", [("enc", "latin1")])})))
+        chooser = Gio.DBusNodeInfo.new_for_xml(CHOOSER_XML)
+        conn.register_object("/org/freedesktop/portal/desktop", chooser.interfaces[0], choose, None, None)
         name = "org.freedesktop.impl.portal.desktop.gtk"
 
         def changed(entries):

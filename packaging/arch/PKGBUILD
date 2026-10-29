@@ -135,6 +135,10 @@ build() {
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
+  # grassfield-portal (ADR-0035 D-4): the Open and Save panels, the Files library and Files' QML (installed by files-build).
+  cmake -S "$(_root)/apps/portal" -B "$srcdir/portal-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/portal-build"
   cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/preview-build"
@@ -187,7 +191,7 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -284,7 +288,7 @@ package_grassfield-desktop() {
   find "$root/packaging/session-bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/session-bin/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
@@ -317,6 +321,13 @@ package_grassfield-desktop() {
     "$pkgdir/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf"
   install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield_settings.service" \
     "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield_settings.service"
+  # grassfield-portal (ADR-0035 D-4): /usr/lib/grassfield/grassfield-portal (D-Bus activation through its unit, above), its
+  # .portal file next to the Settings backend's, and its D-Bus service file.
+  DESTDIR="$pkgdir" cmake --install "$srcdir/portal-build"
+  install -Dm644 "$root/packaging/xdg/xdg-desktop-portal/portals/grassfield.portal" \
+    "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal"
+  install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield.service" \
+    "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield.service"
   # The GTK themes: /usr/share/themes/Grassfield-<accent>[-hc][-dark] (named by the portal backend for GTK 3 and GTK 4).
   install -dm755 "$pkgdir/usr/share/themes"
   cp -r --no-preserve=ownership "$srcdir/gtk-themes/." "$pkgdir/usr/share/themes/"

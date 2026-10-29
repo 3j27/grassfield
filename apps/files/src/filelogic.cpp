@@ -433,6 +433,115 @@ bool nameMatchesFilter(const QString &name, const QString &filter)
     return foldForMatch(name).contains(foldForMatch(filter));
 }
 
+namespace
+{
+
+// The bracket expression opening at pattern[open] ('[' there): whether `c` is in it, with `end` set past its ']'; end = -1
+// when it closes nowhere (that '[' is then a plain character). "[!...]" and "[^...]" negate; a ']' right after the opening
+// is a member; "a-z" is a range; '\' takes the next character as it is, as GTK's fnmatch does.
+bool inBracket(const QList<uint> &pattern, qsizetype open, uint c, qsizetype &end)
+{
+    qsizetype i = open + 1;
+    const bool negate = i < pattern.size() && (pattern[i] == U'!' || pattern[i] == U'^');
+    if (negate)
+        ++i;
+    const auto literal = [&pattern](qsizetype &at) {
+        if (pattern[at] == U'\\' && at + 1 < pattern.size())
+            ++at;
+        return pattern[at];
+    };
+    bool found = false;
+    for (const qsizetype first = i; i < pattern.size(); ++i) {
+        if (pattern[i] == U']' && i > first) {
+            end = i + 1;
+            return found != negate;
+        }
+        const uint low = literal(i);
+        if (i + 2 < pattern.size() && pattern[i + 1] == U'-' && pattern[i + 2] != U']') {
+            i += 2;
+            const uint high = literal(i);
+            found = found || (low <= c && c <= high);
+        } else {
+            found = found || low == c;
+        }
+    }
+    end = -1;
+    return false;
+}
+
+// A shell glob ('*', '?', bracket expressions, '\' quoting the next character) against the whole of `name`, both case
+// folded. Without a regular expression per glob and item: one pass, going back only to the last '*'.
+bool globMatches(const QString &glob, const QString &name)
+{
+    const auto folded = [](const QString &text) {
+        QList<uint> out = text.toUcs4();
+        for (uint &c : out)
+            c = QChar::toCaseFolded(c);
+        return out;
+    };
+    const QList<uint> p = folded(glob);
+    const QList<uint> n = folded(name);
+    qsizetype pi = 0;
+    qsizetype ni = 0;
+    qsizetype starP = -1;
+    qsizetype starN = 0;
+    while (ni < n.size()) {
+        if (pi < p.size()) {
+            const uint c = p[pi];
+            if (c == U'*') {
+                starP = ++pi;
+                starN = ni;
+                continue;
+            }
+            qsizetype next = -1;
+            if (c == U'[') {
+                qsizetype end = -1;
+                const bool in = inBracket(p, pi, n[ni], end);
+                if (end >= 0 ? in : n[ni] == U'[')
+                    next = end >= 0 ? end : pi + 1;
+            } else if (c == U'\\' && pi + 1 < p.size()) {
+                if (p[pi + 1] == n[ni])
+                    next = pi + 2;
+            } else if (c == U'?' || c == n[ni]) {
+                next = pi + 1;
+            }
+            if (next >= 0) {
+                pi = next;
+                ++ni;
+                continue;
+            }
+        }
+        if (starP < 0)
+            return false;
+        pi = starP;
+        ni = ++starN;
+    }
+    while (pi < p.size() && p[pi] == U'*')
+        ++pi;
+    return pi == p.size();
+}
+
+} // namespace
+
+bool passesFilter(const QString &name, const QStringList &mimeTypes, const QStringList &globs, const QStringList &mimeRules)
+{
+    if (globs.isEmpty() && mimeRules.isEmpty())
+        return true;
+    for (const QString &glob : globs) {
+        if (globMatches(glob, name))
+            return true;
+    }
+    for (const QString &rule : mimeRules) {
+        const bool major = rule.endsWith(QLatin1String("/*"));
+        const QString prefix = major ? rule.left(rule.size() - 1) : QString();
+        for (const QString &type : mimeTypes) {
+            if (major ? type.startsWith(prefix, Qt::CaseInsensitive) : type.compare(rule, Qt::CaseInsensitive) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
 bool isValidFileName(const QString &name)
 {
     if (name.isEmpty() || name == QLatin1String(".") || name == QLatin1String(".."))

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The Settings portal backend (ADR-0035 D-4, D-8, step 2b) with the real xdg-desktop-portal frontend.
-# Static (always): the session's routing file lists only Settings (grassfield-settings, then gtk); the .portal file, the D-Bus
+# Static (always): the session's routing file lists only Settings (grassfield-settings, then gtk) and FileChooser (grassfield,
+# then gtk: tests/integration/portal_filechooser.sh); the .portal file, the D-Bus
 # service file and the unit name the same bus name and program; the unit is Type=dbus, restarts on failure, clears
 # GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME and is hardened; the shell's unit clears GTK_USE_PORTAL; env-grassfield, on scratch
 # copies of its paths, puts the routing directory first in XDG_DATA_DIRS once (keeping the list, or the default), sets
@@ -33,30 +34,22 @@
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/portal-settings.XXXXXX")
-bus_pid="" frontend_pid=""
-stop_bus() {
-  [[ -n $frontend_pid ]] && kill "$frontend_pid" 2>/dev/null && wait "$frontend_pid" 2>/dev/null
-  frontend_pid=""
-  # dbus-daemon leads its own process group (setsid): the services it activated are in it too.
-  [[ -n $bus_pid ]] && kill -TERM -- "-$bus_pid" 2>/dev/null
-  [[ -n $bus_pid ]] && wait "$bus_pid" 2>/dev/null
-  bus_pid=""
-}
+# The private bus (start_bus, stop_bus, owned, start_service, wait_until), shared with portal_filechooser.sh.
+. "$root/tests/integration/portal-bus.sh"
 stop_all() { stop_bus; wait 2>/dev/null; rm -rf "$tmp"; }
 trap stop_all EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
-wait_until() { local n=$(($1 * 10)); shift; while ((n-- > 0)); do "$@" && return 0; sleep 0.1; done; return 1; }
 pk=$root/packaging
 name=org.freedesktop.impl.portal.desktop.grassfield_settings
 unit=$pk/systemd/grassfield-portal-settings.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the session's routing lists only Settings: Grassfield first, then gtk"
+desc="the session's routing lists only Settings and FileChooser (D-4): Grassfield first, then gtk"
 check test "$(grep -v '^#' "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf" | grep -v '^$' | tr '\n' ' ')" = \
-  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk "
+  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk "
 desc="the .portal file, the D-Bus service file and the unit name the same bus name and program"
 check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.Settings;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal-settings" "$3" && grep -qx "SystemdService=grassfield-portal-settings.service" "$3" &&
@@ -120,43 +113,7 @@ fi
 client=$root/tests/fixtures/portal-client.py
 fakes=$root/tests/fixtures/fake-portal-backend.py
 
-bus_conf() { # bus_conf <dir> <listen address> <auth mechanism>
-  printf '%s\n' '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' \
-    '<busconfig>' '  <type>session</type>' "  <listen>$2</listen>" "  <auth>$3</auth>"
-  [[ $3 == ANONYMOUS ]] && printf '%s\n' '  <allow_anonymous/>'
-  printf '%s\n' "  <servicedir>$1/services</servicedir>" '  <policy context="default">' \
-    '    <allow send_destination="*" eavesdrop="true"/>' '    <allow eavesdrop="true"/>' '    <allow own="*"/>' '  </policy>' \
-    '</busconfig>'
-}
-start_bus() { # start_bus <dir>: sets bus and bus_pid
-  bus_conf "$1" "unix:path=$1/bus.sock" EXTERNAL >"$1/bus.conf"
-  setsid env -i PATH="$PATH" HOME="$1" XDG_RUNTIME_DIR="$1" dbus-daemon --config-file="$1/bus.conf" --nofork --print-address=1 \
-    >"$1/bus.address" 2>"$1/bus.log" </dev/null &
-  bus_pid=$!
-  if wait_until 3 test -s "$1/bus.address"; then bus=$(head -n 1 "$1/bus.address"); return 0; fi
-  kill "$bus_pid" 2>/dev/null; wait "$bus_pid" 2>/dev/null; bus_pid=""
-  bus_conf "$1" "tcp:host=127.0.0.1,port=0" ANONYMOUS >"$1/bus.conf"
-  : >"$1/bus.address"
-  setsid env -i PATH="$PATH" HOME="$1" XDG_RUNTIME_DIR="$1" dbus-daemon --config-file="$1/bus.conf" --nofork --print-address=1 \
-    >"$1/bus.address" 2>"$1/bus.log" </dev/null &
-  bus_pid=$!
-  wait_until 5 test -s "$1/bus.address" || return 1
-  bus=$(head -n 1 "$1/bus.address")
-}
-has() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I -c '
-import sys
-from gi.repository import Gio, GLib
-c = Gio.bus_get_sync(Gio.BusType.SESSION)
-print(c.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner",
-                  GLib.Variant("(s)", (sys.argv[1],)), None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0])' "$1" 2>/dev/null; }
-owned() { [[ $(has "$1") == True ]]; }
-unowned() { ! owned "$1"; }
 call() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" "$@"; }
-start_service() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I -c '
-import sys
-from gi.repository import Gio, GLib
-Gio.bus_get_sync(Gio.BusType.SESSION).call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
-    "StartServiceByName", GLib.Variant("(su)", (sys.argv[1], 0)), None, Gio.DBusCallFlags.NONE, 5000, None)' "$1"; }
 settings() { # settings <dir> <json>: grassfield.json, replaced atomically as the Settings app writes it
   printf '%s\n' "$2" >"$1/config/grassfield.json.new" && mv -f "$1/config/grassfield.json.new" "$1/config/grassfield.json"
 }
@@ -210,11 +167,12 @@ check test "$(wc -l <"$d/backend.starts" 2>/dev/null)" = 1
 got="$(call read-one org.freedesktop.appearance color-scheme) $(call read-all 'org.gnome.*' | value 'sorted(d)')"
 desc="1 ReadOne and the namespace filter [$got]"
 check test "$got" = '1 ["org.gnome.desktop.interface"]'
-got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \((default )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
-desc="1 the session's file routes Settings only: every other interface keeps the stock routing (FileChooser, Screenshot) [$got]"
+got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \(((default|interface specific) )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
+desc="1 the session's file routes Settings and FileChooser only: every other interface keeps the stock routing (Screenshot) [$got]"
 check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.impl.portal.Settings (config)"* &&
-  $1 == *"org.freedesktop.impl.portal.FileChooser (default config)"* && $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
-  $(grep -o "[A-Za-z]* (config)" <<<"$1" | sort -u | tr "\n" " ") == "Settings (config) " ]]' _ "$got"
+  $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.FileChooser (interface specific config)"* &&
+  $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
+  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "FileChooser (interface specific config) Settings (config) " ]]' _ "$got"
 read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"

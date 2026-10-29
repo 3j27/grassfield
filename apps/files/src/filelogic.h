@@ -111,6 +111,12 @@ QString foldForMatch(const QString &text);
 // Whether `name` contains the filter text under foldForMatch.
 bool nameMatchesFilter(const QString &name, const QString &filter);
 
+// The filters of the Open and Save panels (grassfield-portal, ADR-0035 D-4): whether an item named `name`, whose MIME types are
+// `mimeTypes` (its own first, then every type it inherits from), passes a filter of `globs` and `mimeRules`. A glob matches
+// the whole name without regard to case (a "*.PDF" is a PDF, as the Finder sees it); a MIME rule matches the type, a type it
+// inherits from, or "major/*". A filter without globs and rules passes everything.
+bool passesFilter(const QString &name, const QStringList &mimeTypes, const QStringList &globs, const QStringList &mimeRules);
+
 // A name a single file can take: not empty, not "." or "..", no '/', no NUL, at most 255 UTF-8 bytes.
 bool isValidFileName(const QString &name);
 
