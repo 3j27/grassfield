@@ -20,7 +20,7 @@ Singleton {
     // (ADR-0016 section 7, the macOS "show menu bar background" switched on automatically). Only a measured picture can.
     property var assists: ({})
     // {output name: {lumMin, lumMax}}: the 5th to 95th percentile of the strip under the bar when it was measured (a picture or a
-    // video); the band's glass raises its tint over that range only (Material.backdropOverride).
+    // video); the band's glass raises its tint over that range only (Appearance.barBand, MenuBar.qml).
     property var ranges: ({})
     // {output name: {white, black}} worst-case contrast of each tone, for the status hook and the journal.
     property var contrasts: ({})
@@ -100,6 +100,15 @@ Singleton {
         setAssist(output, r.assist);
         setRange(output, {lumMin: strip.all.p5, lumMax: strip.all.p95});
         console.info("wallpaper tone=" + r.tone + " worst=" + r.best.toFixed(2) + " assist=" + r.assist + " output=" + output);
+    }
+
+    // True when the band over this output's strip is dark glass (light text), false for light glass.
+    function bandDarkOf(output: string): bool {
+        return Logic.bandIsDark(toneOf(output));
+    }
+
+    function forcedOutputs(): var {
+        return Logic.forcedOutputs(assists);
     }
 
     function toneSource(desc: var): string {

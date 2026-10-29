@@ -277,10 +277,10 @@ Scope {
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
-            // The glass band judged over the strip under the bar (a picture or a video); none when the strip is unknown, over a
-            // full-screen window (the bar is then drawn on that window's content) or with Reduce Transparency.
-            readonly property var bandRange: win.fullscreen ? null : BarTone.rangeOf(win.screen.name)
-            readonly property var band: bandRange && Appearance.effectiveTransparency > 0 ? Appearance.glassBand("menu", Appearance.effectiveTransparency, bandRange, BarTone.toneOf(win.screen.name) === "light") : null
+            // The glass band judged over the strip under the bar (a picture or a video), only while that strip is what lies behind it
+            // (BarHide.bandOnWallpaper); else the appearance's own material at the worst case (Appearance.barBand).
+            readonly property var bandRange: BarHide.bandOnWallpaper(win.hideMode, win.fullscreen) ? BarTone.rangeOf(win.screen.name) : null
+            readonly property var band: Appearance.barBand(bandRange, BarTone.bandDarkOf(win.screen.name))
             readonly property bool darkTone: BarTone.toneOf(win.screen.name) === "dark"
             readonly property var barPalette: darkTone ? Appearance.lightColors : Appearance.darkColors
             readonly property color barText: showBackground ? (band ? band.colors.text : Appearance.colors.text) : barPalette.barText

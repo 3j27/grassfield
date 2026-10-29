@@ -281,6 +281,12 @@ TestCase {
         compare(Logic.toneSource({kind: "picture", strip: {}}), "none");
     }
 
+    function test_forcedOutputsAreTheBarBlock() {
+        compare(Logic.forcedOutputs({"eDP-1": true, "DP-1": false, "HDMI-A-1": "yes"}), {"eDP-1": true});
+        compare(Logic.forcedOutputs({}), {});
+        compare(Logic.forcedOutputs(null), {});
+    }
+
     function test_dockDotColoursArePureTones() {
         compare(Tokens.colorDark.indicator, "#FFFFFF");
         compare(Tokens.colorLight.indicator, "#000000");

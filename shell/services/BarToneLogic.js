@@ -65,6 +65,21 @@ function toneSource(desc) {
     return s && s.all && typeof s.all.p5 === "number" && typeof s.all.p95 === "number" && typeof s.all.mean === "number" ? "strip" : "none";
 }
 
+// The band's glass tone for a text tone: light text sits on dark glass, dark text on light glass.
+function bandIsDark(tone) {
+    return tone === "light";
+}
+
+// {output: true} for the outputs whose band is on because of the wallpaper (the `bar` block of wallpaper-state.json).
+function forcedOutputs(assists) {
+    const out = {};
+    for (const name of Object.keys(assists || {})) {
+        if (assists[name] === true)
+            out[name] = true;
+    }
+    return out;
+}
+
 // Luminance of a vertical two-stop gradient strip: from colour a (top) towards colour b, the strip covering the fraction
 // `reach` (0..1) of the way; a and b are {r, g, b} in 0..1. The mean over the strip is taken at its middle.
 function stripOfGradient(a, b, reach) {

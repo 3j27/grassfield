@@ -65,12 +65,7 @@ Singleton {
 
     // {output name: true} for the outputs whose menu bar band is on because of the wallpaper under it.
     function barAssists(): var {
-        const out = {};
-        for (const name of Object.keys(BarTone.assists)) {
-            if (BarTone.assists[name] === true)
-                out[name] = true;
-        }
-        return out;
+        return BarTone.forcedOutputs();
     }
 
     Connections {

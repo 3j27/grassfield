@@ -26,6 +26,7 @@ TestCase {
         Appearance.increaseContrast = false;
         material.backdropRect = Qt.rect(0, 0, 0, 0);
         Appearance.dark = true;
+        Appearance.reduceTransparency = false;
         Appearance.transparency = Tokens.materialDefaultTransparency;
     }
 
@@ -48,65 +49,149 @@ TestCase {
         verify(GlassTint.targetAlpha(0.65, d / 2, d) > 0.65 && GlassTint.targetAlpha(0.65, d / 2, d) < 1);
     }
 
-    // Worst text contrast of a palette's tint at `alpha` over the greys of the range's two ends (the A2 check of the band).
-    function bandContrast(c, alpha, range) {
-        let worst = 99;
-        for (const lum of [range.lumMin, range.lumMax]) {
-            const g = GlassTint.greyOf(lum);
-            const base = GlassTint.over(GlassTint.channels(c.materialTint), alpha, [g, g, g]);
-            for (const ink of [c.text])
-                worst = Math.min(worst, GlassTint.ratio(GlassTint.channels(ink), base));
+    // Independent check of a band (not GlassTint.bandAlpha's own loop): the text's contrast over the tint, at rest, under the
+    // open title's capsule at its real fill (BarButton: hover opacity x active factor, in the palette's hover colour) and dimmed
+    // (band and text at the inactive opacity), over the greys at both ends of the range.
+    function bandStates(c, alpha, range) {
+        const ink = GlassTint.channels(c.text);
+        const cap = Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor;
+        const r = {rest: 99, capsule: 99, dim: 99};
+        // The greys at both ends and the saturated colours that bound them (the same cover as the floor: backdropsOf).
+        for (const back of GlassTint.backdropsOf(range.lumMin).concat(GlassTint.backdropsOf(range.lumMax))) {
+            const base = GlassTint.over(GlassTint.channels(c.materialTint), alpha, back);
+            r.rest = Math.min(r.rest, GlassTint.ratio(ink, base));
+            r.capsule = Math.min(r.capsule, GlassTint.ratio(ink, GlassTint.over(GlassTint.channels(c.hover), cap, base)));
+            const dimBase = GlassTint.over(GlassTint.channels(c.materialTint), alpha * Tokens.menubarInactiveOpacity, back);
+            r.dim = Math.min(r.dim, GlassTint.ratio(GlassTint.over(ink, Tokens.menubarInactiveOpacity, dimBase), dimBase));
         }
-        return worst;
+        return r;
     }
 
-    // The band's tone is the bar's own text tone over the strip (BarToneLogic.stripTone: the better worst case): light text on dark
-    // glass, dark text on light glass.
     function bandOf(range, t) {
         const tone = BarLogic.stripTone(range.lumMin, range.lumMax, "", Tokens.menubarToneNeededContrast, Tokens.menubarToneMargin).tone;
-        return Appearance.glassBand("menu", t, range, tone === "light");
+        return Appearance.barBand(range, BarLogic.bandIsDark(tone));
     }
 
-    // The menu bar's band (ADR-0024 point 3, MenuBar.qml): its glass tone follows the strip under it, whatever the appearance:
-    // dark glass with light text over a dark strip, light glass with dark text over a light one; the alpha is the class tint
-    // raised to keep that text at 4.5:1 over the strip, never below the class target.
-    function test_menuBarBandFollowsItsStrip() {
-        const strips = {owner: {lumMin: 0.0528, lumMax: 0.35}, dark: {lumMin: 0.005, lumMax: 0.02}, light: {lumMin: 0.8, lumMax: 0.95}, mixed: {lumMin: 0.01, lumMax: 0.45}};
+    readonly property var strips: ({owner: {lumMin: 0.0528, lumMax: 0.35}, dark: {lumMin: 0.005, lumMax: 0.02}, light: {lumMin: 0.8, lumMax: 0.95}, mixed: {lumMin: 0.01, lumMax: 0.45}})
+
+    // The tone mapping and the palettes: light text sits on dark glass (the dark palette: its tint and its text), dark text on light
+    // glass, whatever the appearance; the colours are the real ones, not only the flag.
+    function test_bandTonePalette() {
+        compare(BarLogic.bandIsDark("light"), true);
+        compare(BarLogic.bandIsDark("dark"), false);
+        for (const appearanceDark of [false, true]) {
+            Appearance.dark = appearanceDark;
+            const dk = Appearance.glassBand("menu", 0.49, strips.dark, true);
+            compare(dk.dark, true);
+            compare(dk.colors.text, Tokens.colorDark.text);
+            compare(dk.colors.materialTint, Tokens.colorDark.materialTint);
+            compare(dk.colors.text, "#F5F5F7");
+            const lt = Appearance.glassBand("menu", 0.49, strips.light, false);
+            compare(lt.dark, false);
+            compare(lt.colors.text, Tokens.colorLight.text);
+            compare(lt.colors.materialTint, Tokens.colorLight.materialTint);
+            compare(lt.colors.text, "#1B1B1F");
+        }
+    }
+
+    // The band keeps its text legible in every state over the strip, with BOTH tones, in both appearances (A2): rest and the open
+    // capsule 4.5:1, dimmed 3:1; never below the class target; the floor uses the BAND's palette, not the appearance's.
+    function test_bandHoldsA2InEveryState() {
         const rows = [];
-        for (const dark of [false, true]) {
-            Appearance.dark = dark;
-            for (const t of [0.25, 0.49]) {
+        for (const appearanceDark of [false, true]) {
+            Appearance.dark = appearanceDark;
+            for (const t of [0.1, 0.25, 0.49, 0.6]) {
                 for (const name of Object.keys(strips)) {
-                    const b = bandOf(strips[name], t);
-                    const c = bandContrast(b.colors, b.alpha, strips[name]);
-                    rows.push((dark ? "dark" : "light") + " appearance, t=" + t + ", " + name + ": " + (b.dark ? "dark glass" : "light glass") + " alpha=" + b.alpha.toFixed(2) + " text=" + b.colors.text + " A2=" + c.toFixed(2));
-                    verify(c >= 4.5);
-                    verify(b.alpha >= GlassTint.targetAlpha(Tokens.glassMenu, t, Tokens.materialDefaultTransparency) - 1e-9);
+                    for (const darkGlass of [true, false]) {
+                        const b = Appearance.glassBand("menu", t, strips[name], darkGlass);
+                        const st = bandStates(b.colors, b.alpha, strips[name]);
+                        if (t === 0.25 || t === 0.49)
+                            rows.push((appearanceDark ? "dark" : "light") + " appearance t=" + t + " " + name + " " + (darkGlass ? "dark" : "light") + " glass: alpha=" + b.alpha.toFixed(2) + " text=" + b.colors.text + " rest=" + st.rest.toFixed(2) + " capsule=" + st.capsule.toFixed(2) + " dim=" + st.dim.toFixed(2));
+                        verify(st.rest >= 4.5, "rest " + name + " " + darkGlass + " " + t);
+                        verify(st.capsule >= 4.5, "capsule " + name + " " + darkGlass + " " + t);
+                        verify(st.dim >= 3, "dim " + name + " " + darkGlass + " " + t);
+                        verify(b.alpha >= GlassTint.targetAlpha(Tokens.glassMenu, t, Tokens.materialDefaultTransparency) - 1e-9);
+                    }
                 }
-                // Over a dark strip the glass is dark, over a light one it is light, in both appearances.
-                compare(bandOf(strips.dark, t).dark, true);
-                compare(bandOf(strips.light, t).dark, false);
             }
         }
         console.info("band table:\n" + rows.join("\n"));
-        // The owner's strip: dark glass (light text), below the 0.79 of the appearance's light glass.
-        Appearance.dark = false;
-        const owner = bandOf(strips.owner, 0.49);
-        compare(owner.dark, true);
-        verify(owner.alpha < 0.79);
     }
 
-    // Reduce Transparency (slider 0) and an unknown strip keep the appearance's own colours.
-    function test_menuBarBandOpaqueAndUnknown() {
-        for (const dark of [false, true]) {
-            Appearance.dark = dark;
-            const r = Appearance.glassBand("menu", 0, {lumMin: 0.01, lumMax: 0.02}, true);
+    // Each state is judged on its own (GlassTint.bandAlpha): the open capsule raises the floor by itself (no dimming in play), and
+    // the dimmed state does too (no capsule), and the band uses the real fill of BarButton (hover opacity x active factor).
+    function test_bandStatesBindOnTheirOwn() {
+        const c = Tokens.colorDark;
+        const r = strips.owner;
+        const a = (cap, dim, dimNeed) => GlassTint.bandAlpha(Tokens.glassMenu, 0.49, Tokens.materialDefaultTransparency, r, c.materialTint, c.text, c.hover, cap, dim, 4.5, dimNeed, Tokens.glassContrastMargin);
+        const real = Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor;
+        verify(a(real, 1, 0) > a(0, 1, 0), "the capsule must raise the floor");
+        verify(a(0, Tokens.menubarInactiveOpacity, 3) > a(0, 1, 0) || a(0, Tokens.menubarInactiveOpacity, 3) >= a(0, 1, 0), "dimmed");
+        verify(a(0, 0.5, 6) > a(0, 1, 0), "the dimmed state must raise the floor when it binds");
+        Appearance.dark = false;
+        compare(Appearance.glassBand("menu", 0.49, r, true).alpha, a(real, Tokens.menubarInactiveOpacity, 3));
+        verify(a(real, 1, 0) > a(0.14, 1, 0), "the real capsule fill is above the 0.14 of the generic floor");
+    }
+
+    // The floor is judged with the band's own palette: dark glass over a bright strip needs more than light glass does there.
+    function test_bandFloorUsesTheBandPalette() {
+        Appearance.dark = false;
+        const bright = strips.light;
+        const darkGlass = Appearance.glassBand("menu", 0.49, bright, true).alpha;
+        const lightGlass = Appearance.glassBand("menu", 0.49, bright, false).alpha;
+        verify(darkGlass > lightGlass);
+        Appearance.dark = true;
+        compare(Appearance.glassBand("menu", 0.49, bright, true).alpha, darkGlass);
+        compare(Appearance.glassBand("menu", 0.49, bright, false).alpha, lightGlass);
+    }
+
+    // The owner's strip: dark glass, below the 0.79 of the appearance's light glass and the legacy 0.82; the open capsule holds.
+    function test_ownerStripBand() {
+        Appearance.dark = false;
+        const b = bandOf(strips.owner, 0.49);
+        compare(b.dark, true);
+        compare(b.colors.text, "#F5F5F7");
+        verify(b.alpha < 0.79);
+        verify(b.alpha < Appearance.tintAlpha(0.49));
+        verify(bandStates(b.colors, b.alpha, strips.owner).capsule >= 4.5);
+    }
+
+    // Reduce Transparency, an unknown strip: the appearance's own colours (Appearance.barBand, what MenuBar draws).
+    function test_barBandOpaqueAndUnknown() {
+        for (const appearanceDark of [false, true]) {
+            Appearance.dark = appearanceDark;
+            Appearance.reduceTransparency = true;
+            compare(Appearance.barBand(strips.dark, true), null);
+            const r = Appearance.glassBand("menu", 0, strips.dark, true);
             compare(r.alpha, 1);
-            compare(r.dark, dark);
+            compare(r.dark, appearanceDark);
             compare(r.colors, Appearance.colors);
+            Appearance.reduceTransparency = false;
+            compare(Appearance.barBand(null, true), null);
             const u = Appearance.glassBand("menu", 0.49, null, true);
-            compare(u.dark, dark);
+            compare(u.dark, appearanceDark);
+            compare(u.colors, Appearance.colors);
             compare(u.alpha, Appearance.glassAlpha("menu", 0.49, "nowhere"));
+            verify(Appearance.barBand(strips.dark, true) !== null);
+        }
+    }
+
+    // A Material's tint colour defaults to the appearance's material tint (every other surface keeps it).
+    function test_materialTintColorDefault() {
+        for (const appearanceDark of [false, true]) {
+            Appearance.dark = appearanceDark;
+            compare(String(material.tintColor).toLowerCase(), String(Appearance.colors.materialTint).toLowerCase());
+        }
+        const m = createTemporaryObject(plainMaterial, testCase);
+        m.tintColor = "#112233";
+        compare(String(m.tintColor), "#112233");
+    }
+
+    Component {
+        id: plainMaterial
+        Material {
+            width: 10
+            height: 10
         }
     }
 

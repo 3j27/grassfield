@@ -168,7 +168,8 @@ QtObject {
         return glassAlphaOver(glassClass, t, under ?? known);
     }
 
-    // The same over a backdrop range the host knows ({lumMin, lumMax}; the menu bar's strip: BarTone.rangeOf), null = worst case.
+    // The same over a backdrop range the host knows ({lumMin, lumMax}), the appearance's own palette and both texts; null = the
+    // worst case (black to white).
     function glassAlphaOver(glassClass: string, t: real, backdrop: var): real {
         return glassAlphaFor(glassClass, t, backdrop, colors, false);
     }
@@ -183,14 +184,25 @@ QtObject {
     // Adaptive tone of a glass band over a backdrop range the host measured (ADR-0024 point 3, the menu bar: macOS 26's glass
     // follows what lies behind it, not the system appearance). `darkGlass` is the host's choice of tone (the bar's own: the text
     // tone with the better worst case over the strip, BarTone): dark glass with light text, or light glass with dark text;
-    // the alpha is the class tint raised to what keeps that text at 4.5:1 over the range. The bar carries primary text and glyphs
-    // only (no secondary text), so only the primary text is judged. Returns {dark, alpha, colors}; Reduce Transparency (t <= 0)
+    // the alpha is the class tint raised to what keeps that text legible over the range in every state of the bar (rest,
+    // the open title's capsule, dimmed). The bar carries primary text and glyphs only, so only the primary text is judged. Returns {dark, alpha, colors}; Reduce Transparency (t <= 0)
     // and an unknown range keep the appearance's own colours and the standard glass alpha.
     function glassBand(glassClass: string, t: real, backdrop: var, darkGlass: bool): var {
-        if (t <= 0 || !backdrop)
+        const target = glassTargets[glassClass];
+        if (t <= 0 || !backdrop || target === undefined)
             return {dark: dark, alpha: glassAlphaFor(glassClass, t, backdrop, colors, false), colors: colors};
         const palette = darkGlass ? darkColors : lightColors;
-        return {dark: darkGlass, alpha: glassAlphaFor(glassClass, t, backdrop, palette, true), colors: palette};
+        // The states the band can show (GlassTint.bandAlpha): at rest, under the open title's capsule at its real fill, dimmed.
+        const alpha = GlassTint.bandAlpha(target, t, Tokens.materialDefaultTransparency, backdrop, palette.materialTint, palette.text, palette.hover, Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor, Tokens.menubarInactiveOpacity, 4.5, 3, Tokens.glassContrastMargin);
+        return {dark: darkGlass, alpha: alpha, colors: palette};
+    }
+
+    // The menu bar's band for the strip under it, or null when there is none to judge it on: no range (the artwork, a colour, a
+    // bar that overlaps windows or a full-screen window) or Reduce Transparency (the appearance's own opaque material).
+    function barBand(range: var, darkGlass: bool): var {
+        if (!range || effectiveTransparency <= 0)
+            return null;
+        return glassBand("menu", effectiveTransparency, range, darkGlass);
     }
 
     // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and
