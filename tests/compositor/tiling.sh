@@ -1640,6 +1640,26 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       jq -e --argjson w "$1" --argjson h "$2" --arg o "$out" 'any(.[]; .workspace == $w and .home == $h and .output == $o)' <<<"$sp" >/dev/null
     }
     split_gone() { ! split_listed "$1" "$2"; }
+    split_members() { # workspace address...: the reply lists exactly these members, in this order
+      local got want
+      got=$(tiling_state | jq -c --argjson w "$1" '[.splits[] | select(.workspace == $w) | .windows][0] // null')
+      shift
+      want=$(printf '%s\n' "$@" | sed 's/^0x//' | jq -R . | jq -sc .)
+      say "  members: $got (want $want)"
+      [[ $got == "$want" ]]
+    }
+    green_click() { # address: a click on its zoom light (found through tile_popover, the popover closed first)
+      local ev lx ly
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+      event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\"" || return 1
+      ev=$last_event
+      close_popover
+      read -r lx ly < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$ev")
+      pointer abs $((lx - mx)) $((ly - my)) sleep 100 down sleep 80 up sleep 300
+      pointer abs 20 $((mh / 2)) sleep 200
+      sleep 0.8
+    }
     half_of() { # title left|right: that half of the whole output (D42: no menu bar or Dock reservation, one separator of
       # tiling.margin in the middle, on the grid: up to 8 px of rounding)
       local x y w h _a
@@ -1698,6 +1718,44 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         '$a.layout == "left-right" and $a.zone == 0 and $b.layout == "left-right" and $b.zone == 1 and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
     }
     check "split pick: one tile group (the shared edge resizes both)" split_pair
+    check "split pick: the reply lists both members" split_members "$next" "$addr" "$addr2"
+    # D50 (integrator review of c7a6b6e, MAJOR 1): an app's own full screen, or a zoom, keeps a member and its half; the other
+    # does not fill meanwhile, and the window comes back to its half after.
+    for mode in fullscreen maximized; do
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr2\" })" >>"$log" 2>&1
+      sleep 1
+      check "split $mode: the other member keeps its half" half_of tiling-foot left
+      check "split $mode: both still members" split_members "$next" "$addr" "$addr2"
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr2\" })" >>"$log" 2>&1
+      sleep 1
+      check "split $mode ended: the window is back in its half" half_of tiling-foot2 right
+      check "split $mode ended: the other still in its half" half_of tiling-foot left
+    done
+    # D52: a third window opening on the Split View Desktop is no member: the halves stay, also once it closed.
+    open_xdg gf-split-third
+    if [[ -n $xdg_addr ]]; then
+      check "split third: it opened on the Split View Desktop" test "$(desktop_of "$xdg_addr")" = "$next"
+      check "split third: no member" split_members "$next" "$addr" "$addr2"
+      kill "$xdg_pid" 2>/dev/null
+      for _ in $(seq 1 25); do [[ -z $(nestctl clients -j | jq -r --arg a "$xdg_addr" '.[] | select(.address == $a) | .address') ]] && break; sleep 0.2; done
+      sleep 0.8
+      check "split third: closed, the halves stay" half_of tiling-foot left
+      check "split third: the right half too" half_of tiling-foot2 right
+    else
+      check "split third: the third window opened" false
+    fi
+    # D46: one of Hyprland's moves (Super+drag) of a member puts it back in its half at the release.
+    if declare -F super_drag >/dev/null; then
+      super_drag $((mx + mw / 2)) $((my + mh / 2)) 300
+      check "split Super+drag: the member is back in its half" half_of tiling-foot left
+      check "split Super+drag: still a member" split_members "$next" "$addr" "$addr2"
+    else
+      say "SKIP: split Super+drag (the step 2 helpers did not run)"
+    fi
+    mark_events
+    tile_ipc "$addr" right
+    check "split keys: tiling a member is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "split keys: it keeps its half" half_of tiling-foot left
     # D46: a titlebar drag of a Split View window moves nothing (step 6b swaps the two).
     if read -r gx gy < <(grip_of "$addr"); then
       pointer abs "$gx" "$gy" sleep 200 down drag $((gx + 120)) $((gy + 80)) sleep 300 up sleep 600
@@ -1749,8 +1807,11 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     move_off "$addr" special:minimized
     check "split leave: the other window fills the Split View Desktop" fills_output tiling-foot3
     move_off "$addr" "$home"
-    unsplit_ipc "$addr3"
-    check "split leave: Exit Full Screen of the last window: the Desktop it came from shown" test "$(shown_desktop)" = "$home"
+    # D49: the green button of a member leaves the Split View (macOS exits full screen), here its last one.
+    green_click "$addr3"
+    check "split green: the member's zoom light: the Desktop it came from shown" test "$(shown_desktop)" = "$home"
+    check "split green: the window is back on it" test "$(desktop_of "$addr3")" = "$home"
+    check "split green: it was not zoomed" test "$(nestctl clients -j | jq -r --arg a "$addr3" '.[] | select(.address == $a) | .fullscreen')" = 0
     check "split leave: the Split View Desktop ended" split_gone "$next2" "$home"
     tile_ipc "$addr" previous
   else
