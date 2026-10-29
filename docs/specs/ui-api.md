@@ -72,4 +72,5 @@ add GlassTint
 add RimmedCapsule
 add TileGlyph
 add SoftwareUpdateLogic
+add DevicePicture
 ```
