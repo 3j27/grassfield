@@ -55,6 +55,7 @@ TestCase {
         compare(DockModel.windowsOf(items, "foot").join(","), "f1");
         compare(DockModel.windowsOf(items, "Foot.desktop").join(","), "f1");
         compare(DockModel.windowsOf(items, "org.grassfield.Files").join(","), "x1");
+        compare(DockModel.windowsOf(items, "ORG.grassfield.files.desktop").join(","), "x1"); // without case, as every id
         compare(DockModel.windowsOf(items, "chromium").length, 0); // pinned, not running
         compare(DockModel.windowsOf(items, "ghost").length, 0);
         compare(DockModel.windowsOf(items, "").length, 0);

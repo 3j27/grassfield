@@ -125,7 +125,7 @@ function windowsOf(items, appId) {
     if (want === "")
         return [];
     for (const it of items ? items : []) {
-        if (it.kind === "files" && isFilesId(appId))
+        if (it.kind === "files" && want === norm(FILES_ID))
             return it.windows;
         if (it.kind === "app" && (norm(it.key) === want || (it.entry && norm(it.entry.id) === want)))
             return it.windows;
