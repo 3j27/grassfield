@@ -178,12 +178,11 @@ private:
 // the installed shell is never driven from it, apps/runmode.h).
 QStringList reopenCommand();
 // Runs reopenCommand() without the QS_* variables (the shell is named by its directory) or a spent token, killed after
-// kShellIpcMs as Settings' shell calls are (the shell answers at once; review of PR #47).
+// runmode.h's kShellIpcMs, as Settings' shell calls are (the shell answers at once; review of PR #47).
 void askShellToReopen(QObject *parent);
 // Runs `command` (program, arguments) with `env`, its output dropped; killed after `timeoutMs`; the process deletes itself
 // when it ends. nullptr for an empty command.
 class QProcess *runWithTimeout(const QStringList &command, const QProcessEnvironment &env, int timeoutMs, QObject *parent);
-constexpr int kShellIpcMs = 5000;
 
 // AM1: one instance. The running app owns org.grassfield.Activity on the session bus (".Dev" in a dev session, which
 // shares the owner's bus); a second launch calls Activate with its activation token and leaves.

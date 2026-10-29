@@ -41,7 +41,6 @@ constexpr int kMaxReason = 160;
 constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page gets "timed out"
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
-constexpr int kShellIpcMs = 5000;        // the shell's IPC answer to `update check`: at once (the check itself runs there)
 constexpr int kUpdateCheckMs = 200000;   // the checker stops itself after 180 s (SIGTERM, then SIGKILL 5 s later): U1
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
@@ -316,7 +315,7 @@ void Backend::askShellToCheck(const QString &tag)
             env.remove(key);
     }
     start(QStringList{QStringLiteral("qs")} + ipc + QStringList{QStringLiteral("update"), QStringLiteral("check"), QStringLiteral("user")}, tag,
-          kShellIpcMs, Track::None, env);
+          grassfield::apps::runmode::kShellIpcMs, Track::None, env);
 }
 
 QString Backend::updateCheckerProgram()

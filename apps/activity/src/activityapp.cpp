@@ -564,7 +564,7 @@ void askShellToReopen(QObject *parent)
             env.remove(key);
     }
     env.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
-    runWithTimeout(reopenCommand(), env, kShellIpcMs, parent);
+    runWithTimeout(reopenCommand(), env, grassfield::apps::runmode::kShellIpcMs, parent);
 }
 
 Launch claimOrHandOver(QDBusConnection &bus, ActivityService *service, const QString &token, int answerMs)
