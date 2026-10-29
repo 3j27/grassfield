@@ -25,6 +25,11 @@ Variants {
         required property ShellScreen modelData
 
         readonly property bool open: Popups.openOn(modelData ? modelData.name : "")
+        // A popup is loaded and shown here. Only then does this surface hold the keyboard, take the output's input and stay
+        // mapped: whatever leaves `open` true with no popup (a stale value, an unknown kind), the surface lets everything
+        // through and unmaps after its hold (integrator, from an owner report on #56: the overlay mapped with no popup held
+        // Exclusive keyboard focus over the whole output, and the session looked stuck in full screen).
+        readonly property bool hasPopup: open && holder.item !== null
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -39,13 +44,13 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: open && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: hasPopup && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
         // The whole output receives input while a popup is open (the bar strip is handed to the bar, below); nothing once
         // it closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
         // window under it.
         // qmllint disable missing-type
-        mask: win.open && !Popups.pointerHeld ? openMask : passThrough
+        mask: win.hasPopup && !Popups.pointerHeld ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && !(Popups.kind === "dockstack" && ((holder.item as StackPopup)?.fan ?? false)) ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
@@ -65,7 +70,7 @@ Variants {
 
         KeyboardRelease {
             id: release
-            shown: win.open
+            shown: win.hasPopup
         }
 
         // While mapped: `open` is computed again when it disagrees with Popups (a value left stale by a binding loop would keep
@@ -77,6 +82,9 @@ Variants {
             onTriggered: {
                 if (Popups.verify())
                     Popups.verifyOpen(win.open, win.modelData ? win.modelData.name : "");
+                if (win.open && !win.hasPopup)
+                    console.warn("grassfield: overlay on \"" + (win.modelData ? win.modelData.name : "") + "\": open with no popup (kind \"" + Popups.kind
+                                 + "\"): the keyboard and the output's input are let through");
             }
         }
 
@@ -85,7 +93,7 @@ Variants {
         MouseArea {
             anchors.fill: parent
             z: 1000
-            visible: !win.open
+            visible: !win.hasPopup
             acceptedButtons: Qt.AllButtons
         }
 
@@ -191,7 +199,7 @@ Variants {
         Item {
             width: win.width
             height: Tokens.menubarHeight
-            visible: win.open
+            visible: win.hasPopup
 
             HoverHandler {
                 onPointChanged: {

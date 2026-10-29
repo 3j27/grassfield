@@ -272,10 +272,10 @@ Singleton {
     function minimize(toplevel: var): bool {
         if (!toplevel || Minimized.has(root.minimized, toplevel))
             return false;
-        // A member of a Split View Desktop is not minimized, as a window in full screen (macOS; ADR-0036 D56): the Window
+        // A window in full screen or a member of a Split View Desktop is not minimized (macOS; ADR-0036 D56, D61): the Window
         // menu greys Minimize, the plugin greys its light, and Super+M or a request does nothing.
-        if (root.inSplit(toplevel)) {
-            console.info("grassfield: minimize refused: a window of a Split View Desktop");
+        if (toplevel.fullscreen || root.inSplit(toplevel)) {
+            console.info("grassfield: minimize refused: a window in full screen or on a Split View Desktop");
             return false;
         }
         const top = hyprlandToplevel(toplevel);

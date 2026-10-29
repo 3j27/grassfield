@@ -313,6 +313,7 @@ TestCase {
         verify(!split.find(i => i.id === "moveResize").enabled);
         verify(!split.find(i => i.id === "minimize").enabled, "D56: not minimized, as in full screen");
         verify(model.windowMenu(ctx({canTile: true, canSplit: true})).find(i => i.id === "minimize").enabled, "elsewhere Minimize stays");
+        verify(!model.windowMenu(ctx({canTile: true, fullscreen: true})).find(i => i.id === "minimize").enabled, "D61: not minimized in full screen either");
         verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, focusedWindow: null})).find(i => i.id === "exitSplit").enabled);
     }
 

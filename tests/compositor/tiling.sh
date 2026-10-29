@@ -2029,6 +2029,43 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     else
       say "SKIP: split shell cases (no nested shell answers tests/visual/ipc.sh: run them with the shell)"
     fi
+
+    # Integrator, from an owner report on #56 (stuck in full screen on rc1-7): a full-screen window's tiling popover opened by
+    # resting on the revealed bar's zoom light, 4 times: the popup is the tiling popover, closing it leaves no overlay mapped,
+    # the zoom light then leaves full screen, and the shell logs no binding loop meanwhile.
+    if kind=$(open_kind) && [[ $kind != refused ]]; then
+      fs_inset=$(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels[][]? | select(.namespace == "grassfield-menubar") | .h] | max // 0')
+      [[ $fs_inset =~ ^[0-9]+$ ]] || fs_inset=0
+      fs_bar_y=$((fs_inset + GF_TB_MID))
+      fs_rest=$(( ${hover_delay:-$(jq -r '.tiling.hoverDelay.value' "$root/ui/tokens/tokens.json")} + 700 ))
+      fs_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen'; }
+      fs_loops() { grep -ac "Binding loop" "$dev/shell.log" 2>/dev/null || echo 0; }
+      fs_reveal() { pointer abs $((mw / 2)) $((mh / 2)) sleep 100 abs $((mw / 2)) 0 sleep 300; }
+      loops_before=$(fs_loops)
+      close_shell_popup "full-screen popover"
+      for round in 1 2 3 4; do
+        nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
+        sleep 1
+        check "full-screen popover $round: the window is in full screen" test "$(fs_of "$addr")" = 2
+        fs_reveal
+        pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep "$fs_rest"
+        check "full-screen popover $round: resting on the revealed zoom light opens the tiling popover" test "$(open_kind)" = "tiling@$out"
+        keys -k Escape
+        sleep 1
+        check "full-screen popover $round: Esc closes it" test -z "$(open_kind)"
+        check "full-screen popover $round: no overlay left mapped" overlay_gone
+        fs_reveal
+        pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep 150 click sleep 800
+        check "full-screen popover $round: the zoom light leaves full screen" test "$(fs_of "$addr")" = 0
+        pointer abs 20 $((mh / 2)) sleep 200
+        close_shell_popup "full-screen popover $round"
+      done
+      loops_after=$(fs_loops)
+      check "full-screen popover: no binding loop in the shell's log (${loops_before} before, ${loops_after} after)" test "$loops_after" = "$loops_before"
+      tile_ipc "$addr" previous
+    else
+      say "SKIP: full-screen popover cases (no nested shell answers tests/visual/ipc.sh)"
+    fi
   else
     say "SKIP: step 6a cases (the plugin does not advertise tiling-split)"
   fi

@@ -340,8 +340,8 @@ QtObject {
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 
         const items = [
-            // A window of a Split View Desktop is not minimized, as in full screen (D56).
-            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true},
+            // A window in full screen or on a Split View Desktop is not minimized (macOS; D56, D61).
+            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true && ctx.fullscreen !== true},
             {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true}
         ].concat(tiling, fullScreen, [
             {separator: true},
