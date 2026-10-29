@@ -98,8 +98,8 @@ TestCase {
         compare(fakeHost.answers[0].id, 4);
     }
 
-    // AC2: for the camera, the microphone and screen capture neither button is the default; Return does nothing until a button
-    // has the keyboard.
+    // AC2: for the camera and screen capture neither button is the default; Return does nothing until a button has the
+    // keyboard.
     function test_no_default_button_for_the_camera(): void {
         const alert = test.openAlert({icon: "camera-web-symbolic", noDefault: true});
         verify(!test.button(alert, "Allow").primary, "no default button");
@@ -195,10 +195,12 @@ TestCase {
         const alert = test.openAlert({});
         keyClick(Qt.Key_Tab);
         verify(test.button(alert, "Allow").activeFocus || test.button(alert, "Don't Allow").activeFocus, "Tab reached a button");
-        // The active window again (onActiveChanged's call: the offscreen platform moves no activation between windows; the first
-        // activation, which openAlert waits on, goes through the same function).
+        // Away a moment, then the active window again (onActiveChanged's calls: the offscreen platform moves no activation
+        // between windows; the first activation, which openAlert waits on, goes through the same function).
+        alert.inactiveSince = Date.now();
         alert.becameActive();
         verify(!alert.armed, "not armed right after it became active again");
+        verify(!alert.keysHeld, "back after a moment: no hold");
         verify(!test.button(alert, "Allow").activeFocus && !test.button(alert, "Don't Allow").activeFocus, "the keyboard is on the alert");
         const grant = test.button(alert, "Allow");
         mouseClick(grant, grant.width / 2, grant.height / 2);
@@ -221,6 +223,31 @@ TestCase {
         verify(!alert.keysHeld);
         keyClick(Qt.Key_Return);
         tryVerify(() => fakeHost.answers.length === 1);
+    }
+
+    // Back after a long time away (it was open when the lock or another window came in front of it): keys wait for a click
+    // again, as for an alert that first gets the keyboard late (integrator review of e24ea5c, MINOR 1: a Return after the
+    // unlock granted a location alert).
+    function test_back_after_a_long_time_away_waits_for_a_click(): void {
+        const alert = test.openAlert({});
+        verify(!alert.keysHeld, "active at once: no hold");
+        alert.inactiveSince = Date.now() - 2 * Tokens.filesPanelLateFocusMs;
+        alert.becameActive();
+        verify(alert.keysHeld, "held after a long time away");
+        tryVerify(() => alert.armed, 2000);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        wait(50);
+        compare(fakeHost.answers.length, 0, "Return and Space answer nothing");
+        const grant = test.button(alert, "Allow");
+        const at = grant.mapToItem(alert.contentItem, grant.width / 2, grant.height / 2);
+        mouseClick(alert.contentItem, at.x, at.y);
+        wait(50);
+        verify(!alert.keysHeld, "the click ended the hold");
+        compare(fakeHost.answers.length, 0, "and answered nothing");
+        keyClick(Qt.Key_Return);
+        tryVerify(() => fakeHost.answers.length === 1);
+        compare(fakeHost.answers[0].grant, true);
     }
 
     // The click that ends the hold only ends it, even on Allow (review of step 5a, M1: behind the lock, the first click after

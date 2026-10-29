@@ -8,14 +8,15 @@ import "IconSource.js" as IconSource
 // left, the frontend's title in bold and its question and note left-aligned under it, then two capsule buttons of one width
 // filling the row, "Don't Allow" and "Allow" (or the frontend's labels). A window of its own, centred on the screen, or over
 // the application's window when the frontend names one.
-// - Neither button is the default for the camera, the microphone and screen capture (AC2): Return does nothing until a
+// - Neither button is the default for the camera and screen capture (AC2): Return does nothing until a
 //   button has the keyboard. Otherwise Return grants; Space acts only on a button the user reached with Tab (the keyboard
 //   starts on the alert, never on a button: a space typed for another window never grants, ADR-0035 5a-5).
 // - Esc, or the window closed by the compositor, is "Don't Allow".
 // - Each time the alert becomes the active window, no click, key or close answers it for panelAlertArmMs, and a key pressed
-//   meanwhile starts that time again (a click or a key meant for what was there before never answers it); an alert that
-//   first gets the keyboard late (it opened behind the lock, AC3, or under another window) takes keys only after a click in
-//   it, and that click only ends the hold.
+//   meanwhile starts that time again (a click or a key meant for what was there before never answers it); an alert that gets
+//   the keyboard late, the first time (it opened behind the lock, AC3, or under another window) or after a long time away
+//   (the lock, the screen saver or another window came in front of it), takes keys only after a click in it, and that click
+//   only ends the hold.
 Window {
     id: alert
 
@@ -46,6 +47,8 @@ Window {
     property bool keysHeld: false
     property real shownAt: 0
     property bool everActive: false
+    // When the alert last stopped being the active window.
+    property real inactiveSince: 0
     property bool testAnswered: false
     readonly property real pad: Tokens.spacingLg
     readonly property real textInset: Tokens.panelAlertTextInset
@@ -94,6 +97,8 @@ Window {
     onActiveChanged: {
         if (alert.active)
             alert.becameActive();
+        else
+            alert.inactiveSince = Date.now();
     }
 
     function becameActive(): void {
@@ -101,15 +106,13 @@ Window {
         // button that had it before would take a Space).
         alert.armed = false;
         arm.restart();
-        if (alert.everActive) {
-            if (!alert.keysHeld)
-                alert.focusStart();
-            return;
-        }
+        // Away long enough (since it opened, or since it was last active) and keys wait for a click: a Return meant for the
+        // lock or for another window does not answer it once it is back (integrator review of e24ea5c, MINOR 1).
+        const away = Date.now() - (alert.everActive ? alert.inactiveSince : alert.shownAt);
         alert.everActive = true;
-        if (Date.now() - alert.shownAt > Tokens.filesPanelLateFocusMs)
+        if (away > Tokens.filesPanelLateFocusMs)
             alert.keysHeld = true;
-        else
+        if (!alert.keysHeld)
             alert.focusStart();
     }
 
