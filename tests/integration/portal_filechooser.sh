@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# grassfield-portal's Open and Save panels (ADR-0035 D-4, step 4b; docs/specs/system-dialogs.md section 1) with the real
-# xdg-desktop-portal frontend.
+# grassfield-portal's Open and Save panels and permission alerts (ADR-0035 D-4, D-5, steps 4b and 5a; docs/specs/system-
+# dialogs.md sections 1 and 2) with the real xdg-desktop-portal frontend.
 # Static (always): the .portal file, the D-Bus service file and the unit name the same bus name and program and list
-# FileChooser only; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
+# FileChooser and Access; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
 # QT_QPA_PLATFORMTHEME and is hardened; the PKGBUILD builds and installs every piece; the session's window rules give a panel's
-# xdg tag the client-chrome tag.
+# and an alert's xdg tags the client-chrome tag.
 # Runtime, on a private bus of the test's own (the frontend under env -i with a scratch HOME, XDG_CURRENT_DESKTOP=Hyprland and
 # the package's routing directory first in XDG_DATA_DIRS; the backend started by D-Bus activation as a dev session, offscreen,
 # its panels answered by the dev hook GRASSFIELD_PORTAL_TEST_ANSWER; a stand-in for x-d-p-gtk; never the owner's bus):
@@ -17,6 +17,9 @@
 #    by a new process (A-FC6); the process stays within its memory budget while a panel is open (offscreen; A-FC3 is nested)
 #  5 the backend starts and answers with GTK_USE_PORTAL=1, QT_QPA_PLATFORMTHEME=gtk3 and a frontend that never answers (A-FC7)
 #  6 refused outside a Grassfield session, and as a dev run on a bus that is not a private test bus
+#  7 the camera through the frontend (the frontend's permission store on the scratch home): the alert allows (response 0,
+#    "yes" kept) or does not (response 1, "no" kept); an AccessDialog with a choice answers the choice (A-AC1 without the
+#    nested session)
 # Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal, and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
@@ -36,13 +39,14 @@ name=org.freedesktop.impl.portal.desktop.grassfield
 unit=$pk/systemd/grassfield-portal.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser only"
-check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;" "$2" && grep -qx "Name=$1" "$3" &&
+desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser and Access (D-5)"
+check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal" "$3" && grep -qx "SystemdService=grassfield-portal.service" "$3" &&
   grep -qx "BusName=$1" "$4" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-portal" "$4"' _ "$name" \
   "$pk/xdg/xdg-desktop-portal/portals/grassfield.portal" "$pk/dbus/$name.service" "$unit"
-desc="the session's routing sends FileChooser to grassfield, then gtk"
-check grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
+desc="the session's routing sends FileChooser and Access to grassfield, then gtk"
+check bash -c 'grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Access=grassfield;gtk" "$1"' _ \
+  "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
 desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened, every place the user may write writable (4b-12)"
 check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME" \
   NoNewPrivileges=yes ProtectSystem=full RestrictSUIDSGID=yes LockPersonality=yes; do
@@ -52,12 +56,14 @@ desc="the PKGBUILD builds and installs the backend, its unit, .portal and D-Bus 
 check bash -c 'grep -q "cmake -S \"\$(_root)/apps/portal\"" "$1" && grep -q "cmake --install \"\$srcdir/portal-build\"" "$1" &&
   grep -q "for unit in .* portal; do" "$1" && grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal" "$1" &&
   grep -q "usr/share/dbus-1/services/$2.service" "$1" && grep -q " kwindowsystem " "$1"' _ "$pk/arch/PKGBUILD" "$name"
-desc="the session's window rules give a panel's xdg tag (FilePanel.qml gfChromeRole) the client-chrome tag"
-check bash -c 'role=$(sed -n "s/^ *property string gfChromeRole: \"\(.*\)\"$/\1/p" "$1") && [[ -n $role ]] &&
-  grep -qF "match = { xdg_tag = \"^$role\$\" }, tag = \"+grassfield-client-chrome\"" "$2"' _ "$root/apps/files/qml/FilePanel.qml" "$root/config/hypr/grassfield/windows.lua"
+desc="the session's window rules give a panel's and an alert's xdg tags (gfChromeRole) the client-chrome tag"
+check bash -c 'for qml in "$1" "$2"; do role=$(sed -n "s/^ *property string gfChromeRole: \"\(.*\)\"$/\1/p" "$qml") && [[ -n $role ]] &&
+  grep -qF "match = { xdg_tag = \"^$role\$\" }, tag = \"+grassfield-client-chrome\"" "$3" || exit 1; done' _ \
+  "$root/apps/files/qml/FilePanel.qml" "$root/apps/files/qml/AccessAlert.qml" "$root/config/hypr/grassfield/windows.lua"
 
 # --- runtime -----------------------------------------------------------------------------------------------------------
 frontend=/usr/lib/xdg-desktop-portal
+store=/usr/lib/xdg-permission-store
 for tool in dbus-daemon python3; do
   command -v "$tool" >/dev/null || { echo "SKIP: portal_filechooser needs $tool (runtime part)"; exit "$fail"; }
 done
@@ -87,6 +93,10 @@ scenario() { # scenario <name> <answer> [later] [qml dir] [frontend: real|silent
   printf '#!/bin/sh\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
     "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
   printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.gtk\nExec=%s/gtk.sh\n' "$d" >"$d/services/gtk.service"
+  # The frontend's permission store (the permission alerts' answers), on the scratch home.
+  printf '#!/bin/sh\nexec env -i PATH="$PATH" HOME=%s/home XDG_DATA_HOME=%s/home/.local/share DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)" %s\n' \
+    "$d" "$d" "$d" "$store" >"$d/store.sh"
+  printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.PermissionStore\nExec=%s/store.sh\n' "$d" >"$d/services/store.service"
   # The answer of this start: the first start's, then `later` (the restarted process of scenario 4).
   printf '#!/bin/sh\necho started >>%s/backend.starts\necho $$ >%s/backend.pid\nanswer=%s\n[ "$(wc -l <%s/backend.starts)" -gt 1 ] && answer=%s\nexec env -i PATH="$PATH" HOME=%s/home XDG_RUNTIME_DIR=%s/run DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)" GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s GRASSFIELD_DEV=1 GRASSFIELD_CONFIG_HOME=%s/config GRASSFIELD_STATE_HOME=%s/state QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 QML_IMPORT_PATH=%s/ui:%s/.dev/build/qml GRASSFIELD_FILES_QML=%s GRASSFIELD_PORTAL_TEST_ANSWER="$answer" GRASSFIELD_PORTAL_IDLE_MS=5000 %s %s >>%s/backend.log 2>&1\n' \
     "$d" "$d" "\"$2\"" "$d" "\"${3:-$2}\"" "$d" "$d" "$d" "$d" "$d" "$d" "$root" "$root" "${4:-$root/apps/files/qml}" "${6:-}" "$backend" "$d" >"$d/backend.sh"
@@ -105,6 +115,9 @@ scenario() { # scenario <name> <answer> [later] [qml dir] [frontend: real|silent
 }
 choose() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" choose "$@"; }
 impl() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" impl "$@"; }
+camera() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" camera "$@"; }
+access() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" access "$@"; }
+permission() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" permission "$@"; }
 value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(json.dumps(eval(sys.argv[1], {}, {"d": d})))' "$1"; }
 starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
 # The backend's process is gone (or a zombie): backend.sh writes its pid before it execs the backend.
@@ -201,5 +214,35 @@ check bash -c '[[ $1 == *"refused: not a Grassfield session"* ]]' _ "$out"
 out=$(env -i PATH="$PATH" QT_QPA_PLATFORM=offscreen GRASSFIELD_DEV=1 GF_TEST_BUS=1 GF_TEST_BUS_DIR="$tmp" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "$backend" 2>&1)
 desc="6 a dev run refuses a bus that is not a private test bus [$out]"
 check bash -c '[[ $1 == *"refused: a dev session runs it only on a private test bus"* ]]' _ "$out"
+
+# 7 --------------------------------------------------------------------------------------------------------------------
+# The permission alerts (D-5): the camera asked through the frontend, the alert's answer kept by the frontend in its
+# permission store; a choice through the backend's interface.
+if [[ -x $store ]]; then
+  scenario camera accept || exit 1
+  out=$(camera 20)
+  got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.Access \(.*config\)" "$d/frontend.log" | sort -u)
+  desc="7 the frontend routes Access to the Grassfield backend [$got]"
+  check bash -c '[[ $1 == *"grassfield.portal for org.freedesktop.impl.portal.Access"* ]]' _ "$got"
+  desc="7 the camera through the frontend: the alert allows, the application gets response 0 [$out]"
+  check test "$(value 'd.get("response")' <<<"$out")" = "0"
+  perm=$(permission devices camera)
+  desc="7 ... and the frontend keeps \"yes\" in its permission store [$perm]"
+  check test "$(value 'list(d.get("permissions", {}).values())' <<<"$perm")" = '[["yes"]]'
+  out=$(access '{"icon": "find-location-symbolic", "choices": [["remember", "Remember", [], "true"]]}' 20)
+  desc="7 AccessDialog with a choice: response 0 and the choice's value [$out]"
+  check test "$(value '[d.get("response"), d.get("results", {}).get("choices")]' <<<"$out")" = '[0, [["remember", "true"]]]'
+  stop_bus
+  scenario camera-deny cancel || exit 1
+  out=$(camera 20)
+  desc="7 Don't Allow: the application gets response 1 [$out]"
+  check test "$(value 'd.get("response")' <<<"$out")" = "1"
+  perm=$(permission devices camera)
+  desc="7 ... and the frontend keeps \"no\" [$perm]"
+  check test "$(value 'list(d.get("permissions", {}).values())' <<<"$perm")" = '[["no"]]'
+  stop_bus
+else
+  echo "SKIP: 7 needs xdg-permission-store ($store)"
+fi
 
 exit "$fail"
