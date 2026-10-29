@@ -1213,6 +1213,10 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
     });
 }
 
+bool CGrassfieldTitlebar::pointerCovered(const Vector2D& pos) {
+    return zoomLightsCover(pos) != gf::tiling::HoverCoverEffect::None;
+}
+
 void CGrassfieldTitlebar::onSessionLock(bool locked) {
     gf::guarded("titlebar session lock", [locked] {
         auto& input = pointerInput();
