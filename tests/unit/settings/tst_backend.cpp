@@ -328,9 +328,23 @@ TEST_F(BackendTest, UpdateNowStartsOmarchysLauncherDetached)
     Answers devSeen;
     devSeen.listen(dev);
     EXPECT_FALSE(dev.launch(QStringLiteral("update now"), {launcher, QStringLiteral("omarchy-update")}));
-    EXPECT_EQ(devSeen.suppressed, QStringList{QStringLiteral("update now")});
+    // Nor the runner of the update without a terminal (never started by a test: it would ask for the root helper).
+    EXPECT_FALSE(dev.launch(QStringLiteral("update now"), {QStringLiteral("/usr/lib/grassfield/grassfield-update-run")}));
+    EXPECT_EQ(devSeen.suppressed, (QStringList{QStringLiteral("update now"), QStringLiteral("update now")}));
     spinUntil([] { return false; }, 300);
     EXPECT_EQ(recorded(launcher).size(), 1);
+}
+
+// Update Now's runner keeps its state in the session's runtime folder; without one there is no file to read.
+TEST_F(BackendTest, TheRunnersStateIsInTheRuntimeFolder)
+{
+    EnvGuard env{"XDG_RUNTIME_DIR"};
+    qputenv("XDG_RUNTIME_DIR", "/run/user/1000/");
+    EXPECT_EQ(Backend().softwareUpdateRunFile(), QStringLiteral("/run/user/1000/grassfield/software-update-run.json"));
+    qputenv("XDG_RUNTIME_DIR", "relative");
+    EXPECT_EQ(Backend().softwareUpdateRunFile(), QString());
+    qunsetenv("XDG_RUNTIME_DIR");
+    EXPECT_EQ(Backend().softwareUpdateRunFile(), QString());
 }
 
 // The shell is asked by its directory (never a configuration found through QS_*): `update check user`; "ok" means it checks.

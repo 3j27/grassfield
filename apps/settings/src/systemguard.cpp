@@ -383,7 +383,9 @@ int actionTimeoutMs(const QStringList &argv, int requested)
 bool isLaunch(const QStringList &argv)
 {
     static const QString sessionEnd = QStringLiteral("/usr/lib/grassfield/grassfield-session-end");
-    return argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-update")}
+    return argv == QStringList{QStringLiteral("/usr/lib/grassfield/grassfield-update-run")}
+        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-update")}
+        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-migrate")}
         || argv == QStringList{sessionEnd, QStringLiteral("logout")} || argv == QStringList{sessionEnd, QStringLiteral("restart")};
 }
 

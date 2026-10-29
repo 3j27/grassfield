@@ -1,0 +1,185 @@
+#!/bin/bash -p
+# grassfield-update-run: Software Update's Update Now, without a terminal (ADR-0033 "Step 3", owner decision SU-M1;
+# docs/specs/updates.md U24-U30). OPUS SECURITY REVIEW REQUIRED (it starts the root helper). It runs as the user, never as
+# root, and owns the run, so that closing Settings stops nothing. Started only by Settings, detached, with no argument:
+#   /usr/lib/grassfield/grassfield-update-run
+# It:
+#   1. takes Omarchy's update lock ($XDG_RUNTIME_DIR/omarchy-update.lock, the file omarchy-update-lock locks) on a
+#      descriptor every program it starts gets closed (9>&-): `omarchy update`, Grassfield Store and the shell's checker
+#      see an update running; a held lock is `busy`, and nothing runs;
+#   2. makes the operation id and writes its state, $XDG_RUNTIME_DIR/grassfield/software-update-run.json (0600 in a 0700
+#      folder, by rename: version, op, pid, startTime, phase authorizing|configuring|done, result, restart, snapshot,
+#      synced, deferred, startedAt, finishedAt; fixed tokens and numbers only), which Settings reads;
+#   3. lists the Omarchy migrations already pending for this user (omarchy-migrate --pending): more than the helper's 64
+#      names, and the update goes to Omarchy's terminal (`terminal`), since the helper could not scan them all;
+#   4. runs `pkexec /usr/lib/grassfield/grassfield-update-helper run <op-id> [<migration>...]` and reads its outcome from
+#      /run/grassfield-update/<op-id>.exit (pkexec alone: 126 dismissed, 127 not allowed);
+#   5. after a helper that installed something, runs Omarchy's steps that act for the user, as Omarchy's update does
+#      after its transaction: omarchy-migrate, omarchy-hook post-update, omarchy-update-mise (ADR-0033 s3.6). Each runs
+#      with standard input /dev/null and no terminal, a time limit, PATH=/usr/share/omarchy/bin:/usr/bin and
+#      OMARCHY_PATH=/usr/share/omarchy, without BASH_ENV, SUDO_ASKPASS or the caller's exported shell functions. Its
+#      output goes to $XDG_RUNTIME_DIR/grassfield/software-update-run.log (0600);
+#   6. writes the outcome and what finishes the update (restart, logout), then ends, which releases the lock.
+# result: up-to-date | done | failed-partial | busy | space | power | incompatible | terminal | stalelock | failed |
+# cancelled | denied | bootimage; synced: the checked sync databases became the system's before the run stopped (a failure
+# or a terminal answer then cannot say that nothing changed). deferred: migrations (a migration failed: Omarchy's terminal finishes it), aur (apps from the AUR,
+# which Omarchy's terminal update updates).
+set -uo pipefail
+umask 077
+trap '' HUP PIPE
+# The caller's exported shell functions (BASH_FUNC_<name>%% in the environment) reach no program: `bash -p` does not
+# import them here, and Omarchy's commands, bash scripts too, run without them. Nor do BASH_ENV and the rest of what bash
+# reads at its start, or an askpass sudo could ask a password through.
+unexported=(-u BASH_ENV -u ENV -u SUDO_ASKPASS -u SSH_ASKPASS)
+while IFS= read -r -d '' entry; do
+  [[ $entry == BASH_FUNC_* ]] && unexported+=(-u "${entry%%=*}")
+done </proc/$$/environ
+unset BASH_ENV ENV CDPATH GLOBIGNORE
+# Its own checks in the C locale (bash's bracket ranges follow the locale's collation); Omarchy's commands in the user's.
+lc_all_set=${LC_ALL+1} lc_all=${LC_ALL-}
+export LC_ALL=C PATH=/usr/bin
+exec </dev/null
+
+HELPER=/usr/lib/grassfield/grassfield-update-helper
+STATUS=/run/grassfield-update
+OMARCHY=/usr/share/omarchy
+
+((EUID != 0)) || { echo "grassfield-update-run: runs as the user, never as root" >&2; exit 2; }
+(($# == 0)) || { echo "grassfield-update-run: started by Settings only, with no argument" >&2; exit 2; }
+runtime=${XDG_RUNTIME_DIR:-}
+[[ $runtime == "/run/user/$EUID" && -d $runtime && ! -L $runtime && -O $runtime ]] ||
+  { echo "grassfield-update-run: no runtime folder of this user" >&2; exit 2; }
+dir=$runtime/grassfield
+mkdir -p -m 0700 -- "$dir" 2>/dev/null
+[[ -d $dir && ! -L $dir && -O $dir ]] || { echo "grassfield-update-run: $dir is not this user's folder" >&2; exit 2; }
+state=$dir/software-update-run.json
+log=$dir/software-update-run.log
+: >|"$log" && exec >>"$log" 2>&1
+
+read -r stat </proc/$$/stat || exit 1
+rest=${stat##*) }
+read -r -a fields < <(printf '%s\n' "$rest")
+start_time=${fields[19]-0}
+read -r uuid </proc/sys/kernel/random/uuid || exit 1
+op=${uuid//-/}
+[[ $op =~ ^[0-9a-f]{32}$ ]] || exit 1
+started_at=$(printf '%(%s)T' -1)000
+phase=authorizing result="" restart="" snapshot="" synced=false deferred=()
+
+write_state() {
+  local list="" item finished=0
+  for item in "${deferred[@]}"; do list+="${list:+,}\"$item\""; done
+  [[ $phase == done ]] && finished=$(printf '%(%s)T' -1)000
+  printf '{"version":1,"op":"%s","pid":%d,"startTime":"%s","phase":"%s","result":"%s","restart":"%s","snapshot":"%s","synced":%s,"deferred":[%s],"startedAt":%s,"finishedAt":%s}\n' \
+    "$op" "$$" "$start_time" "$phase" "$result" "$restart" "$snapshot" "$synced" "$list" "$started_at" "$finished" >|"$state.tmp" &&
+    mv -f -- "$state.tmp" "$state"
+}
+conclude() { # result
+  phase=done result=$1
+  write_state
+  exit 0
+}
+
+# 1. Omarchy's update lock, for the whole run.
+lock=$runtime/omarchy-update.lock
+exec 9>>"$lock" || conclude failed
+flock -n 9 || conclude busy
+write_state
+
+# The environment of Omarchy's commands.
+# env takes its options before the assignments.
+omarchy_env=(env "${unexported[@]}")
+[[ -n $lc_all_set ]] || omarchy_env+=(-u LC_ALL)
+omarchy_env+=(PATH="$OMARCHY/bin:/usr/bin" OMARCHY_PATH="$OMARCHY")
+[[ -n $lc_all_set ]] && omarchy_env+=(LC_ALL="$lc_all")
+# Omarchy's own reader of this user's markers. Its contract: exit 0 with the names, exit 1 with nothing when none is
+# pending. Anything else (another code, names with 1, nothing with 0) is no answer: pending_feed=1 (the integrator's
+# re-review of 0294373: an unchecked read fails open).
+pending_out="" pending_feed=0
+read_pending() {
+  local rc
+  pending_out="" pending_feed=0
+  [[ -x $OMARCHY/bin/omarchy-migrate ]] || return 0
+  pending_out=$("${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" --pending </dev/null 2>/dev/null 9>&-)
+  rc=$?
+  ((rc == 0)) && [[ -n ${pending_out//[[:space:]]/} ]] && return 0
+  ((rc == 1)) && [[ -z ${pending_out//[[:space:]]/} ]] && { pending_out=""; return 0; }
+  pending_feed=1
+}
+
+# 3. The migrations already pending (names only; the helper scans them). One the helper could not be given (no answer from
+# Omarchy's reader, more than its 64 names, or a name it refuses) would run unscanned: then the update is Omarchy's
+# terminal's.
+read_pending
+((pending_feed == 0)) || conclude terminal
+pending=()
+while IFS= read -r name; do
+  [[ -z $name ]] && continue
+  [[ $name =~ ^[0-9]{1,20}\.sh$ ]] || conclude terminal
+  pending+=("$name")
+done < <(printf '%s\n' "$pending_out")
+((${#pending[@]} <= 64)) || conclude terminal
+
+# 4. The helper, through pkexec: the shell's polkit agent asks for the password.
+/usr/bin/pkexec "$HELPER" run "$op" "${pending[@]}" </dev/null >/dev/null 2>&1 9>&-
+code=$?
+tokens=()
+if [[ -f $STATUS/$op.exit && ! -L $STATUS/$op.exit ]]; then
+  mapfile -t -n 80 tokens <"$STATUS/$op.exit"
+  code=${tokens[0]-1}
+  [[ $code =~ ^[0-9]{1,3}$ ]] || code=1
+fi
+has() { # token
+  local t
+  for t in "${tokens[@]:1}"; do [[ $t == "$1" || $t == "$1 "* ]] && return 0; done
+  return 1
+}
+# Whether the helper took a snapshot before changing anything (the failure sentence never promises one it did not take).
+if has "snapshot made"; then snapshot=made; elif has "snapshot failed"; then snapshot=failed; elif has snapshot; then snapshot=none; fi
+has synced && synced=true
+case $code in
+  0) has "packages 0" && conclude up-to-date ;;
+  1) conclude failed-partial ;;
+  3) conclude busy ;;
+  4) conclude space ;;
+  5) conclude power ;;
+  6) conclude incompatible ;;
+  7) if has "needs stalelock"; then conclude stalelock; else conclude terminal; fi ;;
+  126) conclude cancelled ;;
+  127) conclude denied ;;
+  *) conclude failed ;;
+esac
+
+# 5. Omarchy's steps for the user (ADR-0033 s3.6).
+phase=configuring
+write_state
+if [[ -x $OMARCHY/bin/omarchy-migrate ]]; then
+  timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
+  read_pending
+  if ((pending_feed == 1)) || [[ -n $pending_out ]]; then deferred+=(migrations); fi
+fi
+if [[ -x $OMARCHY/bin/omarchy-hook ]]; then
+  timeout -k 10 300 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-hook" post-update </dev/null 9>&- || echo "grassfield-update-run: the post-update hook failed"
+fi
+if [[ -x $OMARCHY/bin/omarchy-update-mise && -x /usr/bin/mise ]]; then
+  timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-update-mise" </dev/null 9>&- || echo "grassfield-update-run: mise could not update its tools"
+fi
+# Apps from the AUR (omarchy-update-aur-pkgs): installed explicitly from outside the repositories, Grassfield's own aside.
+while IFS= read -r name; do
+  [[ $name == grassfield* ]] && continue
+  deferred+=(aur)
+  break
+done < <(pacman -Qqem 2>/dev/null 9>&-)
+
+# 6. What finishes the update (s3.7): the helper's half, then Omarchy's markers for this user (omarchy-update-restart's
+# reboot-required and restart-*-required).
+if has "bootimage failed"; then
+  conclude bootimage
+fi
+markers=$HOME/.local/state/omarchy
+if has restart || [[ -f $markers/reboot-required ]] || compgen -G "$markers/restart-*-required" >/dev/null; then
+  restart=restart
+elif has logout; then
+  restart=logout
+fi
+conclude done

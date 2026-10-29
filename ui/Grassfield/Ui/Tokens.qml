@@ -3295,8 +3295,14 @@ QtObject {
     readonly property int softwareUpdateRecheckMs: 1800000
     // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateMeteredTimeoutMs: 10000
-    // estimate: after Update Now the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    // estimate: after Update in Terminal… the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11, U28) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateLaunchCheckMs: 5000
+    // while Update Now runs, the pane reads the runner's state and the helper's progress this often; they are replaced by rename, never watched (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunPollMs: 500
+    // estimate: after Update Now the pane says Waiting for permission… until the runner writes its state, at most this long, then shows the last run again (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunStartMs: 10000
+    // a run whose state says it started up to this long before Update Now was clicked is that click's (the runner's clock is in whole seconds) (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunClockSlackMs: 2000
 
     // estimate: the window wide enough for the CPU tab's eight default columns (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityWindowWidth: 980
