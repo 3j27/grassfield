@@ -1,8 +1,8 @@
 # System dialogs spec · shell-engineer, platform-engineer, apps-engineer, security-engineer · 1.0 (ADR-0035)
 
 Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
-(steps 2b and 2c), §4 (step 3), §9 (step 4a in Files, step 4b in the panels) and §1 (step 4b); §4b's notice is built but not
-active on Hyprland 0.56.2; the other sections are not built yet. Decisions and delivery order:
+(steps 2b and 2c), §4 (step 3), §9 (step 4a in Files, step 4b in the panels), §1 (step 4b) and §2's permission alerts (step
+5a; Open With is step 5b); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not built yet. Decisions and delivery order:
 `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
 `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
 owner's decisions recorded in the ADR.
@@ -189,8 +189,9 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
   0 (grant) or 1 (deny) and the choices.
 - AC2 no default button on Camera and Screenshot alerts (the frontend's icon or title tells which: `camera-web-symbolic`,
   `applets-screenshooter-symbolic`); other alerts default to the grant label as the frontend's wording intends.
-- AC3 over the lock: refused while locked with response 2 (the frontend then answers the app "cancelled"; it asks again next
-  time, nothing is stored).
+- AC3 over the lock (ADR-0035 5a-3, replacing "refused with response 2", which the frontend keeps as "no"): an alert asked while
+  the session is locked opens under the lock and waits; the lock hides it and keeps the keyboard from it; after the unlock it
+  takes keys only after a click (the hold rule). Nothing is answered for the user.
 
 ### Acceptance criteria
 - A-OW1 (L0) fake frontend: every option in, the answer out; a desktop id that is not installed is not listed.
@@ -201,6 +202,17 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
 ### Degraded behavior · Known limitations
 As section 1 (forward to gtk). The frontend's wording is xdg-desktop-portal's ("Allow %s to Use the Camera?"), not macOS's
 sentence; Grassfield does not rewrite it (it is translated upstream).
+
+Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`; the decisions are ADR-0035 5a-1 to 5a-7):
+- AC1 as written: the alert shape of the shell's alerts, the frontend's title in bold, its question, its note in the secondary
+  colour, its choices (pop-ups and check boxes), "Don't Allow" and "Allow" (or the frontend's labels) of one width; the
+  application's icon from its desktop entry, the frontend's symbolic icon for an application it cannot name.
+- AC2 for the camera, the microphone and screen capture (the frontend's icon names them); Esc and the window closed are "Don't
+  Allow" (5a-6); no click or key answers in the first 500 ms after the alert drew (5a-5).
+- AC3 as above. FC7's forward: an alert that has not drawn in 3 s, or a process without a display, goes to x-d-p-gtk's Access.
+- Evidence: `tests/unit/portal/tst_access.cpp`, `tests/unit/tst_accessalert.qml`, and `tests/integration/portal_filechooser.sh`
+  scenario 7: the camera asked through the real frontend on a private bus, the alert's answer back to the application and
+  kept by the frontend's permission store ("yes" or "no"); A-AC1 in a nested session and A-AC2 are the integrator's.
 
 ## 3. Screen-sharing picker (P10; ADR-0035 D-6)
 
