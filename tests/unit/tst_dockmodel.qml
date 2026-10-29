@@ -56,6 +56,8 @@ TestCase {
         compare(DockModel.windowsOf(items, "Foot.desktop").join(","), "f1");
         compare(DockModel.windowsOf(items, "org.grassfield.Files").join(","), "x1");
         compare(DockModel.windowsOf(items, "ORG.grassfield.files.desktop").join(","), "x1"); // without case, as every id
+        compare(DockModel.windowsOf(items, "Foot.DESKTOP").join(","), "f1"); // the suffix too (review of 91dcb63)
+        compare(DockModel.windowsOf(items, "org.grassfield.Files.Desktop").join(","), "x1");
         compare(DockModel.windowsOf(items, "chromium").length, 0); // pinned, not running
         compare(DockModel.windowsOf(items, "ghost").length, 0);
         compare(DockModel.windowsOf(items, "").length, 0);

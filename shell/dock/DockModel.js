@@ -122,7 +122,7 @@ function splitFiles(apps, lookup) {
 // tile for it: what `qs ipc call dock reopen <id>` brings forward when a running app is launched again (ADR-0038 AD34). Ids
 // compare without case and without ".desktop", as the entry lookup does.
 function windowsOf(items, appId) {
-    const norm = id => String(id === undefined || id === null ? "" : id).replace(/\.desktop$/, "").toLowerCase();
+    const norm = id => String(id === undefined || id === null ? "" : id).replace(/\.desktop$/i, "").toLowerCase();
     const want = norm(appId);
     if (want === "")
         return [];
