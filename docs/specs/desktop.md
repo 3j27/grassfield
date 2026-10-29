@@ -34,6 +34,10 @@ Unknown config value: `none`. Target surface missing (`apps`): no-op. No composi
 ## Performance · Accessibility · i18n
 No timers run until the pointer is in a corner. Corners are pointer-only; every action has a keyboard path (CTRL+UP Overview, SUPER+N Notifications panel, SUPER+CTRL+Q lock). No user-visible strings.
 
+## Startup
+
+The desktop exposes nothing before its first layout is final (`Logic.settledOn`): the surface is sized, the settings file, the widgets file and the positions file were read, and the first complete listing of the resolved folder is in. `lay` stays empty until then, so no icon appears at a default slot and then moves, and no partial listing is shown and then pruned. The folder model starts on the process's working directory (often the home folder) before its folder is set: a row whose parent is not the desktop folder is a stale row, the listing is refused and nothing is pruned. Clean Up and Clean Up By do nothing before the desktop is ready (they would save empty positions). Each icon stays invisible until its image is in and, for a launcher, its file is read, bounded by `desktopIcon.loadTimeout` (macOS shows each icon whole).
+
 ## Known limitations
 - A real pointer is clamped to the output edge, so a corner is reached only on an edge shared with the screen boundary; with side-by-side outputs, the inner corners are not at the pointer's stop and still work only where the pointer can reach them.
 - The Overlay-layer corner windows cover the 2 px corner of the Quick Settings/popup overlay and of fullscreen apps by design.

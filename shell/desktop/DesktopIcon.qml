@@ -60,6 +60,26 @@ Item {
         id: info
         property string name: ""
         property string icon: ""
+        // The launcher file was read (or could not be): its name and icon are final.
+        property bool read: false
+    }
+
+    // Shown whole (macOS): invisible until the image is in and a launcher's file was read, so no label stands without
+    // its icon and no launcher changes its name once drawn. Latched; Tokens.desktopIconLoadTimeout bounds the wait.
+    readonly property var iconItem: iconLoader.item as Item
+    readonly property bool imageDone: thumbnail ? (thumb.status === Image.Ready || thumb.status === Image.Error) : (iconItem !== null && (iconItem.status === Image.Ready || iconItem.status === Image.Error))
+    readonly property bool whole: imageDone && (!launcher || info.read)
+    property bool shown: false
+    onWholeChanged: {
+        if (whole)
+            shown = true;
+    }
+    opacity: shown ? 1 : 0
+
+    Timer {
+        interval: Tokens.desktopIconLoadTimeout
+        running: !root.shown
+        onTriggered: root.shown = true
     }
 
     FileView {
@@ -70,7 +90,9 @@ Item {
             const r = Logic.parseLauncher(launcherFile.text());
             info.name = r.name;
             info.icon = r.icon;
+            info.read = true;
         }
+        onLoadFailed: info.read = true
     }
 
     // Icon, with a selection tint behind it.
@@ -94,6 +116,7 @@ Item {
 
         // A folder follows the folder colour and shows its symbol (FolderIcon); anything else is a plain icon.
         Loader {
+            id: iconLoader
             anchors.fill: parent
             visible: !(root.thumbnail && thumb.status === Image.Ready)
             sourceComponent: root.isDir && !root.launcher ? folderIcon : plainIcon

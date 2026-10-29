@@ -49,7 +49,7 @@ Scope {
     // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
     property string toolDir: ""
     readonly property var toolEnvironment: root.toolDir.charAt(0) !== "/" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
-    // grassfield.json has been read at least once (also when it was malformed, too large or not a regular file).
+    // grassfield.json has been read at least once (also when it was malformed, too large, not a regular file or missing).
     property bool loaded: false
     // True while the file on disk could not be parsed: nothing is written until it loads again.
     property bool writeBlocked: false
@@ -709,12 +709,15 @@ Scope {
         if (read.status === "missing") {
             root.lastSignature = "-";
             root.takeMissingFile();
+            // A fresh account has no file: that is a read too, and the defaults are final (the Dock and the desktop wait for it).
+            // `loaded` flips after the values are in: its readers run at once, on the document, not on the defaults.
+            root.loaded = true;
         } else if (read.status === "ok") {
             root.lastSignature = read.signature;
-            root.loaded = true;
             root.checkText(read.text);
             root.takeDocument(read.text);
             root.reapplyDirty();
+            root.loaded = true;
             // A change that waited because the file could not be read (it is readable now) is written now.
             if (Object.keys(root.dirty).length > 0)
                 root.save();
@@ -723,8 +726,8 @@ Scope {
             // Found at the very signature it was already found unusable at: the backoff grows; any other case starts it over.
             const same = root.lastSignature === "!" && loader.startSignature !== "" && loader.startSignature === root.badSignature;
             const level = same ? root.badLevel + 1 : 0;
-            root.loaded = true;
             root.takeBadFile(root.badReason(read.status));
+            root.loaded = true;
             root.badSignature = loader.startSignature;
             root.badLevel = level;
         }
@@ -732,6 +735,17 @@ Scope {
     }
 
     // The file watch is set again on the path after every read: a watch follows the file it was set on, not the path.
+    // The first read starts at once (a missing file is a read like any other), and again for a folder that is set later.
+    property bool started: false
+    onFilePathChanged: {
+        if (root.started)
+            root.readFile();
+    }
+    Component.onCompleted: {
+        root.started = true;
+        root.readFile();
+    }
+
     property string watchPath: ""
     function armWatch(): void {
         const want = watchedDir.ready ? root.filePath : "";
@@ -901,11 +915,11 @@ Scope {
     WatchedDir {
         id: watchedDir
         path: root.configDir
+        // The folder matters for the watch and for writing only: the first read does not wait for its mkdir (Component.onCompleted
+        // below), so `loaded` flips as soon as the bounded read ends. The watch, set now, reports a file created later.
         onReadyChanged: {
-            if (ready) {
+            if (ready)
                 root.armWatch();
-                root.readFile();
-            }
         }
     }
 

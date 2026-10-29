@@ -436,6 +436,8 @@ QtObject {
     readonly property real dockAttentionHeightScale: 0.34
     // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockAttentionReveal: 3000
+    // estimate: the longest the Dock waits at startup for the apps model and the focused output once the settings file is in (the file itself it always waits for), ms; inside gate P5's 2 s [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockSettleTimeout: 1000
     // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockAttentionHighlightOpacity: 0.35
     // estimate: the launch bounce stops after this long without a window, ms [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -2091,6 +2093,8 @@ QtObject {
     readonly property int desktopIconThumbnailMax: 128
     // estimate: desktop icons v1, px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconDragThreshold: 6
+    // estimate: an icon stays invisible until its image and its launcher file are in (macOS shows each icon whole); after this long it shows as it is, ms [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
+    readonly property int desktopIconLoadTimeout: 600
     // estimate: desktop icons v1, debounce of the positions file [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSaveMs: 300
     // ADR-0012 spike: ms the 1x1 kicker surface is mapped (and unmapped) so Hyprland re-evaluates the keyboard focus without pointer motion; 60 measured, 30 untested
