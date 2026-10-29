@@ -888,6 +888,21 @@ bool FilesApp::isApplicationUrl(const QUrl &url) const
     return !ApplicationsLogic::entryId(url).isEmpty();
 }
 
+// The name the user clicked: the one the Applications location shows (the Name[...] of the shell's language, as the Apps grid
+// picks it), not KService::name(), which follows KDE's own locale. Falls back to KService's when the entry cannot be read as
+// the grid reads it.
+static QString displayNameOfApplication(const KService::Ptr &service)
+{
+    QFile file(service->entryPath());
+    if (file.open(QIODevice::ReadOnly)) {
+        ApplicationsLogic::Entry entry;
+        if (ApplicationsLogic::parseEntry(file.readAll(), service->desktopEntryName(), service->entryPath(), ApplicationsLogic::processEnvironment(), &entry)
+            && !entry.baseName.isEmpty())
+            return entry.baseName;
+    }
+    return service->name();
+}
+
 void FilesApp::launchApplication(const QUrl &url)
 {
     const QString id = ApplicationsLogic::entryId(url);
@@ -920,7 +935,7 @@ void FilesApp::launchApplication(const QUrl &url)
         if (!service->workingDirectory().isEmpty())
             process.setWorkingDirectory(service->workingDirectory());
         if (!process.startDetached())
-            emit operationFailed(tr("“%1” could not be started.").arg(service->name()));
+            emit operationFailed(tr("“%1” could not be started.").arg(displayNameOfApplication(service)));
         return;
     }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
