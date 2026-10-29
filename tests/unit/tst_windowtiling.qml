@@ -400,13 +400,16 @@ TestCase {
 
     // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
     function test_keptSelectionStartsOnTheFirstTile() {
-        compare(WindowTiling.keptSelection(-1, 3, true), 0, "a new suggestion: the first");
-        compare(WindowTiling.keptSelection(2, 3, true), 0, "a new suggestion resets");
-        compare(WindowTiling.keptSelection(-1, 3, false), 0, "the windows came after the suggestion: the first");
-        compare(WindowTiling.keptSelection(2, 3, false), 2, "kept while in range");
-        compare(WindowTiling.keptSelection(3, 3, false), 0, "out of range (a window closed): the first");
-        compare(WindowTiling.keptSelection(1, 0, false), -1, "no tile");
-        compare(WindowTiling.keptSelection(-1, 0, true), -1);
+        const three = ["a", "b", "c"];
+        compare(WindowTiling.keptSelection(-1, three, true), 0, "a new suggestion: the first");
+        compare(WindowTiling.keptSelection(2, three, true), 0, "a new suggestion resets");
+        compare(WindowTiling.keptSelection(-1, three, false), 0, "the windows came after the suggestion: the first");
+        compare(WindowTiling.keptSelection(2, three, false), 2, "kept while in range");
+        compare(WindowTiling.keptSelection(3, three, false), 0, "out of range (a window closed): the first");
+        compare(WindowTiling.keptSelection(1, [], false), -1, "no tile");
+        compare(WindowTiling.keptSelection(-1, [], true), -1);
+        compare(WindowTiling.keptSelection(-1, undefined, true), -1, "the windows not evaluated yet (#48's merge note: no TypeError)");
+        compare(WindowTiling.keptSelection(0, null, false), -1);
     }
 
     // #48 review, MINOR 7: a Split View Desktop takes no number, the Desktops keep theirs.

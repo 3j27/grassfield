@@ -157,12 +157,11 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            const names = Quickshell.screens.map(s => s.name);
-            if (ScreenChoice.gone(root.screenName, names) && ScreenChoice.closesWithScreen(root.kind)) {
+            const next = ScreenChoice.afterScreensChanged(root.kind, root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+            if (next.close)
                 root.close(); // what it offered is not on any output that remains
-                return;
-            }
-            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, names);
+            else
+                root.screenName = next.screen;
         }
     }
 
@@ -189,6 +188,22 @@ Singleton {
         }
         kind = "";
         data = {};
+    }
+
+    // A popup is open on the output `screen`: the Overlay's `open` (a binding on this reads `revision` too: verifyOpen can
+    // compute a stale one again).
+    function openOn(screen: string): bool {
+        return root.active && root.screenName === screen && root.revision >= 0;
+    }
+
+    // `shown`, a binding on openOn(screen) (the Overlay's `open`), disagrees with it now: computed again, logged. True when they
+    // agree.
+    function verifyOpen(shown: bool, screen: string): bool {
+        if (shown === root.openOn(screen))
+            return true;
+        console.warn("grassfield: overlay on \"" + screen + "\": open (" + shown + ") disagreed with Popups; computed again");
+        root.revision++;
+        return false;
     }
 
     // True when `active` agrees with `kind`; else it is computed again, logged (the Overlay asks too for its own `open`).

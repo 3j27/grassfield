@@ -36,6 +36,15 @@ function closesWithScreen(kind) {
     return kind === "tiling" || kind === "tilingSuggest";
 }
 
+// The outputs changed (`names` the live ones, `focused` the output with the focus) while a popup of kind `kind` was open on
+// `current`: {close: true} when its output went away and it closes with it (closesWithScreen), else {close: false, screen}
+// with the output it shows on now (replacement: `current` when it is still there).
+function afterScreensChanged(kind, current, focused, names) {
+    if (gone(current, names) && closesWithScreen(kind))
+        return {close: true, screen: current};
+    return {close: false, screen: replacement(current, focused, names)};
+}
+
 // The output a piece of state moves to when its own output (`current`) went away: the output with the focus if it still exists,
 // else the first one; `current` itself when it is still there (nothing to move) or empty. Everything is read from the arguments:
 // a handler of "the outputs changed" gets the live names and the focus at that moment, never `Compositor.activeScreenName`

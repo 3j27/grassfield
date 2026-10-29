@@ -35,20 +35,16 @@ FocusScope {
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Choose a window for this zone")
 
-    // The windows offered, 0 while `windows` is not evaluated yet (at creation `suggestion` changes first; integrator merge note
-    // on #48: reading its length then logged a TypeError at every open).
-    function windowCount(): int {
-        return root.windows ? root.windows.length : 0;
-    }
-    Component.onCompleted: root.current = WindowTiling.keptSelection(root.current, root.windowCount(), true)
+    // `windows` is not evaluated yet when `suggestion` changes at creation: keptSelection takes it as it is (#48's merge note).
+    Component.onCompleted: root.current = WindowTiling.keptSelection(root.current, root.windows, true)
     onSuggestionChanged: {
         root.picked = false;
-        root.current = WindowTiling.keptSelection(root.current, root.windowCount(), true);
+        root.current = WindowTiling.keptSelection(root.current, root.windows, true);
     }
     // Every window offered closed meanwhile: the suggestions end.
     onWindowsChanged: {
-        root.current = WindowTiling.keptSelection(root.current, root.windowCount(), false);
-        if (root.windowCount() === 0)
+        root.current = WindowTiling.keptSelection(root.current, root.windows, false);
+        if (root.current < 0)
             Qt.callLater(TilingSuggest.dismiss);
     }
 

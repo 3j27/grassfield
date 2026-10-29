@@ -24,7 +24,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Popups.active && Popups.screenName === (modelData ? modelData.name : "") && Popups.revision >= 0
+        readonly property bool open: Popups.openOn(modelData ? modelData.name : "")
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -75,11 +75,8 @@ Variants {
             repeat: true
             running: win.visible
             onTriggered: {
-                const fresh = Popups.active && Popups.screenName === (win.modelData ? win.modelData.name : "");
-                if (Popups.verify() && win.open !== fresh) {
-                    console.warn("grassfield: overlay: open (" + win.open + ") disagreed with Popups; computed again");
-                    Popups.revision++;
-                }
+                if (Popups.verify())
+                    Popups.verifyOpen(win.open, win.modelData ? win.modelData.name : "");
             }
         }
 
