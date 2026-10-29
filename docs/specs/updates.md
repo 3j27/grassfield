@@ -104,8 +104,9 @@ When it runs (shell)
   checker itself and keeps the result in memory.
 
 Actions (never in a dev session)
-- U11. "Update Now" runs exactly `omarchy-launch-floating-terminal-with-presentation omarchy-update`, in Omarchy's floating
-  terminal. Omarchy asks "Continue with update?" there; the user can cancel. While the update lock is held the button is
+- U11. Without the step 3 runner (U24: a build before it, or no pkexec), "Update Now" runs exactly
+  `omarchy-launch-floating-terminal-with-presentation omarchy-update`, in Omarchy's floating terminal; with it, "Update in
+  Terminal…" (U28) runs the same command. Omarchy asks "Continue with update?" there; the user can cancel. While the update lock is held the button is
   disabled and the pane says the update runs in the terminal. The pane checks again when the lock is released: 5 s after the
   launch it asks for a check, which finds the lock held and waits for it (U4). While `blocking` (U22) the button is disabled
   with a sentence, since every Omarchy update fails then.
@@ -196,6 +197,55 @@ Pane (step 2)
   version and the time of the last check when up to date. With Grassfield updates off (`not-set-up`), Omarchy's release and
   the other updates are listed with "Update Now" under "Set Up…", and the badge counts Omarchy's release.
 
+Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
+- U24. "Update Now" starts exactly `/usr/lib/grassfield/grassfield-update-run`, detached, with no argument (Settings'
+  `isLaunch`; never in a dev session). It runs only when the runner, `grassfield-update-helper` and `/usr/bin/pkexec` are
+  installed; otherwise U11 applies. The runner (as the user) takes Omarchy's update lock for the whole run, lists the
+  migrations already pending (`omarchy-migrate --pending`) and runs `pkexec /usr/lib/grassfield/grassfield-update-helper run
+  <op-id> [<migration>...]`: Grassfield's own polkit dialog (`org.grassfield.packages.update-system`, an administrator's
+  password every time, never for an inactive or remote session). The helper (root) runs in a transient system service when
+  systemd manages the system, so neither closing Settings nor a log out can stop pacman. Its order (ADR-0033 s3.2): the plan
+  from a copy of the sync databases, the compatibility check (U27), the steps that need a person (U28), then the cache prune,
+  the snapshot (every snapper configuration; none, unconfigured or failed: the update goes on, as Omarchy's does), the checked
+  databases made the system's, the Arch keyring, and `pacman -Su --noconfirm --overwrite '/usr/share/omarchy/*'` with
+  `OMARCHY_UPDATE_PACMAN=1` (Omarchy's guard hook). Nothing is changed before the snapshot. After the helper, the runner runs
+  Omarchy's `omarchy-migrate`, `omarchy-hook post-update` and `omarchy-update-mise` as the user, without a terminal.
+- U25. While it runs, the status shows the phase ("Waiting for permission…", "Preparing the update…", "Saving a snapshot of
+  this computer…", "Downloading updates…", "Installing updates…", "Finishing the update…"), "12 of 132" when a count is known,
+  and one bar (0-5 % preparing, 5-45 % downloading, 45-95 % installing, 95-100 % finishing; indeterminate when nothing is
+  counted). No pacman output is shown. The pane reads the runner's state and the helper's progress every 500 ms while the run
+  goes on, and when it opens: closing Settings stops nothing, and opening it again shows the run where it is. A runner that
+  ended without its last state (a log out) shows the helper while it runs; a process id reused by another process (another
+  start time) is not the run. Update Now is hidden while it runs.
+- U26. Before the transaction, the helper refuses with nothing changed: less than 10 GB free on `/` ("This computer needs 10
+  GB of free space to update."); on battery below 50 % with no power supply online ("Connect this computer to power to
+  update."); another run, or pacman's `db.lck` ("Another update is running."); Omarchy's signing key missing (U28). A
+  dismissed dialog says nothing; a refused one says "Software Update was not allowed to update this computer.".
+- U27. Compatibility (ADR-0033 s3.4). grassfield-desktop records the toolkit it was built with
+  (`/usr/share/grassfield/BUILD-DEPS`: `qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`). When the plan
+  changes grassfield-desktop or one of them, every one installed after the transaction must match the record of the
+  grassfield-desktop installed after it (the plan's, so a matching Grassfield build joins the same transaction): Qt, Hyprland,
+  aquamarine and KF6 by major.minor, Quickshell by its whole version. A missing record fails closed. Otherwise nothing changes
+  and the pane says "This update needs a newer version of Grassfield, which isn't available yet." and "Software Update checks
+  again later and tells you when it's ready.", with no technical step.
+- U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `sudo`, `pkexec`, `su`, `run0`,
+  `doas`, `gum` or `/dev/tty`, or an Omarchy command that does; Omarchy's key missing; a package conflict or files no package
+  owns (pacman stops before changing a package). The update stops with nothing installed and the pane says "This update asks
+  questions that need Omarchy's terminal." with "Update in Terminal…" (U11's command). A migration that fails anyway leaves
+  the update installed and says "Some of Omarchy's last steps need its terminal." with "Finish in Terminal…"
+  (`omarchy-launch-floating-terminal-with-presentation omarchy-migrate`). When apps from the AUR are installed, the end says
+  "Apps from the AUR are updated in Omarchy's terminal." with "Update in Terminal…". Orphans are kept (Omarchy's own
+  non-interactive answer); firmware and Omarchy's channel are never touched.
+- U29. The end (U14's rule, plus the run's own answer): a kernel update, Hyprland, a toolkit package of U27, Omarchy's
+  `reboot-required` or a `restart-*-required` marker ask for a restart; grassfield-desktop alone asks for a log out. When the
+  run ends while the window watches it, a sheet asks once: "Restart your computer to finish updating" with "Restart Later" and
+  "Restart" (or "Log out to finish updating Grassfield" with "Log Out Later" and "Log Out"); Later keeps the pane's row.
+  Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
+  "Don't restart this computer yet" and offers no restart.
+- U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
+  download, a plan pacman refuses); one during the transaction "The update stopped before it finished.", and names the
+  snapshot only when one was taken. Update Now stays available to try again after every outcome.
+
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
 |---|---|
@@ -213,6 +263,11 @@ Pane (step 2)
 | A first installation from downloaded files (`pacman -U ./…`) | not verified by pacman (`LocalFileSigLevel = Optional`, Q0); not a documented procedure. The verified one is ADR-0033 b.3a (out-of-band fingerprint, `--lsign-key`, install from the repository). The owner accepted the residual risk of the helper's bootstrap (O17). |
 | A dev session | "Update Now", "Set Up…", "Repair…", "Turn Off…", the beta switch, "Log Out…" and "Restart…" log `dev guard: … suppressed` and do nothing (Settings refuses them, and its Backend again); `grassfield-channel-set` run by hand honours `GRASSFIELD_UPDATE_PKEXEC` (step 1) |
 | A second check while one runs | joins the running one |
+| `grassfield-update-helper` without root, with another verb, a bad operation id or migration name, more than 64 names, an operation id used before | refused (exit 2), nothing written but the reused operation's own files |
+| `grassfield-update-run` as root, or with an argument | refused (exit 2) |
+| Update Now while another run, an `omarchy update` or a Store operation holds Omarchy's update lock | "Another update is running.", nothing runs |
+| An update the compatibility check refuses (U27) | nothing changed, the system's sync databases untouched; "This update needs a newer version of Grassfield…" |
+| An update that needs a person (U28) | nothing installed; "Update in Terminal…" |
 
 ## Acceptance criteria (each mapped to a test; level)
 | Id | Criterion | Test | Level |
@@ -237,7 +292,10 @@ Pane (step 2)
 | A9 | checker output parsing, states, announced versions, schedule (fake clock), dev guard of the actions | `tests/unit/tst_softwareupdate.qml`; `tests/shell/software_update_service.sh` (the service under Quickshell with a fake checker, its IPC); `tests/unit/tst_settingssoftwareupdate.qml` (the dev guard) | L0 |
 | A10 | grassfield-packages' real packages: stable install, update, beta and back, bad signature, the client sees each update | grassfield-packages end-to-end (step 1b) | L0 |
 | A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | `tests/unit/tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`, `tst_dockmodel.qml`; the Backend's doors in `tests/unit/settings/tst_systemguard.cpp` and `tst_backend.cpp`; captures `docs/audits/settings-parity-2026-10-26/software-update*.png` (offscreen; nested: visual NOT verified) | L0/L1 |
-| A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update Now in Omarchy's floating terminal | owner, real session | L2 |
+| A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update in Terminal… in Omarchy's floating terminal | owner, real session | L2 |
+| A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, `db.lck` and its own lock busy, Omarchy's key missing, an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
+| A14 | the pane's run: Update Now's one launch, each phase and count, the bar, the pane opened again mid-run, a runner gone with or without its helper, a reused process id, each outcome's sentence and action, the end's sheet, no restart after a failed startup image, the dev guard | `tests/unit/tst_softwareupdate.qml` (the run's logic), `tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`; the launch vectors in `tst_systemguard.cpp`, `tst_backend.cpp`; captures `software-update-run.png` | L0/L1 |
+| A15 | real flow: Update Now with a published test channel (the dialog once, the snapshot, the progress, closing and reopening Settings mid-run, Restart Later then Restart); a toolkit update without a matching build refused; an Omarchy release with a `sudo` migration sent to the terminal | owner, real session (the integrator's L2) | L2 |
 
 ## Interfaces / contracts (versions)
 - ADR-0033 § g (the repository contract; `grassfield-notes.json` version 1).
@@ -246,6 +304,11 @@ Pane (step 2)
   Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
 - `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
+- Step 3: `/usr/share/grassfield/BUILD-DEPS` (`<name> <version>` lines, U27); `/run/grassfield-update/<op>.progress`
+  (`checking | snapshot | keyring | downloading <done> <total> | installing <done> <total> | finishing`), `<op>.exit` (the code,
+  then `key value` lines: `packages`, `snapshot`, `restart`, `logout`, `bootimage`, `needs`, `incompatible`), `<op>.started`,
+  `last`; `$XDG_RUNTIME_DIR/grassfield/software-update-run.json` (version 1: `op`, `pid`, `startTime`, `phase`, `result`,
+  `restart`, `snapshot`, `deferred`, `startedAt`, `finishedAt`). The polkit action `org.grassfield.packages.update-system`.
 - Shell IPC: `update check` (Settings → shell). The `omarchy-shell` shim forwards `omarchy.system-update refresh|clear` to it.
 
 ## Dependencies (verified versions)
@@ -255,11 +318,18 @@ itself depends on `omarchy-keyring`, `pacman-contrib` and `fakeroot`. `pacman-co
 `grassfield-desktop`'s `depends` since step 1 (declared, not assumed); `grassfield-keyring` joined them once
 grassfield-packages built it (owner decision O21; until the repository is published, a source build installs it first,
 owner decision O22). Omarchy's commands used:
-`omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself).
+`omarchy-launch-floating-terminal-with-presentation`, `omarchy-update`, `omarchy-hook` (through Omarchy itself); step 3:
+`omarchy-migrate`, `omarchy-hook`, `omarchy-update-mise` (run by the runner as the user). Step 3's root steps use pacman,
+`pacman-key --list-keys`, `paccache` (pacman-contrib), snapper when installed, bsdtar (libarchive), `systemd-inhibit` and
+`systemd-run`; `quickshell` joins the build's `makedepends` so BUILD-DEPS records it.
 
 ## Degraded behavior
 - `checkupdates` missing: state `failed`/`unavailable` with "pacman-contrib is not installed"; no other effect.
 - Omarchy's launcher missing (not an Omarchy system): the actions are disabled, with a sentence; the check still works.
+- The runner, its helper or pkexec missing: Update Now opens Omarchy's terminal (U11).
+- No systemd as the system's manager (a container): the helper runs in place, under pkexec.
+- snapper missing or unconfigured: the update goes on without a snapshot, as Omarchy's does; the failure sentence then names
+  none.
 - No shell (Settings alone): Settings runs the checker (U10); no badge, no banner.
 - Offline: automatic checks skipped; a manual check fails cleanly (U2, A4).
 
@@ -270,6 +340,8 @@ owner decision O22). Omarchy's commands used:
   4.0.6's 1791403252), the real `grassfield-channel-set`, helper, scriptlet program, policy (real polkitd and pkexec), hook
   and checker. Never on the owner's machine. The checker's own cases: `tests/shell/update_check.sh` (logic layer, stubs).
 - Checker unit tests (A8), QML tests (A9), grassfield-packages end-to-end (A10).
+- Step 3 container test (`tests/integration/update_helper.sh [--omarchy DIR]`, a throwaway Arch container with network:
+  Arch's mirrors and keys.openpgp.org for Omarchy's public key): A13. Never on the owner's machine.
 - Owner, real session (L2): Set Up… (Grassfield's polkit sheet), Update Now with a published test channel, Beta
   Updates on and off, an Omarchy channel change with the hook, Log Out… after an update.
 
@@ -297,7 +369,15 @@ owner decision O22). Omarchy's commands used:
 - No automatic download or install, no install at logout: pacman's cache and the install need root, and the owner wants no
   install without the user.
 - "Update Now" updates the whole system (Omarchy's update), not Grassfield alone.
-- The update runs in Omarchy's terminal; the pane shows no progress.
+- An Omarchy release that ships a migration using `sudo` goes to Omarchy's terminal (U28): Omarchy 4.0.4 → 4.0.6 has three.
+  Grassfield gives no migration root and asks no `sudo` password (ADR-0033 s3.6).
+- AUR apps are not updated by Update Now (U28).
+- The compatibility check covers five packages; another library Grassfield links can move unchecked.
+- A package conflict is found by pacman only inside the transaction (`--print` does not check them), after the checked
+  databases became the system's: nothing is installed, and Grassfield Store refuses installs until an update finishes.
+- When the run ends while Settings is closed, nothing says so until Settings opens (the pane's row); the shell does not
+  announce it.
+- The transient system service, the real polkit dialog and snapper are verified only on a real machine (A15).
 - A host can replay an old, validly signed database and hold back updates; pacman has no database expiry.
 - One signing key (owner decision O6): if it is ever compromised, revoking it stops every client's `[grassfield]` (`blocking`)
   until the user turns it off or trusts a new key through the verified first-installation steps (ADR-0033 b.3a, b.5).
