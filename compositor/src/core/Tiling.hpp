@@ -549,12 +549,25 @@ namespace gf::tiling {
         std::vector<uint64_t> windows; // the windows that can fill them, at most kMaxSuggested (D26)
     };
 
-    // hl.plugin.grassfield.config keys (values "true" | "false").
-    inline constexpr std::string_view kConfigEdges   = "tilingEdges";
-    inline constexpr std::string_view kConfigMenuBar = "tilingMenuBar";
-    inline constexpr std::string_view kConfigMargins = "tilingMargins";
-    inline constexpr std::string_view kConfigAltDrag = "tilingOptionDrag"; // Settings windows.tilingOptionDrag (TL18)
-    std::optional<bool> parseBool(std::string_view value);
+    // hl.plugin.grassfield.config keys (values "true" | "false"): the switches of Desktop & Dock > Windows (TL32).
+    inline constexpr std::string_view kConfigEdges       = "tilingEdges";
+    inline constexpr std::string_view kConfigMenuBar     = "tilingMenuBar";
+    inline constexpr std::string_view kConfigMargins     = "tilingMargins";
+    inline constexpr std::string_view kConfigAltDrag     = "tilingOptionDrag";  // Settings windows.tilingOptionDrag (TL18)
+    inline constexpr std::string_view kConfigLayouts     = "tilingLayouts";     // the green button's hover event (TL22)
+    inline constexpr std::string_view kConfigSuggestions = "tilingSuggestions"; // the suggestion after an arrangement (TL28)
+    enum class Switch : uint8_t {
+        Edges,
+        MenuBar,
+        AltDrag,
+        Margins,
+        Layouts,
+        Suggestions,
+    };
+    // The switch a config key names; nullopt for any other key ("Bring tile groups forward together" is the shell's alone:
+    // the plugin raises a group only on group_front, ADR-0036 D38).
+    std::optional<Switch> switchOf(std::string_view key);
+    std::optional<bool>   parseBool(std::string_view value);
 
     // ---- the tiling notice and state (gfc/1, ADR-0007) ----
 

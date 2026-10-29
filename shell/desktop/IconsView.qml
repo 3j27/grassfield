@@ -50,7 +50,16 @@ FocusScope {
     readonly property real areaW: Math.max(0, width - leftInset - margin - Settings.dockFootprint.right)
     readonly property real areaH: Math.max(0, height - topInset - bottomInset)
     readonly property var grid: Logic.gridSize(areaW, areaH, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight)
-    readonly property bool ready: width > 0 && height > 0 && files.positionsLoaded && files.dir !== ""
+    // Nothing is exposed before every input of the first layout is final (Logic.settledOn): no default layout that then moves,
+    // no partial or placeholder listing that then goes.
+    readonly property bool ready: files.dir !== "" && Logic.settledOn({
+        width: width,
+        height: height,
+        settings: Settings.loaded,
+        widgets: Widgets.loaded,
+        positions: files.positionsLoaded,
+        listed: files.entriesListed
+    })
     // Widgets of this screen are never overlapped: slots under a widget tile are not available to
     // icons (widgets win; the icons move to the next free slot).
     readonly property var widgetRects: {
@@ -70,7 +79,7 @@ FocusScope {
         return out;
     }
     readonly property var blocked: Logic.blockedSlots(widgetRects, leftInset, topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows)
-    readonly property var lay: Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked)
+    readonly property var lay: ready ? Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked) : ({})
     readonly property var shown: files.entries.filter(e => lay[e.name] !== undefined)
     readonly property var selectedNames: Object.keys(selected).filter(n => selected[n] === true && lay[n] !== undefined)
     readonly property var selectedPaths: selectedNames.map(n => files.path(n))
@@ -286,6 +295,8 @@ FocusScope {
                 SettingsApp.openSection("wallpaper");
             else if (action === "editWidgets")
                 Notifications.openWidgetGallery(root.screen ? root.screen.name : "");
+            else if (action.startsWith("cleanUp") && !root.ready)
+                return;
             else if (action === "cleanUp")
                 files.setPositions(Logic.arrange(Logic.visualOrder(lay), grid.cols, grid.rows, blocked));
             else if (action.startsWith("cleanUpBy:"))

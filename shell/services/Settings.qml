@@ -93,7 +93,11 @@ Singleton {
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property bool windowsTilingEdges: store.windowsTilingEdges
     readonly property bool windowsTilingMenuBar: store.windowsTilingMenuBar
+    readonly property bool windowsTilingOptionDrag: store.windowsTilingOptionDrag
     readonly property bool windowsTilingMargins: store.windowsTilingMargins
+    readonly property bool windowsTilingLayouts: store.windowsTilingLayouts
+    readonly property bool windowsTilingSuggestions: store.windowsTilingSuggestions
+    readonly property bool windowsTilingGroups: store.windowsTilingGroups
     readonly property bool windowsStages: store.windowsStages
     // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
     readonly property bool windowsRebuildExtension: store.windowsRebuildExtension

@@ -30,7 +30,8 @@ Singleton {
         });
     }
 
-    // What happened, for the lock-surfaces harness (it runs without the plugin): "opened", or why not: "lock", "leave",
+    // What happened, for the lock-surfaces harness (it runs without the plugin): "opened", or why not: "lock", "leave", "off"
+    // (a hover while "Show layouts when hovering over the green button" is off),
     // "busy" (another popup is open, or this window's), what refuses it (WindowTiling.hoverRefusedBy), "unavailable" (no
     // plugin feature) or "no window". The refusals and the closing of another window's popover come before the plugin's checks.
     function show(hover: var): string {
@@ -38,6 +39,8 @@ Singleton {
             return "lock";
         if (hover.state === "leave")
             return "leave";
+        if (hover.state === "enter" && !Settings.windowsTilingLayouts)
+            return "off"; // "Show layouts when hovering over the green button" off (TL32): Super+Ctrl+L and the Window menu still open it
         if (hover.state === "enter" && Popups.active && (Popups.kind !== "tiling" || root.address === hover.address))
             return "busy";
         const refused = root.refusedBy();
