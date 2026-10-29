@@ -2,7 +2,7 @@
 Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner
 answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
 rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
-under the owner's rule" (AD1 to AD31). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
+under the owner's rule" (AD1 to AD41). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
 MINORs, all answered in "Review history"; each changed place says "review of e3882de"). Step 0 merged (pull request #37, opus
 PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
@@ -11,7 +11,9 @@ mutants), answered in "Review history"; each changed place says "review of 949fc
 f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". Step 1 merged (pull request #40,
 opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. Step 2
 is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is built in its own pull request
-(`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36). · Date: 2026-10-28 · Decider: owner
+(`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36), merged (pull request #47, main b345334); 2b, the summaries,
+graphs and grouped views, in its own (`docs/audits/activity-2026-10-28/step2b.md`; AD37 to AD41). · Date: 2026-10-28 ·
+Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
 
@@ -384,7 +386,8 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 - `activity.json` (state, version 1, the app only): window frames, tab, view, columns and sort per tab, update frequency,
   Dock icon, Efficiency Mode's "Don't ask again", App History's period. Step 2a writes the window's size (Wayland places
   windows: no position), the tab, the view, the update frequency, and per tab the columns, their widths and the sort; its
-  ADR-0020 row is added there; the later keys come with their steps.
+  ADR-0020 row is added there; step 2b adds what the Disk and Network graphs show (`diskGraph` "io" or "data",
+  `networkGraph` "packets" or "data"); the later keys come with their steps.
 - `activity-<display>/windows.json` and `activity-<display>/dock-tile.json` (runtime, 0600): above; removed when their writer
   stops, and ignored when stale.
 
@@ -589,6 +592,42 @@ Answer: A (see "Answers").
   entry that names a file, gets the theme's generic executable icon. A file named by an entry the user may have written is
   not decoded here (Files decodes such files in an isolated child; the table holds hundreds of rows). The entry's name
   joins the search (AM14); it names a row only through the projection, step 3.
+- **AD37. Every graph keeps its history whichever tab is shown** (AM5, AM29, AM42, AM44; step 2b). macOS samples every
+  resource whatever the tab, so coming back to a tab shows its graph's last minutes. The sampler now reads the four system
+  groups (`/proc/stat` and `loadavg`; `meminfo`, `pressure/memory`, `swaps` and zram's `mm_stat`; `diskstats`; `net/dev`)
+  at every sample on every tab: 0.04 ms together on the cloud machine, 0.04 to 0.07 ms more on a Disk sample of A10's
+  fixture, measured in pairs. A10's step-1 plans always counted every system file; its one-pass Disk line now reads them
+  too, like for like. The Energy Impact graph is the exception: its sum needs the Energy tab's own reads (io, threads, GPU),
+  so it takes only the samples that computed it. A rate the sampler could not give (a first sample, the one after the
+  window was hidden, AM8) is a gap in its graph, never a zero. Each graph keeps `historySamples` samples (120: two minutes
+  at Very Often, ten at Normally).
+- **AD38. A figure's colour is a square beside it, the text stays text** (AM7; step 2b). macOS colours the System and User
+  values (and the IO and network rates) in their graph's colour. A graph colour holds A2's 3:1 against the graph, not the
+  4.5:1 a line of caption text needs, so the figure a graph draws carries a square of its colour (`swatchSize`) before its
+  label, and its label and value keep the window's text colours. The colours are Grassfield's own, per appearance, each 3:1
+  or more against the graph's fill and the window (`test_activity_graph_colours`): System and Write and Out a red, User and
+  Read and In a blue, the Memory Pressure levels green, yellow and red, Battery green.
+- **AD39. The battery from UPower, read while the Energy tab is shown** (AM39; step 2b). The display device (its
+  properties, read only) at each Energy sample, as the inhibitors (AM38); the charge history of the laptop battery (the
+  first device UPower names `battery_*`; peripherals are named by their kind) at most once a minute, or at once when the
+  power source changes. Time on battery or on AC is the time since the history's last change between discharging and
+  anything else, "—" when the twelve hours show none; "Calculating…" while UPower estimates the time left. A computer
+  without a battery shows the Energy Impact graph alone, as macOS. No new D-Bus name or method is served.
+- **AD40. The grouped views are levels in the table's list** (AM13, AM49; step 2b). macOS shows both views in its outline:
+  rows with a disclosure triangle, indented by level. They are entries of the same list model as the flat views (a
+  process at its depth, or a GPU's header), so a new sample still never resets the model and the selection still follows
+  its processes. An entry's identity is its process's and its group's (a process that uses two GPUs is under both, selected
+  and copied once). In the tree a row whose parent is not listed, or is not older than it (the parent's pid was reused),
+  is a root, and so is a row no root leads to (two rows that name each other, read in a race); each level is sorted by the
+  sort column; the search keeps a row that matches and every row above it. A collapsed row stays collapsed across samples
+  while its process lives, a GPU's header while the app runs; the triangle, or Right and Left, open and close a row. A
+  header is not a process: never selected, passed over by the keyboard. The GPU views (GPU Processes too) read the GPU
+  clients on every tab, a gap of step 2a (they listed nothing on Memory, Disk and Network).
+- **AD41. A GPU's name from pci.ids** (AM47; step 2b). The card is the `/sys/class/drm/card<n>` whose `device` link ends in
+  the GPU's `drm-pdev`; its vendor and device ids are looked up in hwdata's `pci.ids` once per GPU. The name is the vendor's
+  short name (its bracket's first part, "[AMD/ATI]": AMD; else its name without a company suffix) and the device's
+  marketing name (its last bracket, else its name): "Intel UHD Graphics", "AMD Radeon RX 6600/6600 XT/6600M", "NVIDIA
+  GeForce RTX 3060 Lite Hash Rate". Without a name, "GPU <n>" for card n-1; without a card, the pdev.
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
@@ -605,7 +644,8 @@ Each step is one pull request to main, reviewed by the integrator (opus), with i
      the window is shown (AD35); AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM4, AM6 to AM12, AM14 to AM19, AM38, AM74.
    - **2b. The summaries and graphs**, and the views that group rows: each tab's summary and graph (AM5, AM29, AM32 to
      AM35, AM39 with UPower, AM42, AM44, AM47's GPU name), the graph tokens (AM7), Network's line under the table (AM43),
-     All Processes, Hierarchically (AM13), Processes, by GPU (AM49).
+     All Processes, Hierarchically (AM13), Processes, by GPU (AM49). Built (AD37 to AD41;
+     `docs/audits/activity-2026-10-28/step2b.md`).
    - **2c. Quit, Force Quit, Send Signal** (AM50 to AM56): the sheets, the `/proc/<pid>` descriptor and
      `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu.
    - **2d. Inspect** (AM57 to AM59): the Info button and its windows.
@@ -783,3 +823,15 @@ Desktop, and resumes on restore; WAYLAND_DEBUG shows one more toplevel state (`s
 | `main.cpp` takes the bus name before `engine.load`, and a second launch waits 2 s at most: two windows | AD34: `claimOrHandOver` takes the name, or calls the running app's `Activate` with the token and waits up to 25 s; it leaves on the answer and on any error but "no owner", and runs only when the name has none (`ALaunchTakesTheNameOrHandsItsTokenOverAndLeaves`, on a private bus) |
 | `activityapp.cpp`: `startDetached` without a timeout | `runWithTimeout`, killed after `kShellIpcMs` (5 s) as in Settings (`AShellCallIsKilledAfterItsTime`) |
 | `DockModel.js`: `isFilesId` compares with case, the comment says without | `windowsOf` compares the normalized ids (`tst_dockmodel.qml`, `ORG.grassfield.files.desktop`) |
+
+**Step 2b, pull request #53: the integrator's opus review of 831f752 (PASS on correctness, three MINORs, NITs;
+2026-10-29).** The line cache is correct (its key is the whole line and the code flag; old and new parsers agree on 20 757
+records); 9 of 15 mutants killed.
+| Note | Answer |
+|---|---|
+| MINOR 1: a cache hit that stopped restoring `writeBytes` would survive | `AnUnchangedLineIsNotParsedAgain` checks the write side: bytes written kept, both rates 0, then the write rate |
+| MINOR 2: `kShellIpcMs` copied from Settings | one constant in `apps/runmode.h`, beside `shellIpcArgs()`, for both apps |
+| MINOR 3: `DockModel.isFilesId` compares with case | it compares without case, as `windowsOf` and the entry lookup; `tst_dockmodel.qml` (a key of another case gives its windows to the Files tile) |
+| NIT: six surviving mutants (the seen count, a key without the start time or the code flag, the NUL, a 120-byte io buffer, the reuse branch) | a case each: `AnEndedProcessIsSweptBesideAKernelThread`, `AReusedPidWithTheSameLineButItsStartIsAnotherProcess`, `TheCodeAddressFlagIsPartOfTheCache`, `StatEndsWhereItsTextEnds`, `IoOfABusyProcess`; the seven mutants (with MINOR 1's) each killed |
+| NIT: the load is read after the build | read just before the measures, the worse phase counts, printed again beside the verdicts |
+| NIT: an idle fixture favours the cache | `activity_cost.sh --changing 10` (the default): Disk measured again with every tenth process changing its stat and io lines between samples (the bench pokes them outside the measured time), against A10's one pass on that fixture, at 1.15 |
