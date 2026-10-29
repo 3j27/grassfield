@@ -7358,7 +7358,7 @@
     </message>
     <message>
         <source>Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.</source>
-        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps. Mise à jour de logiciels le met à jour ; obtenez ensuite l&apos;app à nouveau.</translation>
+        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps. Mettez-le à jour dans Mise à jour de logiciels, puis obtenez de nouveau l’app.</translation>
     </message>
     <message>
         <source>These packages will be installed:</source>
@@ -9471,7 +9471,7 @@
     </message>
     <message>
         <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
-        <translation>Les données d&apos;apps d&apos;Arch n&apos;ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
+        <translation>Les données d’apps d’Arch n’ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
     </message>
     <message>
         <source>Arch&apos;s app data could not be verified.</source>
@@ -10838,7 +10838,7 @@
     </message>
     <message>
         <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
-        <translation>Les données d&apos;apps d&apos;Arch n&apos;ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
+        <translation>Les données d’apps d’Arch n’ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
     </message>
     <message>
         <source>Arch&apos;s app data could not be verified.</source>
