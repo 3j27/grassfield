@@ -704,15 +704,16 @@ Scope {
         const read = root.splitRead(output);
         if (read.status === "missing") {
             root.lastSignature = "-";
-            // A fresh account has no file: that is a read too, and the defaults are final (the Dock and the desktop wait for it).
-            root.loaded = true;
             root.takeMissingFile();
+            // A fresh account has no file: that is a read too, and the defaults are final (the Dock and the desktop wait for it).
+            // `loaded` flips after the values are in: its readers run at once, on the document, not on the defaults.
+            root.loaded = true;
         } else if (read.status === "ok") {
             root.lastSignature = read.signature;
-            root.loaded = true;
             root.checkText(read.text);
             root.takeDocument(read.text);
             root.reapplyDirty();
+            root.loaded = true;
             // A change that waited because the file could not be read (it is readable now) is written now.
             if (Object.keys(root.dirty).length > 0)
                 root.save();
@@ -721,8 +722,8 @@ Scope {
             // Found at the very signature it was already found unusable at: the backoff grows; any other case starts it over.
             const same = root.lastSignature === "!" && loader.startSignature !== "" && loader.startSignature === root.badSignature;
             const level = same ? root.badLevel + 1 : 0;
-            root.loaded = true;
             root.takeBadFile(root.badReason(read.status));
+            root.loaded = true;
             root.badSignature = loader.startSignature;
             root.badLevel = level;
         }
