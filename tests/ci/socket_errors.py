@@ -17,9 +17,13 @@ import sys
 from pathlib import Path
 
 ROOTS = ("shell", "ui", "apps")
-# `<id>.error.connect(<handler>)` and an `onError:` handler inside a `Socket {` object.
+# `<id>.error.connect(<handler>)` (in QML and JS files; any object, a deliberate over-approximation: no error signal of the
+# tree needs to act synchronously) and an `onError:` handler inside a `Socket {` object, qualified (`Io.Socket {`) or not.
+# Not seen: a `function onError` in a `Connections` that targets a socket.
 CONNECT = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\.error\.connect\(")
-SOCKET = re.compile(r"(?<![A-Za-z0-9_.])Socket\s*\{")
+SOCKET = re.compile(r"(?<![A-Za-z0-9_.])(?:[A-Za-z_][A-Za-z0-9_]*\.)*Socket\s*\{")
+# A read the deferred work may need: `const name = a.b.c` (no call, so no side effect before the deferral).
+CONST_READ = re.compile(r"^const\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
 ON_ERROR = re.compile(r"^\s*onError\s*:", re.M)
 
 
@@ -51,7 +55,7 @@ def deferred(handler):
         body = body[body.find("{"):].strip()
     if body.startswith("{") and body.endswith("}"):
         statements = [s.strip() for s in body[1:-1].split(";") if s.strip()]
-        reads = [s for s in statements if re.match(r"^const\s+[A-Za-z_][A-Za-z0-9_]*\s*=", s)]
+        reads = [s for s in statements if CONST_READ.match(s)]
         rest = [s for s in statements if s not in reads]
         return len(rest) == 1 and rest[0].startswith("Qt.callLater(")
     return body.startswith("Qt.callLater(") or bool(re.match(r"^Qt\.callLater\b", body))
@@ -81,7 +85,7 @@ def misses(source):
 
 
 def tracked_qml(root):
-    out = subprocess.run(["git", "-C", str(root), "ls-files", "--", *[f"{r}/**.qml" for r in ROOTS]],
+    out = subprocess.run(["git", "-C", str(root), "ls-files", "--", *[f"{r}/**.qml" for r in ROOTS], *[f"{r}/**.js" for r in ROOTS]],
                          check=True, capture_output=True, text=True).stdout
     return [root / line for line in out.splitlines() if line]
 
@@ -106,6 +110,10 @@ def selftest():
         ("Socket {\n id: s\n onError: s.connected = false\n}", 1),
         ("Socket {\n id: s\n onError: Qt.callLater(s.finish)\n}", 0),
         ("Socket {\n id: s\n onError: {\n s.connected = false;\n }\n}", 1),
+        ("Socket {\n id: s\n onError: {\n Qt.callLater(s.finish);\n }\n}", 0),
+        ("Io.Socket {\n id: s\n onError: s.connected = false\n}", 1),
+        ("WebSocket {\n onError: s.close()\n}", 0),
+        ("sock.error.connect(() => {\n const serial = take(sock);\n Qt.callLater(() => root.closed(serial));\n})", 1),
         # A non-Socket onError (PamContext, a Process) is not this rule's business.
         ("PamContext {\n onError: controller.pamError()\n}", 0),
         ("// sock.error.connect(() => sock.finish());", 0),
