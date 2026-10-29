@@ -600,6 +600,12 @@ Singleton {
         return address !== "" && WindowTiling.splitOfWindow(TilingLink.splits, address) !== null;
     }
 
+    // The window fits half of its output (ADR-0036 D57; from the plugin's last reply: not known yet counts as fitting, the plugin
+    // still refuses it).
+    function fitsHalf(toplevel: var): bool {
+        return WindowTiling.fitsHalf(TilingLink.unfit, addressOf(toplevel));
+    }
+
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
     function splitShown(screenName: string): bool {
         const mon = monitorByName(screenName);

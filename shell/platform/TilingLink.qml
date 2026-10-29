@@ -22,6 +22,9 @@ Singleton {
     // The Split View Desktops of the last reply (WindowTiling.parseSplits: the menu bar and the Dock hide on them, the Desktops
     // list each after the one it came from); [] without one, a malformed reply or tiling-split.
     property var splits: []
+    // The windows that do not fit half of their output (WindowTiling.parseUnfit: the Window menu greys their Full Screen Tile,
+    // ADR-0036 D57); [] without one, a malformed reply or tiling-split. Read again when the Window menu opens (refresh()).
+    property var unfit: []
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
     // A suggestion asked for is on its way (from the notice of its arrangement until its reply is read or the deadline passes):
@@ -44,6 +47,12 @@ Singleton {
         root.awaiting = false;
         root.suggestion = null;
         Compositor.suggestionAsked = null;
+    }
+
+    // The Window menu opens: what fits a half is read again (a window opened or changed its limits since the last reply).
+    function refresh(): void {
+        if (Compositor.canSplit)
+            root.fetch();
     }
 
     function fetch(): void {
@@ -93,10 +102,12 @@ Singleton {
         }
 
         function onCanSplitChanged(): void {
-            if (Compositor.canSplit)
+            if (Compositor.canSplit) {
                 root.fetch();
-            else
+            } else {
                 root.splits = [];
+                root.unfit = [];
+            }
         }
     }
 
@@ -131,6 +142,9 @@ Singleton {
                 }
                 if (Compositor.canSplit && splits !== null)
                     root.splits = splits;
+                const unfit = Compositor.canSplit ? WindowTiling.parseUnfit(text) : null;
+                if (unfit !== null)
+                    root.unfit = unfit;
                 if (splits !== null)
                     root.retried = false;
                 if (adopted !== null) {

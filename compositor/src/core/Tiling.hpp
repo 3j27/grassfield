@@ -650,8 +650,9 @@ namespace gf::tiling {
         std::vector<const TileRecord*> windows;
     };
     // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops with their members and whether one waits for
-    // its second window (TL33), "suggestion" null without one.
+    // its second window (TL33), "unfit" the windows that do not fit half of their output (the Window menu greys their Full
+    // Screen Tile, D57), "suggestion" null without one.
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
-                          std::span<const SplitDesk> splits = {});
+                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {});
 
 } // namespace gf::tiling

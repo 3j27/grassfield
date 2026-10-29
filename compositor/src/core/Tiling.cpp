@@ -1364,7 +1364,7 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1400,6 +1400,9 @@ namespace gf::tiling {
                 out += std::format(R"({}"{:x}")", j == 0 ? "" : ",", splits[i].members[j]);
             out += std::format(R"(],"waiting":{}}})", splits[i].waiting);
         }
+        out += R"(],"unfit":[)";
+        for (size_t i = 0; i < unfit.size(); ++i)
+            out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", unfit[i]);
         out += "]";
         if (!suggestion) {
             out += R"(,"suggestion":null})";

@@ -2275,7 +2275,15 @@ namespace gf::tiler {
             if (State::workspaceState() && State::workspaceState()->query().id(d.workspace).run())
                 splits.push_back(d);
         }
-        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits);
+        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile).
+        std::vector<uint64_t> unfit;
+        if (Desktop::windowState()) {
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (w && placeable(w) && !splittable(w))
+                    unfit.push_back(idOf(w));
+            }
+        }
+        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit);
     }
 
     void beforePointerMotion() {

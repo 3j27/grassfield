@@ -293,6 +293,29 @@ function parseSplits(text) {
     return out;
 }
 
+// gfc1-reply: grassfield-tiling
+// The windows of the reply of `hyprctl grassfield-tiling` that do not fit half of their output (ADR-0036 D57: the Window
+// menu greys their Full Screen Tile), lower-case hex without 0x, a malformed one left out; null when the reply is malformed
+// (an older plugin's reply, without "unfit", lists none).
+function parseUnfit(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling")
+        return null;
+    return (Array.isArray(msg.unfit) ? msg.unfit : []).map(hexAddress).filter(a => a !== "");
+}
+
+// Window `address` (any address form) fits half of its output: it is not among `unfit` (parseUnfit; null or [] when not
+// known: it fits, the plugin still refuses it if not).
+function fitsHalf(unfit, address) {
+    const a = hexAddress(address);
+    return a === "" || (unfit || []).indexOf(a) < 0;
+}
+
 // The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
 function splitOfWorkspace(splits, workspace) {
     return (splits || []).find(d => d.workspace === workspace) || null;

@@ -385,6 +385,19 @@ TestCase {
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
     }
 
+    // D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.
+    function test_parseUnfitReadsTheWindowsThatDoNotFit() {
+        compare(JSON.stringify(WindowTiling.parseUnfit('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":["A1","0xbeef","xyz",7],"suggestion":null}')),
+                JSON.stringify(["a1", "beef"]), "lower-case hex, a malformed one left out");
+        compare(JSON.stringify(WindowTiling.parseUnfit('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"suggestion":null}')), "[]", "an older plugin lists none");
+        for (const bad of ["", "not json", "null", '{"v":"gfc/2","type":"tiling","unfit":["a1"]}', '{"v":"gfc/1","type":"tile-hover","unfit":["a1"]}'])
+            compare(WindowTiling.parseUnfit(bad), null, bad);
+        verify(!WindowTiling.fitsHalf(["a1", "beef"], "0xA1"), "listed: it does not fit, any address form");
+        verify(WindowTiling.fitsHalf(["a1"], "b2"), "not listed: it fits");
+        verify(WindowTiling.fitsHalf(null, "a1"), "not known: it fits (the plugin still refuses)");
+        verify(WindowTiling.fitsHalf(["a1"], ""), "no window");
+    }
+
     // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
     function test_keptSelectionStartsOnTheFirstTile() {
         compare(WindowTiling.keptSelection(-1, 3, true), 0, "a new suggestion: the first");

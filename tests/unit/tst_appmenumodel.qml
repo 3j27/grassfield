@@ -298,6 +298,12 @@ TestCase {
             verify(!t.enabled && t.submenu.every(i => !i.enabled), JSON.stringify(over));
         }
         verify(model.windowMenu(ctx({canTile: true, canSplit: true, splitBlocked: true})).find(i => i.place === "fill").enabled, "D47 greys the halves only");
+        // D57: a window that does not fit half of its output: Full Screen Tile greyed, the tiling items and Enter Full Screen stay.
+        const wide = model.windowMenu(ctx({canTile: true, canSplit: true, splittable: false}));
+        const wideTile = wide.find(i => i.id === "fullScreenTile");
+        verify(!wideTile.enabled && wideTile.submenu.every(i => !i.enabled), "Full Screen Tile greyed");
+        verify(wide.find(i => i.place === "fill").enabled, "Fill stays");
+        verify(wide.find(i => i.id === "fullscreen").enabled, "Enter Full Screen stays");
         const split = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true}));
         compare(ids(split).join(","), "minimize,zoom,tile,tile,moveResize,exitSplit,moveMenu,bringAll,window,window");
         compare(split.find(i => i.id === "exitSplit").text, "Exit Full Screen");
