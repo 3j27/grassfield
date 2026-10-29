@@ -611,43 +611,50 @@ answer reaches the application and the frontend's permission store keeps "yes" o
 
 
 **Delivered in step 5b (Open With).** `apps/portal/src/appchooser.{h,cpp}`: the backend interface (`ChooseApplication`: the
-frontend's candidates kept as desktop ids only, each once, at most 512; its last choice, the content type and the document's
-name checked; the activation token given back with the choice; `UpdateChoices` to the open panel, or on to x-d-p-gtk for a
-forwarded request) on RequestHost (`requestId(handle)` added), on the same exported object as FileChooser and Access; `main.cpp`
-makes the panels' root once for FileChooser and AppChooser. The panel is FilePanel.qml in a Choose Application mode (kind
-`application`), made by FilePanels.qml; FolderModel's chooser takes `applications` (desktop ids) and `allApplications` for the
-Applications location; FilesApp gives `applicationUrl`/`applicationId`. Packaging: `grassfield.portal` lists AppChooser, the
-session's `hyprland-portals.conf` routes `AppChooser=grassfield;gtk`. Tests: `tests/unit/portal/tst_appchooser.cpp`,
+frontend's candidates kept as desktop ids only (a name: no '/', no control character, not hidden; spaces and '+' are a name's),
+each once, at most 512 from a bounded look; its last choice, the document's name and the URI checked; the activation token given
+back with the choice; `UpdateChoices` to the open panel, or on to x-d-p-gtk for a forwarded request) on RequestHost
+(`requestId(handle)` added), on the same exported object as FileChooser and Access; `main.cpp` makes the panels' root once for
+FileChooser and AppChooser. The panel is FilePanel.qml in a Choose Application mode (kind `application`), made by
+FilePanels.qml; FolderModel's chooser takes `applications` (desktop ids) and `allApplications` for the Applications location;
+FilesApp gives `applicationUrl`/`applicationId`. Packaging: `grassfield.portal` lists AppChooser, the session's
+`hyprland-portals.conf` routes `AppChooser=grassfield;gtk`. Tests: `tests/unit/portal/tst_appchooser.cpp`,
 `tests/unit/files/tst_folderchooser.cpp`, `tests/unit/tst_filepanel.qml`, `tests/integration/portal_filechooser.sh` scenario 8
 (a document opened through the real frontend's OpenFile: the panel answers, the frontend starts the chosen application with the
 document and counts the choice).
+
 
 **Decisions of step 5b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
 - **5b-1. The panel.** Options: (a) a list of applications in a window of its own (x-d-p-gtk's); (b) the Open panel in the
   Applications location; (c) a sheet over the application's window. **Choice: (b)**: macOS's Choose Application is an Open panel
   in /Applications with an Enable pop-up; Grassfield's Open panel (step 4b) is the Files browser, with the Applications location
-  in its sidebar, so the panel has the sidebar, the four views, search and the path pop-up the user knows. Rule applied: macOS
-  first.
+  in its sidebar, so the panel has the sidebar, the four views, search and the path pop-up the user knows; its button is Open
+  and it has no New Folder (review of step 5b, M1), and an application never names a file in a Save panel (M2). Rule applied:
+  macOS first.
 - **5b-2. Recommended and All Applications.** "Recommended Applications" enables the frontend's candidates (its recommended
   applications for the type, or every one that declares it when none is recommended, `src/open-uri.c`
   `find_recommended_choices`) and its last choice; "All Applications" enables every application, as macOS's pop-up does; the
-  others are dimmed. The panel opens on Recommended, on All when the frontend gives no candidate. Any application chosen is
-  answered: the frontend starts any desktop id it is given. An application the Applications location does not show (NoDisplay,
-  Hidden, another desktop's, a helper; Launchpad's rules) cannot be chosen, even when the frontend recommends it.
+  others are dimmed. The panel opens on Recommended, on All when the frontend gives no candidate and no last choice (an
+  UpdateChoices later never flips it). Any application chosen is answered: the frontend starts any desktop id it is given. An
+  application the Applications location does not show (NoDisplay, Hidden, another desktop's, a helper; Launchpad's rules) cannot
+  be chosen, even when the frontend recommends it.
 - **5b-3. No "Always Open With" box** (D-5 named one). Options: (a) the box sets the frontend's own count for the calling
   application and the type to its threshold in its permission store (`desktop-used-apps`), so it stops asking; (b) the box sets
   the type's default application (`mimeapps.list`); (c) no box. **Choice: (c).** The interface has no key for it; (a) writes
   another program's private table and makes a choice no Grassfield screen shows or undoes (undoing it would need a technical
   intervention); (b) does not stop the frontend asking for a file (it asks for files whatever the default,
   `should_use_default_app`), it only preselects. The frontend's own rule stays, as D-5 said: the same application chosen three
-  times for a type, and it stops asking. Rule applied: no technical intervention. A Grassfield place that shows and resets those
+  times in a row by that calling application for that type, and the frontend stops asking it (`update_permissions_store` counts
+  again from 1 after another choice). Rule applied: no technical intervention. A Grassfield place that shows and resets those
   choices (and could then offer the box) is a follow-up.
 - **5b-4. What the panel opens on.** The frontend's last choice (the type's default application, or the one chosen last) is
   selected once the Applications listing holds it; nothing is selected without one (Open stays off until the user chooses). The
   panel keeps nothing in FileChooser's memory: it always opens in Applications, and that memory is the application's Open and
   Save panels'.
 - **5b-5. The activation token.** The token the request came with goes back with the choice (the interface allows the same one
-  back when the panel made none); Hyprland gives a new window the keyboard either way.
+  back when the panel made none); a token of the panel's own would need the press's serial (KWindowSystem's request on Wayland);
+  without a token the opened application gets the keyboard by Hyprland's rules for a new window, as one started from the Dock
+  does.
 - **5b-6. A wrong answer.** A choice that is not a desktop id ends the request with response 2, never a launch (the frontend
   starts what it is given). Close, the bound and a failed forward end it with response 2 too, as FileChooser's (the frontend
   reads 2 and an error alike for this interface: it starts nothing and the application is told it failed).

@@ -180,10 +180,10 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
 
 ### Functional requirements
 - OW1 `ChooseApplication(handle, app_id, parent_window, choices, options{last_choice, modal, content_type, uri, filename,
-  activation_token})`: list the `choices` (desktop ids) with icon and name, `last_choice` selected; "All Applications" adds
-  every app that can open the type (DesktopEntries); a search field filters; "Always Open With" is not offered (ADR-0035 5b-3:
-  the interface has no key for it; the frontend stops asking after the same choice three times); `UpdateChoices` refreshes the
-  list live; returns `choice` and `activation_token`.
+  activation_token})`: list the `choices` (desktop ids) with icon and name, `last_choice` selected; "All Applications" enables
+  every application (DesktopEntries); a search field filters; "Always Open With" is not offered (ADR-0035 5b-3: the interface
+  has no key for it; the frontend stops asking after the same choice three times); `UpdateChoices` refreshes the list live;
+  returns `choice` and `activation_token`.
 - AC1 `AccessDialog(handle, app_id, parent_window, title, subtitle, body, options{deny_label, grant_label, icon, choices})`:
   the alert with the app's icon (from `app_id`) and its name as the frontend's title gives it ("Allow Example to Use the
   Camera?"; "Allow Apps to …" when it cannot name it), title/subtitle/body as given (plain text, capped), the labels given (else "Don't Allow"/"Allow"), `choices` as radio groups or check boxes; returns response
