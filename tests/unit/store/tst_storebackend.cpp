@@ -9,6 +9,8 @@
 #include <QDirIterator>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -317,8 +319,9 @@ TEST(StoreBackend, ArchsAppDataProblems)
 }
 
 // A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7 failed mid-download on files the
-// mirror no longer had): Get's plan says so before anything downloads, by Software Update's own answer when it came after
-// the databases were synced, or by a file of the plan the mirror (on disk here) no longer has; the Store never syncs.
+// mirror no longer had; the review of ff2fd83: the owner's Software Update answers not-set-up): Get's plan says so before
+// anything downloads, by Software Update's own answer (the real checker's file) when it came after pacman last synced, or by
+// a file of the plan the mirror (on disk here) no longer has; the Store never syncs.
 TEST(StoreBackend, SystemOlderThanTheMirror)
 {
     Scratch s;
@@ -336,17 +339,17 @@ TEST(StoreBackend, SystemOlderThanTheMirror)
                       "'libpaint 2-1 extra 500 " + mirror.toUtf8() + "/libpaint-2-1-x86_64.pkg.tar.zst' ;;\n"
                       "  *) exec '" + base.toUtf8() + "' \"$@\" ;;\n"
                       "esac");
+    // The owner's case: Grassfield's repository off (not-set-up), Omarchy 4.0.6 and others pending, the databases synced
+    // 50 days before that check.
+    const QByteArray answer = storetest::readFixture(QStringLiteral("software-update/software-update-not-set-up.json"));
+    storetest::writeFile(s.path(QStringLiteral("state/software-update.json")), answer);
+    const QDateTime checked = QDateTime::fromString(QJsonDocument::fromJson(answer).object().value(QStringLiteral("checkedAt")).toString(), Qt::ISODate);
+    ASSERT_TRUE(checked.isValid());
     QDir().mkpath(s.path(QStringLiteral("fixture/sync")));
-    const QDateTime synced = QDateTime::currentDateTimeUtc().addDays(-50);
     storetest::writeFile(s.path(QStringLiteral("fixture/sync/extra.db")), "db");
-    const auto syncAt = [&s](const QDateTime &when) {
-        QFile db(s.path(QStringLiteral("fixture/sync/extra.db")));
-        return db.open(QIODevice::ReadWrite) && db.setFileTime(when, QFileDevice::FileModificationTime);
-    };
-    ASSERT_TRUE(syncAt(synced));
-    const QString checked = QDateTime::currentDateTimeUtc().addSecs(-3600).toString(Qt::ISODate);
-    storetest::writeFile(s.path(QStringLiteral("state/software-update.json")),
-                         (QStringLiteral(R"({"version":1,"state":"available","checkedAt":"%1","others":37,"omarchy":{"installed":"4.0.4","available":""}})").arg(checked)).toUtf8());
+    QFile db(s.path(QStringLiteral("fixture/sync/extra.db")));
+    ASSERT_TRUE(db.open(QIODevice::ReadWrite) && db.setFileTime(checked.addDays(-50), QFileDevice::FileModificationTime));
+    db.close();
     StoreBackend backend;
     QList<QVariantMap> plans;
     QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &, const QString &, const QVariantMap &p) { plans.append(p); });
@@ -362,15 +365,19 @@ TEST(StoreBackend, SystemOlderThanTheMirror)
         }
         return plans.size() > before ? plans.last() : QVariantMap();
     };
-    // Software Update found 37 updates an hour ago; the databases are 50 days old: Software Update first.
+    // Software Update found updates after the last sync (no pacman.log here: the database's date): Software Update first.
     QVariantMap plan = planOf("org.example.Paint");
     EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));
-    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().startsWith(QStringLiteral("Software Update, ")));
+    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().startsWith(QStringLiteral("Software Update (not-set-up), ")))
+        << plan.value(QStringLiteral("detail")).toString().toStdString();
     EXPECT_FALSE(backend.install(QStringLiteral("org.example.Paint"))) << "no plan was accepted";
 
-    // The databases synced since: Software Update's answer no longer says they are behind. Paint's dependency is gone from
-    // the mirror (its package is there): refused, before anything downloads.
-    ASSERT_TRUE(syncAt(QDateTime::currentDateTimeUtc()));
+    // pacman's log says the databases were synced after that check, while the database keeps its old date (the mirror's
+    // Last-Modified): Software Update's answer no longer counts. Paint's dependency is gone from the mirror (its package is
+    // there): refused, before anything downloads.
+    storetest::writeFile(s.path(QStringLiteral("fixture/pacman.log")),
+                         "[" + checked.addSecs(3600).toOffsetFromUtc(3600).toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss'+0100'")).toUtf8()
+                             + "] [PACMAN] synchronizing package lists\n");
     storetest::writeFile(s.path(QStringLiteral("served/paint-1-1-x86_64.pkg.tar.zst")), "package");
     plan = planOf("org.example.Paint");
     EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));

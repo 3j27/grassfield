@@ -77,25 +77,47 @@ QString setupDifference(const SetupCheck &setup)
 
 } // namespace
 
-QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &synced)
+QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastSync)
 {
-    if (softwareUpdate.size() > 512 * 1024 || !synced.isValid())
+    if (softwareUpdate.size() > 512 * 1024 || !lastSync.isValid())
         return {};
-    const QJsonObject o = QJsonDocument::fromJson(softwareUpdate).object();
+    const QJsonObject file = QJsonDocument::fromJson(softwareUpdate).object();
+    if (file.value(QStringLiteral("version")).toInt() != 1)
+        return {};
+    // The last successful answer: the file's own, else the one a failed check left as `previous` (the shell's combine()).
+    static const QStringList kSuccess{QStringLiteral("up-to-date"), QStringLiteral("available"), QStringLiteral("not-set-up")};
+    const auto success = [](const QJsonObject &o) { return kSuccess.contains(o.value(QStringLiteral("state")).toString()); };
+    const QJsonObject previous = file.value(QStringLiteral("previous")).toObject();
+    const QJsonObject o = success(file) ? file : success(previous) ? previous : QJsonObject();
     const QDateTime checked = QDateTime::fromString(o.value(QStringLiteral("checkedAt")).toString(), Qt::ISODate);
-    if (o.value(QStringLiteral("version")).toInt() != 1 || o.value(QStringLiteral("state")).toString() != QLatin1String("available")
-        || !checked.isValid() || checked <= synced)
+    if (o.isEmpty() || !checked.isValid() || checked <= lastSync)
         return {};
     // Grassfield's own release alone is not the mirror's: the Store installs nothing from Grassfield's repository.
     const int others = o.value(QStringLiteral("others")).toInt();
     const QString omarchy = o.value(QStringLiteral("omarchy")).toObject().value(QStringLiteral("available")).toString();
     if (others <= 0 && omarchy.isEmpty())
         return {};
-    return QStringLiteral("Software Update, %1: %2 other updates%3; the package databases date from %4")
+    return QStringLiteral("Software Update (%1), %2: %3 other updates%4; the package databases were synced %5")
+        .arg(o.value(QStringLiteral("state")).toString())
         .arg(checked.toUTC().toString(Qt::ISODate))
         .arg(qMax(0, others))
         .arg(omarchy.isEmpty() ? QString() : QStringLiteral(", Omarchy ") + omarchy.left(64))
-        .arg(synced.toUTC().toString(Qt::ISODate));
+        .arg(lastSync.toUTC().toString(Qt::ISODate));
+}
+
+QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback)
+{
+    // "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists" (pacman's own format since 5.2).
+    static const QRegularExpression line(QStringLiteral(R"(^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)([+-]\d\d)(\d\d)\] \[PACMAN\] synchronizing package lists\s*$)"),
+                                         QRegularExpression::MultilineOption);
+    QDateTime last;
+    for (QRegularExpressionMatchIterator it = line.globalMatch(QString::fromUtf8(pacmanLogTail)); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        const QDateTime t = QDateTime::fromString(m.captured(1) + m.captured(2) + QLatin1Char(':') + m.captured(3), Qt::ISODate);
+        if (t.isValid() && (!last.isValid() || t > last))
+            last = t;
+    }
+    return last.isValid() ? last : fallback;
 }
 
 QDateTime newestSync(const QString &syncDir)
@@ -260,20 +282,20 @@ InstallPlan checkInstall(const QStringList &packages, const PlanTools &tools, bo
         plan.refusal = Refusal::Outdated;
         return plan;
     }
-    // Every file still on the mirror (S5; the owner's rc1-7 failed on its 30th file, after the first had answered): a 404
-    // means the databases are older than the mirror. At most 64 files are asked, and none more once one goes unanswered
-    // (a mirror that does not answer is pacman's to report, not a plan's).
-    if (tools.head) {
-        for (qsizetype i = 0; i < plan.packages.size() && i < 64; ++i) {
-            const QString url = plan.packages.at(i).url;
-            const int status = tools.head(QUrl(url));
-            if (status == 404 || status == 410) {
+    // Every file still on the mirror (S5; the owner's rc1-7 failed on its 30th file, after the first had answered): a 404 or
+    // 410 means the databases are older than the mirror. All of them (256 at most), asked at once within one deadline
+    // (tools.heads); one the mirror does not answer in time is pacman's to report, not a plan's.
+    if (tools.heads) {
+        QList<QUrl> urls;
+        for (qsizetype i = 0; i < plan.packages.size() && i < 256; ++i)
+            urls.append(QUrl(plan.packages.at(i).url));
+        const QList<int> statuses = tools.heads(urls);
+        for (qsizetype i = 0; i < statuses.size() && i < urls.size(); ++i) {
+            if (statuses.at(i) == 404 || statuses.at(i) == 410) {
                 plan.refusal = Refusal::Outdated;
-                plan.detail = QStringLiteral("%1: HTTP %2").arg(url).arg(status);
+                plan.detail = QStringLiteral("%1: HTTP %2").arg(urls.at(i).toString()).arg(statuses.at(i));
                 return plan;
             }
-            if (status <= 0)
-                break;
         }
     }
     QStringList names;

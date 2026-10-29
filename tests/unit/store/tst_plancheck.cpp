@@ -8,6 +8,8 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QThread>
@@ -30,6 +32,7 @@ case "$1" in
                  'xterm 411-1 extra 450000 https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst' ;;
         needsglib) printf '%s\n' 'needsglib 1-1 extra 1000 https://mirror.example/needsglib-1-1.pkg.tar.zst' \
                      'glib2 2.86-1 core 5000000 https://mirror.example/glib2-2.86-1.pkg.tar.zst' ;;
+        huge) i=0; while [ $i -lt 300 ]; do echo "dep$i 1-1 extra 1000 https://mirror.example/dep$i-1-1.pkg.tar.zst"; i=$((i+1)); done ;;
         *) echo "error: target not found: $last" >&2; exit 1 ;;
       esac ;;
   -Si) printf '%s\n' 'Repository      : extra' 'Name            : libxaw' 'Installed Size  : 1.00 MiB' '' \
@@ -57,9 +60,13 @@ struct Fixture {
         tools.pacman = storetest::script(dir.filePath(QStringLiteral("pacman")), kPacman);
         tools.dbLock = dir.filePath(QStringLiteral("db.lck"));
         tools.updateLock = dir.filePath(QStringLiteral("omarchy-update.lock"));
-        tools.head = [this](const QUrl &url) {
-            heads.append(url.toString());
-            return headStatus;
+        tools.heads = [this](const QList<QUrl> &urls) {
+            QList<int> out;
+            for (const QUrl &url : urls) {
+                heads.append(url.toString());
+                out.append(headStatus);
+            }
+            return out;
         };
         storetest::writeFile(dir.filePath(QStringLiteral("installed")), "bash\nglibc\n");
     }
@@ -145,30 +152,61 @@ TEST(PlanCheck, InstallRefusals)
 }
 
 // A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7, databases of 2026-09-08 and a mirror
-// gone on, 404s mid-download): told before anything downloads, by Software Update's own answer or by any file of the plan
-// the mirror no longer has; and recognised in pacman's messages when it happens anyway. Nothing ever syncs the databases.
+// gone on, 404s mid-download; the review of ff2fd83: Software Update's answer in every state it writes): told before
+// anything downloads, by Software Update's own answer or by any file of the plan the mirror no longer has; and recognised in
+// pacman's messages when it happens anyway. Nothing ever syncs the databases.
 TEST(PlanCheck, SystemOlderThanTheMirror)
 {
-    const QDateTime synced = QDateTime::fromString(QStringLiteral("2026-09-08T10:00:00Z"), Qt::ISODate);
-    const auto answer = [](const char *state, const char *checked, int others, const char *omarchy) {
-        return QStringLiteral(R"({"version":1,"state":"%1","checkedAt":"%2","others":%3,"omarchy":{"installed":"4.0.4","available":"%4"},
-                                 "grassfield":{"installed":"1.0.0-1","available":"1.0.1-1"}})")
-            .arg(QLatin1String(state), QLatin1String(checked)).arg(others).arg(QLatin1String(omarchy)).toUtf8();
+    // Software Update's file as its real checker answers and the shell writes it (tests/fixtures/store/software-update,
+    // docs/audits/store-2026-10-27/tools/make-software-update-fixtures.sh), checked 2026-10-26T07:33:20Z.
+    const auto file = [](const char *name) {
+        return storetest::readFixture(QStringLiteral("software-update/software-update-%1.json").arg(QLatin1String(name)));
     };
-    // Updates for the system, found after the databases were synced: behind.
-    const QString behind = databasesBehind(answer("available", "2026-10-28T23:00:00Z", 37, ""), synced);
-    EXPECT_EQ(behind, QStringLiteral("Software Update, 2026-10-28T23:00:00Z: 37 other updates; the package databases date from 2026-09-08T10:00:00Z"));
-    EXPECT_FALSE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 0, "4.0.6"), synced).isEmpty()) << "an Omarchy release";
-    // Not behind: the databases synced after that answer, Grassfield's own release alone, nothing available, no answer.
-    EXPECT_TRUE(databasesBehind(answer("available", "2026-09-07T23:00:00Z", 37, ""), synced).isEmpty());
-    EXPECT_TRUE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 0, ""), synced).isEmpty());
-    EXPECT_TRUE(databasesBehind(answer("up-to-date", "2026-10-28T23:00:00Z", 0, ""), synced).isEmpty());
-    EXPECT_TRUE(databasesBehind(answer("failed", "2026-10-28T23:00:00Z", 37, ""), synced).isEmpty());
-    EXPECT_TRUE(databasesBehind(answer("available", "", 37, ""), synced).isEmpty());
-    EXPECT_TRUE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 37, ""), QDateTime()).isEmpty());
+    const QDateTime synced = QDateTime::fromString(QStringLiteral("2026-09-08T10:00:00Z"), Qt::ISODate);
+    // The owner's machine: Grassfield's repository off (not-set-up), Omarchy 4.0.6 and three others pending.
+    const QString behind = databasesBehind(file("not-set-up"), synced);
+    EXPECT_EQ(behind, QStringLiteral("Software Update (not-set-up), 2026-10-26T07:33:20Z: 3 other updates, Omarchy 4.0.6-1; the package "
+                                     "databases were synced 2026-09-08T10:00:00Z"));
+    EXPECT_FALSE(databasesBehind(file("up-to-date-others"), synced).isEmpty()) << "Arch's updates alone: up-to-date, others counted";
+    EXPECT_FALSE(databasesBehind(file("available"), synced).isEmpty()) << "Grassfield's and Omarchy's releases";
+    // A later check failed: the last success the shell keeps (`previous`) still says so.
+    EXPECT_TRUE(databasesBehind(file("failed-previous"), synced).startsWith(QStringLiteral("Software Update (not-set-up), 2026-10-26T07:33:20Z")));
+    // Not behind: nothing pending; Grassfield's own release alone; a failed check with no success kept; a state with no
+    // counts; the databases synced after the answer; no sync known; not the file's version; not JSON.
+    EXPECT_TRUE(databasesBehind(file("up-to-date"), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("available-grassfield"), synced).isEmpty());
+    QJsonObject failed = QJsonDocument::fromJson(file("failed-previous")).object();
+    failed.remove(QStringLiteral("previous"));
+    EXPECT_TRUE(databasesBehind(QJsonDocument(failed).toJson(), synced).isEmpty());
+    QJsonObject running = QJsonDocument::fromJson(file("not-set-up")).object();
+    running.insert(QStringLiteral("state"), QStringLiteral("update-running"));
+    EXPECT_TRUE(databasesBehind(QJsonDocument(running).toJson(), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), QDateTime::fromString(QStringLiteral("2026-10-26T08:00:00Z"), Qt::ISODate)).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), QDateTime()).isEmpty());
+    QJsonObject later = QJsonDocument::fromJson(file("not-set-up")).object();
+    later.insert(QStringLiteral("version"), 2);
+    EXPECT_TRUE(databasesBehind(QJsonDocument(later).toJson(), synced).isEmpty());
     EXPECT_TRUE(databasesBehind("not json", synced).isEmpty());
 
-    // The databases' age: the newest *.db of pacman's sync folder.
+    // When pacman last synced: its log's last "synchronizing package lists" (checkupdates' own syncs log nowhere), in its
+    // own offset; else the fallback. The integrator's case: the log says 10-29 while the newest database is dated 10-16
+    // (pacman sets the mirror's Last-Modified): Software Update's answer of 10-26 predates the sync and says nothing now.
+    const QDateTime dbDate = QDateTime::fromString(QStringLiteral("2026-10-16T06:00:00Z"), Qt::ISODate);
+    const QByteArray log = "[2026-10-16T09:00:00+0200] [PACMAN] Running 'pacman -Syu'\n"
+                           "[2026-10-16T09:00:01+0200] [PACMAN] synchronizing package lists\n"
+                           "[2026-10-16T09:05:00+0200] [ALPM] upgraded linux (6.17-1 -> 6.18-1)\n"
+                           "[2026-10-29T10:12:33+0100] [PACMAN] Running 'pacman -Syu'\n"
+                           "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists\n"
+                           "[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n"
+                           "[2026-10-30T08:00:00+0100] [ALPM] installed amarok (3.2-1)\n"
+                           "a note: [2026-10-31T00:00:00+0000] [PACMAN] synchronizing package lists\n";
+    EXPECT_EQ(lastSync(log, dbDate), QDateTime::fromString(QStringLiteral("2026-10-29T09:12:33Z"), Qt::ISODate));
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), lastSync(log, dbDate)).isEmpty());
+    EXPECT_EQ(lastSync("[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n", dbDate), dbDate);
+    EXPECT_EQ(lastSync({}, dbDate), dbDate);
+    EXPECT_FALSE(databasesBehind(file("not-set-up"), lastSync({}, dbDate)).isEmpty()) << "no log: the database's date, earlier";
+
+    // The fallback: the newest *.db of pacman's sync folder.
     QTemporaryDir sync;
     EXPECT_FALSE(newestSync(sync.path()).isValid());
     storetest::writeFile(sync.filePath(QStringLiteral("core.db")), "db");
@@ -209,22 +247,30 @@ TEST(PlanCheck, SystemOlderThanTheMirror)
     QFile::remove(f.dir.filePath(QStringLiteral("qu")));
     f.tools.behind.clear();
 
-    // A later file of the plan gone from the mirror: refused, its address in Details.
-    f.tools.head = [&f](const QUrl &url) {
-        f.heads.append(url.toString());
-        return url.path().contains(QStringLiteral("libxaw")) ? 404 : 200;
+    // Every file of the plan asked at once; a later one gone from the mirror: refused, its address in the detail.
+    QList<QList<QUrl>> asked;
+    f.tools.heads = [&asked](const QList<QUrl> &urls) {
+        asked.append(urls);
+        QList<int> out;
+        for (const QUrl &url : urls)
+            out.append(url.path().contains(QStringLiteral("xterm")) ? 404 : 200);
+        return out;
     };
     p = checkInstall({QStringLiteral("xterm")}, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Outdated);
-    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/os/x86_64/libxaw-1.0.16-1-x86_64.pkg.tar.zst: HTTP 404"));
-    // A mirror that does not answer: no more files asked, nothing refused (pacman says what happens).
-    f.heads.clear();
-    f.tools.head = [&f](const QUrl &url) {
-        f.heads.append(url.toString());
-        return 0;
+    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst: HTTP 404"));
+    ASSERT_EQ(asked.size(), 1) << "one set of requests, not one per file";
+    EXPECT_EQ(asked.at(0).size(), 2);
+    // 256 files at most; a mirror that does not answer (0) refuses nothing (pacman says what happens).
+    asked.clear();
+    f.tools.heads = [&asked](const QList<QUrl> &urls) {
+        asked.append(urls);
+        return QList<int>(urls.size(), 0);
     };
-    EXPECT_EQ(checkInstall({QStringLiteral("xterm")}, f.tools, true, false).refusal, Refusal::None);
-    EXPECT_EQ(f.heads.size(), 1);
+    EXPECT_EQ(checkInstall({QStringLiteral("huge")}, f.tools, true, false).refusal, Refusal::None);
+    ASSERT_EQ(asked.size(), 1);
+    EXPECT_EQ(asked.at(0).size(), 256);
+    EXPECT_EQ(asked.at(0).last(), QUrl(QStringLiteral("https://mirror.example/dep255-1-1.pkg.tar.zst")));
 }
 
 TEST(PlanCheck, RemovePlan)
@@ -411,6 +457,13 @@ TEST(PlanCheck, AurPlans)
     EXPECT_EQ(asked, (QList<QStringList>{{QStringLiteral("example-app-bin")}, {QStringLiteral("example-lib")}}));
     EXPECT_EQ(f.heads, (QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst"), QStringLiteral("https://mirror.example/extra/gtk-common.pkg.tar.zst")}))
         << "the repositories' files, as any install's";
+    // A repository dependency gone from the mirror: refused as any install (the review of ff2fd83: the AUR's repository part
+    // comes from the same databases), before yay is ever started.
+    f.headStatus = 404;
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst: HTTP 404"));
+    f.headStatus = 200;
 
     // The system older than the mirror (Software Update's answer): refused as any install, the AUR not asked.
     f.tools.behind = QStringLiteral("Software Update: 37 other updates");

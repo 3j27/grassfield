@@ -40,6 +40,7 @@ constexpr int kStaleHours = 6;       // SR26: the catalog is fetched again when 
 constexpr int kOldDays = 30;         // SR29: a catalog older than this is used with a note
 constexpr qint64 kSignatureMax = 64 * 1024;
 constexpr int kFetchMs = 15000;      // ADR-0037 c
+constexpr int kHeadsMs = 20000;      // a plan's HEADs, all of them (ADR-0037 e.4)
 constexpr qint64 kAppStreamPackageMax = 64 * 1024 * 1024;
 constexpr int kAppStreamDownloadMs = 120000;
 constexpr int kMaxWebApps = 500;
@@ -62,6 +63,20 @@ QByteArray readSmall(const QString &path, qint64 max)
     if (!f.open(QIODevice::ReadOnly) || f.size() > max)
         return {};
     return f.read(max);
+}
+
+// The last `max` bytes of a file that only grows (pacman.log), from the start of a line.
+QByteArray readTail(const QString &path, qint64 max)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    if (f.size() > max && !f.seek(f.size() - max))
+        return {};
+    QByteArray tail = f.read(max);
+    if (f.size() > max)
+        tail.remove(0, tail.indexOf('\n') + 1);
+    return tail;
 }
 
 QString dataHome()
@@ -1363,10 +1378,10 @@ PlanTools StoreBackend::planTools() const
     tools.updateLock = env::updateLock();
     tools.devPlumbing = !env::fixture().isEmpty();
     const bool dev = tools.devPlumbing;
-    tools.head = [dev](const QUrl &url) { return headStatus(url, kFetchMs, dev); };
-    // Software Update's answer against the databases' age (the integrator's note on PR #36): the system first.
+    tools.heads = [dev](const QList<QUrl> &urls) { return headStatuses(urls, kFetchMs, kHeadsMs, dev); };
+    // Software Update's answer against pacman's last sync (ADR-0037 e.4, SD29): the system first.
     tools.behind = databasesBehind(readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024),
-                                   newestSync(env::syncDir()));
+                                   lastSync(readTail(env::pacmanLog(), 1024 * 1024), newestSync(env::syncDir())));
     return tools;
 }
 

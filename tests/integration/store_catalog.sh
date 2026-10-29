@@ -103,7 +103,7 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -su
   -addext subjectAltName=DNS:localhost -keyout /tmp/https.key -out /tmp/https.crt >/dev/null 2>&1
 cp /tmp/https.crt /etc/ca-certificates/trust-source/anchors/store-test-https.crt && update-ca-trust
 cat >/tmp/https.py <<'SERVER'
-import http.server, json, socketserver, ssl
+import http.server, json, socketserver, ssl, time
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -145,6 +145,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b"0\r\n\r\n")
         else:
             self.send(404)
+
+    # A plan's HEADs (fetch.h headStatuses): /slow/<n> answers after a second, /hang after 30 s, /to-http redirects to http.
+    def do_HEAD(self):
+        p = self.path
+        if p.startswith("/slow/"):
+            time.sleep(1)
+            self.head(200)
+        elif p == "/hang":
+            time.sleep(30)
+            self.head(200)
+        elif p == "/to-http":
+            self.send_response(302)
+            self.send_header("Location", "http://localhost:8080/echo")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        else:
+            self.head(404)
+
+    def head(self, code):
+        self.send_response(code)
+        self.send_header("Content-Length", "1000")
+        self.end_headers()
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):

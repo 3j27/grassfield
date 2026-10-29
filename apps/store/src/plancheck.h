@@ -75,21 +75,30 @@ struct PlanTools {
     QString dbLock;     // pacman's <DBPath>/db.lck
     QString updateLock; // Omarchy's update lock (${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock)
     bool devPlumbing = false;
-    // The HTTP status of a HEAD request (fetch.h headStatus); unset: the mirror is not asked.
-    std::function<int(const QUrl &)> head;
+    // The HTTP statuses of HEAD requests for a plan's files, in order (fetch.h headStatuses: all at once, one deadline);
+    // unset: the mirror is not asked.
+    std::function<QList<int>(const QList<QUrl> &)> heads;
     // "" unless the system's sync databases are older than the mirror's (databasesBehind): then what Software Update said,
     // and every install is refused as Outdated before anything downloads.
     QString behind;
 };
 
 // Whether the system's sync databases are older than the mirror's, by Software Update's own answer (ADR-0033's
-// software-update.json, written by its checker from a fresh copy of the mirror's databases; the integrator's note on PR
-// #36): its last answer lists updates for the system (other packages, or an Omarchy release) and came after the databases
-// were last synced (`synced`, the newest file of pacman's sync folder). The mirror then has newer files and no longer the
-// old ones (the owner's rc1-7: 404s mid-download), so an install would fail: the system is updated first, never its
-// databases alone (a partial upgrade, S4). "" when not behind or not known; else a line for Details.
-QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &synced);
-// The newest modification time of pacman's sync databases (<dir>/*.db), invalid when there is none.
+// software-update.json as the shell writes it; ADR-0037 e.4, SD29). Its checker runs checkupdates, which compares what is
+// installed with a fresh copy of the mirror's databases: an update it lists means the mirror moved on. Its last successful
+// answer counts, whatever its state (up-to-date, available or not-set-up, the three that list the system's updates; after a
+// failed check, the one the shell keeps as `previous`), when it lists other updates or an Omarchy release (Grassfield's own
+// release is not the mirror's) and came after pacman last synced the databases (`lastSync`: an answer from before a sync
+// says nothing of the databases now). The mirror then no longer has the old files (the owner's rc1-7: 404s mid-download),
+// so an install would fail: the system is updated first, never its databases alone (a partial upgrade, S4). "" when not
+// behind or not known; else a line for the log.
+QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastSync);
+// When pacman last synced the databases: the last "[PACMAN] synchronizing package lists" line of pacman.log (its tail is
+// enough), else `fallback`. checkupdates and Software Update's own syncs log to /dev/null, so every line there is a sync of
+// the system's databases.
+QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback);
+// The newest modification time of pacman's sync databases (<dir>/*.db), invalid when there is none: lastSync's fallback,
+// never later than the sync (pacman sets it to the mirror's Last-Modified, the integrator's review of ff2fd83).
 QDateTime newestSync(const QString &syncDir);
 // pacman's messages of a download whose file the mirror no longer serves (404, 410, or an error page larger than pacman
 // lets a file be: "Exceeded the maximum allowed file size"), as grassfield-store-helper logs them: the databases were older
