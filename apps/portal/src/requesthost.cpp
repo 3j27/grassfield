@@ -33,6 +33,8 @@ struct RequestHost::Request {
     QString parentWindow;
     QDBusMessage message;
     State state = State::Making;
+    // Closed while forwarded: x-d-p-gtk's answer to a closed dialog is not the user's.
+    bool closed = false;
     QTimer deadline;
     QElapsedTimer since;
     QPointer<QWindow> window;
@@ -234,6 +236,7 @@ void RequestHost::close(const QString &handle)
         if (r->handle != handle)
             continue;
         if (r->state == Request::State::Forwarded) {
+            r->closed = true;
             closeForwarded(r->id, kCloseTries);
             return;
         }
@@ -294,7 +297,10 @@ void RequestHost::forward(int id)
             return;
         const QDBusMessage reply = w->reply();
         const QVariantList args = reply.arguments();
-        if (reply.type() == QDBusMessage::ReplyMessage && reply.signature() == QLatin1String("ua{sv}")) {
+        if (forwarded->closed && m_limits.failAsError) {
+            // The application or the frontend closed it: x-d-p-gtk's answer (its closed dialog's) is no answer of the user's.
+            replyFailed(forwarded->message, "closed");
+        } else if (reply.type() == QDBusMessage::ReplyMessage && reply.signature() == QLatin1String("ua{sv}")) {
             const uint response = args.at(0).toUInt();
             m_bus.send(forwarded->message.createReply(QVariantList{QVariant::fromValue(response), relayed(qdbus_cast<QVariantMap>(args.at(1)))}));
         } else {
@@ -312,7 +318,7 @@ void RequestHost::armIdle()
 {
     if (!m_requests.isEmpty())
         return;
-    m_quiet.restart();
+    m_quiet.start();
     m_idle.start();
 }
 
