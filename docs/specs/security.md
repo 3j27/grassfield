@@ -416,7 +416,21 @@ shell no longer relies on that alone:
   engaged meanwhile (no Desktop switch, no restore: a restore is not refused while locked, GF-116; integrator review of
   cd74af2). lock_surfaces.sh checks these refusals and that every entry point goes through them, each with a mutation.
   No IPC function or popup kind is added; the groups the shell reads from the `hyprctl grassfield-tiling` reply are window
-  addresses and group numbers only.
+  addresses and group numbers only. Tiling step 6a (TL33, the Split View Desktop): `hl.plugin.grassfield.split` (Full
+  Screen › Left or Right of Screen: a new Desktop shown, the window in its half) and `hl.plugin.grassfield.unsplit` (a
+  Split View window's Exit Full Screen: back to its home Desktop) refuse while the session is locked (`tiling` notice with
+  `reason:"locked"`, no Desktop is made or shown, no window moves) and for an unknown window, a side other than left or
+  right, a window of no Split View Desktop or while the Stages strip shows (`reason:"invalid"`). The shell sends them only
+  through `Compositor.split` and `Compositor.unsplit`, which ask `SessionState.refuses` first (the popover's Full Screen
+  submenu and the Window menu, both refused surfaces while locked). A Split View whose picker ended without a second window
+  fills through `Compositor.fillAlone` and `Compositor.tile`, which both ask `SessionState.refuses` first (integrator
+  review of c7a6b6e, MAJOR 2: `tile` did not), and services/TilingSuggest computes no window to fill while locked (it
+  sends the fill at the unlock). What the plugin does on its own after a member left (the other fills, an empty Split View
+  Desktop shown goes back home) moves only windows of that Desktop and shows no new surface, and none of it happens behind
+  the lock screen: the lock ends a pending picker, and the fill of a lone member or the end of an emptied Split View
+  Desktop waits for the unlock (integrator re-review of e5bd9d2). The Split View Desktops the shell reads from the
+  `hyprctl grassfield-tiling` reply are Desktop ids, output names and window addresses only. lock_surfaces.sh checks the
+  four refusals and the fill path, each with a mutation; tests/shell/split_view checks them on the real singletons.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

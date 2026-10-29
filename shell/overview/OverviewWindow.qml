@@ -316,6 +316,14 @@ Variants {
             Compositor.focusSpace(id);
         }
 
+        // A Split View Desktop's name (tiling.md TL33): its apps, as macOS names a full-screen space ("Notes and Mail").
+        function splitLabel(appIds: var): string {
+            const names = (appIds || []).map(id => Apps.nameFor(id));
+            if (names.length >= 2)
+                return qsTr("%1 and %2").arg(names[0]).arg(names[1]);
+            return names.length === 1 ? names[0] : qsTr("Full Screen");
+        }
+
         function activateTile(index: int): void {
             const tile = tiles[index];
             if (!tile)
@@ -597,8 +605,10 @@ Variants {
                         x: isPlus ? win.width - Tokens.overviewAddSize - Tokens.overviewAddEdgeInset : (win.width - rowWidth) / 2 + index * (Tokens.overviewTileWidth + Tokens.overviewTileGap)
                         y: isPlus ? Tokens.overviewBarTopMargin + (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : Tokens.overviewBarTopMargin
                         Accessible.role: Accessible.Button
-                        // Desktops are numbered by position (macOS), never by the compositor's workspace id.
-                        Accessible.name: isPlus ? qsTr("Add Desktop") : qsTr("Desktop %1").arg(index + 1)
+                        // Desktops are numbered by position (macOS), never by the compositor's workspace id; a Split View Desktop
+                        // takes no number and is named after its apps (Compositor.spacesOn, tiling.md TL33).
+                        readonly property string tileLabel: isPlus ? "" : modelData.split ? win.splitLabel(modelData.appIds) : qsTr("Desktop %1").arg(modelData.number)
+                        Accessible.name: isPlus ? qsTr("Add Desktop") : tileLabel
                         Accessible.onPressAction: win.activateTile(index)
 
                         Rectangle {
@@ -652,7 +662,7 @@ Variants {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
-                            text: qsTr("Desktop %1").arg(tile.index + 1)
+                            text: tile.tileLabel
                             textFormat: Text.PlainText
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
