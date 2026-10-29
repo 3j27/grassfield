@@ -41,10 +41,9 @@ QVariantMap Access::toQml(const QString &appId, const QString &parentWindow, con
     QString icon = stringOption(options, QStringLiteral("icon"));
     if (!iconName.match(icon).hasMatch())
         icon.clear();
-    // macOS asks about the camera, the microphone and screen recording with neither button the default: Return does nothing
-    // until a button has the keyboard (AC2).
-    static const QSet<QString> noDefault{QStringLiteral("camera-web-symbolic"), QStringLiteral("audio-input-microphone-symbolic"),
-                                         QStringLiteral("applets-screenshooter-symbolic")};
+    // macOS asks about the camera and screen recording with neither button the default: Return does nothing until a button
+    // has the keyboard (AC2). (Its microphone question has no xdg-desktop-portal 1.22.1 counterpart: no icon for it here.)
+    static const QSet<QString> noDefault{QStringLiteral("camera-web-symbolic"), QStringLiteral("applets-screenshooter-symbolic")};
     const auto label = [&](const char *key) { return chooser::oneLine(chooser::withoutMnemonic(stringOption(options, QLatin1String(key)))); };
     return {
         {QStringLiteral("appId"), appId},

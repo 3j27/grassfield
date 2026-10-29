@@ -44,7 +44,7 @@ public:
 
     // What the alert shows, checked (pure; the tests read it): {appId, title, subtitle, body, denyLabel, grantLabel (""
     // for Grassfield's own), icon (a symbolic icon name, "" when none or not one), modal, parented, noDefault (the
-    // camera, the microphone and screen capture: neither button is the default, AC2), choices (chooser::choicesToQml)}.
+    // camera and screen capture: neither button is the default, AC2), choices (chooser::choicesToQml)}.
     static QVariantMap toQml(const QString &appId, const QString &parentWindow, const QString &title, const QString &subtitle,
                              const QString &body, const QVariantMap &options);
 

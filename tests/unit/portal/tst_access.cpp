@@ -181,7 +181,7 @@ protected:
 } // namespace
 
 // What the alert is given: the frontend's strings as one plain line each, its labels without GTK's mnemonics, a symbolic icon
-// name or none, and no default button for the camera, the microphone and screen capture (AC2).
+// name or none, and no default button for the camera and screen capture (AC2).
 TEST(AccessToQml, ChecksWhatTheFrontendGives)
 {
     registerTypes();
@@ -204,8 +204,7 @@ TEST(AccessToQml, ChecksWhatTheFrontendGives)
     EXPECT_EQ(choices.at(0).toMap().value("label").toString(), QStringLiteral("Remember"));
     EXPECT_EQ(choices.at(1).toMap().value("initial").toString(), QStringLiteral("city")) << "an initial value it does not offer";
 
-    for (const char *icon : {"audio-input-microphone-symbolic", "applets-screenshooter-symbolic"})
-        EXPECT_TRUE(Access::toQml({}, {}, {}, {}, {}, {{QStringLiteral("icon"), QString::fromLatin1(icon)}}).value("noDefault").toBool()) << icon;
+    EXPECT_TRUE(Access::toQml({}, {}, {}, {}, {}, {{QStringLiteral("icon"), QStringLiteral("applets-screenshooter-symbolic")}}).value("noDefault").toBool());
     const QVariantMap location = Access::toQml({}, QStringLiteral("x11:12"), {}, {}, {}, {{QStringLiteral("icon"), QStringLiteral("find-location-symbolic")}});
     EXPECT_FALSE(location.value("noDefault").toBool()) << "the grant button is the default";
     EXPECT_FALSE(location.value("parented").toBool()) << "only a wayland: handle";
