@@ -11,6 +11,8 @@ mid-grey, saturated red and blue and the extreme colours of the five contrast wa
 green noise palette, the black/white checker). Blur makes the backdrop a local average, so flat colours bound it. Compositing is done in
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
+  window         an opaque app window: color.windowBackground and color.sidebarFill, bare and under a rimmed capsule's fill (the text
+                 colour at settings.fieldFillOpacity or settings.toolbarFillOpacity); the same at every transparency and wallpaper
   accent         the solid accent colour
   selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
@@ -215,6 +217,18 @@ def backdrops(tok, role, appearance, t, wallpaper):
             out += [over(chip, tok.path("material.chipFillOpacityLight"), base),
                     over(fill, tok.path("material.fillOpacityLight"), base),
                     over(chip, tok.path("material.wellFillOpacityLight"), base)]
+        return out
+    if kind == "window":
+        # An opaque app window (Settings, the Store, Search's clipboard page): the window and the flush sidebar, each bare and
+        # under a rimmed capsule's fill (RimmedCapsule: the text colour at the field or the toolbar opacity); the transparency
+        # and the wallpaper do not reach it.
+        text = tok.color(pal, appearance, "text")
+        out = []
+        for base_name in ("windowBackground", "sidebarFill"):
+            base = tok.color(pal, appearance, base_name)
+            out.append(base)
+            for opacity in ("settings.fieldFillOpacity", "settings.toolbarFillOpacity"):
+                out.append(over(text, tok.path(opacity), base))
         return out
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
@@ -549,7 +563,8 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES + LOCK_BACKDROPS)
+            self.assertIn(r["backdrop"], ("material", "window", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES
+                          + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
                                               "backdrop"))
@@ -803,6 +818,17 @@ class WindowSurfacePairs(unittest.TestCase):
             for name in ("text", "textSecondary"):
                 r = wcag(self.tok.color("colors", ap, name), side)
                 self.assertGreaterEqual(r, 4.5, "%s on the sidebar, %s: %.2f:1" % (name, ap, r))
+
+    def test_window_backdrop_holds_the_window_the_sidebar_and_the_capsule_fills(self):
+        # The `window` backdrop (RimmedCapsule's role, Search's clipboard page): the window and the sidebar, each bare and under the
+        # field and toolbar capsule fills, whatever the transparency and the wallpaper.
+        role = {"fg": "colors.textSecondary", "backdrop": "window", "kind": "text"}
+        for ap in APPEARANCES:
+            got = backdrops(self.tok, role, ap, 0.6, (0, 0, 0))
+            self.assertEqual(got, backdrops(self.tok, role, ap, 0.0, (255, 255, 255)))
+            self.assertIn(self.window(ap), got)
+            self.assertIn(self.tok.color("colors", ap, "sidebarFill"), got)
+            self.assertEqual(len(got), 6)
 
     def test_quick_settings_slider_fill_against_its_track(self):
         # WCAG 1.4.11: the white fill against the track, and the empty track against the module (1.5:1), every wallpaper colour and
