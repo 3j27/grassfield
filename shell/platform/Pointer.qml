@@ -408,8 +408,13 @@ Singleton {
                     root.socketClosed(sock.serial, "connection closed without an answer");
                 }
             }
-            // Connect failures arrive here (the LocalSocketError type is not importable for a typed handler).
-            Component.onCompleted: sock.error.connect(() => root.socketClosed(sock.serial, "socket error"))
+            // Connect failures arrive here (the LocalSocketError type is not importable for a typed handler). Handled after
+            // Quickshell's error handler has returned: socketClosed drops the socket, and closing it from inside the signal
+            // crashes Quickshell 0.3.2. The serial is read now, the socket may be gone by then.
+            Component.onCompleted: sock.error.connect(() => {
+                const serial = sock.serial;
+                Qt.callLater(() => root.socketClosed(serial, "socket error"));
+            })
         }
     }
 }

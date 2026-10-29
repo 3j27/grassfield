@@ -6,11 +6,14 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <format>
 #include <memory>
 #include <vector>
@@ -31,6 +34,12 @@ namespace gf::frameProbe {
             std::vector<CHyprSignalListener> listeners; // monitors added / removed, render begin and end
             std::vector<SMonitor>            monitors;
             frames::CMarkRing                marks;
+            frames::CStallRing               stalls; // the event loop's late beats (core stallOf)
+            frames::CSpanRing                work;   // the plugin's own work outside a render (work())
+            uint64_t                         beats   = 0;
+            uint64_t                         beatDue = 0; // when the armed beat is due (0: none armed)
+            uint64_t                         beatCpu = 0; // the main thread's CPU time at the previous beat
+            SP<CEventLoopTimer>              beatTimer;   // code of this library: removed in stop()
             frames::CRecording               recording;    // off until a start request, at most kMaxRecordingMs
             bool                             holdsRecords = false; // something was recorded since the last drop
             PHLMONITORREF                    rendering;    // the monitor of the latest render.preChecks
@@ -63,6 +72,9 @@ namespace gf::frameProbe {
                     e.renders->clear();
             }
             s.marks.clear();
+            s.stalls.clear();
+            s.work.clear();
+            s.beats        = 0;
             s.holdsRecords = false;
         }
 
@@ -80,6 +92,49 @@ namespace gf::frameProbe {
                 return false;
             s.holdsRecords = true;
             return true;
+        }
+
+        // The CPU time this thread (Hyprland's main thread: the beats and the renders run on it) has used, in microseconds.
+        uint64_t threadCpuUs() {
+            timespec ts{};
+            if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0)
+                return 0;
+            return static_cast<uint64_t>(ts.tv_sec) * 1'000'000 + static_cast<uint64_t>(ts.tv_nsec) / 1'000;
+        }
+
+        // A beat of the event loop while recording (frames::kBeatUs): a late one records the stall it shows, with the main
+        // thread's CPU time since the previous beat (core stallOf); the beats stop with the recording (its end, the lock:
+        // nothing is recorded then).
+        void beat() {
+            auto& s = st();
+            if (!s.ready || !s.beatTimer || !recordingNow()) {
+                s.beatDue = 0;
+                return; // not armed again
+            }
+            const uint64_t now = microseconds(Time::steadyNow());
+            const uint64_t cpu = threadCpuUs();
+            if (s.beatDue != 0) {
+                if (const auto stall = frames::stallOf(s.beatDue, now, cpu >= s.beatCpu ? cpu - s.beatCpu : 0))
+                    s.stalls.push(*stall);
+                ++s.beats;
+            }
+            s.beatDue = now + frames::kBeatUs;
+            s.beatCpu = cpu;
+            s.beatTimer->updateTimeout(std::chrono::microseconds(frames::kBeatUs));
+        }
+
+        void armBeat() {
+            auto& s = st();
+            if (!g_pEventLoopManager)
+                return;
+            if (!s.beatTimer) {
+                s.beatTimer = makeShared<CEventLoopTimer>(
+                    std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { guarded("frame probe beat", [] { beat(); }); }, nullptr);
+                g_pEventLoopManager->addTimer(s.beatTimer);
+            }
+            s.beatDue = microseconds(Time::steadyNow()) + frames::kBeatUs;
+            s.beatCpu = threadCpuUs();
+            s.beatTimer->updateTimeout(std::chrono::microseconds(frames::kBeatUs));
         }
 
         void attach(const PHLMONITOR& m) {
@@ -168,6 +223,15 @@ namespace gf::frameProbe {
         auto& s = st();
         s.recording.stop();
         s.holdsRecords = false;
+        if (s.beatTimer) {
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(s.beatTimer);
+            s.beatTimer.reset();
+        }
+        s.beatDue = 0;
+        s.beats   = 0;
+        s.stalls.clear();
+        s.work.clear();
         s.monitors.clear(); // the presented listeners first: they point into the rings
         s.listeners.clear();
         s.marks     = {};
@@ -186,6 +250,7 @@ namespace gf::frameProbe {
             return R"({"v":"gfc/1","type":"frames-recording","recording":false})";
         const uint64_t nowMs = microseconds(Time::steadyNow()) / 1000;
         s.recording.start(nowMs);
+        armBeat();
         return std::format(R"({{"v":"gfc/1","type":"frames-recording","recording":true,"ms":{}}})", frames::kMaxRecordingMs);
     }
 
@@ -206,8 +271,21 @@ namespace gf::frameProbe {
                                                 .presentedUs = e.ring->snapshot(),
                                                 .renders     = e.renders ? e.renders->snapshot() : std::vector<frames::RenderSpan>{}});
         }
-        const auto marks = st().marks.snapshot();
-        return frames::framesJson(out, marks);
+        const auto                marks = st().marks.snapshot();
+        const frames::LoopRecords loop{.beats = st().beats, .stalls = st().stalls.snapshot(), .work = st().work.snapshot()};
+        return frames::framesJson(out, marks, loop);
+    }
+
+    uint64_t nowUs() {
+        return microseconds(Time::steadyNow());
+    }
+
+    void work(uint64_t beginUs) {
+        auto& s = st();
+        if (!s.ready || !recordingNow())
+            return;
+        const uint64_t now = microseconds(Time::steadyNow());
+        s.work.push(frames::RenderSpan{.beginUs = beginUs, .cpuUs = now >= beginUs ? now - beginUs : 0});
     }
 
     void mark(std::string_view what) {

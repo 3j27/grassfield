@@ -2,10 +2,12 @@
 
 #include "ClientChrome.hpp"
 #include "DeferredFocus.hpp"
+#include "FrameProbe.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Minimize.hpp"
+#include "Titlebar.hpp"
 #include "TopClamp.hpp"
 #include "core/Minimize.hpp"
 #include "core/TitlebarLayout.hpp"
@@ -13,6 +15,7 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
@@ -20,11 +23,13 @@
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/supplementary/DragController.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
@@ -38,6 +43,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -78,6 +84,49 @@ namespace gf::tiler {
             uint8_t      sides = 0; // with Alt's opposite sides (core extendedSides)
         };
 
+        // TL30: a drag of a shared edge's handle (the plugin's own: its press and release are cancelled on the bus). The
+        // windows of the edge as they were at the press, the edge, the pointer at the press; the frames last applied, at most
+        // one application per refresh of the output (the rest wait for the timer or the release).
+        struct SEdgeDrag {
+            tiling::SharedEdge                          edge;
+            std::vector<tiling::EdgeWindow>             windows;
+            tiling::Grid                                grid;
+            Vector2D                                    press;
+            PHLMONITORREF                               monitor;
+            double                                      delta = 0;
+            std::vector<std::pair<uint64_t, tiling::Rect>> applied;
+            uint64_t                                    beganMs   = 0;
+            uint64_t                                    appliedMs = 0;
+            uint32_t                                    steps     = 0; // applications that changed a frame
+            uint32_t                                    held      = 0; // motions that waited for the next refresh
+            std::vector<uint64_t>                       left;          // windows that left it (gate C1): no longer set, still bounds
+            std::vector<uint64_t>                       moved;         // windows set at least once (the frame probe's mark at the end)
+            uint64_t                                    workUs    = 0; // the plugin's own time in the drag's motions and frames
+            uint64_t                                    maxWorkUs = 0; // the longest of them (one motion or one refresh's frames)
+        };
+
+        // TL30: a record the shared edge looks at (a Tiled group member on the Desktop an output shows) and what it read of
+        // its window: whether it counts (mapped, shown, not full screen or zoomed, not in an inactive stage), its box, its band.
+        struct SEdgeMember {
+            uint64_t     id    = 0;
+            uint64_t     group = 0;
+            PHLWINDOWREF window;
+            bool         counts = false;
+            CBox         box;
+            double       band = 0;
+        };
+
+        // The shared edges of the Desktop an output shows (edgeScene), and what they were derived from.
+        struct SEdgeScene {
+            PHLMONITORREF                   monitor;
+            int64_t                         workspace = -1;
+            double                          margin    = -1;
+            std::vector<SEdgeMember>        members; // in the book's order
+            std::vector<tiling::EdgeWindow> windows;
+            std::vector<tiling::SharedEdge> edges;
+            tiling::Grid                    grid;
+        };
+
         struct SState {
             bool                             ready = false;
             tiling::CTileBook                book;
@@ -96,6 +145,11 @@ namespace gf::tiler {
             SBorderClicks                    border;
             std::optional<SExtend>           extend;
             std::optional<tiling::Suggestion> suggestion; // TL28: valid while the book is at its generation
+            std::optional<SEdgeDrag>          edge;            // TL30: a shared edge being dragged
+            bool                              edgeReleaseOwed = false; // the release of the handle's cancelled press is cancelled too
+            bool                              edgeCursor      = false; // the handle's cursor is set (Hyprland's special-action override)
+            SP<CEventLoopTimer>               edgeTimer;       // the frames that waited for the next refresh (code of this library: removed in stop())
+            SEdgeScene                        edgeHoverScene;  // the edges hover looks up, kept while what they derive from holds
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -228,8 +282,10 @@ namespace gf::tiler {
         constexpr double kNoMaximum = 1e7;
 
         // TL8: the window's limits. Minimum: CWindow::minSize() (a min_size rule, else the client's) and, for an xdg window,
-        // at least the protocol minimum Hyprland's commit clamp applies (Window.cpp:2741-2747). Maximum: likewise the
-        // smaller of the rule and the protocol maximum. X11 increments from WM_NORMAL_HINTS.
+        // at least the protocol minimum Hyprland's commit clamp applies (Window.cpp:2741-2747); never under Hyprland's own
+        // floor, MIN_WINDOW_SIZE (20 px, macros.hpp: what its resizes fall back to; an app with no minimum is not squeezed
+        // to a 1 px frame, integrator review of a6d04df). Maximum: likewise the smaller of the rule and the protocol maximum.
+        // X11 increments from WM_NORMAL_HINTS.
         tiling::Constraints constraintsOf(const PHLWINDOW& w) {
             tiling::Constraints c;
             c.band       = gf::chrome::bandOf(w); // none above a window that draws its own chrome (ADR-0015)
@@ -249,8 +305,8 @@ namespace gf::tiler {
                         max.y = max.y > 0 && max.y < kNoMaximum ? std::min(max.y, pmax.y) : pmax.y;
                 }
             }
-            c.minW = std::max(1.0, min.x);
-            c.minH = std::max(1.0, min.y);
+            c.minW = std::max(MIN_WINDOW_SIZE, min.x);
+            c.minH = std::max(MIN_WINDOW_SIZE, min.y);
             c.maxW = max.x > 0 && max.x < kNoMaximum ? max.x : 0;
             c.maxH = max.y > 0 && max.y < kNoMaximum ? max.y : 0;
             if (w->m_isX11) {
@@ -933,6 +989,314 @@ namespace gf::tiler {
             s.relayoutPending = true;
             scheduleAfter();
         }
+        // ---- shared edge (TL30) ----
+
+        // A record the shared edge looks at on `m` (a Tiled group member on the Desktop `m` shows), with what it reads of
+        // its window `w` now.
+        bool edgeCandidate(const tiling::TileRecord& r, const PHLMONITOR& m) {
+            return r.state == tiling::TileState::Tiled && r.group != 0 && r.output == m->m_name && r.workspace == m->m_activeWorkspace->m_id;
+        }
+        SEdgeMember edgeMember(const tiling::TileRecord& r, const PHLWINDOW& w) {
+            SEdgeMember member{.id = r.id, .group = r.group, .window = w, .counts = false, .box = {}, .band = 0};
+            const auto  t = w && w->m_isMapped && !w->isHidden() && !fullscreenNow(w) && !gf::stager::inStripStage(w) ? w->layoutTarget() : nullptr;
+            if (t) {
+                member.counts = true;
+                member.box    = t->position();
+                member.band   = gf::chrome::bandOf(w);
+            }
+            return member;
+        }
+
+        // The shared edges of the Desktop `m` shows (core sharedEdges over its Tiled group members): none over an open
+        // special workspace; a window in full screen or zoom, hidden, unmapped or in an inactive stage is not Tiled or left out.
+        SEdgeScene edgeScene(const PHLMONITOR& m) {
+            SEdgeScene scene;
+            if (!m || showsSpecial(m) || !m->m_activeWorkspace)
+                return scene;
+            const auto area = areaFor(m);
+            scene.monitor   = m;
+            scene.workspace = m->m_activeWorkspace->m_id;
+            scene.margin    = area.margin;
+            scene.grid      = area.grid;
+            for (const auto& r : st().book.records()) {
+                if (!edgeCandidate(r, m))
+                    continue;
+                const auto w      = windowById(r.id);
+                const auto member = edgeMember(r, w);
+                scene.members.push_back(member);
+                if (!member.counts)
+                    continue;
+                const auto limits = constraintsOf(w);
+                scene.windows.push_back(tiling::EdgeWindow{.id = r.id, .group = r.group, .frame = tiling::frameOf(toRect(member.box), limits.band), .limits = limits});
+            }
+            scene.edges = tiling::sharedEdges(scene.windows, area.margin, tiling::kHandleLength, tiling::kHandleBand);
+            return scene;
+        }
+
+        // Whether `scene` still holds for `m`: the same output, Desktop and margin, no special workspace over it, and the same
+        // records looked at (the book's records alone: no window lookup), each window counting, placed and banded as then.
+        bool edgeSceneHolds(const SEdgeScene& scene, const PHLMONITOR& m) {
+            if (!m || scene.monitor.lock() != m || showsSpecial(m) || !m->m_activeWorkspace || scene.workspace != m->m_activeWorkspace->m_id ||
+                scene.margin != areaFor(m).margin)
+                return false;
+            size_t i = 0;
+            for (const auto& r : st().book.records()) {
+                if (!edgeCandidate(r, m))
+                    continue;
+                if (i == scene.members.size())
+                    return false;
+                const auto& was = scene.members[i++];
+                if (was.id != r.id || was.group != r.group)
+                    return false;
+                const auto now = edgeMember(r, was.window.lock());
+                if (now.counts != was.counts || now.box != was.box || now.band != was.band)
+                    return false;
+            }
+            return i == scene.members.size();
+        }
+
+        // The edges hover looks up (review of a6d04df, MINOR 5: hover ran the whole scene, a window lookup per record and the
+        // quadratic sharedEdges, on every motion): built again only when what they derive from changed.
+        const std::vector<tiling::SharedEdge>& hoverEdges(const PHLMONITOR& m) {
+            auto& cached = st().edgeHoverScene;
+            if (!edgeSceneHolds(cached, m))
+                cached = edgeScene(m);
+            return cached.edges;
+        }
+
+        bool modifierHeld() {
+            constexpr uint32_t kMods = HL_MODIFIER_SHIFT | HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_META; // not Caps or Num Lock
+            return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & kMods) != 0;
+        }
+
+        // A popup holds the point: an xdg popup of any window shown on a visible Desktop, or an X11 override-redirect window
+        // (an XWayland app's menu, a tooltip) whose box holds it. Hyprland's windowAt returns the topmost window whose box
+        // (border grab area included) holds the point before it looks at the popups of the windows below (integrator nested
+        // pass of 3d56d60), and for an override-redirect window that wants no focus it returns the focused window: an edge
+        // window when the menu is that window's (integrator review of 0c4c8f2).
+        bool popupAt(const Vector2D& p) {
+            if (!Desktop::windowState())
+                return false;
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (!w || !w->m_isMapped || w->isHidden() || (w->m_workspace && !w->m_workspace->isVisible()))
+                    continue;
+                if (w->m_isX11 ? w->isX11OverrideRedirect() && w->getWindowMainSurfaceBox().containsPoint(p) : w->m_workspace && w->hasPopupAt(p))
+                    return true;
+            }
+            return false;
+        }
+
+        // TL30, TL34: the frontmost window under the point gets the click (core handleClear). Hyprland's own hit test of its
+        // pointer focus: a window's titlebar (its reserved extents) or border grab area, a full-screen or zoomed window, from
+        // the top of the stack; and any popup there, a popup of the edge's own windows included.
+        bool handleClearAt(const tiling::SharedEdge& edge, const Vector2D& p) {
+            if (!Desktop::viewState())
+                return false;
+            constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+            const auto     w     = Desktop::viewState()->hitTest().windowAt(p, props);
+            return tiling::handleClear(edge, w ? idOf(w) : 0, popupAt(p));
+        }
+
+        // The handle under the pointer, for a plain pointer (no button held, no modifier: Super+drag stays Hyprland's move),
+        // with nothing in front of it (the lock, a foreign Exclusive layer, a layer under the point, a window, titlebar or
+        // popup other than the edge's own: TL34). `windows` and `grid` (a press): the scene as it is now; hover reads the kept
+        // edges.
+        std::optional<tiling::SharedEdge> handleAt(const Vector2D& p, std::vector<tiling::EdgeWindow>* windows, tiling::Grid* grid) {
+            if (gf::deferredFocus::sessionLocked() || modifierHeld())
+                return std::nullopt;
+            const auto m     = monitorAt(p);
+            const bool press = windows || grid;
+            SEdgeScene scene;
+            if (press)
+                scene = edgeScene(m);
+            const auto edge = tiling::edgeAt(press ? scene.edges : hoverEdges(m), p.x, p.y);
+            if (!edge || CGrassfieldTitlebar::pointerCovered(p) || !handleClearAt(*edge, p)) // the hit tests only over a handle
+                return std::nullopt;
+            if (windows)
+                *windows = std::move(scene.windows);
+            if (grid)
+                *grid = scene.grid;
+            return edge;
+        }
+
+        // The handle's cursor: a left-right or up-down double arrow (Hyprland's special-action override, which outranks the
+        // border icon of resize_on_border), set while the pointer rests on a handle and during its drag.
+        void edgeCursor(std::optional<bool> vertical) {
+            auto& s = st();
+            if (!Pointer::Cursor::overrideController)
+                return;
+            if (vertical) {
+                Pointer::Cursor::overrideController->setOverride(*vertical ? "ew-resize" : "ns-resize", Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
+                s.edgeCursor = true;
+            } else if (std::exchange(s.edgeCursor, false)) {
+                Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
+            }
+        }
+
+        void edgeHover() {
+            const auto& s = st();
+            if (!g_pInputManager || s.edge)
+                return;
+            const auto edge = g_pInputManager->hasHeldButtons() ? std::nullopt : handleAt(g_pInputManager->getMouseCoordsInternal(), nullptr, nullptr);
+            edgeCursor(edge ? std::optional<bool>{edge->vertical} : std::nullopt);
+        }
+
+        // The frames of the drag's delta (core dragEdge) on the windows still there: each surface box set and its animation
+        // ended at once (as a step of Hyprland's own resize: setTargetGeom, warpPositionSize). A window closed, unmapped (its
+        // Desktop and layout space gone while the object lives: gate C1, setTargetGeom would reach the missing space) or no
+        // longer Resizing meanwhile (full screen, zoom, minimized: Suspended; forgotten) leaves the drag (once, logged): it is
+        // no longer set, but its frame from the press and its limits still bound the edge (integrator re-review of ce82fd3:
+        // without them, the other side's windows would follow the pointer off the work area); the others go on.
+        void edgeApply() {
+            auto& s = st();
+            if (!s.edge || !g_layoutManager)
+                return;
+            auto&      d      = *s.edge;
+            const auto frames = tiling::dragEdge(d.edge, d.windows, d.delta, d.grid);
+            d.appliedMs       = nowMs();
+            if (frames == d.applied)
+                return;
+            std::vector<uint64_t> gone;
+            for (const auto& f : frames) {
+                const uint64_t id = f.first;
+                if (std::ranges::find(d.left, id) != d.left.end())
+                    continue;
+                const auto w = windowById(id);
+                const auto t = tiling::movable(factsOf(w)) ? w->layoutTarget() : nullptr; // C1: mapped, on a Desktop, in a layout space
+                const auto e = std::ranges::find_if(d.windows, [id](const tiling::EdgeWindow& x) { return x.id == id; });
+                const auto r = s.book.find(id);
+                if (!t || e == d.windows.end() || !r || r->state != tiling::TileState::Resizing) {
+                    gone.push_back(id);
+                    continue;
+                }
+                g_layoutManager->setTargetGeom(toCBox(tiling::surfaceOf(f.second, e->limits.band)), t);
+                t->warpPositionSize();
+                if (std::ranges::find(d.moved, id) == d.moved.end())
+                    d.moved.push_back(id);
+            }
+            for (const uint64_t id : gone) {
+                d.left.push_back(id);
+                logRequest(Log::INFO, "window {:x} closed, unmapped or no longer resizing: it leaves the shared edge's drag (gate C1)", id);
+            }
+            d.applied = frames;
+            ++d.steps;
+        }
+
+        // The plugin's own time in a step of the drag (a motion, the frames of a refresh): recorded for the frame probe's
+        // attribution (integrator review of a6d04df, MAJOR 2: the drag runs before the render, where a stall reads as a late
+        // client) and summed for the drag's DEBUG line.
+        template <typename F>
+        void edgeTimed(F&& step) {
+            const uint64_t began = gf::frameProbe::nowUs();
+            std::forward<F>(step)();
+            gf::frameProbe::work(began);
+            if (auto& d = st().edge) {
+                const uint64_t spent = gf::frameProbe::nowUs() - began;
+                d->workUs += spent;
+                d->maxWorkUs = std::max(d->maxWorkUs, spent);
+            }
+        }
+
+        void armEdgeTimer(uint64_t ms) {
+            auto& s = st();
+            if (!g_pEventLoopManager)
+                return;
+            if (!s.edgeTimer) {
+                s.edgeTimer = makeShared<CEventLoopTimer>(
+                    std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("tiling shared edge frame", [] { edgeTimed(edgeApply); }); },
+                    nullptr);
+                g_pEventLoopManager->addTimer(s.edgeTimer);
+            }
+            s.edgeTimer->updateTimeout(std::chrono::milliseconds(ms));
+        }
+
+        // The end of a drag (its release; the lock; another press): the last frames, then Resizing -> Tiled with the boxes
+        // the windows have, one `resized` notice; the cursor goes back.
+        void edgeEnd(std::string_view why) {
+            auto& s = st();
+            if (!s.edge)
+                return;
+            if (s.edgeTimer)
+                s.edgeTimer->updateTimeout(std::nullopt);
+            edgeApply();
+            const auto d = std::move(*s.edge);
+            s.edge.reset();
+            for (const auto& e : d.windows) {
+                const auto w = windowById(e.id);
+                const auto t = w ? w->layoutTarget() : nullptr;
+                const auto r = s.book.find(e.id);
+                if (t && r && r->state == tiling::TileState::Resizing)
+                    s.book.endResize(e.id, toRect(t->position()));
+            }
+            notify(tiling::Reason::Resized);
+            edgeCursor(std::nullopt);
+            // The drag's own count for P3 (integrator review of 0c4c8f2: the windows it resized, not a number the harness
+            // assumes): "edge-drag:F/E", F of the edge's E windows followed it (set at least once and never left it).
+            const auto followed = std::ranges::count_if(d.windows, [&d](const tiling::EdgeWindow& e) {
+                return std::ranges::find(d.moved, e.id) != d.moved.end() && std::ranges::find(d.left, e.id) == d.left.end();
+            });
+            gf::frameProbe::mark(std::format("edge-drag:{}/{}", followed, d.windows.size()));
+            logRequest(Log::DEBUG, "shared edge: {} window(s), {:+.0f} px, {} step(s) and {} held motion(s) in {} ms, the plugin's work {} us (longest step {} us) ({})",
+                       d.windows.size(), d.delta, d.steps, d.held, nowMs() - d.beganMs, d.workUs, d.maxWorkUs, why);
+        }
+
+        // A plain left press on a handle: the drag begins (every window of the edge Resizing), the press is the plugin's.
+        bool edgePress(const Vector2D& p) {
+            auto& s = st();
+            // Hyprland's held buttons before this press is recorded: another device holding one would make the release
+            // this press owes ambiguous (the bus names no device; FR13, as P6).
+            if (s.edge || !g_layoutManager || !g_pInputManager || g_pInputManager->hasHeldButtons())
+                return false;
+            if (const auto& drag = g_layoutManager->dragController(); drag && drag->mode() != MBIND_INVALID)
+                return false;
+            std::vector<tiling::EdgeWindow> windows;
+            tiling::Grid                    grid;
+            const auto                      edge = handleAt(p, &windows, &grid);
+            if (!edge)
+                return false;
+            std::erase_if(windows, [&](const tiling::EdgeWindow& w) {
+                return std::ranges::find(edge->before, w.id) == edge->before.end() && std::ranges::find(edge->after, w.id) == edge->after.end();
+            });
+            for (const auto& w : windows)
+                s.book.beginResize(w.id); // Tiled by edgeScene
+            const auto now = nowMs();
+            s.edge         = SEdgeDrag{.edge = *edge, .windows = std::move(windows), .grid = grid, .press = p, .monitor = monitorAt(p), .delta = 0, .applied = {},
+                                       .beganMs = now, .appliedMs = now, .steps = 0, .held = 0, .left = {}, .moved = {}, .workUs = 0, .maxWorkUs = 0};
+            s.edgeReleaseOwed = true;
+            edgeCursor(edge->vertical);
+            return true;
+        }
+
+        // A motion during the drag: the edge follows the pointer along its axis, applied at most once per refresh of the
+        // output (TL30, P3: the neighbours are configured at most once per refresh), the rest when the frame is due.
+        void edgeMotion() {
+            auto& s = st();
+            auto& d = *s.edge;
+            if (gf::deferredFocus::sessionLocked()) {
+                edgeEnd("the session locked");
+                return;
+            }
+            const Vector2D p = g_pInputManager ? g_pInputManager->getMouseCoordsInternal() : d.press;
+            d.delta          = d.edge.vertical ? p.x - d.press.x : p.y - d.press.y;
+            const auto   m       = d.monitor.lock();
+            const double hz      = m && m->m_refreshRate > 1 ? m->m_refreshRate : 60.0;
+            const auto   frameMs = static_cast<uint64_t>(std::ceil(1000.0 / hz));
+            const auto   since   = nowMs() - d.appliedMs;
+            if (since < frameMs) {
+                ++d.held;
+                armEdgeTimer(frameMs - since);
+                return;
+            }
+            edgeApply();
+        }
+
+        // TL34: the lock ends a drag at once (the frames its motions before the lock asked for, then Tiled, one `resized`),
+        // and the handle's cursor goes, also a hover's (the lock surface shows its own). Its release stays cancelled.
+        void edgeLocked() {
+            edgeEnd("the session locked");
+            edgeCursor(std::nullopt);
+        }
+
     } // namespace
 
     bool start() {
@@ -952,6 +1316,10 @@ namespace gf::tiler {
         s.moveRelease.reset();
         s.border = {};
         s.extend.reset();
+        s.edge.reset();
+        s.edgeReleaseOwed = false;
+        s.edgeCursor      = false;
+        s.edgeHoverScene  = {};
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
             return false;
         auto& ev = bus->m_events;
@@ -961,6 +1329,8 @@ namespace gf::tiler {
         l.push_back(ev.window.moveToWorkspace.listen(
             [](const PHLWINDOW& w, const PHLWORKSPACE& ws) { gf::guarded("tiling window.moveToWorkspace", [&] { onMoveToWorkspace(w, ws); }); }));
         l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& m) { gf::guarded("tiling monitor.removed", [&] { onMonitorRemoved(m); }); }));
+        if (g_pSessionLockManager)
+            l.push_back(g_pSessionLockManager->m_events.lock.listen([] { gf::guarded("tiling session lock", [] { edgeLocked(); }); }));
         s.ready = true;
         return true;
     }
@@ -985,8 +1355,23 @@ namespace gf::tiler {
         s.resuming.clear();
         s.book.clear(); // windows keep their boxes; groups are forgotten
         s.suggestion.reset();
+        // TL30: a drag of a shared edge ends with the boxes the windows have (the book is cleared just above: no notice for
+        // it); the release it owes is still cancelled by nobody once the listener is gone, and Hyprland never saw its press.
+        if (s.edgeTimer) {
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(s.edgeTimer);
+            s.edgeTimer.reset();
+        }
+        s.edge.reset();
+        s.edgeReleaseOwed = false;
+        s.edgeHoverScene  = {};
+        edgeCursor(std::nullopt);
         if (std::exchange(s.ready, false))
             notify(tiling::Reason::Unavailable);
+    }
+
+    bool edgeOwnsPointer() {
+        return st().edge.has_value();
     }
 
     bool ready() {
@@ -1468,14 +1853,20 @@ namespace gf::tiler {
         auto& s = st();
         if (!s.ready || !g_layoutManager)
             return;
+        if (s.edge) {
+            edgeTimed(edgeMotion); // TL30: the plugin's own drag (Hyprland has none)
+            return;
+        }
         const auto& drag = g_layoutManager->dragController();
         if (!drag || !hyprlandDrag(drag->mode())) {
             if (s.resizing.lock())
                 finishResize(); // the drag ended without a release seen here
             if (s.drag.hyprland)
                 dragDone(); // likewise the preview of a move
+            edgeHover();
             return;
         }
+        s.edgeCursor = false; // a drag of Hyprland's set its own special-action cursor in place of the handle's
         const auto target = drag->target();
         const auto w      = target ? target->window() : nullptr;
         if (drag->mode() == MBIND_MOVE) {
@@ -1489,29 +1880,40 @@ namespace gf::tiler {
             s.resizing = w;
     }
 
-    void beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs) {
+    bool beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs) {
         auto& s = st();
         if (!s.ready || !g_layoutManager || !g_pInputManager)
-            return;
+            return false;
         const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+        // TL30: the shared edge's handle takes a plain left press and its release (both cancelled: Hyprland's held-button
+        // state stays as it was, ADR-0015 P6). A left press while a release is still owed means that release was lost (a
+        // device gone): the drag ends and nothing more is cancelled for it.
+        if (button == BTN_LEFT && pressed && std::exchange(s.edgeReleaseOwed, false))
+            edgeEnd("its release was not seen");
+        if (button == BTN_LEFT && !pressed && std::exchange(s.edgeReleaseOwed, false)) {
+            edgeEnd("released");
+            return true;
+        }
+        if (button == BTN_LEFT && pressed && edgePress(pointer))
+            return true;
         if (pressed) {
             if (button == BTN_LEFT) {
                 s.press   = pointer;
                 s.pressMs = timeMs;
             }
-            return;
+            return false;
         }
         if (s.resizing.lock())
             scheduleAfter(); // ends Resizing once Hyprland ended its drag (afterEvents)
         if (button != BTN_LEFT)
-            return;
+            return false;
         const auto  grip   = std::exchange(s.press, std::nullopt);
         const auto& drag   = g_layoutManager->dragController();
         const auto  mode   = drag ? drag->mode() : MBIND_INVALID;
         const auto  target = drag && hyprlandDrag(mode) ? drag->target() : nullptr;
         const auto  w      = target ? target->window() : nullptr;
         if (!w)
-            return;
+            return false;
         if (mode == MBIND_MOVE) {
             // TL16: tiled once Hyprland ended the drag; the top clamp leaves the window to it (the tile lies below the menu
             // bar), as it does a tiled window put back in its tile.
@@ -1521,11 +1923,12 @@ namespace gf::tiler {
                 gf::topClamp::skip(w);
             s.moveRelease = SMoveRelease{.window = w, .snap = shown};
             scheduleAfter();
-            return;
+            return false;
         }
         // A resize begun at the press and released where it began: a click on the window's resize border (TL20).
         if (grip && !gf::titlebar::exceedsDragThreshold(pointer.x - grip->x, pointer.y - grip->y))
             borderClick(w, *grip, s.pressMs);
+        return false;
     }
 
 } // namespace gf::tiler

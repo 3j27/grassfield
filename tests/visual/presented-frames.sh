@@ -14,6 +14,21 @@
 #                                   (integrator run 2026-10-24: the first frame 2.2 s after each request, 0 in the window)
 #   overview-open-4w, -close-4w     the Overview with four windows (the plugin's live window transforms, docs/specs/overview.md)
 #   overview-open-flat, -close-flat the same with Reduce Transparency on (no blur): what the blur costs, by difference
+#   shared-edge                     two of the four windows arranged left and right (one tile group, the plugin's arrange),
+#                                   their shared edge's handle dragged right, left and back with the button held: both windows
+#                                   resized live (tiling.md TL30); skipped without the plugin's tiling-shared-edge. Judged by
+#                                   frame-attribution.py --gate against edge-baseline (ADR-0036 D34 as amended, the
+#                                   integrator's gate, final on 2026-10-29): (a) the plugin's own work at most 1 ms in every
+#                                   frame, (b) its compositor-caused long frames (its render, or the event loop held before
+#                                   it) per second per resized window (the drag's own count, the plugin's "edge-drag:F/E"
+#                                   mark: every window of the edge must follow; one in the baseline) at most 1.25 times the
+#                                   baseline's; its share on time printed as information (the apps redraw at their own
+#                                   pace); no frame in its animation, or the scenario not measured, fails
+#   edge-baseline                   the same two windows arranged again, the left one's right border dragged by Hyprland's own
+#                                   resize_on_border, outside the handle (40 px below the surface tops), with the same glide:
+#                                   what Hyprland's own live resize costs here; information, the shared edge's reference.
+#                                   PERF_DRAG=1: one `perf record -g` of Hyprland's main thread during the first glide of
+#                                   each (shared-edge.perf.txt, edge-baseline.perf.txt; needs perf)
 # The Dock and the Launchpad in the same run tell the nested output's own pacing apart from the cost of an animation.
 # The window measured is the animation itself (ADR-0006 amendment, integrator decision 2026-10-24 under D-5, the macOS
 # model: a static screen owes no frames, so sparse frames once the animation is over are not misses): from the first frame
@@ -28,8 +43,10 @@
 # Run as a BARE command with a relative path; needs this tree's plugin loaded in the nested session (just plugin-build; the
 # session started by nested-up loads it). The nested output is paced by Hyprland's own timer: the numbers are an indication
 # of the shell's and the compositor's work per frame; the gate is the owner's L2 run on the real session.
-# Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,*.json}.
-# Exit 1 when a phase is below 95 % in its animation window, 2 on an environment error.
+# Output: .dev/visual/presented-frames/{frames.txt,events.txt,events.anim,windows.txt,stats.txt,attribution.txt,renders.all,
+# marks.all,stalls.all,work.all,*.json[,*.perf.txt]}.
+# Exit 1 when a phase is below 95 % in its animation window (the shared edge: when the compositor caused a long frame in
+# it), 2 on an environment error.
 source "$(dirname "$0")/lib.sh"
 set +e
 
@@ -89,8 +106,10 @@ else
 fi
 
 # The frames presented since the last collection, appended as "<monotonic us> <interval us>"; for the attribution, the
-# render spans of the output ("<begin us> <cpu us>") and the plugin's phase marks ("<us> <name>") since then too.
-last=0 last_render=0 last_mark=0
+# render spans of the output ("<begin us> <cpu us>"), the plugin's phase marks ("<us> <name>"), the event loop's stalls
+# ("<begin us> <length us> <main thread's cpu us>") and the plugin's own work ("<begin us> <length us>": a stall before a
+# render reads as a late client without them) since then too, and the most beats the loop probe ran.
+last=0 last_render=0 last_mark=0 last_stall=0 last_work=0 beats=0
 collect() {
   local answer=$out/frames-$(date +%s%N).json
   nestctl -j grassfield-frames >"$answer" 2>/dev/null || return 0
@@ -104,6 +123,13 @@ collect() {
   last_render=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | (.renders // [])[-1][0]][0] // 0' "$answer")
   jq -r --argjson last "$last_mark" '(.marks // [])[] | select(.t > $last) | "\(.t) \(.what)"' "$answer" >>"$out/marks.all"
   last_mark=$(jq -r '[(.marks // [])[-1].t][0] // 0' "$answer")
+  jq -r --argjson last "$last_stall" '(.loop.stalls // [])[] | select(.[0] > $last) | map(tostring) | join(" ")' "$answer" >>"$out/stalls.all"
+  last_stall=$(jq -r '[(.loop.stalls // [])[-1][0]][0] // 0' "$answer")
+  jq -r --argjson last "$last_work" '(.loop.work // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/work.all"
+  last_work=$(jq -r '[(.loop.work // [])[-1][0]][0] // 0' "$answer")
+  local now
+  now=$(jq -r '.loop.beats // 0' "$answer")
+  if ((now > beats)); then beats=$now; fi
 }
 # The intervals that span a request (the previous frame before it, this one after it) are left out: the wait for the
 # request is not a frame of the animation. <frames.all> <events.txt> -> frames.txt
@@ -171,15 +197,92 @@ sleep 1
 for ((c = 1; c <= cycles; c++)); do overview_round -flat; done
 vs_ipc controlcenter reduceTransparency false >/dev/null
 
+# PERF_DRAG=1: Hyprland's main thread sampled with call graphs for SECONDS while a glide runs; the report beside the frames.
+perf_drag() { # <name> <seconds>
+  [[ ${PERF_DRAG:-0} == 1 ]] || return 0
+  command -v perf >/dev/null || { echo "NOTE PERF_DRAG: no perf" >&2; return 0; }
+  local pid
+  pid=$(dev_live_pid "$VS_DEV/nested.pid") || return 0
+  ( perf record -g -t "$pid" -o "$out/$1.perf.data" -- sleep "$2" >/dev/null 2>&1 &&
+      perf report --stdio --no-children --percent-limit 1 -i "$out/$1.perf.data" >"$out/$1.perf.txt" 2>/dev/null ) &
+  perf_pid=$!
+  sleep 0.3
+}
+perf_wait() { [[ -n ${perf_pid:-} ]] && wait "$perf_pid" 2>/dev/null; perf_pid=""; }
+
+# The shared edge (TL30): Terminal 1 on the left half, the next window in stacking order on the right half (one group);
+# the handle in the middle of the margin between them; three glides of 20 motions 15 ms apart, the button held.
+edge_measured=0 baseline_measured=0
+if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+  first=$(nestctl clients -j | jq -r '[.[] | select(.title == "Terminal 1")][0].address // ""')
+  if [[ -n $first ]]; then
+    nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$first\"]}')" >/dev/null 2>&1
+    sleep 1
+    read -r ox oy < <(nestctl monitors -j | jq -r --arg o "$VS_OUTPUT" '.[] | select(.name == $o) | "\(.x) \(.y)"')
+    read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$first" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+    rx=$(nestctl clients -j | jq -r --argjson e "$((lx + lw))" '[.[] | select(.at[0] >= $e) | .at[0]] | min // empty')
+    if [[ ${rx:-} =~ ^[0-9]+$ && ${ox:-} =~ ^-?[0-9]+$ ]]; then
+      hx=$(((lx + lw + rx) / 2 - ox)) hy=$((ly + lh / 2 - oy))
+      for ((c = 1; c <= cycles; c++)); do
+        vs_pointer abs "$hx" "$hy" sleep 300 >/dev/null
+        ((c == 1)) && perf_drag shared-edge 3
+        frames_start
+        t0=$(mono_ns)
+        vs_pointer down drag $((hx + 200)) "$hy" drag $((hx - 200)) "$hy" drag "$hx" "$hy" up >/dev/null
+        t1=$(mono_ns)
+        echo "shared-edge $t0 $(((t1 - t0) / 1000000 + fast_ms))" >>"$out/events.txt"
+        perf_wait
+        sleep 0.6
+        vs_park
+        sleep 0.6
+        collect
+      done
+      edge_measured=1
+      # The baseline (the integrator's D34 gate, 2026-10-28): Hyprland's own resize_on_border drag of the left window's right
+      # border, outside the handle (40 px below the surface tops, 2 px right of the left surface: its border grab area), the
+      # same glide; each round starts from the arrangement again (Hyprland's snap can leave the edge a few px off).
+      bx=$((lx + lw + 2 - ox)) by=$((ly + 40 - oy))
+      for ((c = 1; c <= cycles; c++)); do
+        nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$first\"]}')" >/dev/null 2>&1
+        sleep 1
+        vs_pointer abs "$bx" "$by" sleep 300 >/dev/null
+        ((c == 1)) && perf_drag edge-baseline 3
+        frames_start
+        t0=$(mono_ns)
+        vs_pointer down drag $((bx + 200)) "$by" drag $((bx - 200)) "$by" drag "$bx" "$by" up >/dev/null
+        t1=$(mono_ns)
+        echo "edge-baseline $t0 $(((t1 - t0) / 1000000 + fast_ms))" >>"$out/events.txt"
+        perf_wait
+        sleep 0.6
+        vs_park
+        sleep 0.6
+        collect
+      done
+      baseline_measured=1
+    fi
+  fi
+fi
+((edge_measured)) || echo "NOTE shared-edge not measured: no tiling-shared-edge, or the two windows were not arranged"
+((baseline_measured)) || echo "NOTE edge-baseline not measured (the shared edge's gate (b) fails without it)"
+
 [[ -n $gx0 ]] || echo "NOTE dock-magnification not measured: no Dock tile centres"
 drop_spanning "$out/frames.all" "$out/events.txt" >"$out/frames.txt"
 echo "profile $profile, $cycles cycles, $(wc -l <"$out/frames.txt") frames ($(($(wc -l <"$out/frames.all") - $(wc -l <"$out/frames.txt"))) intervals spanning a request left out), refresh $hz Hz, tail to $window ms"
 # Each request's animation window (and its tail).
 python3 -I "$VS_HERE/animation-windows.py" "$out/frames.all" "$out/events.txt" "$out/marks.all" "$hz" \
-  "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms))" "$window" "$out/events.anim" | tee "$out/windows.txt"
-python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" | tee "$out/stats.txt"
+  "overview=$slow_ms,launchpad=$normal_ms,dock-magnification=$((1200 + fast_ms)),shared-edge=$((900 + fast_ms)),edge-baseline=$((900 + fast_ms))" \
+  "$window" "$out/events.anim" | tee "$out/windows.txt"
+# The shared edge's drag is judged on its own cost and against Hyprland's own resize (ADR-0036 D34 as amended by the
+# integrator: the windows show each app's buffer at its own pace, macOS's live resize); its share on time and the
+# baseline's are information.
+python3 -I "$VS_HERE/frame-stats.py" "$out/frames.txt" "$out/events.anim" "$hz" --info=shared-edge --info=edge-baseline | tee "$out/stats.txt"
 rc=${PIPESTATUS[0]}
-# Whose cost each long interval was (compositor render, a client's late frame, other), in the animation and in its tail.
+# Whose cost each long interval was (the compositor: its render, or the loop held before it; a client's late frame; other),
+# in the animation and in its tail.
+touch "$out/stalls.all" "$out/work.all"
 python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.anim" "$hz" "$window" \
-  | tee "$out/attribution.txt"
+  --stalls="$out/stalls.all" --work="$out/work.all" --beats="$beats" --gate=shared-edge --baseline=edge-baseline \
+  --drag-mark=edge-drag --resizes=edge-baseline=1 | tee "$out/attribution.txt"
+arc=${PIPESTATUS[0]}
+((arc == 1)) && rc=1
 exit "$rc"

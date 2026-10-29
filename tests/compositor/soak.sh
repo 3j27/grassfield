@@ -9,7 +9,9 @@
 # so the pointer device disappears while a button is held; every 4th round released on the menu bar after the tiling
 # preview delay, so the window tiles to fill), double-click zoom, zoom button, close
 # button, press-move-away cancel, and (when the plugin advertises "minimize" and grassfield-shell runs)
-# minimize button + restore through a click on the Dock tile.
+# minimize button + restore through a click on the Dock tile. Every 6th round, when the plugin advertises
+# tiling-shared-edge, the two long-lived windows are arranged left and right and their shared edge's handle is dragged
+# (tiling.md TL30; counted and reported, not part of the verdict).
 # The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
 # The Dock tile is clicked only after the window was seen moving to special:minimized (socket2 movewindowv2), at the
 # centre of the rectangle the shell sent for that window (the plugin's log line, as in tests/compositor/minimize.sh), or,
@@ -112,6 +114,10 @@ focus_out || { echo "soak: harness error: could not make $out the focused output
 . "$root/tests/compositor/window_geometry.sh"
 gf_geom_init || { echo "soak: output $out not listed by hyprctl monitors" >&2; exit 2; }
 
+# Shared-edge drags in the churn (tiling.md TL30): only when the plugin advertises tiling-shared-edge; reported, not judged.
+edge_mode=0 edge_drags=0 edge_moved=0
+HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1 && edge_mode=1
+
 # Minimize rounds: plugin feature (read-only `hyprctl grassfield`) and a running shell (Dock, minimize-request).
 # Without either the run cannot cover minimize/restore at all: a harness error (exit 2), never a silent pass (GF-006).
 minimize_rounds=0
@@ -175,7 +181,7 @@ resident=() # long-lived windows (whole run)
 spawned=0 short=0 skipped=0 round=0 unmapped=0
 st_moves=0 st_swaps=0
 fixture_pid=""
-nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; } # verbs of the plugin (Stages mode only)
+nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; } # verbs of the plugin (Stages mode, the shared edge's arrangement)
 cleanup() {
   if ((stages_mode)); then
     nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
@@ -473,6 +479,31 @@ while (( $(date +%s) < end_epoch )); do
       fi ;;
   esac
 
+  # A shared-edge drag (tiling.md TL30; reported, not judged): every 6th round the two resident windows are arranged left
+  # and right (one tile group) and the handle in the middle of the margin between them is dragged 40 to 120 px either way
+  # with the button held, then released.
+  if ((edge_mode)) && ((round % 6 == 5)) && ((${#resident[@]} >= 2)); then
+    ea=$(addr_of_pid "${resident[0]}") eb=$(addr_of_pid "${resident[1]}")
+    if [[ -n $ea && -n $eb ]]; then
+      nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$ea\",\"$eb\"]}')" >/dev/null 2>&1
+      sleep 0.5
+      if lg=$(gf_window_geom "${resident[0]}" 2000) && rg=$(gf_window_geom "${resident[1]}" 2000); then
+        read -r lx ly lw lh <<<"$lg"
+        read -r rx _ _ _ <<<"$rg"
+        if ((rx >= lx + lw && rx - lx - lw <= 12)); then
+          ex=$(((lx + lw + rx) / 2)) ey=$((ly + lh / 2)) ed=$(((RANDOM % 81 + 40) * (RANDOM % 2 * 2 - 1)))
+          edge_drags=$((edge_drags + 1))
+          pointer abs "$ex" "$ey" sleep 80 down drag $((ex + ed)) "$ey" sleep 30 up
+          sleep 0.3
+          if lg2=$(gf_window_geom "${resident[0]}" 1000); then
+            read -r _ _ lw2 _ <<<"$lg2"
+            ((lw2 != lw)) && edge_moved=$((edge_moved + 1))
+          fi
+        fi
+      fi
+    fi
+  fi
+
   if ((stages_mode)); then
     if ((round % 5 == 0)) && ((${#resident[@]} > 0)); then
       ra=$(addr_of_pid "${resident[$((round / 5 % ${#resident[@]}))]}")
@@ -499,6 +530,7 @@ elapsed=$(( $(date +%s) - start_epoch ))
 say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned (no window found for $unmapped), effective/attempted: $(counters)"
 ((${cancel_missed:-0} > 0)) && say "soak: cancel: ${cancel_missed} press(es) did not land on the button (harness miss, not counted as attempts)"
 say "soak: drags released on the menu bar to fill (tiling): ${fills:-0} of ${att[drag]:-0}"
+((edge_mode)) && say "soak: shared-edge drags (tiling TL30, reported, not judged): $edge_moved of $edge_drags moved the edge"
 say "soak: a shell popup was open at the start of $popups_open round(s) (closed with Esc); $slow_rounds round(s) took longer than 10 s"
 say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0} (no Dock line from the plugin: ${no_tile_line:-0}; a rectangle off every output: ${no_tile_off:-0}); previous tile reused: ${dock_cached:-0}"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
