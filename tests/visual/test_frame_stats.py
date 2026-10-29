@@ -247,7 +247,45 @@ check("gate (b): twice the baseline's rate passes per resized window (the drag r
       attribution(per_window + ["--resizes=shared-edge=2", "--resizes=edge-baseline=1"]) == 0)
 check("gate (b): a bad window count exits 2", attribution(per_window + ["--resizes=shared-edge=0"]) == 2)
 
+# Integrator review of 0c4c8f2. MAJOR 2: the gated drag's resized windows come from its own marks ("edge-drag:F/E" at each
+# drag's end); a drag some windows did not follow, or no mark, fails. MINOR 3: two gated scenarios give two verdicts.
+# MINOR 5: a gate whose scenario never ran fails. MINOR 6: a baseline with no frame fails (P3); its divisor counts (P13).
+def marks_file(lines):
+    return write(lines)
+
+
+mk_ok = marks_file(["%d edge-drag:2/2" % 1_300_000])
+mk_half = marks_file(["%d edge-drag:1/2" % 1_300_000])
+with_marks = ["x", pw[0], pw[1], None, pw[2], "60", "700", "--baseline=edge-baseline", "--drag-mark=edge-drag", "--resizes=edge-baseline=1"] + gate
+check("drag marks: twice the baseline's rate passes when the drag's mark says both windows followed (2/2)",
+      attribution([mk_ok if a is None else a for a in with_marks]) == 0)
+check("drag marks: a drag one window did not follow (1/2) fails", attribution([mk_half if a is None else a for a in with_marks]) == 1)
+check("drag marks: no mark in the drag's animation fails", attribution([m_none if a is None else a for a in with_marks]) == 1)
+two = write(["shared-edge %d 400 0" % (1_000_000 * 1000), "shared-edge-two %d 400 0" % (3_000_000 * 1000), "edge-baseline %d 400 0" % (3_000_000 * 1000)])
+w_two = write("%d %d" % (3_000_000 + i * p_us + 1000, 200) for i in range(0, 13))
+out_two = io.StringIO()
+with contextlib.redirect_stdout(out_two):
+    rc_two = fa_mod.main(["x", pw[0], pw[1], m_none, two, "60", "700", "--baseline=edge-baseline", "--work=" + w_two] + gate)
+check("gate: two gated scenarios each get a verdict with both parts (no crash)",
+      rc_two in (0, 1) and "shared-edge: (a)" in out_two.getvalue() and "shared-edge-two: (a)" in out_two.getvalue()
+      and out_two.getvalue().count("per resized window") >= 4)
+ev_other = write(["overview-open %d 400 0" % (1_000_000 * 1000)])
+check("gate: a gated scenario that never ran fails",
+      attribution(["x", f_long, r_client, m_none, ev_other, "60", "700", "--baseline=edge-baseline"] + gate) == 1)
+fe, re_ = scenario(1_000_000, False)
+nob = [write("%d %d" % f for f in fe), write("%d %d" % r for r in re_),
+       write(["shared-edge %d 400 0" % (1_000_000 * 1000), "edge-baseline %d 400 0" % (9_000_000 * 1000)])]
+check("gate (b): a baseline with no frame in its animation fails (P3)",
+      attribution(["x", nob[0], nob[1], m_none, nob[2], "60", "700", "--baseline=edge-baseline"] + gate) == 1)
+fe, re_ = scenario(1_000_000, True)
+fb_, rb_ = scenario(3_000_000, True)
+div = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(re_ + rb_)),
+       write(["shared-edge %d 400 0" % (1_000_000 * 1000), "edge-baseline %d 400 0" % (3_000_000 * 1000)])]
+check("gate (b): the baseline's window count divides its rate (P13: two resized windows halve it, and the same rate fails)",
+      attribution(["x", div[0], div[1], m_none, div[2], "60", "700", "--baseline=edge-baseline", "--resizes=edge-baseline=2"] + gate) == 1)
+
 for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu,
+          mk_ok, mk_half, two, w_two, ev_other, *nob, *div,
           w_small, r_none_long, r_early, s_after, s_hold, w_big, w_ok, *vf, *pw):
     os.unlink(p)
 

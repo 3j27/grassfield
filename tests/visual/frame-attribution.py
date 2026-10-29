@@ -24,7 +24,7 @@ owns that cost. A stall with little CPU is the main thread waiting (descheduled 
 its length in CPU is the compositor working (integrator nested pass of ce82fd3).
 
 Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE]
-       [--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...]
+       [--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...] [--drag-mark=NAME]
   frames.txt   "<presented us> <interval us>" (the intervals spanning a request already left out)
   renders.all  "<begin us> <cpu us>"
   marks.all    "<us> <name>"
@@ -34,7 +34,7 @@ Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <ref
   --beats      the beats the loop probe ran (0: the loop was not probed, so a stall could not be seen)
   --gate=PREFIX the scenarios whose label starts with PREFIX are judged here (the shared edge's drag, tiling.md TL30,
                ADR-0036 D34 as amended); FAIL (exit 1) when the renders, the loop or the plugin's work were not recorded or
-               the animation holds no frame, else PASS when both hold: (a) the plugin's own work is at most 1 ms in every
+               the animation holds no frame, or no scenario of the prefix was measured at all, else PASS when both hold: (a) the plugin's own work is at most 1 ms in every
                frame of the animation; (b) its compositor-caused long frames per second of animation per window it resizes
                are at most 1.25 times the baseline's (--baseline, --resizes), or none without a baseline. The client-paced
                ones are information (each window shows the buffer its app commits, at its pace). Without it the script only
@@ -45,6 +45,10 @@ Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <ref
   --resizes=LABEL=N the windows the scenario LABEL resizes (default 1): the shared edge resizes two where the baseline
                resizes one, and each resized client's new buffers hold Hyprland's loop the same way (D34 final, integrator,
                2026-10-29: the rate is compared per resized window).
+  --drag-mark=NAME a gated scenario's resized windows come from the drag's own marks "NAME:F/E" in its windows (the plugin
+               marks each drag's end: F of the edge's E windows followed it; integrator review of 0c4c8f2: a count the harness
+               assumes would halve a regression's rate): every drag must have F = E, all with the same E, which is N; no
+               mark, or a drag some windows did not follow, fails.
 """
 import sys
 from collections import defaultdict
@@ -131,7 +135,7 @@ def new_part():
 
 
 def main(argv):
-    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": [], "--baseline": [], "--resizes": []}
+    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": [], "--baseline": [], "--resizes": [], "--drag-mark": []}
     rest = []
     for a in argv:
         key = a.split("=", 1)[0]
@@ -154,9 +158,10 @@ def main(argv):
         resizes[label] = int(count)
     if len(argv) != 7 or beats < 0:
         print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE] "
-              "[--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...]", file=sys.stderr)
+              "[--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...] [--drag-mark=NAME]", file=sys.stderr)
         return 2
     baseline = options["--baseline"][-1] if options["--baseline"] else None
+    drag_mark = options["--drag-mark"][-1] if options["--drag-mark"] else None
     stalls = sorted((int(a[0]), int(a[1]), int(a[2]) if len(a) >= 3 else None) for path in options["--stalls"] for a in rows(path, 2))
     work = sorted((int(a[0]), int(a[1])) for path in options["--work"] for a in rows(path, 2))
     loop = sorted([(b, n) for b, n, _ in stalls] + work)
@@ -174,7 +179,7 @@ def main(argv):
         events.append((r[0], start, window, tail))
     long_limit, cpu_limit, wait_limit, detail_limit = 1.2 * period, 0.8 * period, 0.5 * period, 3 * period
 
-    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list), "anim_us": 0,
+    per = defaultdict(lambda: {"animation": new_part(), "tail": new_part(), "cpu": [], "marks": defaultdict(list), "anim_us": 0, "drags": [],
                                "held": {"frames": 0, "stalls": 0, "stall_cpu": 0.0, "stall_cpu_known": False, "work": 0, "render": 0}})
     details = []
     for name, start, window, tail in events:
@@ -185,6 +190,8 @@ def main(argv):
         for us, what in marks:
             if start - 1_000_000 < us <= tail_end:
                 acc["marks"][what].append((us - start) / 1000.0)
+            if drag_mark and what.startswith(drag_mark + ":") and start < us <= tail_end:
+                acc["drags"].append(what[len(drag_mark) + 1:])
         for t, interval in frames:
             if not start < t <= tail_end:
                 continue
@@ -233,7 +240,8 @@ def main(argv):
             return (f"{p['long']} long (compositor {p['compositor']}, client {p['client']}, other {p['other']}), "
                     f"longest {p['longest'] / 1000:.1f} ms")
 
-        marks_text = ", ".join(f"{what} {sum(v) / len(v):+.0f} ms" for what, v in sorted(a["marks"].items(), key=lambda kv: min(kv[1])))
+        marks_text = ", ".join(f"{what} {sum(v) / len(v):+.0f} ms" for what, v in sorted(a["marks"].items(), key=lambda kv: min(kv[1]))
+                               if not (drag_mark and what.startswith(drag_mark + ":")))
         print(f"{name}: animation {part_text(a['animation'])}; render CPU p50 {pct(cpu, 0.5) / 1000:.1f} ms, p95 {pct(cpu, 0.95) / 1000:.1f} ms, "
               f"max {max(cpu, default=0) / 1000:.1f} ms over {len(cpu)} renders; tail {part_text(a['tail'])}"
               + (f"; plugin phases from the animation's start (mean): {marks_text}" if marks_text else ""))
@@ -246,6 +254,10 @@ def main(argv):
         print(f"long intervals caused by the compositor, and any of {detail_limit / 1000:.0f} ms or more:")
         print("\n".join(details))
     status = 0
+    for prefix in gates:
+        if not any(name.startswith(prefix) for name in per):
+            print(f"FAIL {prefix}: not measured (no scenario of it ran), the gate cannot be judged")
+            status = 1
     for name in sorted(per):
         if not gates or not name.startswith(gates):
             continue
@@ -277,11 +289,26 @@ def main(argv):
                 continue
             base_rate = b["animation"]["compositor"] / (b["anim_us"] / 1e6)
             n, base_n = resizes.get(name, 1), resizes.get(baseline, 1)
-            per, base_per = rate / n, base_rate / base_n
-            rate_ok = per <= base_per * BASELINE_FACTOR + 1e-9
-            rate_text = (f"(b) {a['compositor']} compositor-caused long frame(s) in {seconds:.2f} s, {rate:.1f}/s, {per:.2f}/s per resized window ({n}), "
-                         f"against {baseline}'s {b['animation']['compositor']} in {b['anim_us'] / 1e6:.2f} s, {base_rate:.1f}/s, {base_per:.2f}/s per resized "
-                         f"window ({base_n}) (gate: {base_per * BASELINE_FACTOR:.2f}/s per window)")
+            if drag_mark:
+                drags = per[name]["drags"]
+                counts = set()
+                for d in drags:
+                    f, _, e = d.partition("/")
+                    counts.add((int(f), int(e)) if f.isdigit() and e.isdigit() else (-1, -1))
+                if not drags:
+                    print(f"FAIL {name}: no {drag_mark} mark in its animations, the windows it resized are unknown; {work_text}")
+                    status = 1
+                    continue
+                if any(f != e or e < 1 for f, e in counts) or len({e for _, e in counts}) != 1:
+                    print(f"FAIL {name}: not every window of the edge followed every drag ({', '.join(sorted(drags))}); {work_text}")
+                    status = 1
+                    continue
+                n = next(iter(counts))[1]
+            rate_per_window, base_per_window = rate / n, base_rate / base_n
+            rate_ok = rate_per_window <= base_per_window * BASELINE_FACTOR + 1e-9
+            rate_text = (f"(b) {a['compositor']} compositor-caused long frame(s) in {seconds:.2f} s, {rate:.1f}/s, {rate_per_window:.2f}/s per resized window ({n}), "
+                         f"against {baseline}'s {b['animation']['compositor']} in {b['anim_us'] / 1e6:.2f} s, {base_rate:.1f}/s, {base_per_window:.2f}/s per resized "
+                         f"window ({base_n}) (gate: {base_per_window * BASELINE_FACTOR:.2f}/s per window)")
         verdict = "PASS" if work_ok and rate_ok else "FAIL"
         if verdict == "FAIL":
             status = 1

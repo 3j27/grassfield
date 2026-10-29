@@ -20,9 +20,10 @@
 #                                   frame-attribution.py --gate against edge-baseline (ADR-0036 D34 as amended, the
 #                                   integrator's gate, final on 2026-10-29): (a) the plugin's own work at most 1 ms in every
 #                                   frame, (b) its compositor-caused long frames (its render, or the event loop held before
-#                                   it) per second per resized window (two here, one in the baseline) at most 1.25 times the
+#                                   it) per second per resized window (the drag's own count, the plugin's "edge-drag:F/E"
+#                                   mark: every window of the edge must follow; one in the baseline) at most 1.25 times the
 #                                   baseline's; its share on time printed as information (the apps redraw at their own
-#                                   pace); no frame in its animation fails
+#                                   pace); no frame in its animation, or the scenario not measured, fails
 #   edge-baseline                   the same two windows arranged again, the left one's right border dragged by Hyprland's own
 #                                   resize_on_border, outside the handle (40 px below the surface tops), with the same glide:
 #                                   what Hyprland's own live resize costs here; information, the shared edge's reference.
@@ -105,9 +106,9 @@ else
 fi
 
 # The frames presented since the last collection, appended as "<monotonic us> <interval us>"; for the attribution, the
-# render spans of the output ("<begin us> <cpu us>"), the plugin's phase marks ("<us> <name>"), the event loop's stalls and
-# the plugin's own work ("<begin us> <length us>": a stall before a render reads as a late client without them) since then
-# too, and the most beats the loop probe ran.
+# render spans of the output ("<begin us> <cpu us>"), the plugin's phase marks ("<us> <name>"), the event loop's stalls
+# ("<begin us> <length us> <main thread's cpu us>") and the plugin's own work ("<begin us> <length us>": a stall before a
+# render reads as a late client without them) since then too, and the most beats the loop probe ran.
 last=0 last_render=0 last_mark=0 last_stall=0 last_work=0 beats=0
 collect() {
   local answer=$out/frames-$(date +%s%N).json
@@ -122,7 +123,7 @@ collect() {
   last_render=$(jq -r --arg o "$VS_OUTPUT" '[.monitors[] | select(.name == $o) | (.renders // [])[-1][0]][0] // 0' "$answer")
   jq -r --argjson last "$last_mark" '(.marks // [])[] | select(.t > $last) | "\(.t) \(.what)"' "$answer" >>"$out/marks.all"
   last_mark=$(jq -r '[(.marks // [])[-1].t][0] // 0' "$answer")
-  jq -r --argjson last "$last_stall" '(.loop.stalls // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/stalls.all"
+  jq -r --argjson last "$last_stall" '(.loop.stalls // [])[] | select(.[0] > $last) | map(tostring) | join(" ")' "$answer" >>"$out/stalls.all"
   last_stall=$(jq -r '[(.loop.stalls // [])[-1][0]][0] // 0' "$answer")
   jq -r --argjson last "$last_work" '(.loop.work // [])[] | select(.[0] > $last) | "\(.[0]) \(.[1])"' "$answer" >>"$out/work.all"
   last_work=$(jq -r '[(.loop.work // [])[-1][0]][0] // 0' "$answer")
@@ -281,7 +282,7 @@ rc=${PIPESTATUS[0]}
 touch "$out/stalls.all" "$out/work.all"
 python3 -I "$VS_HERE/frame-attribution.py" "$out/frames.txt" "$out/renders.all" "$out/marks.all" "$out/events.anim" "$hz" "$window" \
   --stalls="$out/stalls.all" --work="$out/work.all" --beats="$beats" --gate=shared-edge --baseline=edge-baseline \
-  --resizes=shared-edge=2 --resizes=edge-baseline=1 | tee "$out/attribution.txt"
+  --drag-mark=edge-drag --resizes=edge-baseline=1 | tee "$out/attribution.txt"
 arc=${PIPESTATUS[0]}
 ((arc == 1)) && rc=1
 exit "$rc"
