@@ -765,14 +765,17 @@ TestCase {
         compare(AutoHide.initial(false).visible, 1);
     }
 
-    // The reveal waits for the surface to have the size of the settled edge.
-    function test_placedNeedsTheSizeOfTheEdge() {
-        verify(Geometry.placed("bottom", 1920, 190, 190, 1920, 1080));
-        verify(!Geometry.placed("left", 1920, 190, 190, 1920, 1080), "still the bottom-edge surface after the edge became left");
-        verify(Geometry.placed("left", 190, 1080, 190, 1920, 1080));
-        verify(Geometry.placed("right", 190.4, 1080, 190, 1920, 1080), "rounding");
-        verify(!Geometry.placed("bottom", 0, 0, 190, 1920, 1080), "not configured yet");
-        verify(!Geometry.placed("bottom", 1920, 190, 0, 1920, 1080));
-        verify(!Geometry.placed("bottom", 1920, 190, 190, 0, 0));
+    // The reveal waits for the surface to have the shape of the settled edge (the real surfaces: a bottom Dock is as wide as the
+    // output, a side one as tall as the output less the menu bar's reserved strip, 1044 on 1080 as in the metrics test above).
+    function test_placedNeedsTheShapeOfTheEdge() {
+        verify(Geometry.placed("bottom", 1920, 190, 190));
+        verify(Geometry.placed("left", 300, 1044, 300), "a side surface is shorter than the output");
+        verify(Geometry.placed("right", 300, 1044, 300));
+        verify(Geometry.placed("right", 300.4, 1044, 300), "rounding");
+        verify(!Geometry.placed("left", 1920, 190, 190), "still the bottom-edge surface after the edge became left");
+        verify(!Geometry.placed("bottom", 300, 1044, 300), "still the left-edge surface after the edge became bottom");
+        verify(!Geometry.placed("bottom", 0, 0, 190), "not configured yet");
+        verify(!Geometry.placed("bottom", 1920, 190, 0));
+        verify(!Geometry.placed("left", 300, 200, 300), "not longer than across");
     }
 }

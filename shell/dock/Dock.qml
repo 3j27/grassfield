@@ -109,7 +109,10 @@ Scope {
     // Enter keyboard mode and focus the first tile.
     function enterKeyboardMode(): void {
         // The Dock never takes the keyboard over the lock screen (GF-116).
-        if (SessionState.refuses("dock keyboard") || !settled)
+        if (SessionState.refuses("dock keyboard"))
+            return;
+        // Not on a Dock that is not revealed yet (invisible: it would take the keyboard for nothing).
+        if (!windows.instances.some(w => w.screenName === root.dockScreen && w.reveal))
             return;
         keyboardScreen = dockScreen;
         keyboardMode = true;
@@ -1299,12 +1302,18 @@ Scope {
             // (exclusive zone 0); at `reveal` all of that switches in one frame.
             // Revealed once the first layout is final (root.settled) and the surface has the size of the settled edge (`placed`:
             // the compositor answers an anchor change with a new size a frame or two later); the timer lets go of `placed`.
-            readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth, screen.width, screen.height)
+            readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth)
             property bool placedGivenUp: false
-            readonly property bool reveal: root.settled && (placed || placedGivenUp)
+            readonly property bool revealWanted: root.settled && (placed || placedGivenUp)
+            // Latched: a later change of the Dock's edge (Settings) re-places the surface but never hides the Dock.
+            property bool reveal: false
+            onRevealWantedChanged: {
+                if (revealWanted)
+                    reveal = true;
+            }
             Timer {
                 interval: Tokens.dockSettleTimeout
-                running: root.settled && !win.placed && !win.placedGivenUp
+                running: root.settled && !win.reveal && !win.placedGivenUp
                 onTriggered: win.placedGivenUp = true
             }
             anchors {
@@ -1318,7 +1327,7 @@ Scope {
             implicitWidth: vertical ? depth : 0
             implicitHeight: vertical ? 0 : depth
             // Only the Dock's output reserves room, and not while auto-hide is on.
-            exclusiveZone: root.settled && isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
+            exclusiveZone: reveal && isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
@@ -1397,6 +1406,8 @@ Scope {
             property string screenName: ""
             Component.onCompleted: {
                 screenName = win.modelData.name;
+                if (revealWanted)
+                    reveal = true;
                 Compositor.registerDock(screenName, win);
                 // An output that does not have the Dock starts with it slid out of sight.
                 if (!isDockScreen)
