@@ -3,7 +3,7 @@ Status: Proposed (owner brief "Cohérence et finition", 2026-10-29, step 0: docs
 on 2026-10-29 (AskUserQuestion), recorded in "Owner decisions (2026-10-29)"; revised after the integrator's review of step 0
 (FAIL: one MAJOR, four MINORs; "Review history"); the steps start one pull request each ·
 Date: 2026-10-29 · Decider: owner (Q1 to Q8), integrator (the steps, the review, the nested pass) · Number: 0039 (free on
-main 11c9e69 and on the open pull requests #41 and #43)
+main 11c9e69 when step 0 began; #41 and #43, open then, have merged since)
 
 Builds on ADR-0024 (macOS 27 structure, macOS 26 glass) and does not change its direction or its values: it closes the
 seams ADR-0024's lots left between surfaces, and the places where an accessibility setting stops short. Measurements:
@@ -107,7 +107,7 @@ few files), M (a surface family).
 
 | # | Step | Where | When | Verify | Size | Closes |
 |---|---|---|---|---|---|---|
-| 0b | **Gate A2's role table:** the 15 undeclared uses of audit §3.7.5 added to the roles that already cover them (exempt ones with their reason), `test_contrast_tokens.py` added to `just check-quick`; the three `shell/security` entries confirmed by the security reviewer (no security code changes) | `tests/visual/contrast-roles.json`, `justfile` | first; on main after the menu bar's band fix (fix/bar-tone-video) merges, which updates its own two entries | `test_contrast_tokens.py` exit 0; `just check-quick` fails with a planted undeclared use | S | G24 |
+| 0b | **Gate A2's role table:** the 15 undeclared uses of audit §3.7.5 added to the roles that already cover them (exempt ones with their reason), `test_contrast_tokens.py` added to `just check-quick`; the three `shell/security` entries confirmed by the security reviewer (no security code changes) | `tests/visual/contrast-roles.json`, `justfile` | first, now (the menu bar's band fix, fix/bar-tone-video, merged in 1048307 with its own entries) | `test_contrast_tokens.py` exit 0; `just check-quick` fails with a planted undeclared use | S | G24 |
 | 1 | **Increase Contrast and pixel grid in the shared controls:** no border around the bezel-less inline pop-up (only its chevron disc), its disc on whole pixels; Toggle, Switch and Slider outlined under Increase Contrast; the check box label and the right-aligned menu shortcuts on whole pixels | `ui/Grassfield/Ui/ComboBox.qml`, `Toggle.qml`, `Switch.qml`, `Slider.qml`, `CheckBox.qml`, `MenuItem.qml`; `tests/unit/tst_pixelgrid.qml` and an Increase Contrast case | free, now | renders (`tools/run.sh`), unit tests, A2 | S | G8, G9, G23 |
 | 2 | **CI guard for literals:** `tests/ci/qml_literals.py` from the audit's tool, run by `just check-quick`; zero literal radius, font size, opacity, geometry value and animation duration; the 20 colours and the timers allowlisted; the OSD's hide delay to a token | `tests/ci/`, `tests/inventory.json`, `justfile`, `shell/osd/Osd.qml`, `tokens.json` | free, now | the guard fails on a planted literal | S | rule 6 |
 | 3 | **Preview's window and settings:** `windowSurface`, window neutrals in Viewer and Glance, `windowSecondary`, text selection in `highlight`, Increase Contrast and Text size read by the backend and bound (Q7) | `apps/preview/qml/Viewer.qml`, `Glance.qml`, `Theme.qml`, `TextView.qml`, `apps/preview/src/previewapp.{h,cpp}` | free, now | build, unit tests, a render or nested capture | S–M | G11 (part), G12 |
@@ -180,7 +180,7 @@ secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Ev
 **Q4. One green for "on" in the dark appearance.** Switches and slider fills use the bright green #4FB36B; checkboxes,
 radio buttons, default buttons and selected rows the deeper #2E8049 chosen for white text (owner decision of 2026-10-26).
 - (a) Switches and slider fills on #2E8049 too (each accent's dark selection fill). Pros: one green for "on"; the white knob
-  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.50–2.77:1 to 4.85–4.89:1 for every other accent but yellow. Cons: a
+  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.82–2.77:1 to 4.85–4.89:1 for every other accent but yellow. Cons: a
   darker switch than macOS's bright one; with the yellow accent the knob stays under 3:1 (2.02:1 on #E0B000, 1.50:1 today),
   because the yellow pair keeps dark marks.
 - (b) Keep both greens. Pros: brighter switches. Cons: two greens side by side in one Settings row; the knob under 3:1.
