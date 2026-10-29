@@ -178,7 +178,11 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   on it, sends `unsplit` for the Exit Full Screen of a member, and `tile(address, "fill")` for a member still waiting once
   its picker is no longer pending (dismissed, refused, timed out). `tile` (except that Fill of a lone member) and
   `arrange` refuse a member (`reason:"invalid"`), and `tile(…, "previous")` does nothing for one: its Desktop places it
-  (integrator review of c7a6b6e).
+  (integrator review of c7a6b6e). The `tile-hover` event's `enter` and `open` add `splittable` (the window can be tiled
+  now and fits either half of its output's Split View Desktop, its minimum size with its titlebar band: the popover greys
+  Left and Right of Screen otherwise); `split`, and a pick into the other half of a Split View Desktop, refuse a window
+  that does not fit its half (`reason:"invalid"`), and the suggestion of that half offers only windows that fit
+  (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -205,7 +209,7 @@ event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
-event tile-hover: address state x y w h tileable
+event tile-hover: address state x y w h tileable splittable
 event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:

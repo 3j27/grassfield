@@ -87,6 +87,10 @@ namespace gf::tiler {
     // `w` can be tiled now (TL9): what the tiling popover greys when not (the tile-hover event's "tileable").
     bool tileable(const PHLWINDOW& w);
 
+    // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
+    // popover greys Left and Right of Screen otherwise; split refuses it).
+    bool splittable(const PHLWINDOW& w);
+
     // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
     // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
     // the address and the output are compared with the live ones. Refused while locked (reason "locked") and for an

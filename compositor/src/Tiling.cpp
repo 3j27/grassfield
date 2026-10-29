@@ -628,15 +628,17 @@ namespace gf::tiler {
             const auto*   split = tiling::splitOf(s.splits, m->m_activeWorkspace->m_id);
             const int64_t from  = split ? split->home : m->m_activeWorkspace->m_id;
             const auto&   all   = Desktop::windowState()->windows(); // bottom to top
+            // A Split View's other half takes only a window that fits it (TL8; nested pass of 1ee992e, MAJOR C: no overlap).
+            const auto fits = [&](const PHLWINDOW& w) { return !split || tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
             for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
                 const auto& w = *it;
-                if (w && w->m_workspace && w->m_workspace->m_id == from && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)))
+                if (w && w->m_workspace && w->m_workspace->m_id == from && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)) && fits(w))
                     sg.windows.push_back(idOf(w));
             }
             for (const auto id : gf::minimizer::minimizedFrom(m->m_name)) {
                 if (sg.windows.size() >= tiling::kMaxSuggested)
                     break;
-                if (tileableKind(windowById(id)) && !inLayout(id))
+                if (const auto w = windowById(id); tileableKind(w) && !inLayout(id) && fits(w))
                     sg.windows.push_back(id);
             }
             if (sg.windows.empty())
@@ -952,6 +954,14 @@ namespace gf::tiler {
             if (ws && ws->m_monitor)
                 return ws->m_monitor.lock();
             return monitorByName(d.output);
+        }
+
+        // The frame of half `zone` (0 left, 1 right) of a Split View Desktop on `m` (core splitArea, D42).
+        tiling::Rect splitHalf(const PHLMONITOR& m, int zone) {
+            const CBox  whole = m->logicalBox();
+            const auto  area  = tiling::splitArea(toRect(whole), tiling::Grid{.originX = whole.x, .originY = whole.y, .step = tiling::gridStep(m->m_scale)});
+            const auto* lr    = tiling::layoutById("left-right");
+            return tiling::zoneFrame(lr->zones[static_cast<size_t>(zone == 1 ? 1 : 0)], area);
         }
 
         // The suggestion of the Split View that window `id` started is still pending (published, nothing changed since): its
@@ -1660,6 +1670,11 @@ namespace gf::tiler {
         return placeable(w);
     }
 
+    bool splittable(const PHLWINDOW& w) {
+        const auto m = placeable(w) ? monitorOf(w) : nullptr;
+        return m && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 0)) && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 1));
+    }
+
     void moveToRequest(std::string_view addressText, std::string_view outputName) {
         if (gf::deferredFocus::sessionLocked()) {
             logRequest(Log::WARN, "move_to: refused: the session is locked");
@@ -1890,6 +1905,10 @@ namespace gf::tiler {
         }
         if (gf::stager::stripColumnRight(m)) {
             refuse("Stages shows its strip on that output (ADR-0036 D47)");
+            return;
+        }
+        if (!tiling::fitsFrame(constraintsOf(w), splitHalf(m, *zone))) {
+            refuse("the window does not fit half of the output (TL8; the popover greys the halves)");
             return;
         }
         catchUp();
@@ -2123,6 +2142,10 @@ namespace gf::tiler {
             const auto held = tiling::zonesHeld(s.book.records(), *r);
             if (std::ranges::find(held, zone) != held.end()) {
                 refuse(std::format("zone {} of {} is held", zone, request->layout));
+                return;
+            }
+            if (tiling::splitOfWindow(s.splits, *request->with) && !tiling::fitsFrame(constraintsOf(windows.front()), splitHalf(m, zone))) {
+                refuse("the window does not fit the other half of the Split View (TL8)");
                 return;
             }
         }

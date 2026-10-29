@@ -1320,6 +1320,11 @@ namespace gf::tiling {
         return Area{.box = Rect{output.x - kMargin, output.y - kMargin, output.w + 2 * kMargin, output.h + 2 * kMargin}, .margin = kMargin, .grid = grid};
     }
 
+    bool fitsFrame(const Constraints& c, const Rect& frame) {
+        constexpr double kSlack = 0.5; // half a logical pixel of rounding (the frames lie on the device-pixel grid)
+        return c.minW <= frame.w + kSlack && c.minH + c.band <= frame.h + kSlack;
+    }
+
     int64_t nextDesktopId(std::span<const int64_t> ids) {
         int64_t top = 0;
         for (const auto id : ids)
@@ -1425,12 +1430,13 @@ namespace gf::tiling {
         return "leave";
     }
 
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable) {
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable, bool splittable) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
         if (state != HoverState::Leave)
-            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable);
+            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{},"splittable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable,
+                               splittable);
         out += '}';
         return out;
     }

@@ -173,7 +173,8 @@ namespace gf::tiling {
         Open,
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false);
+    // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false);
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -609,6 +610,10 @@ namespace gf::tiling {
     // The area of a Split View Desktop (ADR-0036 D42): the whole output `output` (no menu bar, Dock or Stages strip), its two
     // halves one tiling margin apart and no margin at the outer edges, whatever the margins switch says; `grid` the output's.
     Area splitArea(const Rect& output, const Grid& grid);
+
+    // A window with limits `c` fits `frame` (titlebar included, layout coordinates): its minimum surface with its band inside
+    // (TL8). A Split View half too narrow for it is refused rather than overlapped (integrator nested pass of 1ee992e, MAJOR C).
+    bool fitsFrame(const Constraints& c, const Rect& frame);
 
     // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
     // the Overview's "+" does (ADR-0036 D41); 1 when there is none.

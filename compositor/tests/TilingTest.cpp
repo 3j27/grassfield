@@ -981,10 +981,10 @@ TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {
 
 TEST(TilingHover, TheEventIsSmall) {
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Enter, Rect{1500, 40, 18.6667, 18.6667}, true),
-              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true})")
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true,"splittable":false})")
         << "one decimal, as the state reply";
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, false),
-              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false})");
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false,"splittable":false})");
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Leave, Rect{1, 2, 3, 4}, true), R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"leave"})")
         << "leave carries no box";
     EXPECT_LT(tileHoverJson(UINT64_MAX, HoverState::Enter, Rect{-99999.5, -99999.5, 99999.5, 99999.5}, true).size(), 200U);
@@ -1439,6 +1439,21 @@ TEST(TilingSplit, MembersFollowTheirWorkspace) {
     EXPECT_EQ(splits[0].members, (std::vector<uint64_t>{0xb2}));
     EXPECT_TRUE(pruneMembers(splits[0], std::vector<uint64_t>{}));
     EXPECT_TRUE(splits[0].members.empty());
+}
+
+// MAJOR C of the nested pass of 1ee992e: a window whose minimum does not fit its half is refused (no overlap); the band counts
+// in the height; the event says whether the window fits (the popover greys the halves).
+TEST(TilingSplit, AWindowTooWideForAHalfDoesNotFit) {
+    const auto& zones = layoutById("left-right")->zones;
+    const Area  one   = splitArea(Rect{0, 0, 1920, 1080}, Grid{0, 0, 1});
+    const Rect  half  = zoneFrame(zones[0], one); // 956 x 1080
+    EXPECT_TRUE(fitsFrame(Constraints{}, half));
+    EXPECT_TRUE(fitsFrame(Constraints{.minW = 956, .minH = 1050, .band = 30}, half)) << "exactly the half";
+    EXPECT_FALSE(fitsFrame(Constraints{.minW = 1200, .minH = 400}, half)) << "the nested case: 1200 on a 956 half";
+    EXPECT_FALSE(fitsFrame(Constraints{.minW = 957, .minH = 1}, half));
+    EXPECT_FALSE(fitsFrame(Constraints{.minW = 400, .minH = 1060, .band = 30}, half)) << "the band takes height";
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, true, true),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true})");
 }
 
 // D43: two members stay; one fills alone unless it is still choosing its second window; none ends the Desktop.

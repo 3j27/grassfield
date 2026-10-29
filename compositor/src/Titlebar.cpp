@@ -189,8 +189,13 @@ namespace {
     // The minimize path, shared by the minimize button and a double-click set to "minimize": the shell owns
     // the Dock tile rectangle, so it is asked to minimize (it answers with hl.plugin.grassfield.minimize, or
     // parks the window on special:minimized itself when the plugin lacks the feature). Clicks can come from a
-    // virtual pointer at any rate: the request is coalesced per window (spec FR24).
+    // virtual pointer at any rate: the request is coalesced per window (spec FR24). A member of a Split View Desktop is not
+    // minimized: its minimize light is grey, as in full screen (macOS; ADR-0036 D56).
     void requestMinimize(const PHLWINDOW& w) {
+        if (gf::tiler::inSplit(w)) {
+            gf::logRequest(Log::DEBUG, "titlebar minimize: refused for a Split View member (D56)");
+            return;
+        }
         gf::ipc::postMinimizeRequest(reinterpret_cast<uintptr_t>(w.get()));
     }
 
@@ -436,7 +441,7 @@ namespace {
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.leave, gf::tiling::HoverState::Leave));
         if (change.enter && w && gf::state().tilingLayouts) // off (TL32): Super+Ctrl+L and the Window menu still open it
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.enter, gf::tiling::HoverState::Enter, gf::tiling::Rect{light.x, light.y, light.w, light.h},
-                                                              gf::tiler::tileable(w)));
+                                                              gf::tiler::tileable(w), gf::tiler::splittable(w)));
     }
 
     void armZoomTimer(uint64_t ms);
@@ -651,7 +656,8 @@ void CGrassfieldTitlebar::popoverRequest(std::string_view address) {
     const double band  = gf::chrome::bandOf(w);
     const CBox light   = zoomLightOf(w).value_or(CBox{surface.x, surface.y - band, theme::kTitlebarHeight, theme::kTitlebarHeight});
     gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::TileHover, .id = 0},
-                       gf::tiling::tileHoverJson(*id, gf::tiling::HoverState::Open, gf::tiling::Rect{light.x, light.y, light.w, light.h}, gf::tiler::tileable(w)));
+                       gf::tiling::tileHoverJson(*id, gf::tiling::HoverState::Open, gf::tiling::Rect{light.x, light.y, light.w, light.h}, gf::tiler::tileable(w),
+                                                 gf::tiler::splittable(w)));
 }
 
 SDecorationPositioningInfo CGrassfieldTitlebar::getPositioningInfo() {
@@ -835,7 +841,7 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     //    (drawBar). The pointer is checked again here: the window may have moved or gone under a pointer that has not moved
     //    since.
     const bool hovered = pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
-    drawBar(w, bar, scale, rounding, power, alpha, hovered, false);
+    drawBar(w, bar, scale, rounding, power, alpha, hovered, gf::tiler::inSplit(w)); // a member's lights are those of full screen (D56)
 
     // 2. The surface's rounded top corners, under the surface: Hyprland cuts them away with the window's rounding, so the
     //    bar colour fills them, then the content's own pixels are drawn there unrounded (macOS: bar and content are one
