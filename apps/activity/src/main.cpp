@@ -110,13 +110,7 @@ int main(int argc, char *argv[])
     if (window) {
         new activity::ShownWatch(window, &backend);
         QObject::connect(&service, &activity::ActivityService::activateRequested, window, [window](const QString &token) {
-            // Qt's Wayland window takes XDG_ACTIVATION_TOKEN for its next activation request (xdg-activation-v1).
-            if (!token.isEmpty())
-                qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
-            window->setWindowStates(window->windowStates() & ~Qt::WindowMinimized);
-            window->show();
-            window->raise();
-            window->requestActivate();
+            activity::activateWindow(window, token, [] { activity::askShellToReopen(); });
         });
     }
     return app.exec();

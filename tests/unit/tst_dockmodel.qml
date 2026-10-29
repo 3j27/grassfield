@@ -47,6 +47,20 @@ TestCase {
         compare(list[0].windows.length, 0);
     }
 
+    // `dock reopen <id>` (ADR-0038 AD34): the windows of the app's tile, the fixed Files tile included; none for an app the
+    // Dock has no tile for, or an empty id.
+    function test_windowsOfAnApp() {
+        const split = DockModel.splitFiles(DockModel.merge(["chromium"], [{appId: "foot", ref: "f1"}, {appId: "org.grassfield.Files", ref: "x1"}], lookup), lookup);
+        const items = DockModel.withFixed(split.files, split.rest);
+        compare(DockModel.windowsOf(items, "foot").join(","), "f1");
+        compare(DockModel.windowsOf(items, "Foot.desktop").join(","), "f1");
+        compare(DockModel.windowsOf(items, "org.grassfield.Files").join(","), "x1");
+        compare(DockModel.windowsOf(items, "chromium").length, 0); // pinned, not running
+        compare(DockModel.windowsOf(items, "ghost").length, 0);
+        compare(DockModel.windowsOf(items, "").length, 0);
+        compare(DockModel.windowsOf(items, "grid").length, 0); // the Apps tile's key is no app
+    }
+
     function test_tailIsSeparatorThenTrash() {
         const list = DockModel.withTail(DockModel.merge(["foot"], [], lookup));
         compare(list.map(i => i.kind).join(","), "app,separator,trash");

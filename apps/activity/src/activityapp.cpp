@@ -12,6 +12,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QTime>
 
 #include <pwd.h>
@@ -483,6 +484,35 @@ void ActivityApp::readAppearance()
         m_shortcutStyle = shortcuts;
         emit appearanceChanged();
     }
+}
+
+QStringList reopenCommand()
+{
+    const QStringList ipc = grassfield::apps::runmode::shellIpcArgs();
+    if (ipc.isEmpty())
+        return {};
+    return QStringList{QStringLiteral("qs")} + ipc
+        + QStringList{QStringLiteral("dock"), QStringLiteral("reopen"), QStringLiteral("org.grassfield.Activity")};
+}
+
+void askShellToReopen()
+{
+    const QStringList command = reopenCommand();
+    if (command.isEmpty())
+        return;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    for (const QString &key : env.keys()) {
+        if (key.startsWith(QLatin1String("QS_")))
+            env.remove(key);
+    }
+    env.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
+    QProcess process;
+    process.setProcessEnvironment(env);
+    process.setProgram(command.first());
+    process.setArguments(command.mid(1));
+    process.setStandardOutputFile(QProcess::nullDevice());
+    process.setStandardErrorFile(QProcess::nullDevice());
+    process.startDetached();
 }
 
 QString ActivityService::serviceName()

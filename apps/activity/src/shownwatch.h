@@ -6,6 +6,8 @@
 #include <QObject>
 #include <QWindow>
 
+#include <functional>
+
 namespace activity {
 
 // AM8, AD35: the window is on screen when it is visible, exposed and not minimized; the backend samples only then. Hidden
@@ -41,5 +43,21 @@ private:
     QWindow *m_window;
     ActivityApp *m_backend;
 };
+
+// AM1, AD34: a second launch's activation. Qt's next activation request takes the token (xdg-activation-v1); the window is
+// shown and raised. Off screen (minimized, or on another Desktop: the compositor suspends it, AD35), `reopen` asks the
+// shell's Dock to bring it back, which xdg-activation alone does not do for a window on special:minimized.
+inline void activateWindow(QWindow *window, const QString &token, const std::function<void()> &reopen)
+{
+    const bool offScreen = !window->isExposed() || window->visibility() == QWindow::Minimized;
+    if (!token.isEmpty())
+        qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
+    window->setWindowStates(window->windowStates() & ~Qt::WindowMinimized);
+    window->show();
+    window->raise();
+    window->requestActivate();
+    if (offScreen && reopen)
+        reopen();
+}
 
 } // namespace activity

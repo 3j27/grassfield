@@ -159,6 +159,14 @@ private:
     QLocale m_formats;
 };
 
+// AD34: launched again while its window is not on screen, the app asks the shell's Dock to bring it back, as a click on
+// its tile does (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`): xdg-activation switches to another
+// Desktop but leaves a window on special:minimized. Empty when there is no shell to call (a dev session that names none:
+// the installed shell is never driven from it, apps/runmode.h).
+QStringList reopenCommand();
+// Runs reopenCommand() detached, without the QS_* variables (the shell is named by its directory) or a spent token.
+void askShellToReopen();
+
 // AM1: one instance. The running app owns org.grassfield.Activity on the session bus (".Dev" in a dev session, which
 // shares the owner's bus); a second launch calls Activate with its activation token and leaves.
 class ActivityService : public QObject

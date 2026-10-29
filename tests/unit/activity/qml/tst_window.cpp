@@ -253,6 +253,18 @@ TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)
     w.win->showNormal();
     ASSERT_TRUE(QTest::qWaitFor([&] { return w.backend->processSamples() > minimized; }, 3000));
 
+    // AD34: launched again while suspended (minimized, on another Desktop), the app asks the Dock to bring it back, and
+    // Qt's next activation request takes the token; on screen, the token alone.
+    int reopens = 0;
+    suspend(w.win, true);
+    activateWindow(w.win, QStringLiteral("token-1"), [&] { ++reopens; });
+    EXPECT_EQ(reopens, 1);
+    EXPECT_EQ(qgetenv("XDG_ACTIVATION_TOKEN"), "token-1");
+    suspend(w.win, false);
+    activateWindow(w.win, QString(), [&] { ++reopens; });
+    EXPECT_EQ(reopens, 1);
+    qunsetenv("XDG_ACTIVATION_TOKEN");
+
     // AM2: the size it closes at is the one it opens at.
     w.win->resize(700, 400);
     w.win->close();

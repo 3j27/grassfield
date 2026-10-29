@@ -269,3 +269,29 @@ TEST(ActivityState, TheFileIsTheOwnersAlone)
     ASSERT_EQ(::stat(QFile::encodeName(path).constData(), &st), 0);
     EXPECT_EQ(st.st_mode & 07777, 0600u);
 }
+
+// AD34: launched again while its window is off screen, the app asks the shell's Dock to bring it back; a dev session that
+// names no shell never drives the installed one.
+TEST(ActivityService, ReopenAsksTheShellsDock)
+{
+    const QByteArray dev = qgetenv("GRASSFIELD_DEV"), session = qgetenv("GRASSFIELD_SESSION"), shell = qgetenv("GRASSFIELD_SHELL_DIR");
+    qunsetenv("GRASSFIELD_SESSION");
+    qputenv("GRASSFIELD_DEV", "1");
+    qputenv("GRASSFIELD_SHELL_DIR", "/repo/shell");
+    EXPECT_EQ(reopenCommand(), (QStringList{QStringLiteral("qs"), QStringLiteral("ipc"), QStringLiteral("-p"), QStringLiteral("/repo/shell"),
+                                            QStringLiteral("call"), QStringLiteral("dock"), QStringLiteral("reopen"),
+                                            QStringLiteral("org.grassfield.Activity")}));
+    qunsetenv("GRASSFIELD_SHELL_DIR");
+    EXPECT_TRUE(reopenCommand().isEmpty());
+    qunsetenv("GRASSFIELD_DEV");
+    EXPECT_EQ(reopenCommand().value(3), QStringLiteral("/usr/share/grassfield/shell")); // the installed shell
+    auto restore = [](const char *name, const QByteArray &value) {
+        if (value.isNull())
+            qunsetenv(name);
+        else
+            qputenv(name, value);
+    };
+    restore("GRASSFIELD_DEV", dev);
+    restore("GRASSFIELD_SESSION", session);
+    restore("GRASSFIELD_SHELL_DIR", shell);
+}
