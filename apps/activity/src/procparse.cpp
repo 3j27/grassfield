@@ -293,7 +293,7 @@ bool parseIo(std::string_view text, IoFields &out)
     // at every sample (review of f68789c).
     const char *p = text.data();
     const char *const end = p + text.size();
-    int seen = 0;
+    unsigned seen = 0; // one bit per byte field: both are needed, each once (mutant R13 of the review of 19f5d4c)
     while (p < end) {
         const char *key = p;
         while (p < end && *p != ':' && *p != '\n')
@@ -307,10 +307,10 @@ bool parseIo(std::string_view text, IoFields &out)
             if (statNumber(p, end, v)) {
                 if (k == "read_bytes") {
                     out.readBytes = v;
-                    ++seen;
+                    seen |= 1u;
                 } else if (k == "write_bytes") {
                     out.writeBytes = v;
-                    ++seen;
+                    seen |= 2u;
                 } else if (k == "rchar") {
                     out.rchar = v;
                 } else if (k == "wchar") {
@@ -328,7 +328,7 @@ bool parseIo(std::string_view text, IoFields &out)
             ++p;
         ++p;
     }
-    return seen == 2;
+    return seen == 3u;
 }
 
 std::string parseCgroupV2(std::string_view text)

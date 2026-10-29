@@ -3325,4 +3325,33 @@ QtObject {
     readonly property int softwareUpdateRunStartMs: 10000
     // a run whose state says it started up to this long before Update Now was clicked is that click's (the runner's clock is in whole seconds) (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
     readonly property int softwareUpdateRunClockSlackMs: 2000
+
+    // estimate: the window wide enough for the CPU tab's eight default columns (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityWindowWidth: 980
+    // estimate: the window's default height (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityWindowHeight: 620
+    // estimate: the name and three columns, as Files' minimum (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityWindowMinWidth: 600
+    // estimate: the toolbar and about ten rows, as Files' minimum (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityWindowMinHeight: 360
+    // list row 20, as Files' list view (F1 gap 17: list row 20 +-0.5) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/activity.md]
+    readonly property int activityRowHeight: 20
+    // the list header, as Files' list view [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityHeaderHeight: 26
+    // the sort arrow in a header, as Files' list view [ref: docs/specs/activity.md; docs/specs/files.md]
+    readonly property int activityChevronSize: 10
+    // the row's icon, 16 pt (spec AM10) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityIconSize: 16
+    // estimate: the Process Name column (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityNameColumnWidth: 220
+    // estimate: a value column, wide enough for "0:01:23.45" and "123.4 MB" (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityColumnWidth: 92
+    // estimate: the Command column (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCommandColumnWidth: 320
+    // own value: a column dragged narrower stops here, its header still readable [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityColumnMinWidth: 40
+    // the toolbar's search field: Files' expanded capsule less 20, beside the five tabs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activitySearchWidth: 180
+    // the alternate rows' fill opacity, as Files' list stripes (spec AM7) [ref: docs/specs/activity.md; docs/specs/files.md]
+    readonly property real activityRowAlternate: 0.04
 }

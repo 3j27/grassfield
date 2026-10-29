@@ -65,12 +65,12 @@ items (Settings does it); a background collector; any network access.
 
 ## Functional requirements
 
-### Window and navigation (step 2)
-- **AM1** One instance: launching the app while it runs brings its main window to the front (the mechanism Settings and the
-  Store use). Closing the main window quits the app (AD17).
-- **AM2** The main window opens at its last frame (`activity.json`), else at the token size `activity.windowWidth` ×
-  `activity.windowHeight`, never smaller than `activity.windowMinWidth` × `activity.windowMinHeight`. Opaque window, ADR-0024
-  radius, unified toolbar (ADR-0015).
+### Window and navigation (step 2a)
+- **AM1** One instance: launching the app while it runs brings its main window to the front, with the launch's activation
+  token (ADR-0038 AD34: the session bus name `org.grassfield.Activity`). Closing the main window quits the app (AD17).
+- **AM2** The main window opens at its last size (`activity.json`; Wayland places windows, so there is no position), else at
+  the token size `activity.windowWidth` × `activity.windowHeight`, never smaller than `activity.windowMinWidth` ×
+  `activity.windowMinHeight`. Opaque window, ADR-0024 radius, unified toolbar (ADR-0015).
 - **AM3** Toolbar, left to right: the traffic lights; the title (the app's name) with the current view as subtitle; the
   Stop button (Quit Process, enabled with a selection of own processes); the Info button (Inspect, enabled with one row);
   the action menu (…: Quit Process, Inspect Process, Send Signal to Process…, Efficiency Mode, Copy); the segmented control
@@ -86,12 +86,14 @@ items (Settings does it); a background collector; any network access.
   `activity.graphWrite`, `activity.graphIn`, `activity.graphOut`, `activity.pressureGreen`, `activity.pressureYellow`,
   `activity.pressureRed`), each holding A2's 3:1 against the graph's background in both appearances.
 - **AM8** While the window is hidden or minimized no per-process sample is taken (AM-P3). Back on screen, the next sample
-  comes at once; rates restart from it (no rate is drawn from a gap).
+  comes at once; rates restart from it (no rate is drawn from a gap): its rate columns show "—", and the sample after it
+  comes one second later rather than a whole interval (ADR-0038 AD35).
 - **AM9** View > Update Frequency: Very Often (1 sec), Often (2 sec), Normally (5 sec), default Normally; the choice is
   remembered and applies to every window of the app.
 
-### The table (step 2)
-- **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt), the name,
+### The table (step 2a; Hierarchically and the grouped views at step 2b)
+- **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt; ADR-0038
+  AD36: the theme icon its launch unit's desktop entry names), the name,
   then the tab's columns; PID and User are default columns on every tab (macOS). Another owner's row is drawn like the
   others (macOS); only its actions differ (AM50). A click on a header sorts by it; a second click reverses. Defaults: CPU by % CPU, Memory by
   Memory, Energy by Energy Impact, Disk by Bytes Written, Network by Sent Bytes, each descending.
@@ -159,8 +161,8 @@ items (Settings does it); a background collector; any network access.
   file and shared memory is `RssAnon`; A10: 0.6 µs per process) and `status` of one fifth of them in turn, a new process at
   once, for `VmSwap` and `VmHWM`, which therefore show at most five samples late (AD32, review of 949fc98; step 0 read
   `status` of every process at 6.7–7.6 µs each); the other tabs read neither. The tab's first sample after another tab, or
-  after a pause of more than two intervals, reads every process's `status` once, so the bound holds when the user comes
-  back to it (review of f68789c).
+  after a pause of more than two intervals (as set, AM9; review of 19f5d4c), reads every process's `status` once, so the
+  bound holds when the user comes back to it (review of f68789c).
 - **AM31** Optional: Real Memory (`VmRSS`, `statm`'s resident), Private Memory (`RssAnon`), Shared Memory (`RssFile +
   RssShmem`, `statm`'s shared), Compressed Memory (`VmSwap`; titled Swapped Memory under AM34), Peak Memory (`VmHWM`, never
   shown below Real Memory), Page Ins (`stat` field 12, major faults), Threads, PID.
@@ -226,7 +228,8 @@ items (Settings does it); a background collector; any network access.
   (one tenth of the processes' descriptor lists per sample, a new process at its first sample); at each sample only the
   `fdinfo` of the DRM descriptors found is read: keys `drm-driver`, `drm-pdev`, `drm-client-id`, `drm-engine-<name>`,
   `drm-engine-capacity-<name>`, `drm-memory-<region>`; one client per (`drm-pdev`, `drm-client-id`) even when several
-  descriptors share it.
+  descriptors share it. Between two descriptor turns only one descriptor per client is read (its lowest), and every DRM
+  descriptor again as soon as one of those fails or names another client (ADR-0038 d).
 - **AM46** Engine share of a client = Δ`drm-engine-<name>` (ns) ÷ (Δt × capacity); % GPU of a process = its busiest engine
   (Σ over its clients, capped at 100); GPU Time = Σ of its engines' times.
 - **AM47** A system GPU's engine share = Σ over the user's clients on that `drm-pdev`, capped at 100 (the compositor is one of
@@ -239,7 +242,7 @@ items (Settings does it); a background collector; any network access.
   are not listed in this view. Step 1: each row carries the devices it is a client of (`gpuDevices`, sorted); the view is
   step 2's.
 
-### Quit, Force Quit, signals (step 2; Quit of windowed processes through the shell at step 3)
+### Quit, Force Quit, signals (step 2c; Quit of windowed processes through the shell at step 3)
 - **AM50** Actions (Quit, Force Quit, Send Signal, Efficiency Mode) apply to own processes only: with another owner's row
   or the Kernel row in the selection they are disabled, the tooltip saying "You can only quit your own processes." (no
   administrator path, AQ4). Otherwise the Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the
@@ -274,7 +277,7 @@ items (Settings does it); a background collector; any network access.
   compositor (its pid from the dev state) or named by a test fixture; any other is refused with one "dev guard" journal line
   and the sheet says "Development session: only the nested session's processes can be quit."
 
-### Inspect (step 2)
+### Inspect (step 2d)
 - **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
   request raises it), refreshed at the update frequency while open. For another owner's process the window shows what
   `stat` and `status` give (the header, the Memory tab but Proportional Memory, Threads, CPU Time, Context Switches,
@@ -449,7 +452,7 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_textclean.cpp` and `tst_sampler.cpp` (step 1; named `tst_names.cpp` before) | L0 |
 | A-S9 | AM23's and AM43's turns: one fifth of the threads and one tenth of the descriptor lists per sample, a new process at once, every process covered within five and ten samples | `tst_sampler.cpp` | L0 |
 | A-S10 | after the review of 949fc98: a name and a command line follow an exec (by `stat`'s name, and by the code addresses with the same name); a title over argv[0], a login shell and a symbolic link named as AM17 says; the owner read on arrival, exec and turn only; the turns as full whatever the pids; the Memory tab on `statm` with `status` in turns; a failed TCP dump and a failed listing change nothing | `tst_sampler.cpp`, `tst_procparse.cpp` | L0 |
-| A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen | `tests/apps/activity_window.sh` | L1 |
+| A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen; no sample while hidden; the size kept | `tests/unit/activity/qml/tst_window.cpp` (the real backend on a fixture tree, offscreen; step 2a), `tests/unit/tst_activitymain.qml` (a fake backend), `tests/unit/activity/window/` (the backend's logic) | L1 |
 | A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop | `tests/apps/activity_actions.sh` | L1 |
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
@@ -465,6 +468,9 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
   between the shell and the app; a breaking change bumps `v` and needs ADR-0038 amended.
 - IPC `activity quit` (AM61): `docs/specs/security.md` "IPC surface".
 - `activity.json` v1 (AM74): ADR-0020.
+- Session bus, served (AD34, step 2a): `org.grassfield.Activity` (`org.grassfield.Activity.Dev` in a dev session), object
+  `/org/grassfield/Activity`, interface `org.grassfield.Activity`, one method `Activate(s token)`: the window comes
+  forward with the caller's xdg-activation token (one instance, AM1).
 - Read-only D-Bus: logind `ListInhibitors`, UPower (DisplayDevice, `GetHistory`), NetworkManager (active connection name);
   read-write: the systemd user manager `SetUnitProperties` (runtime only, AM68).
 - Kernel interfaces: `/proc/<pid>/{stat,statm,status,io,cmdline,cgroup,fd,fdinfo,task,smaps_rollup,exe,cwd}`, `/proc/{stat,
@@ -488,19 +494,26 @@ contention.
 
 ## Performance (gates; one threshold per tab, from ADR-0038 A10, review of e3882de)
 The reference fixture is A10's: about 600 processes (400 of the user with 4 threads and about 17 descriptors each, 200 of
-another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. The AM-P2 thresholds below are A10's worse of
-two runs plus about 30 % on the reference machine, set by the integrator on 2026-10-28 (i5-10400H, 8 threads, kernel
-7.2.5, the owner's live session at idle, load average 2.0, outside any sandbox; pull request #40, the integrator's comment
-of 18:59 UTC). Step 0's thresholds came from the cloud machine (A10 there: 4.7, 7.7, 10.3, 5.1 and 5.2 ms; limits 6, 10,
-13, 7 and 7 ms), 3 to 6 times faster than the reference machine. Each is measured per tab, the window visible on that tab.
+another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. Since the integrator's decision on pull request
+#47 (2026-10-29; ADR-0038 "Review history"), each tab's AM-P2 limit is 1.3 × A10 reading what the sampler reads, its
+"step 1" plan: `activity_cost.sh` runs A10 before and after the product on the same fixture and takes the worse run, so a
+product more than 1.3 × its own plan fails on any machine. Disk's plan is A10's one pass over the same files in the
+sampler's order (the integrator's second decision of that day): its summed plan, parts measured alone with warm caches,
+is below what any reader of those files pays. The reference machine's figures come from the integrator's run
+at idle (load under 2) before step 2a's merge. Before that decision the limits were A10's step-0 plan, worse of two runs
+plus about 30 %, on the reference machine (i5-10400H, 8 threads, kernel 7.2.5, the owner's live session, outside any
+sandbox; pull request #40, the integrator's comment of 18:59 UTC of 2026-10-28): CPU 17, Memory 25, Energy 40, Disk 17 and
+Network 45 ms, from A10's step-0 plan of 13.0, 19.1, 30.8, 13.3 and 34.6 ms. Step 1 changed the reads on purpose (AD32,
+AD33, the owners' turns), so that plan no longer measured the product. Step 0's first limits came from the cloud machine
+(6, 10, 13, 7 and 7 ms). Each is measured per tab, the window visible on that tab.
 
-| Tab | One sample (AM-P2), sampler thread's CPU time | A10 worse run, reference machine | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
+| Tab | One sample (AM-P2), sampler thread's CPU time | A10 step-1 plan, reference machine | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
 |---|---|---|---|---|
-| CPU | ≤ 17 ms | 13.0 ms | ≤ 0.5 % of one core | ≤ 1.5 % |
-| Memory | ≤ 25 ms | 19.1 ms (`status` every sample, step 0's reads) | ≤ 0.5 % | ≤ 1.5 % |
-| Energy | ≤ 40 ms | 30.8 ms | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 17 ms | 13.3 ms | ≤ 0.5 % | ≤ 1.5 % |
-| Network | ≤ 45 ms | 34.6 ms | ≤ 0.5 % | ≤ 1.5 % |
+| CPU | ≤ 1.3 × the plan | the integrator's idle run (16.92 ms at load 3.9) | ≤ 0.5 % of one core | ≤ 1.5 % |
+| Memory | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Energy | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 2 % |
+| Disk | ≤ 1.3 × the plan in one pass | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Network | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 
 The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
 sample, and 1.5 % (2 % on Energy) at Very Often (1 sec) is 15 ms (20 ms): below AM-P2's limits for some tabs. AM-P1 is
@@ -515,11 +528,9 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   open and re-read with `pread` while their process lives (`stat`; `statm` and `status` on the Memory tab; `io` of the
   user's processes on the Disk and Energy tabs); the app raises its soft `RLIMIT_NOFILE` at start to the hard limit, at most
   16 384 (the session's soft limit is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is
-  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). After the review of 949fc98 the
-  product is also held to its model: `activity_cost.sh --model` runs probe A10 on the same fixture in the same run and
-  prints each tab's ratio to A10 reading the same as the sampler (its "step 1" plan, review of f68789c: 1.1 to 1.4
-  measured here; 0.7 to 1.1 against step 0's plan, the limits' source), and the bench prints each sample's user and kernel
-  time.
+  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). The limit is 1.3 × the tab's step-1
+  plan (the table above): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
+  each tab's plan, limit and ratio, and fails a tab over its limit; the bench prints each sample's user and kernel time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
 - The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window

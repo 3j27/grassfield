@@ -142,6 +142,10 @@ build() {
   cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/preview-build"
+  # Activity Monitor (ADR-0038): the app, its QML, its desktop entry and its icon; packaged in grassfield-desktop (AD2).
+  cmake -S "$(_root)/apps/activity" -B "$srcdir/activity-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/activity-build"
   # Grassfield Store (ADR-0037): the app, its QML, its root helper and polkit policy; packaged as grassfield-store.
   cmake -S "$(_root)/apps/store" -B "$srcdir/store-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -335,6 +339,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
   DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
+  # Activity Monitor (ADR-0038; no root part, no polkit action).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/activity-build"
 
   # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
   install -d "$pkgdir/usr/share/icons"
