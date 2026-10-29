@@ -284,4 +284,20 @@ TestCase {
         compare(m["a|b.txt"], {isDir: false, size: 12, modified: 300, created: 300});
         compare(Object.keys(m).length, 2);
     }
+
+    // Startup: the desktop exposes nothing before every input of its first layout is final (no default layout that then
+    // moves, no placeholder or partial listing that then goes).
+    function test_settledOnWaitsForEveryInput() {
+        const all = {width: 1920, height: 1080, settings: true, widgets: true, positions: true, listed: true};
+        verify(Logic.settledOn(all));
+        for (const k of Object.keys(all)) {
+            const o = Object.assign({}, all);
+            o[k] = typeof all[k] === "number" ? 0 : false;
+            verify(!Logic.settledOn(o), "not settled without " + k);
+        }
+        verify(!Logic.settledOn(null));
+        verify(!Logic.settledOn({}));
+        // A truthy but not true value (a pending object, a string) does not count as loaded.
+        verify(!Logic.settledOn(Object.assign({}, all, {settings: "yes"})));
+    }
 }
