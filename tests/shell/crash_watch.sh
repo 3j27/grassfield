@@ -202,6 +202,12 @@ fresh(tree=False)
 w = W(uid, env_en, tmp + "/cg"); w.add(gpu, 0.0); w.step(0.0); w.step(11.0)
 print("no-tree", w.out, len(w.pending), m.scope_state(SPOTIFY, tmp + "/cg"))
 fresh(); print("tree", m.scope_state(SPOTIFY, tmp + "/cg"))
+# A cgroup.events file that is not what the kernel writes is "unknown", never an exception (tests/fuzz/fuzz_helpers.py found
+# both: a non-UTF-8 byte raised UnicodeDecodeError, a "populated" line without its value raised IndexError).
+for name, content in (("events-not-utf8", b"populated \xff\n"), ("events-no-value", b"populated\n"), ("events-blank-value", b"populated   \n"),
+                      ("events-long", b"frozen 0\n" * 2000 + b"populated 0\n"), ("events-oversized", b"frozen 0\n" * 20000 + b"populated 0\n")):
+    fresh(); cg(SPOTIFY, "populated"); open(tmp + "/cg" + SPOTIFY + "/cgroup.events", "wb").write(content)
+    print(name, m.scope_state(SPOTIFY, tmp + "/cg"))
 # The Flatpak user installation is under the data home (XDG_DATA_HOME/flatpak/exports/share), not next to it.
 xh = tmp + "/xh"; os.makedirs(xh + "/flatpak/exports/share/applications")
 open(xh + "/flatpak/exports/share/applications/org.f.App.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Flat App\nExec=flatpak run org.f.App\n")
@@ -298,6 +304,7 @@ expect=(
   "case no-exe ('Spotify', 'spotify.desktop', 'spotify.desktop')" "case no-exe-user-unit None" "case no-exe-no-unit None" "case foreign-exe None"
   "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chromium fr', 'chromium.desktop', 'chromium.desktop') ('other-bin', 'other-bin', None)"
   "no-tree [] 0 unknown" "tree gone" "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
+  "events-not-utf8 unknown" "events-no-value unknown" "events-blank-value unknown" "events-long empty" "events-oversized unknown"
 )
 expect_owner=("owner (0, True) (0, False) (0, False) (0, False)")
 desc="a command run from a terminal (qml --version in foot, real dump 128224): the terminal's scope is populated, no notice"
@@ -329,6 +336,8 @@ check has "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chrom
 desc="a missing cgroup2 tree is unknown (silence), a tree without the scope is gone"
 check has "no-tree [] 0 unknown"
 check has "tree gone"
+desc="a cgroup.events file that is not the kernel's (not UTF-8, 'populated' without a value, over 64 KiB) is unknown, never an exception; a long one is still read"
+check bash -c 'for c in "events-not-utf8 unknown" "events-no-value unknown" "events-blank-value unknown" "events-long empty" "events-oversized unknown"; do grep -qxF "$c" <<<"$1" || exit 1; done' _ "$out"
 desc="the Flatpak user installation is XDG_DATA_HOME/flatpak/exports/share (no '..'), and its entries are found"
 check has "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
 desc="the Dock's scopes (the binary's name) resolve: by id, by Exec binary (nautilus, grassfield-files), by StartupWMClass; localized"
