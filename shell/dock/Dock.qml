@@ -1104,7 +1104,7 @@ Scope {
             function playLayout(): void {
                 holdLayout = false;
                 // The first fill is not a change: nothing glides or fades in before the Dock is settled.
-                if (!root.settled || Appearance.reduceMotion || dragFrom >= 0)
+                if (!reveal || Appearance.reduceMotion || dragFrom >= 0)
                     return;
                 tiles.forceLayout();
                 const after = tileXs();
@@ -1685,7 +1685,7 @@ Scope {
                                 // with the layout change.
                                 property real shiftAnim: shiftMain
                                 Behavior on shiftAnim {
-                                    enabled: root.settled && !tile.dragging && !win.dragSnap
+                                    enabled: win.reveal && !tile.dragging && !win.dragSnap
                                     NumberAnimation {
                                         duration: Appearance.duration(Tokens.motionFast)
                                         easing.type: Easing.OutQuad
