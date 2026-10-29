@@ -15,9 +15,10 @@
 # docs/upstream/omarchy.lock). Omarchy's own files are read as data only: the new omarchy package's migrations and
 # commands, extracted where only root reads, for the scan.
 # Exit: 0 done, or up to date (`packages 0`); 1 failed during the transaction (the system can be partly updated); 2 usage,
-# or an operation id used before; 3 busy (another run, or pacman's db.lck); 4 less than 10 GiB free on /; 5 on battery
-# below 50 %; 6 needs a newer Grassfield (the compatibility check); 7 needs a person (Omarchy's terminal); 8 failed before
-# changing anything. pkexec itself exits 126 (the dialog dismissed) and 127 (not authorized).
+# or an operation id used before; 3 busy (another run, or a process holding pacman's db.lck); 4 less than 10 GiB free on /;
+# 5 on battery below 50 %; 6 needs a newer Grassfield (the compatibility check); 7 needs a person (Omarchy's terminal; also a
+# db.lck no process holds: `needs stalelock`); 8 failed before installing anything (`synced` when the checked sync databases
+# had already become the system's). pkexec itself exits 126 (the dialog dismissed) and 127 (not authorized).
 #
 # Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
 # environment holds anything at all, it runs itself again under `env -i`, so no variable reaches it or a program it starts
@@ -26,7 +27,9 @@
 #
 # On a system run by systemd it starts itself again as the transient system service grassfield-update.service
 # (`systemd-run --wait`) and waits for it: the transaction then belongs to no user session, so closing Settings, the
-# runner's end or a log out cannot stop pacman, and the unit's name allows one run at a time. Without systemd as the
+# runner's end or a log out cannot stop pacman, and the unit's name allows one run at a time. A stop of the unit
+# (KillMode=mixed: SIGTERM to this process only) ends the run at once while nothing has changed; from the snapshot on, it is
+# logged and the run goes on to its end (pacman is never signalled), within TimeoutStopSec (30 min). Without systemd as the
 # system's manager (a container) it runs in place.
 #
 # What it writes, besides what pacman writes: in /run/grassfield-update/ (root, 0755), <op-id>.log (its messages and
@@ -91,7 +94,7 @@ done
 in_unit() { grep -qxF "0::/system.slice/$GU_UNIT.service" /proc/self/cgroup 2>/dev/null; }
 if [[ -d /run/systemd/system ]] && ! in_unit; then
   systemd-run --unit="$GU_UNIT" --description="Grassfield Software Update" --collect --quiet --wait \
-    --service-type=exec -- "$GU_SELF" run "$op" "$@"
+    --service-type=exec -p KillMode=mixed -p TimeoutStopSec=30min -- "$GU_SELF" run "$op" "$@"
   if [[ -f $GU_DIR/$op.exit ]]; then
     read -r code <"$GU_DIR/$op.exit"
     [[ $code =~ ^[0-9]{1,3}$ ]] && exit "$code"
@@ -114,7 +117,10 @@ outcome=()   # the exit file's `key value` lines
 tmpdb=$GU_DIR/sync.$op
 work=$GU_DIR/work.$op
 inhibitor=""
+own_db_lock=""
+changing=0
 cleanup() {
+  [[ -n $own_db_lock ]] && rm -f -- "$own_db_lock"
   [[ -n $inhibitor ]] && kill "$inhibitor" 2>/dev/null
   rm -rf -- "$tmpdb" "$work" 2>/dev/null
 }
@@ -126,6 +132,15 @@ finish() { # code [message]
     mv -f -- "$GU_DIR/.$op.exit" "$GU_DIR/$op.exit"
   exit "$1"
 }
+# A stop (the unit's SIGTERM): at once while nothing has changed; afterwards the run goes on to its end.
+on_term() {
+  if ((changing)); then
+    say "asked to stop while the system changes: going on to the end"
+  else
+    finish 8 "stopped before anything changed"
+  fi
+}
+trap on_term TERM
 progress() { # phase [done total]
   printf '%s\n' "$*" >|"$GU_DIR/.$op.progress" && mv -f -- "$GU_DIR/.$op.progress" "$GU_DIR/$op.progress"
 }
@@ -158,7 +173,16 @@ find "$GU_DIR" -mindepth 1 -maxdepth 1 -type d \( -name 'sync.*' -o -name 'work.
 dbpath=$(pacman-conf DBPath 9<&-) || finish 8 "pacman-conf DBPath failed"
 dbpath=${dbpath%/}
 [[ $dbpath == /* && -d $dbpath/local ]] || finish 8 "pacman's database folder is unknown"
-no_db_lock() { [[ ! -e $dbpath/db.lck ]] || finish 3 "pacman is running (or stopped mid-way and left $dbpath/db.lck)"; }
+# pacman's db.lck: a process that holds it open is a running pacman (libalpm keeps its descriptor until it unlocks); a lock
+# no process holds was left by one that stopped mid-way, which a person clears (Omarchy's terminal shows pacman's advice).
+no_db_lock() {
+  [[ -e $dbpath/db.lck || -L $dbpath/db.lck ]] || return 0
+  if [[ -n $(find /proc/[0-9]*/fd -maxdepth 1 -lname "$dbpath/db.lck" -print -quit 2>/dev/null 9<&-) ]]; then
+    finish 3 "pacman is running ($dbpath/db.lck is held)"
+  fi
+  outcome+=("needs stalelock")
+  finish 7 "$dbpath/db.lck was left by a pacman that stopped mid-way: nothing was changed"
+}
 no_db_lock
 
 # --- Preconditions (s3.2 step 3) ---------------------------------------------------------------------------------------
@@ -189,14 +213,6 @@ done
 
 declare -A installed=()
 while read -r name version; do installed[$name]=$version; done < <(pacman -Q 2>/dev/null 9<&-)
-# omarchy-update-keyring's test. When it fails, Omarchy fetches its key from a keyserver and signs it: a trust decision,
-# left to Omarchy's terminal.
-if [[ -n ${installed[omarchy]-} ]]; then
-  if [[ -z ${installed[omarchy-keyring]-} ]] || ! pacman-key --list-keys "$GU_OMARCHY_FPR" >/dev/null 2>&1 9<&-; then
-    outcome+=("needs keyring")
-    finish 7 "Omarchy's signing key is not in pacman's keyring: Omarchy's terminal update adds it"
-  fi
-fi
 
 # --- The plan, from a copy of the sync databases (s3.2 step 4) ---------------------------------------------------------
 (umask 022 && mkdir -m 0755 -- "$tmpdb" && mkdir -m 0755 -- "$tmpdb/sync") || finish 8 "cannot make $tmpdb"
@@ -238,16 +254,12 @@ cached() { # package -> the path of its file in pacman's cache, if there
   return 1
 }
 
-# --- The files the checks read (s3.2 step 5) ----------------------------------------------------------------------------
-wanted=()
-for pkg in grassfield-desktop omarchy; do
-  [[ -n ${after[$pkg]-} ]] && wanted+=("$pkg")
-done
-if ((${#wanted[@]})); then
-  say "downloading ${wanted[*]} to read them"
-  pacman -Sw --noconfirm --noprogressbar --dbpath "$tmpdb" --logfile /dev/null -- "${wanted[@]}" 9<&- ||
-    finish 8 "pacman could not download ${wanted[*]}"
-fi
+# --- The files the checks read (s3.2 step 5): each downloaded from the copy, its signature checked ----------------------
+download() { # package
+  say "downloading $1 to read it"
+  pacman -Sw --noconfirm --noprogressbar --dbpath "$tmpdb" --logfile /dev/null -- "$1" 9<&- ||
+    finish 8 "pacman could not download $1"
+}
 (umask 077 && mkdir -m 0700 -- "$work") || finish 8 "cannot make $work"
 
 # --- The compatibility check (s3.4) -------------------------------------------------------------------------------------
@@ -270,6 +282,7 @@ done
 if ((check_needed)) && [[ -n ${after[grassfield-desktop]-} || -n ${installed[grassfield-desktop]-} ]]; then
   record=""
   if [[ -n ${after[grassfield-desktop]-} ]]; then
+    download grassfield-desktop
     file=$(cached grassfield-desktop) || finish 8 "grassfield-desktop's package file is not in pacman's cache"
     record=$(bsdtar -xOf "$file" "$GU_RECORD" 2>/dev/null 9<&- | head -c 4096)
     say "the record of grassfield-desktop ${after[grassfield-desktop]} (this update)"
@@ -301,17 +314,33 @@ if ((check_needed)) && [[ -n ${after[grassfield-desktop]-} || -n ${installed[gra
 fi
 
 # --- The steps that would need a person (s3.6) --------------------------------------------------------------------------
+# omarchy-update-keyring's test, after the compatibility check (an update it refuses is said so first). When it fails,
+# Omarchy fetches its key from a keyserver and signs it: a trust decision, left to Omarchy's terminal.
+if [[ -n ${installed[omarchy]-} ]]; then
+  if [[ -z ${installed[omarchy-keyring]-} ]] || ! pacman-key --list-keys "$GU_OMARCHY_FPR" >/dev/null 2>&1 9<&-; then
+    outcome+=("needs keyring")
+    finish 7 "Omarchy's signing key is not in pacman's keyring: Omarchy's terminal update adds it"
+  fi
+fi
 # The migrations pending after this update: those the new omarchy package adds, and those the runner named. The commands
-# they may call: the new package's, else the installed ones.
+# they may call: the new package's, else the installed ones. Omarchy 4.x ships its commands as files in usr/bin and links
+# to them in usr/share/omarchy/bin: both folders are read, regular files only (a link would point at the installed, older
+# command).
 mig_dir=/usr/share/omarchy/migrations
-bin_dir=/usr/share/omarchy/bin
+bin_dirs=(/usr/bin /usr/share/omarchy/bin)
 pending=("$@")
 if [[ -n ${after[omarchy]-} ]]; then
+  download omarchy
   file=$(cached omarchy) || finish 8 "omarchy's package file is not in pacman's cache"
-  bsdtar -xf "$file" -C "$work" --no-same-owner --no-same-permissions \
-    'usr/share/omarchy/migrations/*' 'usr/share/omarchy/bin/*' 9<&- || finish 8 "cannot read omarchy's package"
+  # The members wanted, from the package's own list: a folder the package lacks is no error (the scan then fails closed).
+  listing=$(bsdtar -tf "$file" 9<&-) || finish 8 "cannot read omarchy's package"
+  grep -E '^(usr/share/omarchy/migrations/|usr/share/omarchy/bin/|usr/bin/omarchy-)[^/]+$' <<<"$listing" >"$work/.members"
+  if [[ -s $work/.members ]]; then
+    bsdtar -xf "$file" -C "$work" --no-same-owner --no-same-permissions -T "$work/.members" 9<&- ||
+      finish 8 "cannot read omarchy's package"
+  fi
   mig_dir=$work/usr/share/omarchy/migrations
-  bin_dir=$work/usr/share/omarchy/bin
+  bin_dirs=("$work/usr/bin" "$work/usr/share/omarchy/bin")
   declare -A had=()
   while IFS= read -r path; do
     [[ $path == /usr/share/omarchy/migrations/*.sh ]] && had[${path##*/}]=1
@@ -319,11 +348,14 @@ if [[ -n ${after[omarchy]-} ]]; then
   while IFS= read -r path; do
     name=${path##*/}
     [[ $name =~ ^[0-9]{1,20}\.sh$ && -z ${had[$name]-} ]] && pending+=("$name")
-  done < <(find "$mig_dir" -maxdepth 1 -type f -name '*.sh' 2>/dev/null)
+  done < <(find "$mig_dir" -maxdepth 1 \( -type f -o -type l \) -name '*.sh' 2>/dev/null)
 fi
 if ((${#pending[@]})); then
   # The commands that need a person, until the set stops growing: Omarchy's own requires-sudo header, the words, and any
   # command that names one of them. Comments count: the scan is conservative.
+  # Without one command file to read, the scan would find nothing: it fails closed.
+  [[ -n $(find "${bin_dirs[@]}" -maxdepth 1 -type f -name 'omarchy-*' -print -quit 2>/dev/null) ]] ||
+    { outcome+=("needs scan"); finish 7 "no Omarchy command file to scan: Omarchy's terminal update runs the migrations"; }
   declare -A person=()
   words=$GU_PERSON_WORDS
   while :; do
@@ -335,7 +367,7 @@ if ((${#pending[@]})); then
       person[$name]=1
       words+="|$name"
       grew=1
-    done < <(find "$bin_dir" -maxdepth 1 -type f -name 'omarchy-*' -exec grep -lE -- "$pattern" {} + 2>/dev/null)
+    done < <(find "${bin_dirs[@]}" -maxdepth 1 -type f -name 'omarchy-*' -exec grep -lE -- "$pattern" {} + 2>/dev/null)
     ((grew)) || break
   done
   pattern="(^|[^[:alnum:]_.-])($words)([^[:alnum:]_.-]|\$)|/dev/tty"
@@ -345,8 +377,11 @@ if ((${#pending[@]})); then
     [[ -n ${seen[$name]-} ]] && continue
     seen[$name]=1
     path=$mig_dir/$name
-    [[ -f $path && ! -L $path ]] || continue
-    grep -qE -- "$pattern" "$path" && needs+=("$name")
+    [[ -e $path || -L $path ]] || continue   # gone from the new package: it never runs
+    # A migration that is not a regular file cannot be read here: it fails closed.
+    if [[ ! -f $path || -L $path ]] || grep -qE -- "$pattern" "$path"; then
+      needs+=("$name")
+    fi
   done
   if ((${#needs[@]})); then
     for name in "${needs[@]}"; do outcome+=("needs migration ${name%.sh}"); done
@@ -356,6 +391,7 @@ if ((${#pending[@]})); then
 fi
 
 # --- From here, the system changes (s3.3) -------------------------------------------------------------------------------
+changing=1
 # Sleep, idle and shutdown wait (omarchy-update-stay-awake) for as long as this process lives: the inhibitor's command
 # ends with it, whatever ends it. A failure (no logind) is no reason to stop.
 systemd-inhibit --what=sleep:idle:shutdown --who="Grassfield Software Update" --why="Updating this computer" \
@@ -388,8 +424,12 @@ fi
 outcome+=("snapshot $snapshot")
 say "snapshot: $snapshot"
 
-# The databases checked become the system's: the transaction installs what was checked, never a newer plan.
+# The databases checked become the system's: the transaction installs what was checked, never a newer plan. Under pacman's
+# own lock (db.lck made here, exclusively, as libalpm makes it), so no pacman reads half of them.
 no_db_lock
+(set -C && : >"$dbpath/db.lck") 2>/dev/null || finish 3 "pacman started meanwhile ($dbpath/db.lck)"
+own_db_lock=$dbpath/db.lck
+outcome+=("synced")
 for repo in "${repos[@]}"; do
   for ext in db db.sig; do
     src=$tmpdb/sync/$repo.$ext
@@ -402,6 +442,7 @@ for repo in "${repos[@]}"; do
     fi
   done
 done
+rm -f -- "$own_db_lock" && own_db_lock=""
 
 # pacman, its output appended to the log up to the log's cap and, when `report` is 1, read for the progress; its exit
 # code. `downloads`: how many files the plan still has to download. `started`: pacman began changing packages.

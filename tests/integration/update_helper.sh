@@ -101,7 +101,7 @@ sleep 2
 
 say "the test packages"
 mkdir -p "$W/pkgs" "$W/repo"
-# mkpkg name version [.PKGINFO line | path=content | path:<file to copy>]...
+# mkpkg name version [.PKGINFO line | path=content | path:<file to copy> | path-><link target>]...
 mkpkg() {
   local name=$1 ver=$2 dir="$W/build/$1-$2" arg path
   shift 2
@@ -114,7 +114,9 @@ mkpkg() {
   } >"$dir/.PKGINFO"
   for arg in "$@"; do
     [[ $arg == *' = '* ]] && continue
-    if [[ $arg == *:* && $arg != *=* ]]; then
+    if [[ $arg == *'->'* && $arg != *=* ]]; then
+      path=${arg%%->*}; mkdir -p "$dir/${path%/*}"; ln -s "${arg#*->}" "$dir/$path"
+    elif [[ $arg == *:* && $arg != *=* ]]; then
       path=${arg%%:*}; mkdir -p "$dir/${path%/*}"; cp "${arg#*:}" "$dir/$path"
     else
       path=${arg%%=*}; mkdir -p "$dir/${path%/*}"; printf '%s\n' "${arg#*=}" >"$dir/$path"
@@ -147,30 +149,40 @@ mkpkg gu-app 5
 mkpkg gu-other 1
 mkpkg gu-file 1
 mkpkg gu-file 2 "usr/share/gu-stray/file=stray"
-# Omarchy: its real migration and hook commands and update guard; test commands (one with sudo, one that calls it, one
-# plain); test migrations (100 plain, 150 asks with gum; 200 calls the indirect command; 300 plain).
+# Omarchy, in its 4.x layout: the commands are files in usr/bin and links to them in usr/share/omarchy/bin (the integrator's
+# review of a060504: a scan of usr/share/omarchy/bin's regular files found none). Its real migration and hook commands and
+# update guard; test commands (one with sudo, one that calls it, one plain); test migrations (100 plain, 150 asks with
+# gum; 200 calls the indirect command; 300 plain; 400 reads /dev/tty; 600 a link).
 omarchy_files=(
-  usr/share/omarchy/bin/omarchy-migrate:/omarchy/bin/omarchy-migrate
-  usr/share/omarchy/bin/omarchy-hook:/omarchy/bin/omarchy-hook
-  usr/share/omarchy/bin/omarchy-update-mise:/omarchy/bin/omarchy-update-mise
-  usr/share/omarchy/bin/omarchy-update-pacman-guard:/omarchy/bin/omarchy-update-pacman-guard
-  usr/bin/omarchy-update-pacman-guard:/omarchy/bin/omarchy-update-pacman-guard
   usr/share/libalpm/hooks/00-omarchy-update-guard.hook:/omarchy/default/libalpm/hooks/00-omarchy-update-guard.hook
-  "usr/share/omarchy/bin/omarchy-gu-sudo=#!/bin/bash
-sudo true"
-  "usr/share/omarchy/bin/omarchy-gu-indirect=#!/bin/bash
-omarchy-gu-sudo"
-  "usr/share/omarchy/bin/omarchy-gu-plain=#!/bin/bash
-echo plain"
-  "usr/share/omarchy/bin/omarchy-notification-dismiss=#!/bin/bash
-true"
   "usr/share/omarchy/migrations/100.sh=echo 100 >>\"\$HOME/migrations.log\""
   "usr/share/omarchy/migrations/150.sh=gum confirm 'Continue?' && echo 150 >>\"\$HOME/migrations.log\""
   "usr/share/omarchy/version=4.0.4"
 )
-mkpkg omarchy 1 "${omarchy_files[@]}"
-mkpkg omarchy 2 "${omarchy_files[@]}" "usr/share/omarchy/migrations/200.sh=omarchy-gu-indirect"
-mkpkg omarchy 3 "${omarchy_files[@]}" "usr/share/omarchy/migrations/300.sh=omarchy-gu-plain >/dev/null; echo 300 >>\"\$HOME/migrations.log\""
+omarchy_commands=()
+for command in omarchy-migrate omarchy-hook omarchy-update-mise omarchy-update-pacman-guard; do
+  omarchy_commands+=("usr/bin/$command:/omarchy/bin/$command" "usr/share/omarchy/bin/$command->/usr/bin/$command")
+done
+printf '#!/bin/bash\nsudo true\n' >"$W/omarchy-gu-sudo"
+printf '#!/bin/bash\nomarchy-gu-sudo\n' >"$W/omarchy-gu-indirect"
+printf '#!/bin/bash\necho plain\n' >"$W/omarchy-gu-plain"
+printf '#!/bin/bash\ntrue\n' >"$W/omarchy-notification-dismiss"
+for command in omarchy-gu-sudo omarchy-gu-indirect omarchy-gu-plain omarchy-notification-dismiss; do
+  omarchy_commands+=("usr/bin/$command:$W/$command" "usr/share/omarchy/bin/$command->/usr/bin/$command")
+done
+mkpkg omarchy 1 "${omarchy_files[@]}" "${omarchy_commands[@]}"
+mkpkg omarchy 2 "${omarchy_files[@]}" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/200.sh=omarchy-gu-indirect"
+mkpkg omarchy 3 "${omarchy_files[@]}" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/300.sh=omarchy-gu-plain >/dev/null; echo 300 >>\"\$HOME/migrations.log\""
+three=("${omarchy_files[@]}" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/300.sh=omarchy-gu-plain >/dev/null; echo 300 >>\"\$HOME/migrations.log\"")
+mkpkg omarchy 4 "${three[@]}" "usr/share/omarchy/migrations/400.sh=read -r answer </dev/tty"
+mkpkg omarchy 5 "${omarchy_files[@]}" "usr/share/omarchy/migrations/300.sh=echo 300" "usr/share/omarchy/migrations/500.sh=echo 500"
+mkpkg omarchy 6 "${three[@]}" "usr/share/omarchy/migrations/600.sh->/usr/share/omarchy/migrations/100.sh"
+seventy=()
+for i in $(seq 1000 1069); do seventy+=("usr/share/omarchy/migrations/$i.sh=true"); done
+mkpkg omarchy 7 "${three[@]}" "${seventy[@]}"
+# A package whose file name has a space: pacman's plan line then has a field too many, which the helper refuses.
+mkpkg gu-space 1
+mkpkg gu-space 2
 
 # publish package-file... : [gutest] holds exactly these (and the installed Arch keyring, which --needed skips).
 publish() {
@@ -237,15 +249,23 @@ printf 'touch %s/bashenv-ran\n' "$W" >"$W/evil.sh"
 op=$(newop); env BASH_ENV="$W/evil.sh" PATH="$W/evil:/usr/bin" "$H" run "$op" </dev/null >/dev/null 2>&1; rc=$?
 expect "a hostile environment (BASH_ENV, PATH) is dropped -> exit 0, neither ran" test "$rc:$(ls "$W"/evil-ran "$W"/bashenv-ran 2>/dev/null | wc -l)" == "0:0"
 
-say "busy, keyring"
+say "busy, a lock left behind, keyring"
+publish "${base[@]/gu-app-1/gu-app-2}"
+# A pacman that runs holds db.lck open (libalpm keeps its descriptor): busy, before anything is read.
+(exec 7<>/var/lib/pacman/db.lck; sleep 5) & sleep 0.5; run_helper; wait $!; rm -f /var/lib/pacman/db.lck
+expect "db.lck held by a process -> exit 3, before the copy is synchronised, gu-app stays 1" bash -c "test '$rc:$(exitfile "$op"):$(ver gu-app)' == '3:3|:1-1' && ! grep -q 'a copy of the databases' $D/$op.log"
+# One no process holds was left by a pacman that stopped mid-way: Omarchy's terminal, nothing read.
 touch /var/lib/pacman/db.lck; run_helper; rm -f /var/lib/pacman/db.lck
-expect "pacman's db.lck present -> exit 3" test "$rc:$(exitfile "$op")" == "3:3|"
+expect "db.lck no process holds -> exit 7, needs stalelock, before the copy, gu-app stays 1" bash -c "test '$rc:$(exitfile "$op"):$(ver gu-app)' == '7:7|needs stalelock|:1-1' && ! grep -q 'a copy of the databases' $D/$op.log"
 (flock -x 8; sleep 5) 8<"$D/helper.lock" & sleep 0.5; run_helper; wait $!
 expect "another run holds the helper's lock -> exit 3" test "$rc" == 3
 expect "helper.lock is root's, 0600" test "$(stat -c %u:%a "$D/helper.lock")" == "0:600"
-publish "${base[@]/gu-app-1/gu-app-2}"
 quiet pacman -Rdd --noconfirm omarchy-keyring; run_helper
 expect "omarchy-keyring not installed -> exit 7, needs keyring, gu-app stays 1" test "$rc:$(exitfile "$op"):$(ver gu-app)" == "7:7|needs keyring|:1-1"
+# The compatibility check comes first: an update it refuses is said so, never sent to the terminal (review of a060504).
+publish "${base[@]/qt6-base-6.11.0/qt6-base-6.12.0}"; run_helper
+expect "  the same with an incompatible toolkit -> exit 6, incompatible qt6-base" test "$rc:$(exitfile "$op")" == "6:6|incompatible qt6-base|"
+publish "${base[@]/gu-app-1/gu-app-2}"
 quiet pacman -S --noconfirm omarchy-keyring
 quiet pacman-key --delete "$FPR"; run_helper
 expect "Omarchy's key not in pacman's keyring -> exit 7, needs keyring" test "$rc:$(exitfile "$op")" == "7:7|needs keyring|"
@@ -257,7 +277,8 @@ LC_ALL=C pacman -Su --noconfirm >"$W/guard.out" 2>&1; rc=$?
 expect "a plain pacman -Su is stopped by Omarchy's guard (exit $rc), gu-app stays 1" bash -c "test $rc != 0 && grep -q 'Woah partner' $W/guard.out && test '$(ver gu-app)' == 1-1"
 run_helper
 expect "gu-app 1 -> 2 through the helper -> exit 0, installed" test "$rc:$(ver gu-app)" == "0:2-1"
-expect "  its exit file: packages 1, snapshot none, restart kernel (the container runs no packaged kernel)" test "$(exitfile "$op")" == "0|snapshot none|packages 1|restart kernel|"
+expect "  its exit file: snapshot none, synced, packages 1, restart kernel (the container runs no packaged kernel)" test "$(exitfile "$op")" == "0|snapshot none|synced|packages 1|restart kernel|"
+expect "  pacman's lock taken for the swap is gone" test ! -e /var/lib/pacman/db.lck
 expect "  Omarchy's guard ran and let it through (OMARCHY_UPDATE_PACMAN=1)" grep -q 'Checking Omarchy update entrypoint' "$D/$op.log"
 expect "  the log holds pacman's output; the progress ends at finishing" bash -c "grep -q '^upgrading gu-app' $D/$op.log && test \"\$(cat $D/$op.progress)\" == finishing"
 
@@ -281,7 +302,13 @@ expect "a Grassfield build without BUILD-DEPS -> exit 6 for every tracked packag
 
 say "Omarchy's migrations (s3.6)"
 publish "${cur[@]/omarchy-1/omarchy-2}"; run_helper
-expect "omarchy 2 adds a migration that calls a command that calls sudo -> exit 7, needs migration 200, not installed" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 200|:1-1"
+expect "omarchy 2 adds a migration that calls a command (a file in usr/bin, a link in usr/share/omarchy/bin) that calls sudo -> exit 7, needs migration 200, not installed" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 200|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-4}"; run_helper
+expect "a migration that reads /dev/tty -> exit 7, needs migration 400 (300 is plain)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 400|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-5}"; run_helper
+expect "a package with no command file to scan -> exit 7, needs scan (fails closed)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs scan|:1-1"
+publish "${cur[@]/omarchy-1/omarchy-6}"; run_helper
+expect "a migration that is a link -> exit 7, needs migration 600 (fails closed)" test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 600|:1-1"
 publish "${cur[@]/omarchy-1/omarchy-3}"; run_helper 100.sh
 expect "omarchy 3 adds a plain migration, 100 named pending -> exit 0, omarchy 3" test "$rc:$(ver omarchy)" == "0:3-1"
 expect "  the log names the migrations scanned" grep -q 'none needs a person: .*300.sh' "$D/$op.log"
@@ -293,13 +320,24 @@ cur=("${cur[@]/gu-app-2/gu-app-3}")
 
 say "conflicts pacman finds inside the transaction (s3.3)"
 publish "${cur[@]/gu-app-3/gu-app-4}"; run_helper
-expect "gu-app 4 conflicts with the installed gu-other -> exit 7, needs conflict, nothing installed" test "$rc:$(exitfile "$op" | cut -d'|' -f1,3):$(ver gu-app):$(ver gu-other)" == "7:7|needs conflict:3-1:1-1"
+expect "gu-app 4 conflicts with the installed gu-other -> exit 7, needs conflict, synced (the databases were the checked ones), nothing installed" test "$rc:$(exitfile "$op" | cut -d'|' -f1,3,4):$(ver gu-app):$(ver gu-other)" == "7:7|synced|needs conflict:3-1:1-1"
 mkdir -p /usr/share/gu-stray && echo mine >/usr/share/gu-stray/file
 publish "${cur[@]/gu-file-1/gu-file-2}"; run_helper
 expect "gu-file 2 brings a file no package owns -> exit 7, needs conflict, gu-file stays 1, the file kept" test "$rc:$(ver gu-file):$(cat /usr/share/gu-stray/file)" == "7:1-1:mine"
 rm -rf /usr/share/gu-stray
 run_helper; expect "  once the file is gone -> exit 0" test "$rc:$(ver gu-file)" == "0:2-1"
 cur=("${cur[@]/gu-file-1/gu-file-2}")
+
+say "pacman's plan, read strictly"
+publish "${cur[@]}" gu-space-1
+quiet pacman -Sy --noconfirm gu-space
+publish "${cur[@]}"
+cp "$W/pkgs/gu-space-2-1-any.pkg.tar.zst" "$W/repo/gu-space 2-1-any.pkg.tar.zst"
+quiet repo-add -q "$W/repo/gutest.db.tar.gz" "$W/repo/gu-space 2-1-any.pkg.tar.zst"
+touch -d "@$(( $(date +%s) + 600 ))" "$W/repo/gutest.db.tar.gz"
+sum=$(syncsum); run_helper
+expect "a plan line with a field too many (a file name with a space) -> exit 8, nothing changed" test "$rc:$(ver gu-space):$(syncsum)" == "8:1-1:$sum"
+expect "  its log says so" grep -q "pacman's plan cannot be read" "$D/$op.log"
 
 say "the 16 newest operations are kept"
 publish "${cur[@]}"
@@ -365,6 +403,14 @@ expect "150 done before -> done, restart (the container's kernel rule), gu-app 6
 expect "  omarchy-migrate ran 100 and 300 as carol, without a terminal" bash -c "test \"\$(sort /home/carol/migrations.log | tr '\n' ' ')\" == '100 300 ' && test -f /home/carol/.local/state/omarchy/migrations/300.sh && test \$(stat -c %U /home/carol/migrations.log) == carol"
 as carol flock -x "/run/user/$uid/omarchy-update.lock" sleep 4 & sleep 0.5; runner; wait $!
 expect "Omarchy's update lock held -> done busy" test "$(state)" == "done busy  "
+# More pending migrations than the helper scans: Omarchy's terminal, and no helper is started.
+seven=("${cur[@]/gu-app-5/gu-app-6}")
+publish "${seven[@]/omarchy-3/omarchy-7}"
+run_helper
+expect "omarchy 7 (70 plain migrations) through the helper -> exit 0" test "$rc:$(ver omarchy)" == "0:7-1"
+before=$(cat "$D/last")
+runuser -u carol -- env -i HOME=/home/carol XDG_RUNTIME_DIR="/run/user/$uid" PATH=/usr/bin LANG=C.UTF-8 "$R" </dev/null >/dev/null 2>&1
+expect "carol then has more than 64 pending -> done terminal, no helper started" test "$(state):$(cat "$D/last")" == "done terminal  :$before"
 
 echo
 echo "update_helper: $fails failure(s)"

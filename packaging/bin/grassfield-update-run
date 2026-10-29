@@ -9,8 +9,9 @@
 #      see an update running; a held lock is `busy`, and nothing runs;
 #   2. makes the operation id and writes its state, $XDG_RUNTIME_DIR/grassfield/software-update-run.json (0600 in a 0700
 #      folder, by rename: version, op, pid, startTime, phase authorizing|configuring|done, result, restart, snapshot,
-#      deferred, startedAt, finishedAt; fixed tokens and numbers only), which Settings reads;
-#   3. lists the Omarchy migrations already pending for this user (omarchy-migrate --pending);
+#      synced, deferred, startedAt, finishedAt; fixed tokens and numbers only), which Settings reads;
+#   3. lists the Omarchy migrations already pending for this user (omarchy-migrate --pending): more than the helper's 64
+#      names, and the update goes to Omarchy's terminal (`terminal`), since the helper could not scan them all;
 #   4. runs `pkexec /usr/lib/grassfield/grassfield-update-helper run <op-id> [<migration>...]` and reads its outcome from
 #      /run/grassfield-update/<op-id>.exit (pkexec alone: 126 dismissed, 127 not allowed);
 #   5. after a helper that installed something, runs Omarchy's steps that act for the user, as Omarchy's update does
@@ -19,8 +20,9 @@
 #      OMARCHY_PATH=/usr/share/omarchy, without BASH_ENV, SUDO_ASKPASS or the caller's exported shell functions. Its
 #      output goes to $XDG_RUNTIME_DIR/grassfield/software-update-run.log (0600);
 #   6. writes the outcome and what finishes the update (restart, logout), then ends, which releases the lock.
-# result: up-to-date | done | failed-partial | busy | space | power | incompatible | terminal | failed | cancelled |
-# denied | bootimage. deferred: migrations (a migration failed: Omarchy's terminal finishes it), aur (apps from the AUR,
+# result: up-to-date | done | failed-partial | busy | space | power | incompatible | terminal | stalelock | failed |
+# cancelled | denied | bootimage; synced: the checked sync databases became the system's before the run stopped (a failure
+# or a terminal answer then cannot say that nothing changed). deferred: migrations (a migration failed: Omarchy's terminal finishes it), aur (apps from the AUR,
 # which Omarchy's terminal update updates).
 set -uo pipefail
 umask 077
@@ -62,14 +64,14 @@ read -r uuid </proc/sys/kernel/random/uuid || exit 1
 op=${uuid//-/}
 [[ $op =~ ^[0-9a-f]{32}$ ]] || exit 1
 started_at=$(printf '%(%s)T' -1)000
-phase=authorizing result="" restart="" snapshot="" deferred=()
+phase=authorizing result="" restart="" snapshot="" synced=false deferred=()
 
 write_state() {
   local list="" item finished=0
   for item in "${deferred[@]}"; do list+="${list:+,}\"$item\""; done
   [[ $phase == done ]] && finished=$(printf '%(%s)T' -1)000
-  printf '{"version":1,"op":"%s","pid":%d,"startTime":"%s","phase":"%s","result":"%s","restart":"%s","snapshot":"%s","deferred":[%s],"startedAt":%s,"finishedAt":%s}\n' \
-    "$op" "$$" "$start_time" "$phase" "$result" "$restart" "$snapshot" "$list" "$started_at" "$finished" >|"$state.tmp" &&
+  printf '{"version":1,"op":"%s","pid":%d,"startTime":"%s","phase":"%s","result":"%s","restart":"%s","snapshot":"%s","synced":%s,"deferred":[%s],"startedAt":%s,"finishedAt":%s}\n' \
+    "$op" "$$" "$start_time" "$phase" "$result" "$restart" "$snapshot" "$synced" "$list" "$started_at" "$finished" >|"$state.tmp" &&
     mv -f -- "$state.tmp" "$state"
 }
 conclude() { # result
@@ -92,14 +94,18 @@ omarchy_env+=(PATH="$OMARCHY/bin:/usr/bin" OMARCHY_PATH="$OMARCHY")
 [[ -n $lc_all_set ]] && omarchy_env+=(LC_ALL="$lc_all")
 pending_migrations() {
   [[ -x $OMARCHY/bin/omarchy-migrate ]] || return 0
-  "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" --pending </dev/null 2>/dev/null 9>&- | head -n 64
+  "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" --pending </dev/null 2>/dev/null 9>&- | head -n 65
 }
 
-# 3. The migrations already pending (names only; the helper scans them).
+# 3. The migrations already pending (names only; the helper scans them). One the helper could not be given (more than its
+# 64 names, or a name it refuses) would run unscanned: then the update is Omarchy's terminal's.
 pending=()
 while IFS= read -r name; do
-  [[ $name =~ ^[0-9]{1,20}\.sh$ ]] && pending+=("$name")
+  [[ -z $name ]] && continue
+  [[ $name =~ ^[0-9]{1,20}\.sh$ ]] || conclude terminal
+  pending+=("$name")
 done < <(pending_migrations)
+((${#pending[@]} <= 64)) || conclude terminal
 
 # 4. The helper, through pkexec: the shell's polkit agent asks for the password.
 /usr/bin/pkexec "$HELPER" run "$op" "${pending[@]}" </dev/null >/dev/null 2>&1 9>&-
@@ -117,6 +123,7 @@ has() { # token
 }
 # Whether the helper took a snapshot before changing anything (the failure sentence never promises one it did not take).
 if has "snapshot made"; then snapshot=made; elif has "snapshot failed"; then snapshot=failed; elif has snapshot; then snapshot=none; fi
+has synced && synced=true
 case $code in
   0) has "packages 0" && conclude up-to-date ;;
   1) conclude failed-partial ;;
@@ -124,7 +131,7 @@ case $code in
   4) conclude space ;;
   5) conclude power ;;
   6) conclude incompatible ;;
-  7) conclude terminal ;;
+  7) if has "needs stalelock"; then conclude stalelock; else conclude terminal; fi ;;
   126) conclude cancelled ;;
   127) conclude denied ;;
   *) conclude failed ;;
@@ -134,14 +141,14 @@ esac
 phase=configuring
 write_state
 if [[ -x $OMARCHY/bin/omarchy-migrate ]]; then
-  timeout 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
+  timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
   [[ -n $(pending_migrations) ]] && deferred+=(migrations)
 fi
 if [[ -x $OMARCHY/bin/omarchy-hook ]]; then
-  timeout 300 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-hook" post-update </dev/null 9>&- || echo "grassfield-update-run: the post-update hook failed"
+  timeout -k 10 300 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-hook" post-update </dev/null 9>&- || echo "grassfield-update-run: the post-update hook failed"
 fi
 if [[ -x $OMARCHY/bin/omarchy-update-mise && -x /usr/bin/mise ]]; then
-  timeout 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-update-mise" </dev/null 9>&- || echo "grassfield-update-run: mise could not update its tools"
+  timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-update-mise" </dev/null 9>&- || echo "grassfield-update-run: mise could not update its tools"
 fi
 # Apps from the AUR (omarchy-update-aur-pkgs): installed explicitly from outside the repositories, Grassfield's own aside.
 while IFS= read -r name; do
