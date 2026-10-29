@@ -3,7 +3,8 @@ Status: Proposed (step 0 of the owner's brief "Identité Grassfield", 2026-10-29
 questions are open (IQ-W1 to IQ-W4, IQ-B1 to IQ-B3, IQ-B5, IQ-L1, IQ-T2, IQ-T4, IQ-T5); every other choice follows the
 owner's rule of 2026-10-28 ("the closest to macOS 27, no technical step for the end user") and is listed in "Decisions
 taken under the owner's rule" (ID-1 to ID-21), which the owner can revisit. Revised after the integrator's opus review of
-b44d17e (FAIL: two MAJORs, five MINORs), answered in "Review history"; each changed place says "review of b44d17e". · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
+b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
+NITs), answered in "Review history"; each changed place says which review. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
 (0039 is the design-polish ADR, pull request #45, merged as e03c859; the open pull requests #47 and #48 add none)
 
 This ADR proposes one identity for Grassfield across its wallpapers, its brand (mark, name, accent, About, app icons),
@@ -102,8 +103,10 @@ and IQ-B3 here changes the palette only, not which controls read it.
   two-slot model (one fixed `wallpaper.crossfadeMs`), the bar tone switching at the crossfade's midpoint from the
   palette; Reduce Motion cuts (ID-14). Settings shows each artwork as one tile in the current appearance, with
   "Automatic / Light / Dark" for the chosen one (macOS's pop-up for its dynamic wallpapers, ASSUMPTION). Settings >
-  Appearance draws the real dark variant instead of darkening the art (W-3). The lock also draws the artwork: it keeps
-  today's drawing, through a fixed variant, until step 4a changes it under the security review (review of b44d17e).
+  Appearance draws the real dark variant instead of darkening the art (W-3). The lock also draws the artwork
+  (`LockView.qml:80`): `WallpaperArt` without a parameter keeps today's drawing, so step 2 edits nothing in
+  `shell/security` and the lock's output stays as it is until step 4a changes it under the security review (reviews of
+  b44d17e and ed21d46).
 - **Videos (IQ-W3, recommended B for 1.0; review of b44d17e).** No video file ships and nothing moves in 1.0: a new
   feature during the release candidate is not worth its risk. The user's own videos stay as built (ADR-0016 W7). After
   1.0, option A: the default artwork gets an optional **moving** variant drawn live (clouds drift, the light changes
@@ -170,7 +173,8 @@ and IQ-B3 here changes the palette only, not which controls read it.
   per output, gate L4 (no window or notification content).
 - **Invariants for the reviewer.** Engaging the lock never waits for the still, the avatar, the name, the settings or a
   fade. The release happens only after PAM success and after the fade; any event during `releasing` (a lock request, a
-  lost lock, an error, a timeout, a shell exit) leaves the session locked and brings the content back. The still is
+  lost lock, an error, a timeout, a shell exit) leaves the session locked and brings the content back, and unlocking
+  then needs a new PAM success: the interrupted one is spent (review of ed21d46). The still is
   Grassfield's own JPEG in the 0700 cache, a regular file of at most `wallpaper.lockStillMaxBytes`, decoded at screen
   size; any failure shows the artwork; no user original and no video decoder enters the module (ADR-0016 §6). Tests:
   L1 to L5, `tests/security/reload_locked.sh`, and new cases (a fade interrupted by a new lock; a missing still; a
@@ -185,7 +189,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | Lock | black first frame [inference], blurred artwork, no fade (L-3, W-9) | same picture, windows go, scrim and text fade in (IQ-T2 A, IQ-W4 A) | `shell/security/lock`; steps 4a and 4b |
 | Unlock | hard cut to another picture (L-3) | fade out while locked, then release | step 4b |
 | Idle dim, then lock | the dim drops before the lock is up [inference] (T-10) | the dim stays until the lock holds; the lock's content starts at the dim's level (ID-8) | `shell/security/idle`; step 5 |
-| Displays off, then lock | the displays light up to draw the lock (T-11) | lock just before the displays go off (IQ-T4 A) | `shell/security/idle`, Settings > Lock Screen; step 5 |
+| Displays off, then lock | the displays light up to draw the lock (T-11) | lock at display-off or at the inactivity limit, whichever comes first; at display-off the lock is drawn just before the displays go off (IQ-T4 A) | `shell/security/idle`, Settings > Lock Screen; step 5 |
 | Screen saver, then lock | the saver goes before the lock is up [inference] (T-12) | the saver stays until the lock holds (ID-8) | `shell/saver`; step 5 |
 | Sleep | locked before sleep when confirmed; exceptions show the desktop on wake (T-13) | unchanged path; the exceptions stay a documented limit (the budget is the system's) | — |
 | Wake | the clock may show the sleep time, then jump (T-14) | clock refreshed on resume before the first frame (ID-7); the lock's picture and name already final | step 4a |
@@ -209,7 +213,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | `wallpaper.artwork` | `grassfield` \| `meadow` \| `rows` \| `ridgeline` | additive key, default `grassfield` |
 | `wallpaper.artworkVariant` | `automatic` \| `light` \| `dark` (\| `timeOfDay` under IQ-W1 C) | additive, default `automatic` |
 | `wallpaper.moving` | bool, false | IQ-W3 A |
-| `lock.requirePasswordAfter` | `immediately` \| `5s` \| `1m` \| `5m` \| `15m` \| `1h` \| `never` | IQ-T4 A; migrates `lock.idleMinutes` (ADR-0020 row) |
+| `lock.requirePasswordAfterDisplayOff` | `immediately` \| `5s` \| `1m` \| `5m` \| `15m` \| `1h` \| `never`, default `immediately` | IQ-T4 A; beside `lock.idleMinutes`, which stays the ceiling, so nothing migrates (ADR-0020 row) |
 | `$XDG_STATE_HOME/grassfield/wallpaper.json` | gains the last shown still per output (path, statistics, ground) | ID-3; ADR-0020 row in that step |
 
 ### 7. How "appears once" is measured
@@ -305,12 +309,16 @@ recommendation changed by the review of b44d17e). Mockup `b4-app-icons.svg`.
 | **A. Lock at once, then scrim and text fade in (200 ms); unlock: fade out while still locked (200 ms), then release (recommended)** | continuity; the release still follows PAM, any failure stays locked | unlock 200 ms longer; a new lock-machine state; security review |
 | B. No motion (today) | nothing to review | hard cuts both ways |
 
-**IQ-T4. When the displays turn off before the lock.**
+**IQ-T4. When the displays turn off before the lock** (rewritten by the review of ed21d46: following display-off
+alone is not stricter than today). Defaults today: displays off after 2 min on battery and 10 min on AC
+(`lock.displayOffBattery`, `lock.displayOffPower`), lock after 5 min (`lock.idleMinutes`), screen saver off. A lock that
+only followed display-off would come at 10 min on AC instead of 5, and never with display-off set to Never and the
+saver off; that form is not offered.
 | Option | For | Against |
 |---|---|---|
-| **A. macOS: "Require password after the screen saver begins or the display turns off: Immediately (default) …"; the session locks just before the displays go off (recommended)** | no lit flash; a dark display is a locked one by default (stricter than today) | `lock.idleMinutes` changes meaning (migration); with a delay other than Immediately the flash can return (unless Hyprland confirms a lock without drawing: VERIFY) |
-| B. Today: lock after N minutes of inactivity; the displays light up to draw it | no change | a lit flash with the default settings on battery (off at 2 min, lock at 5) |
-| C. Keep the inactivity model, turn the displays off only once locked | no flash, no new setting | on battery by default the screen stays lit 5 min instead of 2; "Turn display off after" is no longer honoured |
+| **A. Lock at display-off or at "Require password after inactivity" (`lock.idleMinutes`), whichever comes first; at display-off the lock is drawn just before the displays go off; a new "Require password after the display turns off" (Immediately by default, as macOS) (recommended)** | no lit flash with the defaults; never later than today (the inactivity limit stays the ceiling), earlier where the displays go off first (2 min on battery by default instead of 5) | on battery, more password prompts by default (2 min instead of 5); one more setting; with a delay other than Immediately the lock comes while the displays are off and the flash returns for those users (unless Hyprland confirms a lock without drawing: VERIFY) |
+| B. Keep the inactivity model; turn the displays off only once the lock holds | no flash, no new setting, the lock time unchanged | on battery by default the screen stays lit 5 min instead of 2; "Turn display off after" is no longer honoured when it is shorter than the lock |
+| C. Today: lock after N minutes of inactivity; the displays light up to draw it | no change | a lit flash with the default settings on battery (off at 2 min, lock at 5) |
 
 **IQ-T5. The compositor's red "lock screen died" screen during a shell restart** (was ID-9; it reverses a security
 choice, H10, so it is the owner's: review of b44d17e). Hyprland 0.56.2 has `misc:lockdead_screen_delay` (the
@@ -398,7 +406,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | 1b | About This Computer as a small window, computer first (ID-19) | step 1a | reviewer |
 | 1c | The accent's name and the second green (IQ-B3) with the Settings tiles, the About tile (ID-11) | the owner's answer; with ADR-0039 step 11 | reviewer; A2 |
 | 1d | The mark's places and the dialogs' symbols (IQ-B1) | the owner's answer | reviewer |
-| 2 | Artworks: one component, `artwork.*` tokens, the Settings > Wallpaper "Grassfield" section and its Automatic/Light/Dark choice, the Settings > Appearance thumbnail, A2 runs, the desktop following the appearance (ID-1, ID-14; IQ-W1, IQ-W2). The lock keeps drawing today's artwork, through a fixed variant, until step 4a (its drawing changes only under the security review) | `shell/desktop` merged (today `WallpaperArt.qml` passes no parameter, so the desktop cannot show the choice before) | reviewer; F1 shots |
+| 2 | Artworks: one component, `artwork.*` tokens, the Settings > Wallpaper "Grassfield" section and its Automatic/Light/Dark choice, the Settings > Appearance thumbnail, A2 runs, the desktop following the appearance (ID-1, ID-14; IQ-W1, IQ-W2). Nothing in `shell/security`; the lock's output unchanged: `WallpaperArt` without a parameter keeps today's drawing, so `LockView.qml` (`:80`) is not edited before step 4a (review of ed21d46) | `shell/desktop` merged (today `WallpaperArt.qml` passes no parameter, so the desktop cannot show the choice before) | reviewer; F1 shots |
 | 3 | The wallpaper's first frame from the cache, the ground on Hyprland and the wallpaper window, wallpaper `no_anim`, a hotplugged output's wallpaper, the measurement (ID-2 to ID-4, ID-15's wallpaper part, ID-16). Nothing in `shell/security` | `shell/desktop` merged | reviewer |
 | 4a | Lock, the still and the data: the user's wallpaper (ADR-0016 W8), the preloaded still, the scrim (IQ-W4), the surface colour on the ground and on a hotplugged output (ID-2, ID-15), avatar and name once, the clock on resume (ID-7) | step 3; `shell/desktop` merged (LockView imports `qs.desktop`) | **opus security review**, L1 to L5 |
 | 4b | Lock, the motion: the fades and the `releasing` state (IQ-T2) | step 4a | **opus security review**, L1 to L5 |
@@ -471,6 +479,16 @@ this ADR follows it, and any later pull request of either lane that meets one of
   - Overlaps with ADR-0039: the section "Coordination with ADR-0039", one owner per overlap, as ADR-0039 lists them.
   - Main e03c859 merged in: the startup-settle fix (8b5efac) already makes the Dock and the desktop icons appear once;
     the audit records it, and ID-5 and ID-6 now cover the menu bar and the wallpaper only.
+- **Opus re-review of ed21d46 (integrator, 2026-10-29): FAIL, one MAJOR, one MINOR, two NITs.** Both earlier MAJORs and
+  the earlier MINORs fixed (step 2 in part).
+  - MAJOR 1, IQ-T4 A was "stricter than today" only on battery: following display-off alone moves the AC default from
+    5 to 10 min and never locks with display-off Never and the saver off. Option A now keeps the inactivity limit as the
+    ceiling (whichever comes first), so it is never later than today; the question states the defaults and why the
+    display-off-only form is not offered; the recommendation, re-checked, stays A.
+  - MINOR 2, step 2 could have edited `LockView.qml` under a normal review: step 2 now says "nothing in
+    `shell/security`; the lock's output unchanged" (`WallpaperArt` without a parameter keeps today's drawing).
+  - NIT 3, stale line references in `visual-review.md` after the merge: `MenuBar.qml:870`, `STATE.md:120, 233`.
+  - NIT 4, an interrupted `releasing` needs a new PAM success: said in section 4.
 
 ## Consequences
 - The owner's answers to the twelve open questions decide steps 1c to 8; steps 1a and 1b can start now.
