@@ -49,6 +49,9 @@ T.Control {
         radius: height / 2
         color: root.checked ? Appearance.withAlpha(Appearance.colors.accent, root.dimmed ? Tokens.materialDisabledOpacity : 1)
                             : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        // Increase Contrast outlines the track, as the other controls: the off track alone is barely apart from its backdrop.
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         Behavior on color {
             ColorAnimation {

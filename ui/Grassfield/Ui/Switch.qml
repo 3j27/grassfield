@@ -37,6 +37,9 @@ T.Switch {
             anchors.fill: parent
             radius: height / 2
             color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+            // Increase Contrast outlines the track, as the other controls: the off track alone is barely apart from its backdrop.
+            border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
             Behavior on color {
                 ColorAnimation {
