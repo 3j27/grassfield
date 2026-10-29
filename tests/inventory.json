@@ -21,7 +21,6 @@
  "scripts/gates/*.py"
 ],
 "ignore": [
- {"path": "tests/shell/startup_settle.d/shell.qml", "reason": "scenario of tests/shell/startup_settle.sh (the real Settings service under qs -p)"},
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
