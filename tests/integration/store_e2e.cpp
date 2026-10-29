@@ -243,6 +243,14 @@ int main(int argc, char **argv)
             if (line.indexOf("  ") == 64)
                 check.pins.append({QString::fromUtf8(line.mid(66)), QString::fromLatin1(line.left(64))});
         }
+        // The deny list as the Store reads it: Omarchy's lists, pacman's HoldPkg (this container's pacman.conf).
+        DenyList deny;
+        for (const QString &list : {QStringLiteral("omarchy-base.packages"), QStringLiteral("omarchy-other.packages")}) {
+            QFile f(omarchy + QStringLiteral("/install/") + list);
+            if (f.open(QIODevice::ReadOnly))
+                deny.omarchy.unite(parsePackageList(f.readAll()));
+        }
+        deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
         QList<PlannedPackage> planned;
         Refusal refusal;
         if (install) {
@@ -250,7 +258,7 @@ int main(int argc, char **argv)
             aur.base = QUrl::fromLocalFile(args.at(3));
             aur.devPlumbing = true;
             const auto info = [&aur](const QStringList &asked) { return aurInfo(aur, asked); };
-            const InstallPlan plan = checkAurInstall(name, check, info, tools, true, false);
+            const InstallPlan plan = checkAurInstall(name, check, info, deny, tools, true, false);
             refusal = plan.refusal;
             for (PlannedPackage p : plan.built) {
                 p.version.clear(); // whatever its build makes (as the Store's install())
@@ -259,13 +267,6 @@ int main(int argc, char **argv)
             planned += plan.packages;
             say(QStringLiteral("plan=%1 built=%2 packages=%3 detail=%4").arg(refusalName(plan.refusal), names(plan.built), names(plan.packages), plan.detail));
         } else {
-            DenyList deny;
-            for (const QString &list : {QStringLiteral("omarchy-base.packages"), QStringLiteral("omarchy-other.packages")}) {
-                QFile f(omarchy + QStringLiteral("/install/") + list);
-                if (f.open(QIODevice::ReadOnly))
-                    deny.omarchy.unite(parsePackageList(f.readAll()));
-            }
-            deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
             const RemovePlan plan = checkSetupRemove({name}, check, deny, tools, false);
             refusal = plan.refusal;
             planned = plan.packages;

@@ -43,12 +43,21 @@ struct AppStreamComponent {
     // (violence, drugs, sex, language, social, money) as 1 mild, 2 moderate, 3 intense; a group at none is left out.
     bool rated = false;
     QMap<QString, int> rating;
+    // Flathub's AppStream (step 3c): the app id of its <bundle type="flatpak">app/<id>/<arch>/<branch></bundle>, the
+    // runtime that bundle names ("org.gnome.Platform/x86_64/50"), and Flathub's verified-developer flag (its custom key
+    // flathub::verification::verified). A component with a Flatpak bundle needs no pkgname.
+    QString flatpak;
+    QString runtime;
+    bool verified = false;
 };
 
 // gzip (RFC 1952) to bytes; empty when it is not gzip, is damaged, or would pass maxBytes.
 QByteArray gunzip(const QByteArray &gz, qint64 maxBytes);
 
-// The components of one catalog XML. Components without an id or a pkgname are skipped (the Store shows packages).
+// The components of one catalog XML. Components without an id, or without a pkgname and a Flatpak bundle, are skipped (the
+// Store shows packages and Flatpaks).
 QList<AppStreamComponent> parseAppStream(const QByteArray &xml);
+// A Flatpak runtime as a bundle names it: <id>/<arch>/<branch>.
+bool isFlatpakRuntime(const QString &runtime);
 
 } // namespace grassfield::store

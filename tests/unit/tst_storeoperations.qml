@@ -137,7 +137,7 @@ TestCase {
         t.win.requestGet(t.backend.find("org.example.Paint"));
         t.backend.planReady("org.example.Paint", "install", {refusal: "unfinished", unfinished: ["linux 6.17-1 -> 6.18-1"], packages: []});
         compare(s.title, "Finish the system update first");
-        compare(s.confirmText, "Open Software Update");
+        compare(s.confirmText, "Update Now…");
         verify(s.showCancel);
         verify(find(s, i => i.text === "linux 6.17-1 -> 6.18-1") !== null, "pacman's line");
         s.confirm();
@@ -145,8 +145,13 @@ TestCase {
         verify(t.backend.calls.indexOf("install:org.example.Paint") < 0);
 
         t.win.requestGet(t.backend.find("org.example.Paint"));
-        t.backend.planReady("org.example.Paint", "install", {refusal: "outdated", packages: [], upgrades: ["glib2"], detail: ""});
+        t.backend.planReady("org.example.Paint", "install", {refusal: "outdated", packages: [], upgrades: ["glib2"],
+                            detail: "https://mirror.example/extra/paint-1-1-x86_64.pkg.tar.zst: HTTP 404"});
         compare(s.title, "Update your system first");
+        verify(!find(s, i => i.text !== undefined && String(i.text).indexOf("HTTP 404") >= 0 && i.visible), "the mirror's answer stays in the log");
+        // The system older than the mirror (the integrator's note on PR #36): plain words and one action, Software Update.
+        compare(s.message, "Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.");
+        compare(s.confirmText, "Update Now…");
         s.cancel();
 
         t.win.requestGet(t.backend.find("org.example.Paint"));
@@ -275,6 +280,13 @@ TestCase {
             compare(s.confirmText, "OK");
             s.close();
         }
+        // A dependency the AUR would build under a name of the deny list (the integrator's note on PR #36).
+        t.win.requestGet(app);
+        t.backend.planReady("aur:example-app-bin", "install", {refusal: "protected", protected: "omarchy-example-lib", packages: [], detail: ""});
+        compare(s.title, "“example-app-bin” can't be installed from the AUR");
+        compare(s.message, "It would build omarchy-example-lib from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn't install it.");
+        compare(s.confirmText, "OK");
+        s.close();
         t.win.requestUninstall(Object.assign({}, app, {installed: true}));
         t.backend.planReady("aur:example-app-bin", "remove", {refusal: "", packages: [{name: "example-app-bin", version: "2.4.1-1", repo: "", size: ""}]});
         compare(s.message, "It is removed in a Terminal window, which asks for your password.\n\nThese packages will be removed. Your files and settings stay.");
@@ -404,6 +416,33 @@ TestCase {
         compare(details.text, "sudo rm /var/lib/pacman/db.lck");
         verify(details.message.indexOf("no pacman is running") >= 0);
         details.confirm();
+    }
+
+    // A system older than the mirror (a plan refused before anything downloaded, or a file the mirror no longer had: the
+    // integrator's note on PR #36): plain words and "Update Now…", which opens Software Update; pacman's output is never
+    // shown (no Details…), and no Try Again before the update.
+    function test_outdatedSaysUpdateNow() {
+        const t = make();
+        const notice = find(t.win.contentItem, i => i.objectName === "operationNotice");
+        t.backend.results = {"org.example.Paint": {kind: "install", name: "Paint", outcome: "outdated", present: 0, total: 3,
+                             details: "error: failed retrieving file 'paint-1-1-x86_64.pkg.tar.zst' from mirror.example : The requested URL returned error: 404"}};
+        tryVerify(() => notice.visible);
+        compare(notice.text, "“Paint”: Your system needs to be updated before you can install apps.");
+        compare(notice.actions.map(a => a.text), ["Update Now…", "Close"]);
+        notice.acted("update");
+        verify(t.backend.calls.indexOf("openSoftwareUpdate") >= 0);
+        verify(t.backend.calls.indexOf("dismiss:org.example.Paint") >= 0);
+
+        t.backend.results = {"org.example.Paint": {kind: "install", name: "Paint", outcome: "outdated", present: 0, total: 3, details: "error: 404"}};
+        t.win.openPage("app:org.example.Paint");
+        tryVerify(() => find(t.win.page, i => i.text === "Your system needs to be updated before you can install apps." && i.visible) !== null);
+        const update = find(t.win.page, i => i.text === "Update Now…" && i.activated !== undefined && i.visible);
+        verify(update);
+        verify(!find(t.win.page, i => i.text === "Details…" && i.visible), "pacman's output stays in the log");
+        verify(!find(t.win.page, i => i.text === "Try Again" && i.visible));
+        const before = t.backend.calls.filter(c => c === "openSoftwareUpdate").length;
+        update.activated();
+        compare(t.backend.calls.filter(c => c === "openSoftwareUpdate").length, before + 1);
     }
 
     // The product page says how its last operation ended, with Try Again and Details…; the line at the bottom is for the

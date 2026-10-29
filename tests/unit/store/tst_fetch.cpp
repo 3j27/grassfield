@@ -5,6 +5,7 @@
 #include "storetest.h"
 
 #include <QFile>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -69,6 +70,37 @@ TEST(Fetch, RealHttpsServer)
     r = get(QStringLiteral("/big-chunked"), 1000);
     EXPECT_EQ(r.status, FetchResult::Status::TooLarge);
     EXPECT_TRUE(r.body.isEmpty());
+
+    // A plan's HEADs (the integrator's review of ff2fd83): twelve files that each take a second to answer, asked at once, in
+    // well under twelve seconds; one gone (404) drops the others still running; one that never answers is 0 at the set's
+    // deadline.
+    QList<QUrl> slow;
+    for (int i = 0; i < 12; ++i)
+        slow.append(QUrl(base + QStringLiteral("/slow/%1").arg(i)));
+    QElapsedTimer clock;
+    clock.start();
+    EXPECT_EQ(headStatuses(slow, 10000, 20000), QList<int>(12, 200));
+    EXPECT_LT(clock.elapsed(), 6000);
+    EXPECT_EQ(headStatuses({QUrl(base + QStringLiteral("/slow/a")), QUrl(base + QStringLiteral("/gone"))}, 10000, 20000), (QList<int>{0, 404}));
+    clock.restart();
+    EXPECT_EQ(headStatuses({QUrl(base + QStringLiteral("/hang"))}, 10000, 1500), QList<int>{0});
+    EXPECT_LT(clock.elapsed(), 4000);
+    EXPECT_EQ(headStatuses({QUrl(base + QStringLiteral("/to-http"))}, 10000, 5000), QList<int>{-1}) << "a redirect to http";
+}
+
+// A plan's HEADs through dev plumbing (file://): a file there answers 200, a missing one 404 and drops the rest; file://
+// without dev plumbing, or http, is not requested (-1).
+TEST(Fetch, HeadStatusesThroughDevPlumbing)
+{
+    storetest::ensureApp();
+    QTemporaryDir dir;
+    storetest::writeFile(dir.filePath(QStringLiteral("a.pkg")), "a");
+    storetest::writeFile(dir.filePath(QStringLiteral("c.pkg")), "c");
+    const auto file = [&dir](const char *name) { return QUrl::fromLocalFile(dir.filePath(QLatin1String(name))); };
+    EXPECT_EQ(headStatuses({file("a.pkg"), file("c.pkg")}, 1000, 1000, true), (QList<int>{200, 200}));
+    EXPECT_EQ(headStatuses({file("a.pkg"), file("b.pkg"), file("c.pkg")}, 1000, 1000, true), (QList<int>{200, 404, 0}));
+    EXPECT_EQ(headStatuses({QUrl(QStringLiteral("http://example.org/a.pkg")), file("a.pkg")}, 1000, 1000), (QList<int>{-1, -1}));
+    EXPECT_TRUE(headStatuses({}, 1000, 1000).isEmpty());
 }
 
 TEST(Fetch, DevPlumbingReadsAFileWithinItsCap)

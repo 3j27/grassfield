@@ -24,6 +24,8 @@ TestCase {
     // Installed group, a refused install, the warning.
     function test_aurTexts() {
         compare(Store.getBlockText("aurOff", "aur"), "Turn on the AUR in the Store's settings to install from it.");
+        compare(Store.getBlockText("aurProtected", "aur"), "The system, Omarchy or Grassfield uses this name, so the Store doesn't build it from the AUR.");
+        compare(Store.getBlockText("listsMissing", "aur"), "Omarchy's package lists can't be read, so the Store installs nothing from the AUR.");
         compare(Store.getBlockText("repository", "aur"), "A repository has this package: the Store installs it from there, from its own page.");
         compare(Store.getBlockText("aurUnchecked", "aur"), "Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
         compare(Store.getBlockText("omarchyChanged", "aur"), Store.getBlockText("aurUnchecked", "aur"));

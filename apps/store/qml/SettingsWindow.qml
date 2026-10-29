@@ -45,8 +45,14 @@ Window {
     }
 
     function appDataLine(): string {
-        if (root.appData.problem === "unverified")
+        // Each reason in its own words (the integrator's note on PR #36): a file the mirror no longer has is not a signature
+        // that fails.
+        switch (root.appData.problem) {
+        case "download":
+            return qsTr("Arch's app data couldn't be downloaded. Check for updates, then try again.");
+        case "unverified":
             return qsTr("Arch's app data could not be verified.");
+        }
         switch (root.appData.origin) {
         case "installed":
             return qsTr("Arch's app data: installed on this computer.");
@@ -139,6 +145,15 @@ Window {
 
                 SettingsLine {
                     text: root.appDataLine()
+                }
+
+                // A download that failed: most often a package database older than the mirror, which Software Update
+                // brings up to date (ADR-0033); never a terminal.
+                Button {
+                    visible: root.appData.problem === "download"
+                    push: true
+                    text: qsTr("Open Software Update")
+                    onClicked: root.backend.openSoftwareUpdate()
                 }
 
                 Button {
