@@ -164,8 +164,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   records its own work outside a render (the shared edge's drag steps, `frameProbe::work`); both 1024 spans, dropped with
   the other records. The reply gains `"loop":{"beats":N,"stalls":[[beginUs,lengthUs,cpuUs],...],
   "work":[[beginUs,lengthUs],...]}` after `marks`; `--gate` fails without beats or without the plugin's work, and with
-  `--baseline` compares the gated scenario's compositor-caused long frames per second with the baseline's (tiling.md TL30:
-  the shared edge against Hyprland's own resize, at most 1.25 times, and at most 1 ms of the plugin's work per frame). The
+  `--baseline` compares the gated scenario's compositor-caused long frames per second, per window it resizes
+  (`--resizes`), with the baseline's (tiling.md TL30: the shared edge against Hyprland's own resize, at most 1.25 times per
+  resized window, and at most 1 ms of the plugin's work per frame). The
   attribution lists each
   compositor-caused frame with its render's CPU and the loop's held time before it, split into stalls (with the main
   thread's CPU share in them) and the plugin's work, and sums them per scenario (integrator nested pass of ce82fd3).
@@ -1007,7 +1008,7 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `g_pInputManager->{hasHeldButtons(), m_pointers, getMouseCoordsInternal()}`,
   `Pointer::Cursor::overrideController->{setOverride, unsetOverride}` (special-action group: the shared edge's cursor,
   tiling.md TL30), `Desktop::viewState()->hitTest().windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING)` and
-  `CWindow::hasPopupAt` (what is in front of the shared edge's handle), `g_pSessionLockManager->m_events.lock` (the lock
+  `CWindow::hasPopupAt` of every visible window (what is in front of the shared edge's handle), `CWorkspace::isVisible`, `g_pSessionLockManager->m_events.lock` (the lock
   ends its drag), `MIN_WINDOW_SIZE` (macros.hpp: the tiling minimum's floor), `CEventLoopTimer` (the frame probe's loop
   beats, FR54),
   `CWindow::{m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration,

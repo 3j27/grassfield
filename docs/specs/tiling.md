@@ -386,7 +386,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (core `handleClear`). The pointer resting on a handle (no button held, no modifier, the desktop not covered: not
   locked, no foreign Exclusive layer, no layer under the point, no other window, titlebar or popup in front) shows a
   left-right or up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon);
-  nothing is drawn (D32). Hover reads edges kept from the last look, built again when the book's records, a window's box,
+  nothing is drawn (D32). Any popup there counts, whichever window it belongs to: Hyprland's hit test returns the topmost
+  window whose box (border grab area included) holds the point before it looks at the popups of the windows below, so the
+  plugin checks every visible window's popups (integrator nested pass of 3d56d60). Hover reads edges kept from the last look, built again when the book's records, a window's box,
   band or state, the output's Desktop or the margins changed. A plain left press there, with no button held by any device,
   is the plugin's: it and its release are cancelled
   on the bus (compositor.md FR13, as P6), every window of the edge goes Resizing, and the edge follows the pointer along
@@ -410,11 +412,13 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   frame probe's beats, every 1 ms) or ran the plugin's own work: a stall there shows only as a late render, which read as a
   client's before (integrator review of a6d04df). Measured so, the drag still had compositor-caused long frames at idle (30
   and 43 in two runs), with the plugin's own work at 0.1-0.2 ms per frame: the loop is held 10-18 ms before a late render
-  by Hyprland's own handling of the resize. The gate, restated by the integrator (D34): the shared edge's P3 passes when
+  by Hyprland's own handling of the resize. The gate (D34 final, integrator, 2026-10-29): the shared edge's P3 passes when
   (a) the plugin's own work is at most 1 ms in every frame of the drag and (b) its compositor-caused long frames per second
-  are at most 1.25 times those of Hyprland's own resize_on_border drag of one of the same windows with the same glide
-  (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline`, which fails without the loop's or the
-  plugin's records, without the baseline, and when the animation holds no frame; the share on time is information.
+  per resized window are at most 1.25 times those of Hyprland's own resize_on_border drag of one of the same windows with
+  the same glide (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline --resizes`, which fails
+  without the loop's or the plugin's records, without the baseline, and when the animation holds no frame; the share on
+  time is information. Nested pass of 3d56d60: the plugin's work at most 0.71 ms in a frame, 5.45/s per resized window
+  against Hyprland's own 5.5/s: met; Windows' placeholders are dropped.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
@@ -542,9 +546,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 
 ## Performance (gates affected)
 - P3: popover and suggestions open within one frame budget; the shared-edge drag with two live neighbours costs the plugin
-  at most 1 ms per frame and causes no more compositor long frames per second than 1.25 times Hyprland's own resize of one
-  window (ADR-0036 D34 as amended: its share of frames on time follows the apps' redraw and is reported as information);
-  the neighbours are configured at most once per output refresh.
+  at most 1 ms per frame and causes, per resized window, no more compositor long frames per second than 1.25 times
+  Hyprland's own resize of one window (ADR-0036 D34 final: its share of frames on time follows the apps' redraw and is
+  reported as information); the neighbours are configured at most once per output refresh.
 - C1: the soak gains tiling actions (arrange, drag to edges, popover open and close, shared-edge drags).
 
 ## Accessibility
