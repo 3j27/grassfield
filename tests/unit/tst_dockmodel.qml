@@ -499,7 +499,14 @@ TestCase {
         // A stored Files id (with or without .desktop) gives no second tile and the tile stays when the list is emptied.
         compare(kinds(build(["org.grassfield.Files", "foot", "org.grassfield.Files.desktop"], [])), "files:files,apps,app:foot,separator,trash");
         compare(kinds(build([], [])), "files:files,apps,separator,trash");
-        compare(DockModel.withoutFiles(["org.grassfield.Files", "foot", "ORG.grassfield.Files"]).join(","), "foot,ORG.grassfield.Files");
+        // Whatever its case (review of PR #53: as windowsOf and the entry lookup compare ids).
+        compare(DockModel.withoutFiles(["org.grassfield.Files", "foot", "ORG.grassfield.Files", "org.grassfield.files.DESKTOP"]).join(","), "foot");
+        verify(DockModel.isFilesId("ORG.GRASSFIELD.FILES.desktop"));
+        verify(!DockModel.isFilesId("org.grassfield.Filesystem"));
+        verify(!DockModel.isFilesId(undefined));
+        const split = DockModel.splitFiles([{kind: "app", key: "Org.Grassfield.Files", windows: ["w1"]}], id => null);
+        compare(split.files.windows.join(","), "w1");
+        compare(split.rest.length, 0);
         compare(DockModel.withoutFiles(undefined).length, 0);
         // The tile is not an app tile: reorder, drag slots and unpin never see it.
         const items = build(["chromium", "foot"], []);

@@ -85,10 +85,12 @@ function migratePinned(pinned) {
     return list.length === OLD_DEFAULT_PINNED.length && list.every((id, i) => id === OLD_DEFAULT_PINNED[i]) ? DEFAULT_PINNED.slice() : list;
 }
 
-// True for the id of Grassfield Files, with or without the ".desktop" suffix.
+// True for the id of Grassfield Files, with or without the ".desktop" suffix and whatever its case: ids compare as the entry
+// lookup and windowsOf compare them, so a stored "ORG.grassfield.Files" is the fixed tile, never a second one (review of
+// PR #53).
 function isFilesId(id) {
-    const s = String(id === undefined || id === null ? "" : id).replace(/\.desktop$/, "");
-    return s === FILES_ID;
+    const s = String(id === undefined || id === null ? "" : id).replace(/\.desktop$/i, "");
+    return s.toLowerCase() === FILES_ID.toLowerCase();
 }
 
 // The pinned list without Files: its tile is fixed, a stored id would only make a second tile.
