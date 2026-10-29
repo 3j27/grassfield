@@ -3,7 +3,9 @@ Status: Proposed (step 0 of the owner's brief « Stabilité », 2026-10-29; docu
 open (SQ-1 to SQ-6); every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no technical
 step for the end user") and is listed in "Decisions taken under the owner's rule" (SD-1 to SD-8), which the owner can
 revisit. Revised after the integrator's opus review of 2c0bd74 (FAIL: one MAJOR, eight MINORs, three NITs), answered in
-"Review history"; each changed place says "review of 2c0bd74". · Date: 2026-10-29 · Decider: owner (SQ), integrator (merge; SD under the rule) · Number: 0041 (0040 is the
+"Review history"; each changed place says "review of 2c0bd74". The owner answered SQ-1 to SQ-6 on 2026-10-29 (asked by
+the integrator, recorded in "Owner decisions"): SQ-1 B makes ADR-0010's separate security process the path of step 1;
+the other five take the recommended option. · Date: 2026-10-29 · Decider: owner (SQ), integrator (merge; SD under the rule) · Number: 0041 (0040 is the
 identity ADR on main b345334; the open pull requests #48 and #49 add none)
 
 This ADR proposes the "Stability" work: what happens when a process of the Grassfield session crashes, hangs, loops or
@@ -73,7 +75,7 @@ incompatible combination; no infinite loop, memory leak or hang lasts.
 | Overlap | This ADR | The other |
 |---|---|---|
 | The red "lock screen died" screen's delay during a shell restart | names it; step 1's nested pass records what is drawn, nothing more | ADR-0040 IQ-T5 (owner question) |
-| A separate security process (lock, polkit, idle, sleep inhibitor) | step 1's safe mode is built from the minimal root ADR-0010 S2 describes, under the same security rules; the direction stays ADR-0010's | ADR-0010 "Separate security process", S1-S5 |
+| A separate security process (lock, polkit, idle, sleep inhibitor) | step 1 builds it (the owner's SQ-1 B, 2026-10-29): ADR-0041 carries the S1-S5 plan in the integrator's order (the process and its unit first, then the lock, polkit, idle and the inhibitor one per step, safe mode last), each S-step under the opus security review; ADR-0010 is amended to say so | ADR-0010 "Separate security process", amended 2026-10-29 |
 | The compatibility check, the `[grassfield]` repository, the rc-channel watch job | SQ-3 revisits one rejected option (versioned bounds) with a new shape; the check U27, the a2 "Turn Off" path and the watch job stay as they are | ADR-0033 s3.4, a2, f |
 | The compositor extension's ABI, rebuild and degraded mode | the ABI rule, the user-only rebuild and the degraded mode unchanged; step 2d reverses one line of ADR-0009's amendment ("With the toggle off the notice gives the command"): the notice gives one action, the toggle stays off by default, and 2d amends ADR-0009 explicitly (review of 5a20d19); SQ-6 adds one rule for the login after a compositor crash | ADR-0009 and its amendment |
 | The session configuration under a package upgrade | step 2 adds one guard to the shell's explicit reloads; the watcher stays off | ADR-0001 amendment 2026-10-29 |
@@ -106,57 +108,97 @@ reviewed, with its nested pass before merge. Steps 1 and 2 need owner answers (S
 "Integrator, nested" lists what the integrator verifies in a nested session before merging; "Owner, real session" what
 only the owner can check (L2); "Review" names the required reviewer.
 
-### Step 1: the crash loop ends in safe mode, locked throughout (P-2a, M-4, M-5, M-9) — **opus security review**
-Goal: a shell that crashes in a loop, at any pace, stops looping within minutes, the session stays locked if it was,
-and the user gets a working lock screen, a working polkit agent and a way out (Try Again, Log Out), never a lock-out.
-- **1a. The loop detector** (SQ-2). `grassfield-shell.service` gains a second `OnFailure=` unit,
-  `grassfield-shell-failed.service` (`Type=oneshot`, a POSIX sh script, standard tools only), which records each failure's
-  monotonic time in `$XDG_RUNTIME_DIR/grassfield/shell-failures` (0600), prunes the window and, at the threshold, cancels
-  the pending restart (`systemctl --user stop grassfield-shell.service`, which a unit in auto-restart accepts) and starts
-  `grassfield-shell-safe.service`. systemd's own start limit stays as the backstop and is raised to a window a slow loop
-  reaches (SQ-2). A logout does not count: the script applies the same "compositor gone" test as the sleep-lock gate
-  (`packaging/systemd/sleep-lock-gate`), so the 255 exit of every logout (GF-081) never counts as a failure.
-  `OnFailure=omarchy-sleep-lock.service` stays, unchanged.
-- **1b. Safe mode** (SQ-1). `grassfield-shell-safe.service` runs the same packaged tree, `qs -n -p /usr/share/grassfield/shell`,
-  with `GRASSFIELD_SAFE_MODE=1`; `shell/shell.qml` reads it and loads only: `shell/security` (Lock, AuthAgent, Idle,
-  SleepInhibitor, the crash-recovery marker, the stranded-lock takeover), the notification server with plain banners
-  (the sleep inhibitor's notice and the crash watcher need it), and one bar: the Grassfield mark, the sentence "Grassfield
-  is running in safe mode: its desktop stopped working and was turned off." and the Grassfield menu with Try Again…, Log
-  Out…, Restart…, Shut Down… (the existing session-end path). No Dock, desktop, wallpaper feed, Search, Overview,
-  widgets, OSD, menu bridge client, compositor handshake or request sockets to the plugin: the 2026-10-29 crash lived in
-  those request sockets (I-1), which safe mode never opens. The two units carry `Conflicts=` on each other, so Try Again
-  (`systemctl --user start grassfield-shell.service`, run by the safe shell) stops the safe shell first; the compositor
-  keeps any lock across that hand-over and the full shell takes it over as after any restart (SEC2, rules 1-4 of
-  `docs/specs/security.md`). Try Again also empties the failures file; a second loop returns to safe mode. The same IPC
-  path (`-p /usr/share/grassfield/shell`) means `lock lock`, `lock lid`, the `omarchy-shell` stand-in and the key
-  bindings reach the safe shell unchanged. The sleep-lock gate skips Omarchy's unit while **either** unit is
-  active/running; the stand-in starts the safe unit when the failures file is at its threshold, the full one otherwise.
-  The safe unit's own policy (review of 2c0bd74, finding 8): `Restart=always`, `RestartSec=1`, `StartLimitIntervalSec=300`,
-  `StartLimitBurst=5` (a safe shell that loops stops after its fifth start in five minutes: the compositor's lock then
-  holds, the known limit below), `OnFailure=omarchy-sleep-lock.service` (every failure of the safe shell arms Omarchy's
-  sleep lock, as the full shell's does; no `OnFailure=` back to the detector, so a failing safe shell never re-enters safe
-  mode), `Conflicts=grassfield-shell.service`, `PartOf=` and `Requisite=graphical-session.target`,
-  `ConditionEnvironment=GRASSFIELD_SESSION=1`, and the same `UnsetEnvironment=`, `MemoryHigh=`, `MemoryMax=` and
-  `CPUQuota=` lines as the full unit; `tests/shell/unit_restart_limits.sh` checks both units.
-- Known limit (written in the spec): a Quickshell bug that crashes the safe shell too leaves the compositor's lock in
-  place (fail closed) and the session out of reach from itself; the only exits are a TTY or the power button, as today.
-  The separate security process (ADR-0010 S1-S5) would narrow this further; it stays the direction.
-- Proof: the loop arithmetic in the unit's comment; a nested run where the shell is killed with SIGSEGV every 5 s while
-  locked: Hyprland reports `LOCK` on every monitor the whole time, nothing typed reaches a probe window, the safe bar and
-  the lock view appear after the threshold, the password unlocks at the first attempt, Try Again brings the full shell
-  back; the same unlocked; a logout during the window does not count; captures of the safe bar (en, fr, light, dark).
-- Tests: `tests/shell/unit_restart_limits.sh` gains the lifetime model (it must fail on today's unit, then pass);
-  `tests/security/sleep_lock_units.sh` covers the gate and the stand-in for every state of both units; a logic test of
-  the detector on a fake `systemctl` and a fake runtime directory (`tests/shell/shell_failures.sh`); the safe root under
-  `qs` offscreen (`tests/security/safe_mode.d/`: only the allowed modules are instantiated, the IPC inventory is the
-  security subset, `ipc_inventory.sh` extended); `tests/security/reload_locked.sh` gains the `crash-loop` and
-  `safe-mode` steps (nested, bare); the L1-L5 gates run against the safe shell.
-- Integrator, nested: the proof above; `lock_surfaces.sh`, `ipc_inventory.sh`, `shell_unit_env.sh`; the unit files
-  through `session_services.sh`; what the compositor draws between the crash and the takeover is recorded for IQ-T5.
-- Owner, real session: after installing the package, `kill -SEGV $(systemctl --user show -p MainPID --value grassfield-shell.service)`
-  three times within the window while locked: the session stays locked, safe mode appears, the password unlocks, Try
-  Again restores the desktop (`scripts/gates/r1-restart.sh --journal` then has its first real restarts, gate R1).
-- Review: opus security (R12), then the integrator's counter-review; two pull requests if 1a merges before 1b is agreed.
+### Step 1: the loop stops, and the lock lives apart from the UI (P-2a, M-4, M-5, M-9; SQ-1 B, SQ-2 A) — **opus security review on every part**
+Goal: a UI that crashes in a loop, at any pace, stops looping within minutes; the lock, the polkit agent, idle and the
+sleep inhibitor keep running whatever the UI does; the session stays locked if it was; safe mode is "the UI unit
+failed, the security process is up", with a way out (Try Again, Log Out), never a lock-out. Rewritten after the owner's
+answers of 2026-10-29 (SQ-1 B: ADR-0010's separate security process now, S1-S5; SQ-2 A): the first version built a safe
+configuration of the one shell process. Order and rules set by the integrator under the owner's rule: 1a ships first and
+unchanged (independent, it stops a slow loop today); then the security process, its unit first with nothing moved yet,
+then the lock, polkit, idle and the inhibitor one per step; safe mode is the last step; the UI keeps refusing while
+locked from state it receives and treats "no state yet" or "stale" as locked (a missed push fails closed, never open:
+ADR-0010's risk 2); the second Qt Quick process's memory and start time are measured at S1 against the budgets; IQ-T5
+(the compositor's lockdead delay, ADR-0040) still applies to a crash of the security process itself. Each part is its own
+pull request under the opus security review (R12), and every intermediate state keeps "failures stay locked".
+- **1a. The loop detector** (SQ-2 A: 3 failures within 10 minutes; systemd's start limit raised to 10 starts in 5 minutes
+  as the backstop). `grassfield-shell.service` gains a second `OnFailure=` unit, `grassfield-shell-failed.service`
+  (`Type=oneshot`, a POSIX sh script, standard tools only), which records each failure's monotonic time in
+  `$XDG_RUNTIME_DIR/grassfield/shell-failures` (0600), prunes the window and, at the threshold, cancels the pending restart
+  (`systemctl --user stop grassfield-shell.service`, which a unit in auto-restart accepts) and writes the safe-mode state
+  file the security process reads from S5 on. A logout does not count: the script applies the same "compositor gone"
+  test as the sleep-lock gate (`packaging/systemd/sleep-lock-gate`), so the 255 exit of every logout (GF-081) never
+  counts as a failure. `OnFailure=omarchy-sleep-lock.service` stays, unchanged. Before S5 ships, what the user sees at
+  the threshold is what the start limit gives today, reached now for a slow loop too: the UI stays stopped (no bars,
+  the windows over the ground colour), the compositor keeps a lock if there was one (fail closed, out of reach from the
+  session: a TTY or the power button are the exits, as today), Omarchy's sleep lock stays armed and its stand-in tries
+  the shell once more at sleep time (`reset-failed` + start). Proof: a nested run where the shell is killed with SIGSEGV
+  every 5 s while locked: Hyprland reports `LOCK` on every monitor throughout, nothing typed reaches a probe window, the
+  restarts stop after the third failure; the same unlocked; a logout during the window does not count. Tests:
+  `tests/shell/unit_restart_limits.sh` gains the lifetime model (it must fail on today's unit, then pass); a logic test
+  of the detector on a fake `systemctl` and a fake runtime directory (`tests/shell/shell_failures.sh`);
+  `tests/security/sleep_lock_units.sh` for the gate with the stopped unit; `tests/security/reload_locked.sh` gains the
+  `crash-loop` step (nested, bare). Owner, real session: `kill -SEGV $(systemctl --user show -p MainPID --value
+  grassfield-shell.service)` three times within ten minutes while locked: the session stays locked and the restarts stop
+  (`scripts/gates/r1-restart.sh --journal` then has its first real restarts, gate R1). Review: opus security (R12).
+- **S1. The security process and its unit, nothing moved yet.** `shell/security/` is made free of UI imports (ADR-0010 S1:
+  the lock backdrop through a `Grassfield.Ui` type; popups closed by the UI on `SessionState.locked`, so `Lock.lock()`'s
+  `Popups.close()` goes; the sleep notice through the notification server's public D-Bus interface), without a
+  behaviour change. A second root, `shell/security/shell.qml`, and its unit `grassfield-security.service` (`Restart=always`,
+  `RestartSec=1`, `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `PartOf=` and `Requisite=graphical-session.target`,
+  `ConditionEnvironment=GRASSFIELD_SESSION=1`, the same `UnsetEnvironment=` lines as the shell's, no
+  `NoNewPrivileges` for the same reason as the shell's, `MemoryHigh=`/`MemoryMax=`/`CPUQuota=` set from the S1
+  measurement) run beside the UI, started by `autostart.lua` before the shell, hosting nothing but the IPC target
+  `security state` (answers `starting`) and a heartbeat the UI reads. Measured and recorded against the budgets: the
+  process's RSS at idle (gate P2's accounting gains a second process), its start time to the first IPC answer (gate P5:
+  the session to a usable menu bar and dock stays ≤ 2 s). Tests: `tests/security/shell_unit_env.sh` and
+  `session_services.sh` for the unit; `ipc_inventory.sh` for the new target; `import_graph.py` for the import freedom;
+  `scripts/gates/rss.sh --nested` with both processes. Review: opus security.
+- **S2. The lock moves.** `Lock`, `LockView`, the crash-recovery marker and the stranded-lock takeover run in the security
+  process; the IPC targets `lock lock`, `lock lid` and `lock status` answer on the security instance
+  (`qs ipc -p /usr/share/grassfield/security`), and every caller switches in the same pull request: the key bindings
+  (`config/hypr/grassfield/bindings.lua`), `grassfield-lid`, the `omarchy-shell` stand-in, the screen corners, the apps'
+  `shellIpcArgs()` callers of `lock`, and the tests. The UI reads `lock state` (`locked`|`unlocked` only) at start and
+  receives a push on every transition plus a heartbeat; "no state yet", a stale heartbeat or a security process that is
+  not active/running read as **locked** for every UI refusal (GF-116, "Show previews: When Unlocked", Overview, Switcher,
+  the Dock's reopen): fail closed, the integrator's rule. The compositor keeps the lock across any crash of either
+  process; the security process's own crash shows the compositor's lockdead screen until its restart (IQ-T5 decides the
+  delay); its own loop ends at its start limit with the compositor's lock in place (the known limit, as today). Proof:
+  ADR-0010's crash-injection test moved here: a crash signal to the UI process while locked leaves the lock surface in
+  place (no lockdead screen) and nothing typed reaches a window; while unlocked, the lock is still reachable; a crash of
+  the security process while locked keeps `LOCK` on every monitor until its restart takes the lock back. Tests: L1-L5
+  against the security process (`reload_locked.sh` every step, `l2_wrong_password.sh`, `lock_privacy.sh`,
+  `lock_surfaces.sh`, `lock_monitor_model.sh`, `marker_read`, `reload_order`); a UI-side test that every refusal reads
+  locked on no state, a stale heartbeat and a stopped security unit (mutants on each). Owner, real session: DT-01 and
+  DT-21 re-run (kill the UI while locked, kill the security process while locked). Review: opus security.
+- **S3. The polkit agent moves.** `AuthAgent` and its dialog run in the security process, drawn with `Grassfield.Ui`
+  only; exactly one agent in the session (L5: registration, action id and program shown, cancel works, never
+  auto-approves); the UI's `polkit status` dev hook moves with it. Tests: `authagent_flows.sh`, `tst_authdialog*`,
+  `mutate_authdialog.sh` against the security process. Review: opus security.
+- **S4. Idle and the sleep inhibitor move.** `Idle` (dim, lock, display off), `SleepInhibitor` and the `PrepareForSleep`
+  watcher run in the security process; `OnFailure=omarchy-sleep-lock.service` moves to `grassfield-security.service` and
+  the sleep-lock gate is keyed on it (`active`/`running` of the security unit; the shell's unit keeps `Restart=always`
+  and 1a's detector, and loses its `OnFailure=` to the sleep lock, since it no longer holds an inhibitor); the stand-in's
+  `lock lock` starts the security unit when it is not running. The idle and sleep notices go through the notification
+  server's D-Bus interface (journal only while the UI is down). Tests: `sleep_lock_units.sh` for every state of both
+  units, `tst_idlemodel`, `lid.sh`, `screensaver_inhibit.sh`. Owner, real session: L3 (lock before sleep) and the lid.
+  Review: opus security.
+- **S5. Safe mode, last.** When 1a's state file says the UI is stopped for a loop, the security process maps one layer
+  surface: the Grassfield mark, the sentence "Grassfield is running in safe mode: its desktop stopped working and was
+  turned off." and the Grassfield menu with Try Again…, Log Out…, Restart…, Shut Down… (the existing session-end path),
+  drawn with `Grassfield.Ui` only, under the lock surface when locked. Try Again starts `grassfield-shell.service` and
+  empties the failures file; a second loop returns here. Nothing else: no Dock, desktop, Search, notification server or
+  request socket to the plugin (the 2026-10-29 crash lived in those sockets, I-1, which the security process never
+  opens). Proof: the 1a nested run, now ending with the safe-mode bar after the third failure, the password unlocking
+  at the first attempt, Try Again restoring the desktop; captures (en, fr, light, dark). Tests: the safe-mode surface
+  offscreen (`tests/security/safe_mode.d/`), `reload_locked.sh` gains `safe-mode`, `ipc_inventory.sh` for its actions.
+  Owner, real session: the 1a kills, then safe mode, the password, Try Again. Review: opus security.
+- Known limits (written in the spec): a Quickshell bug that takes the security process down in a loop leaves the
+  compositor's lock in place and the session out of reach from itself (the TTY or the power button); a second Qt Quick
+  process costs memory (measured at S1, the budget recorded in `docs/testing/gates.md`); until S4 ships, a crash of the
+  UI still takes the inhibitor down for the restart's second (Omarchy's sleep lock covers it, as today).
+- Integrator, nested: every proof above, step by step; `lock_surfaces.sh`, `ipc_inventory.sh`, `shell_unit_env.sh`,
+  `session_services.sh` after each move; what the compositor draws during a security-process restart is recorded for
+  IQ-T5.
 
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
@@ -345,29 +387,49 @@ Goal: no input a process reads from the system, a file or another process can cr
 ### Delivery order and what each step waits for
 | Step | Waits for | Pull requests |
 |---|---|---|
-| 1 | SQ-1, SQ-2 | 1a then 1b (or one) |
+| 1 | answered (SQ-1 B, SQ-2 A): 1a now; S1 after the merge of step 0; then S2, S3, S4, S5 in that order | 1a; S1; S2; S3; S4; S5 |
 | 2 | SQ-3 and the repository's publication (2a); 2b, 2c and 2d can start now | 2a; 2b; 2c; 2d |
 | 3 | step 1 for the loop rows; the rest now | 1 |
 | 4 | nothing | 1 or 2 (the fix of a found leak apart) |
 | 5 | nothing | 1 or 2 |
-| 6 | SQ-5, SQ-6 | 6a, 6b |
+| 6 | answered (SQ-5 A, SQ-6 A) | 6a, 6b |
 | 7 | the owner's portal measurement (7c) | 1 |
-| 8 | SQ-4 | 1 |
+| 8 | answered (SQ-4 A) | 1 |
 
 ## New units, packages and dependencies (R5)
 | Item | Kind | Justification | Decided by |
 |---|---|---|---|
 | `grassfield-shell-failed.service` | a `Type=oneshot` user unit, a POSIX sh script | systemd counts starts, not failures, and cannot see a lifetime; nothing but the `OnFailure=` path sees each failure as it happens; it runs for a moment, never a daemon | step 1a (SQ-2 sets its numbers) |
-| `grassfield-shell-safe.service` | a user unit, the same `qs` binary and tree | the brief's safe mode; the same process image, another root; no new program | SQ-1 |
+| `grassfield-security.service` | a second Quickshell process (the same `qs` binary, the root `shell/security/shell.qml`) and its user unit | the owner's SQ-1 B (ADR-0010's direction, GF-050): the lock, polkit, idle and the inhibitor apart from the UI, as loginwindow is apart from the Dock; its memory and start time measured at S1 against P2 and P5 | SQ-1 B (owner, 2026-10-29) |
 | `grassfield-hold` and `grassfield-unhold` | two split packages with `depends`, `provides` and `conflicts` only | the only mechanism pacman offers that refuses on every path and can be undone in one transaction; no code, no service; shipped only once the `[grassfield]` repository is published | SQ-3 |
 | the checker's toolkit comparison | no new unit: a read-only step of the shell's existing update checker, as the user | learns on every path that the toolkit moved under the session, with nothing run as root (ADR-0009:112; review of 2c0bd74 dropped the alpm hook of the first version) | step 2b |
 | `grassfield-shell-watchdog.timer` | a user timer and a `Type=oneshot` unit | a frozen shell is otherwise invisible; a timer runs no daemon; Quickshell offers no `sd_notify` watchdog (NOT VERIFIED: the step checks `qs --help`) | SQ-5 |
 | `tests/fuzz/` | test code, no runtime dependency | ASan/UBSan builds exist; the mutator is in-tree | step 5 |
 | No new runtime dependency | — | every program named above is in the session's `depends` already (`systemd`, `pacman`, `polkit`, `coreutils`, `jq` through the stand-in's existing use) | — |
 
-## Owner questions
+## Owner decisions (2026-10-29, asked by the integrator; recorded from PR #50)
+| Question | The owner's choice | Option |
+|---|---|---|
+| SQ-1 safe mode | « Processus sécurité séparé » | **B**: ADR-0010's separate security process now (S1-S5); safe mode is "the UI unit failed, the security process is up" |
+| SQ-2 the loop detector | « 3 plantages en 10 min » | **A** (recommended) |
+| SQ-3 an untested toolkit | « Détecter maintenant, bloquer plus tard » | **B now, A after the `[grassfield]` repository is published** (recommended) |
+| SQ-4 crash reports | « Afficher le rapport » | **A** (recommended) |
+| SQ-5 a frozen shell | « Sonde toutes les 30 s » | **A** (recommended) |
+| SQ-6 the extension after a compositor crash | « La couper si elle est en cause » | **A** (recommended) |
 
-**SQ-1. The shape of safe mode** (step 1b; the brief requires one; it reverses nothing decided). Both A and B are
+Integrator decisions under the owner's rule that come with SQ-1 B (the closest to macOS, no technical step for the end
+user): step 1 is rewritten around ADR-0010's S1-S5, each S-step its own pull request under the opus security review,
+every intermediate state keeping "failures stay locked"; the order is 1a first (independent, it stops a slow loop today),
+then the security process (its unit first with nothing moved yet, then the lock, polkit, idle and the inhibitor, one per
+step), safe mode last; the UI keeps refusing while locked from state it receives and treats "no state yet" or "stale" as
+locked; the second Qt Quick process's memory and start time are measured at S1 and recorded against the budgets; IQ-T5
+(ADR-0040) still applies to a crash of the security process itself; ADR-0010 is amended to carry the decision.
+
+## Owner questions
+Answered on 2026-10-29 (above); the options stay as they were asked.
+
+
+**SQ-1. The shape of safe mode** (step 1; the brief requires one; it reverses nothing decided). Answered: B (owner, 2026-10-29). Both A and B are
 security modules under R12; the compositor keeps the lock in every option (SP-1).
 | Option | For | Against |
 |---|---|---|
@@ -427,7 +489,8 @@ session whatever its cause; the question is the next login.
 - **SD-3.** The hold, whatever SQ-3 decides, never constrains `hyprland` (ADR-0009: degraded mode and the rebuild).
 - **SD-4.** Safe mode never unlocks by itself, never approves, never sleeps unlocked; its menu offers Try Again, Log Out,
   Restart and Shut Down and nothing else; its sentence is "Grassfield is running in safe mode: its desktop stopped
-  working and was turned off." (French in the same pull request).
+  working and was turned off." (French in the same pull request). Under SQ-1 B its bar is drawn by the security process
+  (step 1, S5), with `Grassfield.Ui` only.
 - **SD-5.** The chaos and endurance tests run in nested sessions only; the owner's real session gets a read-only check
   list per step (`docs/audits/stability-2026-10-29/owner-checks.sh` from step 7 on), never a driven test. The owner's own
   checks listed per step (step 1's kill of the shell, run by the owner's hand on the owner's machine) are owner-run
@@ -444,13 +507,15 @@ session whatever its cause; the question is the next login.
   marked `runner: bare` and recorded in `docs/testing/gates.md` with its date and commit (gates R1, L1, C2, P2, Q3).
 
 ## Consequences
-- The session gains at most two small user units and one timer, and two split packages once the repository is published,
-  all listed above; no alpm hook, no daemon, no new dependency, no new language.
+- The session gains a second Quickshell process and its unit (the owner's SQ-1 B), one small oneshot unit and one timer,
+  and two split packages once the repository is published, all listed above; no alpm hook, no new dependency, no new
+  language.
 - `grassfield-shell.service`'s start limit, `OnFailure=` list and the sleep-lock gate change under the security review;
   `tests/security/sleep_lock_units.sh` and `unit_restart_limits.sh` grow with them.
-- The direction of ADR-0010 (a separate security process) is unchanged; step 1's safe root is reusable as its S2.
+- ADR-0010's direction (a separate security process) becomes the decision: step 1 carries its S1-S5; ADR-0010 is amended
+  on 2026-10-29 to say so.
 - ADR-0033 gains, if SQ-3 chooses A, an amendment that records the hold next to s3.4 and extends f's watch job.
-- Known limits written into the specs: a Quickshell bug that takes the safe shell down too (SQ-1 A); a compositor crash
+- Known limits written into the specs: a Quickshell bug that takes the security process down in a loop (SQ-1 B); a compositor crash
   ends the session (P-1); while a hold lags, updates wait (SQ-3 A); a Store install may need a system update first (I-5).
 
 ## Evidence (this session, main b345334; read-only)
@@ -482,7 +547,8 @@ session whatever its cause; the question is the next login.
   - MINOR 6, step 2b's root hook against ADR-0009:112 ("Nothing in the amended design runs as root after the package is
     installed"): the hook is gone; detection runs as the user in the shell's checker (step 2b, SD-6, the R5 table).
   - MINOR 7, "7 nested Hyprland dumps" sourced (`09-reliability-audit.md:36`) in SQ-6 C.
-  - MINOR 8, the safe unit's `Restart=`, `OnFailure=` and start limit specified (step 1b).
+  - MINOR 8, the safe unit's `Restart=`, `OnFailure=` and start limit specified (then step 1b; the owner's SQ-1 B moved
+    them to `grassfield-security.service`, step 1 S1 and S4).
   - MINOR 9, the extension notices name a command while `windows.rebuildExtension` is off: step 2d plans the notice's
     action; a known limit under SP-6 until then.
   - NITs: SD-5 and step 1's owner check agree (owner-run checks, not driven tests); STATE's note on #48/#49 says their
@@ -499,3 +565,9 @@ session whatever its cause; the question is the next login.
   not run the hold pair's scratch-database check (the project's guard blocks package-install commands even with a
   temporary `--dbpath`): reasoned from libalpm and `vercmp`, `--ask 4` = `ALPM_QUESTION_CONFLICT_PKG`; step 2a's first
   container test decides. The integrator is asking the owner SQ-1 to SQ-6; the answers go on PR #50.
+- **The owner's answers (2026-10-29, posted on PR #50 by the integrator):** SQ-1 B, SQ-2 A, SQ-3 B now and A after the
+  publication, SQ-4 A, SQ-5 A, SQ-6 A, with the integrator's decisions under the owner's rule for SQ-1 B. Recorded in
+  "Owner decisions"; step 1 rewritten around S1-S5 in the integrator's order (1a first, the process and its unit, then
+  the lock, polkit, idle and the inhibitor one per step, safe mode last; the UI fails closed on missing or stale state;
+  memory and start time measured at S1; IQ-T5 applies to the security process); the delivery table, the R5 table, SD-4
+  and the consequences follow; ADR-0010 amended. Next: step 1a, then S1.

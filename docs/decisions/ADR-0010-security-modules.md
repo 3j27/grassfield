@@ -1,5 +1,5 @@
 # ADR-0010: Security modules design (lock, polkit, idle)
-Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed) · Date: 2026-10-17 · Decider: owner · Requires opus reviewer PASS per change (R12)
+Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Proposed); the separate security process of the amendment of 2026-10-24 (GF-050) is decided by the owner on 2026-10-29 (ADR-0041 SQ-1 B), its plan carried by ADR-0041 step 1 (amendment of 2026-10-29 below) · Date: 2026-10-17 · Decider: owner · Requires opus reviewer PASS per change (R12)
 
 ## Context
 D2: grassfield-shell replaces omarchy-shell in the Grassfield session, including lock, polkit agent and
@@ -124,3 +124,18 @@ C1 control characters, line or paragraph separators, bidirectional overrides or 
 contract, rule `plainText`) above them, at most two lines on screen.
 Display only: authentication, the lock state machine and every unlock path are unchanged, and the message is user text from
 the user's own configuration (no notification or window content: L4 holds).
+
+## Amendment 2026-10-29 (ADR-0041 SQ-1 B: the separate security process is decided)
+The owner chose the separate security process as the answer to ADR-0041's SQ-1 (« Processus sécurité séparé », asked by
+the integrator on 2026-10-29): the lock, the polkit agent, idle and the sleep inhibitor always run apart from the UI, and
+safe mode is "the UI unit failed, the security process is up". The plan S1-S5 of the amendment of 2026-10-24 is carried
+from here by `docs/decisions/ADR-0041-stability.md` step 1, in the integrator's order under the owner's rule: 1a (the
+loop detector) first, then the process and its unit with nothing moved yet (S1, which also makes `shell/security/` free
+of UI imports and measures the second process's memory and start time), then the lock (S2, with the IPC move and the
+UI's fail-closed reading of the lock state: "no state yet" or "stale" is locked), the polkit agent (S3), idle and the
+sleep inhibitor (S4, where `OnFailure=` and the sleep-lock gate move to `grassfield-security.service`), and safe mode
+last (S5). Each step is its own pull request under the opus security review, and every intermediate state keeps
+"failures stay locked" (R12). IQ-T5 (ADR-0040) applies to a crash of the security process itself. The risks listed
+above (the IPC contract move, the lock state across processes, the UI imports, the memory of a second process) are
+answered step by step there; nothing of this ADR's rules changes: `WlSessionLock`, `PamContext("omarchy-lock-password")`
+and Quickshell's polkit only, no unlock on a failure.
