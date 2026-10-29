@@ -219,8 +219,10 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   start time) is not the run. Update Now is hidden while it runs.
 - U26. Before the transaction, the helper refuses with nothing changed: less than 10 GB free on `/` ("This computer needs 10
   GB of free space to update."); on battery below 50 % with no power supply online ("Connect this computer to power to
-  update."); another run, or pacman's `db.lck` ("Another update is running."); Omarchy's signing key missing (U28). A
-  dismissed dialog says nothing; a refused one says "Software Update was not allowed to update this computer.".
+  update."); another run, or a `db.lck` a process holds ("Another update is running."); a `db.lck` no process holds, left by
+  a pacman that stopped mid-way ("An earlier update stopped before it finished.", with Update in Terminal…, where pacman
+  says how to clear it); Omarchy's signing key missing (U28, after the compatibility check of U27). A dismissed dialog says
+  nothing; a refused one says "Software Update was not allowed to update this computer.".
 - U27. Compatibility (ADR-0033 s3.4). grassfield-desktop records the toolkit it was built with
   (`/usr/share/grassfield/BUILD-DEPS`: `qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`). When the plan
   changes grassfield-desktop or one of them, every one installed after the transaction must match the record of the
@@ -229,8 +231,10 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   and the pane says "This update needs a newer version of Grassfield, which isn't available yet." and "Software Update checks
   again later and tells you when it's ready.", with no technical step.
 - U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `sudo`, `pkexec`, `su`, `run0`,
-  `doas`, `gum` or `/dev/tty`, or an Omarchy command that does; Omarchy's key missing; a package conflict or files no package
-  owns (pacman stops before changing a package). The update stops with nothing installed and the pane says "This update asks
+  `doas`, `gum` or `/dev/tty`, or an Omarchy command that does (the command files of `usr/bin/omarchy-*` and
+  `usr/share/omarchy/bin/`, Omarchy 4.x's layout); a pending migration the scan cannot read (not a regular file, no command
+  file to read, more than 64 pending, a name the helper refuses); Omarchy's key missing; a package conflict or files no
+  package owns (pacman stops before changing a package). The update stops with nothing installed and the pane says "This update asks
   questions that need Omarchy's terminal." with "Update in Terminal…" (U11's command). A migration that fails anyway leaves
   the update installed and says "Some of Omarchy's last steps need its terminal." with "Finish in Terminal…"
   (`omarchy-launch-floating-terminal-with-presentation omarchy-migrate`). When apps from the AUR are installed, the end says
@@ -243,8 +247,10 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
   "Don't restart this computer yet" and offers no restart.
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
-  download, a plan pacman refuses); one during the transaction "The update stopped before it finished.", and names the
-  snapshot only when one was taken. Update Now stays available to try again after every outcome.
+  download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
+  update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
+  one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
+  Update Now stays available to try again after every outcome.
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -266,6 +272,8 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 | `grassfield-update-helper` without root, with another verb, a bad operation id or migration name, more than 64 names, an operation id used before | refused (exit 2), nothing written but the reused operation's own files |
 | `grassfield-update-run` as root, or with an argument | refused (exit 2) |
 | Update Now while another run, an `omarchy update` or a Store operation holds Omarchy's update lock | "Another update is running.", nothing runs |
+| A `db.lck` no process holds (a pacman that stopped mid-way) | nothing read or changed; "An earlier update stopped before it finished." with Update in Terminal… |
+| A pacman plan line the helper cannot read (a field too many) | nothing changed; "The update could not be installed. Nothing was changed." |
 | An update the compatibility check refuses (U27) | nothing changed, the system's sync databases untouched; "This update needs a newer version of Grassfield…" |
 | An update that needs a person (U28) | nothing installed; "Update in Terminal…" |
 
@@ -293,7 +301,7 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 | A10 | grassfield-packages' real packages: stable install, update, beta and back, bad signature, the client sees each update | grassfield-packages end-to-end (step 1b) | L0 |
 | A11 | pane, badge, menu count, notification, light and dark, en and fr, keyboard | `tests/unit/tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`, `tst_dockmodel.qml`; the Backend's doors in `tests/unit/settings/tst_systemguard.cpp` and `tst_backend.cpp`; captures `docs/audits/settings-parity-2026-10-26/software-update*.png` (offscreen; nested: visual NOT verified) | L0/L1 |
 | A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update in Terminal… in Omarchy's floating terminal | owner, real session | L2 |
-| A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, `db.lck` and its own lock busy, Omarchy's key missing, an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
+| A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, a `db.lck` held (busy) or left behind (stale) before anything is read, its own lock busy, Omarchy's key missing (after an incompatible update is said so), a plan line it cannot read, pacman's lock taken for the swap and gone after it, Omarchy's 4.x layout (commands in `usr/bin`, links in `usr/share/omarchy/bin`), a migration reading `/dev/tty`, no command file to scan, a migration that is a link, more than 64 pending (the runner), an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
 | A14 | the pane's run: Update Now's one launch, each phase and count, the bar, the pane opened again mid-run, a runner gone with or without its helper, a reused process id, each outcome's sentence and action, the end's sheet, no restart after a failed startup image, the dev guard | `tests/unit/tst_softwareupdate.qml` (the run's logic), `tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`; the launch vectors in `tst_systemguard.cpp`, `tst_backend.cpp`; captures `software-update-run.png` | L0/L1 |
 | A15 | real flow: Update Now with a published test channel (the dialog once, the snapshot, the progress, closing and reopening Settings mid-run, Restart Later then Restart); a toolkit update without a matching build refused; an Omarchy release with a `sudo` migration sent to the terminal | owner, real session (the integrator's L2) | L2 |
 
