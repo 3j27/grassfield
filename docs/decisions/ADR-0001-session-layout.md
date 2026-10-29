@@ -47,3 +47,20 @@ Option 1.
 - Omarchy module renames break the include → caught by the version check and C2-like fallback.
 - `XDG_CURRENT_DESKTOP=Hyprland` is kept (portals); Grassfield sets `XDG_SESSION_DESKTOP=Grassfield`.
 - Revisit if Omarchy exposes a stable "hardware only" include.
+
+## Amendment 2026-10-29: the real session does not watch its own files
+A package upgrade unlinks and recreates `/usr/share/grassfield/hypr/**.lua` under the running session. Hyprland 0.56.2's
+file watcher reloads in that window. Proven in nested with a copy of the packaged layout started with a session-style
+entry file: with the entry file absent the reload fails ("cannot open .../session.lua"), the error bar stays after the
+file is back and a `touch` does not clear it (the watch on the entry file is lost; only an explicit `reload` does); with
+a module absent (`grassfield/core.lua`) the reload ran with the module missing and the compositor dropped to 3 binds, the
+default gaps and no compositor extension until the next reload. A rename over a file is harmless.
+- `config/hypr/session.lua` sets `misc.disable_autoreload = true`: the installed files take effect at the next login
+  (macOS: an update never disturbs the running session). `dev.lua` (nested) keeps the watcher.
+- Hyprland reads the files only through the shell's explicit reload (shell/platform/SessionConfig.qml and Displays.qml:
+  `mouse-trackpad.lua`, `keyboard.lua`, the display trial), `grassfield-lid` and Omarchy's clamshell and scaling tools
+  (`hyprctl reload` / `eval`). None of them used the watcher: the Grassfield files are read as text with `io.open`, which
+  Hyprland does not watch (proven in nested: a write alone changes nothing, a reload applies it).
+- Cost, accepted: a hand edit of `~/.config/hypr/monitors.lua` or `input.lua` (Omarchy's Setup menu opens an editor, it
+  runs no reload) needs `hyprctl reload` or the next login. Omarchy's own pacman hook for omarchy-settings pauses and
+  resumes the option the same way (`omarchy-hyprland-reload-guard`) and restores the value it found, so it composes.

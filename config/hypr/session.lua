@@ -66,6 +66,14 @@ require("grassfield.system")
 -- GTK applications keep whatever theme dconf already holds.
 hl.config({ cursor = { sync_gsettings_theme = false } })
 
+-- ADR-0001 amendment 2026-10-29: the installed files (/usr/share/grassfield/hypr) are read at the login only. Hyprland's
+-- file watcher reloads while pacman has unlinked this very file or a module, which fails ("cannot open ...session.lua",
+-- or Grassfield's bindings and plugin dropped for a missing module), and an error on the entry file is not cleared by
+-- the files coming back. A package upgrade never disturbs the running session (macOS: an update takes effect at the next
+-- login). Everything the shell changes at run time asks for its reload itself (shell/platform/SessionConfig.qml), and
+-- Omarchy's tools do the same (hyprctl reload / eval); the nested dev session (dev.lua) keeps the watcher.
+hl.config({ misc = { disable_autoreload = true } })
+
 -- Optional compositor extension (ADR-0009, "Amendment 2026-10-23"). Loaded at parse time (Hyprland applies the plugin
 -- list right after parsing). grassfield.compositor picks the build made for the Hyprland that runs: the packaged one, else
 -- the one the user built (grassfield-compositor-rebuild, vouched for by its --vetted check). With none, nothing is loaded:
