@@ -74,8 +74,9 @@
 #                  now offers zone 1
 #   pick-held      a pick into a zone the layout holds is refused (reason invalid): nothing moves, the suggestion stays
 #   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
-#   suggest-off    (step 5, TL32) config tilingSuggestions false: a zone placement of the first window posts placed and the
-#                  reply has no suggestion; true again, the same placement has one
+#   suggest-off    (step 5, TL32) a zone placement's suggestion ends when config tilingSuggestions turns false and does not
+#                  come back when it turns true; while false, a zone placement posts placed and the reply has no
+#                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
 # Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
@@ -1359,6 +1360,18 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   check "stale: another change ends the suggestion" test "$(suggestion)" = null
 
   # suggest-off: "Suggest windows to fill the rest of a layout" off (TL32).
+  suggests_again() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg a "${addr#0x}" '.address == $a and ([.zones[].zone] == [0, 1])' <<<"$sg" >/dev/null
+  }
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: switched on, a zone placement has its suggestion" suggests_again
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
+  check "suggest-off: the pending suggestion ends with the switch" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
+  check "suggest-off: it does not come back when the switch turns on" test "$(suggestion)" = null
   nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
   mark_events
   arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
@@ -1366,12 +1379,6 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   check "suggest-off: the reply has no suggestion" test "$(suggestion)" = null
   nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
   arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
-  suggests_again() {
-    local sg
-    sg=$(suggestion)
-    say "  suggestion: $sg"
-    jq -e --arg a "${addr#0x}" '.address == $a and ([.zones[].zone] == [0, 1])' <<<"$sg" >/dev/null
-  }
   check "suggest-off: on again, the same placement has a suggestion" suggests_again
 
   nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr3\")" >>"$log" 2>&1

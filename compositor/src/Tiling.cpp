@@ -1822,6 +1822,10 @@ namespace gf::tiler {
         notify(tiling::Reason::Placed);
     }
 
+    void suggestionsOff() {
+        st().suggestion.reset();
+    }
+
     void marginsChanged() {
         relayout(ERelayout::Margins);
     }
@@ -1844,7 +1848,7 @@ namespace gf::tiler {
         }
         // TL28: the suggestion while nothing changed since; a window closed meanwhile is left out.
         std::optional<tiling::Suggestion> suggestion;
-        if (s.suggestion && s.suggestion->generation == s.book.generation() && state().tilingSuggestions) {
+        if (s.suggestion && s.suggestion->generation == s.book.generation()) {
             suggestion = *s.suggestion;
             std::erase_if(suggestion->windows, [](uint64_t id) { return !windowById(id); });
             if (suggestion->windows.empty())

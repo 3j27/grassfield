@@ -365,7 +365,11 @@ namespace gf::ipc {
                             }
                             break;
                         case tiling::Switch::Layouts: state().tilingLayouts = *on; break;
-                        case tiling::Switch::Suggestions: state().tilingSuggestions = *on; break;
+                        case tiling::Switch::Suggestions:
+                            state().tilingSuggestions = *on;
+                            if (!*on)
+                                tiler::suggestionsOff(); // the pending one ends with the switch (TL32)
+                            break;
                     }
                     return;
                 }
