@@ -1,8 +1,10 @@
 import QtQuick
 import Grassfield.Ui
 
-// About's device picture: Grassfield's own drawing of a laptop or a display with the Grassfield artwork on its screen, in the
-// place and size of the macOS picture (macOS draws Apple artwork there). kind: "laptop" or "desktop" (General.deviceKind).
+// The device picture: Grassfield's own drawing of a laptop or a display with the Grassfield artwork on its screen, in the
+// place and size of the macOS picture (macOS draws Apple artwork there). kind: "laptop" or "desktop" (Settings derives it
+// from hostname1's chassis, General.deviceKind). Shared through Grassfield.Ui (ADR-0040 step 1a): Settings > General > About
+// and Displays draw it, and the shell's About This Computer will (step 1b).
 Item {
     id: root
 
