@@ -168,11 +168,12 @@ got="$(call read-one org.freedesktop.appearance color-scheme) $(call read-all 'o
 desc="1 ReadOne and the namespace filter [$got]"
 check test "$got" = '1 ["org.gnome.desktop.interface"]'
 got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \(((default|interface specific) )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
-desc="1 the session's file routes Settings and FileChooser only: every other interface keeps the stock routing (Screenshot) [$got]"
+desc="1 the session's file routes Settings, FileChooser and Access only: every other interface keeps the stock routing (Screenshot) [$got]"
 check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.impl.portal.Settings (config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.FileChooser (interface specific config)"* &&
+  $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Access (interface specific config)"* &&
   $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
-  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "FileChooser (interface specific config) Settings (config) " ]]' _ "$got"
+  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "Access (interface specific config) FileChooser (interface specific config) Settings (config) " ]]' _ "$got"
 read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"
