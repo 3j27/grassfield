@@ -86,6 +86,7 @@ first_decision("shell/launchpad/AppsController.qml", "show", R)
 first_decision("shell/overview/Overview.qml", "show", R)
 first_decision("shell/notifications/Notifications.qml", "openWidgetGallery", R)
 first_decision("shell/dock/Dock.qml", "enterKeyboardMode", R)
+first_decision("shell/dock/Dock.qml", "reopen", R, lines=1)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
