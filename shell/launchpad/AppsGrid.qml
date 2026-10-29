@@ -48,6 +48,15 @@ GridView {
         }
     }
 
+    // Scrolls to the first row, with its margin above it. positionViewAtBeginning() alone leaves a view that has never been
+    // shown at contentY 0 (the first row 38 px under the chips' bottom, i.e. against them) until a later layout; laying out first
+    // and setting the place ourselves is in place on the first opening already, before its first frame.
+    function toBeginning(): void {
+        forceLayout();
+        positionViewAtBeginning();
+        contentY = originY - topMargin;
+    }
+
     // Fills the pool of cells without painting anything. The first change of a freshly built view destroys the
     // cells of the first layout and creates a second screenful (about 55 ms for 200 entries, offscreen), which
     // the first keystroke would pay. forceLayout() does that now: the owner calls it while the window is not

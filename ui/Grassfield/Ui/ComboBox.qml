@@ -33,8 +33,9 @@ T.ComboBox {
     currentIndex: root.valueIndex
     displayText: root.valueIndex >= 0 ? (root.model)[root.valueIndex].text : ""
     // Wide enough for the longest choice (a long translation is never cut to "Si la place le pe…").
-    implicitWidth: root.inline ? Math.ceil(widest) + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
-        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)
+    // Whole pixels, so that the disc and the next control in a row stay on the pixel grid.
+    implicitWidth: Math.ceil(root.inline ? widest + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
+        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm))
     property real widest: 0
     function measureItems(): void {
         let w = 0;
@@ -101,7 +102,9 @@ T.ComboBox {
     background: Rectangle {
         radius: root.inline ? height / 2 : Tokens.radiusControl
         color: root.inline ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        // Increase Contrast outlines the bezel; the inline pop-up has none (its text starts at the edge), so its disc takes the
+        // outline instead.
+        border.width: Appearance.increaseContrast && !root.inline ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
 
@@ -134,7 +137,8 @@ T.ComboBox {
     }
 
     indicator: Item {
-        x: root.inline ? root.width - width - Tokens.settingsPopupInset : root.width - width - Tokens.spacingSm
+        // Whole pixels: the measured inset (3.5) would put the disc's edges between two pixels at scale 1.
+        x: Math.round(root.inline ? root.width - width - Tokens.settingsPopupInset : root.width - width - Tokens.spacingSm)
         y: (root.height - height) / 2
         width: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuIconSize
         height: width
@@ -145,6 +149,8 @@ T.ComboBox {
             visible: root.inline
             anchors.fill: parent
             radius: width / 2
+            border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
             color: Appearance.withAlpha(Appearance.colors.text, root.down ? Tokens.settingsPopupIndicatorOpacity + Tokens.controlPressedOpacity / 2
                 : root.hovered && root.enabled ? Tokens.settingsPopupIndicatorOpacity + Tokens.materialHoverOpacity : Tokens.settingsPopupIndicatorOpacity)
         }

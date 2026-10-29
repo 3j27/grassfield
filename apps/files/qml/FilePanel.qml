@@ -224,7 +224,8 @@ Window {
                 shown.push(qsTr("and %1 more").arg(clashes.length - 8));
             panel.ask(clashes.length === 1 ? qsTr("“%1” already exists. Do you want to replace it?").arg(shown[0])
                                            : qsTr("%1 items already exist in “%2”. Do you want to replace them?").arg(clashes.length).arg(where),
-                      (clashes.length > 1 ? shown.join("\n") + "\n\n" : "") + qsTr("Replacing them will overwrite their current contents."),
+                      clashes.length > 1 ? shown.join("\n") + "\n\n" + qsTr("Replacing them will overwrite their current contents.")
+                                         : qsTr("Replacing it will overwrite its current contents."),
                       qsTr("Replace"), () => panel.finish(uris));
         } else {
             panel.finish(uris);
