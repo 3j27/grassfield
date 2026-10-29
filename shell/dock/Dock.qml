@@ -403,7 +403,7 @@ Scope {
             settle();
     }
 
-    // Startup (Geometry.settledOn): the Dock windows stay unmapped until the settings, the desktop entries and the Dock's output
+    // Startup (Geometry.settledOn): the Dock windows stay unmapped until the settings, the apps model and the Dock's output
     // are final, so the Dock is drawn once, at its place, and no layout animation plays for the first fill. Latched: it never
     // goes back (a later change of position or size is the user's and animates as before).
     property bool settled: false
@@ -411,8 +411,11 @@ Scope {
         settings: Settings.loaded,
         apps: Apps.hiddenReady,
         screens: screenNames,
-        start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint)
+        start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint),
+        waited: waited
     })
+    // The fallback timer ran out: the Dock no longer waits for the apps model or the focused output (the settings file it always does).
+    property bool waited: false
     onInputsFinalChanged: {
         if (inputsFinal)
             settle();
@@ -443,7 +446,7 @@ Scope {
         id: settleTimer
         interval: Tokens.dockSettleTimeout
         running: !root.settled
-        onTriggered: root.settle()
+        onTriggered: root.waited = true
     }
 
     // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).

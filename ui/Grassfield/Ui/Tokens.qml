@@ -436,7 +436,7 @@ QtObject {
     readonly property real dockAttentionHeightScale: 0.34
     // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockAttentionReveal: 3000
-    // estimate: the longest the Dock waits at startup for its inputs (settings file, apps model, focused output) before it appears anyway, ms; kept well inside gate P5's 2 s [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    // estimate: the longest the Dock waits at startup for the apps model and the focused output once the settings file is in (the file itself it always waits for), ms; inside gate P5's 2 s [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSettleTimeout: 1000
     // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockAttentionHighlightOpacity: 0.35

@@ -713,6 +713,11 @@ TestCase {
         verify(!Geometry.settledOn(Object.assign({}, two, {start: ""})), "two outputs and no focused one: the Dock would start on the wrong side");
         verify(!Geometry.settledOn(null));
         verify(!Geometry.settledOn({}));
+        // The fallback timer stands in for the apps model and the focused output, never for the settings file or the outputs.
+        verify(Geometry.settledOn(Object.assign({}, two, {start: "", apps: false, waited: true})), "waited: the Dock appears");
+        verify(!Geometry.settledOn(Object.assign({}, one, {settings: false, waited: true})), "the settings file is always waited for");
+        verify(!Geometry.settledOn(Object.assign({}, one, {screens: [], waited: true})), "no output, no Dock");
+        verify(!Geometry.settledOn(Object.assign({}, two, {start: "", waited: false})));
     }
 
     // The latched start output and the settled gate together: focus arriving late does not move a Dock that already settled.

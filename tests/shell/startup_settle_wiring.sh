@@ -32,9 +32,10 @@ desc="Dock: the make-room Behavior is off before settled"
 check has $D "enabled: root.settled && !tile.dragging && !win.dragSnap"
 desc="Dock: playLayout does nothing before settled"
 check has $D "if (!root.settled || Appearance.reduceMotion || dragFrom >= 0)"
-desc="Dock: the fallback timer runs until settled, uses the token and settles"
+desc="Dock: the fallback timer runs until settled, uses the token and releases the wait (waited), which feeds settledOn"
 t=$(block $D "id: settleTimer" 6)
-check bash -c 'grep -q "running: !root.settled" <<<"$1" && grep -q "interval: Tokens.dockSettleTimeout" <<<"$1" && grep -q "onTriggered: root.settle()" <<<"$1"' _ "$t"
+check bash -c 'grep -q "running: !root.settled" <<<"$1" && grep -q "interval: Tokens.dockSettleTimeout" <<<"$1" && grep -q "onTriggered: root.waited = true" <<<"$1"' _ "$t"
+check has $D "waited: waited"
 desc="Dock: settle() resets every window's machine, then sets settled in a finally"
 check before $D "function settle(): void {" "} finally {" 25
 check before $D "} finally {" "windows.instances.forEach(w => w.resetHide())" 6
