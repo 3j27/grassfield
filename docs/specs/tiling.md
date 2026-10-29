@@ -388,7 +388,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   left-right or up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon);
   nothing is drawn (D32). Any popup there counts, whichever window it belongs to: Hyprland's hit test returns the topmost
   window whose box (border grab area included) holds the point before it looks at the popups of the windows below, so the
-  plugin checks every visible window's popups (integrator nested pass of 3d56d60). Hover reads edges kept from the last look, built again when the book's records, a window's box,
+  plugin checks every visible window's popups (integrator nested pass of 3d56d60); so does an X11 override-redirect window
+  (an XWayland app's menu, a tooltip) whose box holds the point, for which that hit test returns the focused window
+  (integrator review of 0c4c8f2). Hover reads edges kept from the last look, built again when the book's records, a window's box,
   band or state, the output's Desktop or the margins changed. A plain left press there, with no button held by any device,
   is the plugin's: it and its release are cancelled
   on the bus (compositor.md FR13, as P6), every window of the edge goes Resizing, and the edge follows the pointer along
@@ -415,9 +417,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   by Hyprland's own handling of the resize. The gate (D34 final, integrator, 2026-10-29): the shared edge's P3 passes when
   (a) the plugin's own work is at most 1 ms in every frame of the drag and (b) its compositor-caused long frames per second
   per resized window are at most 1.25 times those of Hyprland's own resize_on_border drag of one of the same windows with
-  the same glide (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline --resizes`, which fails
-  without the loop's or the plugin's records, without the baseline, and when the animation holds no frame; the share on
-  time is information. Nested pass of 3d56d60: the plugin's work at most 0.71 ms in a frame, 5.45/s per resized window
+  the same glide (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline --drag-mark`, the drag's
+  resized windows read from its own frame-probe mark (`edge-drag:F/E` at each drag's end: F of the edge's E windows
+  followed; a drag some did not follow fails), which fails without the loop's or the plugin's records, without the
+  baseline, when the scenario never ran and when the animation holds no frame; the share on time is information. Nested pass of 3d56d60: the plugin's work at most 0.71 ms in a frame, 5.45/s per resized window
   against Hyprland's own 5.5/s: met; Windows' placeholders are dropped.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
