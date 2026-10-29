@@ -557,6 +557,41 @@ TEST(Sampler, ADrmClientIsReadThroughOneOfItsDescriptors)
     EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0); // 10 % + 20 % + 10 % + 10 %
 }
 
+// amdgpu writes no engine line for an engine a client has not used: a client idle at its turn is still picked, and its
+// work shows at once, not at the next turn (the integrator's review of 983b7de).
+TEST(Sampler, AClientIdleAtItsTurnIsPickedAndItsWorkShows)
+{
+    Fixture f;
+    auto client = [&](int fd, const std::string &engines) {
+        f.write("proc/100/fdinfo/" + std::to_string(fd),
+                "pos:\t0\ndrm-driver:\tamdgpu\ndrm-client-id:\t5\ndrm-pdev:\t0000:03:00.0\npasid:\t32770\n" + engines);
+    };
+    f.process(100, "game", kMe, 1, 1, nul({"game"}), "/");
+    for (int fd : {7, 8})
+        f.link("/dev/dri/renderD128", "proc/100/fd/" + std::to_string(fd));
+    client(7, "");
+    client(8, ""); // 7 duplicated
+    Options o = options(f);
+    o.descriptorTurns = 10; // pid 100's turn is sample 1
+    Sampler s(o);
+    const unsigned reads = readsForTab(Tab::Cpu);
+    Snapshot snap = s.sample(reads, 1.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 2u); // the turn
+    EXPECT_LT(row(snap, 100)->gpuPercent, 0); // no engine used: "—"
+    snap = s.sample(reads, 2.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 1u); // through the descriptor picked at the turn
+    EXPECT_LT(row(snap, 100)->gpuPercent, 0); // still none
+    client(7, "drm-engine-gfx:\t0 ns\n");
+    client(8, "drm-engine-gfx:\t0 ns\n");
+    snap = s.sample(reads, 3.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 1u);
+    client(7, "drm-engine-gfx:\t500000000 ns\n");
+    client(8, "drm-engine-gfx:\t500000000 ns\n");
+    snap = s.sample(reads, 4.0);
+    EXPECT_EQ(snap.counters.fdinfoReads, 1u);
+    EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0);
+}
+
 // AM8: back on screen after a time hidden, no rate is drawn across the gap; the next sample starts every rate again.
 TEST(Sampler, NoRateIsDrawnAcrossAGap)
 {

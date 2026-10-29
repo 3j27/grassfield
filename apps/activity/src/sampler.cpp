@@ -421,12 +421,13 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
     // manager each duplicate the descriptor they are given, and a duplicate is the same client; each fdinfo read has the
     // driver go over the client's objects. The first read after a descriptor turn reads every DRM descriptor and keeps
     // the first of each client; until the next turn only those are read, and one that fails or names another client (its
-    // number closed and reused) brings the full read back at once (the integrator's AM-P2 run of f68789c on the i5).
+    // number closed and reused) brings the full read back at once (the integrator's AM-P2 run of f68789c on the i5). A
+    // client is picked by its identity, engine lines or not: amdgpu writes none for an engine a client has not used yet,
+    // and a client idle at its turn would go unread until the next one (the integrator's review of 983b7de).
     std::string fbuf;
     auto readClient = [&](int fd, DrmClient &client, std::string &key) {
         ++c.fdinfoReads;
-        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true) || !parseDrmFdinfo(fbuf, client)
-            || client.engineNs.empty())
+        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true) || !parseDrmFdinfo(fbuf, client))
             return false;
         key = client.pdev + '|' + std::to_string(client.clientId);
         return true;
@@ -471,6 +472,8 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
     for (size_t i = 0; i < clients.size(); ++i) {
         const DrmClient &client = clients[i];
         const std::string &key = keys[i];
+        if (client.engineNs.empty())
+            continue; // no engine used yet: nothing to show
         if (!clientsSeen.insert(key).second)
             continue; // a client this sample already counted in another process (inherited or passed)
         any = true;
