@@ -21,7 +21,8 @@ import "platform/WindowTiling.js" as WindowTiling
 //  - locked: nothing is filled, and fillAlone, tile, split and unsplit are refused by their own gates (SessionState names
 //    the refusal); unlocked: the lonely member is sent again;
 //  - a popup that closes itself as it opens (the tiling popover on a member, #48 nested pass): nothing stays open or active
-//    (the overlay would stay mapped over every click and key).
+//    (the overlay would stay mapped over every click and key); a popup closed behind Popups' back as it opens: Popups.verify
+//    computes a stale `active` again.
 // Prints "split-view: PASS (n checks)" or the failures. It refuses to run outside scripts/dev/test.sh's scratch session
 // (a compositor reachable through HYPRLAND_INSTANCE_SIGNATURE would receive the fills).
 ShellRoot {
@@ -37,9 +38,15 @@ ShellRoot {
     property bool selfClosing: false
     readonly property bool popupActive: Popups.active
 
+    // A popup closed behind Popups' back as it opens (step "a stale active is computed again"): `kind` written inside the
+    // update of Popups.active, which a binding loop then leaves stale.
+    property bool rawClose: false
+
     onPopupActiveChanged: {
         if (root.popupActive && root.selfClosing)
             Popups.close();
+        if (root.popupActive && root.rawClose)
+            Popups.kind = "";
     }
 
     function check(name: string, ok: bool): void {
@@ -212,6 +219,19 @@ ShellRoot {
                 check: () => {
                     root.check("closing itself as it opens: closed (" + Popups.kind + ")", Popups.kind === "");
                     root.check("closing itself as it opens: nothing left active for the overlay", !Popups.active);
+                }
+            }, {
+                name: "a stale active is computed again",
+                act: () => {
+                    root.rawClose = true;
+                    Popups.open("tiling", "", 0, 0, "below", {address: "a1"});
+                    root.rawClose = false;
+                },
+                until: () => true,
+                check: () => {
+                    console.log("split-view: after the raw close, active " + Popups.active + " with kind \"" + Popups.kind + "\"");
+                    Popups.verify();
+                    root.check("stale active: computed again by verify (" + Popups.active + ")", Popups.kind === "" && !Popups.active);
                 }
             }, {
                 name: "end",

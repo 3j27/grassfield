@@ -26,7 +26,10 @@ Singleton {
     property string align: "left"
     property var data: ({})
 
-    readonly property bool active: kind !== ""
+    // Bumped by verify(): `active` and every binding built on it (the Overlay's `open`) read it, so a value left stale by a
+    // binding loop is computed again (integrator PASS on 8316ed2: an overlay mapped with no popup must never stay).
+    property int revision: 0
+    readonly property bool active: kind !== "" && revision >= 0
 
     // The open folder stack (shell/overlay/StackPopup.qml publishes these) for the test hooks below.
     property string stackView: ""
@@ -181,6 +184,22 @@ Singleton {
         }
         kind = "";
         data = {};
+    }
+
+    // True when `active` agrees with `kind`; else it is computed again, logged (the Overlay asks too for its own `open`).
+    function verify(): bool {
+        if (root.active === (root.kind !== ""))
+            return true;
+        console.warn("grassfield: popups: active (" + root.active + ") disagreed with kind \"" + root.kind + "\"; computed again");
+        root.revision++;
+        return false;
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.active || root.kind !== ""
+        onTriggered: root.verify()
     }
 
     function closeLater(count: int): void {

@@ -24,7 +24,7 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Popups.active && Popups.screenName === (modelData ? modelData.name : "")
+        readonly property bool open: Popups.active && Popups.screenName === (modelData ? modelData.name : "") && Popups.revision >= 0
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -66,6 +66,21 @@ Variants {
         KeyboardRelease {
             id: release
             shown: win.open
+        }
+
+        // While mapped: `open` is computed again when it disagrees with Popups (a value left stale by a binding loop would keep
+        // this surface over every click and key; integrator PASS on 8316ed2).
+        Timer {
+            interval: 1000
+            repeat: true
+            running: win.visible
+            onTriggered: {
+                const fresh = Popups.active && Popups.screenName === (win.modelData ? win.modelData.name : "");
+                if (Popups.verify() && win.open !== fresh) {
+                    console.warn("grassfield: overlay: open (" + win.open + ") disagreed with Popups; computed again");
+                    Popups.revision++;
+                }
+            }
         }
 
         // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
