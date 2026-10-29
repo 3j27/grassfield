@@ -141,8 +141,16 @@ TestCase {
         compare(combo.value, "io");
         combo.picked("data");
         verify(t.backend.calls.indexOf("setGraphMode:disk:data") >= 0);
-        t.backend.summary.blocks = t.backend.diskBlocks.map(b => Object.assign({}, b)); // the next sample
-        compare(findAll(t.win.summary, i => i.objectName === "graphMode-disk")[0], combo);
+        // Open, then the next sample: the same pop-up, still open (a rebuilt delegate would close it).
+        combo.popup.open();
+        tryVerify(() => combo.popup.opened);
+        t.backend.summary.blocks = t.backend.diskBlocks.map(b => Object.assign({}, b));
+        wait(50); // a delegate replaced would be gone by now
+        const now = findAll(t.win.summary, i => i.objectName === "graphMode-disk");
+        compare(now.length, 1);
+        compare(now[0], combo);
+        verify(combo.popup.opened);
+        combo.popup.close();
     }
 
     // AM43: the Network tab's line under the table, on that tab only.
