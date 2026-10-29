@@ -254,6 +254,39 @@ TestCase {
         }
     }
 
+    // The owner's video wallpaper (the helper's sidecar strip of 13310160-uhd_3840_2160_25fps.mp4, a mid-dark strip with some
+    // light cloud): its tone is decided on ITS strip (a "picture" description with the video's strip), never on the artwork.
+    readonly property var videoDesc: ({kind: "picture", url: "file:///poster.jpg", video: "file:///v.mp4", strip: {all: {mean: 0.1597, p5: 0.0528, p95: 0.3500}}})
+
+    function test_videoToneComesFromItsOwnStrip() {
+        compare(Logic.toneSource(videoDesc), "strip");
+        const s = videoDesc.strip.all;
+        const r = Logic.stripTone(s.p5, s.p95, "", Tokens.menubarToneNeededContrast, Tokens.menubarToneMargin);
+        fuzzyCompare(r.white, 2.625, 1e-3);
+        fuzzyCompare(r.black, 2.056, 1e-3);
+        // Neither tone reaches 4.5:1 over that strip: the band is ADR-0016's own decision on the video's pixels.
+        compare(r.assist, true);
+        // A dark video: light text, no band.
+        const dark = Logic.stripTone(0.01, 0.06, "", Tokens.menubarToneNeededContrast, Tokens.menubarToneMargin);
+        compare(dark.tone, "light");
+        compare(dark.assist, false);
+    }
+
+    function test_toneSourceNeverFallsBackToTheArtworkForAMedia() {
+        compare(Logic.toneSource({kind: "art"}), "art");
+        compare(Logic.toneSource({kind: "color", color: "#fff"}), "color");
+        // A picture or a video whose strip is missing or malformed: no measure, no band, not the artwork's gradient.
+        compare(Logic.toneSource({kind: "picture", strip: null, video: "file:///v.mp4"}), "none");
+        compare(Logic.toneSource({kind: "picture", strip: {all: {mean: 0.2}}}), "none");
+        compare(Logic.toneSource({kind: "picture", strip: {}}), "none");
+    }
+
+    function test_forcedOutputsAreTheBarBlock() {
+        compare(Logic.forcedOutputs({"eDP-1": true, "DP-1": false, "HDMI-A-1": "yes"}), {"eDP-1": true});
+        compare(Logic.forcedOutputs({}), {});
+        compare(Logic.forcedOutputs(null), {});
+    }
+
     function test_dockDotColoursArePureTones() {
         compare(Tokens.colorDark.indicator, "#FFFFFF");
         compare(Tokens.colorLight.indicator, "#000000");

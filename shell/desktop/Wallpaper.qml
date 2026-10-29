@@ -498,10 +498,15 @@ Scope {
                 win.measureGrid(desc);
                 if (VisualFixtures.wallpaperFile !== "")
                     return;
-                if (desc.kind === "picture")
+                // The tone comes from the pixels of what is on screen: a picture's or a video's own strip (the helper measured the
+                // video's poster and sampled frames), never the artwork's gradient.
+                const source = BarTone.toneSource(desc);
+                if (source === "strip")
                     BarTone.reportStrip(win.modelData.name, desc.strip);
-                else if (desc.kind === "color")
+                else if (source === "color")
                     BarTone.reportColor(win.modelData.name, Qt.color(desc.color));
+                else if (source === "none")
+                    BarTone.reportUnmeasured(win.modelData.name);
                 else if (height > 0)
                     BarTone.reportGradient(win.modelData.name, Qt.color(slotA.art.skyTop), Qt.color(slotA.art.skyMid), Tokens.menubarHeight / (0.55 * height));
             }
