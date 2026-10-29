@@ -1,0 +1,40 @@
+[Unit]
+Description=Grassfield shell failure counter (stops a crash loop)
+Documentation=file:///usr/share/doc/grassfield/README.md
+# ADR-0041 step 1a (owner decision SQ-2 A): started by OnFailure= of grassfield-shell.service after every failure of the
+# shell, never by the session's autostart. It counts the failures of the last 10 minutes and, at the third, cancels the
+# shell's pending restart and writes the safe-mode state (packaging/bin/grassfield-shell-failed). A logout counts nothing
+# (session-gone). It never unlocks: the compositor keeps a lock across the stop.
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Service]
+Type=oneshot
+Slice=session.slice
+ExecStart=/usr/lib/grassfield/grassfield-shell-failed
+TimeoutStartSec=20
+# The ledger and the safe-mode state live in $XDG_RUNTIME_DIR/grassfield (0700, shared with the menu bridge, kept when
+# this unit ends).
+RuntimeDirectory=grassfield
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+# Hardening: it reads a few files, writes two in its runtime directory and asks the user manager to stop one unit.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+MemoryMax=32M
+TasksMax=8

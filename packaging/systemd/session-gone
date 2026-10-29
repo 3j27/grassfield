@@ -1,0 +1,60 @@
+#!/bin/sh
+# session-gone: is the Grassfield session's compositor certainly gone? Installed to /usr/lib/grassfield/session-gone, next
+# to the two scripts that ask (they run it as "$(dirname "$0")/session-gone"): the sleep-lock gate
+# (packaging/systemd/sleep-lock-gate, D-12 / GF-081: a logout must not arm Omarchy's sleep lock) and the shell failure
+# counter (packaging/bin/grassfield-shell-failed, ADR-0041 step 1a: a logout's exit 255 is not a crash).
+#   exit 0  gone for certain: the session's own Wayland socket, or its own Hyprland instance directory (never "some
+#           instance directory": stale ones from earlier sessions pile up in $XDG_RUNTIME_DIR/hypr), is definitely absent
+#   exit 1  not gone, or undecidable (an unreadable runtime directory, an over-long or odd path, a missing variable, an
+#           error other than "does not exist"): every caller treats this as "the session lives", which is the safe side
+#           (the gate then arms the lock; the counter then counts the failure).
+# Read-only: file tests only. The graphical-session.target state is NOT read: it still reads inactive at login, before
+# the target is reached, and both callers must work from login on.
+#
+# "Definitely absent" is decided by absent() below: an absolute, well-formed path of sane length whose parent directory is
+# searchable and which does not exist (not even as a dangling link). Anything else cannot be decided: exit 1.
+absent() { # absent PATH: exit 0 only when ENOENT is certain
+  p=$1
+  [ "${#p}" -le 4096 ] || return 1
+  case $p in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  case $p in
+    *..* | *"
+"*) return 1 ;;
+  esac
+  set -f
+  old=$IFS
+  IFS=/
+  for c in $p; do
+    if [ "${#c}" -gt 255 ]; then
+      IFS=$old
+      return 1
+    fi
+  done
+  IFS=$old
+  parent=${p%/*}
+  [ -n "$parent" ] || parent=/
+  [ -d "$parent" ] || return 1
+  [ -x "$parent" ] || return 1
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    return 1
+  fi
+  return 0
+}
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  case $WAYLAND_DISPLAY in
+    /*) sock=$WAYLAND_DISPLAY ;;
+    */* | .* ) sock= ;;
+    *) if [ -n "${XDG_RUNTIME_DIR:-}" ]; then sock=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY; else sock=; fi ;;
+  esac
+  if [ -n "$sock" ] && absent "$sock"; then exit 0; fi
+fi
+if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+  case $HYPRLAND_INSTANCE_SIGNATURE in
+    *[!A-Za-z0-9_.-]* | .*) ;;
+    *) if absent "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE"; then exit 0; fi ;;
+  esac
+fi
+exit 1
