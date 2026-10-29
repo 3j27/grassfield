@@ -209,8 +209,9 @@ Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`
 - AC1 as written: the alert shape of the shell's alerts, the frontend's title in bold, its question, its note in the secondary
   colour, its choices (pop-ups and check boxes), "Don't Allow" and "Allow" (or the frontend's labels) of one width; the
   application's icon from its desktop entry, the frontend's symbolic icon, in the text colour, for an application it cannot
-  name; the buttons one above the other, the default at the bottom, when they do not fit side by side; one alert at a time, the
-  others waiting in order; the frontend's own wording in Grassfield's language (5a-4, 5a-9).
+  name; the buttons one above the other when they do not fit side by side, the default on top ("Don't Allow" on top where
+  neither is the default); one alert at a time, the others waiting in order; the frontend's own wording in Grassfield's language
+  (5a-4, 5a-9).
 - AC2 for the camera and screen capture (the frontend's icon names them; xdg-desktop-portal 1.22.1 asks nothing about the
   microphone); Return grants the other questions, as AC2 says; Esc and the window closed are "Don't Allow" (5a-6); the keyboard
   starts on the alert, never on a button, and no click, key or close answers for 500 ms each time the alert becomes the active

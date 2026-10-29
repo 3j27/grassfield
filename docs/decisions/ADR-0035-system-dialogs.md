@@ -562,9 +562,11 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   `Hyprland --verify-config` refuses it); the application's icon from its desktop entry, the frontend's symbolic icon for an
   application it cannot name, drawn in the text colour (its theme's grey was 1.2:1 on the dark window; A2 asserts 3:1). Two
   buttons that do not fit side by side (French: "Ne pas autoriser" and "Autoriser") stack at the row's width, the default button
-  at the bottom, as macOS stacks an alert's buttons. One alert at a time, as macOS shows them: the others wait in the order they
-  came, with no 3-s deadline while they wait (`RequestHost::queue`), and the next shows when the one on screen goes (integrator
-  nested pass of 1745c0c: MAJOR 1, MINOR 3, MINOR 5).
+  on top as macOS (11 and later) stacks an alert's buttons, "Don't Allow" on top where neither is the default (the camera, AC2;
+  re-review of a4740a2, MINOR 1). An alert that stops being the active window is disarmed until it is active again (re-review of
+  a4740a2, NIT 2). One alert at a time, as macOS shows them: the others wait in the order they came, with no 3-s deadline while
+  they wait (`RequestHost::queue`), and the next shows when the one on screen goes (integrator nested pass of 1745c0c: MAJOR 1,
+  MINOR 3, MINOR 5).
 - **5a-5. No answer by accident.** Question: what keeps a click or a key meant for something else from answering an alert that
   appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click, key
   or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the window
