@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Grassfield.Ui
+import "../../shell/services/BarToneLogic.js" as BarLogic
 
 // Adaptive glass (ADR-0024 section 2, G-1 to G-3; GlassTint.js): a class tint raised to keep text at 4.5:1 over the backdrop,
 // the worst case (black to white) when the shell does not know it, the class target over a known bare desktop.
@@ -47,29 +48,66 @@ TestCase {
         verify(GlassTint.targetAlpha(0.65, d / 2, d) > 0.65 && GlassTint.targetAlpha(0.65, d / 2, d) < 1);
     }
 
-    // The menu bar's band (ADR-0024: the "menu" class, over the strip's own range, MenuBar.qml): at the owner's 0.49 it is near the
-    // class target, not the legacy clamped tint (0.82), and it keeps the text at 4.5:1 over the strip it lies on.
-    function test_menuBarBandIsGlassOverItsStrip() {
-        const strip = {lumMin: 0.0528, lumMax: 0.35}; // the owner's video: the helper's p5 and p95 of the strip
+    // Worst text contrast of a palette's tint at `alpha` over the greys of the range's two ends (the A2 check of the band).
+    function bandContrast(c, alpha, range) {
+        let worst = 99;
+        for (const lum of [range.lumMin, range.lumMax]) {
+            const g = GlassTint.greyOf(lum);
+            const base = GlassTint.over(GlassTint.channels(c.materialTint), alpha, [g, g, g]);
+            for (const ink of [c.text])
+                worst = Math.min(worst, GlassTint.ratio(GlassTint.channels(ink), base));
+        }
+        return worst;
+    }
+
+    // The band's tone is the bar's own text tone over the strip (BarToneLogic.stripTone: the better worst case): light text on dark
+    // glass, dark text on light glass.
+    function bandOf(range, t) {
+        const tone = BarLogic.stripTone(range.lumMin, range.lumMax, "", Tokens.menubarToneNeededContrast, Tokens.menubarToneMargin).tone;
+        return Appearance.glassBand("menu", t, range, tone === "light");
+    }
+
+    // The menu bar's band (ADR-0024 point 3, MenuBar.qml): its glass tone follows the strip under it, whatever the appearance:
+    // dark glass with light text over a dark strip, light glass with dark text over a light one; the alpha is the class tint
+    // raised to keep that text at 4.5:1 over the strip, never below the class target.
+    function test_menuBarBandFollowsItsStrip() {
+        const strips = {owner: {lumMin: 0.0528, lumMax: 0.35}, dark: {lumMin: 0.005, lumMax: 0.02}, light: {lumMin: 0.8, lumMax: 0.95}, mixed: {lumMin: 0.01, lumMax: 0.45}};
+        const rows = [];
+        for (const dark of [false, true]) {
+            Appearance.dark = dark;
+            for (const t of [0.25, 0.49]) {
+                for (const name of Object.keys(strips)) {
+                    const b = bandOf(strips[name], t);
+                    const c = bandContrast(b.colors, b.alpha, strips[name]);
+                    rows.push((dark ? "dark" : "light") + " appearance, t=" + t + ", " + name + ": " + (b.dark ? "dark glass" : "light glass") + " alpha=" + b.alpha.toFixed(2) + " text=" + b.colors.text + " A2=" + c.toFixed(2));
+                    verify(c >= 4.5);
+                    verify(b.alpha >= GlassTint.targetAlpha(Tokens.glassMenu, t, Tokens.materialDefaultTransparency) - 1e-9);
+                }
+                // Over a dark strip the glass is dark, over a light one it is light, in both appearances.
+                compare(bandOf(strips.dark, t).dark, true);
+                compare(bandOf(strips.light, t).dark, false);
+            }
+        }
+        console.info("band table:\n" + rows.join("\n"));
+        // The owner's strip: dark glass (light text), below the 0.79 of the appearance's light glass.
         Appearance.dark = false;
-        const legacy = Appearance.tintAlpha(0.49);
-        fuzzyCompare(legacy, Tokens.materialTintAlphaClamp, 1e-9);
-        const light49 = Appearance.glassAlphaOver("menu", 0.49, strip);
-        const light25 = Appearance.glassAlphaOver("menu", 0.25, strip);
-        console.info("band alpha light: 0.49 -> " + light49 + ", 0.25 -> " + light25 + " (legacy 0.49 -> " + legacy + ")");
-        verify(light49 < legacy);
-        verify(light49 >= GlassTint.targetAlpha(Tokens.glassMenu, 0.49, Tokens.materialDefaultTransparency));
-        verify(light25 >= light49);
-        verify(floorOf(false, strip.lumMin, strip.lumMax, 4.5 + Tokens.glassContrastMargin) <= light49);
-        Appearance.dark = true;
-        const dark49 = Appearance.glassAlphaOver("menu", 0.49, strip);
-        console.info("band alpha dark: 0.49 -> " + dark49 + ", 0.25 -> " + Appearance.glassAlphaOver("menu", 0.25, strip));
-        verify(dark49 < legacy);
-        verify(floorOf(true, strip.lumMin, strip.lumMax, 4.5 + Tokens.glassContrastMargin) <= dark49);
-        // Reduce Transparency (slider 0) stays opaque.
-        compare(Appearance.glassAlphaOver("menu", 0, strip), 1);
-        // No strip known: the worst case, as for any other glass.
-        compare(Appearance.glassAlphaOver("menu", 0.49, null), Appearance.glassAlpha("menu", 0.49, "nowhere"));
+        const owner = bandOf(strips.owner, 0.49);
+        compare(owner.dark, true);
+        verify(owner.alpha < 0.79);
+    }
+
+    // Reduce Transparency (slider 0) and an unknown strip keep the appearance's own colours.
+    function test_menuBarBandOpaqueAndUnknown() {
+        for (const dark of [false, true]) {
+            Appearance.dark = dark;
+            const r = Appearance.glassBand("menu", 0, {lumMin: 0.01, lumMax: 0.02}, true);
+            compare(r.alpha, 1);
+            compare(r.dark, dark);
+            compare(r.colors, Appearance.colors);
+            const u = Appearance.glassBand("menu", 0.49, null, true);
+            compare(u.dark, dark);
+            compare(u.alpha, Appearance.glassAlpha("menu", 0.49, "nowhere"));
+        }
     }
 
     function test_unknownBackdropTakesTheWorstCase() {

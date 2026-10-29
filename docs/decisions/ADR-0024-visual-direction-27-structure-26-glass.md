@@ -134,3 +134,6 @@ Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/a
 3. **App chrome glass:** a toolbar scroll-edge effect inside app windows (Qt-side blur of the window's own content); the
    owner checks it before any wider use of glass in app windows.
 4. **Lensing:** Hyprland's glass blur variant once released and shipped by Omarchy; Full profile only; P3 measured.
+
+## Note (2026-10-29): the menu bar's band
+Integrator decision under the owner's delegation, closest to macOS 26/27. The band the menu bar shows (the setting, the automatic assist of ADR-0016 D1, or a full-screen window) is glass of the "menu" class, and its tone adapts to the wallpaper strip under it (point 3), whatever the appearance: dark glass with light text over a dark strip, light glass with dark text over a light one. The unclassed material gave 0.82 at transparency 0.49. Over the owner's video strip (p5 0.0528, p95 0.35) the band is now dark glass at alpha 0.58 (0.65 at 0.25), text 6.85:1 and 7.89:1; the appearance's own light glass would have needed 0.79. Reduce Transparency stays opaque in the appearance's colours. Detail: docs/specs/menubar.md item 0b.

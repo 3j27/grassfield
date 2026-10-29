@@ -277,11 +277,15 @@ Scope {
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
+            // The glass band judged over the strip under the bar (a picture or a video); none when the strip is unknown, over a
+            // full-screen window (the bar is then drawn on that window's content) or with Reduce Transparency.
+            readonly property var bandRange: win.fullscreen ? null : BarTone.rangeOf(win.screen.name)
+            readonly property var band: bandRange && Appearance.effectiveTransparency > 0 ? Appearance.glassBand("menu", Appearance.effectiveTransparency, bandRange, BarTone.toneOf(win.screen.name) === "light") : null
             readonly property bool darkTone: BarTone.toneOf(win.screen.name) === "dark"
             readonly property var barPalette: darkTone ? Appearance.lightColors : Appearance.darkColors
-            readonly property color barText: showBackground ? Appearance.colors.text : barPalette.barText
-            readonly property color barTextDisabled: Appearance.withAlpha(showBackground ? Appearance.colors.text : barPalette.barText, Tokens.materialDisabledOpacity)
-            readonly property color barTint: showBackground ? Appearance.colors.hover : barPalette.hover
+            readonly property color barText: showBackground ? (band ? band.colors.text : Appearance.colors.text) : barPalette.barText
+            readonly property color barTextDisabled: Appearance.withAlpha(barText, Tokens.materialDisabledOpacity)
+            readonly property color barTint: showBackground ? (band ? band.colors.hover : Appearance.colors.hover) : barPalette.hover
             readonly property color barShadow: darkTone ? barPalette.materialHighlight : barPalette.shadow
             readonly property var battery: UPower.displayDevice
             // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
@@ -807,7 +811,10 @@ Scope {
                 // text at 4.5:1 over the wallpaper strip), not the legacy clamped tint; the strip under the bar is what lies behind it.
                 glassClass: "menu"
                 backdropRect: Qt.rect(0, 0, win.width, Tokens.menubarHeight)
-                backdropOverride: BarTone.rangeOf(win.screen.name)
+                // The band's tone follows the strip under it (Appearance.glassBand), not the appearance; Reduce Transparency keeps the
+                // appearance's own opaque colours.
+                tintAlphaOverride: win.band ? win.band.alpha : -1
+                tintColor: win.band ? win.band.colors.materialTint : Appearance.colors.materialTint
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
                 highlightEnabled: false

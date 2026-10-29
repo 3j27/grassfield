@@ -170,10 +170,27 @@ QtObject {
 
     // The same over a backdrop range the host knows ({lumMin, lumMax}; the menu bar's strip: BarTone.rangeOf), null = worst case.
     function glassAlphaOver(glassClass: string, t: real, backdrop: var): real {
+        return glassAlphaFor(glassClass, t, backdrop, colors, false);
+    }
+
+    function glassAlphaFor(glassClass: string, t: real, backdrop: var, palette: var, primaryOnly: bool): real {
         const target = glassTargets[glassClass];
         if (target === undefined)
             return tintAlpha(t);
-        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
+        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, palette.materialTint, primaryOnly ? [palette.text] : [palette.text, palette.textSecondary], palette.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
+    }
+
+    // Adaptive tone of a glass band over a backdrop range the host measured (ADR-0024 point 3, the menu bar: macOS 26's glass
+    // follows what lies behind it, not the system appearance). `darkGlass` is the host's choice of tone (the bar's own: the text
+    // tone with the better worst case over the strip, BarTone): dark glass with light text, or light glass with dark text;
+    // the alpha is the class tint raised to what keeps that text at 4.5:1 over the range. The bar carries primary text and glyphs
+    // only (no secondary text), so only the primary text is judged. Returns {dark, alpha, colors}; Reduce Transparency (t <= 0)
+    // and an unknown range keep the appearance's own colours and the standard glass alpha.
+    function glassBand(glassClass: string, t: real, backdrop: var, darkGlass: bool): var {
+        if (t <= 0 || !backdrop)
+            return {dark: dark, alpha: glassAlphaFor(glassClass, t, backdrop, colors, false), colors: colors};
+        const palette = darkGlass ? darkColors : lightColors;
+        return {dark: darkGlass, alpha: glassAlphaFor(glassClass, t, backdrop, palette, true), colors: palette};
     }
 
     // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and
