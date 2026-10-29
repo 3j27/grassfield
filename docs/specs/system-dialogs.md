@@ -207,9 +207,11 @@ Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`
 - AC1 as written: the alert shape of the shell's alerts, the frontend's title in bold, its question, its note in the secondary
   colour, its choices (pop-ups and check boxes), "Don't Allow" and "Allow" (or the frontend's labels) of one width; the
   application's icon from its desktop entry, the frontend's symbolic icon for an application it cannot name.
-- AC2 for the camera, the microphone and screen capture (the frontend's icon names them); Esc and the window closed are "Don't
-  Allow" (5a-6); the keyboard starts on the alert, never on a button, and no click, key or close answers for 500 ms each time
-  the alert becomes the active window (a key meanwhile starts that time again; 5a-5).
+- AC2 for the camera and screen capture (the frontend's icon names them; xdg-desktop-portal 1.22.1 asks nothing about the
+  microphone); Return grants the other questions, as AC2 says; Esc and the window closed are "Don't Allow" (5a-6); the keyboard
+  starts on the alert, never on a button, and no click, key or close answers for 500 ms each time the alert becomes the active
+  window (a key meanwhile starts that time again), and an alert back after more than 1.5 s away (the lock, another window) takes
+  keys only after a click, as at a late first activation (5a-5).
 - AC3 as above; a request that ends without the user's answer ends with a D-Bus error, so the frontend keeps nothing (5a-3).
   FC7's forward: an alert that has not drawn in 3 s, or a process without a display, goes to x-d-p-gtk's Access.
 - Evidence: `tests/unit/portal/tst_access.cpp`, `tests/unit/tst_accessalert.qml`, and `tests/integration/portal_filechooser.sh`

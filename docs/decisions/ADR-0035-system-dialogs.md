@@ -522,7 +522,7 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
 (a Request object per call, the delayed reply, the bound on open requests, the UI made at the first request, the 3-s forward to
 x-d-p-gtk with its answer relayed and Close sent on, the idle quit), now shared (5a-2). `access.{h,cpp}`: the backend interface
 (`AccessDialog`: the frontend's strings as plain lines, its labels without mnemonics, a symbolic icon name or none, the choices
-through chooserlogic's functions, no default button for the camera, the microphone and screen capture), on the same exported
+through chooserlogic's functions, no default button for the camera and screen capture), on the same exported
 object as FileChooser; `main.cpp` makes both roots of the UI at the first request of either and quits once both are idle.
 `apps/files/qml/AccessAlerts.qml` and `AccessAlert.qml` (the alert). Packaging: `grassfield.portal` lists Access, the
 session's `hyprland-portals.conf` routes `Access=grassfield;gtk`, `config/hypr/grassfield/windows.lua` gives the alert's tag
@@ -566,11 +566,16 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the window
   before never arms it), the keyboard starts on the alert and never on a button, again each time it becomes active (Space acts
   only on a button reached with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the
-  keyboard late, whose ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the
-  lock took the first click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no
-  technical intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to
-  undo; the alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera, the microphone
-  and screen capture, as on macOS 15 and later.
+  keyboard late, the first time or after more than `filesPanelLateFocusMs` (1.5 s) away (the lock, the screen saver or another
+  window came in front of it; integrator review of e24ea5c, MINOR 1: a Return after the unlock granted a location alert), whose
+  ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
+  click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no technical
+  intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to undo; the
+  alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera and screen capture, as on
+  macOS 15 and later (macOS's microphone question has no xdg-desktop-portal 1.22.1 counterpart, and no icon names it here). For
+  location, the wallpaper and running in the background "Allow" stays the default, so Return grants once the alert is armed and
+  not held: that is AC2's choice, as macOS's location alert has "Allow" as its default, not the safer button made the default;
+  the arm and the hold are what keep a Return meant for something else from granting (integrator review of e24ea5c, NIT 4).
 - **5a-6. Esc and the window closed are "Don't Allow".** The alert has no Cancel: the frontend reads any answer but 0 as "no",
   so Esc and a close by the compositor say it plainly, as macOS's Esc does (a close before the alert is armed is refused,
   5a-5). The application's name is in the frontend's title ("Allow Example to Use the Camera?"), not on a line of its own.
