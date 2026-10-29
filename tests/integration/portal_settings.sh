@@ -47,9 +47,9 @@ name=org.freedesktop.impl.portal.desktop.grassfield_settings
 unit=$pk/systemd/grassfield-portal-settings.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the session's routing lists only Settings and FileChooser (D-4): Grassfield first, then gtk"
+desc="the session's routing lists only Settings, FileChooser and Access (D-4, D-5): Grassfield first, then gtk"
 check test "$(grep -v '^#' "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf" | grep -v '^$' | tr '\n' ' ')" = \
-  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk "
+  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk "
 desc="the .portal file, the D-Bus service file and the unit name the same bus name and program"
 check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.Settings;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal-settings" "$3" && grep -qx "SystemdService=grassfield-portal-settings.service" "$3" &&

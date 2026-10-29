@@ -1,0 +1,314 @@
+// grassfield-portal's permission alerts (ADR-0035 D-5; docs/specs/system-dialogs.md section 2, AC1-AC3): what the alert is
+// given (Access::toQml), and org.freedesktop.impl.portal.Access on the run's private bus (tst_filechooser.cpp's main) with a
+// fake frontend and a fake x-d-p-gtk: the answer, Close, the bounds and the forward.
+#include <gtest/gtest.h>
+
+#include "access.h"
+#include "chooserlogic.h"
+
+#include <QDBusArgument>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusMetaType>
+#include <QDBusPendingCallWatcher>
+#include <QDeadlineTimer>
+#include <QTest>
+
+#include <limits>
+#include <memory>
+
+using namespace grassfield::portal;
+using namespace grassfield::portal::chooser;
+
+extern QString g_address;
+
+namespace {
+
+constexpr auto kService = "org.freedesktop.impl.portal.desktop.grassfield";
+constexpr auto kFakeGtk = "org.test.fakegtk.access";
+constexpr int kDeadlineMs = 1500;
+
+// x-d-p-gtk's Access as the forward sees it: answers every call with what the test set.
+class FakeGtkAccess : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.impl.portal.Access")
+public:
+    QStringList calls;
+    uint response = 0;
+    QVariantMap answer;
+
+public Q_SLOTS:
+    uint AccessDialog(const QDBusObjectPath &handle, const QString &, const QString &, const QString &title, const QString &,
+                      const QString &, const QVariantMap &, QVariantMap &results)
+    {
+        calls << QStringLiteral("AccessDialog %1 %2").arg(handle.path(), title);
+        results = answer;
+        return response;
+    }
+};
+
+struct Reply {
+    bool done = false;
+    bool error = false;
+    uint response = 99;
+    QVariantMap results;
+};
+
+QList<Choice> twoChoices()
+{
+    return {Choice{QStringLiteral("remember"), QStringLiteral("_Remember"), {}, QStringLiteral("true")},
+            Choice{QStringLiteral("level"), QStringLiteral("Accuracy"),
+                   {Pair{QStringLiteral("city"), QStringLiteral("_City")}, Pair{QStringLiteral("exact"), QStringLiteral("Exact")}},
+                   QStringLiteral("nope")}};
+}
+
+class AccessTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        static int n = 0;
+        const QString suffix = QString::number(++n);
+        backendBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-backend") + suffix));
+        frontendBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-frontend") + suffix));
+        gtkBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-gtk") + suffix));
+        ASSERT_TRUE(backendBus->isConnected() && frontendBus->isConnected() && gtkBus->isConnected());
+        make();
+        ASSERT_TRUE(gtkBus->registerObject(QStringLiteral("/org/freedesktop/portal/desktop"), &gtk, QDBusConnection::ExportAllSlots));
+        ASSERT_TRUE(gtkBus->registerService(QString::fromLatin1(kFakeGtk)));
+    }
+
+    // The backend under test, exported as main.cpp does it: the adaptor on the exported object.
+    void make(int maxPending = 16)
+    {
+        Access::Options options;
+        options.gtkService = QString::fromLatin1(kFakeGtk);
+        options.uiDeadlineMs = kDeadlineMs;
+        options.idleQuitMs = 200;
+        options.maxPending = maxPending;
+        access = std::make_unique<Access>(*backendBus, options);
+        exported = std::make_unique<QObject>();
+        new AccessAdaptor(exported.get(), access.get());
+        ASSERT_TRUE(backendBus->registerObject(QStringLiteral("/org/freedesktop/portal/desktop"), exported.get(), QDBusConnection::ExportAdaptors));
+        ASSERT_TRUE(backendBus->registerService(QString::fromLatin1(kService)));
+        QObject::connect(access.get(), &Access::opened, access.get(), [this](int id, const QVariantMap &alert) { opened.append({id, alert}); });
+        QObject::connect(access.get(), &Access::closed, access.get(), [this](int id) { closed.append(id); });
+    }
+
+    void TearDown() override
+    {
+        backendBus->unregisterService(QString::fromLatin1(kService));
+        backendBus->unregisterObject(QStringLiteral("/org/freedesktop/portal/desktop"));
+        gtkBus->unregisterService(QString::fromLatin1(kFakeGtk));
+        access.reset();
+        exported.reset();
+        QDBusConnection::disconnectFromBus(backendBus->name());
+        QDBusConnection::disconnectFromBus(frontendBus->name());
+        QDBusConnection::disconnectFromBus(gtkBus->name());
+    }
+
+    // The frontend's call (src/camera.c and the others): AccessDialog on the backend's name, no timeout.
+    std::shared_ptr<Reply> call(const QString &handle, const QVariantMap &options, const QString &appId = QStringLiteral("org.example.App"))
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/org/freedesktop/portal/desktop"),
+                                                        QStringLiteral("org.freedesktop.impl.portal.Access"), QStringLiteral("AccessDialog"));
+        m << QVariant::fromValue(QDBusObjectPath(handle)) << appId << QString() << QStringLiteral("Allow Example to Use the Camera?")
+          << QStringLiteral("Example wants to access the camera") << QStringLiteral("This permission can be changed at any time from the privacy settings")
+          << options;
+        auto reply = std::make_shared<Reply>();
+        auto *w = new QDBusPendingCallWatcher(frontendBus->asyncCall(m, std::numeric_limits<int>::max()));
+        QObject::connect(w, &QDBusPendingCallWatcher::finished, w, [reply](QDBusPendingCallWatcher *watcher) {
+            watcher->deleteLater();
+            const QDBusMessage r = watcher->reply();
+            reply->done = true;
+            reply->error = r.type() != QDBusMessage::ReplyMessage;
+            if (!reply->error && r.arguments().size() == 2) {
+                reply->response = r.arguments().at(0).toUInt();
+                reply->results = qdbus_cast<QVariantMap>(r.arguments().at(1));
+            }
+        });
+        return reply;
+    }
+
+    bool waitFor(const std::function<bool()> &condition, int ms = 3000)
+    {
+        QDeadlineTimer deadline(ms);
+        while (!condition() && !deadline.hasExpired())
+            QTest::qWait(10);
+        return condition();
+    }
+
+    static QList<Pair> choicesOf(const QVariantMap &results)
+    {
+        const QVariant v = results.value(QStringLiteral("choices"));
+        if (v.metaType() == QMetaType::fromType<QDBusArgument>())
+            return qdbus_cast<QList<Pair>>(v.value<QDBusArgument>());
+        return v.value<QList<Pair>>();
+    }
+
+    std::unique_ptr<QDBusConnection> backendBus, frontendBus, gtkBus;
+    std::unique_ptr<Access> access;
+    std::unique_ptr<QObject> exported;
+    FakeGtkAccess gtk;
+    QList<QPair<int, QVariantMap>> opened;
+    QList<int> closed;
+};
+
+} // namespace
+
+// What the alert is given: the frontend's strings as one plain line each, its labels without GTK's mnemonics, a symbolic icon
+// name or none, and no default button for the camera, the microphone and screen capture (AC2).
+TEST(AccessToQml, ChecksWhatTheFrontendGives)
+{
+    registerTypes();
+    const QVariantMap camera = Access::toQml(QStringLiteral("org.example.App"), QStringLiteral("wayland:abc"),
+                                             QStringLiteral("Allow Example\nto Use the Camera?") + QChar(0x202E), QStringLiteral("sub"), QString(),
+                                             {{QStringLiteral("icon"), QStringLiteral("camera-web-symbolic")},
+                                              {QStringLiteral("deny_label"), QStringLiteral("_Deny Access")},
+                                              {QStringLiteral("grant_label"), QStringLiteral("Grant __Access")},
+                                              {QStringLiteral("modal"), false},
+                                              {QStringLiteral("choices"), QVariant::fromValue(twoChoices())}});
+    EXPECT_EQ(camera.value("title").toString(), QStringLiteral("Allow Example to Use the Camera?"));
+    EXPECT_EQ(camera.value("denyLabel").toString(), QStringLiteral("Deny Access"));
+    EXPECT_EQ(camera.value("grantLabel").toString(), QStringLiteral("Grant _Access"));
+    EXPECT_EQ(camera.value("icon").toString(), QStringLiteral("camera-web-symbolic"));
+    EXPECT_TRUE(camera.value("noDefault").toBool());
+    EXPECT_FALSE(camera.value("modal").toBool());
+    EXPECT_TRUE(camera.value("parented").toBool());
+    const QVariantList choices = camera.value("choices").toList();
+    ASSERT_EQ(choices.size(), 2);
+    EXPECT_EQ(choices.at(0).toMap().value("label").toString(), QStringLiteral("Remember"));
+    EXPECT_EQ(choices.at(1).toMap().value("initial").toString(), QStringLiteral("city")) << "an initial value it does not offer";
+
+    for (const char *icon : {"audio-input-microphone-symbolic", "applets-screenshooter-symbolic"})
+        EXPECT_TRUE(Access::toQml({}, {}, {}, {}, {}, {{QStringLiteral("icon"), QString::fromLatin1(icon)}}).value("noDefault").toBool()) << icon;
+    const QVariantMap location = Access::toQml({}, QStringLiteral("x11:12"), {}, {}, {}, {{QStringLiteral("icon"), QStringLiteral("find-location-symbolic")}});
+    EXPECT_FALSE(location.value("noDefault").toBool()) << "the grant button is the default";
+    EXPECT_FALSE(location.value("parented").toBool()) << "only a wayland: handle";
+    EXPECT_TRUE(location.value("modal").toBool()) << "modal by default";
+    EXPECT_EQ(Access::toQml({}, {}, {}, {}, {}, {{QStringLiteral("icon"), QStringLiteral("../../etc/passwd")}}).value("icon").toString(), QString());
+    EXPECT_EQ(Access::toQml({}, {}, QString(2000, u'x'), {}, {}, {}).value("title").toString().size(), kMaxTextLength);
+}
+
+// Any process on the session bus can call the backend: an option of the wrong type is no option (never a crash).
+TEST(AccessToQml, OptionsOfTheWrongTypeAreNoOptions)
+{
+    registerTypes();
+    const QVariantMap alert = Access::toQml({}, {}, QStringLiteral("t"), {}, {},
+                                            {{QStringLiteral("icon"), 7},
+                                             {QStringLiteral("deny_label"), QStringList{QStringLiteral("x")}},
+                                             {QStringLiteral("modal"), QStringLiteral("false")},
+                                             {QStringLiteral("choices"), QStringLiteral("a(ssa(ss)s)")}});
+    EXPECT_EQ(alert.value("icon").toString(), QString());
+    EXPECT_EQ(alert.value("denyLabel").toString(), QString());
+    EXPECT_TRUE(alert.value("modal").toBool());
+    EXPECT_TRUE(alert.value("choices").toList().isEmpty());
+}
+
+// The alert's answer goes back as response 0 (grant) or 1 (deny), with every choice: the alert's value when the choice allows
+// it, else its initial value.
+TEST_F(AccessTest, TheAlertsAnswerGoesBack)
+{
+    access->setUiLoader([] { return true; });
+    auto granted = call(QStringLiteral("/r/a1"), {{QStringLiteral("icon"), QStringLiteral("camera-web-symbolic")},
+                                                  {QStringLiteral("choices"), QVariant::fromValue(twoChoices())}});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    const QVariantMap alert = opened.first().second;
+    EXPECT_EQ(alert.value("title").toString(), QStringLiteral("Allow Example to Use the Camera?"));
+    EXPECT_EQ(alert.value("subtitle").toString(), QStringLiteral("Example wants to access the camera"));
+    EXPECT_TRUE(alert.value("noDefault").toBool());
+    EXPECT_TRUE(alert.contains("appName") && alert.contains("appIcon"));
+    access->answer(opened.first().first, true,
+                   {QVariantMap{{QStringLiteral("id"), QStringLiteral("remember")}, {QStringLiteral("value"), QStringLiteral("false")}},
+                    QVariantMap{{QStringLiteral("id"), QStringLiteral("level")}, {QStringLiteral("value"), QStringLiteral("anything")}}});
+    ASSERT_TRUE(waitFor([&] { return granted->done; }));
+    EXPECT_FALSE(granted->error);
+    EXPECT_EQ(granted->response, 0u);
+    const QList<Pair> choices = choicesOf(granted->results);
+    ASSERT_EQ(choices.size(), 2);
+    EXPECT_EQ(choices.at(0), (Pair{QStringLiteral("remember"), QStringLiteral("false")}));
+    EXPECT_EQ(choices.at(1), (Pair{QStringLiteral("level"), QStringLiteral("city")})) << "a value the choice does not allow";
+
+    auto denied = call(QStringLiteral("/r/a2"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 2; }));
+    access->answer(opened.last().first, false);
+    ASSERT_TRUE(waitFor([&] { return denied->done; }));
+    EXPECT_EQ(denied->response, 1u);
+    EXPECT_FALSE(denied->results.contains("choices")) << "no choices asked, none answered";
+    EXPECT_TRUE(waitFor([&] { return access->pending() == 0; }));
+}
+
+// Close ends the request with response 2 and takes the alert away; an answer after it is ignored.
+TEST_F(AccessTest, CloseEndsTheRequest)
+{
+    access->setUiLoader([] { return true; });
+    auto reply = call(QStringLiteral("/r/c1"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    const int id = opened.first().first;
+    frontendBus->asyncCall(QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/r/c1"),
+                                                          QStringLiteral("org.freedesktop.impl.portal.Request"), QStringLiteral("Close")));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_EQ(reply->response, 2u);
+    EXPECT_TRUE(closed.contains(id));
+    access->answer(id, true);
+    EXPECT_EQ(access->pending(), 0);
+}
+
+// Without a UI every call goes to x-d-p-gtk's Access, and its answer comes back with the choices (a(ss)) only.
+TEST_F(AccessTest, WithoutAUiTheCallGoesToGtk)
+{
+    access->setUiLoader([] { return false; });
+    gtk.response = 1;
+    gtk.answer = {{QStringLiteral("choices"), QVariant::fromValue(QList<Pair>{Pair{QStringLiteral("remember"), QStringLiteral("true")}})},
+                  {QStringLiteral("uris"), QStringList{QStringLiteral("file:///x")}}};
+    auto reply = call(QStringLiteral("/r/g1"), {{QStringLiteral("choices"), QVariant::fromValue(twoChoices())}});
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_TRUE(opened.isEmpty());
+    ASSERT_EQ(gtk.calls.size(), 1);
+    EXPECT_EQ(gtk.calls.first(), QStringLiteral("AccessDialog /r/g1 Allow Example to Use the Camera?"));
+    EXPECT_EQ(reply->response, 1u);
+    EXPECT_EQ(choicesOf(reply->results), (QList<Pair>{Pair{QStringLiteral("remember"), QStringLiteral("true")}}));
+    EXPECT_FALSE(reply->results.contains("uris")) << "only what the interface defines";
+}
+
+// An alert that has not drawn its first frame within the deadline is dropped and the call goes to x-d-p-gtk (FC7).
+TEST_F(AccessTest, AnAlertWithoutAFrameInTimeGoesToGtk)
+{
+    access->setUiLoader([] { return true; });
+    gtk.response = 0;
+    auto reply = call(QStringLiteral("/r/d1"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    QTest::qWait(kDeadlineMs / 2);
+    EXPECT_FALSE(reply->done) << "well before the deadline";
+    ASSERT_TRUE(waitFor([&] { return reply->done; }, 3 * kDeadlineMs));
+    EXPECT_EQ(gtk.calls.size(), 1);
+    EXPECT_EQ(reply->response, 0u);
+    EXPECT_TRUE(closed.contains(opened.first().first)) << "its alert goes";
+}
+
+// At most maxPending requests at once, one request per handle: the others end with response 2 at once.
+TEST_F(AccessTest, RequestsAreBounded)
+{
+    TearDown();
+    backendBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-backend-bound")));
+    frontendBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-frontend-bound")));
+    gtkBus = std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(g_address, QStringLiteral("access-gtk-bound")));
+    make(2);
+    access->setUiLoader([] { return true; });
+    auto first = call(QStringLiteral("/r/b1"), {});
+    auto twin = call(QStringLiteral("/r/b1"), {});
+    auto second = call(QStringLiteral("/r/b2"), {});
+    auto third = call(QStringLiteral("/r/b3"), {});
+    ASSERT_TRUE(waitFor([&] { return twin->done && third->done; }));
+    EXPECT_EQ(twin->response, 2u) << "the same handle twice";
+    EXPECT_EQ(third->response, 2u) << "past the bound";
+    EXPECT_FALSE(first->done);
+    EXPECT_FALSE(second->done);
+    EXPECT_EQ(access->pending(), 2);
+    for (const auto &o : std::as_const(opened))
+        access->answer(o.first, false);
+    ASSERT_TRUE(waitFor([&] { return first->done && second->done; }));
+}
+
+#include "tst_access.moc"

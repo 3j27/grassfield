@@ -14,6 +14,13 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
                                                the same call made to grassfield-portal's backend interface directly
                                                (org.freedesktop.impl.portal.FileChooser), as the frontend makes it: its
                                                reply, {"response": n, "results": {...}}, or {"error": name}
+    portal-client.py camera SECONDS            org.freedesktop.portal.Camera's AccessCamera as an application calls it (the
+                                               frontend asks the Access backend first): the Response, as for choose
+    portal-client.py access OPTIONS SECONDS    org.freedesktop.impl.portal.Access's AccessDialog made to grassfield-portal
+                                               directly, as the frontend makes it (OPTIONS: icon, deny_label, grant_label,
+                                               choices, modal); its reply, as for impl
+    portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
+                                               Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
 import json
 import os
@@ -97,6 +104,66 @@ def impl(conn, method, given, seconds):
         print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
 
 
+# The Access options of the backend interface, with their D-Bus types.
+ACCESS_TYPES = {"icon": "s", "deny_label": "s", "grant_label": "s", "modal": "b", "choices": "a(ssa(ss)s)"}
+
+
+def response_of(conn, request, call, seconds):
+    answer = {}
+    loop = GLib.MainLoop()
+
+    def response(_conn, _sender, _path, _iface, _signal, params):
+        code, results = params.unpack()
+        answer.update({"response": code, "results": plain(results)})
+        loop.quit()
+
+    # Subscribed before the call: the response can never come first.
+    conn.signal_subscribe(DEST, "org.freedesktop.portal.Request", "Response", request, None, Gio.DBusSignalFlags.NONE, response)
+    call()
+    GLib.timeout_add(int(float(seconds) * 1000), lambda: (answer.setdefault("timeout", True), loop.quit()))
+    loop.run()
+    print(json.dumps(answer), flush=True)
+
+
+def camera(conn, seconds):
+    token = "gfcam%d" % (GLib.get_monotonic_time() % 1000000)
+    sender = conn.get_unique_name()[1:].replace(".", "_")
+    request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+    response_of(conn, request, lambda: conn.call_sync(DEST, PATH, "org.freedesktop.portal.Camera", "AccessCamera",
+                                                      GLib.Variant("(a{sv})", ({"handle_token": GLib.Variant("s", token)},)),
+                                                      None, Gio.DBusCallFlags.NONE, 10000, None), seconds)
+
+
+def access(conn, given, seconds):
+    handle = "/org/freedesktop/portal/desktop/request/1_1/access%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
+    options = {}
+    for key, value in given.items():
+        t = ACCESS_TYPES[key]
+        if t == "a(ssa(ss)s)":
+            value = [(i, label, [tuple(o) for o in opts], init) for i, label, opts, init in value]
+        options[key] = GLib.Variant(t, value)
+    try:
+        reply = conn.call_sync("org.freedesktop.impl.portal.desktop.grassfield", PATH, "org.freedesktop.impl.portal.Access", "AccessDialog",
+                               GLib.Variant("(osssssa{sv})", (handle, "org.example.App", "", "Allow Example to Use the Camera?",
+                                                               "Example wants to access the camera",
+                                                               "This permission can be changed at any time from the privacy settings", options)),
+                               GLib.VariantType("(ua{sv})"), Gio.DBusCallFlags.NONE, int(float(seconds) * 1000), None)
+        code, results = reply.unpack()
+        print(json.dumps({"response": code, "results": plain(results)}))
+    except GLib.Error as error:
+        print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
+
+
+def permission(conn, table, entry):
+    try:
+        reply = conn.call_sync("org.freedesktop.impl.portal.PermissionStore", "/org/freedesktop/impl/portal/PermissionStore",
+                               "org.freedesktop.impl.portal.PermissionStore", "Lookup", GLib.Variant("(ss)", (table, entry)),
+                               GLib.VariantType("(a{sas}v)"), Gio.DBusCallFlags.NONE, 10000, None)
+        print(json.dumps({"permissions": plain(reply.unpack()[0])}))
+    except GLib.Error as error:
+        print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
+
+
 def main():
     conn = Gio.bus_get_sync(Gio.BusType.SESSION)
     command = sys.argv[1]
@@ -105,6 +172,15 @@ def main():
         return
     if command == "impl":
         impl(conn, sys.argv[2], json.loads(sys.argv[3]), sys.argv[4])
+        return
+    if command == "camera":
+        camera(conn, sys.argv[2])
+        return
+    if command == "access":
+        access(conn, json.loads(sys.argv[2]), sys.argv[3])
+        return
+    if command == "permission":
+        permission(conn, sys.argv[2], sys.argv[3])
         return
     if command == "watch":
         out = open(sys.argv[2], "a")
