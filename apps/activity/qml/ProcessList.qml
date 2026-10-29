@@ -60,6 +60,7 @@ FocusScope {
     // Header ------------------------------------------------------------------------------------
     Row {
         id: header
+        objectName: "columnHeaders"
         x: list.x - (list.contentX - list.originX)
         width: list.contentWidth
         height: Tokens.activityHeaderHeight
@@ -199,6 +200,7 @@ FocusScope {
 
     ListView {
         id: list
+        objectName: "processRows"
         anchors.top: header.bottom
         anchors.topMargin: Tokens.appsBorderWidth
         anchors.left: parent.left

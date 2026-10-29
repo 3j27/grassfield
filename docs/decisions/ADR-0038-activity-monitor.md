@@ -9,7 +9,9 @@ PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built a
 "step 1" here. Revised after the integrator's opus review of 949fc98 (FAIL: four MAJORs, five MINORs, five surviving
 mutants), answered in "Review history"; each changed place says "review of 949fc98". Revised again after the re-review of
 f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". Step 1 merged (pull request #40,
-opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. · Date: 2026-10-28 · Decider: owner
+opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. Step 2
+is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is built in its own pull request
+(`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36). · Date: 2026-10-28 · Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
 
@@ -358,6 +360,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 - Other owners' processes are read-only and show only what `stat` and `status` give (A1). Their command lines and their
   rewritten process titles are never read (c, AD25).
 - The user's own command lines are shown (what `ps` shows); environment variables are never read.
+- One name on the session bus (AD34, step 2a): `org.grassfield.Activity` with one method, `Activate(token)`, which only
+  brings the window forward; any process of the user could call it, as it could start the app. The token is kept only if
+  it is a short printable string; nothing is read from the caller.
 - Every process name and command line shown, the user's own included, has its control characters and bidirectional
   formatting characters removed before display (spec AM17), so a process cannot reorder or hide text in the table.
 - The projection holds pids and app ids (any local process of the user reads `hyprctl -j clients` already, ADR-0035
@@ -370,7 +375,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 
 ### j. Files (rows added to ADR-0020 in the step that writes them)
 - `activity.json` (state, version 1, the app only): window frames, tab, view, columns and sort per tab, update frequency,
-  Dock icon, Efficiency Mode's "Don't ask again", App History's period.
+  Dock icon, Efficiency Mode's "Don't ask again", App History's period. Step 2a writes the window's size (Wayland places
+  windows: no position), the tab, the view, the update frequency, and per tab the columns, their widths and the sort; its
+  ADR-0020 row is added there; the later keys come with their steps.
 - `activity-<display>/windows.json` and `activity-<display>/dock-tile.json` (runtime, 0600): above; removed when their writer
   stops, and ignored when stale.
 
@@ -536,6 +543,23 @@ Answer: A (see "Answers").
   hundred `fstatat` a sample bought nothing a running process changes without an exec but its uid, which the turn (a
   tenth per sample) catches; behind a directory owned by root (a non-dumpable process) the turn reads `status`'s real uid
   again too (review of f68789c); an action reads its process's identity again anyway (AD30).
+- **AD34. One instance, on the session bus** (AM1; step 2a). The running app owns `org.grassfield.Activity`
+  (`org.grassfield.Activity.Dev` in a dev session, which shares the owner's bus); a second launch calls its `Activate`
+  with its own xdg-activation token, if it has one, and leaves. The window comes forward with that token (Qt's Wayland
+  window takes `XDG_ACTIVATION_TOKEN` for its next activation request); without one the compositor decides. No Grassfield
+  app had one: the spec's "the mechanism Settings and the Store use" was the Dock's activation plan, which a launch from
+  Apps or a key does not go through, and a monitor running twice would sample twice.
+- **AD35. The sampler on its own thread, only while the window is shown** (AM8, AM9, AM-P3; step 2a). A sample costs up to
+  17 ms on the reference machine's CPU tab and more on Energy and Network (AM-P2): too long for the window's thread. One
+  sample at a time, on a low-priority thread, at the update frequency; the window is shown when it is visible, exposed and
+  not minimized. Back on screen the sampler forgets its rate baselines (`Sampler::forgetRates`): the first sample's rates
+  show "—", and the next comes one second later rather than a whole interval.
+- **AD36. A row's icon from its launch unit's desktop entry, theme names only** (AM10, AM17; step 2a). uwsm names a
+  launch's unit after the desktop id it launched (A7), so an own process in such a unit takes that entry's `Icon` when it
+  is a theme name, looked up in the icon theme on the window's thread (as Files' theme icons); every other process, and an
+  entry that names a file, gets the theme's generic executable icon. A file named by an entry the user may have written is
+  not decoded here (Files decodes such files in an isolated child; the table holds hundreds of rows). The entry's name
+  joins the search (AM14); it names a row only through the projection, step 3.
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
@@ -544,9 +568,18 @@ Each step is one pull request to main, reviewed by the integrator (opus), with i
    Kernel row, GPU clients, TCP sockets, memory pressure), gtest on fixture trees, `tests/apps/activity_cost.sh` with
    AM-P2 met, `tests/integration/activity_owners.sh` (another user's processes through the real kernel), the owner-machine
    read-only checks of "Not verified here". Spec AM20 to AM49 (data), AM79.
-2. **The window**: the five tabs, the table, views, search, columns, summaries and graphs, Quit (SIGTERM path) and Force
-   Quit, Send Signal, Inspect, `activity.json`, menus, icon, desktop entry, translations, the PKGBUILD lines, the legal
-   element; AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM59, AM74 to AM78.
+2. **The window**, in four pull requests (2026-10-28, under the owner's rule: each a slice the integrator can review and
+   pass nested on its own, as other lanes' 4a and 4b):
+   - **2a. The window and its table**: the toolbar, the five tabs, the table with each tab's columns, the flat views,
+     search, the columns chooser, sort, selection, Copy, Preventing Sleep (logind), `activity.json`, menus, icon, desktop
+     entry, translations, the PKGBUILD lines, the legal element; one instance (AD34); sampling on its own thread only while
+     the window is shown (AD35); AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM4, AM6 to AM12, AM14 to AM19, AM38, AM74.
+   - **2b. The summaries and graphs**, and the views that group rows: each tab's summary and graph (AM5, AM29, AM32 to
+     AM35, AM39 with UPower, AM42, AM44, AM47's GPU name), the graph tokens (AM7), Network's line under the table (AM43),
+     All Processes, Hierarchically (AM13), Processes, by GPU (AM49).
+   - **2c. Quit, Force Quit, Send Signal** (AM50 to AM56): the sheets, the `/proc/<pid>` descriptor and
+     `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu.
+   - **2d. Inspect** (AM57 to AM59): the Info button and its windows.
 3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
    tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
 4. **Windows 11's additions**: Processes, by Type, Performance, Efficiency Mode, App History, the Login Items link, the

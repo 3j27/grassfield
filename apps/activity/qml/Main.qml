@@ -54,6 +54,7 @@ Window {
         trailing: [
             SegmentedControl {
                 id: tabs
+                objectName: "tabs"
                 model: root.backend.tabs.map(t => ({id: t.key, text: t.title}))
                 value: root.backend.tab
                 accessibleName: qsTr("Resource")
@@ -61,6 +62,7 @@ Window {
             },
             SearchField {
                 id: search
+                objectName: "search"
                 width: Tokens.activitySearchWidth
                 anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                 Accessible.name: qsTr("Search processes")

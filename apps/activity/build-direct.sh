@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Direct build of the activity monitor with g++ (see CMakeLists.txt; ADR-0038).
 # Usage: apps/activity/build-direct.sh [--install-paths]   (.dev/build/grassfield-activity; --install-paths bakes /usr/share)
-#        apps/activity/build-direct.sh --tests [--asan]     (.dev/build/activity-unit-tests and activity-window-tests, or
-#                                                            -asan with -fsanitize=address,undefined)
+#        apps/activity/build-direct.sh --tests [--asan]     (.dev/build/activity-unit-tests, activity-window-tests and,
+#                                                            unsanitized, activity-window-qml-tests; or -asan with
+#                                                            -fsanitize=address,undefined)
 #        apps/activity/build-direct.sh --bench [--asan]     (.dev/build/activity-sampler-bench)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -46,6 +47,15 @@ case ${1:-} in
       "${sampler[@]}" "${window[@]}" "${generated[@]}" "$root"/tests/unit/activity/window/tst_*.cpp \
       $(pkg-config --libs Qt6Core Qt6Gui Qt6DBus Qt6Test) -lgtest -pthread -o "$out/activity-window-tests$suffix"
     echo "built $out/activity-window-tests$suffix"
+    # A-W1: the window with its real backend on a fixture tree, offscreen (its own main). Not built sanitized: the QML
+    # engine's own code is not what it tests.
+    if [[ -z $suffix ]]; then
+      # shellcheck disable=SC2046
+      g++ "${cxxflags[@]}" "${qtflags[@]}" "-DACTIVITY_ROOT=\"$root\"" $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Test) \
+        "${sampler[@]}" "${window[@]}" "${generated[@]}" "$root"/tests/unit/activity/qml/tst_window.cpp \
+        $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Test) -lgtest -pthread -o "$out/activity-window-qml-tests"
+      echo "built $out/activity-window-qml-tests"
+    fi
     ;;
   --bench)
     g++ "${cxxflags[@]}" -I"$here/src" "${sampler[@]}" "$here/src/bench.cpp" -pthread -o "$out/activity-sampler-bench$suffix"

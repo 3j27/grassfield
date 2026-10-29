@@ -39,7 +39,7 @@ target_include_directories(grassfield-activity-window PUBLIC ${CMAKE_CURRENT_SOU
     ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
 target_link_libraries(grassfield-activity-window PUBLIC grassfield-activity-sampler Qt6::Core Qt6::Gui Qt6::DBus pthread)
 
-add_executable(grassfield-activity src/main.cpp src/iconprovider.h)
+add_executable(grassfield-activity src/main.cpp src/iconprovider.h src/shownwatch.h)
 # windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
@@ -77,4 +77,12 @@ if(GTest_FOUND)
     target_include_directories(activity-window-tests PRIVATE ../../tests/unit/activity)
     target_link_libraries(activity-window-tests PRIVATE grassfield-activity-window Qt6::Test GTest::gtest)
     add_test(NAME activity-window-tests COMMAND activity-window-tests)
+
+    # A-W1: the window with its real backend on a fixture tree, offscreen (its own main).
+    add_executable(activity-window-qml-tests ../../tests/unit/activity/qml/tst_window.cpp)
+    target_include_directories(activity-window-qml-tests PRIVATE ../../tests/unit/activity)
+    target_compile_definitions(activity-window-qml-tests PRIVATE ACTIVITY_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
+    target_link_libraries(activity-window-qml-tests PRIVATE grassfield-activity-window Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test
+        GTest::gtest)
+    add_test(NAME activity-window-qml-tests COMMAND activity-window-qml-tests)
 endif()

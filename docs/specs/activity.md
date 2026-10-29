@@ -65,12 +65,12 @@ items (Settings does it); a background collector; any network access.
 
 ## Functional requirements
 
-### Window and navigation (step 2)
-- **AM1** One instance: launching the app while it runs brings its main window to the front (the mechanism Settings and the
-  Store use). Closing the main window quits the app (AD17).
-- **AM2** The main window opens at its last frame (`activity.json`), else at the token size `activity.windowWidth` ×
-  `activity.windowHeight`, never smaller than `activity.windowMinWidth` × `activity.windowMinHeight`. Opaque window, ADR-0024
-  radius, unified toolbar (ADR-0015).
+### Window and navigation (step 2a)
+- **AM1** One instance: launching the app while it runs brings its main window to the front, with the launch's activation
+  token (ADR-0038 AD34: the session bus name `org.grassfield.Activity`). Closing the main window quits the app (AD17).
+- **AM2** The main window opens at its last size (`activity.json`; Wayland places windows, so there is no position), else at
+  the token size `activity.windowWidth` × `activity.windowHeight`, never smaller than `activity.windowMinWidth` ×
+  `activity.windowMinHeight`. Opaque window, ADR-0024 radius, unified toolbar (ADR-0015).
 - **AM3** Toolbar, left to right: the traffic lights; the title (the app's name) with the current view as subtitle; the
   Stop button (Quit Process, enabled with a selection of own processes); the Info button (Inspect, enabled with one row);
   the action menu (…: Quit Process, Inspect Process, Send Signal to Process…, Efficiency Mode, Copy); the segmented control
@@ -86,12 +86,14 @@ items (Settings does it); a background collector; any network access.
   `activity.graphWrite`, `activity.graphIn`, `activity.graphOut`, `activity.pressureGreen`, `activity.pressureYellow`,
   `activity.pressureRed`), each holding A2's 3:1 against the graph's background in both appearances.
 - **AM8** While the window is hidden or minimized no per-process sample is taken (AM-P3). Back on screen, the next sample
-  comes at once; rates restart from it (no rate is drawn from a gap).
+  comes at once; rates restart from it (no rate is drawn from a gap): its rate columns show "—", and the sample after it
+  comes one second later rather than a whole interval (ADR-0038 AD35).
 - **AM9** View > Update Frequency: Very Often (1 sec), Often (2 sec), Normally (5 sec), default Normally; the choice is
   remembered and applies to every window of the app.
 
-### The table (step 2)
-- **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt), the name,
+### The table (step 2a; Hierarchically and the grouped views at step 2b)
+- **AM10** A row: the icon (the app's icon for a process of an app, a generic executable glyph otherwise, 16 pt; ADR-0038
+  AD36: the theme icon its launch unit's desktop entry names), the name,
   then the tab's columns; PID and User are default columns on every tab (macOS). Another owner's row is drawn like the
   others (macOS); only its actions differ (AM50). A click on a header sorts by it; a second click reverses. Defaults: CPU by % CPU, Memory by
   Memory, Energy by Energy Impact, Disk by Bytes Written, Network by Sent Bytes, each descending.
@@ -240,7 +242,7 @@ items (Settings does it); a background collector; any network access.
   are not listed in this view. Step 1: each row carries the devices it is a client of (`gpuDevices`, sorted); the view is
   step 2's.
 
-### Quit, Force Quit, signals (step 2; Quit of windowed processes through the shell at step 3)
+### Quit, Force Quit, signals (step 2c; Quit of windowed processes through the shell at step 3)
 - **AM50** Actions (Quit, Force Quit, Send Signal, Efficiency Mode) apply to own processes only: with another owner's row
   or the Kernel row in the selection they are disabled, the tooltip saying "You can only quit your own processes." (no
   administrator path, AQ4). Otherwise the Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the
@@ -275,7 +277,7 @@ items (Settings does it); a background collector; any network access.
   compositor (its pid from the dev state) or named by a test fixture; any other is refused with one "dev guard" journal line
   and the sheet says "Development session: only the nested session's processes can be quit."
 
-### Inspect (step 2)
+### Inspect (step 2d)
 - **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
   request raises it), refreshed at the update frequency while open. For another owner's process the window shows what
   `stat` and `status` give (the header, the Memory tab but Proportional Memory, Threads, CPU Time, Context Switches,
@@ -450,7 +452,7 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_textclean.cpp` and `tst_sampler.cpp` (step 1; named `tst_names.cpp` before) | L0 |
 | A-S9 | AM23's and AM43's turns: one fifth of the threads and one tenth of the descriptor lists per sample, a new process at once, every process covered within five and ten samples | `tst_sampler.cpp` | L0 |
 | A-S10 | after the review of 949fc98: a name and a command line follow an exec (by `stat`'s name, and by the code addresses with the same name); a title over argv[0], a login shell and a symbolic link named as AM17 says; the owner read on arrival, exec and turn only; the turns as full whatever the pids; the Memory tab on `statm` with `status` in turns; a failed TCP dump and a failed listing change nothing | `tst_sampler.cpp`, `tst_procparse.cpp` | L0 |
-| A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen | `tests/apps/activity_window.sh` | L1 |
+| A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen; no sample while hidden; the size kept | `tests/unit/activity/qml/tst_window.cpp` (the real backend on a fixture tree, offscreen; step 2a), `tests/unit/tst_activitymain.qml` (a fake backend), `tests/unit/activity/window/` (the backend's logic) | L1 |
 | A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop | `tests/apps/activity_actions.sh` | L1 |
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
@@ -466,6 +468,9 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
   between the shell and the app; a breaking change bumps `v` and needs ADR-0038 amended.
 - IPC `activity quit` (AM61): `docs/specs/security.md` "IPC surface".
 - `activity.json` v1 (AM74): ADR-0020.
+- Session bus, served (AD34, step 2a): `org.grassfield.Activity` (`org.grassfield.Activity.Dev` in a dev session), object
+  `/org/grassfield/Activity`, interface `org.grassfield.Activity`, one method `Activate(s token)`: the window comes
+  forward with the caller's xdg-activation token (one instance, AM1).
 - Read-only D-Bus: logind `ListInhibitors`, UPower (DisplayDevice, `GetHistory`), NetworkManager (active connection name);
   read-write: the systemd user manager `SetUnitProperties` (runtime only, AM68).
 - Kernel interfaces: `/proc/<pid>/{stat,statm,status,io,cmdline,cgroup,fd,fdinfo,task,smaps_rollup,exe,cwd}`, `/proc/{stat,

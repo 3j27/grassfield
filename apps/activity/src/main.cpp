@@ -13,6 +13,7 @@
 #include "globalmenu.h"
 #include "iconprovider.h"
 #include "runmode.h"
+#include "shownwatch.h"
 #include "translationloader.h"
 #include "windowchrome.h"
 
@@ -22,41 +23,6 @@
 #ifndef GRASSFIELD_VERSION
 #define GRASSFIELD_VERSION "unknown" // the real one comes from VERSION (cmake/GrassfieldVersion.cmake, build-direct.sh)
 #endif
-
-namespace {
-
-// AM8: the window is on screen when it is visible, exposed (a minimized or suspended surface is not) and not minimized.
-class ShownWatch : public QObject
-{
-public:
-    ShownWatch(QWindow *window, activity::ActivityApp *backend)
-        : QObject(window)
-        , m_window(window)
-        , m_backend(backend)
-    {
-        window->installEventFilter(this);
-        connect(window, &QWindow::visibilityChanged, this, [this] { update(); });
-        update();
-    }
-
-    bool eventFilter(QObject *watched, QEvent *event) override
-    {
-        if (watched == m_window && (event->type() == QEvent::Expose || event->type() == QEvent::Show || event->type() == QEvent::Hide))
-            QMetaObject::invokeMethod(this, [this] { update(); }, Qt::QueuedConnection);
-        return false;
-    }
-
-private:
-    void update()
-    {
-        m_backend->setWindowShown(m_window->isVisible() && m_window->isExposed() && m_window->visibility() != QWindow::Minimized);
-    }
-
-    QWindow *m_window;
-    activity::ActivityApp *m_backend;
-};
-
-} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -142,7 +108,7 @@ int main(int argc, char *argv[])
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
     if (window) {
-        new ShownWatch(window, &backend);
+        new activity::ShownWatch(window, &backend);
         QObject::connect(&service, &activity::ActivityService::activateRequested, window, [window](const QString &token) {
             // Qt's Wayland window takes XDG_ACTIVATION_TOKEN for its next activation request (xdg-activation-v1).
             if (!token.isEmpty())
