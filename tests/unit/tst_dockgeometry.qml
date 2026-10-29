@@ -700,4 +700,25 @@ TestCase {
             verify(bruteWidest(size, kinds, magOptions(c.m)) <= c.room, "m " + c.m + " room " + c.room + " size " + size);
         }
     }
+
+    // Startup: the Dock window stays unmapped until the settings, the apps and the Dock's output are final, so it is drawn once.
+    function test_settledOnWaitsForEveryInput() {
+        const one = {settings: true, apps: true, screens: ["DP-1"], start: ""};
+        const two = {settings: true, apps: true, screens: ["DP-1", "DP-2"], start: "DP-2"};
+        verify(Geometry.settledOn(one), "one output needs no focus information");
+        verify(Geometry.settledOn(two));
+        verify(!Geometry.settledOn(Object.assign({}, one, {settings: false})), "settings file not read yet (default edge and size)");
+        verify(!Geometry.settledOn(Object.assign({}, one, {apps: false})), "desktop entries not loaded (pinned icons)");
+        verify(!Geometry.settledOn(Object.assign({}, one, {screens: []})), "no output yet");
+        verify(!Geometry.settledOn(Object.assign({}, two, {start: ""})), "two outputs and no focused one: the Dock would start on the wrong side");
+        verify(!Geometry.settledOn(null));
+        verify(!Geometry.settledOn({}));
+    }
+
+    // The latched start output and the settled gate together: focus arriving late does not move a Dock that already settled.
+    function test_startScreenKnownOnlyOnceFocusArrives() {
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "", ""), "");
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "DP-2", ""), "DP-2");
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "HDMI-9", ""), "");
+    }
 }

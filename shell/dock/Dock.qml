@@ -399,6 +399,43 @@ Scope {
     Component.onCompleted: {
         rebuild();
         latchStartScreen();
+        if (inputsFinal)
+            settle();
+    }
+
+    // Startup (Geometry.settledOn): the Dock windows stay unmapped until the settings, the desktop entries and the Dock's output
+    // are final, so the Dock is drawn once, at its place, and no layout animation plays for the first fill. Latched: it never
+    // goes back (a later change of position or size is the user's and animates as before).
+    property bool settled: false
+    readonly property bool inputsFinal: Geometry.settledOn({
+        settings: Settings.loaded,
+        apps: Apps.hiddenReady && DesktopEntries.applications.values.length > 0,
+        screens: screenNames,
+        start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint)
+    })
+    onInputsFinalChanged: {
+        if (inputsFinal)
+            settle();
+    }
+
+    function settle(): void {
+        if (settled)
+            return;
+        settleTimer.stop();
+        latchStartScreen();
+        // The fallback (no focused output ever reported): the Dock stays on the output it is on, whatever focus does later.
+        if (chosenScreen === "")
+            chosenScreen = dockScreen;
+        rebuild();
+        settled = true;
+    }
+
+    // Nothing waited for ever: a compositor without focus events, an account without desktop entries.
+    Timer {
+        id: settleTimer
+        interval: Tokens.dockSettleMax
+        running: !root.settled
+        onTriggered: root.settle()
     }
 
     // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).
@@ -1054,7 +1091,8 @@ Scope {
             // recents section instead of jumping), new tiles fade in. Skipped with Reduce Motion and while a tile is dragged.
             function playLayout(): void {
                 holdLayout = false;
-                if (Appearance.reduceMotion || dragFrom >= 0)
+                // The first fill is not a change: nothing glides or fades in before the Dock is settled.
+                if (!root.settled || Appearance.reduceMotion || dragFrom >= 0)
                     return;
                 tiles.forceLayout();
                 const after = tileXs();
@@ -1247,6 +1285,8 @@ Scope {
             }
 
             screen: modelData
+            // Mapped once the first layout is final (root.settled).
+            visible: root.settled
             anchors {
                 bottom: true
                 left: win.edge !== "right"
@@ -1599,7 +1639,7 @@ Scope {
                                 // with the layout change.
                                 property real shiftAnim: shiftMain
                                 Behavior on shiftAnim {
-                                    enabled: !tile.dragging && !win.dragSnap
+                                    enabled: root.settled && !tile.dragging && !win.dragSnap
                                     NumberAnimation {
                                         duration: Appearance.duration(Tokens.motionFast)
                                         easing.type: Easing.OutQuad

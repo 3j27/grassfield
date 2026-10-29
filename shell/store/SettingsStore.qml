@@ -49,7 +49,7 @@ Scope {
     // `head` there. Empty in the shell (never taken from the environment); a relative path is ignored.
     property string toolDir: ""
     readonly property var toolEnvironment: root.toolDir.charAt(0) !== "/" ? ({}) : ({"PATH": root.toolDir + ":" + Quickshell.env("PATH")})
-    // grassfield.json has been read at least once (also when it was malformed, too large or not a regular file).
+    // grassfield.json has been read at least once (also when it was malformed, too large, not a regular file or missing).
     property bool loaded: false
     // True while the file on disk could not be parsed: nothing is written until it loads again.
     property bool writeBlocked: false
@@ -704,6 +704,8 @@ Scope {
         const read = root.splitRead(output);
         if (read.status === "missing") {
             root.lastSignature = "-";
+            // A fresh account has no file: that is a read too, and the defaults are final (the Dock and the desktop wait for it).
+            root.loaded = true;
             root.takeMissingFile();
         } else if (read.status === "ok") {
             root.lastSignature = read.signature;

@@ -405,3 +405,18 @@ function latchScreen(chosen, names, focused, preferred) {
 function movesDock(isDockScreen, previousState, nextState) {
     return !isDockScreen && previousState !== "revealing" && nextState === "revealing";
 }
+
+// ---- Startup: the Dock appears once, in its final place (the owner's report of 2026-10-29) ----
+
+// Whether every input of the Dock's first layout is final: the settings file was read (edge, size, magnification, pinned
+// apps), the desktop entries and the hidden-entry list loaded (the icons of the pinned apps), and the output that has the
+// Dock is known (with several outputs, the focused one; `start` is startScreen()). Until then the window stays unmapped, so
+// nothing is drawn at a default edge or size and then moved. `in` is {settings, apps, screens, start}.
+function settledOn(inputs) {
+    if (!inputs || inputs.settings !== true || inputs.apps !== true)
+        return false;
+    const n = inputs.screens ? inputs.screens.length : 0;
+    if (n === 0)
+        return false;
+    return n === 1 || String(inputs.start || "") !== "";
+}
