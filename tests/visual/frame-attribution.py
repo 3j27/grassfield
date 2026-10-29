@@ -24,7 +24,7 @@ owns that cost. A stall with little CPU is the main thread waiting (descheduled 
 its length in CPU is the compositor working (integrator nested pass of ce82fd3).
 
 Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE]
-       [--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL]
+       [--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...]
   frames.txt   "<presented us> <interval us>" (the intervals spanning a request already left out)
   renders.all  "<begin us> <cpu us>"
   marks.all    "<us> <name>"
@@ -35,12 +35,16 @@ Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <ref
   --gate=PREFIX the scenarios whose label starts with PREFIX are judged here (the shared edge's drag, tiling.md TL30,
                ADR-0036 D34 as amended); FAIL (exit 1) when the renders, the loop or the plugin's work were not recorded or
                the animation holds no frame, else PASS when both hold: (a) the plugin's own work is at most 1 ms in every
-               frame of the animation; (b) its compositor-caused long frames per second of animation are at most 1.25 times
-               the baseline's (--baseline), or none without a baseline. The client-paced ones are information (each window
-               shows the buffer its app commits, at its pace). Without it the script only reports (exit 0).
+               frame of the animation; (b) its compositor-caused long frames per second of animation per window it resizes
+               are at most 1.25 times the baseline's (--baseline, --resizes), or none without a baseline. The client-paced
+               ones are information (each window shows the buffer its app commits, at its pace). Without it the script only
+               reports (exit 0).
   --baseline=LABEL the scenario a gated one is compared with: Hyprland's own resize_on_border drag of one of the same windows,
                with the same glide (the integrator's D34 gate, 2026-10-28: the shared edge is judged against what Hyprland's
                own resize costs, not against zero); not measured: FAIL.
+  --resizes=LABEL=N the windows the scenario LABEL resizes (default 1): the shared edge resizes two where the baseline
+               resizes one, and each resized client's new buffers hold Hyprland's loop the same way (D34 final, integrator,
+               2026-10-29: the rate is compared per resized window).
 """
 import sys
 from collections import defaultdict
@@ -127,7 +131,7 @@ def new_part():
 
 
 def main(argv):
-    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": [], "--baseline": []}
+    options = {"--gate": [], "--stalls": [], "--work": [], "--beats": [], "--baseline": [], "--resizes": []}
     rest = []
     for a in argv:
         key = a.split("=", 1)[0]
@@ -141,9 +145,16 @@ def main(argv):
         beats = int(options["--beats"][-1]) if options["--beats"] else 0
     except ValueError:
         beats = -1
+    resizes = {}
+    for item in options["--resizes"]:
+        label, _, count = item.rpartition("=")
+        if not label or not count.isdigit() or int(count) < 1:
+            beats = -1
+            break
+        resizes[label] = int(count)
     if len(argv) != 7 or beats < 0:
         print("usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <refresh Hz> <window ms> [--stalls=FILE] "
-              "[--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL]", file=sys.stderr)
+              "[--work=FILE] [--beats=N] [--gate=PREFIX ...] [--baseline=LABEL] [--resizes=LABEL=N ...]", file=sys.stderr)
         return 2
     baseline = options["--baseline"][-1] if options["--baseline"] else None
     stalls = sorted((int(a[0]), int(a[1]), int(a[2]) if len(a) >= 3 else None) for path in options["--stalls"] for a in rows(path, 2))
@@ -265,9 +276,12 @@ def main(argv):
                 status = 1
                 continue
             base_rate = b["animation"]["compositor"] / (b["anim_us"] / 1e6)
-            rate_ok = rate <= base_rate * BASELINE_FACTOR + 1e-9
-            rate_text = (f"(b) {a['compositor']} compositor-caused long frame(s) in {seconds:.2f} s, {rate:.1f}/s, against {baseline}'s "
-                         f"{b['animation']['compositor']} in {b['anim_us'] / 1e6:.2f} s, {base_rate:.1f}/s (gate: {base_rate * BASELINE_FACTOR:.1f}/s)")
+            n, base_n = resizes.get(name, 1), resizes.get(baseline, 1)
+            per, base_per = rate / n, base_rate / base_n
+            rate_ok = per <= base_per * BASELINE_FACTOR + 1e-9
+            rate_text = (f"(b) {a['compositor']} compositor-caused long frame(s) in {seconds:.2f} s, {rate:.1f}/s, {per:.2f}/s per resized window ({n}), "
+                         f"against {baseline}'s {b['animation']['compositor']} in {b['anim_us'] / 1e6:.2f} s, {base_rate:.1f}/s, {base_per:.2f}/s per resized "
+                         f"window ({base_n}) (gate: {base_per * BASELINE_FACTOR:.2f}/s per window)")
         verdict = "PASS" if work_ok and rate_ok else "FAIL"
         if verdict == "FAIL":
             status = 1

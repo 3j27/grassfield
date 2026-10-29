@@ -233,10 +233,22 @@ with contextlib.redirect_stdout(verdict):
     fa_mod.main(["x", vf[0], vf[1], m_none, vf[2], "60", "700", "--baseline=edge-baseline"] + gate)
 check("gate: the verdict names both parts with their numbers",
       "PASS shared-edge: (a) the plugin's own work at most 0.60 ms in a frame (gate: 1 ms); (b) 1 compositor-caused long frame(s) in 0.40 s, 2.5/s, "
-      "against edge-baseline's 1 in 0.40 s, 2.5/s (gate: 3.1/s)" in verdict.getvalue())
+      "2.50/s per resized window (1), against edge-baseline's 1 in 0.40 s, 2.5/s, 2.50/s per resized window (1) (gate: 3.12/s per window)"
+      in verdict.getvalue())
+# D34 final (integrator, 2026-10-29): the rate per resized window. The drag resizes two windows, the baseline one: twice the
+# baseline's rate is the same per window and passes; without --resizes it is 2 times the baseline's and fails.
+fe, re_ = scenario(1_000_000, True)
+fb_, rb_ = scenario(3_000_000, True)
+pw = [write("%d %d" % f for f in fe + fb_), write("%d %d" % r for r in sorted(re_ + rb_)),
+      write(["shared-edge %d 400 0" % (1_000_000 * 1000), "edge-baseline %d 800 0" % (3_000_000 * 1000)])]
+per_window = ["x", pw[0], pw[1], m_none, pw[2], "60", "700", "--baseline=edge-baseline"] + gate
+check("gate (b): twice the baseline's rate fails when both resize one window", attribution(per_window) == 1)
+check("gate (b): twice the baseline's rate passes per resized window (the drag resizes two)",
+      attribution(per_window + ["--resizes=shared-edge=2", "--resizes=edge-baseline=1"]) == 0)
+check("gate (b): a bad window count exits 2", attribution(per_window + ["--resizes=shared-edge=0"]) == 2)
 
 for p in (fa, ev, fb, fm, em, eb, en, f_long, r_client, r_comp, m_none, ev_edge, s_pre, s_short, s_render, w_pre, ev_far, s_cpu,
-          w_small, r_none_long, r_early, s_after, s_hold, w_big, w_ok, *vf):
+          w_small, r_none_long, r_early, s_after, s_hold, w_big, w_ok, *vf, *pw):
     os.unlink(p)
 
 sys.exit(1 if failures else 0)
