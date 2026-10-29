@@ -102,7 +102,15 @@ Window {
         if (alert.active)
             alert.becameActive();
         else
-            alert.inactiveSince = Date.now();
+            alert.becameInactive();
+    }
+
+    // Not the active window: nothing answers it until it is active again and armed from then (integrator re-review of
+    // a4740a2, NIT 2: an armed alert stayed armed behind another window).
+    function becameInactive(): void {
+        alert.inactiveSince = Date.now();
+        alert.armed = false;
+        arm.stop();
     }
 
     function becameActive(): void {
@@ -315,8 +323,9 @@ Window {
             height: Math.max(buttons.height, hint.implicitHeight)
 
             // Two capsules of one width side by side (the shell's alert); when the wider label does not fit in half the row, one
-            // above the other at the row's width, the default button at the bottom, as macOS stacks an alert's buttons
-            // (integrator nested pass of 1745c0c, MAJOR 1: "Ne pas autoriser" pushed "Autoriser" out of the alert).
+            // above the other at the row's width, the default button on top as macOS (11 and later) stacks an alert's buttons, and
+            // "Don't Allow" on top where neither is the default (integrator nested pass of 1745c0c, MAJOR 1: "Ne pas autoriser"
+            // pushed "Autoriser" out of the alert; re-review of a4740a2, MINOR 1: the default on top).
             Item {
                 id: buttons
                 visible: !alert.keysHeld
@@ -325,11 +334,13 @@ Window {
                 readonly property bool stacked: 2 * Math.max(denyButton.implicitWidth, grantButton.implicitWidth) + gap > width
                 readonly property real buttonWidth: stacked ? width : (width - gap) / 2
                 readonly property real buttonHeight: Math.max(denyButton.implicitHeight, grantButton.implicitHeight)
+                readonly property bool grantOnTop: stacked && alert.hasDefault
                 height: stacked ? 2 * buttonHeight + gap : buttonHeight
 
                 Button {
                     id: denyButton
                     capsule: true
+                    y: buttons.grantOnTop ? buttons.buttonHeight + buttons.gap : 0
                     width: buttons.buttonWidth
                     text: alert.denyText
                     onClicked: {
@@ -345,7 +356,7 @@ Window {
                     capsule: true
                     primary: alert.hasDefault
                     x: buttons.stacked ? 0 : buttons.buttonWidth + buttons.gap
-                    y: buttons.stacked ? buttons.buttonHeight + buttons.gap : 0
+                    y: buttons.stacked && !buttons.grantOnTop ? buttons.buttonHeight + buttons.gap : 0
                     width: buttons.buttonWidth
                     text: alert.grantText
                     onClicked: {
@@ -398,7 +409,8 @@ Window {
                     alert.focusStart();
                 }
                 alert.armed = false;
-                arm.restart();
+                if (alert.active)
+                    arm.restart();
             }
         }
     }

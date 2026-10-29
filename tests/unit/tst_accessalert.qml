@@ -319,20 +319,47 @@ TestCase {
         compare(fakeHost.answers.length, 0);
     }
 
-    // MAJOR 1 of the integrator's nested pass of 1745c0c: two labels that do not fit side by side (French) stack, the default
-    // button at the bottom, both inside the alert; short ones stay side by side.
+    // MAJOR 1 of the integrator's nested pass of 1745c0c: two labels that do not fit side by side (French) stack, both inside the
+    // alert, the default button on top as macOS stacks them (re-review of a4740a2, MINOR 1); short ones stay side by side.
     function test_buttons_that_do_not_fit_stack(): void {
         const wide = test.openAlert({denyLabel: "Ne pas autoriser", grantLabel: "Autoriser"});
         const deny = test.button(wide, "Ne pas autoriser");
         const grant = test.button(wide, "Autoriser");
         const d = deny.mapToItem(wide.contentItem, 0, 0);
         const g = grant.mapToItem(wide.contentItem, 0, 0);
-        verify(g.y > d.y, "one above the other, the default at the bottom");
+        verify(g.y < d.y, "one above the other, the default on top");
         compare(d.x, g.x);
         compare(deny.width, grant.width);
         verify(g.x >= 0 && g.x + grant.width <= wide.width, "inside the alert: " + (g.x + grant.width) + " of " + wide.width);
-        verify(g.y + grant.height <= wide.height, "inside the alert's height");
+        verify(d.y + deny.height <= wide.height, "inside the alert's height");
         verify(deny.implicitWidth <= deny.width, "the label is not cut");
+    }
+
+    // With no default (the camera), "Don't Allow" stays on top when they stack.
+    function test_stacked_without_a_default_dont_allow_on_top(): void {
+        const alert = test.openAlert({icon: "camera-web-symbolic", noDefault: true, denyLabel: "Ne pas autoriser", grantLabel: "Autoriser"});
+        const deny = test.button(alert, "Ne pas autoriser");
+        const grant = test.button(alert, "Autoriser");
+        verify(!grant.primary, "no default");
+        verify(deny.mapToItem(alert.contentItem, 0, 0).y < grant.mapToItem(alert.contentItem, 0, 0).y, "Don't Allow on top");
+        verify(grant.mapToItem(alert.contentItem, 0, 0).y + grant.height <= alert.height, "inside the alert's height");
+    }
+
+    // An armed alert that stops being the active window answers nothing until it is active again and armed from then (integrator
+    // re-review of a4740a2, NIT 2).
+    function test_an_alert_that_goes_inactive_is_disarmed(): void {
+        const alert = test.openAlert({});
+        verify(alert.armed);
+        alert.becameInactive();
+        verify(!alert.armed, "disarmed when another window is active");
+        wait(alert.armMs + 200);
+        verify(!alert.armed, "and stays so while inactive");
+        alert.becameActive();
+        verify(!alert.armed, "not at once on its return");
+        tryVerify(() => alert.armed, 2000);
+        const grant = test.button(alert, "Allow");
+        mouseClick(grant, grant.width / 2, grant.height / 2);
+        tryVerify(() => fakeHost.answers.length === 1);
     }
 
     function test_short_buttons_stay_side_by_side(): void {
