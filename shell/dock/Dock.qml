@@ -109,7 +109,7 @@ Scope {
     // Enter keyboard mode and focus the first tile.
     function enterKeyboardMode(): void {
         // The Dock never takes the keyboard over the lock screen (GF-116).
-        if (SessionState.refuses("dock keyboard"))
+        if (SessionState.refuses("dock keyboard") || !settled)
             return;
         keyboardScreen = dockScreen;
         keyboardMode = true;
@@ -881,7 +881,7 @@ Scope {
             UsableProbe {
                 kind: "dock"
                 screenName: win.modelData ? win.modelData.name : ""
-                active: win.visible
+                active: win.reveal
             }
 
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
@@ -1294,8 +1294,19 @@ Scope {
             }
 
             screen: modelData
-            // Mapped once the first layout is final (root.settled).
-            visible: root.settled
+            // Mapped at once, invisible: its first scene-graph pass and surface mapping run beside the settings read. Until
+            // `reveal` nothing of it is drawn (content at opacity 0, no blur), takes input (empty mask) or reserves room
+            // (exclusive zone 0); at `reveal` all of that switches in one frame.
+            // Revealed once the first layout is final (root.settled) and the surface has the size of the settled edge (`placed`:
+            // the compositor answers an anchor change with a new size a frame or two later); the timer lets go of `placed`.
+            readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth, screen.width, screen.height)
+            property bool placedGivenUp: false
+            readonly property bool reveal: root.settled && (placed || placedGivenUp)
+            Timer {
+                interval: Tokens.dockSettleTimeout
+                running: root.settled && !win.placed && !win.placedGivenUp
+                onTriggered: win.placedGivenUp = true
+            }
             anchors {
                 bottom: true
                 left: win.edge !== "right"
@@ -1307,7 +1318,7 @@ Scope {
             implicitWidth: vertical ? depth : 0
             implicitHeight: vertical ? 0 : depth
             // Only the Dock's output reserves room, and not while auto-hide is on.
-            exclusiveZone: isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
+            exclusiveZone: root.settled && isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
@@ -1315,11 +1326,19 @@ Scope {
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.
             // qmllint disable missing-type
-            mask: Region {
+            mask: win.reveal ? hitMask : emptyMask
+            BackgroundEffect.blurRegion: win.reveal && shelf.blurActive ? blurRegion : null
+            // qmllint enable missing-type
+
+            Region {
+                id: hitMask
                 item: hitItem
             }
-            BackgroundEffect.blurRegion: shelf.blurActive ? blurRegion : null
-            // qmllint enable missing-type
+
+            // Nothing takes input before the reveal (an empty region).
+            Region {
+                id: emptyMask
+            }
 
             Region {
                 id: blurRegion
@@ -1429,6 +1448,8 @@ Scope {
             Item {
                 id: area
                 anchors.fill: parent
+                // Nothing is drawn before the reveal; at it the Dock appears whole, in one frame (no fade, with or without Reduce Motion).
+                opacity: win.reveal ? 1 : 0
 
                 HoverHandler {
                     id: areaHover

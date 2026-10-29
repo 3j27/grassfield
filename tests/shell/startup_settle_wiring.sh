@@ -26,8 +26,19 @@ block() { local a; a=$(at "$1" "$2"); [ -n "$a" ] && tail -n +"$a" "$1" | head -
 
 D=shell/dock/Dock.qml S=shell/store/SettingsStore.qml F=shell/desktop/DesktopFiles.qml V=shell/desktop/IconsView.qml I=shell/desktop/DesktopIcon.qml
 
-desc="Dock: the windows are mapped only when settled"
-check has $D "visible: root.settled"
+desc="Dock: the windows are revealed only when settled and placed (reveal), and mapped at once"
+check has $D "readonly property bool reveal: root.settled && (placed || placedGivenUp)"
+check has $D "readonly property bool placed: screen !== null && Geometry.placed("
+check bash -c '! grep -q "visible: root.settled" "$1"' _ $D
+desc="Dock: before the reveal nothing is drawn, caught or reserved (opacity, mask, blur, exclusive zone, keyboard, probe)"
+check has $D "opacity: win.reveal ? 1 : 0"
+check has $D "mask: win.reveal ? hitMask : emptyMask"
+check has $D "BackgroundEffect.blurRegion: win.reveal && shelf.blurActive ? blurRegion : null"
+check has $D "exclusiveZone: root.settled && isDockScreen ?"
+check has $D 'if (SessionState.refuses("dock keyboard") || !settled)'
+check has $D "active: win.reveal"
+desc="Dock: the placed fallback timer runs after settle and gives up"
+check has $D "onTriggered: win.placedGivenUp = true"
 desc="Dock: the make-room Behavior is off before settled"
 check has $D "enabled: root.settled && !tile.dragging && !win.dragSnap"
 desc="Dock: playLayout does nothing before settled"

@@ -432,3 +432,12 @@ function settledOn(inputs) {
         return true;
     return inputs.apps === true && (n === 1 || String(inputs.start || "") !== "");
 }
+
+// Whether a Dock surface has the size of its edge: across the Dock `depth`, along it the whole output. Until then an anchor
+// change (the settled edge) has not been answered by the compositor and the Dock would be drawn in a surface of the old edge.
+function placed(edge, width, height, depth, screenW, screenH) {
+    if (!(depth > 0) || !(screenW > 0) || !(screenH > 0))
+        return false;
+    const near = (a, b) => Math.abs(a - b) < 1;
+    return isVertical(edge) ? (near(width, depth) && near(height, screenH)) : (near(height, depth) && near(width, screenW));
+}

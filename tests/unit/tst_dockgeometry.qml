@@ -764,4 +764,15 @@ TestCase {
         compare(AutoHide.initial(false).state, "shown");
         compare(AutoHide.initial(false).visible, 1);
     }
+
+    // The reveal waits for the surface to have the size of the settled edge.
+    function test_placedNeedsTheSizeOfTheEdge() {
+        verify(Geometry.placed("bottom", 1920, 190, 190, 1920, 1080));
+        verify(!Geometry.placed("left", 1920, 190, 190, 1920, 1080), "still the bottom-edge surface after the edge became left");
+        verify(Geometry.placed("left", 190, 1080, 190, 1920, 1080));
+        verify(Geometry.placed("right", 190.4, 1080, 190, 1920, 1080), "rounding");
+        verify(!Geometry.placed("bottom", 0, 0, 190, 1920, 1080), "not configured yet");
+        verify(!Geometry.placed("bottom", 1920, 190, 0, 1920, 1080));
+        verify(!Geometry.placed("bottom", 1920, 190, 190, 0, 0));
+    }
 }
