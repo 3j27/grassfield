@@ -9,6 +9,7 @@
 #include "removal.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -39,7 +40,7 @@ enum class Refusal {
     Outdated,   // the plan upgrades an installed package, does not resolve, or its first file is gone from the mirror
     Offline,    // an install needs the network
     Dependency, // (uninstall) other installed packages need it
-    Protected,  // (uninstall) the plan takes a protected package along
+    Protected,  // (uninstall) the plan takes a protected package along; (AUR) it would build one
     OmarchyChanged, // (setup, AUR) the installed Omarchy lacks the recipe, or a pinned file differs from the catalog's pin
     Repository, // (AUR) a repository has the package: it is installed from there
     NotOnAur,   // (AUR) the AUR does not know the package, or a dependency is on neither the repositories nor the AUR
@@ -57,6 +58,7 @@ struct InstallPlan {
     qint64 installedSize = 0;
     QStringList unfinished; // Unfinished: pacman -Qu's lines
     QStringList upgrades;   // Outdated: the installed packages the plan would upgrade
+    QString protectedPackage; // Protected (AUR): the name of the deny list it would build
     QString detail;         // pacman's own message, for Details
 };
 
@@ -73,9 +75,35 @@ struct PlanTools {
     QString dbLock;     // pacman's <DBPath>/db.lck
     QString updateLock; // Omarchy's update lock (${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock)
     bool devPlumbing = false;
-    // The HTTP status of a HEAD request (fetch.h headStatus); unset: the mirror is not asked.
-    std::function<int(const QUrl &)> head;
+    // The HTTP statuses of HEAD requests for a plan's files, in order (fetch.h headStatuses: all at once, one deadline);
+    // unset: the mirror is not asked.
+    std::function<QList<int>(const QList<QUrl> &)> heads;
+    // "" unless the system's sync databases are older than the mirror's (databasesBehind): then what Software Update said,
+    // and every install is refused as Outdated before anything downloads.
+    QString behind;
 };
+
+// Whether the system's sync databases are older than the mirror's, by Software Update's own answer (ADR-0033's
+// software-update.json as the shell writes it; ADR-0037 e.4, SD29). Its checker runs checkupdates, which compares what is
+// installed with a fresh copy of the mirror's databases: an update it lists means the mirror moved on. Its last successful
+// answer counts, whatever its state (up-to-date, available or not-set-up, the three that list the system's updates; after a
+// failed check, the one the shell keeps as `previous`), when it lists other updates or an Omarchy release (Grassfield's own
+// release is not the mirror's) and came after pacman last synced the databases (`lastSync`: an answer from before a sync
+// says nothing of the databases now). The mirror then no longer has the old files (the owner's rc1-7: 404s mid-download),
+// so an install would fail: the system is updated first, never its databases alone (a partial upgrade, S4). "" when not
+// behind or not known; else a line for the log.
+QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastSync);
+// When pacman last synced the databases: the last "[PACMAN] synchronizing package lists" line of pacman.log (its tail is
+// enough), else `fallback`. checkupdates and Software Update's own syncs log to /dev/null, so every line there is a sync of
+// the system's databases.
+QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback);
+// The newest modification time of pacman's sync databases (<dir>/*.db), invalid when there is none: lastSync's fallback,
+// never later than the sync (pacman sets it to the mirror's Last-Modified, the integrator's review of ff2fd83).
+QDateTime newestSync(const QString &syncDir);
+// pacman's messages of a download whose file the mirror no longer serves (404, 410, or an error page larger than pacman
+// lets a file be: "Exceeded the maximum allowed file size"), as grassfield-store-helper logs them: the databases were older
+// than the mirror (S5).
+bool downloadGone(const QString &log);
 
 // A setup's recipe and the catalog's pins (ADR-0037 g), checked against the installed Omarchy at `root`.
 struct SetupCheck {
@@ -106,12 +134,13 @@ RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const 
 // omarchy-pkg-drop).
 InstallPlan checkSetupInstall(const QStringList &packages, const SetupCheck &setup, const PlanTools &tools, bool online, bool ownOperation);
 RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup, const DenyList &deny, const PlanTools &tools, bool ownOperation);
-// An AUR package (b.2, step 3b2): the AUR's command (setup.recipe, omarchy-pkg-aur-add) and the pins first, as a setup's;
-// then no repository may have the name (yay would take the repository's), the AUR must know it, and the dependencies
+// An AUR package (b.2, step 3b2): no name of the deny list, the app's or any it would build (Protected, the name in
+// `protectedPackage`); the AUR's command (setup.recipe, omarchy-pkg-aur-add) and the pins, as a setup's; then no
+// repository may have the name (yay would take the repository's), the AUR must know it, and the dependencies
 // (depends, makedepends, checkdepends) the system lacks (pacman -T) come from the repositories (pacman -S --print: what
 // pacman adds, never an upgrade) or from the AUR, whose own are read in turn: at most 25 packages to build, in 6 rounds.
 // `info` asks the AUR (aur.h aurInfo). The repositories' packages are in `packages`, the AUR's in `built`.
 InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
-                            const PlanTools &tools, bool online, bool ownOperation);
+                            const DenyList &deny, const PlanTools &tools, bool online, bool ownOperation);
 
 } // namespace grassfield::store

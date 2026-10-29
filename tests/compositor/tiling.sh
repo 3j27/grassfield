@@ -325,8 +325,8 @@ alive() { nestctl version -j >/dev/null 2>&1; }
 # ---- gate C1: a window that unmaps (alive) during the plugin's titlebar drag (see the header) ----
 dumps() { coredumpctl --no-legend --no-pager list 2>/dev/null | grep -ci hyprland || true; }
 xdg_addr="" xdg_pid=""
-open_xdg() { # app id: an xdgact window on GF-REF; its address in xdg_addr, its pid in xdg_pid
-  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" "$1" >>"$run/xdgact.out" 2>&1 </dev/null &
+open_xdg() { # app id [min width]: an xdgact window on GF-REF; its address in xdg_addr, its pid in xdg_pid
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" "$@" >>"$run/xdgact.out" 2>&1 </dev/null &
   pids+=("$!")
   xdg_addr="" xdg_pid=""
   for _ in $(seq 1 50); do
@@ -1183,20 +1183,33 @@ QML
     done
     sleep 0.3
   }
-  stop_layer() { [[ -n $layer_pid ]] && kill "$layer_pid" 2>/dev/null; layer_pid=""; sleep 0.5; }
+  # The layer gone as Hyprland reports it (integrator follow-up of PR #43: "the Exclusive layer gone, the hover works again"
+  # flaked after a fixed 0.5 s while the layer was still mapped), then a moment for the plugin's layer listener.
+  stop_layer() {
+    [[ -n $layer_pid ]] && kill "$layer_pid" 2>/dev/null
+    layer_pid=""
+    local _
+    for _ in $(seq 1 50); do
+      nestctl layers -j 2>/dev/null | jq -e '[.. | objects | select(.namespace? == "tiling-test-layer")] | length == 0' >/dev/null 2>&1 && break
+      sleep 0.1
+    done
+    sleep 0.3
+  }
   no_enter_for() { # seconds: the pointer rests on the light, no enter comes
     mark_events
     pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
     sleep "$1"
     [[ -z $(events_since "$(hover_filter enter)") ]]
   }
-  enter_again() { # off the light and back: the hover works again
+  enter_again() { # off the light and back: the hover works again, its enter within the delay + 2 s
     pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 200
     mark_events
     pointer abs $((lcx - mx)) $((lcy - my)) sleep 100
-    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
-    local ok=1
-    events_since "$(hover_filter enter)" | grep -q . && ok=0
+    local _ ok=1
+    for _ in $(seq 1 $(((hover_delay + 2000) / 100))); do
+      events_since "$(hover_filter enter)" | grep -q . && { ok=0; break; }
+      sleep 0.1
+    done
     ((ok)) && surfaces_state
     close_popover
     return $ok
@@ -1607,6 +1620,360 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "shared-edge: outside the handle one window is resized, the other stays" only_one
   else
     say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
+  fi
+
+  # Step 6a (TL33, ADR-0036 D41-D47): Full Screen › Left or Right of Screen makes a Split View Desktop. Every window back to
+  # its box from before first; the first window goes left, the second is picked into the right half.
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-split")' >/dev/null 2>&1; then
+    tile_ipc "$addr" previous
+    tile_ipc "$addr3" previous
+    split_ipc() { nestctl dispatch "hl.plugin.grassfield.split(\"$1\", \"$2\")" >>"$log" 2>&1; sleep 1; }
+    unsplit_ipc() { nestctl dispatch "hl.plugin.grassfield.unsplit(\"$1\")" >>"$log" 2>&1; sleep 1; }
+    shown_desktop() { nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | .activeWorkspace.id'; }
+    desktop_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .workspace.id'; }
+    move_off() { nestctl dispatch "hl.dsp.window.move({ workspace = \"$2\", follow = false, window = \"address:$1\" })" >>"$log" 2>&1; sleep 1; }
+    near() { (( $1 - $2 <= $3 && $2 - $1 <= $3 )); }
+    split_listed() { # workspace home: the reply lists that Split View Desktop
+      local sp
+      sp=$(tiling_state | jq -c '.splits')
+      say "  splits: $sp"
+      jq -e --argjson w "$1" --argjson h "$2" --arg o "$out" 'any(.[]; .workspace == $w and .home == $h and .output == $o)' <<<"$sp" >/dev/null
+    }
+    split_gone() { ! split_listed "$1" "$2"; }
+    split_members() { # workspace address...: the reply lists exactly these members, in this order
+      local got want
+      got=$(tiling_state | jq -c --argjson w "$1" '[.splits[] | select(.workspace == $w) | .windows][0] // null')
+      shift
+      want=$(printf '%s\n' "$@" | sed 's/^0x//' | jq -R . | jq -sc .)
+      say "  members: $got (want $want)"
+      [[ $got == "$want" ]]
+    }
+    green_click() { # address: a click on its zoom light (found through tile_popover, the popover closed first)
+      local ev lx ly
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+      event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\"" || return 1
+      ev=$last_event
+      close_popover
+      read -r lx ly < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$ev")
+      pointer abs $((lx - mx)) $((ly - my)) sleep 100 down sleep 80 up sleep 300
+      pointer abs 20 $((mh / 2)) sleep 200
+      sleep 0.8
+    }
+    half_of() { # title left|right: that half of the whole output (D42: no menu bar or Dock reservation, one separator of
+      # tiling.margin in the middle, on the grid: up to 8 px of rounding)
+      local x y w h _a
+      read -r x y w h _a < <(geometry_of "$1")
+      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $tb)"
+      near $((y - tb)) "$my" 1 && near $((h + tb)) "$mh" 1 || return 1
+      if [[ $2 == left ]]; then
+        near "$x" "$mx" 1 && (( x + w <= mx + mw / 2 - m / 2 + 1 && x + w >= mx + mw / 2 - m / 2 - 8 ))
+      else
+        near $((x + w)) $((mx + mw)) 1 && (( x >= mx + mw / 2 + m / 2 - 1 && x <= mx + mw / 2 + m / 2 + 8 ))
+      fi
+    }
+    fills_output() { # title: the whole output (D43)
+      local x y w h _a
+      read -r x y w h _a < <(geometry_of "$1")
+      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $tb)"
+      near "$x" "$mx" 1 && near $((y - tb)) "$my" 1 && near "$w" "$mw" 1 && near $((h + tb)) "$mh" 1
+    }
+    home=$(shown_desktop)
+    next=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+    read -r bx by bw bh _ < <(geometry_of tiling-foot)
+    mark_events
+    split_ipc "$addr" top
+    check "split: a side other than left or right is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "split: nothing changed" test "$(shown_desktop)" = "$home"
+    mark_events
+    split_ipc "$addr" left
+    check "split: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
+    check "split: $out shows a new Desktop with the next free id ($next)" test "$(shown_desktop)" = "$next"
+    check "split: the window is on it" test "$(desktop_of "$addr")" = "$next"
+    check "split: the reply lists it with the Desktop it came from ($home)" split_listed "$next" "$home"
+    check "split: the window takes the left half while its second window is chosen" half_of tiling-foot left
+    split_suggestion() {
+      local sg
+      sg=$(suggestion)
+      say "  suggestion: $sg"
+      jq -e --arg a "${addr#0x}" --arg b "${addr2#0x}" --arg c "${addr3#0x}" --arg o "$out" \
+        '.address == $a and .layout == "left-right" and .output == $o and ([.zones[].zone] == [1])
+         and (.windows | index($b) != null and index($c) != null and index($a) == null)' <<<"$sg" >/dev/null
+    }
+    check "split: the suggestion offers the right half with the windows of the Desktop it came from" split_suggestion
+    mark_events
+    split_ipc "$addr" right
+    check "split: a window of a Split View Desktop is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+
+    arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr2\"],\"zone\":1,\"with\":\"$addr\"}"
+    check "split pick: the second window joins the Split View Desktop" test "$(desktop_of "$addr2")" = "$next"
+    check "split pick: it takes the right half" half_of tiling-foot2 right
+    check "split pick: the first keeps the left half" half_of tiling-foot left
+    split_pair() {
+      local a b
+      a=$(record_of "$addr")
+      b=$(record_of "$addr2")
+      say "  first: $a; second: $b"
+      jq -e -n --argjson a "$a" --argjson b "$b" \
+        '$a.layout == "left-right" and $a.zone == 0 and $b.layout == "left-right" and $b.zone == 1 and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
+    }
+    check "split pick: one tile group (the shared edge resizes both)" split_pair
+    check "split pick: the reply lists both members" split_members "$next" "$addr" "$addr2"
+    # D50 (integrator review of c7a6b6e, MAJOR 1): an app's own full screen, or a zoom, keeps a member and its half; the other
+    # does not fill meanwhile, and the window comes back to its half after.
+    for mode in fullscreen maximized; do
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr2\" })" >>"$log" 2>&1
+      sleep 1
+      check "split $mode: the other member keeps its half" half_of tiling-foot left
+      check "split $mode: both still members" split_members "$next" "$addr" "$addr2"
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr2\" })" >>"$log" 2>&1
+      sleep 1
+      check "split $mode ended: the window is back in its half" half_of tiling-foot2 right
+      check "split $mode ended: the other still in its half" half_of tiling-foot left
+    done
+    # D52: a third window opening on the Split View Desktop is no member: the halves stay, also once it closed.
+    open_xdg gf-split-third
+    if [[ -n $xdg_addr ]]; then
+      check "split third: it opened on the Split View Desktop" test "$(desktop_of "$xdg_addr")" = "$next"
+      check "split third: no member" split_members "$next" "$addr" "$addr2"
+      kill "$xdg_pid" 2>/dev/null
+      for _ in $(seq 1 25); do [[ -z $(nestctl clients -j | jq -r --arg a "$xdg_addr" '.[] | select(.address == $a) | .address') ]] && break; sleep 0.2; done
+      sleep 0.8
+      check "split third: closed, the halves stay" half_of tiling-foot left
+      check "split third: the right half too" half_of tiling-foot2 right
+    else
+      check "split third: the third window opened" false
+    fi
+    # D46: one of Hyprland's moves (Super+drag) of a member puts it back in its half at the release.
+    if declare -F super_drag >/dev/null; then
+      super_drag $((mx + mw / 2)) $((my + mh / 2)) 300
+      check "split Super+drag: the member is back in its half" half_of tiling-foot left
+      check "split Super+drag: still a member" split_members "$next" "$addr" "$addr2"
+    else
+      say "SKIP: split Super+drag (the step 2 helpers did not run)"
+    fi
+    mark_events
+    tile_ipc "$addr" right
+    check "split keys: tiling a member is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "split keys: it keeps its half" half_of tiling-foot left
+    # D46: a titlebar drag of a Split View window moves nothing (step 6b swaps the two).
+    if read -r gx gy < <(grip_of "$addr"); then
+      pointer abs "$gx" "$gy" sleep 200 down drag $((gx + 120)) $((gy + 80)) sleep 300 up sleep 600
+      check "split titlebar: a drag moves nothing" half_of tiling-foot left
+    else
+      check "split titlebar: the first window's grip found" false
+    fi
+
+    if lock_session; then
+      mark_events
+      unsplit_ipc "$addr"
+      check "split locked: unsplit is refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
+      check "split locked: the window stays on the Split View Desktop" test "$(desktop_of "$addr")" = "$next"
+      mark_events
+      split_ipc "$addr3" left
+      check "split locked: split is refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
+    else
+      check "split locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "split locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+
+    # D44: Exit Full Screen sends that window back; the other stays and fills the Split View Desktop.
+    mark_events
+    unsplit_ipc "$addr"
+    check "unsplit: $out shows the Desktop it came from again" test "$(shown_desktop)" = "$home"
+    check "unsplit: the window is back on it" test "$(desktop_of "$addr")" = "$home"
+    check "unsplit: at its box from before" box_of tiling-foot "$bx" "$by" "$bw" "$bh"
+    check "unsplit: no tile record left" test "$(record_of "$addr")" = null
+    check "unsplit: the other window stays on the Split View Desktop" test "$(desktop_of "$addr2")" = "$next"
+    check "unsplit: and fills it alone" fills_output tiling-foot2
+    check "unsplit: the Split View Desktop is still listed" split_listed "$next" "$home"
+    # D43: the Split View Desktop emptied while shown goes back to the Desktop it came from, and ends.
+    nestctl dispatch "hl.dsp.focus({ workspace = \"$next\" })" >>"$log" 2>&1
+    sleep 0.8
+    check "split empty: shown again" test "$(shown_desktop)" = "$next"
+    move_off "$addr2" "$home"
+    check "split empty: its last window moved off, $out goes back to the Desktop it came from" test "$(shown_desktop)" = "$home"
+    check "split empty: the reply no longer lists it" split_gone "$next" "$home"
+    tile_ipc "$addr2" previous
+
+    # D43: one of the two leaving (minimized here) leaves the other filling the Split View Desktop.
+    next2=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+    split_ipc "$addr3" right
+    check "split leave: the third window makes Split View Desktop $next2" test "$(desktop_of "$addr3")" = "$next2"
+    check "split leave: in the right half" half_of tiling-foot3 right
+    arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr\"],\"zone\":0,\"with\":\"$addr3\"}"
+    check "split leave: the first window picked into the left half" half_of tiling-foot left
+    move_off "$addr" special:minimized
+    check "split leave: the other window fills the Split View Desktop" fills_output tiling-foot3
+    move_off "$addr" "$home"
+    # D49: the green button of a member leaves the Split View (macOS exits full screen), here its last one, zoomed by a key
+    # first (re-review of e5bd9d2: it went home still zoomed).
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$addr3\" })" >>"$log" 2>&1
+    sleep 1
+    green_click "$addr3"
+    check "split green: the member's zoom light: the Desktop it came from shown" test "$(shown_desktop)" = "$home"
+    check "split green: the window is back on it" test "$(desktop_of "$addr3")" = "$home"
+    check "split green: it was not zoomed" test "$(nestctl clients -j | jq -r --arg a "$addr3" '.[] | select(.address == $a) | .fullscreen')" = 0
+    check "split leave: the Split View Desktop ended" split_gone "$next2" "$home"
+    tile_ipc "$addr" previous
+
+    # D51, D55 (re-review of e5bd9d2: MAJOR A and the glue mutants G4, G5): nothing of a Split View changes behind the lock,
+    # and it settles at the unlock. An xdgact window is the first member here (it is closed while locked).
+    addr_box() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"'; }
+    fills_addr() { # address: the whole output (with the plugin's titlebar band above the surface, or none: client chrome)
+      local x y w h
+      read -r x y w h < <(addr_box "$1")
+      say "  $1 at ${x:-?},${y:-?} ${w:-?}x${h:-?} (output $mx,$my ${mw}x$mh, band $tb or none)"
+      [[ -n ${h:-} ]] && near "$x" "$mx" 1 && near "$w" "$mw" 1 && { { near $((y - tb)) "$my" 1 && near $((h + tb)) "$mh" 1; } || { near "$y" "$my" 1 && near "$h" "$mh" 1; }; }
+    }
+    open_xdg gf-split-lock
+    if [[ -n $xdg_addr ]]; then
+      next3=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$xdg_addr" left
+      check "split lock: the xdgact window makes Split View Desktop $next3" test "$(desktop_of "$xdg_addr")" = "$next3"
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr2\"],\"zone\":1,\"with\":\"$xdg_addr\"}"
+      check "split lock: the second window picked" split_members "$next3" "$xdg_addr" "$addr2"
+      # D49 with two members: the green button sends that window back, the other fills.
+      green_click "$addr2"
+      check "split green with two members: the window is back on its Desktop" test "$(desktop_of "$addr2")" = "$home"
+      check "split green with two members: the other fills alone" fills_addr "$xdg_addr"
+      nestctl dispatch "hl.dsp.focus({ workspace = \"$next3\" })" >>"$log" 2>&1
+      sleep 0.8
+      # D55: its last member closed while locked: the Desktop stays shown and listed until the unlock (G5), then ends and the
+      # output goes back home (the unlock listener, G4).
+      if lock_session; then
+        kill "$xdg_pid" 2>/dev/null
+        sleep 1.5
+        check "split locked close: no Desktop switch behind the lock" test "$(shown_desktop)" = "$next3"
+        check "split locked close: still listed while locked" split_listed "$next3" "$home"
+      else
+        check "split locked close: the foreign locker holds the session lock (${locked:-no answer})" false
+      fi
+      check "split locked close: released, Hyprland reports the session unlocked" unlock_session
+      sleep 1.5
+      check "split locked close: at the unlock, the Desktop it came from shown" test "$(shown_desktop)" = "$home"
+      check "split locked close: at the unlock, it ended" split_gone "$next3" "$home"
+      # MAJOR A: lock with a Split View still waiting for its second window: the lock ends its picker; nothing moves while
+      # locked; at the unlock the plugin fills the member itself.
+      tile_ipc "$addr2" previous
+      next4=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr3" left
+      waiting_now() { tiling_state | jq -e --argjson w "$next4" 'any(.splits[]; .workspace == $w and .waiting == true)' >/dev/null; }
+      check "split locked picker: waiting for its second window" waiting_now
+      if lock_session; then
+        sleep 1
+        check "split locked picker: nothing moves behind the lock" half_of tiling-foot3 left
+      else
+        check "split locked picker: the foreign locker holds the session lock (${locked:-no answer})" false
+      fi
+      check "split locked picker: released, Hyprland reports the session unlocked" unlock_session
+      sleep 1.5
+      check "split locked picker: at the unlock, the member fills its Desktop" fills_output tiling-foot3
+      unsplit_ipc "$addr3"
+      check "split locked picker: Exit Full Screen ends it" split_gone "$next4" "$home"
+      tile_ipc "$addr3" previous
+    else
+      check "split lock: the xdgact window opened" false
+    fi
+
+    # D57 (integrator nested pass of 1ee992e, MAJOR C): a window whose minimum width is wider than half of the output does not
+    # fit a Split View half: the popover's event says so (the popover greys Left and Right of Screen), split refuses it, the
+    # picker of another Split View does not offer it, and a pick of it there is refused; an ordinary window fits.
+    open_xdg gf-split-wide $((mw / 2 + 200))
+    if [[ -n $xdg_addr ]]; then
+      hover_open_of() { # address jq-condition: tile_popover posts open for that window, the condition holding on its event
+        mark_events
+        nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+        event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\" and $2"
+        local ok=$?
+        say "  event: $last_event"
+        close_shell_popup "split wide"
+        return $ok
+      }
+      check "split wide: its event says it does not fit a half (tileable, splittable false)" hover_open_of "$xdg_addr" '.tileable == true and .splittable == false'
+      check "split wide: an ordinary window fits (splittable true)" hover_open_of "$addr" '.splittable == true'
+      mark_events
+      split_ipc "$xdg_addr" left
+      check "split wide: split is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split wide: $out still shows the Desktop it was on" test "$(shown_desktop)" = "$home"
+      check "split wide: the window stays there" test "$(desktop_of "$xdg_addr")" = "$home"
+      next6=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr" left
+      wide_not_offered() {
+        local sg
+        sg=$(suggestion)
+        say "  suggestion: $sg"
+        jq -e --arg w "${xdg_addr#0x}" --arg b "${addr2#0x}" '(.windows | index($w) == null and index($b) != null)' <<<"$sg" >/dev/null
+      }
+      check "split wide: the picker of another Split View does not offer it" wide_not_offered
+      mark_events
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$xdg_addr\"],\"zone\":1,\"with\":\"$addr\"}"
+      check "split wide: a pick of it into the other half is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split wide: it stays on its Desktop" test "$(desktop_of "$xdg_addr")" = "$home"
+      unsplit_ipc "$addr"
+      check "split wide: Exit Full Screen ends that Split View" split_gone "$next6" "$home"
+      tile_ipc "$addr" previous
+      kill "$xdg_pid" 2>/dev/null
+      sleep 0.5
+    else
+      check "split wide: the xdgact window opened" false
+    fi
+
+    # Integrator nested pass of 1ee992e, with the shell running: a Split View the shell did not start shows its picker
+    # (MAJOR B, D48 amended) with its first window selected, so a first Return picks it (MINOR D), and the window picked has
+    # the keyboard after (MINOR E, D58); the tiling popover opens on a member and its Exit Full Screen runs from the keyboard,
+    # and no overlay stays mapped after it (BLOCKER A).
+    open_kind() { timeout 5 "$root/tests/visual/ipc.sh" menubar openKind 2>>"$log"; }
+    overlay_gone() { ! shell_popup_open; }
+    active_is() { # address
+      local a
+      a=$(nestctl activewindow -j | jq -r '.address')
+      say "  active window: $a (want $1)"
+      [[ $a == "$1" ]]
+    }
+    if kind=$(open_kind) && [[ $kind != refused ]]; then
+      close_shell_popup "split shell"
+      next5=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr3" left
+      first=$(suggestion | jq -r '.windows[0] // empty')
+      say "  first window offered: ${first:-none}"
+      check "split shell: the shell shows the picker of a Split View it did not start" test "$(open_kind)" = "tilingSuggest@$out"
+      check "split shell: its member is not filled meanwhile" half_of tiling-foot3 left
+      keys -k Return
+      sleep 1.5
+      check "split shell: a first Return picks the first window offered" split_members "$next5" "$addr3" "0x$first"
+      check "split shell: the picker closed" test -z "$(open_kind)"
+      sleep 1
+      check "split shell: the window picked has the keyboard" active_is "0x$first"
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
+      sleep 1
+      check "split shell popover: the tiling popover opens on a member" test "$(open_kind)" = "tiling@$out"
+      keys -k Escape
+      sleep 1
+      check "split shell popover: Esc closes it" test -z "$(open_kind)"
+      check "split shell popover: no overlay left mapped" overlay_gone
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
+      sleep 1
+      check "split shell popover: open again" test "$(open_kind)" = "tiling@$out"
+      keys -k Down
+      keys -k Return
+      sleep 1.5
+      check "split shell popover: its Exit Full Screen sends the member back to the Desktop it came from" test "$(desktop_of "$addr3")" = "$home"
+      check "split shell popover: the popover closed" test -z "$(open_kind)"
+      check "split shell popover: no overlay left mapped" overlay_gone
+      check "split shell popover: the other member fills the Split View Desktop" fills_addr "0x$first"
+      unsplit_ipc "0x$first"
+      check "split shell: ended" split_gone "$next5" "$home"
+      tile_ipc "$addr3" previous
+      tile_ipc "0x$first" previous
+      surfaces_state
+    else
+      say "SKIP: split shell cases (no nested shell answers tests/visual/ipc.sh: run them with the shell)"
+    fi
+  else
+    say "SKIP: step 6a cases (the plugin does not advertise tiling-split)"
   fi
 
   tile_ipc "$addr3" previous

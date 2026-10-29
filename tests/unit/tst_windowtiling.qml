@@ -24,6 +24,15 @@ TestCase {
         verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":1,"h":1,"tileable":"yes"}').tileable);
     }
 
+    // #48 nested pass, MAJOR C (TL8): a window that does not fit half of its output; only the plugin's true counts.
+    function test_parseHoverReadsSplittable() {
+        verify(WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,"splittable":true}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,"splittable":false}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true}').splittable, "an older plugin: not known to fit");
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":14,"h":14,"splittable":"yes"}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"leave","splittable":true}').splittable, "leave carries nothing");
+    }
+
     function test_parseHoverRefusesAnythingElse() {
         const bad = [
             "", "not json", "null", "[]",
@@ -301,5 +310,118 @@ TestCase {
         compare(steps("a1", ["a1", "b2"], [on("a1", -97, false, false), on("b2", -98, false, true)]),
                 JSON.stringify([{op: "activate", address: "a1"}, {op: "restore", address: "b2"}, {op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
         compare(steps("zz", ["a1"], [on("a1", 1, true, false)]), "[]", "an unknown window: nothing");
+    }
+
+    // TL33 (step 6a): the Split View Desktops of the reply with their members; an older plugin's reply without "splits" lists none.
+    function test_parseSplitsReadsTheSplitViewDesktops() {
+        const reply = splits => JSON.stringify({v: "gfc/1", type: "tiling", gen: 5, outputs: [], splits: splits, suggestion: null});
+        compare(JSON.stringify(WindowTiling.parseSplits(reply([{workspace: 4, output: "DP-1", home: 1, windows: ["A1", "0xb2"], waiting: false},
+                                                                {workspace: 5, output: "GF-REF", home: 2, windows: ["c3"], waiting: true}]))),
+                JSON.stringify([{workspace: 4, output: "DP-1", home: 1, windows: ["a1", "b2"], waiting: false}, {workspace: 5, output: "GF-REF", home: 2, windows: ["c3"], waiting: true}]));
+        compare(JSON.stringify(WindowTiling.parseSplits(JSON.stringify({v: "gfc/1", type: "tiling", gen: 5, outputs: []}))), "[]", "no splits key: none");
+        compare(JSON.stringify(WindowTiling.parseSplits(reply("x"))), "[]");
+        // Members: malformed ones are left out; no list, none; waiting only when true.
+        compare(JSON.stringify(WindowTiling.parseSplits(reply([{workspace: 4, output: "DP-1", home: 1, windows: ["zz", 7, null, "c3", "c3\""], waiting: "true"}]))),
+                JSON.stringify([{workspace: 4, output: "DP-1", home: 1, windows: ["c3"], waiting: false}]));
+        compare(JSON.stringify(WindowTiling.parseSplits(reply([{workspace: 4, output: "DP-1", home: 1}]))),
+                JSON.stringify([{workspace: 4, output: "DP-1", home: 1, windows: [], waiting: false}]), "an older plugin's entry: no member known");
+        // Malformed entries are left out, not fatal.
+        const bad = [null, {workspace: 0, output: "DP-1", home: 1}, {workspace: 4.5, output: "DP-1", home: 1}, {workspace: "4", output: "DP-1", home: 1},
+                     {workspace: 4, output: "", home: 1}, {workspace: 4, output: 7, home: 1}, {workspace: 4, output: "DP-1", home: -1},
+                     {workspace: 4, output: "DP-1"}, {workspace: Infinity, output: "DP-1", home: 1}, {workspace: 6, output: "DP-2", home: 3, windows: ["d4"]}];
+        compare(JSON.stringify(WindowTiling.parseSplits(reply(bad))), JSON.stringify([{workspace: 6, output: "DP-2", home: 3, windows: ["d4"], waiting: false}]));
+        for (const text of ["", "x", "null", JSON.stringify({v: "gfc/2", type: "tiling", splits: []}), JSON.stringify({v: "gfc/1", type: "stages", splits: []})])
+            compare(WindowTiling.parseSplits(text), null, text);
+    }
+
+    function test_splitOfWorkspaceFindsTheDesktop() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1"], waiting: false}, {workspace: 5, output: "GF-REF", home: 2, windows: [], waiting: false}];
+        compare(WindowTiling.splitOfWorkspace(splits, 5).home, 2);
+        compare(WindowTiling.splitOfWorkspace(splits, 1), null, "a home is no Split View Desktop");
+        compare(WindowTiling.splitOfWorkspace(null, 4), null, "no reply yet");
+        compare(WindowTiling.splitOfWorkspace([], 4), null);
+    }
+
+    // ADR-0036 D52: the members are the Split View's windows; another window on that Desktop is none.
+    function test_splitOfWindowFindsTheMembersDesktop() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1", "b2"], waiting: false}, {workspace: 5, output: "GF-REF", home: 2, windows: ["c3"], waiting: true}];
+        compare(WindowTiling.splitOfWindow(splits, "0xB2").workspace, 4);
+        compare(WindowTiling.splitOfWindow(splits, "c3").workspace, 5);
+        compare(WindowTiling.splitOfWindow(splits, "d4"), null, "not a member");
+        compare(WindowTiling.splitOfWindow(splits, ""), null);
+        compare(WindowTiling.splitOfWindow(splits, "zz"), null);
+        compare(WindowTiling.splitOfWindow(null, "a1"), null, "no reply yet");
+    }
+
+    // D43 (#48 review, MAJOR 3): the one member still waiting for its second window fills alone once its picker is not pending.
+    function test_lonelyMembersFillUnlessTheirPickerIsPending() {
+        const split = (ws, windows, waiting) => ({workspace: ws, output: "DP-1", home: 1, windows: windows, waiting: waiting});
+        const splits = [split(4, ["a1"], true), split(5, ["b2", "c3"], false), split(6, ["d4"], false), split(7, ["e5"], true), split(8, [], true)];
+        compare(JSON.stringify(WindowTiling.lonelyMembers(splits, "")), JSON.stringify(["a1", "e5"]), "waiting, alone: no picker pending");
+        compare(JSON.stringify(WindowTiling.lonelyMembers(splits, "0xA1")), JSON.stringify(["e5"]), "the picker of a1 is shown or on its way");
+        compare(JSON.stringify(WindowTiling.lonelyMembers(splits, "e5")), JSON.stringify(["a1"]));
+        compare(JSON.stringify(WindowTiling.lonelyMembers([split(4, ["a1", "b2"], true)], "")), "[]", "two members: nothing to fill");
+        compare(JSON.stringify(WindowTiling.lonelyMembers([split(6, ["d4"], false)], "")), "[]", "not waiting: the plugin fills it itself");
+        compare(JSON.stringify(WindowTiling.lonelyMembers(null, "")), "[]");
+    }
+
+    // #48 nested pass, MAJOR B (D48): the picker of a Split View the shell did not start.
+    function test_splitPickerAdoptsTheSuggestionOfAWaitingSplitView() {
+        const split = (windows, waiting) => ({workspace: 4, output: "DP-1", home: 1, windows: windows, waiting: waiting});
+        const sg = (address, gen, layout) => ({gen: gen, address: address, layout: layout || "left-right", output: "DP-1", zones: [{zone: 1, x: 0, y: 0, w: 9, h: 9}], windows: ["b2"]});
+        const waiting = [split(["a1"], true)];
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), null), sg("a1", 3), "its one member waits: its picker shows");
+        compare(WindowTiling.splitPicker(waiting, sg("0xA1", 3), null), sg("0xA1", 3), "the address in any case, with or without 0x");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3, "top-bottom"), null), null, "another layout's suggestion is not a Split View's");
+        compare(WindowTiling.splitPicker(waiting, sg("b2", 3), null), null, "the suggestion of another window");
+        compare(WindowTiling.splitPicker([split(["a1"], false)], sg("a1", 3), null), null, "not waiting: the plugin fills it");
+        compare(WindowTiling.splitPicker([split(["a1", "b2"], true)], sg("a1", 3), null), null, "two members: nothing to pick");
+        compare(WindowTiling.splitPicker([], sg("a1", 3), null), null, "no Split View Desktop");
+        compare(WindowTiling.splitPicker(null, sg("a1", 3), null), null);
+        compare(WindowTiling.splitPicker(waiting, null, null), null, "no suggestion");
+        compare(WindowTiling.splitPicker(waiting, sg("", 3), null), null, "no address");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "0xa1", gen: 3}), null, "dismissed: not shown again (its window fills)");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 4), {address: "a1", gen: 3}), sg("a1", 4), "a later Split View of the same window has its own picker");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
+    }
+
+    // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
+    function test_keptSelectionStartsOnTheFirstTile() {
+        compare(WindowTiling.keptSelection(-1, 3, true), 0, "a new suggestion: the first");
+        compare(WindowTiling.keptSelection(2, 3, true), 0, "a new suggestion resets");
+        compare(WindowTiling.keptSelection(-1, 3, false), 0, "the windows came after the suggestion: the first");
+        compare(WindowTiling.keptSelection(2, 3, false), 2, "kept while in range");
+        compare(WindowTiling.keptSelection(3, 3, false), 0, "out of range (a window closed): the first");
+        compare(WindowTiling.keptSelection(1, 0, false), -1, "no tile");
+        compare(WindowTiling.keptSelection(-1, 0, true), -1);
+    }
+
+    // #48 review, MINOR 7: a Split View Desktop takes no number, the Desktops keep theirs.
+    function test_numberDesktopsSkipsTheSplitViewDesktops() {
+        const spaces = [{id: 1}, {id: 4}, {id: 2}, {id: 3}];
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1"], waiting: false}];
+        const numbered = WindowTiling.numberDesktops(spaces, splits);
+        compare(numbered.map(s => s.id + ":" + (s.split ? "split" : s.number)).join(","), "1:1,4:split,2:2,3:3");
+        compare(numbered[1].number, 0);
+        verify(numbered[0] !== spaces[0] && spaces[0].number === undefined, "new objects, the spaces untouched");
+        compare(WindowTiling.numberDesktops(spaces, []).map(s => s.number).join(","), "1,2,3,4");
+        compare(WindowTiling.numberDesktops([], splits).length, 0);
+    }
+
+    // D41: each Split View Desktop right after its home, several in id order; one whose home is gone stays at its id.
+    function test_desktopOrderListsASplitViewDesktopAfterItsHome() {
+        const order = (ids, splits) => WindowTiling.desktopOrder(ids.map(id => ({id: id})), splits).map(s => s.id).join(",");
+        compare(order([1, 2, 3, 4], []), "1,2,3,4");
+        compare(order([1, 2, 3, 4], null), "1,2,3,4");
+        compare(order([1, 2, 3, 4], [{workspace: 4, output: "DP-1", home: 1}]), "1,4,2,3");
+        compare(order([1, 2, 3, 5, 6], [{workspace: 6, output: "DP-1", home: 2}, {workspace: 5, output: "DP-1", home: 2}]), "1,2,5,6,3");
+        compare(order([1, 4, 5], [{workspace: 4, output: "DP-1", home: 2}]), "1,4,5", "its home not listed (another output): where its id puts it");
+        compare(order([1, 2, 3], [{workspace: 2, output: "DP-1", home: 2}]), "1,2,3", "its own home: where its id puts it");
+        compare(order([2, 3, 7], [{workspace: 7, output: "DP-1", home: 3}, {workspace: 3, output: "DP-1", home: 2}]), "2,3,7",
+                "a chain of homes (never sent): every Desktop once");
+        compare(order([1, 3, 7], [{workspace: 7, output: "DP-1", home: 3}, {workspace: 3, output: "DP-1", home: 7}]), "1,3,7",
+                "a loop of homes (never sent): id order");
+        const spaces = [{id: 1, name: "a"}, {id: 4, name: "b"}];
+        verify(WindowTiling.desktopOrder(spaces, [{workspace: 4, output: "DP-1", home: 1}])[1] === spaces[1], "the same objects");
     }
 }

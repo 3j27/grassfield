@@ -5,6 +5,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QList>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -101,36 +102,62 @@ FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &
     return result;
 }
 
-int headStatus(const QUrl &url, int timeoutMs, bool devPlumbing)
+QList<int> headStatuses(const QList<QUrl> &urls, int timeoutMs, int deadlineMs, bool devPlumbing)
 {
-    if (!requestAllowed(url, devPlumbing))
-        return -1;
-    if (url.isLocalFile())
-        return QFileInfo(url.toLocalFile()).isFile() ? 200 : 404;
+    QList<int> out(urls.size(), 0);
+    bool gone = false;
+    const auto isGone = [](int status) { return status == 404 || status == 410; };
+    // One manager for all: it keeps its connections open between requests and runs several to a host at once.
     QNetworkAccessManager manager;
     manager.setCookieJar(nullptr);
     manager.setRedirectPolicy(QNetworkRequest::UserVerifiedRedirectPolicy);
-    QNetworkReply *reply = manager.head(storeRequest(url, FetchLimits{0, timeoutMs}));
     QEventLoop loop;
-    bool refused = false;
-    QObject::connect(reply, &QNetworkReply::redirected, reply, [&](const QUrl &to) {
-        if (requestAllowed(to, false)) {
-            emit reply->redirectAllowed();
-        } else {
-            refused = true;
-            reply->abort();
+    QList<QNetworkReply *> replies;
+    qsizetype pending = 0;
+    for (qsizetype i = 0; i < urls.size() && !gone; ++i) {
+        const QUrl &url = urls.at(i);
+        if (!requestAllowed(url, devPlumbing)) {
+            out[i] = -1;
+            continue;
         }
-    });
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QTimer guard; // as fetch()'s
-    guard.setSingleShot(true);
-    QObject::connect(&guard, &QTimer::timeout, reply, [reply] { reply->abort(); });
-    guard.start(2 * timeoutMs);
-    if (!reply->isFinished())
+        if (url.isLocalFile()) {
+            out[i] = QFileInfo(url.toLocalFile()).isFile() ? 200 : 404;
+            gone = isGone(out.at(i));
+            continue;
+        }
+        QNetworkReply *reply = manager.head(storeRequest(url, FetchLimits{0, timeoutMs}));
+        replies.append(reply);
+        ++pending;
+        QObject::connect(reply, &QNetworkReply::redirected, reply, [reply, &out, i](const QUrl &to) {
+            if (requestAllowed(to, false)) {
+                emit reply->redirectAllowed();
+            } else {
+                out[i] = -1;
+                reply->abort();
+            }
+        });
+        QObject::connect(reply, &QNetworkReply::finished, &loop, [reply, &out, &gone, &pending, &loop, &isGone, i] {
+            if (out.at(i) != -1)
+                out[i] = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            gone = gone || isGone(out.at(i));
+            if (--pending == 0 || gone)
+                loop.quit();
+        });
+    }
+    if (pending > 0 && !gone) {
+        QTimer deadline; // the whole set's
+        deadline.setSingleShot(true);
+        QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+        deadline.start(deadlineMs);
         loop.exec();
-    const int code = refused ? -1 : reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    reply->deleteLater();
-    return code;
+    }
+    // What has not answered by now (the deadline, or one file already gone) is dropped: 0.
+    for (QNetworkReply *reply : std::as_const(replies)) {
+        QObject::disconnect(reply, nullptr, nullptr, nullptr);
+        if (!reply->isFinished())
+            reply->abort();
+    }
+    return out;
 }
 
 bool downloadTo(const QUrl &url, const QString &file, const FetchLimits &limits, bool devPlumbing)

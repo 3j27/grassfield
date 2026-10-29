@@ -1314,9 +1314,57 @@ namespace gf::tiling {
         return out;
     }
 
+    Area splitArea(const Rect& output, const Grid& grid) {
+        // zoneFrame keeps a margin inside the area's outer edges and half a margin each side of an inner one: the area one
+        // margin larger on every side puts the outer edges on the output's and leaves one margin between the halves.
+        return Area{.box = Rect{output.x - kMargin, output.y - kMargin, output.w + 2 * kMargin, output.h + 2 * kMargin}, .margin = kMargin, .grid = grid};
+    }
+
+    bool fitsFrame(const Constraints& c, const Rect& frame) {
+        constexpr double kSlack = 0.5; // half a logical pixel of rounding (the frames lie on the device-pixel grid)
+        return c.minW <= frame.w + kSlack && c.minH + c.band <= frame.h + kSlack;
+    }
+
+    int64_t nextDesktopId(std::span<const int64_t> ids) {
+        int64_t top = 0;
+        for (const auto id : ids)
+            top = std::max(top, id);
+        return top + 1;
+    }
+
+    std::optional<int> splitZone(std::string_view side) {
+        if (side == "left")
+            return 0;
+        if (side == "right")
+            return 1;
+        return std::nullopt;
+    }
+
+    const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace) {
+        const auto it = std::ranges::find(splits, workspace, &SplitDesk::workspace);
+        return it == splits.end() ? nullptr : &*it;
+    }
+
+    const SplitDesk* splitOfWindow(std::span<const SplitDesk> splits, uint64_t id) {
+        const auto it = std::ranges::find_if(splits, [id](const SplitDesk& d) { return std::ranges::find(d.members, id) != d.members.end(); });
+        return it == splits.end() ? nullptr : &*it;
+    }
+
+    bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
+        return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
+    }
+
+    SplitStep splitStep(size_t members, bool picking) {
+        if (members == 0)
+            return SplitStep::End;
+        if (members == 1 && !picking)
+            return SplitStep::Fill;
+        return SplitStep::Keep;
+    }
+
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1342,6 +1390,15 @@ namespace gf::tiling {
                                    num(r->box.x), num(r->box.y), num(r->box.w), num(r->box.h));
             }
             out += "]}";
+        }
+        out += R"(],"splits":[)";
+        for (size_t i = 0; i < splits.size(); ++i) {
+            out += std::format(R"({}{{"workspace":{},"output":")", i == 0 ? "" : ",", splits[i].workspace);
+            out += gf::gfc::jsonEscape(splits[i].output);
+            out += std::format(R"(","home":{},"windows":[)", splits[i].home);
+            for (size_t j = 0; j < splits[i].members.size(); ++j)
+                out += std::format(R"({}"{:x}")", j == 0 ? "" : ",", splits[i].members[j]);
+            out += std::format(R"(],"waiting":{}}})", splits[i].waiting);
         }
         out += "]";
         if (!suggestion) {
@@ -1373,12 +1430,13 @@ namespace gf::tiling {
         return "leave";
     }
 
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable) {
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable, bool splittable) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
         if (state != HoverState::Leave)
-            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable);
+            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{},"splittable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable,
+                               splittable);
         out += '}';
         return out;
     }

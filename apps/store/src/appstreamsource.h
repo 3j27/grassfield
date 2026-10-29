@@ -47,8 +47,20 @@ struct AppStreamTools {
 // The cached copy (Origin::Fetched), or Origin::None when there is none.
 AppStreamData readFetched(const QString &cacheDir);
 
+// Why a refresh did not bring the copy pacman's database names, each with its own words in the window (the integrator's note
+// on PR #36: a package file the mirror no longer has is not a signature that fails).
+enum class RefreshProblem {
+    None,
+    NoPackageFile,     // pacman names no archlinux-appstream-data file (no sync database, pacman failing)
+    Download,          // the package file could not be downloaded: most often a package database older than the mirror (404)
+    SignatureDownload, // its .sig could not be downloaded
+    Unverified,        // the signature does not pass pacman's rule
+    Unpack,            // bsdtar could not unpack it, or it holds no usr/share/swcatalog/xml
+    Cache,             // the cache folder cannot be written
+};
+
 // Makes the cached copy match pacman's database: nothing when it already does; otherwise downloads, verifies, unpacks,
-// switches `current`, removes the old version. An error leaves the previous copy as it was.
-bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QString *error);
+// switches `current`, removes the old version. A problem leaves the previous copy as it was; `detail` says more, for logs.
+RefreshProblem refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QString *detail);
 
 } // namespace grassfield::store

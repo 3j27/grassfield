@@ -182,15 +182,15 @@ QtObject {
         return ids.filter(id => root.layoutZones[id] !== undefined).map(id => ({id: id, text: root.layoutNames[id], zones: root.layoutZones[id], enabled: enabled}));
     }
 
-    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, outputClass, fullscreen, outputs}.
-    // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with Alt: the quarters,
-    // Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the plugin's
-    // tiling-layouts, layoutsSection), then Full Screen and one Move to <display> row per other output; in full screen only Exit
-    // Full Screen. The glyphs of a window that cannot be tiled now are greyed. Full Screen's Left and Right of Screen come with
-    // step 6 (ADR-0036 D17).
+    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, canSplit, splitBlocked, splittable,
+    // outputClass, fullscreen, inSplit, outputs} (`splittable` false: the window does not fit half of its output, TL8).
+    // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with
+    // Alt: the quarters, Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the
+    // plugin's tiling-layouts, layoutsSection), then Full Screen (fullScreenRow) and one Move to <display> row per other output;
+    // in full screen or on a Split View Desktop only Exit Full Screen. The glyphs of a window that cannot be tiled now are greyed.
     function tilingPopover(ctx: var): var {
-        if (ctx.fullscreen)
-            return {sections: [], layouts: [], rows: [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
+        if (ctx.fullscreen || ctx.inSplit)
+            return {sections: [], layouts: [], rows: [{id: ctx.inSplit ? "exitSplit" : "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
         const can = ctx.tileable === true;
         const arrange = can && ctx.canArrange === true;
         const places = ctx.alt ? ["top-left", "top-right", "bottom-left", "bottom-right"] : ["left", "right", "top", "bottom"];
@@ -205,8 +205,27 @@ QtObject {
                     ]}
             ],
             layouts: ctx.canLayouts === true ? root.layoutsSection(ctx.outputClass, can) : [],
-            rows: [{id: "fullscreen", text: qsTr("Full Screen"), glyph: {zones: [], own: -1}, enabled: true}].concat(root.moveToOutputItems(ctx.outputs, can))
+            rows: [root.fullScreenRow(ctx.canSplit === true, can && ctx.splitBlocked !== true && ctx.splittable !== false)].concat(root.moveToOutputItems(ctx.outputs, can))
         };
+    }
+
+    // Left or Right of Screen (docs/specs/tiling.md TL33): the window's own half in full, the other light.
+    function splitItem(side: string, enabled: bool): var {
+        return {id: "split", side: side, text: side === "left" ? qsTr("Left of Screen") : qsTr("Right of Screen"), glyph: {zones: Tokens.tilingLayoutLeftRight, own: side === "left" ? 0 : 1}, enabled: enabled};
+    }
+
+    // The popover's Full Screen row: with the plugin's tiling-split the submenu Full Screen › Entire Screen, Left of Screen,
+    // Right of Screen (TL33, the step ADR-0036 D17 waited for; the halves greyed for a window that cannot be tiled now and
+    // while Stages shows its strip, D47), else the row that enters full screen.
+    function fullScreenRow(canSplit: bool, splittable: bool): var {
+        const row = {id: "fullscreen", text: qsTr("Full Screen"), glyph: {zones: [], own: -1}, enabled: true};
+        if (!canSplit)
+            return row;
+        return Object.assign(row, {id: "fullScreenMenu", submenu: [
+                    {id: "fullscreen", text: qsTr("Entire Screen"), glyph: root.placeGlyph("fill"), enabled: true},
+                    root.splitItem("left", splittable),
+                    root.splitItem("right", splittable)
+                ]});
     }
 
     // Longest window title shown in the Window menu.
@@ -276,9 +295,9 @@ QtObject {
         // Window tiling (macOS 15+, TL25): Fill, Center, Move & Resize and Move to <display>, placed by the compositor plugin
         // (window-tiling). The plugin places floating windows only: not in full screen, not zoomed (unzoom first, as macOS greys
         // them for a zoomed window). Move & Resize has the headed sections Halves, Quarters and Arrange (with Alt the "&
-        // Quarters" alternates in place, M28; with the plugin's tiling-arrange only), then Return to Previous Size. Full Screen
-        // Tile comes with step 6 (M29).
-        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized;
+        // Quarters" alternates in place, M28; with the plugin's tiling-arrange only), then Return to Previous Size. A window of a
+        // Split View Desktop (TL33) is placed by its Desktop: no tiling command, no Zoom.
+        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized && ctx.inSplit !== true;
         const arrange = (layout, quarters) => Object.assign(root.arrangeItem(layout, canTile), {alternate: root.arrangeItem(quarters, canTile)});
         const arrangeRows = ctx.canArrange === true ? [
             {separator: true},
@@ -311,11 +330,19 @@ QtObject {
                 ])}
         ].concat(root.moveToOutputItems(ctx.outputs, canTile), [{separator: true}]) : [];
 
+        // Full Screen (TL33): on a Split View Desktop Exit Full Screen sends the window back (Compositor.unsplit); else Enter or Exit
+        // Full Screen, then with the plugin's tiling-split Full Screen Tile › Left of Screen, Right of Screen (M29), greyed with
+        // the tiling items and while Stages shows its strip (D47).
+        const canSplit = canTile && ctx.splitBlocked !== true;
+        const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}] : [
+            {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct}
+        ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
+
         const items = [
-            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct},
-            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct}
-        ].concat(tiling, [
-            {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct},
+            // A window of a Split View Desktop is not minimized, as in full screen (D56).
+            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true},
+            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true}
+        ].concat(tiling, fullScreen, [
             {separator: true},
             {id: "moveMenu", text: qsTr("Move to Desktop"), enabled: canAct, submenu: spaces},
             {separator: true},

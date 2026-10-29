@@ -353,14 +353,45 @@ QList<AppStreamComponent> parseAppStream(const QByteArray &bytes)
                 readContentRating(xml, &c.rating);
             } else if (name == u"languages") {
                 readLanguages(xml, &c.languages);
+            } else if (name == u"bundle") {
+                // <bundle type="flatpak" runtime="<id>/<arch>/<branch>">app/<id>/<arch>/<branch></bundle> (Flathub's).
+                const auto a = xml.attributes();
+                const bool flatpak = a.value(u"type") == u"flatpak";
+                const QString runtime = a.value(u"runtime").toString();
+                const QStringList ref = xml.readElementText().trimmed().split(QLatin1Char('/'));
+                if (flatpak && c.flatpak.isEmpty() && ref.size() == 4 && ref.at(0) == QLatin1String("app") && isFlatpakId(ref.at(1))) {
+                    c.flatpak = ref.at(1);
+                    c.runtime = isFlatpakRuntime(runtime) ? runtime : QString();
+                }
+            } else if (name == u"custom") {
+                while (!xml.atEnd()) {
+                    xml.readNext();
+                    if (xml.isEndElement() && xml.name() == u"custom")
+                        break;
+                    if (!xml.isStartElement())
+                        continue;
+                    if (xml.name() != u"value") {
+                        xml.skipCurrentElement();
+                        continue;
+                    }
+                    const bool key = xml.attributes().value(u"key") == u"flathub::verification::verified";
+                    if (xml.readElementText().trimmed() == QLatin1String("true") && key)
+                        c.verified = true;
+                }
             } else {
-                xml.skipCurrentElement(); // provides, suggests, extends, requires, agreement, custom, …
+                xml.skipCurrentElement(); // provides, suggests, extends, requires, agreement, …
             }
         }
-        if (!c.id.isEmpty() && isPackageName(c.pkgname) && c.id.size() <= 255)
+        if (!c.id.isEmpty() && (isPackageName(c.pkgname) || !c.flatpak.isEmpty()) && c.id.size() <= 255)
             out.append(c);
     }
     return out;
+}
+
+bool isFlatpakRuntime(const QString &runtime)
+{
+    static const QRegularExpression re(QStringLiteral(R"(\A[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}/[A-Za-z0-9_]{1,32}/[A-Za-z0-9._-]{1,64}\z)"));
+    return runtime.size() <= 360 && re.match(runtime).hasMatch();
 }
 
 } // namespace grassfield::store
