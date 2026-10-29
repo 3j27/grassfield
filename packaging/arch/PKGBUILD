@@ -179,6 +179,10 @@ package_grassfield-desktop() {
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
+  # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
+  # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
+  conflicts=('quickshell=0.3.2')
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo.svg:
   # all rights reserved, the owner's mark, owner decision 2026-10-27: LicenseRef-Grassfield-logo-all-rights-reserved); Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).

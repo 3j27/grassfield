@@ -105,8 +105,9 @@ Singleton {
                 onTriggered: sock.finish()
             }
 
+            // Judged after Quickshell's error handler has returned (closing from inside the signal crashes Quickshell 0.3.2).
             Component.onCompleted: {
-                sock.error.connect(() => sock.finish());
+                sock.error.connect(() => Qt.callLater(sock.finish));
                 sock.connected = true;
             }
         }

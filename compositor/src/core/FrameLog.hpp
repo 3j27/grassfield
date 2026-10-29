@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -89,24 +90,52 @@ namespace gf::frames {
         bool     operator==(const RenderSpan&) const = default;
     };
 
-    // The last kCapacity render spans in time order: a span that does not begin after the newest is refused.
-    class CSpanRing {
+    // The last kCapacity spans (anything with a `beginUs`) in time order: a span that does not begin after the newest is
+    // refused.
+    template <typename Span>
+    class CSpanRingOf {
       public:
-        bool                    push(const RenderSpan& span);
-        std::vector<RenderSpan> snapshot() const;
-        void                    clear();
+        bool push(const Span& span) {
+            if (m_any && span.beginUs <= m_last)
+                return false;
+            m_slots[m_next] = span;
+            m_next          = (m_next + 1) % kCapacity;
+            if (m_size < kCapacity)
+                ++m_size;
+            m_last = span.beginUs;
+            m_any  = true;
+            return true;
+        }
+
+        // Oldest first.
+        std::vector<Span> snapshot() const {
+            std::vector<Span> out;
+            out.reserve(m_size);
+            const size_t first = (m_next + kCapacity - m_size) % kCapacity;
+            for (size_t i = 0; i < m_size; ++i)
+                out.push_back(m_slots[(first + i) % kCapacity]);
+            return out;
+        }
+
+        void clear() {
+            m_next = 0;
+            m_size = 0;
+            m_last = 0;
+            m_any  = false;
+        }
 
         size_t size() const {
             return m_size;
         }
 
       private:
-        std::vector<RenderSpan> m_slots = std::vector<RenderSpan>(kCapacity);
-        size_t                  m_next  = 0;
-        size_t                  m_size  = 0;
-        uint64_t                m_last  = 0;
-        bool                    m_any   = false;
+        std::vector<Span> m_slots = std::vector<Span>(kCapacity);
+        size_t            m_next  = 0;
+        size_t            m_size  = 0;
+        uint64_t          m_last  = 0;
+        bool              m_any   = false;
     };
+    using CSpanRing = CSpanRingOf<RenderSpan>;
 
     // Phase marks of the plugin's animations ("overview-opening", ...): the last kMaxMarks, in time order (a mark older
     // than the newest is refused), each name cut at kMaxMarkBytes.
@@ -133,6 +162,40 @@ namespace gf::frames {
         uint64_t          m_last  = 0;
     };
 
+    // The compositor thread's own time outside the renders, for attribution (integrator review of a6d04df: a main-loop
+    // stall before a render shows only as a late render, which reads as a client's late frame). While recording, the plugin
+    // beats on the event loop every kBeatUs; a beat more than kStallUs past its due time shows the loop was held from then
+    // to the beat (stallOf). The plugin also records its own work outside a render, each from its start to its end: the
+    // shared edge's drag (its motions and the frames it applies, tiling.md TL30), as RenderSpans (the start and the length).
+    // A hold is recorded at most one beat short (its stall starts at the first beat due inside it): with 1 ms, a 12 ms hold
+    // before a 3 ms render reads as over 0.8 of a 60 Hz period (integrator re-review of ce82fd3: with a 4 ms beat it did
+    // not). The beats run only while a measurement records.
+    inline constexpr uint64_t kBeatUs  = 1'000;
+    inline constexpr uint64_t kStallUs = 1'000;
+
+    // A stall of the event loop: from the beat's due time, its length, and the CPU time the compositor's main thread used
+    // from the previous beat to this one (the stall and at most kBeatUs before it; integrator nested pass of ce82fd3: is a
+    // compositor-caused frame the compositor's work or the thread waiting, descheduled under load?). Little CPU: the thread
+    // was waiting; about the length: it was working.
+    struct Stall {
+        uint64_t beginUs  = 0;
+        uint64_t lengthUs = 0;
+        uint64_t cpuUs    = 0;
+
+        bool     operator==(const Stall&) const = default;
+    };
+    using CStallRing = CSpanRingOf<Stall>;
+
+    // The stall a beat due at `dueUs` and run at `nowUs` shows (`cpuUs`: the main thread's CPU time since the previous
+    // beat), or nullopt when it was on time (within kStallUs).
+    std::optional<Stall> stallOf(uint64_t dueUs, uint64_t nowUs, uint64_t cpuUs);
+
+    struct LoopRecords {
+        uint64_t                beats = 0; // beats run since the recording started (0: the loop was not probed)
+        std::vector<Stall>      stalls;
+        std::vector<RenderSpan> work;
+    };
+
     struct MonitorFrames {
         std::string             name;
         double                  refreshHz = 0; // the mode's refresh rate (0 when unknown)
@@ -142,9 +205,10 @@ namespace gf::frames {
     };
 
     // {"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name":"GF-REF","refreshHz":60,
-    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}]}.
+    //  "total":1234,"presented":[...],"renders":[[beginUs,cpuUs],...]}],"marks":[{"t":us,"what":"overview-opening"}],
+    //  "loop":{"beats":N,"stalls":[[beginUs,lengthUs,cpuUs],...],"work":[[beginUs,lengthUs],...]}}.
     // Names are JSON-escaped and cut at kMaxNameBytes (on a UTF-8 boundary); at most kMaxMonitors monitors; a refresh rate
     // that is not finite and positive is written as 0.
-    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {});
+    std::string framesJson(std::span<const MonitorFrames> monitors, std::span<const Mark> marks = {}, const LoopRecords& loop = {});
 
 } // namespace gf::frames

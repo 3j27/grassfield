@@ -384,8 +384,14 @@ shell no longer relies on that alone:
   kind `tilingSuggest`, opened only through `Popups.open` by services/TilingSuggest, whose `show` asks
   `SessionState.refuses("tiling suggestions")` first, then refuses them over the polkit sheet, a full-attention surface and
   the Dock's keyboard mode (`TilingHover.refusedBy`) and in place of any popup but the tiling popover; they close with every
-  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Planned, not built
-  (step 4c): the shared-edge handle joins this list, and closes when the lock engages.
+  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Built in tiling step 4c
+  (TL30): the shared-edge handle draws no surface; the plugin shows its cursor and takes its press only when the session
+  is not locked, no foreign Exclusive layer or layer covers the point and no other window, titlebar or popup is in front
+  of it (Hyprland's own pointer-focus hit test: the frontmost window under the pointer gets the click), and a drag in
+  progress ends the moment the lock engages (Hyprland's session-lock event: the windows keep the boxes the motions before
+  the lock reached, the handle's cursor goes, the release it owes is still cancelled); no input after the lock moves a
+  window. The frame probe's loop records (the event loop's stalls and the plugin's own drag work, compositor.md FR54) follow
+  its other records: kept only while a measurement records, never while locked, dropped when the lock engages.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or

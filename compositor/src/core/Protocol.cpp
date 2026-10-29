@@ -105,7 +105,8 @@ namespace gf::gfc {
 
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview, bool desktopFocus, bool stagesAvailable, bool stagesEnabled,
                                            bool cursorRefresh, bool overviewFocus, bool minimizeEffect, bool windowTiling, bool layerPointer, bool appearance,
-                                           bool clientChrome, bool frameTimes, bool keyboardFocus, bool tilingArrange, bool tileHover, bool tilingGroups) {
+                                           bool clientChrome, bool frameTimes, bool keyboardFocus, bool tilingArrange, bool tileHover, bool tilingGroups,
+                                           bool sharedEdge) {
         std::vector<std::string_view> out{kFeatureDecorations};
         if (minimize)
             out.push_back(kFeatureMinimize);
@@ -150,6 +151,8 @@ namespace gf::gfc {
             out.push_back(kFeatureTileHover);
         if (windowTiling && tilingArrange && tilingGroups)
             out.push_back(kFeatureTilingGroups);
+        if (windowTiling && tilingArrange && sharedEdge)
+            out.push_back(kFeatureTilingSharedEdge);
         return out;
     }
 

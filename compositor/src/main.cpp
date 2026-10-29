@@ -104,7 +104,10 @@ namespace {
             // One of Hyprland's resizes of a tiled window keeps its record (Resizing); one of its moves shows the tiling preview
             // and takes a tiled window out of its tile at its size from before (tiling.md TL10, TL16).
             gf::guarded("tiling motion", [] { gf::tiler::beforePointerMotion(); });
-            CGrassfieldTitlebar::onGlobalMouseMove();
+            // A drag of a shared edge's handle holds the pointer (TL30): no titlebar hover or press tracking meanwhile (the
+            // press was the plugin's, so Hyprland counts no held button).
+            if (!gf::tiler::edgeOwnsPointer())
+                CGrassfieldTitlebar::onGlobalMouseMove();
         }));
         // The zoom light's hover starts over across the session lock (tiling.md TL22, D24; integrator nested rerun of 25e757c).
         if (g_pSessionLockManager) {
@@ -114,9 +117,10 @@ namespace {
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
         // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before
-        // anything else sees the press (R13 review of 46b3e9b). One exception: a press on the revealed titlebar of a
-        // full-screen window and the release of that press are cancelled together (ADR-0015 P6): Hyprland returns before
-        // its held-button state for a cancelled event, so the pair leaves it unchanged.
+        // anything else sees the press (R13 review of 46b3e9b). Two exceptions: a press on the revealed titlebar of a
+        // full-screen window and the release of that press are cancelled together (ADR-0015 P6), and so are a press on a
+        // shared edge's handle and its release (tiling.md TL30): Hyprland returns before its held-button state for a
+        // cancelled event, so the pair leaves it unchanged.
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
             // A shell layer mapped or took the keyboard under the resting pointer and its pointer focus is not refreshed yet
             // (a button was held, no pointer device, or the press came in the same event loop pass): a press is delivered
@@ -133,8 +137,14 @@ namespace {
             gf::guarded("top clamp release", [&] { gf::topClamp::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             // After the top clamp's (its callback runs first): a resize of a tiled window ends with the box it left; a move
             // released over the place shown tiles there (the top clamp skipped); a double-click on a resize border extends the
-            // window's sides (tiling.md TL16, TL20).
-            gf::guarded("tiling button", [&] { gf::tiler::beforePointerButton(e.button, e.state == WL_POINTER_BUTTON_STATE_PRESSED, e.timeMs); });
+            // window's sides (tiling.md TL16, TL20). The second exception to FR13: a plain left press on a shared edge's
+            // handle and the release of that press are the plugin's drag (TL30), cancelled together like P6's.
+            bool edge = false;
+            gf::guarded("tiling button", [&] { edge = gf::tiler::beforePointerButton(e.button, e.state == WL_POINTER_BUTTON_STATE_PRESSED, e.timeMs); });
+            if (edge) {
+                info.cancelled = true;
+                return;
+            }
             CGrassfieldTitlebar::onGlobalMouseButton(e);
             if (CGrassfieldTitlebar::onRevealedBarButton(e))
                 info.cancelled = true;

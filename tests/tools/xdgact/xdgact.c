@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // xdgact: a window that activates ITSELF through xdg-activation-v1, for the NESTED dev compositor (tests/shell/show_desktop_nested.sh),
-// and that unmaps itself without being destroyed (tests/compositor/tiling.sh, gate C1).
+// that unmaps itself without being destroyed (tests/compositor/tiling.sh, gate C1), and that opens a popup over its right edge
+// (tests/compositor/tiling.sh, the shared edge's handle behind a popup).
 // Never run it against the owner's session: use tests/tools/xdgact/xdgact.sh, which targets only the verified nested socket.
 //
 // Usage: xdgact APP_ID
@@ -8,7 +9,9 @@
 // activation token and activates its own surface with it: what an app does to bring its window forward (a real client request,
 // handled by Hyprland's CWindow::activate with misc.focus_on_activate), as opposed to the focus dispatcher. Prints "activated" when
 // the request is sent. On SIGUSR2 it attaches a null buffer and commits: the toplevel unmaps while every object stays alive (what an
-// app that closes to the tray does), and prints "unmapped". Ends on SIGTERM/SIGINT or when the window is closed.
+// app that closes to the tray does), and prints "unmapped". On SIGHUP it opens an xdg popup (no grab) on the middle of its right
+// edge, extending right, and prints "popup mapped APP_ID"; a pointer button pressed on that popup prints "popup pressed APP_ID". The
+// toplevel draws a buffer of the size the compositor configures. Ends on SIGTERM/SIGINT or when the window is closed.
 #define _GNU_SOURCE
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -30,19 +33,31 @@ static struct wl_compositor*       compositor;
 static struct wl_shm*              shm;
 static struct xdg_wm_base*         wm_base;
 static struct xdg_activation_v1*   activation;
+static struct wl_seat*             seat;
 static struct wl_surface*          surface;
+static struct xdg_surface*         toplevel_xs;
+static struct wl_surface*          popup_surface;
+static struct wl_surface*          pointer_focus;
 static struct wl_display*          display;
+static const char*                 app_id;
 static volatile sig_atomic_t       want_activate;
 static volatile sig_atomic_t       want_unmap;
+static volatile sig_atomic_t       want_popup;
 static volatile sig_atomic_t       want_exit;
 static int                         closed;
 static int                         mapped;
+static int                         unmapped;
+static int                         popup_mapped;
+static int                         cfg_w = WIDTH, cfg_h = HEIGHT; // the size the compositor configured (its default before any)
+static int                         buf_w, buf_h;
 
 static void on_signal(int sig) {
     if (sig == SIGUSR1)
         want_activate = 1;
     else if (sig == SIGUSR2)
         want_unmap = 1;
+    else if (sig == SIGHUP)
+        want_popup = 1;
     else
         want_exit = 1;
 }
@@ -58,6 +73,8 @@ static void global_add(void* data, struct wl_registry* reg, uint32_t name, const
         wm_base = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
     else if (strcmp(iface, xdg_activation_v1_interface.name) == 0)
         activation = wl_registry_bind(reg, name, &xdg_activation_v1_interface, 1);
+    else if (strcmp(iface, wl_seat_interface.name) == 0 && !seat)
+        seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
 }
 static void global_remove(void* data, struct wl_registry* reg, uint32_t name) {
     (void)data;
@@ -72,34 +89,52 @@ static void ping(void* data, struct xdg_wm_base* base, uint32_t serial) {
 }
 static const struct xdg_wm_base_listener wm_listener = {ping};
 
-static struct wl_buffer* make_buffer(void) {
-    const int stride = WIDTH * 4;
-    const int size   = stride * HEIGHT;
+// A buffer the compositor no longer reads is destroyed.
+static void buffer_release(void* data, struct wl_buffer* buf) {
+    (void)data;
+    wl_buffer_destroy(buf);
+}
+static const struct wl_buffer_listener buffer_listener = {buffer_release};
+
+static struct wl_buffer* make_buffer(int width, int height, uint32_t argb) {
+    const int stride = width * 4;
+    const int size   = stride * height;
     int       fd     = memfd_create("xdgact", MFD_CLOEXEC);
-    if (fd < 0 || ftruncate(fd, size) < 0)
+    if (fd < 0 || ftruncate(fd, size) < 0) {
+        if (fd >= 0)
+            close(fd);
         return NULL;
+    }
     uint32_t* px = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (px == MAP_FAILED)
+    if (px == MAP_FAILED) {
+        close(fd);
         return NULL;
-    for (int i = 0; i < WIDTH * HEIGHT; i++)
-        px[i] = 0xff3a6ea5;
+    }
+    for (int i = 0; i < width * height; i++)
+        px[i] = argb;
     munmap(px, size);
     struct wl_shm_pool* pool = wl_shm_create_pool(shm, fd, size);
-    struct wl_buffer*   buf  = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT, stride, WL_SHM_FORMAT_ARGB8888);
+    struct wl_buffer*   buf  = wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888);
     wl_shm_pool_destroy(pool);
     close(fd);
+    wl_buffer_add_listener(buf, &buffer_listener, NULL);
     return buf;
 }
 
+// The toplevel at the size last configured (its first buffer maps it; never again once it unmapped itself).
 static void surface_configure(void* data, struct xdg_surface* xs, uint32_t serial) {
     (void)data;
     xdg_surface_ack_configure(xs, serial);
+    if (unmapped || (mapped && buf_w == cfg_w && buf_h == cfg_h))
+        return;
+    struct wl_buffer* buf = make_buffer(cfg_w, cfg_h, 0xff3a6ea5);
+    if (!buf)
+        return;
+    wl_surface_attach(surface, buf, 0, 0);
+    wl_surface_commit(surface);
+    buf_w = cfg_w;
+    buf_h = cfg_h;
     if (!mapped) {
-        struct wl_buffer* buf = make_buffer();
-        if (!buf)
-            return;
-        wl_surface_attach(surface, buf, 0, 0);
-        wl_surface_commit(surface);
         mapped = 1;
         printf("mapped\n");
         fflush(stdout);
@@ -110,9 +145,11 @@ static const struct xdg_surface_listener surface_listener = {surface_configure};
 static void toplevel_configure(void* data, struct xdg_toplevel* t, int32_t w, int32_t h, struct wl_array* states) {
     (void)data;
     (void)t;
-    (void)w;
-    (void)h;
     (void)states;
+    if (w > 0 && h > 0) {
+        cfg_w = w;
+        cfg_h = h;
+    }
 }
 static void toplevel_close(void* data, struct xdg_toplevel* t) {
     (void)data;
@@ -141,6 +178,110 @@ static void token_done(void* data, struct xdg_activation_token_v1* token, const 
 }
 static const struct xdg_activation_token_v1_listener token_listener = {token_done};
 
+static void popup_surface_configure(void* data, struct xdg_surface* xs, uint32_t serial) {
+    (void)data;
+    xdg_surface_ack_configure(xs, serial);
+    if (popup_mapped)
+        return;
+    struct wl_buffer* buf = make_buffer(WIDTH, HEIGHT, 0xffa53a6e);
+    if (!buf)
+        return;
+    wl_surface_attach(popup_surface, buf, 0, 0);
+    wl_surface_commit(popup_surface);
+    popup_mapped = 1;
+    printf("popup mapped %s\n", app_id);
+    fflush(stdout);
+}
+static const struct xdg_surface_listener popup_surface_listener = {popup_surface_configure};
+
+static void popup_configure(void* data, struct xdg_popup* p, int32_t x, int32_t y, int32_t w, int32_t h) {
+    (void)data;
+    (void)p;
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+}
+static void popup_done(void* data, struct xdg_popup* p) {
+    (void)data;
+    (void)p;
+    printf("popup done %s\n", app_id);
+    fflush(stdout);
+}
+static const struct xdg_popup_listener popup_listener = {.configure = popup_configure, .popup_done = popup_done}; // xdg_wm_base v1: no repositioned
+
+// A popup without a grab on the middle of the toplevel's right edge, extending right.
+static void open_popup(void) {
+    if (popup_surface || unmapped)
+        return;
+    struct xdg_positioner* pos = xdg_wm_base_create_positioner(wm_base);
+    xdg_positioner_set_size(pos, WIDTH, HEIGHT);
+    xdg_positioner_set_anchor_rect(pos, 0, 0, buf_w > 0 ? buf_w : WIDTH, buf_h > 0 ? buf_h : HEIGHT);
+    xdg_positioner_set_anchor(pos, XDG_POSITIONER_ANCHOR_RIGHT);
+    xdg_positioner_set_gravity(pos, XDG_POSITIONER_GRAVITY_RIGHT);
+    popup_surface             = wl_compositor_create_surface(compositor);
+    struct xdg_surface* pxs   = xdg_wm_base_get_xdg_surface(wm_base, popup_surface);
+    struct xdg_popup*   popup = xdg_surface_get_popup(pxs, toplevel_xs, pos);
+    xdg_positioner_destroy(pos);
+    xdg_surface_add_listener(pxs, &popup_surface_listener, NULL);
+    xdg_popup_add_listener(popup, &popup_listener, NULL);
+    wl_surface_commit(popup_surface);
+}
+
+static void pointer_enter(void* data, struct wl_pointer* p, uint32_t serial, struct wl_surface* s, wl_fixed_t x, wl_fixed_t y) {
+    (void)data;
+    (void)p;
+    (void)serial;
+    (void)x;
+    (void)y;
+    pointer_focus = s;
+}
+static void pointer_leave(void* data, struct wl_pointer* p, uint32_t serial, struct wl_surface* s) {
+    (void)data;
+    (void)p;
+    (void)serial;
+    if (pointer_focus == s)
+        pointer_focus = NULL;
+}
+static void pointer_motion(void* data, struct wl_pointer* p, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
+    (void)data;
+    (void)p;
+    (void)time;
+    (void)x;
+    (void)y;
+}
+static void pointer_button(void* data, struct wl_pointer* p, uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
+    (void)data;
+    (void)p;
+    (void)serial;
+    (void)time;
+    (void)button;
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED && popup_surface && pointer_focus == popup_surface) {
+        printf("popup pressed %s\n", app_id);
+        fflush(stdout);
+    }
+}
+static void pointer_axis(void* data, struct wl_pointer* p, uint32_t time, uint32_t axis, wl_fixed_t value) {
+    (void)data;
+    (void)p;
+    (void)time;
+    (void)axis;
+    (void)value;
+}
+// wl_seat version 1: wl_pointer version 1 sends only these.
+static const struct wl_pointer_listener pointer_listener = {
+    .enter = pointer_enter, .leave = pointer_leave, .motion = pointer_motion, .button = pointer_button, .axis = pointer_axis};
+
+static void seat_capabilities(void* data, struct wl_seat* s, uint32_t caps) {
+    (void)data;
+    static struct wl_pointer* pointer;
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !pointer) {
+        pointer = wl_seat_get_pointer(s);
+        wl_pointer_add_listener(pointer, &pointer_listener, NULL);
+    }
+}
+static const struct wl_seat_listener seat_listener = {.capabilities = seat_capabilities};
+
 static void request_activation(const char* app_id) {
     struct xdg_activation_token_v1* token = xdg_activation_v1_get_activation_token(activation);
     xdg_activation_token_v1_add_listener(token, &token_listener, NULL);
@@ -162,6 +303,7 @@ int main(int argc, char** argv) {
     struct sigaction sa = {.sa_handler = on_signal};
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
     struct wl_registry* reg = wl_display_get_registry(display);
@@ -172,10 +314,13 @@ int main(int argc, char** argv) {
         return 1;
     }
     xdg_wm_base_add_listener(wm_base, &wm_listener, NULL);
+    if (seat)
+        wl_seat_add_listener(seat, &seat_listener, NULL);
+    app_id                   = argv[1];
     surface                  = wl_compositor_create_surface(compositor);
-    struct xdg_surface*  xs  = xdg_wm_base_get_xdg_surface(wm_base, surface);
-    struct xdg_toplevel* top = xdg_surface_get_toplevel(xs);
-    xdg_surface_add_listener(xs, &surface_listener, NULL);
+    toplevel_xs              = xdg_wm_base_get_xdg_surface(wm_base, surface);
+    struct xdg_toplevel* top = xdg_surface_get_toplevel(toplevel_xs);
+    xdg_surface_add_listener(toplevel_xs, &surface_listener, NULL);
     xdg_toplevel_add_listener(top, &toplevel_listener, NULL);
     xdg_toplevel_set_app_id(top, argv[1]);
     xdg_toplevel_set_title(top, argv[1]);
@@ -188,8 +333,14 @@ int main(int argc, char** argv) {
             request_activation(argv[1]);
             continue;
         }
+        if (want_popup) {
+            want_popup = 0;
+            open_popup();
+            continue;
+        }
         if (want_unmap) {
             want_unmap = 0;
+            unmapped   = 1;
             wl_surface_attach(surface, NULL, 0, 0);
             wl_surface_commit(surface);
             printf("unmapped\n");

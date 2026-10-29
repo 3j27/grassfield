@@ -145,6 +145,11 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   locked (`tiling` notice `reason:"locked"`) and for an unknown window (`reason:"invalid"`). The groups themselves are the
   `group` of each window in the `hyprctl grassfield-tiling` reply (step 1). Feature `tiling-groups`, advertised with
   `tiling-arrange` when the verb registered.
+- Window tiling, step 4c (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL30): feature `tiling-shared-edge`,
+  advertised with `tiling-arrange`: the plugin's own drag of a shared edge's handle between windows of a tile group. No
+  verb and no event are added: the drag is the plugin's from the press to the release (both cancelled on the bus, as the
+  revealed titlebar's, ADR-0015 P6), the windows along the edge are `Resizing` meanwhile, and its end posts the `tiling`
+  notice `reason:"resized"` once. Nothing of it while the session is locked.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -172,7 +177,7 @@ event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
 event tile-hover: address state x y w h tileable
-event frames: clock marks monitors name presented refreshHz renders t total unit what
+event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
@@ -187,7 +192,7 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front
 ```
 
