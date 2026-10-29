@@ -4,6 +4,8 @@
 # Usage: apps/files/build-direct.sh [--install-paths]   (--install-paths bakes /usr/share paths)
 #        apps/files/build-direct.sh --tests             (only the unit tests: .dev/build/files-unit-tests, files-kio-tests)
 #        apps/files/build-direct.sh --tests --asan      (the unit tests with -fsanitize=address,undefined: .dev/build/files-unit-tests-asan)
+#        apps/files/build-direct.sh --core              (only the Files library: .dev/build/libgrassfield-files-core.a,
+#                                                        linked by grassfield-files and apps/portal/build-direct.sh)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)
@@ -45,53 +47,68 @@ if [[ ${1:-} == "--tests" ]]; then
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Quick Qt6Widgets Qt6Qml Qt6DBus Qt6Test) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests$suffix"
   echo "built $out/files-unit-tests$suffix"
-  # Grassfield's KIO dialogs (ADR-0035 D-12 a): the logic and real KIO jobs, against KIO's libraries; its own main (a scratch
-  # home, offscreen). Not built in the sanitized run: the KIO jobs and the scratch home are its subject, not memory safety.
-  "$moc" "${kf_includes[@]}" "$here/src/kioprompts.h" -o "$out/moc_tests_kioprompts.cpp"
+  # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): the logic and real KIO
+  # jobs and listings, against the Files library; its own main (a scratch home, offscreen). Not built in the sanitized run:
+  # the KIO jobs and the scratch home are its subject, not memory safety.
   if [[ -z $suffix ]]; then
+  "$0" --core >/dev/null
+  # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${kfdefs[@]}" "-DFILES_SOURCE_DIR=\"$here/src\"" -I"$here/src" -I"$root/apps" "${kf_includes[@]}" \
-    $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network) \
-    "$root/tests/unit/files/tst_kioprompts.cpp" "$root/tests/unit/files/tst_kiodialogs.cpp" \
-    "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "$here/src/filelogic.cpp" "$out/moc_tests_kioprompts.cpp" \
-    $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
+    $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick) \
+    "$root/tests/unit/files/tst_kioprompts.cpp" "$root/tests/unit/files/tst_kiodialogs.cpp" "$root/tests/unit/files/tst_folderchooser.cpp" \
+    "$root/tests/unit/files/tst_diskprobe.cpp" \
+    "$out/libgrassfield-files-core.a" \
+    $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick wayland-client) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
   echo "built $out/files-kio-tests"
   fi
   exit 0
 fi
 
-defs=()
-if [[ ${1:-} != "--install-paths" ]]; then
-  defs+=("-DGRASSFIELD_FILES_QML_DIR=\"$here/qml\"")
-fi
-
-# QObjects with Q_OBJECT need moc.
+# The Files library (files-core.cmake, decision 4b-1 of ADR-0035): every source but main.cpp, compiled in parallel (KIO
+# headers are heavy) into one archive that grassfield-files and grassfield-portal link.
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
+read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui)"
+read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client)"
+# Compiles each source into $objdir in parallel; the object paths go to the global `objs`.
+compile() {
+  local objdir=$1; shift
+  mkdir -p "$objdir"
+  local pids=() status=0 src obj pid
+  objs=()
+  for src in "$@"; do
+    obj=$objdir/$(basename "${src%.cpp}").o
+    objs+=("$obj")
+    g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
+      -c "$src" -o "$obj" &
+    pids+=($!)
+  done
+  for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+  [[ $status -eq 0 ]] || { echo "build-direct: compilation failed" >&2; exit 1; }
+}
+
+defs=()
 mocs=()
-for h in foldermodel placesmodel filesapp tagsearch recents kioprompts; do
+for h in foldermodel placesmodel filesapp tagsearch recents kioprompts diskprobe; do
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
+compile "$out/files-core-obj" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp" "$here/src/diskprobe.cpp" \
+  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
+  "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
+  "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "${mocs[@]}"
+core=$out/libgrassfield-files-core.a
+rm -f "$core"
+ar rcs "$core" "${objs[@]}"
+if [[ ${1:-} == "--core" ]]; then
+  echo "built $core"
+  exit 0
+fi
 
-# Compile the translation units in parallel (KIO headers are heavy), then link.
-objdir=$out/files-obj
-mkdir -p "$objdir"
-read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui)"
-read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client)"
-sources=("$here/src/main.cpp" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp"
-  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp"
-  "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp"
-  "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "${mocs[@]}")
-pids=() objs=()
-for src in "${sources[@]}"; do
-  obj=$objdir/$(basename "${src%.cpp}").o
-  objs+=("$obj")
-  g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
-    -c "$src" -o "$obj" &
-  pids+=($!)
-done
-status=0
-for pid in "${pids[@]}"; do wait "$pid" || status=1; done
-[[ $status -eq 0 ]] || { echo "build-direct: compilation failed" >&2; exit 1; }
-g++ "${objs[@]}" "${qt_libs[@]}" "${kf_libs[@]}" -o "$out/grassfield-files"
+# The app: its main() (the QML directory baked in) against the library.
+if [[ ${1:-} != "--install-paths" ]]; then
+  defs+=("-DGRASSFIELD_FILES_QML_DIR=\"$here/qml\"")
+fi
+compile "$out/files-obj" "$here/src/main.cpp"
+g++ "${objs[@]}" "$core" "${qt_libs[@]}" "${kf_libs[@]}" -o "$out/grassfield-files"
 echo "built $out/grassfield-files"

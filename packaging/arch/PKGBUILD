@@ -26,7 +26,7 @@ if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; the
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
   exit 1
 fi
-pkgrel=${GRASSFIELD_PKGREL:-6}
+pkgrel=${GRASSFIELD_PKGREL:-9}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -38,9 +38,11 @@ license=(MIT)
 # Everything the build compiles against or runs is here: `makepkg -s` installs the global depends and makedepends only,
 # not the depends of the package functions below. Found by the first builds in a clean container (grassfield-packages,
 # ADR-0033 f): hyprwayland-scanner (the plugin's protocol code, compositor/CMakeLists.txt), kio, solid, kcoreaddons and
-# kservice (apps/files), qt6-webengine (QtPdf) and qt6-multimedia (apps/preview).
+# kservice (apps/files), qt6-webengine (QtPdf) and qt6-multimedia (apps/preview). quickshell: the build records the version
+# the shell was built for (BUILD-DEPS, below), which Software Update's compatibility check reads (ADR-0033 s3.4).
 makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools
-             hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia)
+             hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia
+             quickshell)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
@@ -74,10 +76,17 @@ prepare() {
   # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
   # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
   # ${srcdir:?}: an empty $srcdir must stop here, never turn these into paths at the root.
-  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/pacman"
+  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/BUILD-DEPS" "${srcdir:?}/pacman"
   mkdir -p "$srcdir/snapshot"
   git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
+  # BUILD-DEPS (ADR-0033 s3.4): the versions of the toolkit this build compiles and runs against, one `<name> <version>`
+  # per line, read by grassfield-update-helper's compatibility check before an update changes one of them. All of them or
+  # no build: a record that lacks one refuses every update of it.
+  if ! pacman -Q qt6-base quickshell hyprland aquamarine kcoreaddons >"$srcdir/BUILD-DEPS"; then
+    echo "PKGBUILD: the build environment lacks a package BUILD-DEPS records (qt6-base quickshell hyprland aquamarine kcoreaddons)" >&2
+    return 1
+  fi
   if [[ $(tr -d '[:space:]' <"$srcdir/snapshot/VERSION") != "$_ver" ]]; then
     echo "PKGBUILD: VERSION of HEAD ($(<"$srcdir/snapshot/VERSION")) is not the VERSION this PKGBUILD read ($_ver): commit it first" >&2
     return 1
@@ -126,9 +135,17 @@ build() {
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
+  # grassfield-portal (ADR-0035 D-4): the Open and Save panels, the Files library and Files' QML (installed by files-build).
+  cmake -S "$(_root)/apps/portal" -B "$srcdir/portal-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/portal-build"
   cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/preview-build"
+  # Activity Monitor (ADR-0038): the app, its QML, its desktop entry and its icon; packaged in grassfield-desktop (AD2).
+  cmake -S "$(_root)/apps/activity" -B "$srcdir/activity-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/activity-build"
   # Grassfield Store (ADR-0037): the app, its QML, its root helper and polkit policy; packaged as grassfield-store.
   cmake -S "$(_root)/apps/store" -B "$srcdir/store-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -178,7 +195,11 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
+  # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
+  # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
+  conflicts=('quickshell=0.3.2')
   # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo.svg:
   # all rights reserved, the owner's mark, owner decision 2026-10-27: LicenseRef-Grassfield-logo-all-rights-reserved); Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
@@ -249,13 +270,15 @@ package_grassfield-desktop() {
   for tool in grassfield-login grassfield-login-check grassfield-nightshift grassfield-channel-set; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
-  # Software Update (ADR-0033 c; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the program of
-  # the polkit action below, run by grassfield-channel-set through pkexec) and grassfield-channel-scriptlet (this
-  # package's pre_remove and post_upgrade) over their shared library, the only Grassfield code that runs as root; the
-  # templates they write /etc/pacman.d/grassfield.conf from; Omarchy's pre-refresh-pacman hook that grassfield-channel-set
-  # links. grassfield-channel-set and grassfield-update-check come from packaging/bin above.
+  # Software Update (ADR-0033 c and "Step 3"; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the
+  # program of the first polkit action below, run by grassfield-channel-set through pkexec), grassfield-update-helper (the
+  # second's, run by grassfield-update-run: Update Now, owner decision SU-M1) and grassfield-channel-scriptlet (this
+  # package's pre_remove and post_upgrade) over their shared library, the Grassfield code of this package that runs as root;
+  # the templates they write /etc/pacman.d/grassfield.conf from; Omarchy's pre-refresh-pacman hook that
+  # grassfield-channel-set links. grassfield-channel-set, grassfield-update-check and grassfield-update-run come from
+  # packaging/bin above.
   install -m755 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel-helper" \
-    "$root/packaging/pacman/grassfield-channel-scriptlet"
+    "$root/packaging/pacman/grassfield-update-helper" "$root/packaging/pacman/grassfield-channel-scriptlet"
   install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
   install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
@@ -269,7 +292,7 @@ package_grassfield-desktop() {
   find "$root/packaging/session-bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/session-bin/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
@@ -302,6 +325,13 @@ package_grassfield-desktop() {
     "$pkgdir/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf"
   install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield_settings.service" \
     "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield_settings.service"
+  # grassfield-portal (ADR-0035 D-4): /usr/lib/grassfield/grassfield-portal (D-Bus activation through its unit, above), its
+  # .portal file next to the Settings backend's, and its D-Bus service file.
+  DESTDIR="$pkgdir" cmake --install "$srcdir/portal-build"
+  install -Dm644 "$root/packaging/xdg/xdg-desktop-portal/portals/grassfield.portal" \
+    "$pkgdir/usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal"
+  install -Dm644 "$root/packaging/dbus/org.freedesktop.impl.portal.desktop.grassfield.service" \
+    "$pkgdir/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.grassfield.service"
   # The GTK themes: /usr/share/themes/Grassfield-<accent>[-hc][-dark] (named by the portal backend for GTK 3 and GTK 4).
   install -dm755 "$pkgdir/usr/share/themes"
   cp -r --no-preserve=ownership "$srcdir/gtk-themes/." "$pkgdir/usr/share/themes/"
@@ -309,6 +339,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
   DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
+  # Activity Monitor (ADR-0038; no root part, no polkit action).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/activity-build"
 
   # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
   install -d "$pkgdir/usr/share/icons"
@@ -335,6 +367,7 @@ package_grassfield-desktop() {
   # Version and build provenance: the shell's About reads VERSION (a sibling of the shell directory).
   install -Dm644 "$root/VERSION" "$pkgdir/usr/share/grassfield/VERSION"
   install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/grassfield/BUILD-COMMIT"
+  install -Dm644 "$srcdir/BUILD-DEPS" "$pkgdir/usr/share/grassfield/BUILD-DEPS"
   install -Dm644 "$root/CHANGELOG.md" "$pkgdir/usr/share/doc/grassfield/CHANGELOG.md"
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"

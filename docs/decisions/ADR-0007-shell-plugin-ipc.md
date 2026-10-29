@@ -134,6 +134,30 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   in that layout). It is published while the tile records are still those of `gen` (the generation of the `placed`
   notice that announced it): any later change ends it. Feature `tiling-layouts`, advertised together with
   `tiling-arrange`.
+- Window tiling, step 4b (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL29): verb `group_front(address)`: the
+  members of the window's tile group on screen on its Desktop (Tiled or being resized; not minimized, full screen, zoomed
+  or hidden) come forward in their stacking order, above every other window, then the window itself when it is on screen,
+  whatever its state (zoomed or full screen included; integrator review of cd74af2); the shell sends it after it
+  activates or restores the window (a window brought forward from the Dock, its menu, the menu bar's Window menu, the app
+  switcher or the Overview), only for a window in a group, so the window ends in front whichever of the two reaches the
+  compositor first (a window on a special workspace is not raised: its restore raises it). It
+  changes no tile record and posts no notice; a window without a group changes nothing. Refused while the session is
+  locked (`tiling` notice `reason:"locked"`) and for an unknown window (`reason:"invalid"`). The groups themselves are the
+  `group` of each window in the `hyprctl grassfield-tiling` reply (step 1). Feature `tiling-groups`, advertised with
+  `tiling-arrange` when the verb registered.
+- Window tiling, step 4c (2026-10-28, additive, ADR-0036, docs/specs/tiling.md TL30): feature `tiling-shared-edge`,
+  advertised with `tiling-arrange`: the plugin's own drag of a shared edge's handle between windows of a tile group. No
+  verb and no event are added: the drag is the plugin's from the press to the release (both cancelled on the bus, as the
+  revealed titlebar's, ADR-0015 P6), the windows along the edge are `Resizing` meanwhile, and its end posts the `tiling`
+  notice `reason:"resized"` once. Nothing of it while the session is locked.
+- Window tiling, step 5 (2026-10-29, additive, ADR-0036 D36-D38, docs/specs/tiling.md TL32): no new event, verb or
+  feature. The `config` allowlist gains `tilingLayouts` ∈ true|false (true at load; false: the hover tracker posts no
+  `tile-hover` `enter`, `tile_popover` still posts `open`; the shell sends it with `tile-hover`) and `tilingSuggestions` ∈
+  true|false (true at load; false: an `arrange` keeps no suggestion, the pending one is dropped, and the `hyprctl
+  grassfield-tiling` reply has `"suggestion":null`; sent with `tiling-layouts`). A plugin built before step 5 rejects both
+  keys (a WARN line for each, two per push); the shell's own gates keep the behaviour right (ADR-0036 D39). The shell now sends `tilingOptionDrag` (with `window-tiling`) and
+  `titlebarDoubleClick` = `fill` (only with `tiling-arrange`, `zoom` otherwise). "Bring tile groups forward together" adds
+  no key: the plugin raises a group only on `group_front`.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -161,7 +185,7 @@ event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
 event tile-hover: address state x y w h tileable
-event frames: clock marks monitors name presented refreshHz renders t total unit what
+event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
@@ -176,8 +200,8 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front
 ```
 
 ## Evidence

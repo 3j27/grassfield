@@ -8,12 +8,17 @@ import "WindowTiling.js" as WindowTiling
 // arrangement the shell asked (Compositor.suggestionAsked: a layout or an arrangement from the popover, the Window menu or the
 // keys, or a pick of the suggestions), the suggestion of the `hyprctl grassfield-tiling` reply when it fills that window's
 // layout and belongs to that notice; any other change of the tile records ends it (a refusal changes nothing). One fetch at
-// a time; services/TilingSuggest shows the suggestion. Without the plugin's tiling-layouts nothing is ever fetched.
+// a time; services/TilingSuggest shows the suggestion. The same reply gives the tile groups (TL29): read again after every
+// change of the tile records while the plugin offers tiling-groups. Without tiling-layouts or tiling-groups nothing is
+// ever fetched.
 Singleton {
     id: root
 
     // The suggestion to show (WindowTiling.parseSuggestion) or null.
     property var suggestion: null
+    // The tile groups of the last reply (WindowTiling.parseGroups: the Dock menu's Show Tile Group, an Overview drop), or
+    // null (no reply yet, a malformed one, no tiling-groups).
+    property var groups: null
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
     // A fetch was asked while the previous process was still running: start it when that one ends.
@@ -49,12 +54,31 @@ Singleton {
             }
             root.wantedGen = -1;
             root.suggestion = null;
+            if (Compositor.canGroups)
+                root.fetch(); // the groups may have changed
         }
 
         function onCanLayoutsChanged(): void {
             if (!Compositor.canLayouts)
                 root.dismiss();
         }
+
+        function onSuggestionsOnChanged(): void {
+            if (!Compositor.suggestionsOn)
+                root.dismiss();
+        }
+
+        function onCanGroupsChanged(): void {
+            if (Compositor.canGroups)
+                root.fetch();
+            else
+                root.groups = null;
+        }
+    }
+
+    Component.onCompleted: {
+        if (Compositor.canGroups)
+            root.fetch();
     }
 
     Process {
@@ -63,9 +87,13 @@ Singleton {
         command: ["hyprctl", "grassfield-tiling"]
         stdout: StdioCollector {
             onStreamFinished: {
-                if (root.startPending || root.wantedGen < 0)
-                    return; // a newer notice asks again, or the suggestion ended meanwhile
+                if (root.startPending)
+                    return; // a newer notice asks again
                 fetchDeadline.stop();
+                if (Compositor.canGroups)
+                    root.groups = WindowTiling.parseGroups(text);
+                if (root.wantedGen < 0)
+                    return; // no suggestion wanted, or it ended meanwhile
                 const sg = WindowTiling.parseSuggestion(text);
                 const asked = Compositor.suggestionAsked;
                 root.suggestion = sg !== null && sg.gen === root.wantedGen && asked !== null && sg.address === asked.address ? sg : null;
@@ -79,7 +107,8 @@ Singleton {
         }
     }
 
-    // A reply that does not come in this time: nothing is shown (a stale suggestion would offer zones that changed).
+    // A reply that does not come in this time: nothing is shown (a stale suggestion would offer zones that changed); the
+    // groups stay as last read (the plugin checks them again at each request).
     Timer {
         id: fetchDeadline
 

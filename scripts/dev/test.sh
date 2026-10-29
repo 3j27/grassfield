@@ -244,6 +244,11 @@ gtest_suite tests/unit/secrets-handover "apps/secrets-handover/build-direct.sh -
 # on a private bus: tests/integration/portal_settings.sh.
 gtest_suite tests/unit/portal-settings "apps/portal-settings/build-direct.sh --tests >/dev/null && apps/portal-settings/build-direct.sh --tests --asan" \
   ".dev/build/portal-settings-unit-tests --gtest_brief=1" ".dev/build/portal-settings-unit-tests-asan --gtest_brief=1"
+# grassfield-portal's FileChooser (ADR-0035 D-4): the option mapping in and the results out, the panels' memory, and the
+# backend on a private dbus-daemon with a fake frontend and a fake x-d-p-gtk (the forward, Close, the bounds, idle). With the
+# real binary and the real frontend: tests/integration/portal_filechooser.sh.
+gtest_suite tests/unit/portal "apps/portal/build-direct.sh --tests >/dev/null && apps/portal/build-direct.sh --tests --asan" \
+  ".dev/build/portal-unit-tests --gtest_brief=1" ".dev/build/portal-unit-tests-asan --gtest_brief=1"
 # grassfield-settings dev guard, the wallpaper helper door (exact tool path, exact argument vectors) and the Backend's glue
 # (one answer per query unless shared, one password action per tag; fake commands on a scratch PATH).
 gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan" \
@@ -253,6 +258,16 @@ gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/nul
 # scratch paths), the merged model and search, the child-process limits. Built twice: plain, then with ASan and UBSan.
 gtest_suite tests/unit/store "apps/store/build-direct.sh --tests >/dev/null && apps/store/build-direct.sh --tests --asan" \
   ".dev/build/store-unit-tests --gtest_brief=1" ".dev/build/store-unit-tests-asan --gtest_brief=1"
+# The activity monitor's sampler (ADR-0038 step 1): the /proc and /sys parsers on fixtures, the owners and kinds, the per-tab
+# reads and their turns, the kept descriptors, the TCP counters through sock_diag (the real kernel, loopback sockets of the
+# test), the names made safe to show. Its window's backend (step 2): the values, the columns, the table's views, search,
+# sort and selection, activity.json, and sampling only while the window is shown; the window itself with that backend on
+# a fixture tree, always offscreen (A-W1). Built twice: plain, then with ASan and UBSan (the window's case plain only).
+# Other owners through the real kernel: tests/integration/activity_owners.sh; the cost per tab: tests/apps/activity_cost.sh.
+gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/null && apps/activity/build-direct.sh --tests --asan" \
+  ".dev/build/activity-unit-tests --gtest_brief=1" ".dev/build/activity-unit-tests-asan --gtest_brief=1" \
+  ".dev/build/activity-window-tests --gtest_brief=1" ".dev/build/activity-window-tests-asan --gtest_brief=1" \
+  ".dev/build/activity-window-qml-tests --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.
@@ -302,6 +317,12 @@ if want logic; then
   python3 -I tests/ci/run_mode.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/run_mode.py "$rc" PASS
+  # A Quickshell Socket's error handler acts only after the signal (the Quickshell 0.3.2 crash loop): the rule on samples;
+  # the tree is checked by `just check-shell`.
+  rc=0
+  python3 -I tests/ci/socket_errors.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/socket_errors.py "$rc" PASS
   # The generated GTK themes (ADR-0035 D-8): 36, each importing GTK's own theme, no colour function, the pairs' contrast. Their
   # rendering under Xvfb is tests/integration/gtk_themes.sh.
   rc=0

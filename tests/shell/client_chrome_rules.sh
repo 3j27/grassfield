@@ -27,6 +27,24 @@ check "the client-chrome rule matches a class list and any xdg tag" $?
 tp_class=$(sed -n 's/.*name = "gf-client-chrome-third-party", match = { class = "\([^"]*\)" }, tag = "+grassfield-client-chrome".*/\1/p' "$rules")
 [[ $tp_class == '^('*')$' ]]
 check "the third-party client-chrome rule matches a class list (GF-056)" $? "$tp_class"
+# Every Grassfield app that draws its own chrome (its main.cpp makes a ChromeTagger, apps/windowchrome.h) is in the rule,
+# under each app id it gives itself; Glance alone has its own rule, without a titlebar (integrator, PR #47: Activity Monitor
+# showed two sets of lights). A missing app gets the plugin's titlebar over its toolbar.
+cc_re=${cc_class//\\\\/\\}
+glance_re=$(sed -n 's/.*name = "gf-glance", match = { class = "\([^"]*\)" }.*decorate = false.*/\1/p' "$rules")
+glance_re=${glance_re//\\\\/\\}
+ids=$(grep -l "ChromeTagger" "$root"/apps/*/src/main.cpp | xargs grep -h "setDesktopFileName" \
+  | grep -o 'QStringLiteral("org\.grassfield\.[A-Za-z.]*")' | sed 's/QStringLiteral("\(.*\)")/\1/' | sort -u)
+missing=""
+for id in $ids; do
+  [[ $id =~ $cc_re || ( -n $glance_re && $id =~ $glance_re ) ]] || missing+=" $id"
+done
+[[ -n $ids && -z $missing ]]
+rc=$?
+check "every Grassfield app drawing its own chrome is in the client-chrome rule ($(echo $ids | wc -w) ids)" $rc
+[[ -n $missing ]] && echo "  missing:$missing"
+[[ ! org.grassfield.NotAnApp =~ $cc_re ]]
+check "negative control: an id outside the list does not match the rule" $?
 cc_inner=${cc_class#^}; cc_inner=${cc_inner%\$}
 tp_inner=${tp_class#^(}; tp_inner=${tp_inner%)\$}
 grep -qF "name = \"gf-no-maximize-event\", match = { class = \"negative:^($cc_inner|$tp_inner)\$\" }, suppress_event = \"maximize\"" "$rules"

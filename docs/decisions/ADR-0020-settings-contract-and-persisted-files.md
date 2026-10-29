@@ -31,6 +31,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | Files QSettings | config | Files / Files, Preview | n/a | stays |
 | `software-update.json` (ADR-0033) | state | shell / Settings | 1 | none (versioned from the start) |
 | `checkup-db/`, `health-db/`, `checkup.lock` (ADR-0033) | cache (`$XDG_CACHE_HOME/grassfield`) | the update checker (`checkupdates`, the `[grassfield]`-only sync, its lock) / the checker | n/a (pacman databases, a lock file) | none (regenerable; the `[grassfield]` files are deleted when the channel's Server changes, a stale `db.lck` under the checker's lock) |
+| `software-update-run.json`, `software-update-run.log` (ADR-0033 "Step 3") | runtime (`$XDG_RUNTIME_DIR/grassfield`, tmpfs; 0700, files 0600) | `grassfield-update-run` / Settings | 1 (the JSON; the log is plain text) | none (versioned from the start; the last Update Now run, its state by rename; gone at log out) |
 | `pre-refresh-pacman.d/50-grassfield` (ADR-0033) | Omarchy's user hooks (`~/.config/omarchy/hooks/`) | `grassfield-channel-set` / Omarchy's `omarchy-hook` | n/a (a symbolic link to a packaged file) | stays (removed by `grassfield-channel-set off`) |
 | `wallpaper-state.json` | config (`WallpaperState.qml:43`, `backend.cpp:105`) | shell / Settings | none | state, v1 |
 | `pointer-theme.json` | config (`shell.qml:151`) | shell (`PointerTheme.qml:254`) / Settings (`PointerThemeStatus.qml:16`) | none | state, v1 |
@@ -43,6 +44,8 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
 | `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |
 | `files-views.json` (2026-10-26, Files PR 1) | state | Files / Files | 1 | none (versioned from the start) |
+| `portal-filechooser.json` (ADR-0035 D-4, step 4b) | state | `grassfield-portal` / the portal only | 1 | none (versioned from the start): per application id, the Open and Save panels' last folder (a local folder URL), view and whether the Save panel was expanded; at most 64 applications, the least recently used dropped; a file that is unreadable, malformed or larger than 256 KiB is an empty memory, and the next write replaces it whole |
+| `activity.json` (ADR-0038 j, step 2a) | state (0600) | Activity Monitor / Activity Monitor | 1 | none (versioned from the start): the window's size, the tab, the view, the update frequency, and per tab the columns shown in order, their widths and the sort; a file that is not version 1 JSON is renamed `.bad` and the defaults are used; the later keys (Dock icon, "Don't ask again", App History's period) come with their steps |
 | `clipboard/pinned/` (`index.json` + one `<id>.item` per item; ADR-0034, written when an item is pinned) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; at most 50 items and 32 MiB, never expired; emptied by unpin, Delete Item or Settings' "Also delete pinned items") |
 | `clipboard/history/` (same layout; ADR-0034, only when `search.clipboard.keepOnDisk` is on) | state (0700, files 0600) | `grassfield-clipboard-helper` / the helper only | 1 (`index.json`) | none (versioned from the start; at most 100 items and 64 MiB, expired at the chosen retention, deleted when the switch or the history is turned off and by Clear History) |
 | `clipboard/` thumbnails and previews (ADR-0034) | runtime (`$XDG_RUNTIME_DIR/grassfield`, tmpfs; 0700, files 0600) | the clipboard helper / the shell | n/a (PNG) | none (never on disk; removed with their item and when the helper starts or exits) |
@@ -139,4 +142,6 @@ key (decision 1).
 System files outside the user's home are not user files and are not in the table: `/etc/pacman.d/grassfield.conf` and the
 two `[grassfield]` lines at the end of `/etc/pacman.conf`. Only `grassfield-channel-helper` (through pkexec) and
 `grassfield-channel-scriptlet` (from pacman's scriptlets) write them, and no package owns them (ADR-0033 a, c). The keyring's
-files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package.
+files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package. Step 3 (owner decision SU-M1)
+adds the runner's runtime row above; the root helper's status files in `/run/grassfield-update/` (root, 0755) are system
+files, as the Store's `/run/grassfield-store/` are, and `/usr/share/grassfield/BUILD-DEPS` belongs to grassfield-desktop.

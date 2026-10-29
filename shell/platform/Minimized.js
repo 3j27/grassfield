@@ -7,7 +7,7 @@
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
 var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages", "arrange",
-    "tile_popover", "move_to"];
+    "tile_popover", "move_to", "group_front"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -76,6 +76,13 @@ function zoneCall(address, layout, zone, withAddress) {
         request.with = "0x" + other;
     // Only validated pieces: the JSON holds no quote or backslash to escape for Lua but the JSON's own quotes.
     return guardedPluginCall("arrange", ["\"" + JSON.stringify(request).replace(/"/g, "\\\"") + "\""]);
+}
+
+// hl.plugin.grassfield.group_front(address) (capability "tiling-groups", TL29): the window's tile group comes forward (sent
+// after the window's activation or restore: Compositor.groupForward). "" when the address is invalid.
+function groupFrontCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("group_front", ["\"0x" + hex + "\""]);
 }
 
 // hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of
@@ -249,15 +256,18 @@ function blurCall(size, passes) {
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
-// tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
+// The tiling keys: tilingSwitches below (docs/specs/tiling.md TL32). titlebarDoubleClick "fill": doubleClickAction.
 // appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
 // stagesEnabled: Settings windows.stages (feature "stages-available"; ADR-0013, owner decision D-4).
 var pluginConfig = {
-    titlebarDoubleClick: ["zoom", "minimize", "none"],
+    titlebarDoubleClick: ["zoom", "minimize", "fill", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
+    tilingOptionDrag: ["true", "false"],
     tilingMargins: ["true", "false"],
+    tilingLayouts: ["true", "false"],
+    tilingSuggestions: ["true", "false"],
     appearance: ["dark", "light"],
     stagesEnabled: ["true", "false"]
 };
@@ -282,6 +292,30 @@ function stagesCall(request) {
     if (typeof json !== "string" || json.length > 8192)
         return "";
     return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
+}
+
+// The switches of Desktop & Dock > Windows the plugin takes (docs/specs/tiling.md TL32), in the Settings order: the config
+// key, the feature the plugin advertises when it accepts it, and the Settings property it carries. "Bring tile groups
+// forward together" is the shell's alone (Compositor.groupForward, ADR-0036 D38).
+var tilingSwitches = [
+    {key: "tilingEdges", feature: "window-tiling", setting: "windowsTilingEdges"},
+    {key: "tilingMenuBar", feature: "window-tiling", setting: "windowsTilingMenuBar"},
+    {key: "tilingOptionDrag", feature: "window-tiling", setting: "windowsTilingOptionDrag"},
+    {key: "tilingMargins", feature: "window-tiling", setting: "windowsTilingMargins"},
+    {key: "tilingLayouts", feature: "tile-hover", setting: "windowsTilingLayouts"},
+    {key: "tilingSuggestions", feature: "tiling-layouts", setting: "windowsTilingSuggestions"}
+];
+
+// The [key, value] pairs to push for `settings` (the Settings singleton, or any object with its windowsTiling* properties):
+// each switch whose feature `has(feature)` says the plugin advertises, as "true" | "false".
+function tilingConfigPairs(settings, has) {
+    return tilingSwitches.filter(s => has(s.feature)).map(s => [s.key, settings[s.setting] === true ? "true" : "false"]);
+}
+
+// The double-click action the plugin is sent for the setting `action`: Fill needs the plugin's arrangements (feature
+// "tiling-arrange"); without them the double-click zooms, the action's default (ADR-0036 D36).
+function doubleClickAction(action, canArrange) {
+    return action === "fill" && canArrange !== true ? "zoom" : action;
 }
 
 function configCall(key, value) {

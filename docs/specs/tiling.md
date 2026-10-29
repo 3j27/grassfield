@@ -1,9 +1,10 @@
 # Window tiling spec · compositor-engineer (plugin) + shell-engineer (shell) · owner brief 2026-10-27
 
 Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
-(PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a on its branch
-(the Layouts section, its number keys and the suggestions, TL27, TL28), 4b (tile groups, TL29) and 4c (the shared edge,
-TL30) not built; steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
+(PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
+(PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
+merged (PR #42: the shared edge, TL30); step 5 on its branch (Settings > Desktop & Dock > Windows, TL32); step 6 is not
+built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -129,7 +130,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Window.cpp:2885-2889, while Hyprland's commit clamp still applies the protocol minimum, Window.cpp:2741-2747); for an
   X11 window, the rule or its size hints. The engine applies that minimum itself, so the commit clamp never recentres a
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
-  the protocol maximum too).
+  the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
+  fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
@@ -348,6 +350,24 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   app's groups ("Show Tile Group"); the Overview moves a group to another Desktop as one; membership follows TL10: a
   window leaves its group when it is dragged away (Moving), tiled elsewhere or becomes Free; a resize keeps it; minimized
   windows stay members; a group of one dissolves.
+  Step 4b as built (D29-D31): verb `group_front(address)` (core `groupRaiseOrder`): the members of the window's group that
+  are Tiled or being resized on its Desktop are raised in their stacking order, bottom first, then the window itself
+  whenever it is on screen, zoomed or full screen included (`alterZOrder("top")`, the same raise as a restore; integrator
+  review of cd74af2); a minimized, full-screen, zoomed or hidden member stays; no tile record changes. The shell
+  (Compositor `groupForward`, `activateWithGroup`, `unminimizeWithGroup`) sends it after the window's own activation or
+  restore, only for a window in a group of the last reply (`WindowTiling.membersOf`) and never while locked, for a Dock
+  click (the window that ends focused), a Dock tile of a minimized window, the Dock menu's and the menu bar's window rows,
+  the app switcher and the Overview's choice of a window or of a minimized one; the window ends in front whichever request
+  the compositor takes first (on a special workspace it is not raised, and its restore raises it). The groups are the
+  `group` of each window in the `hyprctl grassfield-tiling` reply (`WindowTiling.parseGroups`, a suspended member
+  included), read again by platform/TilingLink after every change of the tile records. The Dock menu lists the app's
+  groups after Show All Windows (`WindowTiling.tileGroupRows`): "Show Tile Group", or "Show Tile Group with <the other
+  members' apps>" when the app has several; the row (Compositor `showTileGroup`, the steps of
+  `WindowTiling.tileGroupSteps`) shows the group's Desktop (the window's, else a member's that is on one), brings the
+  window and the group's minimized members back there, focuses the window and brings the group forward, all through the
+  dispatch channel in that order, nothing if the lock engaged while the menu closed. An Overview drop (Compositor
+  `moveGroupToSpace`, `WindowTiling.groupMovers`) moves the window and the members on its Desktop to the target Desktop,
+  where they stay tiled and grouped (TL14). Feature `tiling-groups`, with `tiling-arrange`.
 - **TL30** Shared edge (T1e, option 1, M43, W18): between two windows of a group whose frames share an edge (margin
   between them included), the pointer over the middle `tiling.handleLength` of that edge shows a handle (resize cursor);
   dragging it moves the edge for every window of the group along it, within their minimum and maximum; outside the handle
@@ -355,6 +375,54 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`CWindow::m_events.resize` or the motion listener, then `setTargetGeom` and a warp), measured for configure storms and
   P3; if live following proves too slow, the neighbours follow at the release and show their app icon on the glass during
   the drag (Windows' placeholder).
+  Step 4c as built (D32-D34): the plugin drives the drag itself, Hyprland's resize is not followed (D33). Core
+  `sharedEdges` finds, per output Desktop, the edges the Tiled members of a group share: two windows face each other when
+  the gap between their facing sides is the margin or less (from -1 to margin + 1 px) and they overlap along it by more
+  than 1 px; an edge holds every window of the group on that line, before (left or above) and after it; one handle per
+  pair of facing windows, the middle `tiling.handleLength` of the stretch they share, across the gap and at least
+  `tiling.handleBand` wide (without margins half in each window). **The frontmost window under the pointer always gets the
+  click** (macOS; integrator review of a6d04df): the handle exists only where nothing is in front of it, that is where
+  Hyprland's own pointer-focus hit test (its reserved extents, so a titlebar, its border grab areas, xdg popups, a
+  full-screen or zoomed window, from the top of the stack) finds no window or one of the edge's own windows, and no popup
+  (core `handleClear`). The pointer resting on a handle (no button held, no modifier, the desktop not covered: not
+  locked, no foreign Exclusive layer, no layer under the point, no other window, titlebar or popup in front) shows a
+  left-right or up-down double arrow (Hyprland's special-action cursor override, above resize_on_border's border icon);
+  nothing is drawn (D32). Any popup there counts, whichever window it belongs to: Hyprland's hit test returns the topmost
+  window whose box (border grab area included) holds the point before it looks at the popups of the windows below, so the
+  plugin checks every visible window's popups (integrator nested pass of 3d56d60); so does an X11 override-redirect window
+  (an XWayland app's menu, a tooltip) whose box holds the point, for which that hit test returns the focused window
+  (integrator review of 0c4c8f2). Hover reads edges kept from the last look, built again when the book's records, a window's box,
+  band or state, the output's Desktop or the margins changed. A plain left press there, with no button held by any device,
+  is the plugin's: it and its release are cancelled
+  on the bus (compositor.md FR13, as P6), every window of the edge goes Resizing, and the edge follows the pointer along
+  its axis (core `dragEdge`: the before windows' far side and the after windows' near side move together, the gap kept,
+  the edge on the grid line nearest the pointer and never past any window's minimum or maximum, heights counting the
+  titlebar band), each window's surface set and its animation ended at once (`setTargetGeom`, `warpPositionSize`, as a
+  step of Hyprland's own resize), at most once per refresh of the output (the motions in between wait for a timer: P3,
+  the neighbours configured at most once per refresh); the release, or the lock the moment it engages, ends it: Tiled
+  with the new boxes, one `resized` notice, a DEBUG line with the drag's steps, held motions, duration and the plugin's own
+  time in it (total and longest step; each step is also a work span of the frame probe, compositor.md FR54). A window
+  closed, unmapped or no longer Resizing meanwhile leaves the drag (logged once, no longer set), but its frame from the
+  press and its limits still bound the edge (integrator re-review of ce82fd3: else the other side followed the pointer off
+  the work area; core `dragEdge` does not move an edge with no window left on one side); Tiled again at its end if its
+  record is still Resizing; the others go on (gate C1). Outside the handle Hyprland's resize_on_border resizes one window (TL10: it keeps its record
+  and group). During the drag DesktopFocus and the titlebars ignore the pointer. Feature `tiling-shared-edge`, with
+  `tiling-arrange`. The spike's measurement (D34, amended by the integrator): tests/visual/presented-frames.sh
+  `shared-edge` (two live windows, three glides with the button held) kept 64.9 % and 58.6 % of frames within 20 ms in a
+  loaded nested instance, every long frame paced by a client and none by the compositor (render CPU p95 6.1 and 5.3 ms):
+  the neighbours stay live (macOS's live resize, each app redrawing at its own pace) and Windows' placeholders are not
+  built. The compositor's cost counts its render's CPU and, before the render, the time the event loop was held (the
+  frame probe's beats, every 1 ms) or ran the plugin's own work: a stall there shows only as a late render, which read as a
+  client's before (integrator review of a6d04df). Measured so, the drag still had compositor-caused long frames at idle (30
+  and 43 in two runs), with the plugin's own work at 0.1-0.2 ms per frame: the loop is held 10-18 ms before a late render
+  by Hyprland's own handling of the resize. The gate (D34 final, integrator, 2026-10-29): the shared edge's P3 passes when
+  (a) the plugin's own work is at most 1 ms in every frame of the drag and (b) its compositor-caused long frames per second
+  per resized window are at most 1.25 times those of Hyprland's own resize_on_border drag of one of the same windows with
+  the same glide (presented-frames.sh `edge-baseline`); frame-attribution.py `--gate --baseline --drag-mark`, the drag's
+  resized windows read from its own frame-probe mark (`edge-drag:F/E` at each drag's end: F of the edge's E windows
+  followed; a drag some did not follow fails), which fails without the loop's or the plugin's records, without the
+  baseline, when the scenario never ran and when the animation holds no frame; the share on time is information. Nested pass of 3d56d60: the plugin's work at most 0.71 ms in a frame, 5.45/s per resized window
+  against Hyprland's own 5.5/s: met; Windows' placeholders are dropped.
 - **TL31** Layout bar at the top of the screen during a drag (T1b): not built; the menu bar keeps its macOS role (fill,
   TL21). Kept here so a later change of mind starts from the design: the plugin would hit-test zones the shell publishes
   (as the Stages strip does) and post the hovered zone.
@@ -369,6 +437,17 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`windows.titlebarDoubleClick` = `fill`). Each key is pushed with `config(...)` once the plugin advertises its feature;
   without the plugin the rows show the existing footnote and do nothing. The settings contract (ADR-0020) and the schema
   in `config/schema/` gain the keys in the same commit.
+  As built (step 5, ADR-0036 D36-D39): the Windows group lists the seven switches in this order, then "Rebuild the
+  compositor extension after Hyprland updates", under the footnote "Needs the Grassfield compositor extension."; the Alt
+  row names the key as the menus do (`keyboard.shortcutStyle`: "Hold ⌥ key…" in the macOS style); the double-click
+  choice is Fill, Zoom, Minimize, No Action (macOS 27's names). The shell pushes `tilingEdges`, `tilingMenuBar`, `tilingOptionDrag` and
+  `tilingMargins` with `window-tiling`, `tilingLayouts` with `tile-hover`, `tilingSuggestions` with `tiling-layouts`, and
+  `titlebarDoubleClick` = `fill` only with `tiling-arrange` (`zoom` in its place otherwise, D36). Layouts off: the plugin
+  posts no hover `enter` and the shell ignores one; `tile_popover` (Super+Ctrl+L, the Window menu) still opens the
+  popover with its Layouts section. Suggestions off: the plugin keeps no suggestion after an arrangement and drops the
+  pending one (it does not come back when the switch turns on), the shell asks for none, and one shown closes. Tile groups off: the shell's `groupForward` brings the window
+  alone; the plugin gets no key (it raises a group only on `group_front`), groups still form, and Show Tile Group still
+  brings the group (D37).
 
 ### Full Screen tile (step 6, T4)
 - **TL33** Full Screen › Left of Screen / Right of Screen: a new Desktop right after the current one, the menu bar and the
@@ -381,7 +460,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (popup kind `tiling`, through `Popups.open`), the suggestions overlay, the Layouts section, the shared-edge handle and
   the new `windows` IPC functions (`arrange`, `tilePopover`, `nextOutput`, beside today's `tile`) ask
   `SessionState.refuses(...)` first; when the lock engages, an open popover or suggestions overlay closes. The plugin's
-  hover event changes nothing by itself (the shell refuses the popover). `docs/specs/security.md` "Nothing opens over the
+  hover event changes nothing by itself (the shell refuses the popover). The shared-edge handle (plugin, step 4c) takes
+  nothing while the session is locked, a foreign Exclusive layer or a layer covers the point, or any window, titlebar or
+  popup other than the edge's own is in front of it (the frontmost window under the pointer gets the click, TL30); the
+  lock ends a drag the moment it engages (its cursor goes too; its release stays cancelled), and no input after the lock
+  moves a window. `docs/specs/security.md` "Nothing opens over the
   lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
   `tests/security/lock_surfaces.sh` when it is a surface. Plugin side (step 1, defence in depth): the verbs `tile` and
   `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves).
@@ -477,8 +560,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **Owner (L2):** trackpad drags, a HiDPI or portrait output, the real Dock and switcher.
 
 ## Performance (gates affected)
-- P3: popover and suggestions open within one frame budget; the shared-edge drag keeps ≥ 95 % of frames under 16.7 ms
-  with two live neighbours; the neighbours are configured at most once per output refresh.
+- P3: popover and suggestions open within one frame budget; the shared-edge drag with two live neighbours costs the plugin
+  at most 1 ms per frame and causes, per resized window, no more compositor long frames per second than 1.25 times
+  Hyprland's own resize of one window (ADR-0036 D34 final: its share of frames on time follows the apps' redraw and is
+  reported as information); the neighbours are configured at most once per output refresh.
 - C1: the soak gains tiling actions (arrange, drag to edges, popover open and close, shared-edge drags).
 
 ## Accessibility

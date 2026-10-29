@@ -93,6 +93,15 @@ namespace gf::tiler {
     // unknown output, the window's own output or a window that cannot move (reason "invalid").
     void moveToRequest(std::string_view address, std::string_view output);
 
+    // hl.plugin.grassfield.group_front(address) (TL29): the members of the window's tile group on screen on its Desktop come
+    // forward, in their stacking order (core groupRaiseOrder), above every other window, the window itself last when it is
+    // on screen, zoomed or full screen included (the shell's activation may reach the compositor first, and changes nothing
+    // for the focused window). A minimized or hidden window's restore raises it, before or after this request. Nothing for a
+    // window without a group. Untrusted: the address is compared with the live
+    // windows. Refused while locked (reason "locked") and for an unknown window (reason "invalid"); the tile records do not
+    // change (no notice otherwise).
+    void groupFrontRequest(std::string_view address);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);
@@ -116,6 +125,10 @@ namespace gf::tiler {
     // The margins setting changed: every tiled window is placed again from its zone (TL2).
     void marginsChanged();
 
+    // "Suggest windows to fill the rest of a layout" turned off (TL32): the suggestion pending in the state reply ends; it
+    // never comes back when the switch turns on again (integrator review of 1c08d6b).
+    void suggestionsOff();
+
     // The reply of `hyprctl grassfield-tiling` (core stateJson). It moves no window: it only drops the records of closed
     // windows and of windows moved by other means.
     std::string stateReply();
@@ -123,14 +136,23 @@ namespace gf::tiler {
     // From the plugin's pointer motion listener, before Hyprland applies the motion: one of Hyprland's resizes of a tiled
     // window began (Resizing); one of Hyprland's moves passed the drag threshold on a tiled window (TL16: Moving, its drag
     // ended and begun again from its size from before under the pointer) or goes on (dragMotion: the preview); no drag any
-    // more ends a resize or a preview whose release was not seen.
+    // more ends a resize or a preview whose release was not seen. TL30: a drag of a shared edge's handle follows the
+    // pointer; with no drag at all, the pointer resting on a handle shows its cursor.
     void beforePointerMotion();
 
     // From the plugin's first pointer button listener, after the top clamp's, before Hyprland handles the button: a press
     // records the grip; the release that ends one of Hyprland's moves tiles the place shown (TL16, the top clamp left out),
     // or makes a Moving window Free, once Hyprland ended the drag; the release that ends a resize ends Resizing then; two
     // left clicks on a window's resize border (Hyprland's border or the app's own, its resize begun and ended without
-    // moving) extend its sides (TL20, with Alt the opposite ones) once Hyprland ended the second one.
-    void beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs);
+    // moving) extend its sides (TL20, with Alt the opposite ones) once Hyprland ended the second one. TL30: a plain left press
+    // on a shared edge's handle (two windows of a tile group facing each other across the margin, the middle
+    // tiling.handleLength of what they share; not under the lock, a foreign Exclusive layer or a layer) begins the plugin's
+    // drag of that edge: every window along it is Resizing and follows the pointer, within every window's limits; the release
+    // ends it (Tiled with the new boxes, one `resized` notice). True for that press and its release: the caller cancels them
+    // on the bus (Hyprland's held-button state is left as it was, ADR-0015 P6), and no other listener acts on them.
+    bool beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs);
+
+    // TL30: a drag of a shared edge's handle is in progress (DesktopFocus leaves its press alone).
+    bool edgeOwnsPointer();
 
 } // namespace gf::tiler

@@ -153,18 +153,37 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   window (ADR-0006 amendment 2026-10-24, D-5, macOS model: a static screen owes no frames): from the first frame after the
   request to it + the animation's token duration + one refresh period, or to the Overview's end mark when later
   (`tests/visual/animation-windows.py`); the tail after it is reported, never judged. `tests/visual/frame-attribution.py`
-  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (its frame took more than 0.8
-  period of CPU), `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw
-  until then), `other`.
+  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (the compositor's own time for its
+  frame was over 0.8 period: the render's CPU plus, before that render, the time the event loop was held or ran the
+  plugin's own work, outside any render), `client` (the render began more than 0.5 period after the previous presentation,
+  the loop free: nothing new to draw until then), `other`. The loop's records (integrator review of a6d04df: a main-loop
+  stall before a render shows only as a late render): while recording, an event-loop timer beats every 1 ms
+  (`frames::kBeatUs`: a hold is recorded at most one beat short, so a 12 ms hold before a 3 ms render still reads over the
+  budget); a beat more than 1 ms late (`kStallUs`, core `stallOf`) records a stall from its due time to the beat, with the CPU time Hyprland's main thread used since the previous beat (`CLOCK_THREAD_CPUTIME_ID`: little CPU is
+  the thread waiting, descheduled under load or blocked; about the stall's length is the compositor working); the plugin
+  records its own work outside a render (the shared edge's drag steps, `frameProbe::work`); both 1024 spans, dropped with
+  the other records. The reply gains `"loop":{"beats":N,"stalls":[[beginUs,lengthUs,cpuUs],...],
+  "work":[[beginUs,lengthUs],...]}` after `marks`; `--gate` fails without beats or without the plugin's work, and with
+  `--baseline` compares the gated scenario's compositor-caused long frames per second, per window it resizes (the drag's
+  own count: the plugin marks each shared-edge drag's end `edge-drag:F/E`, F of the edge's E windows followed it;
+  `--drag-mark`, every drag F = E; `--resizes` for the baseline), with the baseline's (tiling.md TL30: the shared edge against Hyprland's own resize, at most 1.25 times per
+  resized window, and at most 1 ms of the plugin's work per frame). The
+  attribution lists each
+  compositor-caused frame with its render's CPU and the loop's held time before it, split into stalls (with the main
+  thread's CPU share in them) and the plugin's work, and sums them per scenario (integrator nested pass of ce82fd3).
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
 - **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
   state always matches the device and the click after any titlebar gesture reaches the window under the
-  pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
-  are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
-  was. Such a press is taken only when no device holds that button already (the bus event names no device). Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  pointer. Two exceptions, P6 (the revealed titlebar of a full-screen window) and the shared edge's handle between two tiled
+  windows of a group (docs/specs/tiling.md TL30; only where Hyprland's pointer-focus hit test finds no window in front of
+  it but the edge's own, no popup: the frontmost window under the pointer gets the click): a press on it and the release
+  of that press are cancelled together;
+  Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it was. Such a press is
+  taken only when no device holds a button already (the bus event names no device), and a release still owed when the
+  button is pressed again was lost and is forgotten. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.
@@ -195,7 +214,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
   interrupting a restore starts from the restore's current box, a funnel one (either way) from the shape on screen.
 - **FR16** `hl.plugin.grassfield.config(key, value)`: allowlist `titlebarDoubleClick` = `zoom` | `minimize` |
-  `none`, `appearance` = `dark` | `light` (FR53), `stagesEnabled` (FR33), `minimizeEffect` = `funnel` | `shrink` | `fade`
+  `fill` | `none` (`fill`: tiling.md TL32), `appearance` = `dark` | `light` (FR53), `stagesEnabled` (FR33), `minimizeEffect` = `funnel` | `shrink` | `fade`
   (FR45) and the tiling keys (FR50) (exact strings); anything
   else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell pushes the settings after each
   capabilities event and whenever Settings change.
@@ -609,12 +628,16 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `hl.plugin.grassfield.move_to(address, output)` moves a window onto another output (a tiled one into the same tile
   there; refused while locked). Untrusted: fixed-size strings, the address
   compared with live windows, the place from a fixed list, the output name checked and compared with the live outputs.
-- **FR50** Settings (macOS Desktop & Dock > Windows, all on by default): `windows.tilingEdges` ("Drag windows to screen
-  edges to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"), `windows.tilingMargins` ("Tiled
-  windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",
-  "true" | "false")` once the plugin advertises `window-tiling`. Since tiling step 2 the plugin also accepts
-  `tilingOptionDrag` (on at load; "Hold Alt key while dragging windows to tile", its Settings switch comes in tiling step 5). Without the plugin (C2) the shell shows no tiling items
-  and the keys do nothing; drags move windows as Hyprland does.
+- **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag
+  windows to left or right edge of screen to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"),
+  `windows.tilingOptionDrag` ("Hold Alt key while dragging windows to tile"), `windows.tilingMargins` ("Tiled windows have
+  margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingOptionDrag" |
+  "tilingMargins", "true" | "false")` once the plugin advertises `window-tiling`; `windows.tilingLayouts` ("Show layouts
+  when hovering over the green button": off, the hover tracker posts no `enter`; `tile_popover` still posts `open`) with
+  `tile-hover`, and `windows.tilingSuggestions` ("Suggest windows to fill the rest of a layout": off, an arrangement keeps
+  no suggestion and the pending one is dropped) with `tiling-layouts`; core `tiling::switchOf` maps the keys.
+  `windows.tilingGroups` ("Bring tile groups forward together") is the shell's alone (ADR-0036 D38). Without the plugin
+  (C2) the shell shows no tiling items and the keys do nothing; drags move windows as Hyprland does.
 - **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
   Chromium dragged up until its tab strip was under the menu bar could not be grabbed again). For floating windows (not
   full screen or zoomed), on every output, with the plugin's titlebar (a 32 px band above the surface) or the app's own
@@ -981,13 +1004,19 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - APIs used (all read from the 0.56.2 headers): `HyprlandAPI::{addWindowDecoration, removeWindowDecoration,
   addLuaFunction, removeLuaFunction, registerHyprCtlCommand, unregisterHyprCtlCommand, addNotification,
   getHyprlandVersion}`, `Event::bus()->m_events.{window.open, window.floating, window.fullscreen,
-  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled; the deprecated
+  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled but for FR13's two exceptions; the deprecated
   `registerCallbackDynamic` is not used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`,
   `g_pDecorationPositioner`, `g_pHyprRenderer->addPassElement` with `CRectPassElement` /
   `CTexPassElement`, `renderText`, `g_layoutManager->setTargetGeom` (move),
   `Desktop::focusState()->fullWindowFocus`, `Fullscreen::controller()->setFullscreenMode`,
   `Config::Actions::{closeWindow, alterZOrder}`, `Event::bus()->m_events.input.mouse.move`,
   `g_pInputManager->{hasHeldButtons(), m_pointers, getMouseCoordsInternal()}`,
+  `Pointer::Cursor::overrideController->{setOverride, unsetOverride}` (special-action group: the shared edge's cursor,
+  tiling.md TL30), `Desktop::viewState()->hitTest().windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING)` and
+  `CWindow::hasPopupAt` of every visible window, `CWindow::isX11OverrideRedirect` and `getWindowMainSurfaceBox` (what is in
+  front of the shared edge's handle: a popup, an X11 menu), `CWorkspace::isVisible`, `g_pSessionLockManager->m_events.lock` (the lock
+  ends its drag), `MIN_WINDOW_SIZE` (macros.hpp: the tiling minimum's floor), `CEventLoopTimer` (the frame probe's loop
+  beats, FR54),
   `CWindow::{m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration,
   forceRecalcFor}`, `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
   Minimize (M2, also checked in the exported symbol table): `Event::bus()->m_events.{render.preChecks,
@@ -1412,7 +1441,7 @@ when they run, P8 is re-evaluated there.
 | P6 | the plugin titlebar's green button with Alt held: true full screen (`FSMODE_FULLSCREEN`), glyph = full-screen arrows while Alt is held over the group (REQ-ADR0002-6, plugin part). The way back (review 2026-10-23: no pointer way out of full screen): the pointer within 2 px of the monitor's top edge reveals the window's titlebar, square, over its content, below the shell's menu bar (`grassfield-menubar` layer height on that monitor, at most 64 px; 0 without it); it stays while the pointer is within 8 px below it or a press on it is held, and goes with the full screen. Its zoom light (arrows) leaves full screen, close closes, minimize is grey and inert (macOS). Hyprland 0.56.2 draws no decoration on a full-screen window and places decoration input above the window, outside the monitor, so the revealed bar is drawn at `RENDER_POST_WINDOWS` (under the overlay layers) and its presses are taken on the bus: a press inside it and the release of that press are cancelled together. `CInputManager::onMouseButton` returns right after the bus when an event is cancelled, before it records the button as held or released (read from the binary: the `cancelled` test follows `emitInternal`, the held-button list is touched after it), so the pair leaves Hyprland's held-button state unchanged; a release still owed when the same button is pressed elsewhere was lost and is forgotten (never cancel a release Hyprland expects). The bus event names no device and Hyprland's held buttons are per button, so a press is taken only when no device holds that button already (another device's release of the same button can then never be mistaken for the bar's). What Hyprland holds is known only once the plugin has seen it hold nothing (`core CHeldButtons`): until then no press is taken (a button held when the plugin loaded would otherwise delay its device's release behind a bar press). While the session is locked no light acts, an armed one included, and nothing is logged. Each press over the revealed bar logs one INFO line, with no position: taken (and which light), or left to Hyprland and why; each release of an armed light whether it acted. Never revealed while the session is locked, while the client confines or locks the pointer (`CInputManager::isConstrained`: a game that scrolls at the screen's edge must not meet a working close light), during a move or resize (`CDragStateController::mode`) or a drag and drop, or under a special workspace shown on the monitor; never taking a press under a layer popup or an Overlay layer (review of part B, 2026-10-24). The cheap test (the pointer at the top edge) runs first on every motion. Logic pure (`core/ClientChrome.*`: `nextRevealed`, `lightAvailableInFullscreen`, `CRevealPresses`). Not covered: direct scanout of a full-screen window (no composition, so no bar) and the menu bar's own slide (the bar sits at the menu bar's height even while the menu bar is away) | `ClientChromeZoomLight.*`, `ClientChromeFullscreenTitlebar.*` GTests; `zoom_restore.sh` cases 6 and 7 (7: a click where the light would be, coming from below, stays the window's; top edge then the light leaves full screen); `fullscreen_reveal.sh` (a mouse-reporting foot gets neither the press nor the release of a click on the bar; minimize inert; an Overlay layer over the lights keeps its press; nothing while locked; the way out) |
 | P7 | the light constants come from `window.*` of `ui/tokens/tokens.json` (generated, or a GTest comparing `Theme.hpp` with it) | GTest |
 | P8 | minimize capability (GF-056 part 2): GTK4 greys a minimize button the compositor does not offer, and Hyprland 0.56.2 sends every toplevel `wm_capabilities` fullscreen and maximize, once, from `CXDGToplevelResource`'s constructor (read from the binary). A tagged window, while the P5 bridge runs, is sent `wm_capabilities` again with minimize added (`core wmCapabilities`: fullscreen, maximize, minimize; the protocol's enum), then Hyprland's own full configure (`CXDGToplevelResource::setSize` with `m_pendingApply.size`: an `xdg_toplevel.configure` with its current states, then the `xdg_surface.configure`; no early return in the binary). A bare `xdg_surface.configure` is not enough: GTK4 then applied an empty state set (no longer activated or tiled). The toplevel's `wl_resource` is private: found among its client's resources (`wl_client_for_each_resource`, class `xdg_toplevel`, `CXDGToplevelResource::fromResource`); a resource is read with `fromResource` only when it is an `xdg_toplevel` of v5 or later that still has its user data (`core capabilityCandidate`: `fromResource` reads the user data without a check, and it is null while the resource is destroyed). Nothing below xdg_toplevel v5: a window whose resource is not found is remembered as unreachable and never walked again (`core needsTell`). Sent at map (`window.open`) and on `window.updateRules` only when the answer changes; on unload every window told minimize is told Hyprland's own capabilities again (C2: the button greys again), and so is a window told minimize when it unmaps (`window.close`; the event only, its next map carries it in a new configure sequence), so that a toolkit that hides a window and keeps its toplevel cannot keep a minimize button nothing answers after an unload. The click sends `set_minimized`, which P5 routes to the titlebar light's path | `ClientChromeCapabilities.*` GTests (the candidate test, told once, unreachable never again); `third_party_chrome.sh` (Nautilus's own minimize minimizes to the Dock tile and the tile restores it); nested by hand: unload and load with Nautilus open (WAYLAND_DEBUG `wm_capabilities` array[12] / array[8] / array[12], the button enabled / grey / enabled, the window stays active at its size) |
-| S1 (done) | `config/hypr/grassfield/windows.lua`: `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })` | `tests/shell/client_chrome_rules.sh`; `just check-config`; `client_chrome.sh` assertion 2 |
+| S1 (done) | `config/hypr/grassfield/windows.lua`: `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })` | `tests/shell/client_chrome_rules.sh`; `just check-config`; `client_chrome.sh` assertion 2 |
 | S1b (done, GF-056) | `gf-client-chrome-third-party`: the same tag on third-party apps whose own close, minimize and zoom work (Evince, Nautilus, Chromium's browser window, Obsidian; ADR-0015 amendment 2026-10-25: Hyprland 0.56.2 gives no usable per-window decoration signal; Nautilus's minimize needs P8), exempt from the maximize suppression (Evince's zoom request was suppressed untagged); the session's GTK button layout is `close,minimize,maximize:` (packaging/dconf) | `tests/shell/client_chrome_rules.sh`; `tests/shell/dconf_profile.sh`; `tests/compositor/third_party_chrome.sh` |
 | S2 (done) | `gf-no-maximize-event` matches every class but the S1 list, `gf-no-maximize-event-untagged` every window without an xdg tag: only an S1 window (a client-chrome one) is exempt (Q4: its zoom is honoured; another toolkit's tagged window is not, review 2026-10-23) | `client_chrome_rules.sh`; `client_chrome.sh` assertion 6 |
 | S3 (done) | windows of role `info`: `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12` (titlebar style, Q5) | `client_chrome_rules.sh`; `getprop rounding` |

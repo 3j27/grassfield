@@ -175,7 +175,8 @@ display. Offscreen, gtk3 exits 1 for lack of one, with or without the list.
 Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under
 `$XDG_RUNTIME_DIR`; Flatpak sandboxes cannot reach it). Classes: **action** = called by Grassfield's own bindings,
 gestures, screen corners or session helpers (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`,
-`packaging/bin`, `packaging/shims`, `packaging/session-bin`), available in a real session, never returns private state;
+`packaging/bin`, `packaging/shims`, `packaging/session-bin`) or by a Grassfield app through `apps/runmode.h`
+`shellIpcArgs()` (`apps/*/src`), available in a real session, never returns private state;
 **dev** = test hook, refused outside a dev session (the dev rule: the relative `RunMode.dev` call in the security modules,
 `Mode.dev` or `VisualFixtures.dev` elsewhere; void functions do nothing, others answer `refused`); **fixtures** = dev
 session AND `GRASSFIELD_VISUAL_FIXTURES=1` (`Mode.fixtures`, `VisualFixtures.active`). No function unlocks, runs a command, opens a URL, reads notification content or
@@ -220,6 +221,7 @@ does not check its gate.
 | controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
+| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
 | dock | pinned, dragstate, forceinterrupt, forcehold, noactivate, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, iconrect, stack, addfolder | fixtures | visual tests; `click` launches an app; `iconrect` reads the drawn icon rectangle; `noactivate` makes a Dock activation do nothing (click tests); `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
@@ -384,8 +386,14 @@ shell no longer relies on that alone:
   kind `tilingSuggest`, opened only through `Popups.open` by services/TilingSuggest, whose `show` asks
   `SessionState.refuses("tiling suggestions")` first, then refuses them over the polkit sheet, a full-attention surface and
   the Dock's keyboard mode (`TilingHover.refusedBy`) and in place of any popup but the tiling popover; they close with every
-  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Planned, not built
-  (step 4c): the shared-edge handle joins this list, and closes when the lock engages.
+  popup when the lock engages (and the suggestion is dropped: nothing reopens it after the unlock). Built in tiling step 4c
+  (TL30): the shared-edge handle draws no surface; the plugin shows its cursor and takes its press only when the session
+  is not locked, no foreign Exclusive layer or layer covers the point and no other window, titlebar or popup is in front
+  of it (Hyprland's own pointer-focus hit test: the frontmost window under the pointer gets the click), and a drag in
+  progress ends the moment the lock engages (Hyprland's session-lock event: the windows keep the boxes the motions before
+  the lock reached, the handle's cursor goes, the release it owes is still cancelled); no input after the lock moves a
+  window. The frame probe's loop records (the event loop's stalls and the plugin's own drag work, compositor.md FR54) follow
+  its other records: kept only while a measurement records, never while locked, dropped when the lock engages.
   Built in tiling step 1 (plugin, defence in depth behind the shell's refusal): `hl.plugin.grassfield.tile` and
   `hl.plugin.grassfield.arrange` refuse while the session is locked (`tiling` notice with `reason:"locked"`, no window
   moves). Tiling step 2 adds no IPC function: the drags it tiles (Hyprland's own move, an app's toolbar or
@@ -398,7 +406,17 @@ shell no longer relies on that alone:
   locked, while another Exclusive layer than the shell's popups is mapped or while a layer covers the light (integrator
   review of 4ead6fb). Tiling step 4a: `arrange` with `zone` and `with` (a zone of the Layouts section, a pick of the
   suggestions) is refused while locked like every `arrange`; the suggestion in the `hyprctl grassfield-tiling` reply is read
-  only by the shell after its own arrangement, and lists window addresses only (no titles, no contents).
+  only by the shell after its own arrangement, and lists window addresses only (no titles, no contents). Tiling step 4b
+  (TL29): `hl.plugin.grassfield.group_front` refuses while the session is locked (`tiling` notice with
+  `reason:"locked"`, no window is raised) and for an unknown window (`reason:"invalid"`); it only changes the stacking
+  order of windows already on screen (no move, no focus, no tile record). The shell sends it only through
+  `Compositor.groupForward`, which asks `SessionState.refuses` first, from entry points the lock already refuses (a Dock
+  click or tile, a Dock menu row, the app switcher, the Overview's choice, the menu bar's Window menu); a Dock menu row or
+  Show Tile Group runs once the menu's surface is gone (`Compositor.runPendingActivation`), which refuses too when the lock
+  engaged meanwhile (no Desktop switch, no restore: a restore is not refused while locked, GF-116; integrator review of
+  cd74af2). lock_surfaces.sh checks these refusals and that every entry point goes through them, each with a mutation.
+  No IPC function or popup kind is added; the groups the shell reads from the `hyprctl grassfield-tiling` reply are window
+  addresses and group numbers only.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
@@ -671,6 +689,10 @@ VERIFIED until run).
   call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
+Software Update's two actions (ADR-0033 c and "Step 3"), `org.grassfield.packages.set-channel` and
+`org.grassfield.packages.update-system` (Update Now, owner decision SU-M1: an administrator's password every time), are shown
+as polkit gives them: their own message and "Action: <id>"; the sheet reads nothing from them. The update helper's
+arguments (an operation id, migration names) say nothing a person needs to decide on.
 Grassfield Store's action (ADR-0037 b.1, SD2, SD17): for `org.grassfield.store.manage-packages` only, the sheet reads polkit's
 message, which polkitd expands with the helper's argument vector as pkexec reports it (`$(command_line)`), by one strict
 pattern (`AuthDialogModel.storeRequestOf`: the policy's English or French message, `/usr/lib/grassfield/grassfield-store-helper`,

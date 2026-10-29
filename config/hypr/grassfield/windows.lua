@@ -10,7 +10,7 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- suppression. Two rules make the negation of those matches (any class but Grassfield's and the third-party list below;
 -- or no xdg tag and not in that list) without reading the tag itself: the tag is a dynamic effect, the suppression a
 -- static one read at map. tests/shell/client_chrome_rules.sh checks that both negations are built from the two lists.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store)|chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)|chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
 hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
 
 -- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
@@ -19,7 +19,7 @@ hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "nega
 -- class list is the apps that set a tag; KIO and widget dialogs set none and keep the plugin titlebar. The plugin and the
 -- shell read the same tag name: keep it in step with shell/overview/ClientChrome.js. Never `decorate = false`: it also
 -- drops Hyprland's border and shadow.
-hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
+hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
 
 -- Third-party apps that draw their own window controls (GF-056; ADR-0015 amendment 2026-10-25). macOS: a window has one
 -- set of traffic lights, close, minimize, zoom, top-left; an app that draws its own title bar gets no second bar from the
@@ -38,6 +38,11 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- buttons of the GTK button layout, so a user layout without minimize or zoom leaves them a partial set (none without
 -- any button).
 hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
+
+-- The Open and Save panels (grassfield-portal, ADR-0035 D-4) draw a sheet's frame and no lights; a panel takes the Wayland app
+-- id of the application it belongs to (its Dock tile, its menu bar), so its xdg tag alone says it is one: no plugin
+-- titlebar on it.
+hl.window_rule({ name = "gf-client-chrome-panel", match = { xdg_tag = "^file-panel$" }, tag = "+grassfield-client-chrome" })
 
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"). macOS 27 has one radius for every window
 -- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 20, the global decoration.rounding (looknfeel.lua).

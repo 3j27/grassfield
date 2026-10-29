@@ -57,6 +57,7 @@ namespace gf {
         bool                               luaArrangeRegistered       = false;
         bool                               luaTilePopoverRegistered   = false;
         bool                               luaMoveToRegistered        = false;
+        bool                               luaGroupFrontRegistered    = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;
@@ -64,6 +65,11 @@ namespace gf {
         // defaults, all on.
         tiling::DragOptions tilingDrag;
         bool                tilingMargins = true;
+        // "Show layouts when hovering over the green button" (tilingLayouts): off, the hover tracker posts no "enter";
+        // "Suggest windows to fill the rest of a layout" (tilingSuggestions): off, an arrangement keeps no suggestion and the
+        // pending one ends (TL32).
+        bool tilingLayouts     = true;
+        bool tilingSuggestions = true;
         // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.
         theme::Appearance appearance = theme::kDefaultAppearance;
 

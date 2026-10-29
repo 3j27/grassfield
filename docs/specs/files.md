@@ -38,7 +38,11 @@ selection").
 1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's widgets library expects one; its dialogs are Grassfield sheets, ADR-0035 D-12 a),
    `setDesktopFileName("org.grassfield.Files")`, `grassfield-files [locations...]` opens one window per location
    (default: home). QML from `GRASSFIELD_FILES_QML` or the baked-in directory (installed
-   `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`.
+   `/usr/share/grassfield/files/qml`). Image providers `image://icon/<theme name>` and `image://thumbnail/<id>`. Everything
+   but `main.cpp` is the Files library (`apps/files/files-core.cmake`, a static library) that `grassfield-portal` links too:
+   its Open and Save panels (`FilePanels.qml`, `FilePanel.qml`; ADR-0035 D-4, `docs/specs/system-dialogs.md` section 1) are
+   Files' browser, with a tab that browses for a panel (`BrowserTab.chooser`: no file operation, items the panel cannot take
+   dimmed through `FolderModel.chooser`).
 2. F2 Listing: `FolderModel` = KIO `KDirModel` (+`KDirLister`) behind a `QSortFilterProxyModel` with flat QML roles
    (name, url, iconName, isDir, size(Text), modified(Text), kind, thumbnail, largeThumbnail, selected, hidden, canPreview,
    emblem, tags, tagColors, folderColor, folderGlyph, group).
@@ -55,7 +59,8 @@ selection").
    Show Hidden Files and the preview pane of each view stay global (QSettings `Grassfield/Files`); each folder keeps its
    view, sort and grouping (F-3). Tag search results (F16) in the column mode show as a list.
 5. F5 Sidebar: Favorites = Home, Applications, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists
-   (Applications always; Go > Applications, Ctrl+Shift+A); Tags (F16);
+   (Applications always; Go > Applications, Ctrl+Shift+A; whether a folder exists is asked off the GUI thread, and one on a
+   mount that does not answer stays listed, dimmed, until it answers, ADR-0035 4b-18); Tags (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
    (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:

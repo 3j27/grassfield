@@ -73,6 +73,8 @@ check-shell:
     python3 -I tests/ci/import_graph.py
     python3 -I tests/ci/run_mode.py --selftest
     python3 -I tests/ci/run_mode.py
+    python3 -I tests/ci/socket_errors.py --selftest
+    python3 -I tests/ci/socket_errors.py
 
 # The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
 check-shaders:

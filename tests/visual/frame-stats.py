@@ -1,6 +1,6 @@
 """Frame statistics of the P3 probe (tests/visual/overview-frames.sh, tests/tools/framepulse).
 
-Usage: python3 -I frame-stats.py FRAMES EVENTS HZ [WINDOW_MS] [TOLERANCE]
+Usage: python3 -I frame-stats.py FRAMES EVENTS HZ [WINDOW_MS] [TOLERANCE] [--info=PREFIX ...]
   FRAMES  lines "epoch_us interval_us" (framepulse: one per frame callback of a surface that redraws every frame)
   EVENTS  lines "<label> <epoch_ns>" (the moment an open or a close was requested), or "<label> <epoch_ns> <window_ms> ..."
           with the event's own window (tests/visual/animation-windows.py: from the animation's first frame to its end)
@@ -10,6 +10,10 @@ an event's own window wins):
 count, median, 95th percentile and worst interval, and the share of frames whose interval is within TOLERANCE x the refresh
 period (default 1.2: 20 ms at 60 Hz; a dropped frame shows as two periods). Exit status 1 when the share is below 95 %
 (gate P3: at least 95 % of frames on time) in any phase, 2 on unusable input.
+--info=PREFIX: the phases whose label starts with PREFIX are printed as INFO, never judged here, and left out of "all":
+their gate is another one (the shared edge's drag, tiling.md TL30 and ADR-0036 D34 as amended: no long frame the
+compositor causes, tests/visual/frame-attribution.py --gate; its share on time follows each app's own redraw). Such a
+phase with no frame in its window still fails: nothing was measured.
 """
 import sys
 
@@ -76,6 +80,8 @@ def stats(intervals, period_us, tolerance):
 
 
 def main(argv):
+    info = tuple(a.split("=", 1)[1] for a in argv[1:] if a.startswith("--info="))
+    argv = [a for a in argv if not a.startswith("--info=")]
     if len(argv) < 4:
         print(__doc__)
         return 2
@@ -89,14 +95,16 @@ def main(argv):
         return 2
     period = 1e6 / hz
     status = 0
+    judged = [e for e in events if not e[0].startswith(info)] if info else events
     for label in sorted({e[0] for e in events}) + [None]:
-        s = stats(phase(frames, events, label, window_us), period, tolerance)
+        informative = label is not None and bool(info) and label.startswith(info)
+        s = stats(phase(frames, events if label is not None else judged, label, window_us), period, tolerance)
         name = label or "all"
         if s is None:
             print("FAIL %s: no frame arrived in the window" % name)
             status = 1
             continue
-        verdict = "PASS" if s["share"] >= 0.95 else "FAIL"
+        verdict = "INFO" if informative else ("PASS" if s["share"] >= 0.95 else "FAIL")
         if verdict == "FAIL":
             status = 1
         print("%s %s: %d frames, median %.1f ms, p95 %.1f ms, worst %.1f ms, %.1f %% within %.1f ms (refresh %.1f Hz)" % (

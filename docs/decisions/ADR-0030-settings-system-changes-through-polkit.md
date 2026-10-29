@@ -316,3 +316,24 @@ action at a time, up to 120 s for the dialog, a refusal or a cancel shown on one
 - writes only pacman's own files (through pacman) and its status files under `/run/grassfield-store/`.
 The AUR and Omarchy's recipes do not go through it (they run in Omarchy's terminal with sudo, ADR-0037 b.2). It and its policy
 need the security reviewer's (opus) PASS before they merge. Everything else in this ADR stands.
+
+## Amendment (ADR-0033 "Step 3", Software Update's Update Now, 2026-10-29, Proposed)
+Update Now is a third exception to "No Grassfield code runs as root", by the owner's decision SU-M1 (2026-10-29, confirmed by
+the owner): Omarchy's system update runs without a terminal through a Grassfield root helper:
+- `/usr/lib/grassfield/grassfield-update-helper`, run by `pkexec` from the user's runner `grassfield-update-run`, which
+  Settings starts detached (one exact vector, nothing in a dev session); on a system run by systemd the helper continues as
+  the transient system service `grassfield-update.service`, so neither Settings nor the session can stop pacman;
+- its own polkit action `org.grassfield.packages.update-system` (`auth_admin` for the active session, never kept; `no`
+  otherwise), in `org.grassfield.packages.policy` beside the channel's.
+The helper:
+- takes only `run <op-id> [<migration>...]` (a 32-digit operation id used once, up to 64 names of `[0-9]{1,20}.sh`);
+- reads no environment variable (it runs itself again under `env -i`; not even `PKEXEC_UID`);
+- runs no Omarchy script: only pacman, `pacman-key --list-keys`, `paccache`, snapper, bsdtar (reading two package files as
+  data), `systemd-inhibit` and `systemd-run`, with the arguments of the Omarchy scripts they replace (pinned in
+  `docs/upstream/omarchy.lock`);
+- changes nothing before its checks pass (a plan from a copy of the sync databases, the compatibility check, the steps that
+  need a person), then takes a snapshot, makes the checked databases the system's and runs `pacman -Su --noconfirm`
+  (ADR-0033 s3.2);
+- writes only pacman's own files (through pacman, and the sync databases it checked), snapper's snapshots, and its status
+  files under `/run/grassfield-update/`.
+It, its runner and its policy need the security reviewer's (opus) PASS before they merge. Everything else in this ADR stands.

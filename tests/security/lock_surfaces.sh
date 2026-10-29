@@ -86,6 +86,7 @@ first_decision("shell/launchpad/AppsController.qml", "show", R)
 first_decision("shell/overview/Overview.qml", "show", R)
 first_decision("shell/notifications/Notifications.qml", "openWidgetGallery", R)
 first_decision("shell/dock/Dock.qml", "enterKeyboardMode", R)
+first_decision("shell/dock/Dock.qml", "reopen", R, lines=1)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -100,6 +101,36 @@ first_decision("shell/platform/Compositor.qml", "minimizeByAddress", R, text=com
 first_decision("shell/services/TilingHover.qml", "show", R)
 # Tiling step 4a: the suggestions that follow a layout or an arrangement open only through here.
 first_decision("shell/services/TilingSuggest.qml", "show", R)
+# Tiling step 4b (integrator review of cd74af2): a tile group comes forward only through Compositor.groupForward, which
+# refuses while locked; a menu's window row or Show Tile Group runs after the menu's surface is gone, and refuses then if
+# the lock engaged meanwhile (a restore is not refused while locked, GF-116).
+first_decision("shell/platform/Compositor.qml", "groupForward", R, text=compositor, lines=1)
+# Tiling step 5: Show Tile Group brings the group forward through groupFront whatever "Bring tile groups forward together"
+# says (groupForward's switch is not its gate); it refuses first too.
+first_decision("shell/platform/Compositor.qml", "groupFront", R, text=compositor, lines=1)
+first_decision("shell/platform/Compositor.qml", "runPendingActivation", R, text=compositor, lines=4)
+def calls(path, name, pattern, text=None):
+    body = function(text if text is not None else read(path), name) if name else (text if text is not None else read(path))
+    expect(f"{path}: {name or 'the file'} goes through {pattern}", body is not None and re.search(pattern, code(body)) is not None)
+# Only a window in a group of the last reply sends group_front (integrator NIT on PR #38).
+calls("shell/platform/Compositor.qml", "groupFront", r"WindowTiling\.membersOf\(TilingLink\.groups, address\)\.length === 0", compositor)
+calls("shell/platform/Compositor.qml", "activateWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
+calls("shell/platform/Compositor.qml", "unminimizeWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
+calls("shell/platform/Compositor.qml", "groupForward", r"return groupFront\(address\)", compositor)
+calls("shell/platform/Compositor.qml", "showTileGroup", r"groupFront\(step\.address\)", compositor)
+calls("shell/platform/Compositor.qml", "runPendingActivation", r"showTileGroup\(p\.toplevel, p\.members\)[\s\S]*activateWithGroup\(p\.toplevel\)", compositor)
+calls("shell/dock/Dock.qml", "", r"Compositor\.groupForward\(Compositor\.addressOf\(plan\[plan\.length - 1\]\)\)")
+calls("shell/dock/Dock.qml", "", r"Compositor\.unminimizeWithGroup\(item\.toplevel\)")
+calls("shell/switcher/Switcher.qml", "activateTarget", r"Compositor\.activateWithGroup\(main\)")
+calls("shell/menubar/AppMenus.qml", "", r"case \"window\":\s*FocusReturn\.skip\(\);\s*Compositor\.activateWithGroup\(item\.ref\)")
+calls("shell/overlay/DockMenu.qml", "", r"Compositor\.activateAfterLayer\(item\.ref, \"grassfield-overlay\"\)")
+calls("shell/overlay/DockMenu.qml", "", r"Compositor\.showTileGroupAfterLayer\(item\.ref, \"grassfield-overlay\", item\.members\)")
+calls("shell/overview/Overview.qml", "closeAnd", r"if \(target\.kind === \"window\" && !locked\)\s*Compositor\.groupForward\(target\.address\)")
+# The group forward follows the window's focus request, as from the other entry points (#38's first NIT; integrator review
+# of a6d04df: untested): no group_front before overview_focus in closeAnd.
+calls("shell/overview/Overview.qml", "closeAnd",
+      r"^(?:(?!Compositor\.groupForward)[\s\S])*Compositor\.overviewFocus\(target\)[\s\S]*Compositor\.groupForward\(target\.address\)")
+calls("shell/overview/Overview.qml", "", r"if \(restore && !locked\)\s*Compositor\.unminimizeWithGroup\(restore\)")
 first_decision("shell/switcher/Switcher.qml", "step", "if (locked)", lines=8)
 # Review of 1d2c856: the desktop's context menu, its attribution card and the widget menu (an Overlay layer with the
 # keyboard) also refuse and close.
@@ -485,7 +516,7 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
-  shell/services/TilingSuggest.qml; do
+  shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -500,6 +531,19 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows nextOutput")#false' \
   'shell/services/TilingHover.qml#SessionState.refuses("tiling popover")#false' \
   'shell/services/TilingSuggest.qml#SessionState.refuses("tiling suggestions")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("tile group forward")#false' \
+  'shell/platform/Compositor.qml#if (WindowTiling.membersOf(TilingLink.groups, address).length === 0)#if (false)' \
+  'shell/platform/Compositor.qml#function groupFront(address: string): string {\n        if (SessionState.refuses("tile group forward"))#function groupFront(address: string): string {\n        if (false)' \
+  'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \
+  'shell/overview/Overview.qml#if (target.kind === "window" && !locked)#if (target.kind === "window")' \
+  'shell/overview/Overview.qml#        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);\n        // A window chosen brings its tile group forward (TL29), sent after its focus request as from the other entry points.\n        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);#        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);\n        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);' \
+  'shell/overview/Overview.qml#if (restore && !locked)\n            Compositor.unminimizeWithGroup(restore);#if (restore)\n            Compositor.unminimizeWithGroup(restore);' \
+  'shell/switcher/Switcher.qml#Compositor.activateWithGroup(main)#Compositor.activate(main)' \
+  'shell/menubar/AppMenus.qml#Compositor.activateWithGroup(item.ref)#Compositor.activate(item.ref)' \
+  'shell/dock/Dock.qml#Compositor.unminimizeWithGroup(item.toplevel)#Compositor.unminimize(item.toplevel)' \
+  'shell/dock/Dock.qml#            Compositor.groupForward(Compositor.addressOf(plan[plan.length - 1]));#            ;' \
+  'shell/platform/Compositor.qml#        unminimize(toplevel);\n        groupForward(addressOf(toplevel));#        unminimize(toplevel);' \
+  'shell/overlay/DockMenu.qml#Compositor.showTileGroupAfterLayer(item.ref, "grassfield-overlay", item.members)#Compositor.activateAfterLayer(item.ref, "grassfield-overlay")' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows minimize request")#false' \
   'shell/services/Popups.qml#SessionState.refuses("popup " + popupKind)#false' \
   'shell/security/polkit/AuthAgent.qml#dialogModel.active && !SessionState.locked#dialogModel.active' \

@@ -428,7 +428,7 @@ namespace {
         const gf::events::Key key{.channel = gf::events::Channel::TileHover, .id = 0};
         if (change.leave)
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.leave, gf::tiling::HoverState::Leave));
-        if (change.enter && w)
+        if (change.enter && w && gf::state().tilingLayouts) // off (TL32): Super+Ctrl+L and the Window menu still open it
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.enter, gf::tiling::HoverState::Enter, gf::tiling::Rect{light.x, light.y, light.w, light.h},
                                                               gf::tiler::tileable(w)));
     }
@@ -1211,6 +1211,10 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         if (input.grab.dragging)
             updateMove(input.grab);
     });
+}
+
+bool CGrassfieldTitlebar::pointerCovered(const Vector2D& pos) {
+    return zoomLightsCover(pos) != gf::tiling::HoverCoverEffect::None;
 }
 
 void CGrassfieldTitlebar::onSessionLock(bool locked) {

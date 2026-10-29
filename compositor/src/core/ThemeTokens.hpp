@@ -121,6 +121,10 @@ namespace gf::theme::tokens {
     inline constexpr int kTilingSuggestTileWidth = 240;
     // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr double kTilingSuggestThumbAspect = 1.6;
+    // estimate until measured in nested against the owner's captures: the middle of the stretch two windows of a tile group share along an edge where a drag resizes every window along it (pt; outside it the edge resizes one window, TL30; parity rows M43 and W18) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
+    inline constexpr int kTilingHandleLength = 120;
+    // own value: the shared-edge handle is at least this wide across the edge (pt; the margin between tiled windows is 8; without margins the band takes half from each window, as Hyprland's border grab does, TL30) [ref: docs/specs/tiling.md § Functional requirements]
+    inline constexpr int kTilingHandleBand = 8;
     // Left & Right (macOS Arrange; also the halves of the Layouts section): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]
     inline constexpr int kTilingLayoutLeftRight[][4] = {{0, 0, 6, 12}, {6, 0, 6, 12}};
     // Right & Left (macOS Arrange): the zones in twelfths of the work area, [x, y, w, h], the first zone for the window that asks (ADR-0036 Layout catalogue) [ref: docs/specs/tiling.md § Functional requirements]

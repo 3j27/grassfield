@@ -111,6 +111,9 @@ Scope {
         // The Dock never takes the keyboard over the lock screen (GF-116).
         if (SessionState.refuses("dock keyboard"))
             return;
+        // Not on a Dock that is not revealed yet (invisible: it would take the keyboard for nothing).
+        if (!windows.instances.some(w => w.screenName === root.dockScreen && w.reveal))
+            return;
         keyboardScreen = dockScreen;
         keyboardMode = true;
         Qt.callLater(() => {
@@ -336,7 +339,7 @@ Scope {
             return;
         }
         if (item.kind === "minimized") {
-            Compositor.unminimize(item.toplevel);
+            Compositor.unminimizeWithGroup(item.toplevel); // its tile group comes forward with it (TL29)
             return;
         }
         if (item.kind === "folder") {
@@ -347,11 +350,18 @@ Scope {
             root.launchItem(item);
             return;
         }
-        // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
-        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows.
-        const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
+        root.bringForward(item.windows);
+    }
+
+    // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
+    // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows. The tile group
+    // of the window that ends focused comes forward with it (TL29).
+    function bringForward(windows: var): void {
+        const plan = Launch.activationPlan(windows.map(t => Compositor.windowInfo(t)));
         for (const top of plan)
             Compositor.activate(top);
+        if (plan.length > 0)
+            Compositor.groupForward(Compositor.addressOf(plan[plan.length - 1]));
     }
 
     // The newest items of every folder shown as a stack (StackWatch: one watcher per folder for the whole Dock, not one per
@@ -396,6 +406,52 @@ Scope {
     Component.onCompleted: {
         rebuild();
         latchStartScreen();
+        if (inputsFinal)
+            settle();
+    }
+
+    // Startup (Geometry.settledOn): the Dock windows stay unmapped until the settings, the apps model and the Dock's output
+    // are final, so the Dock is drawn once, at its place, and no layout animation plays for the first fill. Latched: it never
+    // goes back (a later change of position or size is the user's and animates as before).
+    property bool settled: false
+    readonly property bool inputsFinal: Geometry.settledOn({
+        settings: Settings.loaded,
+        apps: Apps.hiddenReady,
+        screens: screenNames,
+        start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint),
+        waited: waited
+    })
+    // The fallback timer ran out: the Dock no longer waits for the apps model or the focused output (the settings file it always does).
+    property bool waited: false
+    onInputsFinalChanged: {
+        if (inputsFinal)
+            settle();
+    }
+
+    function settle(): void {
+        if (settled)
+            return;
+        settleTimer.stop();
+        try {
+            // The fallback (no focused output ever reported): the Dock stays on the output it is on, whatever focus does later.
+            chosenScreen = Geometry.settleScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
+            rebuild();
+        } catch (e) {
+            console.warn("grassfield-shell: Dock first layout failed:", e);
+        } finally {
+            // Whatever happened, the Dock appears. Every window starts from the state it will rest in (hidden when it hides,
+            // shown otherwise): a machine that began shown would slide out in front of the user.
+            windows.instances.forEach(w => w.resetHide());
+            settled = true;
+        }
+    }
+
+    // Nothing waited for ever: a compositor without focus events, an account without desktop entries.
+    Timer {
+        id: settleTimer
+        interval: Tokens.dockSettleTimeout
+        running: !root.settled
+        onTriggered: root.waited = true
     }
 
     // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).
@@ -593,9 +649,23 @@ Scope {
     }
 
     // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold|forceinterrupt>. autohide, magnify, click
-    // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
+    // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert. `reopen`
+    // is no test hook: apps call it.
     IpcHandler {
         target: "dock"
+
+        // A running app launched again asks for its windows (macOS: launching a running app brings it forward, a minimized
+        // window back): what a click on its tile does (bringForward). Called by the app itself, `qs ipc -p <shell> call dock
+        // reopen <desktop id>` (apps/runmode.h shellIpcArgs), when its window is not on screen; xdg-activation alone
+        // switches to another Desktop but leaves a window on special:minimized (ADR-0038 AD34; Activity Monitor). An app
+        // the Dock has no window for is left alone; nothing while the session is locked.
+        function reopen(appId: string): void {
+            if (SessionState.refuses("dock reopen"))
+                return;
+            const windows = DockModel.windowsOf(root.items, appId);
+            if (windows.length > 0)
+                root.bringForward(windows);
+        }
 
         // The kept apps (JSON list) from the live settings: the drag stress test asserts it never changes.
         function pinned(): string {
@@ -832,7 +902,7 @@ Scope {
             UsableProbe {
                 kind: "dock"
                 screenName: win.modelData ? win.modelData.name : ""
-                active: win.visible
+                active: win.reveal
             }
 
             // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
@@ -1051,7 +1121,8 @@ Scope {
             // recents section instead of jumping), new tiles fade in. Skipped with Reduce Motion and while a tile is dragged.
             function playLayout(): void {
                 holdLayout = false;
-                if (Appearance.reduceMotion || dragFrom >= 0)
+                // The first fill is not a change: nothing glides or fades in before the Dock is settled.
+                if (!reveal || Appearance.reduceMotion || dragFrom >= 0)
                     return;
                 tiles.forceLayout();
                 const after = tileXs();
@@ -1244,6 +1315,25 @@ Scope {
             }
 
             screen: modelData
+            // Mapped at once, invisible: its first scene-graph pass and surface mapping run beside the settings read. Until
+            // `reveal` nothing of it is drawn (content at opacity 0, no blur), takes input (empty mask) or reserves room
+            // (exclusive zone 0); at `reveal` all of that switches in one frame.
+            // Revealed once the first layout is final (root.settled) and the surface has the size of the settled edge (`placed`:
+            // the compositor answers an anchor change with a new size a frame or two later); the timer lets go of `placed`.
+            readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth)
+            property bool placedGivenUp: false
+            readonly property bool revealWanted: root.settled && (placed || placedGivenUp)
+            // Latched: a later change of the Dock's edge (Settings) re-places the surface but never hides the Dock.
+            property bool reveal: false
+            onRevealWantedChanged: {
+                if (revealWanted)
+                    reveal = true;
+            }
+            Timer {
+                interval: Tokens.dockSettleTimeout
+                running: root.settled && !win.reveal && !win.placedGivenUp
+                onTriggered: win.placedGivenUp = true
+            }
             anchors {
                 bottom: true
                 left: win.edge !== "right"
@@ -1255,7 +1345,7 @@ Scope {
             implicitWidth: vertical ? depth : 0
             implicitHeight: vertical ? 0 : depth
             // Only the Dock's output reserves room, and not while auto-hide is on.
-            exclusiveZone: isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
+            exclusiveZone: reveal && isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
@@ -1263,11 +1353,19 @@ Scope {
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.
             // qmllint disable missing-type
-            mask: Region {
+            mask: win.reveal ? hitMask : emptyMask
+            BackgroundEffect.blurRegion: win.reveal && shelf.blurActive ? blurRegion : null
+            // qmllint enable missing-type
+
+            Region {
+                id: hitMask
                 item: hitItem
             }
-            BackgroundEffect.blurRegion: shelf.blurActive ? blurRegion : null
-            // qmllint enable missing-type
+
+            // Nothing takes input before the reveal (an empty region).
+            Region {
+                id: emptyMask
+            }
 
             Region {
                 id: blurRegion
@@ -1326,10 +1424,17 @@ Scope {
             property string screenName: ""
             Component.onCompleted: {
                 screenName = win.modelData.name;
+                if (revealWanted)
+                    reveal = true;
                 Compositor.registerDock(screenName, win);
                 // An output that does not have the Dock starts with it slid out of sight.
                 if (!isDockScreen)
-                    hideMachine = {state: "hidden", visible: 0, timer: 0};
+                    hideMachine = AutoHide.initial(true);
+            }
+
+            // At the first settled layout: the machine starts where it will rest (AutoHide.initial).
+            function resetHide(): void {
+                hideMachine = AutoHide.initial(autohide);
             }
             Component.onDestruction: Compositor.unregisterDock(screenName, win)
 
@@ -1372,6 +1477,8 @@ Scope {
             Item {
                 id: area
                 anchors.fill: parent
+                // Nothing is drawn before the reveal; at it the Dock appears whole, in one frame (no fade, with or without Reduce Motion).
+                opacity: win.reveal ? 1 : 0
 
                 HoverHandler {
                     id: areaHover
@@ -1596,7 +1703,7 @@ Scope {
                                 // with the layout change.
                                 property real shiftAnim: shiftMain
                                 Behavior on shiftAnim {
-                                    enabled: !tile.dragging && !win.dragSnap
+                                    enabled: win.reveal && !tile.dragging && !win.dragSnap
                                     NumberAnimation {
                                         duration: Appearance.duration(Tokens.motionFast)
                                         easing.type: Easing.OutQuad

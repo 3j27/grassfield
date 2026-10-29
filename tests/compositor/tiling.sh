@@ -47,6 +47,8 @@
 #   popover-verb   tile_popover(address) posts tile-hover "open" for the window, tileable, its light in the titlebar's band
 #   hover          the pointer on that light: no "enter" before tiling.hoverDelay, "enter" after it; moving away posts
 #                  "leave"
+#   layouts-off    (step 5, TL32) config tilingLayouts false: the pointer resting on the light posts no "enter";
+#                  tile_popover still posts "open"; then true again
 #   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
@@ -72,8 +74,38 @@
 #                  now offers zone 1
 #   pick-held      a pick into a zone the layout holds is refused (reason invalid): nothing moves, the suggestion stays
 #   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
+#   suggest-off    (step 5, TL32) a zone placement's suggestion ends when config tilingSuggestions turns false and does not
+#                  come back when it turns true; while false, a zone placement posts placed and the reply has no
+#                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
+# Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
+# end in one group):
+#   group-front    the second window (no group) focused above the group; group_front(first): the third window, then the
+#                  first, come above it (Hyprland's stacking order, `clients` bottom first); the focus stays on the second
+#   no-group       group_front of the second window changes nothing in the stacking order
+#   invalid        group_front of an unknown window: the `tiling` notice says "invalid"
+#   zoomed         the first window zoomed, then full screen, and focused (its tile suspended): group_front(first) leaves it
+#                  above the third (integrator review of cd74af2)
+#   locked         while the foreign locker holds the session lock, group_front raises nothing (reason "locked")
+# Step 4c (docs/specs/tiling.md TL30; only with tiling-shared-edge; right after the step 4b cases, the third and first
+# windows still one group in the middle and right thirds):
+#   shared-edge    the pointer on the middle of their shared edge (in the margin), pressed and dragged 60 px right: the
+#                  third window grows, the first follows with the gap kept, both stay tiled in one group, the plugin posts
+#                  `resized`; dragged back, both are where they were
+#   covered        a foot that reports the mouse centred on the handle, then zoomed, then full screen: each time the drag
+#                  over the handle reaches foot (it reads mouse reports) and moves neither window (the frontmost window
+#                  under the pointer gets the click)
+#   minimum        dragged to the output's right side: the edge stops at the right window's minimum (at least Hyprland's
+#                  20 px floor), the gap and its right side kept; then back
+#   locked         while the foreign locker holds the session lock the same drag moves nothing
+#   after unlock   0.5 s after the unlock, with no other motion first, the handle's drag moves the edge (the first press
+#                  after unlocking is the user's), then back
+#   lock mid-drag  the button held, 30 px, the lock, 60 px more, the release: the windows keep the frames of before the lock,
+#                  both Tiled in one group after the unlock; then back
+#   outside        in the margin 20 px below the surface tops (outside the handle), the pointer settled on the wallpaper
+#                  first: the drag is Hyprland's resize of one window, only one of the two boxes changes (Hyprland's lock
+#                  state, the cursor, the active window and the layers are logged before the press)
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -83,6 +115,13 @@
 #   moving-unfocused   the other window took the focus first (the unmap keeps the held button: the plugin's drag goes on)
 #   still-focused      no motion after the unmap, then the release
 #   still-unfocused    the focus moved first, no motion after the unmap, then the release
+#   shared-edge        (with tiling-shared-edge) the victim one of two windows arranged left and right, unmapped while the
+#                      plugin drags their shared edge: it leaves the drag (logged) but still bounds it: the other follows,
+#                      dragged far toward the victim it stops at the victim's minimum, inside the work area; Tiled again
+# With them (tiling-shared-edge; xdgact windows), not C1 cases: the left one of two xdgact windows arranged left and right
+# opens an xdg popup over the handle; the drag there reaches the popup and moves neither window (TL30, D35). And an X11
+# override-redirect menu (tests/tools/x11menu, on the nested Hyprland's own X display) over the handle, the left window
+# focused: the plugin does not take the press (the right window keeps its box).
 # Hyprland must answer after each, the plugin must log its guarded path ("closed or unmapped"), and coredumpctl must list no
 # new Hyprland core dump. A/B against an older build (the integrator's proof that the cases reach the crash):
 #   tests/compositor/tiling.sh --c1 --plugin /path/to/439e1f2/grassfield-compositor.so   (expected: FAIL, Hyprland gone)
@@ -337,6 +376,175 @@ run_c1() { # name focused|unfocused moving|still
   kill "$xdg_pid" 2>/dev/null
   sleep 0.3
 }
+# The shared edge's drag (TL30, integrator review of a6d04df): the victim and the other xdgact window arranged left and
+# right (one group), the handle dragged 40 px, the victim unmapped (alive) with the button held, then dragged far left, past
+# the victim, and released. Hyprland answers, the plugin logs that the victim left the drag (8965f85's guard: setTargetGeom
+# never reaches its missing space), the other window followed but stopped where the victim's minimum (20 px, its frame from
+# the press) puts the edge: a window that leaves the drag still bounds it (integrator re-review of ce82fd3: without it the
+# other window went off the work area), and it is Tiled again (the drag ended: its one `resized`).
+run_c1_edge() {
+  local tb=$GF_TB_HEIGHT lx ly lw lh rx rw rx1 rw1 hx hy p
+  close_shell_popup "C1 shared-edge"
+  open_xdg gf-c1-edge
+  if [[ -z $xdg_addr || -z $c1_other ]]; then
+    check "C1 shared-edge: the victim window opened" false
+    return
+  fi
+  nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$xdg_addr\",\"$c1_other\"]}')" >>"$log" 2>&1
+  sleep 0.8
+  read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$xdg_addr" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r rx rw < <(nestctl clients -j | jq -r --arg a "$c1_other" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  if [[ -z ${lx:-} || -z ${rx:-} ]] || ((rx <= lx + lw)); then
+    check "C1 shared-edge: the two windows are arranged left and right (${lx:-?}+${lw:-?}, ${rx:-?})" false
+    kill "$xdg_pid" 2>/dev/null
+    return
+  fi
+  hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 40)) "$hy" sleep 2200 drag 2 "$hy" sleep 300 up &
+  p=$!
+  sleep 1.2
+  kill -USR2 "$xdg_pid" 2>/dev/null
+  wait "$p"
+  sleep 0.8
+  check "C1 shared-edge: the victim unmapped (alive) during the edge's drag: Hyprland alive" alive
+  c1_edge_guarded() {
+    plugin_logged "window ${xdg_addr#0x} closed, unmapped or no longer resizing" && return 0
+    plugin_lines "${xdg_addr#0x}"
+    plugin_lines "held back"
+    surfaces_state
+    return 1
+  }
+  check "C1 shared-edge: the plugin logged that the victim left the drag" c1_edge_guarded
+  read -r rx1 rw1 < <(nestctl clients -j | jq -r --arg a "$c1_other" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  local stop=$((lx + 20 + rx - lx - lw)) # the victim's left side + its 20 px floor + the gap
+  say "  the other window ${rw1:-?} px wide at ${rx1:-?} (was $rw at $rx; the victim's minimum puts its left side at $stop)"
+  check "C1 shared-edge: dragged past the gone victim, the other window stops at the victim's minimum, its right side kept" \
+    test $((${rx1:-0} - stop)) -ge -1 -a $((${rx1:-0} - stop)) -le 1 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -ge -1 -a $((${rx1:-0} + ${rw1:-0} - rx - rw)) -le 1
+  c1_edge_tiled() {
+    local st
+    st=$(nestctl grassfield-tiling 2>>"$log" | jq -r --arg a "${c1_other#0x}" '[.outputs[].windows[] | select(.address == $a)][0].state // "none"')
+    say "  the other window's record: $st"
+    [[ $st == tiled ]]
+  }
+  check "C1 shared-edge: the other window is Tiled again (the drag ended)" c1_edge_tiled
+  kill "$xdg_pid" 2>/dev/null
+  sleep 0.3
+}
+# A popup in front of the handle keeps the click from it (TL30, ADR-0036 D35; integrator re-review of ce82fd3 and nested pass
+# of 3d56d60): two xdgact windows arranged left and right, the left one opens an xdg popup on the middle of its right edge
+# (SIGHUP), over the handle.
+#   frontmost  the left window raised first (a popup opens from a click in its window): the drag there reaches the popup
+#              (xdgact prints "popup pressed") and moves neither window
+#   below      the right window raised over it, the popup still there: the plugin does not take the press (the left window
+#              keeps its box: the edge's drag would widen it); Hyprland's own routing gives the press to the right window's
+#              border grab area, which its windowAt finds before the lower window's popup (as without the plugin): logged
+run_edge_popup() {
+  local tb=$GF_TB_HEIGHT a b apid bpid lx ly lw lh rx rw l1 r1 hx hy mark
+  close_shell_popup "shared-edge popup"
+  open_xdg gf-edge-popup-a
+  a=$xdg_addr apid=$xdg_pid
+  open_xdg gf-edge-popup-b
+  b=$xdg_addr bpid=$xdg_pid
+  if [[ -z $a || -z $b ]]; then
+    check "shared-edge popup: the two xdgact windows opened" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$a\",\"$b\"]}')" >>"$log" 2>&1
+  sleep 0.8
+  read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r rx rw < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  if [[ -z ${lx:-} || -z ${rx:-} ]] || ((rx <= lx + lw)); then
+    check "shared-edge popup: the two windows are arranged left and right (${lx:-?}+${lw:-?}, ${rx:-?})" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  nestctl dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$a' })" >>"$log" 2>&1
+  sleep 0.3
+  mark=$(grep -ac "" "$run/xdgact.out" 2>/dev/null || echo 0)
+  kill -HUP "$apid" 2>/dev/null
+  popup_line() { tail -n +"$((mark + 1))" "$run/xdgact.out" 2>/dev/null | grep -aq -- "$1"; }
+  for _ in $(seq 1 30); do popup_line "popup mapped gf-edge-popup-a" && break; sleep 0.1; done
+  check "shared-edge popup: the left window's popup is mapped" popup_line "popup mapped gf-edge-popup-a"
+  sleep 0.3
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+  for _ in $(seq 1 20); do popup_line "popup pressed gf-edge-popup-a" && break; sleep 0.1; done
+  check "shared-edge popup frontmost: the popup in front of the handle gets the press" popup_line "popup pressed gf-edge-popup-a"
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  left window $l1 (was $lx $ly $lw $lh), right window $r1 (was $rx $rw)"
+  check "shared-edge popup frontmost: neither window moved" test "$l1" = "$lx $ly $lw $lh" -a "$r1" = "$rx $rw"
+  # The right window over the left one, the popup still mapped: no window's box but the right one's grab area holds the point.
+  nestctl dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$b' })" >>"$log" 2>&1
+  sleep 0.3
+  mark=$(grep -ac "" "$run/xdgact.out" 2>/dev/null || echo 0)
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 600
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  popup below: left window $l1 (was $lx $ly $lw $lh), right window $r1 (was $rx $rw; Hyprland's own border resize may move it)," \
+    "the popup $(popup_line "popup pressed gf-edge-popup-a" && echo pressed || echo "not pressed"), $(popup_line "popup done" && echo dismissed || echo "still mapped")"
+  check "shared-edge popup below: the plugin does not take the press (the left window keeps its box)" test "$l1" = "$lx $ly $lw $lh"
+  kill "$apid" "$bpid" 2>/dev/null
+  sleep 0.3
+}
+# An X11 menu over the handle keeps the press from it (TL30, D35; integrator review of 0c4c8f2): two xdgact windows arranged
+# left and right, the left one focused (for an override-redirect window that wants no focus Hyprland's windowAt returns the
+# focused window: an edge window, as when the menu is that window's own), and an X11 override-redirect window of type popup
+# menu (tests/tools/x11menu) over the handle. The plugin does not take the press: the right window keeps its box (the edge's
+# drag would move its left side). Hyprland's own routing may then resize the focused left window by its border, as it does
+# without the plugin: logged. Skipped when the nested Hyprland has no X display.
+run_edge_x11menu() {
+  local tb=$GF_TB_HEIGHT a b apid bpid mpid lx ly lw lh rx rw r1 l1 hx hy xdisplay menu
+  nestctl dispatch "hl.dsp.exec_cmd('printf %s \"\$DISPLAY\" > $run/xdisplay')" >>"$log" 2>&1
+  sleep 0.8
+  xdisplay=$(cat "$run/xdisplay" 2>/dev/null || true)
+  if [[ ! $xdisplay =~ ^:[0-9]+$ || $xdisplay == "${DISPLAY:-}" ]]; then
+    say "SKIP: shared-edge X11 menu (the nested Hyprland has no X display of its own: '${xdisplay}')"
+    return
+  fi
+  "$root/tests/tools/x11menu/x11menu.sh" --build >>"$log" 2>&1 || { check "shared-edge X11 menu: tests/tools/x11menu builds" false; return; }
+  close_shell_popup "shared-edge X11 menu"
+  open_xdg gf-edge-x11-a
+  a=$xdg_addr apid=$xdg_pid
+  open_xdg gf-edge-x11-b
+  b=$xdg_addr bpid=$xdg_pid
+  if [[ -z $a || -z $b ]]; then
+    check "shared-edge X11 menu: the two xdgact windows opened" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  nestctl dispatch "hl.plugin.grassfield.arrange('{\"layout\":\"left-right\",\"windows\":[\"$a\",\"$b\"]}')" >>"$log" 2>&1
+  sleep 0.8
+  read -r lx ly lw lh < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r rx rw < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  if [[ -z ${lx:-} || -z ${rx:-} ]] || ((rx <= lx + lw)); then
+    check "shared-edge X11 menu: the two windows are arranged left and right (${lx:-?}+${lw:-?}, ${rx:-?})" false
+    kill "$apid" "$bpid" 2>/dev/null
+    return
+  fi
+  hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  nestctl dispatch "hl.dsp.focus({ window = 'address:$a' })" >>"$log" 2>&1
+  sleep 0.3
+  : >"$run/x11menu.out"
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/x11menu/x11menu.sh" "$xdisplay" $((mx + hx - 100)) $((my + hy - 60)) 200 120 \
+    >"$run/x11menu.out" 2>&1 </dev/null &
+  mpid=$!
+  pids+=("$mpid")
+  for _ in $(seq 1 30); do grep -aq mapped "$run/x11menu.out" && break; sleep 0.1; done
+  check "shared-edge X11 menu: the override-redirect window is mapped" grep -aq mapped "$run/x11menu.out"
+  sleep 0.5
+  menu=$(nestctl clients -j | jq -r '[.[] | select(.xwayland == true and .size == [200, 120])][0] | select(. != null) | "\(.at[0]) \(.at[1])"')
+  say "  the X11 menu at ${menu:-?} (wanted $((mx + hx - 100)) $((my + hy - 60))), the handle at $((mx + hx)),$((my + hy))"
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 600
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  left window $l1 (was $lx $ly $lw $lh; Hyprland's own border resize may change it), right window $r1 (was $rx $rw), the menu" \
+    "$(grep -aq pressed "$run/x11menu.out" && echo pressed || echo "not pressed")"
+  check "shared-edge X11 menu: the plugin does not take the press (the right window keeps its box)" test "$r1" = "$rx $rw"
+  kill "$mpid" "$apid" "$bpid" 2>/dev/null
+  sleep 0.3
+}
 c1_cases() {
   "$root/tests/tools/xdgact/xdgact.sh" --build >>"$log" 2>&1 || { check "C1: tests/tools/xdgact builds" false; return; }
   local dumps0 dumps1
@@ -347,6 +555,13 @@ c1_cases() {
   run_c1 moving-unfocused unfocused moving
   run_c1 still-focused focused still
   run_c1 still-unfocused unfocused still
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+    run_c1_edge
+    run_edge_popup
+    run_edge_x11menu
+  else
+    say "SKIP: C1 shared-edge and the popup over the handle (the plugin does not advertise tiling-shared-edge)"
+  fi
   if command -v coredumpctl >/dev/null 2>&1; then
     dumps1=$(dumps)
     check "C1: no new Hyprland core dump (coredumpctl: $dumps0 before, $dumps1 after)" test "$dumps1" -le "$dumps0"
@@ -687,12 +902,30 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
     fx=$((x + w / 2 - mx)) fy=$((y + h / 2 - my))
     with_mod logo $(($3 + 1800)) abs "$fx" "$fy" sleep 100 down sleep 150 drag $(((fx + tx) / 2)) $(((fy + ty) / 2)) sleep 150 drag "$tx" "$ty" sleep "$3" up
   }
-  # The foot window Free at its size from before, at (300, 200) on GF-REF, focused.
+  # The foot window Free at its size from before, at (300, 200) on GF-REF, focused; waits until it is there (the next case
+  # reads its box: under load a fixed pause read the box before the move, integrator nested pass of ce82fd3).
   free_foot() {
+    local _ x y _w _h _a
     nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
     nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
-    sleep 0.8
+    for _ in $(seq 1 30); do
+      read -r x y _w _h _a < <(geometry)
+      (( ${x:-0} - mx - 300 <= 1 && mx + 300 - ${x:-0} <= 1 && ${y:-0} - my - 200 <= 1 && my + 200 - ${y:-0} <= 1 )) && break
+      sleep 0.1
+    done
+    sleep 0.3
+  }
+  # The foot window's box reaches X Y W H (surface, 1 px slack) within 3 s: a gesture's own result, not a fixed pause; is_box
+  # logs the last look.
+  box_reached() { # x y w h
+    local _ x y w h _a
+    for _ in $(seq 1 30); do
+      read -r x y w h _a < <(geometry)
+      (( x - $1 <= 1 && $1 - x <= 1 && y - $2 <= 1 && $2 - y <= 1 && w - $3 <= 1 && $3 - w <= 1 && h - $4 <= 1 && $4 - h <= 1 )) && break
+      sleep 0.1
+    done
+    is_box "$@"
   }
   delay=$(jq -r '.tiling.previewDelay.value' "$root/ui/tokens/tokens.json")
   say "step 2: preview delay $delay ms (token tiling.previewDelay)"
@@ -743,8 +976,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   read -r x y w h _a < <(geometry)
   bx=$((x + w + 3 - mx)) by=$((y + h / 2 - my)) # 3 px right of the surface: Hyprland's border grab (resize_on_border)
   pointer abs $((bx + 40)) "$by" sleep 150 abs "$bx" "$by" sleep 200 click sleep 120 click
-  sleep 0.8
-  check "edge: a double-click on the right border extends the right side to the work area's edge" is_box "$x" "$y" $((ax + aw - m - x)) "$h"
+  check "edge: a double-click on the right border extends the right side to the work area's edge" box_reached "$x" "$y" $((ax + aw - m - x)) "$h"
   check "edge: the window is tiled with its right side extended (sides \"right\")" sides_are "$addr" right
 
   free_foot
@@ -752,7 +984,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-arrange"
   read -r x y w h _a < <(geometry)
   cx=$((x + w + 3 - mx)) cy=$((y + h + 3 - my))
   with_mod alt 2600 abs $((cx + 40)) $((cy + 40)) sleep 150 abs "$cx" "$cy" sleep 200 click sleep 120 click
-  check "alt-corner: an Alt double-click on the bottom-right corner fills the work area" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
+  check "alt-corner: an Alt double-click on the bottom-right corner fills the work area" box_reached $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
   free_foot
 
   if command -v chromium >/dev/null; then
@@ -899,6 +1131,19 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     check "hover: leaving the light posts tile-hover leave" event_came "$(hover_filter leave)"
     sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 300) / 1000 }')" # the shell's popover closes by itself
     close_popover
+    # layouts-off: "Show layouts when hovering over the green button" off (TL32).
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingLayouts\", \"false\")" >>"$log" 2>&1
+    pointer abs $((lcx - mx + 200)) $((lcy - my + 150)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 300
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "layouts-off: the pointer resting on the zoom light posts no enter" no_early_enter
+    mark_events
+    nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
+    check "layouts-off: tile_popover still posts open" event_came "$(hover_filter open)"
+    close_popover
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingLayouts\", \"true\")" >>"$log" 2>&1
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 300
   else
     check "hover: needs the light from the open event" false
   fi
@@ -1114,6 +1359,28 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   tile_ipc "$addr2" previous
   check "stale: another change ends the suggestion" test "$(suggestion)" = null
 
+  # suggest-off: "Suggest windows to fill the rest of a layout" off (TL32).
+  suggests_again() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg a "${addr#0x}" '.address == $a and ([.zones[].zone] == [0, 1])' <<<"$sg" >/dev/null
+  }
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: switched on, a zone placement has its suggestion" suggests_again
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
+  check "suggest-off: the pending suggestion ends with the switch" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
+  check "suggest-off: it does not come back when the switch turns on" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: the zone placement posts placed" event_came '.type == "tiling" and .reason == "placed"'
+  check "suggest-off: the reply has no suggestion" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: on again, the same placement has a suggestion" suggests_again
+
   nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr3\")" >>"$log" 2>&1
   sleep 1
   workspace_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .workspace.name'; }
@@ -1137,6 +1404,211 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
   check "minimized: the pick brings it back to $out's Desktop" on_desktop
   check "minimized: in the middle third, in the first's group" picked "$addr3" 1
 
+  # Step 4b (TL29): the first and the third windows are one group now; the second has none.
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-groups")' >/dev/null 2>&1; then
+    group_front() { nestctl dispatch "hl.plugin.grassfield.group_front(\"$1\")" >>"$log" 2>&1; sleep 0.8; }
+    order_now() { nestctl clients -j | jq -c 'map(.address)'; }
+    # Each window above the one before it in Hyprland's stacking order (`clients` lists it bottom first).
+    above() { # address...
+      local order a i prev=-1 seen=""
+      order=$(order_now)
+      for a in "$@"; do
+        i=$(jq -r --arg a "$a" 'index($a) // -1' <<<"$order")
+        seen+=" $a:$i"
+        (( i > prev )) || { say "  stack:$seen"; return 1; }
+        prev=$i
+      done
+      say "  stack:$seen"
+    }
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr2' })" >>"$log" 2>&1
+    sleep 0.5
+    group_below() { above "$addr3" "$addr2" && above "$addr" "$addr2"; }
+    check "group-front: the second window (no group) is above the group first" group_below
+    group_front "$addr"
+    check "group-front: the group comes forward, the chosen window in front" above "$addr2" "$addr3" "$addr"
+    check "group-front: the focus stays where it was (no activation)" test "$(nestctl activewindow -j | jq -r '.address')" = "$addr2"
+    before=$(order_now)
+    group_front "$addr2"
+    check "group-front: a window in no group changes nothing" test "$(order_now)" = "$before"
+    mark_events
+    group_front "0x1"
+    check "group-front: an unknown window is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    # Zoomed, then full screen, and focused (integrator review of cd74af2): Suspended but on screen, the chosen window still
+    # ends above its group (the protocol activation does nothing for the focused window).
+    for mode in maximized fullscreen; do
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+      sleep 0.8
+      check "group-front $mode: the first window's tile is suspended" test "$(record_of "$addr" | jq -r '.state')" = suspended
+      group_front "$addr"
+      check "group-front $mode: the chosen window stays above its group" above "$addr3" "$addr"
+      nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$addr\" })" >>"$log" 2>&1
+      sleep 0.8
+    done
+    check "group-front: the first window is tiled again after zoom and full screen" test "$(record_of "$addr" | jq -r '.state')" = tiled
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr2' })" >>"$log" 2>&1
+    sleep 0.5
+    if lock_session; then
+      before=$(order_now)
+      mark_events
+      group_front "$addr3"
+      check "group-front locked: refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
+      check "group-front locked: nothing is raised" test "$(order_now)" = "$before"
+    else
+      check "group-front locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "group-front locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+  else
+    say "SKIP: step 4b cases (the plugin does not advertise tiling-groups)"
+  fi
+
+  # Step 4c (TL30): the third and the first windows, the middle and right thirds, are one group side by side.
+  if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+    read -r lx ly lw lh _ < <(geometry_of tiling-foot3)
+    read -r rx0 ry0 rw0 rh0 _ < <(geometry_of tiling-foot)
+    gap=$((rx0 - lx - lw))
+    # The handle: the middle of the stretch the two frames share (titlebars included), in the gap; GF-REF coordinates.
+    hx=$((lx + lw + gap / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+    say "  shared edge: ${gap} px between the third window (right side $((lx + lw))) and the first ($rx0), handle at $hx,$hy"
+    edge_group() {
+      local a b
+      a=$(record_of "$addr")
+      b=$(record_of "$addr3")
+      say "  first: $a; third: $b"
+      jq -e -n --argjson a "$a" --argjson b "$b" '$a.state == "tiled" and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
+    }
+    mark_events
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+    check "shared-edge: the plugin posts resized" event_came '.type == "tiling" and .reason == "resized"'
+    check "shared-edge: the left window grew with the drag" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
+    check "shared-edge: the right window followed, the gap kept" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
+    check "shared-edge: both still tiled, in one group" edge_group
+    pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
+    check "shared-edge: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    check "shared-edge: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    # A window in front of the handle gets the click (TL30, TL34; integrator review of a6d04df: the frontmost window under
+    # the pointer always does): a foot that reports the mouse (xterm mode 1000; what it reads goes to a file) is centred on
+    # the handle, then zoomed, then full screen. Each time the drag over the handle reaches foot and moves neither window.
+    mouse_log=$run/mouse-reports
+    : >"$mouse_log"
+    env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" setsid "$root/scripts/dev/isolated.sh" --name tiling \
+      foot -T tiling-mouse -w 500x300 sh -c 'stty raw -echo; printf "\033[?1000h"; exec cat >"$0"' "$mouse_log" >>"$run/foot.out" 2>&1 </dev/null &
+    mouse_pid=$!
+    pids+=("$mouse_pid")
+    for _ in $(seq 1 100); do [[ -n $(geometry_of tiling-mouse) ]] && break; sleep 0.2; done
+    sleep 1
+    read -r _ _ _ _ maddr < <(geometry_of tiling-mouse)
+    if [[ -n ${maddr:-} ]]; then
+      nestctl dispatch "hl.dsp.window.move({ x = $((mx + hx - 250)), y = $((my + hy - 150)), window = 'address:$maddr' })" >>"$log" 2>&1
+      nestctl dispatch "hl.dsp.focus({ window = 'address:$maddr' })" >>"$log" 2>&1
+      sleep 0.8
+      for mode in plain maximized fullscreen; do
+        if [[ $mode != plain ]]; then
+          nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$maddr\" })" >>"$log" 2>&1
+          sleep 0.8
+        fi
+        before=$(stat -c %s "$mouse_log" 2>/dev/null || echo 0)
+        pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+        after=$(stat -c %s "$mouse_log" 2>/dev/null || echo 0)
+        say "  covered ($mode): foot read $((after - before)) byte(s) of mouse reports"
+        check "shared-edge covered ($mode): the foot in front gets the click" test "$after" -gt "$before"
+        check "shared-edge covered ($mode): the left window did not move" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+        check "shared-edge covered ($mode): nor the right one" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+        if [[ $mode != plain ]]; then
+          nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"$mode\", window = \"address:$maddr\" })" >>"$log" 2>&1
+          sleep 0.8
+        fi
+      done
+    else
+      check "shared-edge covered: the mouse-reporting foot opened" false
+    fi
+    kill "$mouse_pid" 2>/dev/null
+    for _ in $(seq 1 25); do [[ -z $(geometry_of tiling-mouse) ]] && break; sleep 0.2; done
+    # A drag far past the right window's minimum (TL8: the app's, never under Hyprland's 20 px floor; integrator review of
+    # a6d04df): the edge stops there, the gap kept and the right window's right side where it was; then dragged back.
+    pointer abs "$hx" "$hy" sleep 300 down drag $((mw - 2)) "$hy" sleep 200 up sleep 600
+    at_minimum() {
+      local x w _y _h _a l
+      read -r x _y w _h _a < <(geometry_of tiling-foot)
+      read -r _ _ l _ _ < <(geometry_of tiling-foot3)
+      say "  right window ${w} px wide at $x (right side $((x + w)), was $((rx0 + rw0))), the left one $l px wide, gap $((x - lx - l))"
+      ((w >= 20 && w < rw0 / 2 && x + w - rx0 - rw0 <= 1 && rx0 + rw0 - x - w <= 1 && x - lx - l - gap <= 1 && gap - x + lx + l <= 1))
+    }
+    check "shared-edge minimum: the edge stops at the right window's minimum, the gap kept" at_minimum
+    read -r _ _ lw_now _ _ < <(geometry_of tiling-foot3)
+    hx_now=$((lx + ${lw_now:-$lw} + gap / 2 - mx))
+    pointer abs "$hx_now" "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 600
+    check "shared-edge minimum: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    check "shared-edge minimum: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    # While the foreign locker holds the session lock the handle takes nothing (TL34): no window moves.
+    if lock_session; then
+      pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+      check "shared-edge locked: the left window did not move" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+      check "shared-edge locked: nor the right one" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    else
+      check "shared-edge locked: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "shared-edge locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+    # The first press after the unlock is the user's (macOS: the first click after unlocking acts; integrator nested pass of
+    # 5d3dc49): the handle, pressed 0.5 s after the unlock with no other motion first, moves the edge, then back.
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
+    check "shared-edge after the unlock: the first press on the handle moves the edge" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
+    check "shared-edge after the unlock: the right window followed" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
+    pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
+    check "shared-edge after the unlock: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    # The lock during a drag ends it at once (TL34; integrator review of a6d04df): the button held, 30 px, then the lock,
+    # then 60 px more and the release. The lock itself ends the drag: both records are Tiled while still locked, before any
+    # motion follows (integrator re-review of ce82fd3: the next motion would end it too); the windows keep the frames of the
+    # motions before the lock. The hold (12 s) outlasts the locker's start (lock_session waits up to 6 s).
+    pointer abs "$hx" "$hy" sleep 300 down drag $((hx + 30)) "$hy" sleep 12000 drag $((hx + 90)) "$hy" sleep 200 up &
+    held_pid=$!
+    sleep 1.5
+    if lock_session; then
+      locked_tiled() {
+        local a b
+        a=$(record_of "$addr" | jq -r '.state // "none"')
+        b=$(record_of "$addr3" | jq -r '.state // "none"')
+        say "  while locked, before the next motion: first $a, third $b"
+        [[ $a == tiled && $b == tiled ]]
+      }
+      check "shared-edge lock mid-drag: the lock itself ended the drag (both Tiled while locked, before the next motion)" locked_tiled
+      wait "$held_pid"
+      check "shared-edge lock mid-drag: the left window kept the frame of before the lock" box_of tiling-foot3 "$lx" "$ly" $((lw + 30)) "$lh"
+      check "shared-edge lock mid-drag: the right one too" box_of tiling-foot $((rx0 + 30)) "$ry0" $((rw0 - 30)) "$rh0"
+    else
+      wait "$held_pid"
+      check "shared-edge lock mid-drag: the foreign locker holds the session lock (${locked:-no answer})" false
+    fi
+    check "shared-edge lock mid-drag: released, Hyprland reports the session unlocked" unlock_session
+    sleep 0.5
+    check "shared-edge lock mid-drag: both tiled again, in one group" edge_group
+    pointer abs $((hx + 30)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
+    check "shared-edge lock mid-drag: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
+    check "shared-edge lock mid-drag: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
+    # Outside the handle the edge resizes one window as usual (Hyprland's resize_on_border). The point is in the margin 20 px
+    # below the windows' surface tops, well outside the handle (the middle 120 px of their common stretch) and below the
+    # titlebar row (the integrator's probe: Hyprland resizes one window there); the pointer settles on the wallpaper first.
+    oy=$((ly + 20 - my))
+    pointer abs 20 $((mh / 2)) sleep 300 abs "$hx" "$oy" sleep 400
+    say "  outside the handle at $hx,$oy: hyprctl locked $(hypr_locked), cursor $(nestctl cursorpos 2>/dev/null), active $(nestctl activewindow -j 2>/dev/null | jq -r '.title // "none"')"
+    surfaces_state
+    pointer down drag $((hx + 40)) "$oy" sleep 200 up sleep 600
+    only_one() {
+      local l r moved=0
+      read -r l < <(geometry_of tiling-foot3 | cut -d' ' -f1-4)
+      read -r r < <(geometry_of tiling-foot | cut -d' ' -f1-4)
+      [[ $l != "$lx $ly $lw $lh" ]] && moved=$((moved + 1))
+      [[ $r != "$rx0 $ry0 $rw0 $rh0" ]] && moved=$((moved + 1))
+      say "  third window $l, first window $r: $moved changed"
+      ((moved == 1))
+    }
+    check "shared-edge: outside the handle one window is resized, the other stays" only_one
+  else
+    say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
+  fi
+
   tile_ipc "$addr3" previous
   free_foot
   kill "$foot3_pid" 2>/dev/null
@@ -1151,5 +1623,12 @@ fi
 
 c1_cases
 
+# Every SKIP of the run again at the end, so a case that did not run (the X11 menu without an X display, Chromium not
+# installed...) is not lost in the log (integrator follow-up of PR #42).
+mapfile -t skips < <(grep -o 'SKIP: .*' "$log")
+if ((${#skips[@]})); then
+  say "tiling: ${#skips[@]} skipped, NOT VERIFIED in this run:"
+  for line in "${skips[@]}"; do say "  ${line#SKIP: }"; done
+fi
 check "Hyprland alive" alive
 exit $fail

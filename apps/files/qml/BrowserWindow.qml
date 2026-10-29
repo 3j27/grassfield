@@ -29,19 +29,12 @@ Window {
     // How far a preview pane's fill reaches up behind the toolbar (macOS 27: to the top of the window); not past the tab
     // bar or a banner.
     readonly property real previewExtension: win.tabBarVisible || banner.visible ? 0 : tabHost.y
-    // The views in toolbar order (Nav.viewModes), with the switcher's names.
-    readonly property var viewModes: [
-        {mode: "icons", name: qsTr("as Icons")},
-        {mode: "list", name: qsTr("as List")},
-        {mode: "columns", name: qsTr("as Columns")},
-        {mode: "gallery", name: qsTr("as Gallery")}
-    ]
     // The view switcher folds into its pop-up while the search field is open (Finder-Search), or where the whole switcher
     // would leave the title less than its room (measured with the whole switcher, so folding cannot unfold it again).
     readonly property bool compactViews: {
         if (searchCapsule.expanded)
             return true;
-        const trailing = win.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
+        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
@@ -247,7 +240,7 @@ Window {
     }
 
     function focusSearch(): void {
-        search.forceActiveFocus();
+        searchCapsule.focusField();
     }
 
     // A place of the sidebar (Go menu): opened like a sidebar click.
@@ -465,7 +458,7 @@ Window {
     Shortcut {
         sequence: "Ctrl+F"
         enabled: !win.childIsKey
-        onActivated: search.forceActiveFocus()
+        onActivated: searchCapsule.focusField()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -672,153 +665,20 @@ Window {
             }
 
             // Back and forward: one 72 x 36 capsule (macOS).
-            leading: Rectangle {
-                id: navButtons
-                width: navRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
-                radius: height / 2
-                color: Appearance.buttonFill
-                Accessible.role: Accessible.Grouping
-                Accessible.name: qsTr("Navigation")
-
-                Row {
-                    id: navRow
-                    anchors.centerIn: parent
-
-                    ToolButton {
-                        capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
-                        iconName: "chevron-right"
-                        iconRotation: 180
-                        enabled: win.tab !== null && win.tab.canBack
-                        accessibleName: qsTr("Back")
-                        onClicked: win.tab.back()
-                    }
-
-                    ToolButton {
-                        capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
-                        iconName: "chevron-right"
-                        enabled: win.tab !== null && win.tab.canForward
-                        accessibleName: qsTr("Forward")
-                        onClicked: win.tab.forward()
-                    }
-                }
+            leading: NavCapsule {
+                tab: win.tab
             }
 
             trailing: Row {
                 id: tools
                 spacing: Tokens.spacingSm
 
-                // View switcher (macOS 27 Finder, measured on Finder-Home): four segments in a capsule, the selected view a pill
-                // darker than the capsule, a rule between two views that are not selected.
-                Rectangle {
-                    visible: !win.compactViews
-                    width: win.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
-                    height: Tokens.filesToolbarCapsule
-                    radius: height / 2
-                    color: Appearance.buttonFill
+                ViewSwitcher {
+                    id: viewSwitcher
                     anchors.verticalCenter: parent.verticalCenter
-                    Accessible.role: Accessible.Grouping
-                    Accessible.name: qsTr("View")
-
-                    Row {
-                        x: Tokens.filesViewGroupPadding
-                        height: parent.height
-
-                        Repeater {
-                            model: win.viewModes
-                            delegate: Item {
-                                id: segment
-                                required property var modelData
-                                required property int index
-                                readonly property bool current: win.tab !== null && win.tab.viewMode === segment.modelData.mode
-                                width: Tokens.filesViewSegmentWidth
-                                height: parent.height
-
-                                ToolButton {
-                                    anchors.centerIn: parent
-                                    width: Tokens.filesViewPillWidth
-                                    height: Tokens.filesViewPillHeight
-                                    capsule: true
-                                    checkedColor: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesViewPillOpacity)
-                                    checkable: true
-                                    radio: true
-                                    checked: segment.current
-                                    accessibleName: segment.modelData.name
-                                    onClicked: win.tab.setViewMode(segment.modelData.mode)
-
-                                    ViewGlyph {
-                                        anchors.centerIn: parent
-                                        kind: segment.modelData.mode
-                                    }
-                                }
-
-                                // The rule before this segment, where neither view beside it is the selected one.
-                                Rectangle {
-                                    visible: segment.index > 0 && win.tab !== null && !segment.current && win.tab.viewMode !== win.viewModes[segment.index - 1].mode
-                                    x: -width / 2
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: Tokens.appsBorderWidth
-                                    height: Tokens.filesViewSeparatorHeight
-                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesViewSeparatorOpacity)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // The switcher folded into one pop-up button while the search field is open or the title has no room
-                // (Finder-Search): the current view's glyph and up and down chevrons; it opens View As.
-                Rectangle {
-                    visible: win.compactViews
-                    width: Tokens.filesViewPopupWidth
-                    height: Tokens.filesToolbarCapsule
-                    radius: height / 2
-                    color: Appearance.buttonFill
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    ToolButton {
-                        id: viewPopup
-                        anchors.fill: parent
-                        capsule: true
-                        buttonSize: Tokens.filesToolbarCapsule
-                        enabled: win.tab !== null
-                        accessibleName: qsTr("View")
-                        onClicked: {
-                            const p = viewPopup.mapToItem(null, 0, viewPopup.height + Tokens.spacingXs);
-                            win.menuLayer.open(win.tab.viewSubmenu().submenu, p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
-                        }
-
-                        Item {
-                            width: viewPopup.width
-                            height: viewPopup.height
-
-                            // In the slot of the icon glyph (15 wide); the wider glyphs keep its centre.
-                            ViewGlyph {
-                                x: Tokens.filesViewPopupInset
-                                anchors.verticalCenter: parent.verticalCenter
-                                size: 2 * Tokens.filesViewIconsSquare + Tokens.filesViewIconsGap
-                                kind: win.tab !== null ? win.tab.viewMode : "icons"
-                                color: viewPopup.foreground
-                            }
-
-                            Repeater {
-                                model: [-1, 1]
-
-                                Icon {
-                                    required property int modelData
-                                    x: Tokens.filesViewPopupInset + 2 * Tokens.filesViewIconsSquare + Tokens.filesViewIconsGap + Tokens.filesViewPopupChevronGap
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.verticalCenterOffset: modelData * Tokens.filesViewPopupChevronOffset
-                                    name: "chevron-down"
-                                    rotation: modelData < 0 ? 180 : 0
-                                    size: Tokens.filesViewPopupChevronSize
-                                    color: viewPopup.foreground
-                                }
-                            }
-                        }
-                    }
+                    tab: win.tab
+                    compact: win.compactViews
+                    menuLayer: win.menuLayer
                 }
 
                 // Group By (Finder): a capsule with the groups glyph and a chevron; its menu groups and sorts the folder.
@@ -880,88 +740,11 @@ Window {
                     }
                 }
 
-                // Search field (filters the current folder)
-                // A 36-pt circle that expands to a capsule while it has the focus or text (macOS).
-                Rectangle {
+                // Search field (filters the current folder).
+                SearchCapsule {
                     id: searchCapsule
-                    readonly property bool expanded: search.activeFocus || search.text !== ""
-                    width: expanded ? Tokens.filesSearchWidth : Tokens.filesToolbarCapsule
-                    height: Tokens.filesToolbarCapsule
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: height / 2
-                    color: Appearance.buttonFill
-                    border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
-                    clip: true
-
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutQuad
-                        }
-                    }
-
-                    // A click on the collapsed circle opens it.
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: !searchCapsule.expanded
-                        cursorShape: Qt.ArrowCursor
-                        onClicked: search.forceActiveFocus()
-                    }
-
-                    Icon {
-                        id: searchIcon
-                        name: "search"
-                        size: Tokens.menuIconSize
-                        color: Appearance.colors.textSecondary
-                        x: searchCapsule.expanded ? Tokens.spacingMd : (searchCapsule.width - width) / 2
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    TextInput {
-                        id: search
-                        TextCursor {}
-                        anchors.left: searchIcon.right
-                        anchors.leftMargin: Tokens.spacingXs
-                        anchors.right: parent.right
-                        anchors.rightMargin: Tokens.spacingSm
-                        anchors.verticalCenter: parent.verticalCenter
-                        clip: true
-                        opacity: searchCapsule.expanded ? 1 : 0
-                        activeFocusOnTab: true
-                        color: Appearance.colors.text
-                        selectionColor: Appearance.highlight
-                        selectedTextColor: Appearance.highlightText
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyBodySize
-                        text: win.tab ? win.tab.searchText : ""
-                        onTextEdited: win.tab.setSearch(text)
-                        Accessible.role: Accessible.EditableText
-                        Accessible.name: qsTr("Search in this folder")
-                        Accessible.searchEdit: true
-
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_Escape) {
-                                win.tab.setSearch("");
-                                win.tab.focusView();
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                if (win.folder.count > 0 && win.folder.selectedCount === 0)
-                                    win.folder.select(0, 0);
-                                win.tab.focusView();
-                                event.accepted = true;
-                            }
-                        }
-
-                        Text {
-                            textFormat: Text.PlainText
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: search.text === ""
-                            text: qsTr("Search")
-                            color: Appearance.colors.textSecondary
-                            font: search.font
-                        }
-                    }
+                    tab: win.tab
                 }
             }
         }

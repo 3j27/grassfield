@@ -3,7 +3,15 @@ Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no c
 answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
 rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
 under the owner's rule" (AD1 to AD31). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
-MINORs, all answered in "Review history"; each changed place says "review of e3882de"). · Date: 2026-10-28 · Decider: owner
+MINORs, all answered in "Review history"; each changed place says "review of e3882de"). Step 0 merged (pull request #37, opus
+PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
+(`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
+"step 1" here. Revised after the integrator's opus review of 949fc98 (FAIL: four MAJORs, five MINORs, five surviving
+mutants), answered in "Review history"; each changed place says "review of 949fc98". Revised again after the re-review of
+f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68789c". Step 1 merged (pull request #40,
+opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. Step 2
+is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is built in its own pull request
+(`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36). · Date: 2026-10-28 · Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
 
@@ -16,7 +24,7 @@ neutral (master-prompt §14): the folder `apps/activity`, the binary `grassfield
 `org.grassfield.Activity`, the QML module and the code say "activity". In this ADR "the app" means it.
 
 Parity with macOS 27 and Windows 11, row by row: `docs/audits/activity-2026-10-28/parity.md`. Behaviour, keyboard,
-accessibility, refusals and limits: `docs/specs/activity.md`. Evidence: the probes A0 to A8 of
+accessibility, refusals and limits: `docs/specs/activity.md`. Evidence: the probes A0 to A10 of
 `docs/audits/activity-2026-10-28/activity-probes.sh`, run in a throwaway `archlinux:base` container, output in
 `probes-output.txt` next to it. Legal points are marked "needs legal review" (master-prompt §14); none is a conclusion.
 
@@ -63,12 +71,12 @@ accessibility, refusals and limits: `docs/specs/activity.md`. Evidence: the prob
   `default/systemd/zram-generator.conf.d/90-omarchy.conf`) and turns zswap off (`etc/tmpfiles.d/omarchy-zswap.conf`).
 
 ### What the kernel lets a user read and do (probes, kernel 6.18.44; `probes-output.txt`)
-| What | Own process | Another user's process, or an own non-dumpable one | Cost (A8) |
+| What | Own process | Another user's process, or an own non-dumpable one | Cost (A10 in C, A8 for `smaps_rollup`; step 1) |
 |---|---|---|---|
-| `/proc/<pid>/stat`, `statm`, `status`, `cmdline`, `comm`, `cgroup`, `sched`, `limits`, `task/` | read (A1) | read (A1) | 6 to 10 µs per file |
-| `/proc/<pid>/io` (bytes read and written by the storage layer) | read | refused (EACCES) | 6 to 8 µs |
+| `/proc/<pid>/stat`, `statm`, `status`, `cmdline`, `comm`, `cgroup`, `sched`, `limits`, `task/` | read (A1) | read (A1) | `stat` 2.4–3.9 µs, `status` 6.7–7.6 µs, `statm` 0.7 µs per process; a thread's `status` 9.6–11.1 µs |
+| `/proc/<pid>/io` (bytes read and written by the storage layer) | read | refused (EACCES) | 3.3–4.9 µs |
 | `/proc/<pid>/smaps_rollup` (proportional and private memory) | read | refused | **6.6 ms** for a 1 GiB process (A8) |
-| `/proc/<pid>/fd/`, `fdinfo/` (open files, sockets, GPU clients), `exe`, `cwd`, `maps`, `environ` | read | refused | a readlink per descriptor |
+| `/proc/<pid>/fd/`, `fdinfo/` (open files, sockets, GPU clients), `exe`, `cwd`, `maps`, `environ` | read | refused | a readlink per descriptor, 2.1–2.4 µs each |
 | signal (`kill`, `pidfd_send_signal`) | allowed (A2) | refused (EPERM) | — |
 | a pidfd on a process that ended | `pidfd_send_signal` fails with ESRCH: a pid reused since cannot be hit (A2) | — | — |
 | a `/proc/<pid>` directory descriptor | names one process for good: `stat` read through it with `openat`, and the same descriptor signalled with `pidfd_send_signal`; once the process ended both fail with ESRCH (A2) | — | — |
@@ -108,7 +116,9 @@ system file together 0.04 ms. Reading everything at every sample would cost 38�
   GPU).
 - RLIMIT_NICE in the owner's session; the `cpu` controller in `app-graphical.slice`; the user journal holding the resource
   records of app scopes; Hyprland's client list carrying `inhibitingIdle`; UPower's history on the laptop.
-- A10's costs on the reference machine (i5-10400H): step 1 runs the same fixture there (d).
+- A10's costs on the reference machine (i5-10400H): step 1 runs the same fixture there (d). Step 1 gathers this list in
+  one read-only script for the owner, `docs/audits/activity-2026-10-28/owner-checks.sh` (nothing is changed, nothing needs
+  root); its output is recorded in `step1.md` when the owner sends it.
 - Whether systemd turns the `cpu` controller off again in `app.slice` once no unit sets a weight (step 4, g).
 
 ## Decision
@@ -155,9 +165,10 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 - View > My Processes, System Processes and Other User Processes filter by owner, as macOS. A User column (default on every
   tab, macOS) names the owner. The owner is the real uid of `status`; the `/proc/<pid>` directory's owner (the effective uid,
   and root for a non-dumpable process) serves as a shortcut on the tabs that do not read `status`, and `status` is read
-  where that shortcut says root and `stat` does not say kernel thread (d).
-- **Read-only for the others.** Their rows are filled from `stat` and `status` only (% CPU, CPU Time, Threads, Memory, User,
-  PID); disk, network, GPU, open files and Inspect's detailed tabs show "—" for them. Their name is the kernel's short name
+  where that shortcut says root and `stat` does not say kernel thread (d). The directory's owner is read when a process
+  is first seen, after an exec and in its turn, a tenth of the processes per sample (AD33, review of 949fc98).
+- **Read-only for the others.** Their rows are filled from `stat`, `statm` and `status` only (% CPU, CPU Time, Threads,
+  Memory, User, PID); their `cgroup` is not read either (review of 949fc98); disk, network, GPU, open files and Inspect's detailed tabs show "—" for them. Their name is the kernel's short name
   (`stat` field 2), never `cmdline`: a process can rewrite its `argv[0]` into a title (an SSH server's "sshd: bob@pts/0"),
   so other people's command lines and titles are never read or shown (AD25, review of e3882de).
 - **Actions only on the user's own processes** (the kernel enforces it, A2; no polkit action, the brief): Quit, Force Quit,
@@ -171,27 +182,75 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   Normally (5 sec), **Normally by default** (Apple's guide for macOS 27: "every 5 seconds" by default).
 - What one sample reads (AD10), kept descriptors re-read with `pread` at offset 0 while the process lives (A10: 9.8–11.0 µs
   for `stat` and `status` against 14.4–15.9 µs with an open and a close each):
-  - every tab: the `/proc` listing, `stat` of every process, the system files of the tab's summary;
-  - Memory: `status` of every process (the Memory column needs `VmSwap`, which `statm` lacks);
-  - Disk: `io` of the user's processes;
+  - every tab: the `/proc` listing, `stat` of every process, the system files of the tab's summary; the directory's owner
+    (`fstatat`) only for a process seen for the first time, after an exec, and in its turn (AD33);
+  - Memory: `statm` of every process, and `status` of one fifth of them in turn for `VmSwap` and `VmHWM`, which `statm`
+    lacks, every new process at once (AD32, review of 949fc98; step 0 read `status` of every process at every sample);
+  - Disk: `io` of the user's processes, kept open and re-read with `pread` as `stat` (the kernel checks the access at each
+    read);
   - Energy: `io` of the user's processes and, for the Wake Ups term, the threads' `status` of one fifth of the user's
     processes in turn (each process every fifth sample; its rate is taken over those five samples);
   - Network: one TCP `sock_diag` dump, and the descriptor lists (`fd/`) of one tenth of the user's processes in turn, each new
     process at its first sample; a socket counted once its process is known (its counters are cumulative, so nothing is lost
-    while the socket lives);
+    while the socket lives); the dump leaves out listeners, TIME_WAIT and closed sockets, which carry no bytes or no owner
+    (review of f68789c: the dump is most of this tab's cost);
   - the GPU columns: the descriptor lists in the same turn (one tenth per sample, new processes at once), then each sample
-    only the `fdinfo` of the DRM descriptors found;
+    only the `fdinfo` of one descriptor per client: the first read after a turn reads every DRM descriptor found and keeps
+    the first of each (`drm-pdev`, `drm-client-id`), and one that fails or names another client brings the full read back
+    at once (the integrator's AM-P2 run of f68789c: Mesa's pipe loader and iris's buffer manager each duplicate their DRM
+    descriptor, a duplicate is the same client, and each `fdinfo` read has the driver go over the client's objects);
   - `smaps_rollup` never in the table (6.6 ms for a 1 GiB process, A8), only in Inspect.
+  - The turns (a fifth, a tenth) go by each process's order of arrival, not by its pid, so each sample reads as many lists
+    whatever the pids are (review of 949fc98). An own process's `cgroup` is read when it is first seen and again in its
+    first two descriptor turns (a launcher moves a process into its unit before it runs it), then no more.
+  - An exec is seen from `stat` alone (review of 949fc98): for the user's own processes, whose code addresses `stat` gives
+    (fields 26 and 27), a change of either address, so a new image even under the same name; a new name with the same
+    addresses is a `prctl(PR_SET_NAME)` rename, and the process keeps its name and command as on macOS (review of
+    f68789c). For other owners, whose addresses read 0, a new name (field 2) is all there is. The process is then named
+    again (AM17) from its command line and its `exe` link. Known limit: an exec into the same non-position-independent
+    program (or with address randomization turned off) maps it at the same addresses and is not seen; its Command keeps the
+    old arguments until the process ends.
+  - Nothing a sample reads is cleared or copied first (step 0's code cleared a 64 KiB buffer at every read, most of a
+    sample's cost on the reference machine; review of 949fc98); a per-process file is read in one call.
+- Kept descriptors (step 1, the integrator's note on the merge of step 0): `stat` of every process, `statm` and `status` on
+  the Memory tab, `io` of the user's processes on the Disk and Energy tabs, so up to about 2 400 for the reference fixture,
+  over the session's soft `RLIMIT_NOFILE` of 1 024. The app
+  raises its soft limit at start to the hard limit, at most 16 384 (`raiseFileLimit`; an unprivileged process may raise its
+  soft limit up to its hard one), and keeps at most that soft limit less 256 descriptors open, the 256 left for everything
+  else it opens (Qt, D-Bus, the window, the descriptor lists it reads). Past that budget a file is opened, read and closed
+  each time: slower, never an error. A kept descriptor whose `pread` fails is closed (its process ended), and every kept
+  descriptor of a process is closed when the process leaves the listing or its start time changes (pid reuse). The
+  session's hard limit is one of the owner's read-only checks (`owner-checks.sh`).
 - The window hidden or minimized: no per-process sample. With a Dock graph (f), only the system file the graph needs, at the
   update frequency. Nothing else wakes the app.
 - **Budget (AM-P1 to AM-P4, `tests/apps/activity_cost.sh`).** One sample's CPU time on the sampler's thread
   (`CLOCK_THREAD_CPUTIME_ID`) for the reference fixture of A10 (about 600 processes, 1 600 threads, 6 800 descriptors, 220
-  TCP sockets): **CPU ≤ 6 ms, Memory ≤ 10 ms, Disk ≤ 7 ms, Energy ≤ 13 ms, Network ≤ 7 ms**, A10's worst run (4.7, 7.7, 5.1,
-  10.3 and 5.2 ms) plus about 30 %. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
+  TCP sockets): **each tab ≤ 1.3 × A10's step-1 plan** (A10 reading what the sampler reads), the worse of A10's two runs
+  on the same fixture, before and after the product's (the integrator's decision on pull request #47, 2026-10-29; the
+  reference machine's figures from its run at idle). **Disk's plan is A10's one pass** over the same files in the
+  sampler's order (`step 1 Disk, in one pass`; the integrator's second decision, the same day): the summed plan adds parts
+  each measured alone with warm caches, and no reader of those files meets it (the product reading them and parsing
+  nothing was 1.25–1.41 × it here, the whole product within 0–10 % of that and about 1.17 × the one pass). CPU, Memory,
+  Energy and Network keep the summed plan (1.06–1.20 × on the reference machine). Until then the limits were A10's step-0 plan there plus about 30 %:
+  CPU 17, Memory 25, Disk 17, Energy 40 and Network 45 ms (pull request #40), and before that, from the cloud machine,
+  6, 10, 7, 13 and 7 ms. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
   sec) on every tab; at Very Often (1 sec) ≤ 1.5 % on CPU, Memory, Disk and Network and ≤ 2 % on Energy; ≤ 0.1 % minimized
-  with a Dock graph at 5 s; PSS ≤ 120 MB after 10 minutes and < 5 MB of growth over an hour. A10 ran on this cloud machine:
-  step 1 measures the same fixture on the reference machine (i5-10400H) and the integrator sets the thresholds again from
-  those numbers if they differ. The app lists itself, as macOS does, so the user sees its cost too.
+  with a Dock graph at 5 s; PSS ≤ 120 MB after 10 minutes and < 5 MB of growth over an hour (AM-P1 to AM-P4 are step 2's
+  gates, measured on the whole app; on the reference machine, 0.5 % of a core at 5 s is 25 ms a sample and 1.5 % at 1 s is
+  15 ms, below some AM-P2 limits, so the integrator sets them again with step 2's measures). The app lists itself, as macOS
+  does, so the user sees its cost too.
+- **Step 1, measured** (`tests/apps/activity_cost.sh --model` on the product sampler, as an unprivileged user in a throwaway
+  container on this cloud machine, 608 processes of which 404 own, 1 600 threads, 100 TCP connections; median of 101
+  samples, then probe A10 on the same fixture in the same run): after the review of 949fc98, CPU 2.6–2.8 ms, Memory
+  2.8–2.9, Energy 5.9–6.0, Disk 2.1, Network 3.2–3.4; against A10 0.9–1.1 × on CPU, Memory, Energy and Network and 0.7–0.8
+  × on Disk (three runs; `docs/audits/activity-2026-10-28/step1.md`). Against A10 reading the same as the sampler (its
+  "step 1" plan: owners a tenth per sample, `statm` and a fifth of `status`, `io` kept; review of f68789c), 1.1–1.2 × on
+  CPU, Energy and Network and 1.3–1.4 × on Disk and Memory, whose reads cost least in the kernel: the rest is the sampler's
+  parsing and its 368-byte rows. The reference machine's figures are the integrator's run of the same script at idle
+  (the review of 949fc98 measured 1.6 to 2.3 × A10 there before these changes; the re-review of f68789c 0.73 to 1.10 ×). A10 itself
+  now raises its soft `RLIMIT_NOFILE` as the app does: at 1 024 its kept `stat`, `status` and `statm` (three per process)
+  used up the descriptors and its later phases opened nothing (no thread, no descriptor list, no socket read), so its
+  figures came out too low; it prints the files it could not open.
 
 ### e. Quit, Force Quit and signals (no root; macOS sheet)
 - The Stop button and View > Quit Process open macOS's sheet: "Are you sure you want to quit this process?", with Cancel,
@@ -306,6 +365,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 - Other owners' processes are read-only and show only what `stat` and `status` give (A1). Their command lines and their
   rewritten process titles are never read (c, AD25).
 - The user's own command lines are shown (what `ps` shows); environment variables are never read.
+- One name on the session bus (AD34, step 2a): `org.grassfield.Activity` with one method, `Activate(token)`, which only
+  brings the window forward; any process of the user could call it, as it could start the app. The token is kept only if
+  it is a short printable string; nothing is read from the caller.
 - Every process name and command line shown, the user's own included, has its control characters and bidirectional
   formatting characters removed before display (spec AM17), so a process cannot reorder or hide text in the table.
 - The projection holds pids and app ids (any local process of the user reads `hyprctl -j clients` already, ADR-0035
@@ -318,7 +380,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 
 ### j. Files (rows added to ADR-0020 in the step that writes them)
 - `activity.json` (state, version 1, the app only): window frames, tab, view, columns and sort per tab, update frequency,
-  Dock icon, Efficiency Mode's "Don't ask again", App History's period.
+  Dock icon, Efficiency Mode's "Don't ask again", App History's period. Step 2a writes the window's size (Wayland places
+  windows: no position), the tab, the view, the update frequency, and per tab the columns, their widths and the sort; its
+  ADR-0020 row is added there; the later keys come with their steps.
 - `activity-<display>/windows.json` and `activity-<display>/dock-tile.json` (runtime, 0600): above; removed when their writer
   stops, and ignored when stale.
 
@@ -327,7 +391,7 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 **AQ1. The app's name (needs legal review).**
 | Option | For | Against |
 |---|---|---|
-| A. « Moniteur d'activité » / "Activity Monitor" | the macOS name, which users look for; the same footing as "Preview" / « Aperçu », kept by the owner (L1) | Apple's app name: trade-dress risk on the list (§14, docs/legal/visual-review.md) |
+| A. « Moniteur d'activité » / "Activity Monitor" | the macOS name, which users look for; the same footing as "Preview" / « Aperçu », kept by the owner (L1) [as asked; Preview ships « Visionneuse », so the precedent holds for the English name only: see the header, review of e3882de] | Apple's app name: trade-dress risk on the list (§14, docs/legal/visual-review.md) |
 | B. « Activité » / "Activity" | short, close to macOS, Omarchy already calls btop "Activity" | further from macOS; collides in words with Omarchy's btop entry if both are shown |
 | C. « Moniteur système » / "System Monitor" | the generic Linux name (GNOME, KDE), lowest resemblance | not macOS; two different apps on Linux already carry it |
 | D. « Gestionnaire d'activité Grassfield » / "Grassfield Activity" | own name, like "Grassfield Store" | long in the Dock and the menu bar |
@@ -380,7 +444,7 @@ Answer: A (see "Answers").
 ### Answers (2026-10-28, AskUserQuestion; the options as asked in French, in the order above)
 | Question | Answer | Consequence |
 |---|---|---|
-| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the English name only: L1 keeps Preview's shipped French name « Visionneuse » (main b6763c2; review of e3882de; the owner is told in the reply to the review) |
+| AQ1 name | « Moniteur d'activité » (Recommandé) → A | "Activity Monitor" / « Moniteur d'activité »; **needs legal review** (E38 and question 14 of the visual review, added in this pull request). The option's "same footing as Preview / Aperçu" holds for the English name only: L1 keeps Preview's shipped French name « Visionneuse » (main b6763c2; review of e3882de; the owner is told in the reply to the review). **Confirmed again by the owner on 2026-10-28** with the corrected precedent in view (relayed by the integrator on pull request #40): the name stays in both languages, at the owner's risk; it still needs legal review (visual review section 7) |
 | AQ2 network per process | « TCP seulement, étiqueté » (Recommandé) → A | AM43: the four columns headed "(TCP)" and the line under the table |
 | AQ3 energy per process | « Indice « Impact énergétique » » (Recommandé) → A | AM36 to AM39; weights calibrated by an owner L2 run on the laptop |
 | AQ4 other users' processes | « Visibles en lecture seule » → **B** (not the recommended A) | c above, AD25, AD26; the brief's "sees only the user's processes" is amended by the owner for seeing; stopping stays the user's own processes only |
@@ -454,7 +518,7 @@ Answer: A (see "Answers").
 - **AD24. Tables and graphs** reuse Grassfield.Ui (tokens, `SegmentedControl`, `SearchField`, `PopupMenu`, `Sheet`) and the
   list header of Files (`apps/files/qml/FileList.qml`); a shared table component moves into Grassfield.Ui only if the
   step's code is the same in both apps (R5).
-- **AD25. Other owners' rows (AQ4 = B).** Read from `stat` and `status` only; their name is `stat`'s short name (the
+- **AD25. Other owners' rows (AQ4 = B).** Read from `stat`, `statm` and `status` only (not `cgroup`, review of 949fc98); their name is `stat`'s short name (the
   kernel's 15-character `comm`), their Command cell is "—", and search does not match their command lines. `cmdline` is never
   read for them: its first word can be a rewritten title (review of e3882de). Kernel threads (`PF_KTHREAD`) are summed into
   one "Kernel" row (user root, PID "—"), as macOS's `kernel_task`; its CPU counts in System.
@@ -472,16 +536,74 @@ Answer: A (see "Answers").
   same descriptor signalled (review of e3882de).
 - **AD31. No "Delete Usage History"** (g): a user cannot delete journal entries, and a button that only hides them would not
   do what it says (R11; review of e3882de).
+- **AD32. The Memory tab reads `statm` at every sample and `status` in turns** (d; review of 949fc98). `statm`'s resident
+  set less its file and shared-memory part is `RssAnon` exactly, at a sixth of `status`'s cost (A10); `VmSwap` and
+  `VmHWM` come from `status`, a fifth of the processes per sample and every new one at once, so they show at most five
+  samples late (25 s at Normally), and the peak never shows below the resident set. The tab's first sample after another
+  tab, or after a pause of more than two intervals (a hidden window), reads every process's `status` once, so the bound
+  holds when the user comes back to it (review of f68789c). The interval is the one set (AM9), not the one measured, which
+  a full read left unknown (review of 19f5d4c). Swap changes slowly: the column stays macOS's, at the cost of the CPU
+  tab.
+- **AD33. A process's owner from its directory on arrival, after an exec and in its turn** (c, d; review of 949fc98): six
+  hundred `fstatat` a sample bought nothing a running process changes without an exec but its uid, which the turn (a
+  tenth per sample) catches; behind a directory owned by root (a non-dumpable process) the turn reads `status`'s real uid
+  again too (review of f68789c); an action reads its process's identity again anyway (AD30).
+- **AD34. One instance, on the session bus** (AM1; step 2a). The running app owns `org.grassfield.Activity`
+  (`org.grassfield.Activity.Dev` in a dev session, which shares the owner's bus); a second launch calls its `Activate`
+  with its own xdg-activation token, if it has one, and leaves. The window comes forward with that token (Qt's Wayland
+  window takes `XDG_ACTIVATION_TOKEN` for its next activation request); without one the compositor decides. No Grassfield
+  app had one: the spec's "the mechanism Settings and the Store use" was the Dock's activation plan, which a launch from
+  Apps or a key does not go through, and a monitor running twice would sample twice. Launched again while its window is
+  off screen (minimized, or on another Desktop: the compositor suspends it, AD35), the app also asks the shell's Dock to
+  bring it back, `qs ipc -p <shell> call dock reopen org.grassfield.Activity` (apps/runmode.h `shellIpcArgs`, as Settings'
+  `update check`): the Dock does what a click on its tile does (`Launch.activationPlan`: everything minimized, the most
+  recent window comes back), the path the Dock uses for a minimized window. xdg-activation alone switches Desktops but
+  leaves a window on `special:minimized`, which the shell hides again as soon as an activation shows it (the integrator's
+  nested pass of 983b7de; macOS: launching a running app brings its window back). The action is in the IPC table
+  (`docs/specs/security.md`), and `tests/security/ipc_inventory.sh` counts a Grassfield app as its caller only through
+  `shellIpcArgs()`.
+- **AD35. The sampler on its own thread, only while the window is shown** (AM8, AM9, AM-P3; step 2a). A sample costs up to
+  17 ms on the reference machine's CPU tab and more on Energy and Network (AM-P2): too long for the window's thread. One
+  sample at a time, on a low-priority thread, at the update frequency; the window is shown when it is visible, exposed and
+  not minimized. Back on screen the sampler forgets its rate baselines (`Sampler::forgetRates`): the first sample's rates
+  show "—", and the next comes one second later rather than a whole interval.
+  Hidden is told by what the compositor sends, not by a Grassfield record (the integrator's review of 983b7de): Hyprland
+  0.56.2 sets xdg_toplevel's `suspended` state on every mapped window whose workspace is not shown
+  (`GlobalWindowController::updateSuspendedStates`, run by every move to a workspace and every workspace change), and Qt's
+  Wayland client (6.11.2, xdg_wm_base version 6) then reports the window not exposed (`QWaylandXdgSurface::isExposed`) and
+  sends an expose event. That covers Grassfield's minimize, whose hidden state is the workspace `special:minimized`
+  (whether the plugin or the shell's fallback moves the window there), and a Desktop not shown, with no request from the
+  app to the shell. Grassfield's own minimize record (the plugin's places, the shell's list) would need a new channel from
+  the app and would miss the other Desktops. Qt's Minimized state stays in the test for the platforms that keep it: on
+  Wayland, which has no minimized state, Qt reverts it at once. A window covered by others is still on a shown workspace and
+  keeps sampling. A-W1 drives Qt's side (an expose event that makes the window unexposed, as Qt's Wayland client sends it);
+  the compositor's side is the nested pass.
+- **AD36. A row's icon from its launch unit's desktop entry, theme names only** (AM10, AM17; step 2a). uwsm names a
+  launch's unit after the desktop id it launched (A7), so an own process in such a unit takes that entry's `Icon` when it
+  is a theme name, looked up in the icon theme on the window's thread (as Files' theme icons); every other process, and an
+  entry that names a file, gets the theme's generic executable icon. A file named by an entry the user may have written is
+  not decoded here (Files decodes such files in an isolated child; the table holds hundreds of rows). The entry's name
+  joins the search (AM14); it names a row only through the projection, step 3.
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
 0. **Docs** (this pull request): ADR-0038, `docs/specs/activity.md`, the parity matrix, the probes.
 1. **The sampler, no window**: `apps/activity/src` (process and system samples, rates, row identity, owners, kinds, the
    Kernel row, GPU clients, TCP sockets, memory pressure), gtest on fixture trees, `tests/apps/activity_cost.sh` with
-   AM-P2 met, the owner-machine read-only checks of "Not verified here". Spec AM20 to AM49 (data), AM79.
-2. **The window**: the five tabs, the table, views, search, columns, summaries and graphs, Quit (SIGTERM path) and Force
-   Quit, Send Signal, Inspect, `activity.json`, menus, icon, desktop entry, translations, the PKGBUILD lines, the legal
-   element; AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM59, AM74 to AM78.
+   AM-P2 met, `tests/integration/activity_owners.sh` (another user's processes through the real kernel), the owner-machine
+   read-only checks of "Not verified here". Spec AM20 to AM49 (data), AM79.
+2. **The window**, in four pull requests (2026-10-28, under the owner's rule: each a slice the integrator can review and
+   pass nested on its own, as other lanes' 4a and 4b):
+   - **2a. The window and its table**: the toolbar, the five tabs, the table with each tab's columns, the flat views,
+     search, the columns chooser, sort, selection, Copy, Preventing Sleep (logind), `activity.json`, menus, icon, desktop
+     entry, translations, the PKGBUILD lines, the legal element; one instance (AD34); sampling on its own thread only while
+     the window is shown (AD35); AM-P1, AM-P3, AM-P4 measured. Spec AM1 to AM4, AM6 to AM12, AM14 to AM19, AM38, AM74.
+   - **2b. The summaries and graphs**, and the views that group rows: each tab's summary and graph (AM5, AM29, AM32 to
+     AM35, AM39 with UPower, AM42, AM44, AM47's GPU name), the graph tokens (AM7), Network's line under the table (AM43),
+     All Processes, Hierarchically (AM13), Processes, by GPU (AM49).
+   - **2c. Quit, Force Quit, Send Signal** (AM50 to AM56): the sheets, the `/proc/<pid>` descriptor and
+     `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu.
+   - **2d. Inspect** (AM57 to AM59): the Info button and its windows.
 3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
    tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
 4. **Windows 11's additions**: Processes, by Type, Performance, Efficiency Mode, App History, the Login Items link, the
@@ -536,7 +658,10 @@ under Settings > System > For developers (Advanced on 25H2), off by default.
   A7 uwsm 0.27.1's scope and service names, its escape of "-" and the session's bindpid unit; A8 the cost of each `/proc`
   read (Python); A2 also the `/proc/<pid>` descriptor path; A9 `perf_event_paranoid` 2 and a reversible
   `sched_setaffinity`; A10 the CPU cost of one sample per tab in C (`sampcost.c`), two runs. The second recorded output
-  replaces the first (review of e3882de).
+  replaces the first (review of e3882de). Step 1 corrects `sampcost.c`'s Energy label only (the recorded output keeps the
+  old label; its figure already counted the descriptor lists).
+- Step 1: `docs/audits/activity-2026-10-28/step1.md` (the cost per tab, the unit tests plain and under ASan and UBSan, the
+  mutants, the two-user container test) and `owner-checks.sh` (the read-only checks for the owner's machine).
 - Code read: `shell/services/NotResponding.qml` and `.js`, `shell/overlay/ForceQuitPanel.qml`, `shell/overlay/DockMenu.qml`,
   `shell/services/Power.qml`, `shell/services/AppLaunch.js`, `shell/services/SettingsApp.qml`,
   `apps/settings/qml/LoginItemsPage.qml`, `apps/runmode.h`, `config/hypr/grassfield/bindings.lua`.
@@ -544,7 +669,8 @@ under Settings > System > For developers (Advanced on 25H2), off by default.
 
 ## Consequences
 - New: `apps/activity/` (C++ sampler and model, QML window), `tests/unit/activity/` (gtest with fixture `/proc` trees: every
-  formula, every refusal), `tests/apps/activity_cost.sh` (the budget), `tests/apps/activity_*.sh` (offscreen), a nested
+  formula, every refusal), `tests/apps/activity_cost.sh` (the budget), `tests/integration/activity_owners.sh` (two users in
+  a throwaway container), `tests/apps/activity_*.sh` (offscreen), a nested
   scenario (Not Responding, Quit through the shell, the Dock graph), translations, the icon, the PKGBUILD lines.
 - Shell: a projection writer and the IPC action `activity quit` (security.md "IPC surface"; `ipc_inventory.sh` extended to
   the callers in `apps/`), the Dock
@@ -578,3 +704,69 @@ root, no polkit action, no new dependency; the IPC never kills; A1 supports AQ4;
 | MINOR: `ipc_inventory.sh` does not see callers in `apps/` | extended at step 3 (f; spec A-I1) |
 | MINOR: A6's "absent: MEMORY_PEAK=" | a probe artifact: A6 now searches field names without "=" and finds all of them |
 | MINOR: "Delete Usage History" deletes nothing | dropped (g, AD31; spec AM67) |
+
+**Integrator's notes on the merge of step 0 (pull request #37, opus PASS on f950042), carried into step 1.**
+| Note | Answer (step 1) |
+|---|---|
+| raise the soft `RLIMIT_NOFILE` (1 024 in the session) or cap the kept `/proc` descriptors (about 1 200 to 1 800) | both: the soft limit raised to the hard one (at most 16 384) and the kept descriptors capped at that limit less 256, opened and closed each time past it (d; spec AM-P2; `tst_sampler.cpp` "kept budget") |
+| "A0 to A8" (ADR header, spec header) and the cost column's figures | A0 to A10; the column gives A10's figures in C, A8's for `smaps_rollup` only |
+| AQ1's option A still calls the Preview precedent « Aperçu » | the option text stays as asked, annotated: Preview ships « Visionneuse », so the precedent holds for the English name only |
+| `sampcost.c`'s Energy label | "(+ io + a fifth of the threads + a tenth of the descriptor lists)", as its formula already counted |
+| the owner confirms AQ1 again (question 14) | asked in the session reply of step 1; confirmed by the owner on 2026-10-28 (relayed by the integrator on pull request #40): the name stays, owner-accepted risk; recorded in "Answers" and in the visual review's section 7 |
+
+**Integrator's opus review of 949fc98 (step 1, 2026-10-28): FAIL, four MAJORs and five MINORs; five surviving mutants.**
+What held: security and lifetime (the sampler reads only `/proc`, `/sys`, `login.defs` and `sock_diag`; writes nothing,
+execs nothing, has no thread, timer or install rule). Each finding and its answer:
+| Finding | Answer |
+|---|---|
+| MAJOR 1: AM-P2 fails on the reference CPU; the product costs 1.6 to 2.3 × A10's model (a 64 KiB buffer cleared at every read) | profiled (callgrind, perf, strace): no buffer cleared or copied; one read per per-process file; `stat` and `status` parsed in one pass; `io` kept; the owner's `fstatat` on arrival, exec and turn only (AD33); the Memory tab on `statm` with `status` in turns (AD32); the TCP dump searched without a table. Same run, same fixture: 0.9–1.1 × A10 on CPU, Memory, Energy and Network, 0.7–0.8 × on Disk. `activity_cost.sh --model` prints the ratios; the bench prints user and kernel time. A10 raises its own descriptor limit (at 1 024 it read no thread, descriptor or socket) |
+| MAJOR 2: names never refresh after exec | an exec is seen from `stat` (its name, or the user's processes' code addresses, fields 26 and 27), and the process is named again (d; spec AM17); `ANameFollowsAnExec`, `AnExecThatKeepsStatsNameIsSeenByItsCodeAddresses` |
+| MAJOR 3: a title written over argv[0] names the process | argv[0]'s basename only when argv[0] has no space and is the executable's or the invoked name, else the executable's basename, else `stat`'s (spec AM17; `processName`); the case in the fixture |
+| MAJOR 4: the fixture hardcodes /tmp, silently | `$TMPDIR`, and an exception the test reports when the fixture cannot be made or written |
+| MINOR 5: a failed `sock_diag` dump doubles TCP totals; a failed `opendir(/proc)` wipes every row and all state | a failed dump changes nothing; a failed listing keeps the last rows (`processesStale`) and all state (`AFailedTcpDumpChangesNoTotal`, `AFailedListingWipesNothing`) |
+| MINOR 6: other owners' cgroup read and kept raw | not read; no cgroup path in a row at all (an own unit's kind, session and eligibility are kept) |
+| MINOR 7: `socketOwner_` written, never read | removed |
+| MINOR 8: turns by pid residue can be unbalanced | turns by order of arrival (`TheTurnsAreAsFullWhateverThePids`) |
+| MINOR 9: AM47's GPU name and AM49's per-row device not built; AM38 and AM39 deferred without a record | AM49's devices are in the rows (`gpuDevices`); AM47's name, AM38 and AM39 (D-Bus) recorded in the spec as step 2 |
+| Mutants M03, M06, M07, M09, M10 survive | each killed by a test (`TheClockTickIsTheMachines`, `MemoryColumnsFromStatus`, `TheMemoryTabReadsStatmAndStatusInTurns`, `ACounterThatWentBackGivesNoRate`, `TheUserShareIsNeverAboveTheBusyShare`) |
+
+**Integrator's opus re-review of f68789c (step 1, 2026-10-28): FAIL, one MAJOR from this round's AD32, four MINORs.**
+What held: every claim of 568d5c8 (cost 0.73–1.10 × A10 against its step-0 plan; exec and argv[0] titles on the real
+kernel; the fixture; every MINOR; the limits of f68789c across the script, the spec, d, step1.md and STATE). Each finding
+and its answer:
+| Finding | Answer |
+|---|---|
+| MAJOR: AD32's swap goes stale after a tab switch: back on Memory, four fifths of the rows show the old swap | the tab's first sample after another tab or a pause of more than two intervals reads every `status` (AD32; spec AM30; `TheMemoryTabReadsEveryStatusAfterAnotherTabOrAPause`) |
+| MINOR: the `--model` ratios compare different read plans | A10 prints a "step 1" plan, the sampler's reads (owners a tenth per sample, `statm` and a fifth of `status`, `io` kept, the TCP dump without listeners), beside step 0's (the limits' source); `--model` takes its ratios from the step-1 plan: 1.1–1.4 × (d; step1.md) |
+| MINOR: `sampcost` warns "out of descriptors?" on the kernel's refusals | EMFILE and ENFILE counted apart from refusals (pid 1's `fd/`, non-dumpable agents), which are expected |
+| MINOR: two exec-detection gaps | a `prctl(PR_SET_NAME)` rename is no exec for the user's processes (their code addresses decide; `AProcessThatRenamesItselfKeepsItsName`); an exec into the same program at the same addresses (non-PIE, or randomization off) stays a known limit (d; spec Known limitations) |
+| MINOR: surviving mutants N06, N10, N13 (N03 without effect) | `AnExecIsSeenByItsCodeEndAlone` (N06); the real uid behind a root-owned directory read again in the owner's turn, `TheRealUidBehindARootDirectoryIsReadAgainInItsTurn` (N10); `ThePeakIsNeverBelowTheResidentSet` (N13) |
+| Network has no headroom (45.2–46.6 ms in a loaded sandbox) | the dump leaves out listeners, TIME_WAIT and closed sockets (fewer sockets on a real machine; none on the fixture, whose 200 sockets are established); the verdict waits on the integrator's idle run |
+
+**Integrator's AM-P2 runs on the reference machine, and the review of 19f5d4c: PASS, merged (2026-10-28).** On f68789c
+(load 3.5 to 5, a review build running) every tab passed: CPU 16.5 ms (limit 17), Memory 12.9 (25), Energy 32.8 (40), Disk
+10.9 (17), Network 35.8 (45). On 19f5d4c, at the merge (load 3.0 to 3.9): CPU 16.7, Memory 13.0, Energy 32.5, Disk 11.0,
+Network 36.0, at 1.39, 1.22, 1.24, 1.31 and 1.07 × A10's step-1 plan. Network is settled; the follow-ups go with step 2:
+| Note | Answer |
+|---|---|
+| 1. CPU passes with 0.3 ms to spare, at 1.39 × the step-1 plan, 14.5 ms of it in the kernel (f68789c): find the cut that brings it near 1.1 ×; does it read anything per process beyond `stat` that it does not show? | beyond `stat`, the CPU tab reads the owner (a tenth per sample, the User column), the descriptor lists (a tenth per sample: the GPU clients; Open Files comes with them), the real uid behind a root-owned directory (a tenth), and at every sample the `fdinfo` of every DRM descriptor found. Only that last read is outside A10, and this cloud machine has no GPU to measure it. A client is now read through one of its descriptors between two turns (d; spec AM45; `ADrmClientIsReadThroughOneOfItsDescriptors`), and A10 measures the DRM reads (every descriptor, one per client) and counts them in its step-1 CPU and Energy plans. The rest of the cut: open |
+| 2. A pause right after the first Memory sample is missed (`memoryInterval_` is 0 after a full read): use the configured interval | the pause is told by the interval set, `Options::interval` and `Sampler::setInterval` (AM9, Normally by default; the window sets it at step 2); AD32; spec AM30; `APauseRightAfterTheFirstMemorySampleIsSeen` (your probe: Memory at 5 s, back at 3 605 s, every swap new) |
+| 3. Mutant R13: `parseIo` accepts a line with one of its two byte fields | each byte field is one bit, and both are needed: one alone, or one twice, is no `io` (`ProcParse.Io`) |
+| 4. Carried from step 1: AM47's GPU name, AM38, AM39 | step 2 |
+
+**Step 2a, pull request #47: the integrator's review of 983b7de (PASS with a condition) and nested pass on 983b7de and
+bd50b9c (2026-10-29).** The stop on minimize is proven nested: the sampler's thread stays flat minimized and on another
+Desktop, and resumes on restore; WAYLAND_DEBUG shows one more toplevel state (`suspended`) on minimize, as AD35 says.
+| Note | Answer |
+|---|---|
+| Condition: the stop on minimize rests on what the compositor sends; say which in the ADR | AD35: the xdg_toplevel `suspended` state, read in Hyprland 0.56.2's and Qt 6.11.2's sources; A-W1 drives Qt's side (unexposed, then minimized); proven nested |
+| MINOR: an amdgpu client idle at its turn is never picked | picked by its identity, engine lines or not (d; `AClientIdleAtItsTurnIsPickedAndItsWorkShows`) |
+| MINOR: mutants L03, L05, L09, J01 survive | four cases (`step2a.md`); 13 of 13 mutants of the round caught |
+| NITs: the entry's apostrophe; no tooltip on the tabs and the search field (AM3) | `Moniteur d’activité`; Grassfield.Ui's `Tooltip` under each control (`test_toolbarTooltips`) |
+| MAJOR (nested): a second titlebar, the `gf-client-chrome` rule lacks `org.grassfield.Activity` | added there and to the maximize exemption; `client_chrome_rules.sh` checks that every app making a ChromeTagger is in the rule, under each app id it sets (Glance keeps its own rule), with a negative control |
+| MINOR (nested): a second launch leaves a minimized window minimized | the integrator chose the Dock's path: `dock reopen <desktop id>` (AD34), called by the app when its window is off screen (`activateWindow`, A-W1); `DockModel.windowsOf`; the IPC inventory counts an app caller built on `shellIpcArgs()`, with two selftests |
+| Cost: CPU 17.93 ms against 17 at load 3.9, 1.06 × A10's step-1 plan | **Integrator's decision**: AM-P2's limits are re-based on A10's step-1 plan, × 1.3 (d; spec "Performance"). `activity_cost.sh` runs A10 before and after the product on the same fixture, takes each tab's worse step-1 plan, prints the plan, the limit and the ratio, and fails a tab over 1.3 ×; `--model` is accepted and changes nothing. The reference machine's figures come from the integrator's run at idle before the merge |
+| Check of 737cdb0: Disk at 1.27–1.35 × its step-1 plan against 1.3; find what it spends beyond the plan and cut it to about 1.15 × | the Disk tab reads exactly the plan's files (strace: per sample `stat` of every process, `io` of the own ones, a tenth of the owners, the listing, `diskstats`). A10 now also reads them in one pass, in the sampler's order: 1.20–1.44 × the summed plan here, whose parts are each measured alone with warm caches; the product is 1.11–1.16 × that one pass. Reading `io` in a second pass costs more (2.55–2.64 against 2.38–2.53 ms). So 1.15 × the summed plan would need the product faster than C doing the same reads: put to the integrator |
+| Check of f2ff9a0, MAJOR: a second launch toggles the maximized state (`setWindowStates(... & ~Minimized)` made Qt send `unset_maximized`, which Hyprland toggles) | `activateWindow` leaves the states alone and clears only a Minimized state Qt still holds; A-W1 counts the platform's state requests during a second launch, normal and maximized: none (the old code asked once each time and fails it) |
+| Check of f2ff9a0: Disk 1.23–1.28 × its step-1 plan on the i5; cut it to about 1.15 × | callgrind: of the Disk tab's user-mode instructions, `parseStat` 56 %, `parseIo` 20 %, the loop 9 %. The product with that work taken out (its loop reading the same files, parsing and building nothing) costs 2.26–2.29 ms here against a summed plan of 1.62–1.83 ms (1.25–1.41 ×) and A10's one pass 1.93–2.16 ms; the whole product 2.27–2.53 ms. The parsing and the rows are 0–10 % of the sample: no cut there reaches 1.15 × the summed plan, which the reads alone exceed. Put to the integrator again, with the reads-only floor |
+| **Integrator's decision on Disk's reference** (after the reads-only floor) | AM-P2: Disk's limit is 1.3 × A10's one-pass Disk line, the other tabs keep the summed step-1 plan. `activity_cost.sh` takes Disk's plan from the one-pass line (the worse of A10's runs before and after the product) and prints both Disk lines; here Disk 1.19 × its one pass (1.97 against 1.66 ms). A cheaper way to read the same files is for 2b |

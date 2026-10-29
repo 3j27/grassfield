@@ -2,7 +2,9 @@
 # GF-AUDIT-001 SEC-03/SEC-04: the shell's IPC surface (Quickshell IpcHandler, callable by any process of the user) is
 # exactly the table in docs/specs/security.md "IPC surface", and each function is what its class says:
 #   action    has a real-session caller (a binding or gesture in config/hypr/grassfield/*.lua, a session helper in
-#             packaging/bin, packaging/shims or packaging/session-bin, or a screen corner in shell/desktop/HotCornerActions.js) and is not gated
+#             packaging/bin, packaging/shims or packaging/session-bin, a screen corner in shell/desktop/HotCornerActions.js,
+#             or a Grassfield app in apps/*/src whose call is built on apps/runmode.h shellIpcArgs(), the target and the
+#             function as the first two QStringLiterals of the QStringList appended to it) and is not gated
 #   dev       refused outside a dev session: its body checks the one dev rule (ADR-0019) by an exact gate, directly or
 #             through a property or a function of the same file:
 #               - in a security module (shell/security/**): the call
@@ -161,6 +163,11 @@ def load():
         for path in sorted(glob.glob(pattern)):
             if os.path.isfile(path):
                 files[path] = read(path)
+    # The apps that call the shell: only through apps/runmode.h shellIpcArgs() (the shell named by its directory).
+    for path in sorted(glob.glob("apps/*/src/*.cpp")):
+        text = read(path)
+        if "shellIpcArgs()" in text:
+            files[path] = text
     files["docs/specs/security.md"] = open("docs/specs/security.md", encoding="utf-8").read()
     return files
 
@@ -860,6 +867,12 @@ def check(files):
                 if "qs ipc" in line or (path.endswith(".lua") and "qs_ipc .." in line):
                     callers |= set(re.findall(r"call (\w+) (\w+)", line))
     callers |= set(re.findall(r'\["(\w+)",\s*"(\w+)"\]', files.get("shell/desktop/HotCornerActions.js", "")))
+    # A Grassfield app: `QStringList{QStringLiteral("qs")} + shellIpcArgs() + QStringList{QStringLiteral("<target>"),
+    # QStringLiteral("<function>"), ...}` or the same with `ipc` held in a variable: the list appended right after the
+    # shellIpcArgs() result names the call. A file that does not build on shellIpcArgs() calls nothing.
+    for path in sorted(files):
+        if path.startswith("apps/") and path.endswith(".cpp") and "shellIpcArgs()" in files[path]:
+            callers |= set(re.findall(r'(?:shellIpcArgs\(\)|\bipc)\s*\+\s*QStringList\s*\{\s*QStringLiteral\("(\w+)"\)\s*,\s*QStringLiteral\("(\w+)"\)', files[path]))
 
     defs = definitions(files)
     fails += defs
@@ -880,7 +893,7 @@ def check(files):
         fixtures_gated = gated_by(params, body, atext, fixture_exprs)
         if cls == "action":
             if key not in callers:
-                fails.append(name + ": class action but no binding, gesture or screen corner calls it")
+                fails.append(name + ": class action but no binding, gesture, screen corner or app calls it")
             elif dev_gated or fixtures_gated:
                 fails.append(name + ": class action but gated")
         elif cls == "dev":
@@ -1017,6 +1030,10 @@ def selftest(files):
         ("an effect under the exempt warning line", LOCK_QML, warn_line, "controller.pamSuppressed = true;"),
         ("pamSuppressed set from the gate call || true", LOCK_QML, 'controller.pamSuppressed = root.devHooks && Quickshell.env("GRASSFIELD_DEV_ALLOW_PAM") !== "1";',
          "controller.pamSuppressed = " + SEC_CALL + " || true;"),
+        # An app is a caller only through shellIpcArgs() (PR #47, Activity Monitor's `dock reopen`).
+        ("an app's call not built on shellIpcArgs()", "apps/activity/src/activityapp.cpp", "grassfield::apps::runmode::shellIpcArgs()",
+         'QStringList{QStringLiteral("ipc"), QStringLiteral("call")}'),
+        ("an app calling a function no IpcHandler has", "apps/activity/src/activityapp.cpp", 'QStringLiteral("reopen")', 'QStringLiteral("reopenx")'),
     ]
     # Re-review of bf9e280 (B1 and the reviewer's other probes): RunMode.js under another name, in QML and JS, any path
     # spelling; RunMode reached as a member or spread; Quickshell (env() feeds the gate) written or passed bare; the

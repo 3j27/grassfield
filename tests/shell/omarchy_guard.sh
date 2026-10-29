@@ -77,4 +77,11 @@ else
   echo "SKIP: Omarchy is not installed here (call chain not checked)"
 fi
 
+# A package upgrade (pacman unlinks and recreates /usr/share/grassfield/hypr/*.lua) must not reload the running session:
+# the real session's entry file turns Hyprland's file watcher off, the nested dev configuration keeps it (ADR-0001 amendment).
+desc="session.lua sets misc.disable_autoreload (an upgrade under a running session left a red error bar, or dropped the bindings)"
+check grep -q '^hl.config({ misc = { disable_autoreload = true } })' "$root/config/hypr/session.lua"
+desc="the nested dev configuration keeps the file watcher (edits of the repository's modules apply at once)"
+check bash -c '! grep -q disable_autoreload "$1"' _ "$root/config/hypr/dev.lua"
+
 exit $fail

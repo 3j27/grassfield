@@ -328,6 +328,9 @@ Scope {
         restoreAfter = choice && choice.kind === "minimized" ? choice.toplevel : null;
         const target = V2.closeTarget(choice, previous, stayOnSpace);
         focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);
+        // A window chosen brings its tile group forward (TL29), sent after its focus request as from the other entry points.
+        if (target.kind === "window" && !locked)
+            Compositor.groupForward(target.address);
         pending = target;
         releaseSettled = false;
         keepScreen = holderScreen();
@@ -370,12 +373,12 @@ Scope {
         }
         if (!viaPlugin && !locked)
             FocusReturn.startFallback(target, 0);
-        // A minimized window chosen in the strip comes back to the current Desktop and takes the focus (the same call as a
-        // click on its Dock tile), once the chromes have let go of the keyboard.
+        // A minimized window chosen in the strip comes back to the current Desktop and takes the focus, its tile group coming
+        // forward with it (the same call as a click on its Dock tile), once the chromes have let go of the keyboard.
         const restore = restoreAfter;
         restoreAfter = null;
         if (restore && !locked)
-            Compositor.unminimize(restore);
+            Compositor.unminimizeWithGroup(restore);
     }
 
     // Without the plugin capability the focus, check and retry run in FocusReturn.startFallback (shared with the Exclusive

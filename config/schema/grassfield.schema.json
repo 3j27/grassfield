@@ -231,6 +231,7 @@
           "enum": [
             "zoom",
             "minimize",
+            "fill",
             "none"
           ],
           "default": "zoom"
@@ -243,7 +244,23 @@
           "type": "boolean",
           "default": true
         },
+        "tilingOptionDrag": {
+          "type": "boolean",
+          "default": true
+        },
         "tilingMargins": {
+          "type": "boolean",
+          "default": true
+        },
+        "tilingLayouts": {
+          "type": "boolean",
+          "default": true
+        },
+        "tilingSuggestions": {
+          "type": "boolean",
+          "default": true
+        },
+        "tilingGroups": {
           "type": "boolean",
           "default": true
         },
