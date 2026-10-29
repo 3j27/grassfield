@@ -4,7 +4,8 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
-in two (ADR-0036 D40): 6a on its branch (the Split View Desktop, TL33), 6b not built. Below, "Today" is the state before step 1. A requirement
+in two, then three (ADR-0036 D40 and D40 amended): 6a merged (PR #48: the Split View Desktop, TL33), 6b on its branch (the
+separator's reset and the swap), 6c not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -496,9 +497,17 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   fit (D57). Popups and the overlay compute `active` and `open` again, once a second while anything shows, when they
   disagree with the popup's kind (a value a binding loop left stale must never keep the overlay over every click and key). The picker opens with its first window selected (Return takes it), and the window picked has the
   keyboard once the suggestions close (D58). A lone member's fill waits for the end of the event that made it lonely, so
-  the shell's own lock, which closes the picker just before its lock state changes, sends it at the unlock. Step 6b: the separator's
-  double-click reset, the drag that swaps the two, the titles hidden and revealed at the top, the Split View rows (Replace
-  Tiled Window, Move Window to Desktop, Make Window Full Screen), the Desktop's name in the Overview.
+  the shell's own lock, which closes the picker just before its lock state changes, sends it at the unlock.
+  Step 6b as built (ADR-0036 D59, D60, D40 amended): a double-click on the separator (the shared edge between the two
+  members, core `splitOfEdge`) puts both back to equal halves of the whole output, its press and release the plugin's; an
+  ordinary group's shared edge keeps TL30's drag only. A member dragged by its titlebar follows the pointer at its size (no
+  un-tile, snap or preview); released over the other half the two swap halves (core `splitDropZone`; each keeps its group
+  and its box from before), anywhere else, or when the drag ends without its release, it goes back in its half; it never
+  takes another output's Desktop that way; nothing swaps while locked. After #48's merge: the picker no longer reads its
+  windows before they exist (a TypeError at each open), the window picked has the keyboard on any output whose Desktop shows
+  it, and the tiling popover and the suggestions close with their output instead of moving to another one. Step 6c: the
+  titles hidden and revealed at the top, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full
+  Screen), the Overview's drop targets for a Split View Desktop.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
