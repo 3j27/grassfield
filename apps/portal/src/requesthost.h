@@ -60,6 +60,9 @@ public:
     Q_INVOKABLE void present(int id, QObject *window);
     // The window for `id` cannot be made: the call goes to x-d-p-gtk now.
     Q_INVOKABLE void fail(int id);
+    // For the QML: the window for `id` waits for another one to go (one alert at a time, as macOS shows them): no deadline runs
+    // until present() (integrator nested pass of 1745c0c, MINOR 5).
+    Q_INVOKABLE void queue(int id);
     // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
     // has no entry.
     Q_INVOKABLE QString appName(const QString &appId) const;

@@ -14,6 +14,7 @@
 #include <QDeadlineTimer>
 #include <QTest>
 #include <QTranslator>
+#include <QWindow>
 
 #include <functional>
 #include <limits>
@@ -431,6 +432,31 @@ TEST_F(AccessTest, AnAnswerAfterTheForwardIsIgnored)
     EXPECT_FALSE(reply->error);
     EXPECT_EQ(reply->response, 1u) << "x-d-p-gtk's answer";
     EXPECT_EQ(access->pending(), 0);
+}
+
+// One alert at a time: an alert waiting for another to go has no deadline (it is not sent to x-d-p-gtk for waiting), and has
+// the whole deadline again once its window is presented (integrator nested pass of 1745c0c, MINOR 5).
+TEST_F(AccessTest, AnAlertWaitingItsTurnHasNoDeadline)
+{
+    access->setUiLoader([] { return true; });
+    gtk.response = 0;
+    auto first = call(QStringLiteral("/r/q1"), {});
+    auto second = call(QStringLiteral("/r/q2"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 2; }));
+    const int waiting = opened.at(1).first;
+    access->queue(waiting);
+    ASSERT_TRUE(waitFor([&] { return first->done; }, 3 * kDeadlineMs)) << "the first, never drawn, goes to x-d-p-gtk";
+    QTest::qWait(kDeadlineMs);
+    EXPECT_FALSE(second->done) << "the waiting one is not sent on";
+    EXPECT_EQ(gtk.calls.size(), 1);
+    // Its turn: a window that never draws a frame, and the deadline counts from now.
+    QWindow window;
+    access->present(waiting, &window);
+    QTest::qWait(kDeadlineMs / 2);
+    EXPECT_FALSE(second->done) << "well before its deadline";
+    ASSERT_TRUE(waitFor([&] { return second->done; }, 3 * kDeadlineMs));
+    EXPECT_EQ(gtk.calls.size(), 2);
+    EXPECT_TRUE(closed.contains(waiting));
 }
 
 // At most maxPending requests at once, one request per handle: the others end at once, with an error (no answer).

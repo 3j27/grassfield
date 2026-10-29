@@ -200,6 +200,9 @@ void RequestHost::present(int id, QObject *object)
         return;
     }
     r->window = window;
+    // A request that waited its turn (queue()) has the whole deadline from now.
+    if (!r->deadline.isActive())
+        r->deadline.start();
     if (auto *quick = qobject_cast<QQuickWindow *>(window)) {
         connect(quick, &QQuickWindow::frameSwapped, this, [this, id] {
             const auto shown = m_requests.value(id);
@@ -228,6 +231,13 @@ void RequestHost::fail(int id)
         return;
     qWarning("grassfield-portal: the panel could not be made; the request goes to x-d-p-gtk");
     forward(id);
+}
+
+void RequestHost::queue(int id)
+{
+    const auto r = m_requests.value(id);
+    if (r && r->state == Request::State::Making && !r->window)
+        r->deadline.stop();
 }
 
 void RequestHost::close(const QString &handle)

@@ -26,6 +26,32 @@ TestCase {
         property string testAnswer: ""
     }
 
+    // Access as AccessAlerts.qml sees it: the requests it opens and closes, the windows presented and the ones queued.
+    QtObject {
+        id: fakeAccess
+        signal opened(int id, var request)
+        signal closed(int id)
+        property var presented: []
+        property var queued: []
+        function present(id: int, window: var): void {
+            fakeAccess.presented = fakeAccess.presented.concat([id]);
+            window.show();
+        }
+        function queue(id: int): void {
+            fakeAccess.queued = fakeAccess.queued.concat([id]);
+        }
+        function fail(id: int): void {
+        }
+        function answer(id: int, grant: bool, choices: var): void {
+            fakeAccess.closed(id);
+        }
+    }
+
+    Component {
+        id: managerComponent
+        AccessAlerts {}
+    }
+
     Component {
         id: alertComponent
         AccessAlert {
@@ -221,6 +247,7 @@ TestCase {
         mousePress(alert.contentItem, 10, 10);
         mouseRelease(alert.contentItem, 10, 10);
         verify(!alert.keysHeld);
+        tryVerify(() => alert.armed, 2000, "armed again after the click");
         keyClick(Qt.Key_Return);
         tryVerify(() => fakeHost.answers.length === 1);
     }
@@ -245,6 +272,7 @@ TestCase {
         wait(50);
         verify(!alert.keysHeld, "the click ended the hold");
         compare(fakeHost.answers.length, 0, "and answered nothing");
+        tryVerify(() => alert.armed, 2000, "armed again after the click");
         keyClick(Qt.Key_Return);
         tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].grant, true);
@@ -268,6 +296,112 @@ TestCase {
         compare(fakeHost.answers.length, 0, "and answered nothing");
     }
 
+    // The first click after the unlock ends the hold, whether the alert was armed or not, and whether that click came just
+    // before the alert became active or after (integrator nested pass of 1745c0c, MINOR 2: it took three clicks).
+    function test_the_first_click_after_the_unlock_ends_the_hold(): void {
+        const alert = test.openAlert({}, {shownAt: 1}, false);
+        verify(alert.keysHeld && !alert.armed, "held and not armed yet");
+        mouseClick(alert.contentItem, 10, 10);
+        verify(!alert.keysHeld, "that click ended the hold");
+        compare(fakeHost.answers.length, 0, "and answered nothing");
+        tryVerify(() => alert.armed, 2000);
+        keyClick(Qt.Key_Return);
+        tryVerify(() => fakeHost.answers.length === 1);
+    }
+
+    // The press in the alert that made it active may come just before the activation: it is that click, and no hold follows.
+    function test_the_click_that_made_it_active_is_that_click(): void {
+        const alert = test.openAlert({}, {}, false);
+        mouseClick(alert.contentItem, 10, 10);
+        alert.inactiveSince = Date.now() - 2 * Tokens.filesPanelLateFocusMs;
+        alert.becameActive();
+        verify(!alert.keysHeld, "the click that made it active counts");
+        compare(fakeHost.answers.length, 0);
+    }
+
+    // MAJOR 1 of the integrator's nested pass of 1745c0c: two labels that do not fit side by side (French) stack, the default
+    // button at the bottom, both inside the alert; short ones stay side by side.
+    function test_buttons_that_do_not_fit_stack(): void {
+        const wide = test.openAlert({denyLabel: "Ne pas autoriser", grantLabel: "Autoriser"});
+        const deny = test.button(wide, "Ne pas autoriser");
+        const grant = test.button(wide, "Autoriser");
+        const d = deny.mapToItem(wide.contentItem, 0, 0);
+        const g = grant.mapToItem(wide.contentItem, 0, 0);
+        verify(g.y > d.y, "one above the other, the default at the bottom");
+        compare(d.x, g.x);
+        compare(deny.width, grant.width);
+        verify(g.x >= 0 && g.x + grant.width <= wide.width, "inside the alert: " + (g.x + grant.width) + " of " + wide.width);
+        verify(g.y + grant.height <= wide.height, "inside the alert's height");
+        verify(deny.implicitWidth <= deny.width, "the label is not cut");
+    }
+
+    function test_short_buttons_stay_side_by_side(): void {
+        const alert = test.openAlert({denyLabel: "No", grantLabel: "Yes"});
+        const no = test.button(alert, "No");
+        const yes = test.button(alert, "Yes");
+        const n = no.mapToItem(alert.contentItem, 0, 0);
+        const y = yes.mapToItem(alert.contentItem, 0, 0);
+        compare(n.y, y.y, "side by side");
+        verify(y.x > n.x, "the default on the right");
+        compare(no.width, yes.width);
+        verify(y.x + yes.width <= alert.width);
+    }
+
+    // MINOR 4 of the integrator's nested pass of 1745c0c: the hint takes the buttons' place while the keys are held, so the
+    // alert keeps its size and nothing moves under the pointer.
+    function test_the_hint_takes_the_buttons_place(): void {
+        const alert = test.openAlert({});
+        const height = alert.height;
+        const hint = test.find(alert.contentItem, i => i.text === "Click the alert before you answer it.");
+        verify(hint !== null && !hint.visible);
+        alert.inactiveSince = Date.now() - 2 * Tokens.filesPanelLateFocusMs;
+        alert.becameActive();
+        verify(alert.keysHeld);
+        verify(hint.visible, "the hint shows");
+        verify(!test.button(alert, "Allow").visible, "in the buttons' place");
+        compare(alert.height, height, "the alert keeps its size");
+        mouseClick(alert.contentItem, 10, 10);
+        verify(!hint.visible && test.button(alert, "Allow").visible);
+        compare(alert.height, height);
+    }
+
+    // MINOR 3 of the integrator's nested pass of 1745c0c: the question's symbol (an application without an icon of its own) is
+    // drawn in the text colour; an application's own icon keeps its colours.
+    function test_the_symbol_is_in_the_text_colour(): void {
+        const alert = test.openAlert({icon: "camera-web-symbolic", appIcon: ""});
+        const symbol = test.find(alert.contentItem, i => i.name === "camera-web-symbolic" && i.tint !== undefined);
+        verify(symbol !== null && symbol.visible, "the symbol");
+        verify(symbol.tint, "tinted");
+        verify(Qt.colorEqual(symbol.color, Appearance.colors.text), "the text colour: " + symbol.color);
+    }
+
+    function test_an_applications_own_icon_keeps_its_colours(): void {
+        const alert = test.openAlert({icon: "camera-web-symbolic", appIcon: "foot"});
+        const symbol = test.find(alert.contentItem, i => i.tint !== undefined && i.name !== undefined);
+        verify(symbol !== null && !symbol.visible, "the application's own icon instead of the symbol");
+    }
+
+    // MINOR 5 of the integrator's nested pass of 1745c0c: one alert at a time, the others waiting in order with no deadline
+    // (Access::queue); a waiting one the application closes leaves the line; the next shows when the one on screen goes.
+    function test_one_alert_at_a_time(): void {
+        fakeAccess.presented = [];
+        fakeAccess.queued = [];
+        const manager = createTemporaryObject(managerComponent, test, {host: fakeAccess});
+        fakeAccess.opened(1, test.request({}));
+        fakeAccess.opened(2, test.request({title: "Second"}));
+        fakeAccess.opened(3, test.request({title: "Third"}));
+        compare(fakeAccess.presented, [1], "the first only");
+        compare(fakeAccess.queued, [2, 3], "the others wait");
+        verify(manager.alerts[1].visible);
+        fakeAccess.closed(2);
+        manager.alerts[1].answer(false);
+        compare(fakeAccess.presented, [1, 3], "the next waiting one");
+        verify(manager.alerts[3] !== undefined && manager.alerts[1] === undefined);
+        fakeAccess.closed(3);
+        compare(Object.keys(manager.alerts).length, 0);
+        compare(manager.waiting.length, 0);
+    }
+
     // The click that ends the hold only ends it, even on Allow (review of step 5a, M1: behind the lock, the first click after
     // the unlock went on to the button under it).
     function test_the_click_that_ends_the_hold_is_no_answer(): void {
@@ -279,6 +413,10 @@ TestCase {
         wait(50);
         verify(!alert.keysHeld, "the hold ended");
         compare(fakeHost.answers.length, 0, "and nothing was answered");
+        mouseClick(grant, grant.width / 2, grant.height / 2);
+        wait(50);
+        compare(fakeHost.answers.length, 0, "a second click right after it (a double click) answers nothing");
+        tryVerify(() => alert.armed, 2000, "armed again after the click");
         mouseClick(grant, grant.width / 2, grant.height / 2);
         tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].grant, true);

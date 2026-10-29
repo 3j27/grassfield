@@ -5,9 +5,10 @@ import "IconSource.js" as IconSource
 
 // A permission alert of grassfield-portal (ADR-0035 D-5; docs/specs/system-dialogs.md section 2, AC1-AC3): the macOS 26 alert
 // shape of the shell's alerts (shell/overlay/Dialog.qml, the same tokens): the application's icon in a 64-pt frame at the top
-// left, the frontend's title in bold and its question and note left-aligned under it, then two capsule buttons of one width
-// filling the row, "Don't Allow" and "Allow" (or the frontend's labels). A window of its own, centred on the screen, or over
-// the application's window when the frontend names one.
+// left (or the question's symbol in the text colour), the frontend's title in bold and its question and note left-aligned
+// under it, then two capsule buttons of one width filling the row, "Don't Allow" and "Allow" (or the frontend's labels), one
+// above the other when they do not fit side by side. A window of its own, centred on the screen, or over the application's
+// window when the frontend names one; one at a time (AccessAlerts.qml).
 // - Neither button is the default for the camera and screen capture (AC2): Return does nothing until a
 //   button has the keyboard. Otherwise Return grants; Space acts only on a button the user reached with Tab (the keyboard
 //   starts on the alert, never on a button: a space typed for another window never grants, ADR-0035 5a-5).
@@ -16,7 +17,7 @@ import "IconSource.js" as IconSource
 //   meanwhile starts that time again (a click or a key meant for what was there before never answers it); an alert that gets
 //   the keyboard late, the first time (it opened behind the lock, AC3, or under another window) or after a long time away
 //   (the lock, the screen saver or another window came in front of it), takes keys only after a click in it, and that click
-//   only ends the hold.
+//   only ends the hold; the hint takes the buttons' place meanwhile, so the alert never changes size.
 Window {
     id: alert
 
@@ -47,9 +48,12 @@ Window {
     property bool keysHeld: false
     property real shownAt: 0
     property bool everActive: false
-    // When the alert last stopped being the active window.
+    // When the alert last stopped being the active window, and when it was last pressed while a click answers nothing.
     property real inactiveSince: 0
+    property real pressedAt: 0
     property bool testAnswered: false
+    // The frontend's symbolic icon, shown when the application has no icon of its own.
+    readonly property string symbol: !alert.request.appIcon && alert.request.icon ? String(alert.request.icon) : ""
     readonly property real pad: Tokens.spacingLg
     readonly property real textInset: Tokens.panelAlertTextInset
 
@@ -61,7 +65,7 @@ Window {
     color: Appearance.colors.windowBackground
     modality: alert.request.modal && alert.request.parented ? Qt.WindowModal : Qt.NonModal
     // One size, the content's: the alert is not resized.
-    readonly property real contentHeight: alert.pad + column.implicitHeight + Tokens.spacingLg + buttonRow.height + alert.pad
+    readonly property real contentHeight: alert.pad + column.implicitHeight + Tokens.spacingLg + footer.height + alert.pad
     width: Tokens.panelAlertWidth
     height: alert.contentHeight
     minimumWidth: Tokens.panelAlertWidth
@@ -107,10 +111,13 @@ Window {
         alert.armed = false;
         arm.restart();
         // Away long enough (since it opened, or since it was last active) and keys wait for a click: a Return meant for the
-        // lock or for another window does not answer it once it is back (integrator review of e24ea5c, MINOR 1).
-        const away = Date.now() - (alert.everActive ? alert.inactiveSince : alert.shownAt);
+        // lock or for another window does not answer it once it is back (integrator review of e24ea5c, MINOR 1). A press in it
+        // that made it active is that click, whether it came just before the activation or after (integrator nested pass of
+        // 1745c0c, MINOR 2).
+        const now = Date.now();
+        const away = now - (alert.everActive ? alert.inactiveSince : alert.shownAt);
         alert.everActive = true;
-        if (away > Tokens.filesPanelLateFocusMs)
+        if (away > Tokens.filesPanelLateFocusMs && now - alert.pressedAt > alert.armMs)
             alert.keysHeld = true;
         if (!alert.keysHeld)
             alert.focusStart();
@@ -188,15 +195,26 @@ Window {
                 width: Tokens.panelAlertIconFrame
                 height: Tokens.panelAlertIconFrame
 
+                // The application's icon (in its colours).
                 Image {
+                    visible: alert.symbol === ""
                     anchors.centerIn: parent
                     width: Tokens.panelAlertIconGlyph
                     height: Tokens.panelAlertIconGlyph
                     sourceSize: Qt.size(2 * Tokens.panelAlertIconGlyph, 2 * Tokens.panelAlertIconGlyph)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
-                    // The application's icon; for an application the frontend could not name, the question's own symbol.
-                    source: alert.request.appIcon ? IconSource.url(String(alert.request.appIcon)) : IconSource.url(alert.request.icon ? String(alert.request.icon) : "application-x-executable")
+                    source: alert.symbol === "" ? IconSource.url(alert.request.appIcon ? String(alert.request.appIcon) : "application-x-executable") : ""
+                }
+
+                // For an application the frontend could not name, the question's own symbol, in the text colour (the theme's grey
+                // was 1.2:1 on the dark window; integrator nested pass of 1745c0c, MINOR 3).
+                ThemeIcon {
+                    visible: alert.symbol !== ""
+                    anchors.centerIn: parent
+                    name: alert.symbol
+                    size: Tokens.panelAlertIconGlyph
+                    color: Appearance.colors.text
                 }
             }
 
@@ -285,10 +303,66 @@ Window {
                     }
                 }
             }
+        }
+
+        // The buttons, or while the keys are held the hint in their place: the alert keeps one size, so nothing moves under the
+        // pointer when a hold starts or ends (integrator nested pass of 1745c0c, MINOR 4).
+        Item {
+            id: footer
+            x: alert.pad
+            y: alert.pad + column.implicitHeight + Tokens.spacingLg
+            width: alert.width - 2 * alert.pad
+            height: Math.max(buttons.height, hint.implicitHeight)
+
+            // Two capsules of one width side by side (the shell's alert); when the wider label does not fit in half the row, one
+            // above the other at the row's width, the default button at the bottom, as macOS stacks an alert's buttons
+            // (integrator nested pass of 1745c0c, MAJOR 1: "Ne pas autoriser" pushed "Autoriser" out of the alert).
+            Item {
+                id: buttons
+                visible: !alert.keysHeld
+                width: parent.width
+                readonly property real gap: Tokens.controlAlertButtonGap
+                readonly property bool stacked: 2 * Math.max(denyButton.implicitWidth, grantButton.implicitWidth) + gap > width
+                readonly property real buttonWidth: stacked ? width : (width - gap) / 2
+                readonly property real buttonHeight: Math.max(denyButton.implicitHeight, grantButton.implicitHeight)
+                height: stacked ? 2 * buttonHeight + gap : buttonHeight
+
+                Button {
+                    id: denyButton
+                    capsule: true
+                    width: buttons.buttonWidth
+                    text: alert.denyText
+                    onClicked: {
+                        if (alert.armed)
+                            alert.answer(false);
+                        else
+                            arm.restart();
+                    }
+                }
+
+                Button {
+                    id: grantButton
+                    capsule: true
+                    primary: alert.hasDefault
+                    x: buttons.stacked ? 0 : buttons.buttonWidth + buttons.gap
+                    y: buttons.stacked ? buttons.buttonHeight + buttons.gap : 0
+                    width: buttons.buttonWidth
+                    text: alert.grantText
+                    onClicked: {
+                        if (alert.armed)
+                            alert.answer(true);
+                        else
+                            arm.restart();
+                    }
+                }
+            }
 
             Text {
+                id: hint
                 visible: alert.keysHeld
+                anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
+                horizontalAlignment: Text.AlignHCenter
                 textFormat: Text.PlainText
                 text: qsTr("Click the alert before you answer it.")
                 color: Appearance.colors.textSecondary
@@ -297,48 +371,12 @@ Window {
                 wrapMode: Text.WordWrap
             }
         }
-
-        // Two capsules of one width filling the row (the shell's alert), never narrower than the wider label.
-        Row {
-            id: buttonRow
-            x: alert.pad
-            y: alert.pad + column.implicitHeight + Tokens.spacingLg
-            spacing: Tokens.controlAlertButtonGap
-            readonly property real fill: (alert.width - 2 * alert.pad - spacing) / 2
-            readonly property real wanted: Math.max(fill, denyButton.implicitWidth, grantButton.implicitWidth)
-            height: grantButton.implicitHeight
-
-            Button {
-                id: denyButton
-                capsule: true
-                width: buttonRow.wanted
-                text: alert.denyText
-                onClicked: {
-                    if (alert.armed)
-                        alert.answer(false);
-                    else
-                        arm.restart();
-                }
-            }
-
-            Button {
-                id: grantButton
-                capsule: true
-                primary: alert.hasDefault
-                width: buttonRow.wanted
-                text: alert.grantText
-                onClicked: {
-                    if (alert.armed)
-                        alert.answer(true);
-                    else
-                        arm.restart();
-                }
-            }
-        }
     }
 
     // Clicks wait until the alert is armed; while the keys are held, this takes them, and the first press in the alert ends the
-    // hold, and only that (review of step 5a, M1: it once went on to the button under it).
+    // hold, and only that (review of step 5a, M1: it once went on to the button under it), also before the alert is armed
+    // (integrator nested pass of 1745c0c, MINOR 2: the click that made it active after the unlock did nothing, and it took
+    // three); the alert is armed again from that press, so the second click of a double click answers nothing.
     Item {
         id: guard
         anchors.fill: parent
@@ -354,10 +392,13 @@ Window {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
             onPressed: {
-                if (!alert.armed)
-                    return;
-                alert.keysHeld = false;
-                alert.focusStart();
+                alert.pressedAt = Date.now();
+                if (alert.keysHeld) {
+                    alert.keysHeld = false;
+                    alert.focusStart();
+                }
+                alert.armed = false;
+                arm.restart();
             }
         }
     }
