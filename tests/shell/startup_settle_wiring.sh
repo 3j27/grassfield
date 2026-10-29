@@ -51,8 +51,8 @@ check before $S "root.takeDocument(read.text);" "root.loaded = true" 4
 desc="Store: loaded flips after takeMissingFile (a missing file counts as read)"
 check before $S "root.takeMissingFile();" "root.loaded = true" 4
 desc="Store: loaded flips after takeBadFile"
-check before $S "const level = same ? root.badLevel + 1 : 0;" "root.takeBadFile(root.badReason(read.status));" 3
-check before $S "const level = same ? root.badLevel + 1 : 0;" "root.loaded = true" 4
+bad=$(at $S "const level = same ? root.badLevel + 1 : 0;"); tb=$(at $S "root.takeBadFile(root.badReason(read.status));" "${bad:-1}"); ld=$(at $S "root.loaded = true" "${tb:-1}")
+check test -n "$bad" -a -n "$tb" -a -n "$ld" -a "$((tb - bad))" -le 3 -a "$((ld - tb))" -le 2
 
 desc="Desktop: lay is empty until ready"
 check has $V "readonly property var lay: ready ? Logic.layout("
