@@ -470,7 +470,19 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Desktop it came from when it showed it (D43). The menu bar and the Dock hide there as in full screen and show at their
   edge; the wallpaper's video pauses. On a Split View window the popover offers only Exit Full Screen, and the Window menu
   Exit Full Screen without Zoom or tiling items: the plugin's `unsplit(address)` (D44). Its titlebar drag moves nothing
-  (D46). The `hyprctl grassfield-tiling` reply lists `"splits":[{"workspace","output","home"}]`. Step 6b: the separator's
+  (D46). The `hyprctl grassfield-tiling` reply lists `"splits":[{"workspace","output","home","windows","waiting"}]`.
+  After the integrator review of c7a6b6e (D49-D55): a Split View Desktop has members, the window it was made for and the one
+  picked, whatever their state; another window there is an ordinary floating window, no member, and changes nothing (D52;
+  once no member is left the Split View ends and that Desktop stays, an ordinary one). The green button of a member, with or
+  without Alt, leaves the Split View as Exit Full Screen does (D49). An app's own full screen or a zoom keeps a member and
+  its half, the other keeps its own, and the window comes back to its half after; one of Hyprland's moves (Super+drag) puts
+  a member back in its half at the release; the tiling keys, Arrange and an edge double-click refuse a member, Fill aside for
+  one alone (D50). Its picker ending without a second window in any way (dismissed, refused over another surface, timed out,
+  ended by another change) makes the one member fill the Desktop; while locked, at the unlock (D51). Exit Full Screen of a
+  window tiled on its Desktop before the split puts it back into that tile when its zone is still free (D54). A Split View
+  Desktop emptied while locked ends at the unlock (D55); it follows its workspace to another output when its output goes
+  away. The Overview names it after its apps and gives it no number, the Desktops keep theirs, and the Window menu's Move to
+  Desktop lists the Desktops only (D53). Step 6b: the separator's
   double-click reset, the drag that swaps the two, the titles hidden and revealed at the top, the Split View rows (Replace
   Tiled Window, Move Window to Desktop, Make Window Full Screen), the Desktop's name in the Overview.
 
@@ -487,7 +499,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
   `tests/security/lock_surfaces.sh` when it is a surface. Plugin side (step 1, defence in depth): the verbs `tile` and
   `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves). Step 6a: `Compositor.split` and `Compositor.unsplit` ask
-  `SessionState.refuses` first, and the plugin's `split` and `unsplit` refuse while locked (no Desktop made or shown).
+  `SessionState.refuses` first, and the plugin's `split` and `unsplit` refuse while locked (no Desktop made or shown);
+  `Compositor.tile` and `Compositor.fillAlone` refuse first too, and services/TilingSuggest sends no fill while locked
+  (integrator review of c7a6b6e, MAJOR 2).
 
 ## Appearance (F1 strict, ADR-0024)
 - Targets: geometry within ±1 pt of the owner's captures, tints within ±0.1, contrast A2, motion by tokens. Tokens only;

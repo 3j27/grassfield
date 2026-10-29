@@ -630,8 +630,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `hl.plugin.grassfield.move_to(address, output)` moves a window onto another output (a tiled one into the same tile
   there; refused while locked). Since tiling step 6a (TL33) `hl.plugin.grassfield.split(address, side)` makes a Split View
   Desktop (the next free workspace id on the window's output, shown; the window in that half of the whole output) and
-  `hl.plugin.grassfield.unsplit(address)` sends a window of one back to the Desktop it came from (both refused while locked);
-  the plugin fills a Split View Desktop's one window left and ends an empty one. Untrusted: fixed-size strings, the address
+  `hl.plugin.grassfield.unsplit(address)` sends a member back to the Desktop it came from, into its tile there when its zone
+  is free (both refused while locked); the plugin keeps each Split View Desktop's members (whatever their state), fills the
+  one left, ends one without a member (at the unlock when locked), and refuses the tiling of a member; the zoom light of a
+  member leaves the Split View. Untrusted: fixed-size strings, the address
   compared with live windows, the place and the side from fixed lists, the output name checked and compared with the live
   outputs.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag

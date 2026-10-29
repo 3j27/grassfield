@@ -8,8 +8,10 @@ A string is user-visible when it is the argument of qsTr/qsTranslate/QT_TR_NOOP/
 shell/, ui/, apps/ (qml, js, cpp, h), a <source> or <translation> of translations/*.ts, or a Name/GenericName/Comment/
 Keywords line of a .desktop file. Comments and internal identifiers are not scanned (D-13 renames those later).
 Owner decisions of 2026-10-27: "Night Shift" and "Notification Center" never come back (the UI says "Night Light" and
-"Notifications"); "Focus" stays allowed (owner decision, same day), so it is not in the list. The rest of the list is the
-pattern of visual-review section 3.1. Exception: `ui-names-ignore` on the line.
+"Notifications"); "Focus" stays allowed (owner decision, same day), so it is not in the list. Tiling step 6a (2026-10-29):
+macOS's "Split View" is not shown either (the UI says Full Screen, Left of Screen, Right of Screen, Full Screen Tile; the
+specs keep the name as the macOS reference). The rest of the list is the pattern of visual-review section 3.1. Exception:
+`ui-names-ignore` on the line.
 """
 import re
 import subprocess
@@ -21,7 +23,7 @@ BANNED = [
     "Mac OS", "Apple", "Liquid Glass", "Tahoe", "Golden Gate", "AirDrop", "AirPlay", "Exposé", "Time Machine",
     "Handoff", "Sidecar", "FaceTime", "Safari", "Keychain", "Retina", "Touch ID", "Aqua", "Cupertino", "Sequoia",
     "Sonoma", "SF Pro", "SF Symbols", "San Francisco", "Night Shift", "True Tone", "Notification Center",
-    "Dashboard", "Continuity", "Ventura", "Monterey", "Big Sur", "Catalina", "Mojave",
+    "Dashboard", "Continuity", "Ventura", "Monterey", "Big Sur", "Catalina", "Mojave", "Split View",
 ]
 # Whole words only. "Mac" is matched case-sensitively (the Mac, not a "MAC address").
 PATTERN = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(n) for n in BANNED) + r")(?!\w)", re.I)
@@ -103,6 +105,9 @@ def selftest():
         ('<translation>Notification Center</translation>', "ts", 1),
         ('Name[fr]=Aperçu', "desktop", 0),
         ('Comment=Like Spotlight', "desktop", 1),
+        ('text: qsTr("Exit Split View")', "code", 1),
+        ('text: qsTr("Left of Screen")', "code", 0),
+        ('// a Split View Desktop (comment)', "code", 0),
     ]
     bad = [c for c in cases if len(hits_in(c[0], c[1])) != c[2]]
     for text, kind, want in bad:

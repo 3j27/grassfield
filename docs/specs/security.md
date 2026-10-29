@@ -420,11 +420,14 @@ shell no longer relies on that alone:
   `reason:"locked"`, no Desktop is made or shown, no window moves) and for an unknown window, a side other than left or
   right, a window of no Split View Desktop or while the Stages strip shows (`reason:"invalid"`). The shell sends them only
   through `Compositor.split` and `Compositor.unsplit`, which ask `SessionState.refuses` first (the popover's Full Screen
-  submenu and the Window menu, both refused surfaces while locked); a dismissed Split View suggestion makes the window fill
-  through `Compositor.tile`, which refuses too. What the plugin does on its own after a Split View window left (the other
-  fills, an empty Split View Desktop shown goes back home) moves only windows of that Desktop and shows no new surface; the
-  Split View Desktops the shell reads from the `hyprctl grassfield-tiling` reply are Desktop ids and output names only.
-  lock_surfaces.sh checks both refusals and the fill path, each with a mutation.
+  submenu and the Window menu, both refused surfaces while locked). A Split View whose picker ended without a second window
+  fills through `Compositor.fillAlone` and `Compositor.tile`, which both ask `SessionState.refuses` first (integrator
+  review of c7a6b6e, MAJOR 2: `tile` did not), and services/TilingSuggest computes no window to fill while locked (it
+  sends the fill at the unlock). What the plugin does on its own after a member left (the other fills, an empty Split View
+  Desktop shown goes back home) moves only windows of that Desktop and shows no new surface, and an emptied Split View
+  Desktop is not left behind the lock screen: it ends at the unlock. The Split View Desktops the shell reads from the
+  `hyprctl grassfield-tiling` reply are Desktop ids, output names and window addresses only. lock_surfaces.sh checks the
+  four refusals and the fill path, each with a mutation; tests/shell/split_view checks them on the real singletons.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

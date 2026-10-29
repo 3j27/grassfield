@@ -92,8 +92,10 @@ Shell side only, no plugin change: the plugin does not transform windows parked 
 - Platform (`shell/platform/Compositor.qml`, new functions only): `spacesOn`, `windowsOn`, `nextSpaceId`,
   `focusSpace`, `moveToSpace` (address validated by `Minimized.moveRequest`, the single validator, Lua `hl.dsp.window.move({... follow = false ...})`),
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
-  Since tiling step 6a (`docs/specs/tiling.md` TL33, ADR-0036 D41) `spacesOn` lists a Split View Desktop right after the
-  Desktop it came from (`WindowTiling.desktopOrder`, from the plugin's `splits`), the others in id order.
+  Since tiling step 6a (`docs/specs/tiling.md` TL33, ADR-0036 D41, D53) `spacesOn` lists a Split View Desktop right after
+  the Desktop it came from (`WindowTiling.desktopOrder`, from the plugin's `splits`), the others in id order; it takes no
+  number (`WindowTiling.numberDesktops`): the Desktops keep "Desktop N" by their own position, and its tile is named after
+  its apps ("%1 and %2", one app's name alone, else Full Screen).
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
   macOS details (ADR-0024 lot 5, C-19; docs/audits/visual-tahoe-2026-10-25.md § Overview): N is the tile's position
