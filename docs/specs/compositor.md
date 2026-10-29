@@ -127,7 +127,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
   registered; with it, `tiling-arrange` when `arrange`, `hyprctl grassfield-tiling` and the tiling listeners registered and
-  `tile-hover` when `tile_popover` and `move_to` registered (`docs/specs/tiling.md` TL6, TL22-TL26); `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
+  `tile-hover` when `tile_popover` and `move_to` registered (`docs/specs/tiling.md` TL6, TL22-TL26), and with
+  `tiling-arrange` `tiling-layouts`, `tiling-groups` (when `group_front` registered), `tiling-shared-edge` and
+  `tiling-split` (when `split` and `unsplit` registered; TL27-TL33); `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
   registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered;
   `keyboard-focus` (FR20) with `appmenu`; `stages` only while its flag is on
   (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times","keyboard-focus"]`
@@ -626,8 +628,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   then leave; no light counts while the session is locked, while an Exclusive layer other than the shell's popups is mapped
   or while a Top or Overlay layer covers the pointer), `hl.plugin.grassfield.tile_popover(address)` posts it as `open` for the keyboard, and
   `hl.plugin.grassfield.move_to(address, output)` moves a window onto another output (a tiled one into the same tile
-  there; refused while locked). Untrusted: fixed-size strings, the address
-  compared with live windows, the place from a fixed list, the output name checked and compared with the live outputs.
+  there; refused while locked). Since tiling step 6a (TL33) `hl.plugin.grassfield.split(address, side)` makes a Split View
+  Desktop (the next free workspace id on the window's output, shown; the window in that half of the whole output) and
+  `hl.plugin.grassfield.unsplit(address)` sends a window of one back to the Desktop it came from (both refused while locked);
+  the plugin fills a Split View Desktop's one window left and ends an empty one. Untrusted: fixed-size strings, the address
+  compared with live windows, the place and the side from fixed lists, the output name checked and compared with the live
+  outputs.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag
   windows to left or right edge of screen to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"),
   `windows.tilingOptionDrag` ("Hold Alt key while dragging windows to tile"), `windows.tilingMargins` ("Tiled windows have
@@ -789,7 +795,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hyprctl grassfield-stages` (request socket; StagesLink, on each notice with `on:true`) | the state: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
 | shell → plugin | `hl.plugin.grassfield.arrange("<json>")` (feature `tiling-arrange`) | `{"layout":"<catalogue id>","windows":["0x<hex>",…],"fill":bool?,"zone":int?,"output":"<name>"?}` (tiling.md TL6, ADR-0007) |
 | plugin → shell | socket2 event `grassfield` (tiling change notice) | `{"v":"gfc/1","type":"tiling","gen":N}` (+ `"reason"`) |
-| shell → plugin | `hyprctl grassfield-tiling` (request socket) | the state: `{"v":"gfc/1","type":"tiling","gen":N,"outputs":[{"name","area","class","grid","windows":[…]}]}` (tiling.md TL15) |
+| shell → plugin | `hyprctl grassfield-tiling` (request socket) | the state: `{"v":"gfc/1","type":"tiling","gen":N,"outputs":[{"name","area","class","grid","windows":[…]}],"splits":[{"workspace","output","home"}],"suggestion":…}` (tiling.md TL15, TL28, TL33) |
+| shell → plugin | `hl.plugin.grassfield.split("0x<hex>", "left"\|"right")`, `hl.plugin.grassfield.unsplit("0x<hex>")` (feature `tiling-split`) | Full Screen › Left or Right of Screen; Exit Full Screen of a Split View window (tiling.md TL33, ADR-0007); the `tiling` notice follows |
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
 | shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window"\|"workspace"\|"remembered"\|"none",…}` (FR41; contract `docs/specs/overview.md` "Close focus") |
 | plugin → shell | socket2 event `grassfield` (overview focus outcome) | `{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"…","id":N}` (+ `"address"`, `"workspace"`, `"reason"`; FR42) |

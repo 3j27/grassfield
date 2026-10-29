@@ -3,8 +3,8 @@
 Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
-merged (PR #42: the shared edge, TL30); step 5 on its branch (Settings > Desktop & Dock > Windows, TL32); step 6 is not
-built. Below, "Today" is the state before step 1. A requirement
+merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
+in two (ADR-0036 D40): 6a on its branch (the Split View Desktop, TL33), 6b not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -281,7 +281,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Step 3 as built: AppMenuModel `tilingPopover` (shared with the Window menu's rows, glyphs and texts) and
   overlay/TilingPopover (glass `menu`, `tiling.popoverWidth` wide, glyphs `tiling.glyph*` on a `tiling.glyphPitch` pitch,
   the TileGlyph component of Grassfield.Ui). Layouts waits for step 4 (D16); the Full Screen row enters full screen until
-  step 6 turns it into Full Screen › (D17); the arrangements are greyed without `tiling-arrange`. Move to <display> rows
+  step 6 turns it into Full Screen › (D17; step 6a as built: TL33); the arrangements are greyed without `tiling-arrange`. Move to <display> rows
   name the output as Settings > Displays does (Built-in Display, its model, else its connector) and call `move_to` (D18,
   D22).
 - **TL24** Client chrome (M25): on windows tagged `grassfield-client-chrome` whose app is a Grassfield app, the plugin
@@ -295,7 +295,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
   shows the "& Quarters" alternates in place. Shortcut texts come from the one table that mirrors `bindings.lua`.
   Step 3 as built: Minimize, Zoom, Fill, Center, —, Move & Resize ›, one Move to <display> row per other output (D21), —,
-  Enter Full Screen, …; Full Screen Tile › waits for step 6 (D17). PopupMenu gained section headers, glyph rows and Alt
+  Enter Full Screen, …; Full Screen Tile › waits for step 6 (D17; step 6a as built: after Enter Full Screen, TL33). PopupMenu gained section headers, glyph rows and Alt
   alternates (`alternate`, also in a submenu opened by the pointer: it follows the Alt of the menu that opened it). Arrange
   needs `tiling-arrange`.
 - **TL26** Keyboard (T2 option A as amended by T2a and T2b): Super+Ctrl+arrows always give the half, as on macOS (the same
@@ -453,7 +453,26 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **TL33** Full Screen › Left of Screen / Right of Screen: a new Desktop right after the current one, the menu bar and the
   Dock hidden on it, the window in that half and suggestions (TL28) for the other half; a separator between the two that
   resizes both (double-click resets); dragging a window by its title bar to the other side swaps them; the menu bar and
-  the Dock show when the pointer reaches their edge; Exit Full Screen returns both windows to their Desktop and boxes.
+  the Dock show when the pointer reaches their edge; Exit Full Screen of one window returns it to its Desktop and box and
+  the other fills the Split View Desktop alone (amended by ADR-0036 D44: macOS 27 returns only the window asked).
+  Step 6a as built (ADR-0036 D40-D48): with the plugin's `tiling-split` the popover's Full Screen row is the submenu Full
+  Screen › Entire Screen (Hyprland's full screen in place, D45), Left of Screen, Right of Screen, and the Window menu has
+  Full Screen Tile › Left of Screen, Right of Screen after Enter Full Screen; the halves are greyed with the tiling items
+  (a window that cannot be tiled now, full screen, zoomed) and while Stages is on (D47: the plugin refuses them while its
+  strip shows). The plugin's `split(address, side)` makes a Desktop with the next free id on the window's output and shows
+  it (D41: the shell lists it right after the Desktop it came from, in the Overview strip and the Move to Desktop rows;
+  Hyprland's next and previous Desktop keys and Ctrl+number keep the id order); the window takes that half of the whole
+  output, one `tiling.margin` separator between the halves, none at the outer edges, whatever the margins switch says
+  (D42, core `splitArea`). The suggestions (TL28) offer the other half with the windows of the Desktop it came from,
+  always (D48); a pick joins the window's tile group, so the shared edge (TL30) is the separator that resizes both.
+  Dismissed, or nothing to suggest, the window fills the Split View Desktop alone; one of two leaving (closed, minimized,
+  moved, sent back) leaves the other filling it; an emptied Split View Desktop ends, and its output goes back to the
+  Desktop it came from when it showed it (D43). The menu bar and the Dock hide there as in full screen and show at their
+  edge; the wallpaper's video pauses. On a Split View window the popover offers only Exit Full Screen, and the Window menu
+  Exit Full Screen without Zoom or tiling items: the plugin's `unsplit(address)` (D44). Its titlebar drag moves nothing
+  (D46). The `hyprctl grassfield-tiling` reply lists `"splits":[{"workspace","output","home"}]`. Step 6b: the separator's
+  double-click reset, the drag that swaps the two, the titles hidden and revealed at the top, the Split View rows (Replace
+  Tiled Window, Move Window to Desktop, Make Window Full Screen), the Desktop's name in the Overview.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
@@ -467,7 +486,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   moves a window. `docs/specs/security.md` "Nothing opens over the
   lock" names them as planned; the step that adds an entry point moves it into that list with its code, and into
   `tests/security/lock_surfaces.sh` when it is a surface. Plugin side (step 1, defence in depth): the verbs `tile` and
-  `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves).
+  `arrange` refuse while the session is locked (notice `reason:"locked"`, nothing moves). Step 6a: `Compositor.split` and `Compositor.unsplit` ask
+  `SessionState.refuses` first, and the plugin's `split` and `unsplit` refuse while locked (no Desktop made or shown).
 
 ## Appearance (F1 strict, ADR-0024)
 - Targets: geometry within ±1 pt of the owner's captures, tints within ±0.1, contrast A2, motion by tokens. Tokens only;
@@ -599,7 +619,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - Tiles do not follow a later change of the work area (the Dock resized, moved or auto-hidden, the menu bar hidden, the
   Stages strip): they keep the box they were given until the next tiling (TL1).
 - Windows tiled the Hyprland way (SUPER+T) are outside Grassfield's tiles, groups and popover.
-- Full Screen tile comes in step 6 (T4); until then Full Screen is one window per Desktop.
+- The Split View (step 6a) has no separator double-click reset, no swap by titlebar drag and no revealed titles yet
+  (step 6b); Left and Right of Screen are refused while Stages shows its strip (ADR-0036 D47).
+- A Split View Desktop is listed after the Desktop it came from, but Hyprland's next and previous Desktop keys, Ctrl+number
+  and the three-finger swipe go by Hyprland's id order (ADR-0036 D41).
 - Without the plugin there is no tiling at all.
 - Timings not published by Apple or Microsoft (hover delay, preview delay, animation curve) are estimates until measured
   in nested against the owner's material.
