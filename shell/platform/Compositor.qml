@@ -432,8 +432,11 @@ Singleton {
                 onTriggered: sock.finish()
             }
 
+            // The error is judged after Quickshell's own error handler has returned: closing the socket from inside the
+            // signal let Quickshell 0.3.2 null its socket, then call deleteLater on the null pointer (SIGSEGV at every shell
+            // start, the shell restarting in a loop).
             Component.onCompleted: {
-                sock.error.connect(() => sock.finish());
+                sock.error.connect(() => Qt.callLater(sock.finish));
                 sock.connected = true;
             }
         }
