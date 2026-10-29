@@ -2,12 +2,17 @@
 // drawn across a gap, the columns and the sort of each tab, and activity.json.
 #include "../fixture.h"
 #include "activityapp.h"
+#include "samplerworker.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTest>
 
 #include <gtest/gtest.h>
+
+#include <sys/stat.h>
 
 using namespace activity;
 using activity_test::Fixture;
@@ -100,6 +105,78 @@ TEST(ActivityApp, SamplesOnlyWhileShownAndNoRateAcrossAGap)
         EXPECT_LT(r.process.cpuPercent, 0);
 }
 
+// AM8: back on screen after a gap, the first sample's rates show "—", so the next comes a second later, then the interval.
+TEST(ActivityApp, AfterAGapTheSecondSampleComesASecondLater)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    Isolated iso;
+    ActivityApp app(fixtureOptions(f), iso.statePath()); // Normally (5 sec)
+    app.setWindowShown(true);
+    ASSERT_TRUE(waitSample(app));
+    app.setWindowShown(false);
+    app.setWindowShown(true);
+    ASSERT_TRUE(waitSample(app)); // at once
+    QElapsedTimer t;
+    t.start();
+    ASSERT_TRUE(waitSample(app));
+    EXPECT_LT(t.elapsed(), 2500); // a second later, not five
+    for (const TableRow &r : app.processTable().shownRows())
+        EXPECT_GE(r.process.cpuPercent, 0);
+    QSignalSpy spy(&app, &ActivityApp::sampled);
+    EXPECT_FALSE(spy.wait(2500)); // then the interval again
+}
+
+// One sample at a time: what asks for one while one runs (a tab, a column) gets a single one more, with what it asked.
+TEST(ActivityApp, RequestsWhileASampleRunsMakeOneMore)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    Isolated iso;
+    ActivityApp app(fixtureOptions(f), iso.statePath());
+    QSignalSpy requests(&app, &ActivityApp::sampleRequested);
+    QSignalSpy samples(&app, &ActivityApp::sampled);
+    app.setWindowShown(true); // the first sample, running on its thread
+    app.setTab(QStringLiteral("memory"));
+    app.setTab(QStringLiteral("energy"));
+    app.setTab(QStringLiteral("disk"));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return samples.count() >= 2; }, 5000));
+    EXPECT_FALSE(samples.wait(1000)); // no third before the interval
+    EXPECT_EQ(samples.count(), 2);
+    ASSERT_EQ(requests.count(), 2);
+    EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults));
+}
+
+// Follow-up 2 (AD32): a pause is told by the update interval set in the window, which reaches the sampler.
+TEST(ActivityApp, ThePauseIsToldByTheIntervalSet)
+{
+    Fixture f;
+    for (int pid = 100; pid < 110; ++pid)
+        f.process(pid, "m", kMe, 0, 1, nul({"m"}), "/");
+    Isolated iso;
+    {
+        ActivityApp app(fixtureOptions(f), iso.statePath());
+        app.setInterval(2);
+        QSignalSpy requests(&app, &ActivityApp::sampleRequested);
+        app.setWindowShown(true);
+        ASSERT_GE(requests.count(), 1);
+        EXPECT_DOUBLE_EQ(requests.first().at(1).toDouble(), 2.0);
+        ASSERT_TRUE(waitSample(app));
+    }
+
+    SamplerWorker worker(fixtureOptions(f)); // Normally (5 sec) until told otherwise
+    std::vector<SnapshotPtr> got;
+    QObject::connect(&worker, &SamplerWorker::sampled, [&](const SnapshotPtr &s, unsigned) { got.push_back(s); });
+    const unsigned memory = readsForTab(Tab::Memory);
+    worker.sample(memory, 0.1, false);
+    QTest::qWait(300); // three intervals of a tenth of a second: a pause
+    worker.sample(memory, 0.1, false);
+    worker.sample(memory, 5, false); // at once: no pause at 5 sec
+    ASSERT_EQ(got.size(), 3u);
+    EXPECT_EQ(got[1]->counters.statusReads, 10u); // every process
+    EXPECT_EQ(got[2]->counters.statusReads, 2u);  // the turns
+}
+
 TEST(ActivityApp, ColumnsAndSortPerTab)
 {
     Fixture f;
@@ -177,4 +254,18 @@ TEST(ActivityState, ABrokenFileIsSetAside)
     EXPECT_EQ(cpu.sort, Column::CpuPercent);
     EXPECT_TRUE(cpu.widths.isEmpty());
     EXPECT_TRUE(QFile::exists(path)); // a readable version 1 file stays where it is
+}
+
+// AM74: activity.json is the owner's alone (0600), whatever the umask.
+TEST(ActivityState, TheFileIsTheOwnersAlone)
+{
+    QTemporaryDir dir;
+    const QString path = dir.path() + QStringLiteral("/activity.json");
+    const mode_t old = ::umask(022);
+    const bool written = writeState(path, defaultState());
+    ::umask(old);
+    ASSERT_TRUE(written);
+    struct stat st {};
+    ASSERT_EQ(::stat(QFile::encodeName(path).constData(), &st), 0);
+    EXPECT_EQ(st.st_mode & 07777, 0600u);
 }
