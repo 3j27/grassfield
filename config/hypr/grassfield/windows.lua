@@ -44,6 +44,10 @@ hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chr
 -- titlebar on it.
 hl.window_rule({ name = "gf-client-chrome-panel", match = { xdg_tag = "^file-panel$" }, tag = "+grassfield-client-chrome" })
 
+-- The permission alerts (grassfield-portal, ADR-0035 D-5) draw the alert shape, its own buttons and no lights: no plugin
+-- titlebar, and the alert's radius (24, Tokens.radiusAlert; the shell's alerts) instead of a window's 20.
+hl.window_rule({ name = "gf-client-chrome-alert", match = { xdg_tag = "^access-alert$" }, tag = "+grassfield-client-chrome", rounding = 24 })
+
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"). macOS 27 has one radius for every window
 -- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 20, the global decoration.rounding (looknfeel.lua).
 hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 20 })
