@@ -1,6 +1,7 @@
 # ADR-0039: Design polish: one grammar for materials, controls, windows and accessibility settings
 Status: Proposed (owner brief "Cohérence et finition", 2026-10-29, step 0: docs only, no code). The owner answered Q1 to Q8
-on 2026-10-29 (AskUserQuestion), recorded in "Owner decisions (2026-10-29)"; the steps start one pull request each ·
+on 2026-10-29 (AskUserQuestion), recorded in "Owner decisions (2026-10-29)"; revised after the integrator's review of step 0
+(FAIL: one MAJOR, four MINORs; "Review history"); the steps start one pull request each ·
 Date: 2026-10-29 · Decider: owner (Q1 to Q8), integrator (the steps, the review, the nested pass) · Number: 0039 (free on
 main 11c9e69 and on the open pull requests #41 and #43)
 
@@ -22,6 +23,8 @@ seams ADR-0024's lots left between surfaces, and the places where an accessibili
   `ui/Grassfield/Ui/Appearance.qml` and `Material.qml` (fixes in progress). `shell/security` is out of this work.
 - What the container cannot verify (the nested session, rendering with blur, motion) is written NOT VERIFIED; the integrator
   runs the nested pass.
+- Since step 0 was written, pull requests #41 (Files and the portal), #43 (tiling step 5) and #44 (Software Update step 3)
+  merged (main 35e62c5, merged into this branch): `apps/files`, `apps/portal` and the Software Update panel are free now.
 
 ### What holds on main 11c9e69 (audit §2)
 - ADR-0024's lots 1 to 6, T-1 and T-3 are merged. On the renders of the real `Grassfield.Ui` and Settings: white text on the
@@ -57,6 +60,7 @@ seams ADR-0024's lots left between surfaces, and the places where an accessibili
 | G21 | Distance-field text | 13 px: 7.7 % less ink than native at 1x, 19.5 % at 2x (T-2 still open) | `shots/metrics.txt` |
 | G22 | Small finish defects per app | Settings: hand-built buttons without hover, two empty-list styles, 34 literal hairlines; Files: dark wells in Customize Folder (0.14 in the light appearance), no in-view loading; Store: buttons without hover or pressed state, disabled 0.45 against 0.38, three progress indicators across the apps | audit §4.2–§4.5 |
 | G23 | Pixel-grid leftovers | right-aligned menu shortcuts, the check box label and the inline pop-up's chevron disc on half pixels (14 of 62 items off the grid, mostly text widths) | `shots/gallery-light-1x-walker.txt` |
+| G24 | Gate A2's role table is red on main | `test_contrast_tokens.py` exits 1: 15 file-and-class counts of contrast-relevant colour uses differ from `contrast-roles.json` (13 on 11c9e69); every one is a table out of date, no colour fails; the check is in `scripts/dev/test.sh`, not in `just check-quick` | audit §3.7.5 |
 
 ## Decision
 
@@ -103,6 +107,7 @@ few files), M (a surface family).
 
 | # | Step | Where | When | Verify | Size | Closes |
 |---|---|---|---|---|---|---|
+| 0b | **Gate A2's role table:** the 15 undeclared uses of audit §3.7.5 added to the roles that already cover them (exempt ones with their reason), `test_contrast_tokens.py` added to `just check-quick`; the three `shell/security` entries confirmed by the security reviewer (no security code changes) | `tests/visual/contrast-roles.json`, `justfile` | first; on main after the menu bar's band fix (fix/bar-tone-video) merges, which updates its own two entries | `test_contrast_tokens.py` exit 0; `just check-quick` fails with a planted undeclared use | S | G24 |
 | 1 | **Increase Contrast and pixel grid in the shared controls:** no border around the bezel-less inline pop-up (only its chevron disc), its disc on whole pixels; Toggle, Switch and Slider outlined under Increase Contrast; the check box label and the right-aligned menu shortcuts on whole pixels | `ui/Grassfield/Ui/ComboBox.qml`, `Toggle.qml`, `Switch.qml`, `Slider.qml`, `CheckBox.qml`, `MenuItem.qml`; `tests/unit/tst_pixelgrid.qml` and an Increase Contrast case | free, now | renders (`tools/run.sh`), unit tests, A2 | S | G8, G9, G23 |
 | 2 | **CI guard for literals:** `tests/ci/qml_literals.py` from the audit's tool, run by `just check-quick`; zero literal radius, font size, opacity, geometry value and animation duration; the 20 colours and the timers allowlisted; the OSD's hide delay to a token | `tests/ci/`, `tests/inventory.json`, `justfile`, `shell/osd/Osd.qml`, `tokens.json` | free, now | the guard fails on a planted literal | S | rule 6 |
 | 3 | **Preview's window and settings:** `windowSurface`, window neutrals in Viewer and Glance, `windowSecondary`, text selection in `highlight`, Increase Contrast and Text size read by the backend and bound (Q7) | `apps/preview/qml/Viewer.qml`, `Glance.qml`, `Theme.qml`, `TextView.qml`, `apps/preview/src/previewapp.{h,cpp}` | free, now | build, unit tests, a render or nested capture | S–M | G11 (part), G12 |
@@ -115,7 +120,7 @@ few files), M (a surface family).
 | 10 | **Sheet buttons and radii** (Q1, Q2): the shared `Sheet`'s buttons, its radius and concentric controls; `radius.sheet` and `radius.alert` | `ui/Grassfield/Ui/Sheet.qml`, `tokens.json`, `shell/overlay/Dialog.qml` | radii now (Q2); buttons after the macOS 27 sheet measurement (D-Q1) | renders of a Settings sheet, nested capture of the shell's | S–M | G3, G4 |
 | 11 | **One green for "on"** (Q4) | `Toggle.qml`, `Switch.qml`, `Slider.qml` | after the macOS 27 dark check (D-Q4) | A2 (knob 3:1), renders | S | G14 |
 | 12 | **Hover and selection roles:** one token per role (control hover, neutral row selection on glass, accent menu selection, grid selection) replacing the multipliers | `shell/overlay/StackPopup.qml`, `shell/overview`, `shell/switcher`, `shell/overlay/TilingPopover.qml`, `tokens.json` | free, now | renders, A2 | S–M | G6 |
-| 13 | **Radius roles and concentric shapes:** `radius.group` for Settings' groups, `radius.dialog` removed, the inner radii of G5, rounded tiling-suggestion thumbnails; the switcher's selection measured first | `tokens.json`, `apps/settings/qml/SettingsGroup.qml` and its readers, `shell/overlay/ForceQuitPanel.qml`, `StackPopup.qml`, `controlcenter/NowPlaying.qml`, `shell/widgets/builtin/nowplaying/NowPlaying.qml`, `shell/notifications/NotificationContent.qml`, `TilingSuggestions.qml` | free, now (Sheet with step 10) | renders | S–M | G5 |
+| 13 | **Radius roles and concentric shapes:** `radius.group` for Settings' groups, the inner radii of G5, rounded tiling-suggestion thumbnails; the switcher's selection measured first; `radius.dialog` stays (the polkit dialog's, outside this lane) | `tokens.json`, `apps/settings/qml/SettingsGroup.qml` and its readers, `shell/overlay/ForceQuitPanel.qml`, `StackPopup.qml`, `controlcenter/NowPlaying.qml`, `shell/widgets/builtin/nowplaying/NowPlaying.qml`, `shell/notifications/NotificationContent.qml`, `TilingSuggestions.qml` | free, now (Sheet with step 10) | renders | S–M | G5 |
 | 14 | **Shared toolbar and search field:** `toolbar.*` tokens (capsule 36, button 34, divider) replacing the borrowed `files.*` and `settings.*`; `RimmedCapsule` on them; `SearchField` as the rimmed 28-pt capsule with a clear button, used by Settings; icon-only `ToolButton`s show their name as a tooltip | `ui/Grassfield/Ui/RimmedCapsule.qml`, `SearchField.qml`, `ToolButton.qml`, `tokens.json`, `apps/settings/qml/Main.qml` | free, now (Files and Store with steps 23 and 24) | renders, unit tests | M | G16 (part) |
 | 15 | **Settings finish** (Software Update excluded): `InfoButton` and `MoreButton` on `ToolButton`'s states, the colour well's field and popover on `TextField` and `Material`, one empty-list style, `ErrorNote` in `windowSecondary`, the 34 literal hairlines on the token, content that scrolls under the toolbar with its rule (D3), the glass preview on the class tints and Reduce Transparency, unused tokens removed | `apps/settings/qml/*` | free, now | renders (`settings.py`), unit tests | M | G22 (Settings), G12 (preview) |
 | 16 | **Preview's structure:** the edge-to-edge sidebar, toolbar capsules on the shared tokens with 34-pt buttons, scroll bars, the toolbar rule | `apps/preview/qml/Viewer.qml`, `ToolbarGroup.qml`, `ImageView.qml`, `TextView.qml` | free, after step 14 | nested capture | M | G11 |
@@ -125,13 +130,14 @@ few files), M (a surface family).
 | 20 | **Motion tokens** (Q6): a panel-and-sheet curve, one easing per role (enter, exit, move), Hyprland's curves aligned with them | `tokens.json`, the free surfaces, `config/hypr/grassfield/looknfeel.lua`, `shell/platform/Minimized.js` | decided (Q6: the 650-ms stand-in) | nested recordings, P3 | M | G20 |
 | 21 | **Third-party title bars** (Q8) | `tokens.json` `titlebar.*`, the plugin's theme (nested only, gates C1–C3) | decided (Q8: the window tokens) | nested capture | S | G19 |
 | 22 | **Glass classes for every surface:** classes for the Overview band and gallery (0.15) and widgets (0.92); the switcher, tooltips, Stages badges and the About This Wallpaper card on a class; tails and close capsules on their body's tint, the Increase Contrast frost and Reduce Transparency; Material's inner rim stronger toward the top left (ADR-0024 §2.5) and its dark edge raised by Increase Contrast | `Appearance.qml`, `Material.qml`, `Tooltip.qml`, `shell/overview`, `shell/widgets`, `shell/switcher`, `shell/stages`, `shell/overlay/DockMenu.qml`, `StackPopup.qml`, `shell/notifications` | **after the Appearance and Material fixes merge** | A2 per class and appearance, nested captures (blur) | M | G1 |
-| 23 | **Files finish:** `windowSecondary`, Increase Contrast and Text size, Customize Folder's wells on `Appearance.fillOpacity`, a rounded tags ring, capsules and search on step 14's pieces, an in-view loading indicator, keyboard paths for the column headers, path bar and preview-pane actions, native text (Q5) | `apps/files` | **after #41 merges** | renders, unit tests, nested | M | G12, G16, G22 (Files) |
+| 23 | **Files finish:** `windowSecondary`, Increase Contrast and Text size, Customize Folder's wells on `Appearance.fillOpacity`, a rounded tags ring, capsules and search on step 14's pieces, an in-view loading indicator, keyboard paths for the column headers, path bar and preview-pane actions, native text (Q5) | `apps/files` | free now (#41 merged); the Files findings re-measured on main first | renders, unit tests, nested | M | G12, G16, G22 (Files) |
 | 24 | **Store finish:** buttons with hover and pressed states and the shared disabled opacity, the shared progress indicators (D4), menu host and search field (28), an empty state on the category page, the hairline token, rings on keyboard focus, native text (Q5) | `apps/store` | **after step 3c merges** | renders (store shots), unit tests | M | G16, G22 (Store), G7 |
 | 25 | **Dock, desktop and menu bar:** the Dock shelf's darker outer edge (ADR-0024 §2.5), the Dock menu's "Recent Documents" as a header, one bar-button ring on keyboard focus, the Dock's auto-hide jumping under Reduce Motion, its easings per role, the menu bar's band under Reduce Transparency and Increase Contrast | `shell/dock`, `shell/desktop`, `shell/menubar`, `shell/overlay/DockMenu.qml` | **after their fixes merge** | nested | M | G1, G7, G10, G17 |
-| 26 | **Software Update panel:** step 15's Settings rules on its three files | `apps/settings/qml/SoftwareUpdate*.qml` | **after step 3 merges** | renders (`settings.py --update`) | S | G22 |
+| 26 | **Software Update panel:** step 15's Settings rules on its three files | `apps/settings/qml/SoftwareUpdate*.qml` | free now (#44 merged) | renders (`settings.py --update`) | S | G22 |
 | 27 | **Activity Monitor:** its window built on these rules from the start (a checklist in its step, ADR-0038) | `apps/activity` | at its window step | its own review | — | — |
 
-Steps 1 to 8 need neither an answer nor a merge. Steps 9 to 11 and 18 to 21 follow the owner's answers of 2026-10-29
+Step 0b and steps 1 to 8 need neither an answer nor a merge (the review's clashes of steps 6 and 20 with #43, and of steps
+14, 15 and 17 with #44, are gone: both merged before these steps start). Steps 9 to 11 and 18 to 21 follow the owner's answers of 2026-10-29
 ("Owner decisions (2026-10-29)" below): step 10's buttons and step 11's colour start with a measurement of the macOS 27
 reference the owner named (Q1, Q4); every other answered step can start in this order.
 
@@ -173,8 +179,10 @@ secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Ev
 
 **Q4. One green for "on" in the dark appearance.** Switches and slider fills use the bright green #4FB36B; checkboxes,
 radio buttons, default buttons and selected rows the deeper #2E8049 chosen for white text (owner decision of 2026-10-26).
-- (a) Switches and slider fills on #2E8049 too. Pros: one green for "on"; the white knob goes from 2.63:1 to 4.88:1 (WCAG
-  1.4.11). Cons: a darker switch than macOS's bright one.
+- (a) Switches and slider fills on #2E8049 too (each accent's dark selection fill). Pros: one green for "on"; the white knob
+  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.50–2.77:1 to 4.85–4.89:1 for every other accent but yellow. Cons: a
+  darker switch than macOS's bright one; with the yellow accent the knob stays under 3:1 (2.02:1 on #E0B000, 1.50:1 today),
+  because the yellow pair keeps dark marks.
 - (b) Keep both greens. Pros: brighter switches. Cons: two greens side by side in one Settings row; the knob under 3:1.
 - (c) Checkboxes and radio buttons on #4FB36B with a dark mark. Pros: one bright green. Cons: breaks white-on-accent (F1,
   2026-10-26) with a dark checkmark, which macOS never draws.
@@ -246,7 +254,42 @@ Asked with AskUserQuestion after step 0 was written; the answers verbatim where 
   Grassfield's fill that holds white marks in the dark appearance is the selection colour (#2E8049 for the green, the derived
   shade per accent of 2026-10-26), so "the same as on macOS 27" is option (a): switches and slider fills move to it. Step 11
   first checks this on the dark macOS 27 release captures (a switch and a checkbox side by side); if they show two fills, the
-  step follows what they show and records it here.
+  step follows what they show and records it here. The fill is each accent's dark selection colour: the white knob reaches
+  4.85–4.89:1 for every accent but yellow, whose pair keeps dark marks; there the knob stays at 2.02:1 (1.50:1 today), and
+  step 11 gives it the outline Increase Contrast draws (step 1) or records the limit.
+
+## Coordination with the identity lane (ADR-0040, pull request #46)
+The integrator's review named nine overlaps. Whichever pull request merges second rebases; the owner of each is:
+
+| Overlap | Owner | The other lane |
+|---|---|---|
+| The greens: this Q4 and step 11 ↔ IQ-B3 (the default accent named "Grassfield") | ADR-0040 owns the accent palette (`color.accent*`, the default's name and swatch) | this lane owns which controls read the accent and which the selection fill |
+| About: steps 4 and 10 (the shell's sheets) ↔ IQ-B4 (About as a small window), IQ-B1 (the glyphs of `NoticeDialog` and `ConfirmDialog`) | ADR-0040 owns About This Computer's form and the dialogs' glyphs | this lane owns `Dialog`'s and `Sheet`'s grammar (radius, buttons, blur radius); if About becomes a window, steps 4 and 10 no longer touch it |
+| `looknfeel.lua`, `windows.lua`, `Compositor.qml`: steps 6 and 20 ↔ ID-2, ID-4, ID-9 | ADR-0040 owns the session's ground colour, first frame and transitions | this lane owns the window border colour per appearance and the compositor's animation curves |
+| Motion tokens: Q6's roles ↔ the session and lock fades | this lane owns `motion.*` (the roles of panels, sheets, controls) | ADR-0040 owns `session.*` and `lock.*` fades, which name a `motion` role where one fits |
+| `shell/saver` | ADR-0040 owns the saver's transitions (ID-8) | step 5 only gates its slide crossfade under Reduce Motion |
+| Settings' Appearance and Wallpaper pages | ADR-0040 owns the wallpaper page and the accent row | this lane owns the shared controls on them and the glass preview (step 15) |
+| `GrassfieldArtwork.qml`'s colours: step 2's allowlist ↔ ID-1 (artwork tokens) | ADR-0040 | step 2's guard drops them from its allowlist when ID-1 lands |
+| The Dock's and menu bar's auto-hide: step 25 ↔ ADR-0040 step 6 | ADR-0040 owns the reveal at login | this lane owns Reduce Motion and the easing of auto-hide |
+| `tests/visual/test_contrast_tokens.py` and `contrast-roles.json` | this lane owns the role table's repair (step 0b) | ADR-0040 adds the roles of its own surfaces (lock scrim bands) |
+
+The owner answered Q3, Q7 and Q8 directly on 2026-10-29, where the review would have had the integrator decide them under
+the macOS model; the answers are the options that model gives. Q4 was answered before IQ-B3 is asked; IQ-B3 changes the
+palette, not which controls read it.
+
+## Review history
+- **Integrator review of step 0 (independent opus, 2026-10-29): FAIL, one MAJOR, four MINORs.** Accuracy: 19 of 20 claims
+  exact.
+  - MAJOR: `radius.dialog` is used by the polkit dialog (`shell/security/polkit/AuthAgent.qml:250, :316`, `AuthDialog.qml:24`),
+    so step 13 no longer removes it. Every "unused" or "rename" claim was checked again over the whole tree, `shell/security`
+    included: the three unused Settings tokens hold; "the shared `FocusRing` is used once in the shell" now says outside
+    `shell/security`; `SearchField` is used by no surface (only by unit tests).
+  - MINOR: the clashes with #43 and #44 are gone (both merged); Q4 now gives the yellow accent's 2.02:1; the audit says what
+    the render tools need (and that Qt's `offscreen` platform is not a substitute); the STATE key is 108, above main's 106 and
+    the open pull requests' 107.
+  - Also in scope: gate A2's role table, red on main: audit §3.7.5 lists the 15 entries (13 on 11c9e69, two more from the
+    startup-settle fix), each a table out of date; step 0b repairs it and wires the check into `just check-quick`.
+  - Coordination with #46: the section above.
 
 ## macOS reference
 - macOS 27: one window radius, edge-to-edge sidebars, bars with a rule once content scrolls, white text on the accent, its
@@ -266,11 +309,11 @@ Asked with AskUserQuestion after step 0 was written; the answers verbatim where 
 
 ## Consequences
 - Tokens: per-appearance window border tokens, `toolbar.*`, `radius.group`, role fills for hover and selection, the UX
-  timings, the glass classes of step 22, possibly new dark secondary and sheet values (Q2, Q3); removed: `radius.dialog` and
-  the unused tokens of audit §4.2. Each with its source.
-- Code: the shared controls first (steps 1, 10, 11, 14), then the surfaces; the frozen areas after their merges (steps 22 to
-  26).
-- Tests: `tst_pixelgrid` and an Increase Contrast case, a CI guard for literals, A2 cases for every new role or class, unit
+  timings, the glass classes of step 22, the dark secondary and sheet values (Q2, Q3); removed: the three unused Settings tokens of
+  audit §4.2 (`radius.dialog` stays: the polkit dialog uses it). Each with its source.
+- Code: the role table first (step 0b), the shared controls next (steps 1, 10, 11, 14), then the surfaces; the areas still
+  frozen after their merges (steps 22, 24, 25; steps 23 and 26 are free since #41 and #44 merged).
+- Tests: gate A2's role check in `just check-quick`, `tst_pixelgrid` and an Increase Contrast case, a CI guard for literals, A2 cases for every new role or class, unit
   tests for Reduce Motion and focus rings; `tests/visual` captures per step (nested, integrator).
 - Gates: A1 (keyboard: steps 7, 23), A2 (every colour step), F1 (the owner's side-by-side), P3 (steps 5, 20, 22), C1–C3 (step
   21, plugin).
