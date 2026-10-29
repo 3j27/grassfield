@@ -75,7 +75,7 @@ incompatible combination; no infinite loop, memory leak or hang lasts.
 | The red "lock screen died" screen's delay during a shell restart | names it; step 1's nested pass records what is drawn, nothing more | ADR-0040 IQ-T5 (owner question) |
 | A separate security process (lock, polkit, idle, sleep inhibitor) | step 1's safe mode is built from the minimal root ADR-0010 S2 describes, under the same security rules; the direction stays ADR-0010's | ADR-0010 "Separate security process", S1-S5 |
 | The compatibility check, the `[grassfield]` repository, the rc-channel watch job | SQ-3 revisits one rejected option (versioned bounds) with a new shape; the check U27, the a2 "Turn Off" path and the watch job stay as they are | ADR-0033 s3.4, a2, f |
-| The compositor extension's ABI, rebuild and degraded mode | unchanged; SQ-6 adds one rule for the login after a compositor crash | ADR-0009 and its amendment |
+| The compositor extension's ABI, rebuild and degraded mode | the ABI rule, the user-only rebuild and the degraded mode unchanged; step 2d reverses one line of ADR-0009's amendment ("With the toggle off the notice gives the command"): the notice gives one action, the toggle stays off by default, and 2d amends ADR-0009 explicitly (review of 5a20d19); SQ-6 adds one rule for the login after a compositor crash | ADR-0009 and its amendment |
 | The session configuration under a package upgrade | step 2 adds one guard to the shell's explicit reloads; the watcher stays off | ADR-0001 amendment 2026-10-29 |
 | The portals' start-up and the `GTK_USE_PORTAL` loop | step 7 verifies the 25 s hypothesis (I-4) and, if confirmed, ships one drop-in | ADR-0035 D-4, D-8, 2b-12, 2b-14 |
 | The persisted files and their readers | step 5 fuzzes each reader of the ADR-0020 table and adds the bound every reader must keep | ADR-0020 |
@@ -175,12 +175,20 @@ of the session, never in a terminal.
   one root transaction, `pacman -S --noconfirm --ask 4 grassfield-unhold` (`--ask` is pacman's bitmask that answers its
   conflict question, so the twin replaces the hold in one step; if pacman 7 no longer keeps it, `pacman -Rdd
   grassfield-hold` followed by `pacman -S grassfield-unhold` is the fallback: step 2a's first container test decides),
-  and `hold` runs the reverse ("Hold untested system updates again"). pacman then refuses, on every path, any
+  and `hold` runs the reverse ("Hold untested system updates again"). Once the toolkit has moved past the bounds, that
+  reverse cannot be satisfied (pacman answers "unable to satisfy dependency 'qt6-base<6.12'"; review of 5a20d19): the pane
+  then shows "Hold again" greyed with the reason, "Your system already moved past the versions this Grassfield was built
+  for; holding comes back with the next Grassfield update", decided by the same comparison as 2b (`pacman -Q` against the
+  hold's bounds); the next `grassfield-desktop` build, made against the new toolkit, carries a hold whose bounds match, so
+  the button works again after it. pacman then refuses, on every path, any
   transaction that moves `quickshell` or `qt6-base` past the bounds, until the repository ships the build made against
   the new toolkit, which joins the same transaction (ADR-0033 f's watch job, extended from Hyprland's ABI to Qt and
   Quickshell on Omarchy's rc mirror). What the user sees when it refuses: on Update Now, the helper's plan step fails
-  before any change and the pane says "This update needs a newer version of Grassfield, which isn't available yet."
-  (U27's sentence, now also raised by a hold), with "Allow…" one click away; on `omarchy update` in a terminal, pacman's
+  before any change; today that step exits 8, "pacman cannot plan this update" (`packaging/pacman/grassfield-update-helper:242-243`),
+  which the pane shows as a failed preparation, so step 2a makes the helper read pacman's refusal and, when it names
+  `grassfield-hold`, answer exit 6 (`incompatible`, the U27 path): the pane then says "This update needs a newer version of
+  Grassfield, which isn't available yet." with "Allow…" one click away. That reading is a root-side change of the helper,
+  under the opus security review (review of 5a20d19, finding 4). On `omarchy update` in a terminal, pacman's
   own error names `grassfield-hold` and the bound and Omarchy's script reports a failed update, and the session's next
   scheduled check (ADR-0033 d) raises the same notice with the same action.
 - **2b. Detection as the user, on every path.** Nothing runs as root: ADR-0009's amendment says "Nothing in the amended
@@ -207,8 +215,9 @@ of the session, never in a terminal.
   swaps the hold for its twin through polkit (`--ask 4`, or the `-Rdd` fallback) and the update goes through; "Hold
   again" swaps them back; the checker's comparison on a fake `/var/lib/pacman/local` and `BUILD-DEPS` posts the notice
   (offscreen harness); the extension notice's action runs the rebuild (nested).
-- Tests: the container cases above; `tests/shell/session_services.sh` for the checker's reader; `tst_softwareupdate.qml`
-  for the pane's sentences; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the s3.4 table name the same
+- Tests: the container cases above, with the helper's reading of a hold refusal (exit 6, `incompatible grassfield-hold`)
+  in `tests/integration/update_helper.sh`; `tests/shell/session_services.sh` for the checker's reader;
+  `tst_softwareupdate.qml` for the pane's sentences and the greyed "Hold again"; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the s3.4 table name the same
   packages; `tests/shell/compositor_rebuild.sh` for the notice's action.
 - Integrator, nested: the notice on a fake `/var/lib/pacman/local`; the reload guard with a fake `db.lck` during a display
   trial; "Update Extension" from the notice.
@@ -423,10 +432,12 @@ session whatever its cause; the question is the next login.
   list per step (`docs/audits/stability-2026-10-29/owner-checks.sh` from step 7 on), never a driven test. The owner's own
   checks listed per step (step 1's kill of the shell, run by the owner's hand on the owner's machine) are owner-run
   checks, not driven tests (review of 2c0bd74).
-- **SD-6.** Nothing of this ADR runs as root after the package is installed, as ADR-0009's amendment says ("Nothing in the
-  amended design runs as root after the package is installed", `docs/decisions/ADR-0009-plugin-distribution.md:112`): the
-  toolkit change is detected as the user (2b), every repair runs as the user at the next login or at the user's click,
-  and the only root code stays the existing polkit helpers (2a's two verbs), each under the opus review.
+- **SD-6.** Nothing of this ADR runs as root on its own after the package is installed, as ADR-0009's amendment says
+  ("Nothing in the amended design runs as root after the package is installed",
+  `docs/decisions/ADR-0009-plugin-distribution.md:112`): the toolkit change is detected as the user (2b) and every repair
+  runs as the user at the next login or at the user's click. The only root code is what the user starts behind a polkit
+  dialog: the existing helpers, which step 2a extends by two verbs (`hold`, `unhold`) and one reading of pacman's refusal,
+  each under the opus security review (qualified after the review of 5a20d19).
 - **SD-7.** The plan's order is the user's exposure: the loop and the lock first, the update second, the proofs third.
   A step's pull request may land before an earlier step's when it waits on an owner answer.
 - **SD-8.** Every step adds its regression test to `tests/inventory.json` under its layer; a nested-only proof is
@@ -453,7 +464,8 @@ session whatever its cause; the question is the next login.
 - **Integrator's opus review of 2c0bd74 (PR #50): FAIL, one MAJOR, eight MINORs, three NITs.** Holds: nothing unlocks or
   weakens the lock trio, IQ-T5 referenced only, nothing sent off the machine, the new units justified, owner-checks.sh
   read-only; its items 1, 2 and 5 run on the owner's machine (x-d-p-gtk 25.5 s, `GTK_USE_PORTAL=1` in the user manager,
-  no drop-in: I-4's hypothesis holds; `hyprctl` not run, the owner's Hyprland is off-limits). Answered in the commits that
+  no drop-in: the evidence supports I-4's hypothesis, which stays NOT VERIFIED until the drop-in is tried, step 7;
+  `hyprctl` not run, the owner's Hyprland is off-limits). Answered in the commits that
   follow 2c0bd74:
   - MAJOR 1, SQ-3's premise (a hold the desktop depends on cannot be removed with `-R`; one it does not depend on is never
     installed; a `kcoreaddons` bound refuses every monthly KF6; a hold before the repository publishes blocks every update
@@ -477,3 +489,13 @@ session whatever its cause; the question is the next login.
     keys (112 and 111 zeros) and that there is no collision; owner-checks.sh prints its "(none)" fallback.
   - The reviewer's opinions on the questions are recorded next to each (SQ-1 A once finding 8 is fixed, SQ-2 A, SQ-3 B now
     and A after the publication, SQ-4 A without `coredumpctl list` in the notice, SQ-5 A once finding 3 is fixed, SQ-6 A).
+- **Integrator's re-review of 5a20d19: PASS, with doc MINORs and NITs to fix before the merge.** Every earlier finding
+  fixed (MINOR 5 in part). Fixed in the commit that follows 5a20d19: the bridge's default limit can never be reached (at
+  most 4 starts fit in 10 s with its growing delays; audit P-4); "Hold again" past the bounds is greyed with its reason
+  and comes back with the next build (step 2a); the coordination row says 2d amends ADR-0009's "the notice gives the
+  command"; Update Now's plan step exits 8 today, so the helper's reading of a hold refusal (exit 6, the U27 path) is
+  named as a root-side change under the opus review (step 2a); M-7's "post-transaction marker" wording; SD-6 qualified
+  (two root verbs behind polkit); I-4's evidence "supports" the hypothesis, which stays NOT VERIFIED. The reviewer could
+  not run the hold pair's scratch-database check (the project's guard blocks package-install commands even with a
+  temporary `--dbpath`): reasoned from libalpm and `vercmp`, `--ask 4` = `ALPM_QUESTION_CONFLICT_PKG`; step 2a's first
+  container test decides. The integrator is asking the owner SQ-1 to SQ-6; the answers go on PR #50.
