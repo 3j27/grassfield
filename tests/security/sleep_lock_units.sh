@@ -218,6 +218,12 @@ out=$(shimrun active ok "$half" lock status)
 [[ $(jq -r '.secure' <<<"$out") == false ]] && pass "stand-in: status not secure when one monitor lacks LOCK" || bad "stand-in: status '$out' with a monitor unlocked"
 out=$(shimrun active ok "[]" lock status)
 [[ $(jq -r '.secure' <<<"$out") == false ]] && pass "stand-in: status not secure without a monitor answer" || bad "stand-in: status '$out' without monitors"
+# Fail closed on another shape of the answer (tests/fuzz/fuzz_helpers.py lock-status): a string holding "LOCK" as a substring,
+# an object instead of an array, a non-JSON answer are never secure.
+for odd in '[{"name":"eDP-1","solitaryBlockedBy":"UNLOCKED"}]' '[{"name":"eDP-1","solitaryBlockedBy":"LOCK"}]' '[{"name":"eDP-1","solitaryBlockedBy":{"LOCK":1}}]' 'not json' '[{"name":"eDP-1"}]' '{"a":{"name":"eDP-1","solitaryBlockedBy":["LOCK"]}}' '"LOCK"'; do
+  out=$(shimrun active ok "$odd" lock status)
+  [[ $(jq -r '.secure' <<<"$out") == false ]] && pass "stand-in: status not secure for the answer $odd" || bad "stand-in: status '$out' for the answer $odd"
+done
 [[ $(jq -r '.requested' <<<"$out") == false ]] && pass "stand-in: not requested without the crash-recovery marker" || bad "stand-in: requested '$out'"
 for line in "locked" "locked sleeps=12"; do
   printf '%s\n' "$line" >"$tmp/run/grassfield-lock-sig_1_x"
