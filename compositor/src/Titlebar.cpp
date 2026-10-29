@@ -325,7 +325,8 @@ namespace {
         // The titlebar stops at the menu bar while the pointer goes on, and follows it again on the way down (macOS).
         box = gf::topClamp::heldMove(w, box, pointer);
         g_layoutManager->setTargetGeom(box, target);
-        gf::tiler::dragMotion(w, pointer); // the place under the pointer, shown after the preview delay (TL17)
+        if (!grab.member) // a Split View member shows no tiling place: it lands in a half (TL33, step 6b)
+            gf::tiler::dragMotion(w, pointer); // the place under the pointer, shown after the preview delay (TL17)
     }
 
     std::vector<WP<IPointer>> pointerDevices() {
@@ -1085,6 +1086,7 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         input.grab.pressBox = input.grab.startBox;
         input.grab.devices  = pointerDevices();
         input.presses.claim(e.button, true);
+        gf::tiler::memberDragBegin(w);
         return true;
     }
 
@@ -1169,8 +1171,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
                 if (input.grab.dragging)
                     gf::tiler::dragDone(); // no preview, no tile
                 if (input.grab.member) {
-                    if (input.grab.moved)
-                        gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
+                    gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
                 } else {
                     gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
                     if (input.grab.moved)
@@ -1199,9 +1200,8 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         // A Split View member (TL33, step 6b): over the other half the two swap halves, anywhere else it goes back in its half;
         // it never takes another output's Desktop nor a tiling place.
         if (grab.member) {
-            gf::tiler::dragDone();
-            if (grab.moved && g_pInputManager)
-                gf::tiler::memberDrop(grab.window.lock(), g_pInputManager->getMouseCoordsInternal());
+            const auto at = grab.moved && g_pInputManager ? std::optional<Vector2D>{g_pInputManager->getMouseCoordsInternal()} : std::optional<Vector2D>{};
+            gf::tiler::memberDrop(grab.window.lock(), at); // a click: nothing to place (back in its half: where it is)
             return;
         }
         // Released over the place shown (after the preview delay, TL17): the window takes it (FR47); the preview goes.
@@ -1253,8 +1253,7 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
             if (input.grab.dragging)
                 gf::tiler::dragDone();
             if (input.grab.member) {
-                if (input.grab.moved)
-                    gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
+                gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
             } else {
                 gf::tiler::endMove(input.grab.window.lock());
                 if (input.grab.moved)
@@ -1288,7 +1287,7 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
         auto& input        = pointerInput();
         if (input.grab.dragging)
             gf::tiler::dragDone();
-        if (input.grab.member && input.grab.moved)
+        if (input.grab.member)
             gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // a Split View member: back in its half
         else
             gf::tiler::endMove(input.grab.window.lock());

@@ -1476,6 +1476,7 @@ TEST(TilingSplit, TheSeparatorIsTheEdgeBetweenTheTwoMembers) {
     EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xd4})), nullptr) << "a member and another window";
     EXPECT_EQ(splitOfEdge(splits, edge({0xd4}, {0xe5})), nullptr) << "an ordinary tile group";
     EXPECT_EQ(splitOfEdge(splits, edge({0xa1, 0xd4}, {0xb2})), nullptr) << "more than the two members";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xb2, 0xd4})), nullptr) << "more than one window after it";
     EXPECT_EQ(splitOfEdge(splits, edge({0xc3}, {0xc3})), nullptr) << "a Split View with one member has no separator";
     EXPECT_EQ(splitOfEdge(splits, edge({}, {0xb2})), nullptr);
 }
@@ -1491,9 +1492,32 @@ TEST(TilingSplit, ADropOnTheOtherHalfSwapsTheMembers) {
     EXPECT_EQ(splitDropZone(left, right, 0, 964, 0), 1) << "the other half's top-left corner";
     EXPECT_EQ(splitDropZone(left, right, 0, 1920, 500), std::nullopt) << "past its right side";
     EXPECT_EQ(splitDropZone(left, right, 0, 1400, 1080), std::nullopt) << "below it";
+    EXPECT_EQ(splitDropZone(left, right, 0, 1400, -0.5), std::nullopt) << "above it";
+    EXPECT_EQ(splitDropZone(left, right, 0, 963.5, 500), std::nullopt) << "left of it (on the separator)";
     EXPECT_EQ(splitDropZone(left, right, 1, 955.9, 1079.9), 0);
     EXPECT_EQ(splitDropZone(left, right, 2, 1400, 500), std::nullopt) << "no half of a Split View";
     EXPECT_EQ(splitDropZone(left, right, -1, 100, 500), std::nullopt);
+}
+
+// TL10, and the integrator review of e352f7c (step 6b): reconcile forgets a record whose window is gone, or a Tiled one moved
+// by other means, but never the Split View member whose titlebar drag is under way (it is placed at its drop).
+TEST(TilingBook, AStaleRecordIsForgottenButNotTheDraggedMember) {
+    TileRecord r;
+    r.id    = 0xa1;
+    r.state = TileState::Tiled;
+    EXPECT_TRUE(staleRecord(r, false, true, 0)) << "its window gone or unmapped";
+    EXPECT_TRUE(staleRecord(r, false, true, 0xa1)) << "gone, even while dragged";
+    EXPECT_FALSE(staleRecord(r, true, true, 0)) << "at its box";
+    EXPECT_TRUE(staleRecord(r, true, false, 0)) << "moved by other means";
+    EXPECT_TRUE(staleRecord(r, true, false, 0xb2)) << "another window is dragged";
+    EXPECT_FALSE(staleRecord(r, true, false, 0xa1)) << "the member being dragged keeps its record";
+    r.relayout = true;
+    EXPECT_FALSE(staleRecord(r, true, false, 0)) << "it waits for a relayout";
+    r.relayout = false;
+    for (const auto state : {TileState::Moving, TileState::Resizing, TileState::Suspended}) {
+        r.state = state;
+        EXPECT_FALSE(staleRecord(r, true, false, 0)) << "only a Tiled record is checked against its box";
+    }
 }
 
 // D43: two members stay; one fills alone unless it is still choosing its second window; none ends the Desktop.

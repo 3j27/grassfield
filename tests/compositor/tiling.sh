@@ -1497,6 +1497,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "shared-edge: the left window grew with the drag" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
     check "shared-edge: the right window followed, the gap kept" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
     check "shared-edge: both still tiled, in one group" edge_group
+    # D60 (step 6b): only a Split View's separator resets at a double-click; an ordinary group's edge keeps where it was put.
+    pointer abs $((hx + 60)) "$hy" sleep 300 down sleep 40 up sleep 100 down sleep 40 up sleep 500
+    check "shared-edge: a double-click does not reset an ordinary group's edge" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
     pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
     check "shared-edge: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
     check "shared-edge: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
@@ -1808,6 +1811,12 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       check "split swap back: the first window in the left half again" half_of tiling-foot left
       check "split swap back: the second in the right half again" half_of tiling-foot2 right
       check "split swap back: zones as at the pick" split_pair
+      # A drag over the other half cancelled by a second button (the right one): no swap, back in its half (D59).
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 rdown sleep 100 rup sleep 200 up sleep 800
+      fi
+      check "split cancelled: a second button ends the drag, back in its half" half_of tiling-foot left
+      check "split cancelled: no swap" half_of tiling-foot2 right
     else
       check "split titlebar: the first window's grip found" false
     fi

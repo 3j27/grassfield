@@ -153,6 +153,7 @@ namespace gf::tiler {
             std::optional<SMoveRelease>      moveRelease;
             SBorderClicks                    border;
             SSeparatorClicks                 separator;
+            PHLWINDOWREF                     memberDrag; // TL33 (step 6b): the member whose titlebar drag is under way (reconcile keeps it)
             std::optional<SExtend>           extend;
             std::optional<tiling::Suggestion> suggestion; // TL28: valid while the book is at its generation
             std::optional<SEdgeDrag>          edge;            // TL30: a shared edge being dragged
@@ -477,13 +478,13 @@ namespace gf::tiler {
         // Records of closed windows are dropped; a Tiled window whose box is not the one the plugin gave it (an app's own
         // configure, a keyboard move or resize, a rule) becomes Free (TL10).
         void reconcile() {
-            auto&                 s = st();
+            auto&                 s       = st();
+            const auto            dragged = s.memberDrag.lock();
             std::vector<uint64_t> gone;
             for (const auto& r : s.book.records()) {
                 const auto w      = windowById(r.id);
                 const auto target = w && w->m_isMapped ? w->layoutTarget() : nullptr;
-                const bool moved  = target && r.state == tiling::TileState::Tiled && !r.relayout && !sameBox(target->position(), toCBox(r.box));
-                if (!target || moved)
+                if (tiling::staleRecord(r, target != nullptr, target && sameBox(target->position(), toCBox(r.box)), dragged ? idOf(dragged) : 0))
                     gone.push_back(r.id);
             }
             for (const auto id : gone)
@@ -1548,6 +1549,8 @@ namespace gf::tiler {
         s.edgeReleaseOwed = false;
         s.edgeCursor      = false;
         s.edgeHoverScene  = {};
+        s.separator       = {};
+        s.memberDrag.reset();
         s.splits.clear(); // TL33: a Split View Desktop of a previous load is an ordinary Desktop now
         s.splitHomes.clear();
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
@@ -2094,14 +2097,20 @@ namespace gf::tiler {
         return w && tiling::splitOfWindow(st().splits, idOf(w)) != nullptr;
     }
 
+    void memberDragBegin(const PHLWINDOW& w) {
+        auto& s = st();
+        if (s.ready && w && tiling::splitOfWindow(s.splits, idOf(w)))
+            s.memberDrag = w;
+    }
+
     void memberDrop(const PHLWINDOW& w, std::optional<Vector2D> at) {
         auto& s = st();
+        s.memberDrag.reset(); // first: from here the record is checked as any other (nothing below reconciles before it is placed)
         if (!s.ready || !w || !g_layoutManager)
             return;
         const auto* d = tiling::splitOfWindow(s.splits, idOf(w));
         if (!d || !w->m_workspace || w->m_workspace->m_id != d->workspace)
             return; // it left the Split View meanwhile (splitCheck)
-        catchUp();
         const auto* r = s.book.find(idOf(w));
         if (!r)
             return;
@@ -2115,7 +2124,7 @@ namespace gf::tiler {
             r->where.layout == layout->id && ro->where.layout == layout->id && ow->m_workspace == w->m_workspace)
             zone = tiling::splitDropZone(splitHalf(m, 0), splitHalf(m, 1), r->where.zone, at->x, at->y);
         if (!zone) {
-            applySurface(w, toCBox(r->box)); // back in its half
+            applySurface(w, toCBox(r->box)); // back in its half (the state from before the drag, also under the lock)
             return;
         }
         // The two swap halves (macOS): each takes the other's zone, fitted together on the whole output (TL8), in its group.
@@ -2424,8 +2433,11 @@ namespace gf::tiler {
             edgeEnd("released");
             return true;
         }
-        if (button == BTN_LEFT && pressed && edgePress(pointer, timeMs))
-            return true;
+        if (button == BTN_LEFT && pressed) {
+            if (edgePress(pointer, timeMs))
+                return true;
+            s.separator = {}; // a press anywhere else ends a separator's double-click
+        }
         if (pressed) {
             if (button == BTN_LEFT) {
                 s.press   = pointer;

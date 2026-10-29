@@ -1350,6 +1350,12 @@ namespace gf::tiling {
         return it == splits.end() ? nullptr : &*it;
     }
 
+    bool staleRecord(const TileRecord& r, bool mapped, bool atItsBox, uint64_t dragged) {
+        if (!mapped)
+            return true;
+        return r.state == TileState::Tiled && !r.relayout && !atItsBox && r.id != dragged;
+    }
+
     const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge) {
         if (edge.before.size() != 1 || edge.after.size() != 1)
             return nullptr;

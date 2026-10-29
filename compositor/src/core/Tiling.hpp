@@ -628,6 +628,12 @@ namespace gf::tiling {
     // The Split View Desktop window `id` is a member of, or nullptr.
     const SplitDesk* splitOfWindow(std::span<const SplitDesk> splits, uint64_t id);
 
+    // TL10: record `r` is stale and is forgotten when its window is gone or unmapped (`mapped` false), or when it is Tiled and
+    // no longer at its box (`atItsBox` false: moved or resized by other means) unless it waits for a relayout or it is the
+    // Split View member whose titlebar drag is under way (`dragged`: placed at its drop, TL33 step 6b; the integrator review
+    // of e352f7c: forgotten mid-drag, it never swapped nor went back).
+    bool staleRecord(const TileRecord& r, bool mapped, bool atItsBox, uint64_t dragged);
+
     // The Split View Desktop whose two members `edge` separates (one on each side, nothing else on it: the separator, TL33),
     // or nullptr (an edge of an ordinary tile group).
     const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge);
