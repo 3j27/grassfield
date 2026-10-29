@@ -267,3 +267,100 @@ function answered(before, after) {
     const a = normalize(after).checkedAt;
     return typeof a === "string" && a !== "" && a !== normalize(before).checkedAt;
 }
+
+// --- Update Now without a terminal (ADR-0033 "Step 3", owner decision SU-M1; docs/specs/updates.md U24-U30) ---------------
+// grassfield-update-run's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json) and grassfield-update-helper's files
+// (/run/grassfield-update/<op>.progress, .exit, .started), read by Settings.
+const RUN_PHASES = ["authorizing", "configuring", "done"];
+const RUN_RESULTS = ["up-to-date", "done", "failed-partial", "busy", "space", "power", "incompatible", "terminal", "failed",
+    "cancelled", "denied", "bootimage"];
+const HELPER_PHASES = ["checking", "snapshot", "keyring", "downloading", "installing", "finishing"];
+const MAX_RUN_TEXT = 4096;
+
+// The runner's state, or null when the text is not one.
+function parseRun(text) {
+    if (typeof text !== "string" || text === "" || text.length > MAX_RUN_TEXT)
+        return null;
+    let v;
+    try {
+        v = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!isObject(v) || v.version !== 1 || !/^[0-9a-f]{32}$/.test(String(v.op)) || RUN_PHASES.indexOf(v.phase) < 0)
+        return null;
+    const result = typeof v.result === "string" ? v.result : "";
+    if (v.phase === "done" ? RUN_RESULTS.indexOf(result) < 0 : result !== "")
+        return null;
+    return {
+        op: v.op,
+        pid: Number.isInteger(v.pid) && v.pid > 0 ? v.pid : 0,
+        startTime: /^[0-9]{1,20}$/.test(String(v.startTime)) ? String(v.startTime) : "",
+        phase: v.phase,
+        result: result,
+        restart: v.restart === "restart" || v.restart === "logout" ? v.restart : "",
+        snapshot: v.snapshot === "made" || v.snapshot === "none" || v.snapshot === "failed" ? v.snapshot : "",
+        deferred: Array.isArray(v.deferred) ? v.deferred.filter(d => d === "migrations" || d === "aur") : [],
+        startedAt: typeof v.startedAt === "number" ? v.startedAt : 0,
+        finishedAt: typeof v.finishedAt === "number" ? v.finishedAt : 0
+    };
+}
+
+// Field 22 of /proc/<pid>/stat (the start time); "" when unreadable. The command name before it is in parentheses and may
+// hold spaces and parentheses.
+function startTimeOf(statText) {
+    const s = String(statText || "");
+    const close = s.lastIndexOf(") ");
+    if (close < 0)
+        return "";
+    const fields = s.slice(close + 2).trim().split(/\s+/);
+    return fields.length > 19 && /^[0-9]+$/.test(fields[19]) ? fields[19] : "";
+}
+
+// The helper's progress line: {phase, done, total}, or null.
+function parseProgress(text) {
+    const parts = String(text || "").trim().split(/\s+/);
+    if (HELPER_PHASES.indexOf(parts[0]) < 0)
+        return null;
+    const done = parts.length === 3 && /^[0-9]{1,6}$/.test(parts[1]) ? Number(parts[1]) : 0;
+    const total = parts.length === 3 && /^[0-9]{1,6}$/.test(parts[2]) ? Number(parts[2]) : 0;
+    return { phase: parts[0], done: Math.min(done, total), total: total };
+}
+
+// The overall percentage of a run (ADR-0033 s3.5): 0-5 checking and the snapshot, 5-45 downloading, 45-95 installing,
+// 95-100 finishing and Omarchy's steps for the user; -1 when nothing is counted (an indeterminate bar).
+function percentOf(phase, done, total) {
+    const part = total > 0 ? done / total : -1;
+    switch (phase) {
+    case "downloading":
+        return part < 0 ? -1 : Math.round(5 + 40 * part);
+    case "installing":
+        return part < 0 ? -1 : Math.round(45 + 50 * part);
+    case "finishing":
+        return 95;
+    case "configuring":
+        return 97;
+    }
+    return -1;
+}
+
+// What the pane shows of a run: {state, phase, done, total, percent, result, restart, snapshot, deferred}. `state`: "none",
+// "running" (authorizing, the helper's phases, configuring) or "done". `run`: parseRun's; `alive`: the runner's process is
+// still the one the state names; `progress`: parseProgress of the helper's file for run.op; `helperAlive`: the helper of
+// run.op still runs (its .started process). A runner that ended without its last state (a log out) shows the helper while
+// it runs, then nothing.
+function runView(run, alive, progress, helperAlive) {
+    const none = { state: "none", phase: "", done: 0, total: 0, percent: -1, result: "", restart: "", snapshot: "", deferred: [] };
+    if (run === null)
+        return none;
+    if (run.phase === "done")
+        return { state: "done", phase: "done", done: 0, total: 0, percent: -1, result: run.result, restart: run.restart, snapshot: run.snapshot, deferred: run.deferred };
+    if (!alive && !helperAlive)
+        return none;
+    let phase = run.phase === "configuring" ? "configuring" : progress !== null ? progress.phase : "authorizing";
+    if (run.phase === "authorizing" && !alive && progress === null)
+        phase = "checking";
+    const done = phase === "downloading" || phase === "installing" ? progress.done : 0;
+    const total = phase === "downloading" || phase === "installing" ? progress.total : 0;
+    return { state: "running", phase: phase, done: done, total: total, percent: percentOf(phase, done, total), result: "", restart: "", snapshot: "", deferred: [] };
+}

@@ -459,9 +459,20 @@ TEST(LaunchGuard, OnlyUpdateNowAndTheSessionEnd)
 {
     const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
     const QString end = QStringLiteral("/usr/lib/grassfield/grassfield-session-end");
+    const QString runner = QStringLiteral("/usr/lib/grassfield/grassfield-update-run");
+    EXPECT_TRUE(isLaunch({runner}));
     EXPECT_TRUE(isLaunch({launcher, QStringLiteral("omarchy-update")}));
+    EXPECT_TRUE(isLaunch({launcher, QStringLiteral("omarchy-migrate")}));
     EXPECT_TRUE(isLaunch({end, QStringLiteral("logout")}));
     EXPECT_TRUE(isLaunch({end, QStringLiteral("restart")}));
+    // The runner takes no argument and is never found on PATH; its root helper is never Settings' to start.
+    EXPECT_FALSE(isLaunch({runner, QStringLiteral("0123456789abcdef0123456789abcdef")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("grassfield-update-run")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("/usr/lib/grassfield/grassfield-update-helper"), QStringLiteral("run"),
+                           QStringLiteral("0123456789abcdef0123456789abcdef")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("pkexec"), QStringLiteral("/usr/lib/grassfield/grassfield-update-helper")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-migrate"), QStringLiteral("--pending")}));
+    EXPECT_FALSE(isAllowedAction({runner}));
     // Not -y (no question asked), not another command in Omarchy's terminal, not a shut down, not --force.
     EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-update"), QStringLiteral("-y")}));
     EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-update -y")}));

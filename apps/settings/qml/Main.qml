@@ -1192,6 +1192,29 @@ Window {
         onAccepted: updateState.endSession("restart")
     }
 
+    // Update Now's end (U29, owner decision SU-M1): when the run this window watched asks for a restart or a log out, it asks
+    // once, as macOS does; Later keeps the pane's row. Nothing restarts by itself.
+    Sheet {
+        id: finishSheet
+        property string action: "restart"
+        title: finishSheet.action === "restart" ? qsTr("Restart your computer to finish updating") : qsTr("Log out to finish updating Grassfield")
+        message: finishSheet.action === "restart" ? qsTr("The updates are installed. Open applications will be closed when the computer restarts.")
+            : qsTr("The new version of Grassfield starts when you log in again. Open applications will be closed.")
+        cancelText: finishSheet.action === "restart" ? qsTr("Restart Later") : qsTr("Log Out Later")
+        confirmText: finishSheet.action === "restart" ? qsTr("Restart") : qsTr("Log Out")
+        onAccepted: updateState.endSession(finishSheet.action)
+    }
+
+    Connections {
+        target: updateState
+        function onRunFinished(result: string, restart: string): void {
+            if (result === "done" && (restart === "restart" || restart === "logout") && !updateState.restartBlocked) {
+                finishSheet.action = restart;
+                finishSheet.open();
+            }
+        }
+    }
+
     Component {
         id: aboutPage
         AboutPage {
@@ -1321,7 +1344,7 @@ Window {
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
         volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
-        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet]
+        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet]
 
     Instantiator {
         model: root.sheets

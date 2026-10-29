@@ -7,7 +7,9 @@ import "../../apps/settings/qml" as SettingsQml
 // Settings > General > Software Update (ADR-0033; docs/specs/updates.md U8, U10-U14, U19, U21, U22; A11): the badge of the
 // General row, the check when the pane opens (the shell asked first, the checker run here without one), what each state shows,
 // the exact commands of Set Up…, Repair…, Turn Off…, Beta Updates and Update Now, the password's wait and the one-line
-// refusal, Log Out… and Restart… after an update, and the dev guard. The backend is a fake: nothing runs.
+// refusal, Log Out… and Restart… after an update, and the dev guard. Update Now without a terminal (U24-U30, owner decision
+// SU-M1): the runner's one launch, the run's phases from its state and the helper's progress, the pane opened again
+// mid-run, what each outcome says and offers, the end's restart. The backend is a fake: nothing runs.
 TestCase {
     id: testCase
     name: "SettingsSoftwareUpdate"
@@ -17,6 +19,8 @@ TestCase {
     when: windowShown
 
     readonly property string stateFile: "/state/grassfield/software-update.json"
+    readonly property string runFile: "/run/user/1000/grassfield/software-update-run.json"
+    readonly property string runOp: "0123456789abcdef0123456789abcdef"
     readonly property string repositoryReady: "GRASSFIELD_REPO_BASE=https://packages.example.org\nGRASSFIELD_SIGNING_FINGERPRINT=0123456789ABCDEF0123456789ABCDEF01234567\n"
     readonly property string repositoryPlaceholder: "GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid\nGRASSFIELD_SIGNING_FINGERPRINT=\n"
 
@@ -42,6 +46,8 @@ TestCase {
         QtObject {
             property bool devSession: false
             property bool omarchyUpdate: true
+            property bool updateRunner: false
+            property string softwareUpdateRunFile: testCase.runFile
             property string homeDir: "/home/u"
             property string softwareUpdateFile: testCase.stateFile
             property var pendingActions: ({})
@@ -162,7 +168,7 @@ TestCase {
         const files = Object.assign({"/proc/osrelease": "6.18.1-arch1-1\n", "/modules/6.18.1-arch1-1": "", "/usr/share/grassfield/pacman/repository.conf": o.repository ?? testCase.repositoryReady}, o.files || {});
         if (file !== null)
             files[testCase.stateFile] = JSON.stringify(file);
-        const backend = createTemporaryObject(fakeBackend, testCase, {devSession: o.dev === true, omarchyUpdate: o.omarchy !== false, files: files});
+        const backend = createTemporaryObject(fakeBackend, testCase, {devSession: o.dev === true, omarchyUpdate: o.omarchy !== false, updateRunner: o.runner === true, files: files});
         const system = createTemporaryObject(serviceComp, testCase, {backend: backend});
         const store = createTemporaryObject(storeComp, testCase);
         const updates = createTemporaryObject(stateComp, testCase, {backend: backend, system: system});
@@ -519,12 +525,188 @@ TestCase {
         verify(!row(none.page, "Log out to finish updating Grassfield"));
     }
 
+    // The runner's state file, and the process it names (field 22 of /proc/<pid>/stat is its start time).
+    function runState(phase, result, extra) {
+        return JSON.stringify(Object.assign({version: 1, op: testCase.runOp, pid: 4242, startTime: "777", phase: phase, result: result || "",
+            restart: "", snapshot: "", deferred: [], startedAt: Date.now(), finishedAt: phase === "done" ? Date.now() : 0}, extra || {}));
+    }
+    readonly property string runnerStat: "4242 (grassfield-upda) S 1 4242 4242 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 1 0 777 1000 100\n"
+    readonly property string helperStat: "5151 (bash) S 1 5151 5151 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 1 0 888 1000 100\n"
+    function helperFile(ext) {
+        return "/run/grassfield-update/" + testCase.runOp + "." + ext;
+    }
+
+    // U24-U25: Update Now starts the runner, once, then shows the run's phase, its count and one bar from the files it reads.
+    function test_updateNowRunsWithoutATerminal() {
+        const t = make(available(), {runner: true});
+        verify(row(t.page, "Update Now installs everything listed here."));
+        compare(row(t.page, "Update Now installs everything listed here.").subtitle, "It asks for an administrator's password and saves a snapshot first.");
+        button(t.page, "Update Now").clicked();
+        compare(t.backend.launches, [["/usr/lib/grassfield/grassfield-update-run"]]);
+        verify(t.updates.running);
+        verify(t.updates.poll.running, "the pane reads the run's files while it goes on");
+        verify(row(t.page, "Waiting for permission…"));
+        verify(!button(t.page, "Update Now"), "no second Update Now while it runs");
+        const bar = shown(t.page, i => i.indeterminate !== undefined && i.accessibleName === "Waiting for permission…");
+        verify(bar && bar.indeterminate, "an indeterminate bar until something is counted");
+        // The runner writes its state; the helper its progress.
+        t.backend.write(testCase.runFile, runState("authorizing"));
+        t.backend.write("/proc/4242/stat", testCase.runnerStat);
+        t.updates.readRun();
+        verify(row(t.page, "Waiting for permission…"), "the password dialog is up");
+        t.backend.write(helperFile("started"), "5151 888
+");
+        t.backend.write("/proc/5151/stat", testCase.helperStat);
+        t.backend.write(helperFile("progress"), "checking
+");
+        t.updates.readRun();
+        verify(row(t.page, "Preparing the update…"));
+        t.backend.write(helperFile("progress"), "snapshot
+");
+        t.updates.readRun();
+        verify(row(t.page, "Saving a snapshot of this computer…"));
+        t.backend.write(helperFile("progress"), "downloading 3 10
+");
+        t.updates.readRun();
+        compare(row(t.page, "Downloading updates…").subtitle, "3 of 10");
+        compare(t.updates.run.percent, 17);
+        verify(!shown(t.page, i => i.indeterminate !== undefined && i.accessibleName === "Downloading updates…").indeterminate);
+        t.backend.write(helperFile("progress"), "installing 5 10
+");
+        t.updates.readRun();
+        compare(row(t.page, "Installing updates…").subtitle, "5 of 10");
+        compare(t.updates.run.percent, 70);
+        t.backend.write(helperFile("exit"), "0
+snapshot made
+packages 10
+restart kernel
+");
+        t.backend.write(testCase.runFile, runState("configuring"));
+        t.updates.readRun();
+        verify(row(t.page, "Finishing the update…"));
+        // The end: the restart it asks for, once, and the pane's row.
+        const finished = [];
+        t.updates.runFinished.connect((result, restart) => finished.push(result + ":" + restart));
+        t.backend.write(testCase.runFile, runState("done", "done", {restart: "restart", snapshot: "made"}));
+        t.updates.readRun();
+        compare(finished, ["done:restart"]);
+        verify(!t.updates.running);
+        verify(!t.updates.poll.running, "nothing read once it ended");
+        verify(t.updates.restartNeeded);
+        verify(row(t.page, "Restart to finish updating"));
+        t.updates.readRun();
+        compare(finished.length, 1, "a run that ended is announced once");
+        verify(button(t.page, "Check Now").enabled);
+    }
+
+    // U25: the run outlives the window. Opened again mid-run, the pane shows it; a runner gone with its helper shows nothing.
+    function test_aRunIsShownWhenThePaneOpensAgain() {
+        const running = {};
+        running[testCase.runFile] = runState("authorizing");
+        running["/proc/4242/stat"] = testCase.runnerStat;
+        running[helperFile("started")] = "5151 888
+";
+        running["/proc/5151/stat"] = testCase.helperStat;
+        running[helperFile("progress")] = "installing 2 4
+";
+        const t = make(available(), {runner: true, files: running});
+        verify(t.updates.running);
+        verify(t.updates.poll.running);
+        compare(row(t.page, "Installing updates…").subtitle, "2 of 4");
+        // The runner ended without its last state (a log out): the helper still runs, so the run is shown.
+        const orphan = Object.assign({}, running, {"/proc/4242/stat": undefined});
+        verify(make(available(), {runner: true, files: orphan}).updates.running);
+        // Neither runs (a crash, a reboot left the state): nothing is shown, Update Now is back.
+        const gone = Object.assign({}, orphan, {"/proc/5151/stat": undefined});
+        const g = make(available(), {runner: true, files: gone});
+        verify(!g.updates.running);
+        verify(button(g.page, "Update Now").enabled);
+        // A pid reused by another process (another start time) is not the runner.
+        const reused = Object.assign({}, gone, {"/proc/4242/stat": testCase.runnerStat.replace(" 777 ", " 999 ")});
+        verify(!make(available(), {runner: true, files: reused}).updates.running);
+    }
+
+    // U28-U30: what an ended run says, with its one action; the same sentence when Settings opens again.
+    function test_whatARunSays() {
+        const cases = [
+            ["incompatible", "This update needs a newer version of Grassfield, which isn't available yet.", ""],
+            ["terminal", "This update asks questions that need Omarchy's terminal.", "Update in Terminal…"],
+            ["failed", "The update could not be installed. Nothing was changed.", ""],
+            ["failed-partial", "The update stopped before it finished.", ""],
+            ["space", "This computer needs 10 GB of free space to update.", ""],
+            ["power", "Connect this computer to power to update.", ""],
+            ["busy", "Another update is running.", ""],
+            ["denied", "Software Update was not allowed to update this computer.", ""]
+        ];
+        for (const c of cases) {
+            const files = {};
+            files[testCase.runFile] = runState("done", c[0]);
+            const t = make(available(), {runner: true, files: files});
+            const r = row(t.page, c[1]);
+            verify(r, c[0] + " says: " + c[1]);
+            if (c[2] !== "")
+                verify(button(t.page, c[2]), c[0] + " offers " + c[2]);
+            else
+                verify(!button(t.page, "Update in Terminal…") && !button(t.page, "Finish in Terminal…"), c[0] + " offers no terminal");
+            verify(button(t.page, "Update Now").enabled, c[0] + ": Update Now can be tried again");
+        }
+        const files = {};
+        files[testCase.runFile] = runState("done", "failed-partial", {snapshot: "made"});
+        compare(row(make(available(), {runner: true, files: files}).page, "The update stopped before it finished.").subtitle,
+            "Try Update Now again. The snapshot saved before the update can be chosen when the computer starts.");
+        // Update in Terminal…: Omarchy's update in its terminal, then the check that waits for it.
+        files[testCase.runFile] = runState("done", "terminal");
+        const term = make(available(), {runner: true, files: files});
+        button(term.page, "Update in Terminal…").clicked();
+        compare(term.backend.launches, [["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]]);
+        verify(term.updates.updateRunning);
+        // A migration left: Finish in Terminal… runs Omarchy's migrations there.
+        files[testCase.runFile] = runState("done", "done", {deferred: ["migrations", "aur"]});
+        const mig = make(answer("up-to-date"), {runner: true, files: files});
+        verify(row(mig.page, "Some of Omarchy's last steps need its terminal."));
+        button(mig.page, "Finish in Terminal…").clicked();
+        compare(mig.backend.launches, [["omarchy-launch-floating-terminal-with-presentation", "omarchy-migrate"]]);
+        files[testCase.runFile] = runState("done", "done", {deferred: ["aur"]});
+        verify(row(make(answer("up-to-date"), {runner: true, files: files}).page, "Apps from the AUR are updated in Omarchy's terminal."));
+        // Nothing to say after a cancelled dialog or an update with nothing to install.
+        for (const quiet of ["cancelled", "up-to-date", "done"]) {
+            files[testCase.runFile] = runState("done", quiet);
+            const q = make(answer("up-to-date"), {runner: true, files: files});
+            verify(!shown(q.page, i => i.title !== undefined && /Omarchy's terminal|Nothing was changed|newer version/.test(i.title)), quiet + " says nothing more");
+        }
+        // The startup files could not be prepared: no restart is offered, even with Omarchy's marker.
+        files[testCase.runFile] = runState("done", "bootimage", {restart: "restart"});
+        files["/home/u/.local/state/omarchy/reboot-required"] = "";
+        const boot = make(answer("up-to-date"), {runner: true, files: files});
+        verify(row(boot.page, "Don't restart this computer yet"));
+        verify(!boot.updates.restartNeeded);
+        verify(!button(boot.page, "Restart…"));
+        // A log out is enough when only Grassfield changed.
+        const logout = {};
+        logout[testCase.runFile] = runState("done", "done", {restart: "logout"});
+        const l = make(answer("up-to-date"), {runner: true, files: logout});
+        verify(l.updates.logoutNeeded && !l.updates.restartNeeded);
+        verify(row(l.page, "Log out to finish updating Grassfield"));
+    }
+
+    // Without the runner installed (a build before step 3, or no pkexec), Update Now is Omarchy's terminal (U11).
+    function test_withoutTheRunnerUpdateNowOpensTheTerminal() {
+        const t = make(available(), {runner: false});
+        verify(row(t.page, "Omarchy's update installs everything listed here."));
+        button(t.page, "Update Now").clicked();
+        compare(t.backend.launches, [["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]]);
+    }
+
     // A dev session: the state is read, nothing is changed or started.
     function test_devGuard() {
         const t = make(available(), {dev: true, channel: "stable"});
         button(t.page, "Update Now").clicked();
         compare(t.backend.launches, []);
         verify(!t.updates.updateRunning);
+        const r = make(available(), {dev: true, runner: true});
+        button(r.page, "Update Now").clicked();
+        compare(r.backend.launches, [], "nor the runner");
+        verify(!r.updates.running);
         t.updates.setChannel("beta", "beta");
         t.updates.endSession("logout");
         compare(t.backend.actions, []);

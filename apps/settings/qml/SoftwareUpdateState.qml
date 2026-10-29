@@ -11,8 +11,13 @@ import Grassfield.Ui
 //     stored per user); whether this build can set updates up (repository.conf); Omarchy's reboot marker and the running
 //     kernel's modules (U14, read only).
 //   - The actions, through SystemService (never in a dev session): the channel changes (the polkit dialog: one at a time,
-//     Backend.pendingActions), Update Now (Omarchy's terminal, then a check that waits for its update lock), Log Out… and
-//     Restart… (grassfield-session-end, after the window's confirmation sheet).
+//     Backend.pendingActions), Update Now (U24-U30: grassfield-update-run, which owns the update without a terminal; when it
+//     is not installed, Omarchy's terminal, then a check that waits for its update lock), Update in Terminal… and Finish in
+//     Terminal… (Omarchy's terminal, for what needs a person), Log Out… and Restart… (grassfield-session-end, after the
+//     window's confirmation sheet).
+//   - The run of Update Now: the runner's state (Backend.softwareUpdateRunFile) and the root helper's progress
+//     (/run/grassfield-update/<op>.progress), read every 500 ms while it runs and when the window opens: closing Settings
+//     stops nothing, and opening it again shows the run where it is (ADR-0033 s3.5).
 QtObject {
     id: root
 
@@ -25,6 +30,9 @@ QtObject {
     property string rebootMarker: root.backend.homeDir + "/.local/state/omarchy/reboot-required"
     property string kernelReleaseFile: "/proc/sys/kernel/osrelease"
     property string modulesDir: "/usr/lib/modules"
+    property string runFile: root.backend.softwareUpdateRunFile
+    property string helperDir: "/run/grassfield-update"
+    property string procDir: "/proc"
 
     // software-update.json (SoftwareUpdateLogic.normalize), or Settings' own answer combined into it.
     property var file: SoftwareUpdateLogic.normalize(null)
@@ -42,12 +50,29 @@ QtObject {
     readonly property bool buildReady: SoftwareUpdateLogic.buildReady(root.backend.readText(root.repositoryFile).text)
     // A Grassfield update in this session waits for a log out (GF-083, written to the file by the shell).
     readonly property bool logoutPending: root.file.logoutPending === true
-    property bool restartNeeded: false
+    // ...or the last run says so (s3.7: Grassfield's packages changed, nothing that asks for a restart).
+    readonly property bool logoutNeeded: root.logoutPending || (root.run.result === "done" && root.run.restart === "logout")
+    // Omarchy's marker or the kernel's modules (readRestart), or the last run's own answer (s3.7); never while the run says
+    // its startup files may be broken.
+    property bool markerRestart: false
+    readonly property bool restartNeeded: !root.restartBlocked && (root.markerRestart || (root.run.result === "done" && root.run.restart === "restart"))
+    readonly property bool restartBlocked: root.run.result === "bootimage"
     // Update Now started Omarchy's terminal: the button waits for the check that follows (launchCheckMs), which waits for
     // Omarchy's update lock while the update runs, then for the answer after it.
     property bool launched: false
-    readonly property bool updateRunning: root.launched || root.file.state === "update-running"
-    readonly property bool canUpdate: root.backend.omarchyUpdate === true
+    // Update Now started the runner (ms; 0 when not): "Waiting for permission…" until its state names a run started since.
+    property double runLaunchedAt: 0
+    // The run of Update Now, SoftwareUpdateLogic.runView: state none | running | done, phase, done, total, percent, result,
+    // restart, deferred.
+    property var run: SoftwareUpdateLogic.runView(null, false, null, false)
+    readonly property bool running: root.run.state === "running" || root.runLaunchedAt > 0
+    readonly property bool updateRunning: root.launched || root.running || root.file.state === "update-running"
+    // Update Now runs without a terminal (the runner, its helper and pkexec are installed), else in Omarchy's terminal.
+    readonly property bool withoutTerminal: root.backend.updateRunner === true
+    readonly property bool canUpdate: root.withoutTerminal || root.backend.omarchyUpdate === true
+    readonly property bool canUseTerminal: root.backend.omarchyUpdate === true
+    // A run ended while this window watched it (the pane offers the restart or log out it asks for).
+    signal runFinished(string result, string restart)
     // The channel change that waits for the polkit dialog (Backend.pendingActions); "" when none.
     readonly property string channelTag: "update.channel.act"
     readonly property bool waitingForPermission: (root.backend.pendingActions ?? {})[root.channelTag] !== undefined
@@ -80,7 +105,45 @@ QtObject {
     function readRestart(): void {
         const release = root.backend.readText(root.kernelReleaseFile).text.trim();
         const modulesGone = release !== "" && release.indexOf("/") < 0 && !root.backend.readText(root.modulesDir + "/" + release).exists;
-        root.restartNeeded = root.backend.readText(root.rebootMarker).exists || modulesGone;
+        root.markerRestart = root.backend.readText(root.rebootMarker).exists || modulesGone;
+    }
+
+    // The process `pid` is still the one that started at `startTime` (field 22 of its stat).
+    function alive(pid: int, startTime: string): bool {
+        return pid > 0 && startTime !== "" && SoftwareUpdateLogic.startTimeOf(root.backend.readText(root.procDir + "/" + pid + "/stat").text) === startTime;
+    }
+
+    // The runner's state and, while it runs, the helper's progress (s3.5).
+    function readRun(): void {
+        const r = root.runFile !== "" ? root.backend.readText(root.runFile) : { ok: false, text: "" };
+        let state = SoftwareUpdateLogic.parseRun(r.ok ? r.text : "");
+        // Until the runner writes a run started since Update Now, the last one is not this one.
+        if (root.runLaunchedAt > 0) {
+            if (state !== null && state.startedAt >= root.runLaunchedAt - Tokens.softwareUpdateRunClockSlackMs)
+                root.runLaunchedAt = 0;
+            else if (Date.now() - root.runLaunchedAt > Tokens.softwareUpdateRunStartMs)
+                root.runLaunchedAt = 0;
+            else
+                state = null;
+        }
+        let runnerAlive = false, progress = null, helperAlive = false;
+        if (state !== null && state.phase !== "done") {
+            runnerAlive = root.alive(state.pid, state.startTime);
+            const p = root.backend.readText(root.helperDir + "/" + state.op + ".progress");
+            progress = SoftwareUpdateLogic.parseProgress(p.ok ? p.text : "");
+            const started = root.backend.readText(root.helperDir + "/" + state.op + ".started");
+            if (started.ok && !root.backend.readText(root.helperDir + "/" + state.op + ".exit").exists) {
+                const f = started.text.trim().split(" ");
+                helperAlive = f.length === 2 && /^[0-9]{1,9}$/.test(f[0]) && root.alive(Number(f[0]), f[1]);
+            }
+        }
+        const before = root.run.state;
+        root.run = SoftwareUpdateLogic.runView(state, runnerAlive, progress, helperAlive);
+        if (before === "running" && root.run.state === "done") {
+            root.readRestart();
+            root.runFinished(root.run.result, root.run.restart);
+        }
+        root.poll.running = root.running;
     }
 
     // U8: the pane opening checks unless a check finished less than paneFreshMs ago or one runs.
@@ -108,14 +171,36 @@ QtObject {
         return root.system.act("software update: " + action + " (grassfield-channel-set " + verb + ")", ["/usr/lib/grassfield/grassfield-channel-set", verb], root.channelTag);
     }
 
+    // Update Now (U24): the runner, which asks for the password and owns the run; without it, Omarchy's terminal (U11).
     function updateNow(): bool {
         if (!root.canUpdate || root.updateRunning || root.file.state === "blocking")
             return false;
-        if (!root.system.launch("update now", ["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]))
+        if (!root.withoutTerminal)
+            return root.updateInTerminal();
+        if (!root.system.launch("update now", ["/usr/lib/grassfield/grassfield-update-run"]))
+            return false;
+        root.runLaunchedAt = Date.now();
+        root.run = SoftwareUpdateLogic.runView(null, false, null, false);
+        root.poll.running = true;
+        return true;
+    }
+
+    // Update in Terminal… (U28): Omarchy's own update, for an update that needs a person; then the check that waits for its lock.
+    function updateInTerminal(): bool {
+        if (!root.canUseTerminal || root.updateRunning)
+            return false;
+        if (!root.system.launch("update in terminal", ["omarchy-launch-floating-terminal-with-presentation", "omarchy-update"]))
             return false;
         root.launched = true;
         root.launchCheck.restart();
         return true;
+    }
+
+    // Finish in Terminal… (U28): Omarchy's migrations a run could not finish, in Omarchy's terminal.
+    function finishInTerminal(): bool {
+        if (!root.canUseTerminal || root.updateRunning)
+            return false;
+        return root.system.launch("finish in terminal", ["omarchy-launch-floating-terminal-with-presentation", "omarchy-migrate"]);
     }
 
     function endSession(action: string): bool {
@@ -128,6 +213,14 @@ QtObject {
         root.read();
         root.readChannel();
         root.readRestart();
+        root.readRun();
+    }
+
+    // While a run goes on: its files are replaced by rename, so they are read again rather than watched.
+    readonly property Timer poll: Timer {
+        interval: Tokens.softwareUpdateRunPollMs
+        repeat: true
+        onTriggered: root.readRun()
     }
 
     // The shell's check has no answer in time (it was busy, or it died): the pane stops waiting.
