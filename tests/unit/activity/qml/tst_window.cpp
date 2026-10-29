@@ -148,6 +148,10 @@ struct Window {
         f.process(100, "alpha", kMe, 300, 1, nul({"alpha"}), "/");
         f.process(101, "beta", kMe, 200, 1, nul({"beta"}), "/");
         f.process(102, "gamma", kMe, 100, 1, nul({"gamma"}), "/");
+        // The system files of the summary (AM29, AM32).
+        f.write("proc/stat", "cpu  100 0 50 1000 0 0 0 0 0 0\ncpu0 100 0 50 1000 0 0 0 0 0 0\nintr 1\n");
+        f.write("proc/loadavg", "0.10 0.20 0.30 1/57 999\n");
+        f.write("proc/meminfo", "MemTotal: 16000000 kB\nMemAvailable: 8000000 kB\nActive(file): 1000000 kB\nInactive(file): 500000 kB\n");
         qputenv("GRASSFIELD_CONFIG_HOME", config.path().toUtf8());
         Options o;
         o.procRoot = f.proc();
@@ -234,6 +238,41 @@ TEST(ActivityWindow, TheTableTabsSortSearchViewsAndCopy)
     ASSERT_EQ(copied.size(), 2);
     EXPECT_TRUE(copied[0].startsWith(QStringLiteral("Process Name\t% CPU")));
     EXPECT_TRUE(copied[1].startsWith(QStringLiteral("gamma\t")));
+}
+
+// Every visible text under `item`.
+QStringList textsUnder(QQuickItem *item)
+{
+    QStringList out;
+    if (!item || !item->isVisible())
+        return out;
+    const QVariant text = item->property("text");
+    if (text.typeId() == QMetaType::QString && !text.toString().isEmpty())
+        out << text.toString();
+    for (QQuickItem *child : item->childItems())
+        out << textsUnder(child);
+    return out;
+}
+
+// AM5: the summary under the table holds the real backend's figures, from the fixture's system files, and its graphs keep
+// the historySamples token's count.
+TEST(ActivityWindow, TheSummaryShowsTheSystemFigures)
+{
+    Window w;
+    ASSERT_NE(w.win, nullptr);
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(w.win));
+    QQuickItem *summary = named(w.win, "summary");
+    ASSERT_NE(summary, nullptr);
+    ASSERT_TRUE(w.backend->ready() || w.sampled());
+    EXPECT_GT(w.backend->summaryModel().capacity(), 1);
+    ASSERT_TRUE(becomes([&] { return textsUnder(summary).contains(QStringLiteral("57")); }, true)); // Threads, from loadavg
+    const QStringList cpu = textsUnder(summary);
+    EXPECT_TRUE(cpu.contains(QStringLiteral("Processes:")));
+    EXPECT_TRUE(cpu.contains(QStringLiteral("3")));
+    EXPECT_TRUE(cpu.contains(QStringLiteral("CPU Load")));
+    QMetaObject::invokeMethod(named(w.win, "tabs"), "picked", Q_ARG(QString, QStringLiteral("memory")));
+    ASSERT_TRUE(becomes([&] { return textsUnder(summary).contains(QStringLiteral("16.4 GB")); }, true)); // 16 000 000 KiB
+    EXPECT_TRUE(textsUnder(summary).contains(QStringLiteral("Memory Pressure")));
 }
 
 TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)

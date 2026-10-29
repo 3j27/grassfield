@@ -3,9 +3,9 @@ import QtTest
 import Grassfield.Ui
 import "activity"
 
-// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 step 2a) with a fake backend: the title with the view
-// as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the keyboard and
-// the accessible names. The backend's own logic has its gtest cases (tests/unit/activity/window).
+// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a and 2b) with a fake backend: the title with
+// the view as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the
+// keyboard and the accessible names, the summary's figures and graphs, the Disk pop-up and the Network tab's line. The backend's own logic has its gtest cases (tests/unit/activity/window).
 TestCase {
     id: testCase
     name: "ActivityMain"
@@ -111,6 +111,47 @@ TestCase {
         menu.chosen("wakeUps");
         verify(t.backend.calls.indexOf("setColumnShown:wakeUps:true") >= 0);
         tryVerify(() => texts(t.win.contentItem).indexOf("Wake Ups") >= 0);
+    }
+
+    // AM5: the tab's figures under the table, the graphs between them; a figure a graph draws has its colour's square.
+    function test_summaryFiguresAndGraphs() {
+        const t = make();
+        const shown = texts(t.win.summary);
+        for (const text of ["System:", "5.0 %", "User:", "Idle:", "70.0 %", "Threads:", "1734", "Processes:", "412", "CPU Load"])
+            verify(shown.indexOf(text) >= 0, text + " in the summary");
+        compare(t.backend.summary.capacity, Tokens.activityHistorySamples);
+        const graphs = findAll(t.win.summary, i => i.visible && i.Accessible && i.Accessible.role === Accessible.Graphic);
+        compare(graphs.length, 1);
+        compare(graphs[0].Accessible.name, "CPU Load");
+        verify(t.win.summary.y + t.win.summary.height <= t.win.height + 0.5, "the summary is at the bottom");
+        compare(t.win.summary.height, Tokens.activitySummaryHeight);
+        verify(t.win.processList.y + t.win.processList.height <= t.win.summary.y + 0.5, "the table ends above it");
+        const squares = findAll(t.win.summary, i => i.width === Tokens.activitySwatchSize && i.height === Tokens.activitySwatchSize && i.visible);
+        compare(squares.length, 2); // System and User, not Idle
+        verify(Qt.colorEqual(squares[0].color, Appearance.colors.activityGraphSystem));
+    }
+
+    // AM42: the pop-up above the Disk graph; a new sample leaves it in place (the delegates are kept, not rebuilt).
+    function test_graphModePopUp() {
+        const t = make();
+        t.backend.summary.blocks = t.backend.diskBlocks;
+        const combo = findAll(t.win.summary, i => i.objectName === "graphMode-disk")[0];
+        verify(combo && combo.visible);
+        compare(combo.value, "io");
+        combo.picked("data");
+        verify(t.backend.calls.indexOf("setGraphMode:disk:data") >= 0);
+        t.backend.summary.blocks = t.backend.diskBlocks.map(b => Object.assign({}, b)); // the next sample
+        compare(findAll(t.win.summary, i => i.objectName === "graphMode-disk")[0], combo);
+    }
+
+    // AM43: the Network tab's line under the table, on that tab only.
+    function test_networkNote() {
+        const t = make();
+        verify(!t.win.networkNote.visible);
+        t.backend.tab = "network";
+        verify(t.win.networkNote.visible);
+        compare(t.win.networkNote.text, "UDP traffic, such as some video, is counted only in the totals below.");
+        verify(t.win.processList.y + t.win.processList.height <= t.win.networkNote.y + 0.5);
     }
 
     function test_rowsAndKeyboard() {
