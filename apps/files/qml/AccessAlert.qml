@@ -9,11 +9,13 @@ import "IconSource.js" as IconSource
 // filling the row, "Don't Allow" and "Allow" (or the frontend's labels). A window of its own, centred on the screen, or over
 // the application's window when the frontend names one.
 // - Neither button is the default for the camera, the microphone and screen capture (AC2): Return does nothing until a
-//   button has the keyboard. Otherwise the grant button is.
+//   button has the keyboard. Otherwise Return grants; Space acts only on a button the user reached with Tab (the keyboard
+//   starts on the alert, never on a button: a space typed for another window never grants, ADR-0035 5a-5).
 // - Esc, or the window closed by the compositor, is "Don't Allow".
-// - A click or a key in the first portalAlertArmMs after the alert drew does nothing (a click or a key meant for what was
-//   there before never answers it), and an alert that first gets the keyboard late (it opened behind the lock, AC3, or under another
-//   window) takes keys only after a click in it (the hold rule of the system dialogs).
+// - Each time the alert becomes the active window, no click, key or close answers it for panelAlertArmMs, and a key pressed
+//   meanwhile starts that time again (a click or a key meant for what was there before never answers it); an alert that
+//   first gets the keyboard late (it opened behind the lock, AC3, or under another window) takes keys only after a click in
+//   it, and that click only ends the hold.
 Window {
     id: alert
 
@@ -22,7 +24,7 @@ Window {
     // AccessAlerts.qml.
     required property var manager
     required property int requestId
-    // Access::toQml, with appName and appIcon.
+    // Access::toQml, with appIcon.
     required property var request
 
     readonly property bool hasDefault: alert.request.noDefault !== true
@@ -37,9 +39,10 @@ Window {
         return values;
     }
     property bool answered: false
-    // False until armMs after the first frame: clicks and keys answer nothing yet.
+    // False until armMs after the alert became the active window (again), or after the last key pressed meanwhile: clicks,
+    // keys and a close answer nothing yet.
     property bool armed: false
-    property int armMs: Tokens.portalAlertArmMs
+    property int armMs: Tokens.panelAlertArmMs
     property bool keysHeld: false
     property real shownAt: 0
     property bool everActive: false
@@ -77,12 +80,9 @@ Window {
         alert.host.answer(alert.requestId, grant, choices);
     }
 
-    // The keyboard at the start: the grant button when it is the default, else none of the buttons (Tab reaches them).
+    // The keyboard at the start: the alert, none of its buttons (Return grants where Allow is the default; Tab reaches them).
     function focusStart(): void {
-        if (alert.hasDefault)
-            grantButton.forceActiveFocus();
-        else
-            keys.forceActiveFocus();
+        keys.forceActiveFocus();
     }
 
     onVisibleChanged: {
@@ -91,7 +91,12 @@ Window {
     }
 
     onActiveChanged: {
-        if (!alert.active || alert.everActive)
+        if (!alert.active)
+            return;
+        // A click or a key that made it the active window is not an answer.
+        alert.armed = false;
+        arm.restart();
+        if (alert.everActive)
             return;
         alert.everActive = true;
         if (Date.now() - alert.shownAt > Tokens.filesPanelLateFocusMs)
@@ -100,12 +105,17 @@ Window {
             alert.focusStart();
     }
 
-    // Closed by the compositor (no answer yet): "Don't Allow".
-    onClosing: alert.answer(false)
+    // Closed by the compositor (no answer yet): "Don't Allow"; not yet armed, the close is refused (one meant for the window
+    // before it).
+    onClosing: close => {
+        if (!alert.armed) {
+            close.accepted = false;
+            return;
+        }
+        alert.answer(false);
+    }
 
     onFrameSwapped: {
-        if (!arm.running && !alert.armed)
-            arm.start();
         if (alert.manager.testAnswer === "" || alert.testAnswered)
             return;
         alert.testAnswered = true;
@@ -124,19 +134,30 @@ Window {
         focus: true
         Accessible.role: Accessible.Dialog
         Accessible.name: alert.title
-        Accessible.description: String(alert.request.subtitle)
+        Accessible.description: [String(alert.request.subtitle), String(alert.request.body)].filter(t => t !== "").join(" ")
 
-        Keys.onEscapePressed: {
+        // Not armed: any key starts the time again, so keys typed on for another window never arm it.
+        function unarmedKey(): bool {
             if (alert.armed)
+                return false;
+            arm.restart();
+            return true;
+        }
+        Keys.onEscapePressed: {
+            if (!keys.unarmedKey())
                 alert.answer(false);
         }
         Keys.onReturnPressed: {
-            if (alert.hasDefault && alert.armed)
+            if (!keys.unarmedKey() && alert.hasDefault)
                 alert.answer(true);
         }
         Keys.onEnterPressed: {
-            if (alert.hasDefault && alert.armed)
+            if (!keys.unarmedKey() && alert.hasDefault)
                 alert.answer(true);
+        }
+        Keys.onPressed: event => {
+            if (keys.unarmedKey())
+                event.accepted = true;
         }
 
         Column {
@@ -296,7 +317,7 @@ Window {
     }
 
     // Clicks wait until the alert is armed; while the keys are held, this takes them, and the first press in the alert ends the
-    // hold and goes on to what is under it.
+    // hold, and only that (review of step 5a, M1: it once went on to the button under it).
     Item {
         id: guard
         anchors.fill: parent
@@ -307,15 +328,15 @@ Window {
             event.accepted = true;
         }
 
+        // Taken, never passed on: a click that ends the hold or comes before the alert is armed is not an answer.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: mouse => {
+            onPressed: {
                 if (!alert.armed)
                     return;
                 alert.keysHeld = false;
                 alert.focusStart();
-                mouse.accepted = false;
             }
         }
     }

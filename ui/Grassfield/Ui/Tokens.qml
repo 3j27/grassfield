@@ -696,6 +696,8 @@ QtObject {
     readonly property int panelSheetFooterHeight: 64
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertWidth: 260
+    // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
+    readonly property int panelAlertArmMs: 500
 
     // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63
@@ -2276,8 +2278,6 @@ QtObject {
     readonly property int filesPanelFieldWidth: 300
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
-    // estimate: a permission alert takes no click and no key this long after it drew, so a click or a key meant for what was there before never answers it [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
-    readonly property int portalAlertArmMs: 500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
