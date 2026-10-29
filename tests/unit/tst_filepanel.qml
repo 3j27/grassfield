@@ -1021,6 +1021,7 @@ TestCase {
         compare(fakeAppHost.answers.length, 1);
         compare(fakeAppHost.answers[0].response, 1);
         compare(fakeHost.answers.length, 0);
+        compare(fakeHost.remembered.length, 0, "Cancel keeps nothing in FileChooser's memory either");
     }
 
     // M2 of the review of step 5b: in a Save panel, an application of the Applications location is left alone; its name never
