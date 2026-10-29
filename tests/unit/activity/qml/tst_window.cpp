@@ -7,6 +7,7 @@
 #include "iconprovider.h"
 #include "shownwatch.h"
 
+#include <QAccessible>
 #include <QClipboard>
 #include <QFile>
 #include <QGuiApplication>
@@ -301,12 +302,29 @@ TEST(ActivityWindow, HierarchicallyIndentsAndCollapses)
     EXPECT_EQ(t.data(t.index(alpha + 1), ProcessTable::DepthRole).toInt(), 1);
     // The triangle of alpha's row, in the view: a click there closes it.
     QQuickItem *list = named(w.win, "processRows");
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+    // A screen reader hears that alpha's row opens, and whether it is open (Qt 6.12; Qt 6.11.2 has no such state).
+    const auto alphaState = [&] {
+        for (QQuickItem *item : list->property("contentItem").value<QQuickItem *>()->childItems()) {
+            QAccessibleInterface *a = QAccessible::queryAccessibleInterface(item);
+            if (a && item->isVisible() && item->property("name").toString() == QLatin1String("alpha"))
+                return a->state();
+        }
+        return QAccessible::State();
+    };
+    EXPECT_TRUE(alphaState().expandable);
+    EXPECT_TRUE(alphaState().expanded);
+#endif
     const qreal rowHeight = list->property("contentHeight").toReal() / t.count();
     settledClick(w.win, [&] {
         return list->mapToScene(QPointF(10, (alpha + 0.5) * rowHeight - list->property("contentY").toReal())).toPoint();
     });
     ASSERT_TRUE(becomes([&] { return rows(w.win); }, 3, 2000));
     EXPECT_FALSE(t.data(t.index(alpha), ProcessTable::ExpandedRole).toBool());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+    EXPECT_TRUE(alphaState().expandable);
+    EXPECT_FALSE(alphaState().expanded);
+#endif
 }
 
 TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)

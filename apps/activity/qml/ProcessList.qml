@@ -278,8 +278,15 @@ FocusScope {
             Accessible.name: row.accessibleText
             Accessible.selectable: !row.group
             Accessible.selected: row.selected
-            Accessible.expandable: row.expandable
-            Accessible.expanded: row.expanded
+            // Qt 6.12 tells a screen reader which rows open and which are open; Qt 6.11.2 has neither property, and the
+            // app must load on it too (integrator, PR #53). They are set only where they exist.
+            Component.onCompleted: {
+                const accessible = row.Accessible;
+                if ("expanded" in accessible) {
+                    accessible["expandable"] = Qt.binding(() => row.expandable);
+                    accessible["expanded"] = Qt.binding(() => row.expanded);
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
