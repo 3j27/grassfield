@@ -214,7 +214,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
   interrupting a restore starts from the restore's current box, a funnel one (either way) from the shape on screen.
 - **FR16** `hl.plugin.grassfield.config(key, value)`: allowlist `titlebarDoubleClick` = `zoom` | `minimize` |
-  `none`, `appearance` = `dark` | `light` (FR53), `stagesEnabled` (FR33), `minimizeEffect` = `funnel` | `shrink` | `fade`
+  `fill` | `none` (`fill`: tiling.md TL32), `appearance` = `dark` | `light` (FR53), `stagesEnabled` (FR33), `minimizeEffect` = `funnel` | `shrink` | `fade`
   (FR45) and the tiling keys (FR50) (exact strings); anything
   else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell pushes the settings after each
   capabilities event and whenever Settings change.
@@ -628,12 +628,16 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `hl.plugin.grassfield.move_to(address, output)` moves a window onto another output (a tiled one into the same tile
   there; refused while locked). Untrusted: fixed-size strings, the address
   compared with live windows, the place from a fixed list, the output name checked and compared with the live outputs.
-- **FR50** Settings (macOS Desktop & Dock > Windows, all on by default): `windows.tilingEdges` ("Drag windows to screen
-  edges to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"), `windows.tilingMargins` ("Tiled
-  windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",
-  "true" | "false")` once the plugin advertises `window-tiling`. Since tiling step 2 the plugin also accepts
-  `tilingOptionDrag` (on at load; "Hold Alt key while dragging windows to tile", its Settings switch comes in tiling step 5). Without the plugin (C2) the shell shows no tiling items
-  and the keys do nothing; drags move windows as Hyprland does.
+- **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag
+  windows to left or right edge of screen to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"),
+  `windows.tilingOptionDrag` ("Hold Alt key while dragging windows to tile"), `windows.tilingMargins` ("Tiled windows have
+  margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingOptionDrag" |
+  "tilingMargins", "true" | "false")` once the plugin advertises `window-tiling`; `windows.tilingLayouts` ("Show layouts
+  when hovering over the green button": off, the hover tracker posts no `enter`; `tile_popover` still posts `open`) with
+  `tile-hover`, and `windows.tilingSuggestions` ("Suggest windows to fill the rest of a layout": off, an arrangement keeps
+  no suggestion and the state reply has none) with `tiling-layouts`; core `tiling::switchOf` maps the keys.
+  `windows.tilingGroups` ("Bring tile groups forward together") is the shell's alone (ADR-0036 D38). Without the plugin
+  (C2) the shell shows no tiling items and the keys do nothing; drags move windows as Hyprland does.
 - **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
   Chromium dragged up until its tab strip was under the menu bar could not be grabbed again). For floating windows (not
   full screen or zoomed), on every output, with the plugin's titlebar (a 32 px band above the surface) or the app's own
