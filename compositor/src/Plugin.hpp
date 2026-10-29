@@ -65,6 +65,10 @@ namespace gf {
         // defaults, all on.
         tiling::DragOptions tilingDrag;
         bool                tilingMargins = true;
+        // "Show layouts when hovering over the green button" (tilingLayouts): off, the hover tracker posts no "enter";
+        // "Suggest windows to fill the rest of a layout" (tilingSuggestions): off, an arrangement keeps no suggestion (TL32).
+        bool tilingLayouts     = true;
+        bool tilingSuggestions = true;
         // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.
         theme::Appearance appearance = theme::kDefaultAppearance;
 

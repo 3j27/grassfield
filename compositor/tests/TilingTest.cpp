@@ -119,6 +119,18 @@ TEST(TilingNames, PlacesAndOptionsParseStrictly) {
     EXPECT_FALSE(parseBool("True").has_value());
 }
 
+// TL32: the six switches the plugin takes; tile groups forward together stays in the shell (ADR-0036 D38).
+TEST(Tiling, SwitchKeys) {
+    EXPECT_EQ(switchOf("tilingEdges"), Switch::Edges);
+    EXPECT_EQ(switchOf("tilingMenuBar"), Switch::MenuBar);
+    EXPECT_EQ(switchOf("tilingOptionDrag"), Switch::AltDrag);
+    EXPECT_EQ(switchOf("tilingMargins"), Switch::Margins);
+    EXPECT_EQ(switchOf("tilingLayouts"), Switch::Layouts);
+    EXPECT_EQ(switchOf("tilingSuggestions"), Switch::Suggestions);
+    for (const char* other : {"", "tilingGroups", "tilingAltDrag", "TilingLayouts", "tilingLayouts ", "titlebarDoubleClick", "stagesEnabled"})
+        EXPECT_FALSE(switchOf(other).has_value()) << other;
+}
+
 // ---- ADR-0036 step 1: the geometry engine (docs/specs/tiling.md TL1-TL15) ----
 
 namespace {

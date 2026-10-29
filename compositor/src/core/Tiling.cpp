@@ -947,6 +947,22 @@ namespace gf::tiling {
         return "";
     }
 
+    std::optional<Switch> switchOf(std::string_view key) {
+        if (key == kConfigEdges)
+            return Switch::Edges;
+        if (key == kConfigMenuBar)
+            return Switch::MenuBar;
+        if (key == kConfigAltDrag)
+            return Switch::AltDrag;
+        if (key == kConfigMargins)
+            return Switch::Margins;
+        if (key == kConfigLayouts)
+            return Switch::Layouts;
+        if (key == kConfigSuggestions)
+            return Switch::Suggestions;
+        return std::nullopt;
+    }
+
     std::optional<bool> parseBool(std::string_view value) {
         if (value == "true")
             return true;

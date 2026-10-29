@@ -1811,8 +1811,9 @@ namespace gf::tiler {
             s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zoneIndex[i]},
                           m->m_name, workspace->m_id, group);
         }
-        // TL28: the zones left empty in that layout, offered to the shell in the state reply until the next change.
-        s.suggestion = suggestionFor(request->with ? *request->with : idOf(windows.front()), m);
+        // TL28: the zones left empty in that layout, offered to the shell in the state reply until the next change (none while
+        // "Suggest windows to fill the rest of a layout" is off, TL32).
+        s.suggestion = state().tilingSuggestions ? suggestionFor(request->with ? *request->with : idOf(windows.front()), m) : std::nullopt;
         logRequest(Log::DEBUG, "arrange: {} with {} window(s) on {}{}", layout->id, windows.size(), m->m_name,
                    s.suggestion ? std::format(", {} zone(s) to suggest", s.suggestion->zones.size()) : "");
         notify(tiling::Reason::Placed);
@@ -1840,7 +1841,7 @@ namespace gf::tiler {
         }
         // TL28: the suggestion while nothing changed since; a window closed meanwhile is left out.
         std::optional<tiling::Suggestion> suggestion;
-        if (s.suggestion && s.suggestion->generation == s.book.generation()) {
+        if (s.suggestion && s.suggestion->generation == s.book.generation() && state().tilingSuggestions) {
             suggestion = *s.suggestion;
             std::erase_if(suggestion->windows, [](uint64_t id) { return !windowById(id); });
             if (suggestion->windows.empty())
