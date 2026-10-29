@@ -51,6 +51,16 @@ FocusScope {
     property real captionExtra: 0
     readonly property real naturalWidth: root.model.length > 0 ? (root.model.length - 1) * root.naturalPitch + root.pictureWidth + 2 * root.ringPad : 0
 
+    function measureCaptions(): void {
+        let widest = 0;
+        for (let i = 0; i < measure.count; i++) {
+            const item = measure.itemAt(i);
+            if (item)
+                widest = Math.max(widest, item.implicitWidth);
+        }
+        root.widestCaption = widest;
+    }
+
     // Each name reports the height it takes and one line's height; the extra is the tallest beyond one line.
     property var nameHeights: ({})
 
