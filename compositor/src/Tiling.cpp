@@ -1067,15 +1067,28 @@ namespace gf::tiler {
             return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & kMods) != 0;
         }
 
+        // An xdg popup of any window shown on a visible Desktop holds the point. Hyprland's windowAt returns the topmost
+        // window whose box (border grab area included) holds the point before it looks at the popups of the windows below,
+        // so a popup reaching over the gap from the lower window of the edge was not seen (integrator nested pass of 3d56d60).
+        bool popupAt(const Vector2D& p) {
+            if (!Desktop::windowState())
+                return false;
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (w && w->m_isMapped && !w->isHidden() && !w->m_isX11 && w->m_workspace && w->m_workspace->isVisible() && w->hasPopupAt(p))
+                    return true;
+            }
+            return false;
+        }
+
         // TL30, TL34: the frontmost window under the point gets the click (core handleClear). Hyprland's own hit test of its
-        // pointer focus: a window's titlebar (its reserved extents), border grab area or xdg popup, a full-screen or zoomed
-        // window, from the top of the stack; a popup of the edge's own window keeps the click too.
+        // pointer focus: a window's titlebar (its reserved extents) or border grab area, a full-screen or zoomed window, from
+        // the top of the stack; and any popup there, a popup of the edge's own windows included.
         bool handleClearAt(const tiling::SharedEdge& edge, const Vector2D& p) {
             if (!Desktop::viewState())
                 return false;
             constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
             const auto     w     = Desktop::viewState()->hitTest().windowAt(p, props);
-            return tiling::handleClear(edge, w ? idOf(w) : 0, w && !w->m_isX11 && w->hasPopupAt(p));
+            return tiling::handleClear(edge, w ? idOf(w) : 0, popupAt(p));
         }
 
         // The handle under the pointer, for a plain pointer (no button held, no modifier: Super+drag stays Hyprland's move),

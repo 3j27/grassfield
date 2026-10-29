@@ -1278,6 +1278,8 @@ TEST(TilingEdge, AHandleYieldsToAWindowInFrontOfIt) {
     EXPECT_FALSE(handleClear(v, 9, false)) << "another window in front (free, zoomed, full screen, or its titlebar) gets the click";
     EXPECT_FALSE(handleClear(v, 1, true)) << "a popup of the edge's own window";
     EXPECT_FALSE(handleClear(v, 9, true));
+    EXPECT_FALSE(handleClear(v, 0, true)) << "a popup over the gap, no window's box there (integrator nested pass of 3d56d60)";
+    EXPECT_FALSE(handleClear(v, 3, true)) << "a popup of the lower window under the upper one's border grab area";
     EXPECT_FALSE(handleClear(edges[1], 1, false)) << "a window of the group outside this edge";
 }
 
