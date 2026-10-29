@@ -480,17 +480,24 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   a thread of its own with a deadline (`FileChooser::probe`, 1 s), the GUI thread never waiting. **Choice: (b).** A folder
   that has not answered in time is passed over when a panel opens (the next of the application's folder, the remembered
   one, Documents, Home), and Save, SaveFiles and Go to Folder say "“name” isn't responding." with "Choose another folder,
-  or try again later.", as the Finder says of a server that went away; the panel stays open. One job per call: the call's
-  paths are read in order on one thread of their own (a panel's start folders with the places first and the application's
-  folder last; SaveFiles' names, up to 4096, in one job), each answer posted as it comes, and the call answered once every
-  path has, or once none has come for 1 s, so a share that is slow but answering is waited for and a stuck one is not. A
-  path another job is reading is not read again, and at most 16 jobs run at once (a stuck one counts while its read hangs):
-  beyond, a new call's paths are not responding at once, so stuck reads cannot pile up threads under the unit's
-  `TasksMax`. (A first version read each path on a thread of its own with a bound of 16 paths in flight: SaveFiles with 17
-  names or more was never answered on a healthy disk, re-review of 6b26afc, MAJOR 1.) New Folder asks KIO (its job runs off
-  the GUI thread) and learns a taken name from KIO's error instead of a look first.
-  Left on the GUI thread: Files' own per-item reads once a listing has arrived (tags, folder looks), the panels' state
-  file in the state directory, and the application's desktop entry (KService's cache).
+  or try again later.", as the Finder says of a server that went away; the panel stays open. The questions go through
+  `DiskProbe` (Files' library, shared by the portal and Files' sidebar): a call's paths are read in order on one thread of
+  its own, each answer posted as it comes and its own; the call ends once every path has answered, once none has for 1 s (a
+  share that is slow but answering is waited for), or after 5 s in all. A path queued behind a hung one in the same call is
+  not responding for that call only and is read again by the next; a read still running when its call ends is stuck, and
+  until it returns a later call gets "not responding" for that path at once (it is not read twice); with 16 reads stuck, no
+  new read starts, so stuck reads cannot pile up threads under the unit's `TasksMax`. A panel's start folders are three calls
+  at once (the application's folder, the remembered one, the places), so a hung remembered folder never hides the
+  application's healthy one (re-review of 65311e0, MAJOR 1; a first version read every path of a call behind one another and
+  kept a path queued behind a hung one as "being read" until the process quit; an earlier one had a thread per path and a
+  bound of 16 paths, so SaveFiles with 17 names was never answered, re-review of 6b26afc). Files' sidebar (`PlacesModel`, the
+  same in Files and in a panel) lists the standard folders at once and asks the disk about each in a call of its own: one
+  that is not there leaves the list, one that does not answer stays, dimmed, as the Finder shows a server that went away
+  (re-review of 65311e0, MAJOR 2: it read them on the GUI thread, when a panel's UI was made and at every device change). New
+  Folder asks KIO (its job runs off the GUI thread) and learns a taken name from KIO's error instead of a look first. Left on
+  the GUI thread: the files under the home folder's configuration directory (`user-dirs.dirs`, `grassfield.json`, the panels'
+  state file; a hung home folder stops the whole session anyway), Files' own per-item reads once a listing has arrived (tags,
+  folder looks), and the application's desktop entry (KService's cache).
 
 ### D-5. Open With and the permission alerts in the same backend (category A; P4–P7)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.AppChooser` and `org.freedesktop.impl.portal.Access`.

@@ -109,8 +109,9 @@ Built in step 4b (`grassfield-portal`, `apps/files/qml/FilePanel.qml`; the decis
   a pop-up or a check box.
 - FC7: the UI loads at the first request; no first frame in 3 s, a QML that does not load, or no display: the call goes to
   x-d-p-gtk; the process quits 60 s after its last request (4b-11). The panels never read the disk on the GUI thread: a
-  folder that has not answered for 1 s (a share gone, a sleeping disk) is passed over when a panel opens, and Save, Go to
-  Folder and SaveFiles say "“name” isn't responding." there; another application's panel is never held up (4b-18).
+  folder that has not answered for 1 s (5 s at most for many names; a share gone, a sleeping disk) is passed over when a
+  panel opens, is dimmed in the sidebar, and Save, Go to Folder and SaveFiles say "“name” isn't responding." there; another
+  application's panel is never held up (4b-18).
 - FC8: the compositor's session lock hides the panel and keeps the keyboard from it; a panel that first gets the keyboard
   1.5 s or more after it opened takes keys only after a click, and its footer says so (4b-8).
 - FC9: Files' KIO sheets, in the panel the user last worked in.

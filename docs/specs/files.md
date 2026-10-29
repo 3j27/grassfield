@@ -59,7 +59,8 @@ selection").
    Show Hidden Files and the preview pane of each view stay global (QSettings `Grassfield/Files`); each folder keeps its
    view, sort and grouping (F-3). Tag search results (F16) in the column mode show as a list.
 5. F5 Sidebar: Favorites = Home, Applications, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists
-   (Applications always; Go > Applications, Ctrl+Shift+A); Tags (F16);
+   (Applications always; Go > Applications, Ctrl+Shift+A; whether a folder exists is asked off the GUI thread, and one on a
+   mount that does not answer stays listed, dimmed, ADR-0035 4b-18); Tags (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
    (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
