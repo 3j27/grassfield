@@ -135,7 +135,8 @@ struct DiskStat {
     uint64_t reads = 0, sectorsRead = 0, readTicksMs = 0, writes = 0, sectorsWritten = 0, writeTicksMs = 0, ioTicksMs = 0;
 };
 
-std::vector<DiskStat> parseDiskstats(std::string_view text);
+// `only`, when given: the names kept, sorted (the whole physical disks, AM42); the other lines are not converted.
+std::vector<DiskStat> parseDiskstats(std::string_view text, const std::vector<std::string> *only = nullptr);
 
 // /proc/net/dev.
 struct NetDev {
@@ -158,5 +159,21 @@ struct DrmClient {
 };
 
 bool parseDrmFdinfo(std::string_view text, DrmClient &out);
+
+// A sysfs PCI id file (`vendor`, `device`: "0x8086\n"); -1 when it is not one.
+int parsePciId(std::string_view text);
+
+// pci.ids (hwdata, AM47): the vendor's and the device's names for two ids, "" for what it does not list. Vendor lines are
+// "<4 hex>  <name>", device lines a tab then "<4 hex>  <name>" under their vendor; comments start with '#'.
+struct PciNames {
+    std::string vendor, device;
+};
+PciNames lookupPciIds(std::string_view pciIds, int vendor, int device);
+
+// The name a GPU shows (AM47), from pci.ids' names: the vendor's short name and the device's marketing name, "Intel UHD
+// Graphics" for "Intel Corporation" and "CometLake-H GT2 [UHD Graphics]". The vendor's short name is the first part of
+// its bracket ("[AMD/ATI]": AMD), else its name without a company suffix; the device's is its last bracket, else its name.
+// "" without a device name.
+std::string gpuModelName(const PciNames &names);
 
 } // namespace activity

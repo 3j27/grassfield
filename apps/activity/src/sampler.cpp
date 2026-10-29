@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -61,21 +62,53 @@ bool exists(const std::string &path)
     return lstat(path.c_str(), &st) == 0;
 }
 
+// A row of the last sample, emptied for this one: its values reset in one copy, its strings emptied with their buffers
+// kept, so a name longer than the short-string buffer is not allocated and freed again at each sample (2b, the Disk tab's
+// cost). Every field is the default one (sampler.h checks that ProcessRow has no other member).
+ProcessRow &recycle(ProcessRow &r)
+{
+    static const ProcessValues blank{};
+    static_cast<ProcessValues &>(r) = blank;
+    r.name.clear();
+    r.command.clear();
+    r.appId.clear();
+    r.gpuDevices.clear();
+    return r;
+}
+
+// A whole file of at most 16 MiB (pci.ids is about 1.5 MiB), read once per GPU.
+bool readWhole(const std::string &path, std::string &out)
+{
+    const int f = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (f < 0)
+        return false;
+    out.clear();
+    char chunk[65536];
+    ssize_t n = 0;
+    while ((n = read(f, chunk, sizeof chunk)) > 0 && out.size() < (16u << 20))
+        out.append(chunk, static_cast<size_t>(n));
+    close(f);
+    return n >= 0;
+}
+
 } // namespace
 
 unsigned readsForTab(Tab tab)
 {
+    // Every tab reads the four system groups (2b): each tab's graph keeps its history whichever tab is shown, as macOS's
+    // do (about 0.04 ms a sample on the cloud machine; A10's step-1 plans always counted them).
+    constexpr unsigned system = ReadSystemCpu | ReadSystemMemory | ReadSystemDisk | ReadSystemNet;
     switch (tab) {
     case Tab::Cpu:
-        return ReadProcesses | ReadDescriptors | ReadGpu | ReadSystemCpu;
+        return ReadProcesses | ReadDescriptors | ReadGpu | system;
     case Tab::Memory:
-        return ReadProcesses | ReadMemory | ReadSystemMemory;
+        return ReadProcesses | ReadMemory | system;
     case Tab::Energy:
-        return ReadProcesses | ReadIo | ReadThreads | ReadDescriptors | ReadGpu | ReadSystemCpu;
+        return ReadProcesses | ReadIo | ReadThreads | ReadDescriptors | ReadGpu | system;
     case Tab::Disk:
-        return ReadProcesses | ReadIo | ReadSystemDisk;
+        return ReadProcesses | ReadIo | system;
     case Tab::Network:
-        return ReadProcesses | ReadDescriptors | ReadSockets | ReadSystemNet;
+        return ReadProcesses | ReadDescriptors | ReadSockets | system;
     }
     return ReadProcesses;
 }
@@ -172,10 +205,10 @@ void Sampler::setWindowOwners(std::unordered_set<int> pids)
 const std::string &Sampler::procPath(int pid, const char *file)
 {
     char digits[16];
-    const int n = std::snprintf(digits, sizeof digits, "%d", pid);
+    char *end = std::to_chars(digits, digits + sizeof digits, pid).ptr; // snprintf costs ten times more (2b)
     path_.assign(opt_.procRoot);
     path_ += '/';
-    path_.append(digits, static_cast<size_t>(n));
+    path_.append(digits, static_cast<size_t>(end - digits));
     if (file && *file) {
         path_ += '/';
         path_ += file;
@@ -578,7 +611,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
         s.system.processes = static_cast<int>(listing_.size());
         if (!std::is_sorted(listing_.begin(), listing_.end())) // /proc lists pids in increasing order
             std::sort(listing_.begin(), listing_.end());
-        s.rows.clear();
+        size_t used = 0; // the last sample's rows are emptied and filled again in place (recycle)
         s.rows.reserve(listing_.size());
         s.kernel = KernelRow{};
         double kernelPercent = 0;
@@ -650,7 +683,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             if (!p.kthread
                 && (fresh || exec || index_ % static_cast<uint64_t>(opt_.descriptorTurns) == p.turn % static_cast<uint64_t>(opt_.descriptorTurns))) {
                 char name[16];
-                std::snprintf(name, sizeof name, "%d", pid);
+                *std::to_chars(name, name + sizeof name - 1, pid).ptr = '\0';
                 ++c.ownerStats;
                 uint32_t owner = 0;
                 bool ownerOk = false;
@@ -741,7 +774,8 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                 p.haveCommand = true;
             }
 
-            ProcessRow &row = s.rows.emplace_back(); // reserved above: no reallocation, the reference holds
+            ProcessRow &row = used < s.rows.size() ? recycle(s.rows[used]) : s.rows.emplace_back(); // reserved: the reference holds
+            ++used;
             row.pid = pid;
             row.start = st.starttime;
             row.ppid = st.ppid;
@@ -873,6 +907,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                 s.energyImpact = (s.energyImpact < 0 ? 0 : s.energyImpact) + row.energyImpact;
             }
         }
+        s.rows.resize(used);
         s.kernel.cpuPercent = kernelKnown ? kernelPercent : -1;
 
         // Processes that ended: their kept descriptors close. Swept only when some did: the sweep touches every process's
@@ -953,6 +988,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             for (auto &[pdev, dev] : devices) {
                 for (const auto &[engine, share] : engines[pdev])
                     dev.engines.push_back({engine, std::min(share, 100.0)});
+                nameGpu(dev, c);
                 s.gpus.push_back(dev);
             }
         }
@@ -984,6 +1020,50 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
     ++index_;
     s.cpuMs = threadCpuMs() - cpu0;
     return s;
+}
+
+// AM47: the card whose `device` link ends in the pdev, and the name pci.ids gives its vendor and device ids. Read once per
+// pdev: a GPU's ids do not change while it is there.
+void Sampler::nameGpu(GpuDevice &dev, Counters &c)
+{
+    auto it = gpuNames_.find(dev.pdev);
+    if (it == gpuNames_.end()) {
+        GpuName name;
+        const std::string drm = opt_.sysRoot + "/class/drm";
+        if (DIR *d = opendir(drm.c_str())) {
+            while (dirent *e = readdir(d)) {
+                if (std::strncmp(e->d_name, "card", 4) != 0 || !isNumeric(e->d_name + 4)) // card1, not card1-eDP-1
+                    continue;
+                const std::string device = drm + '/' + e->d_name + "/device";
+                char target[4096];
+                const ssize_t n = readlink(device.c_str(), target, sizeof target - 1);
+                if (n <= 0)
+                    continue;
+                target[n] = '\0';
+                const char *slash = std::strrchr(target, '/');
+                if (dev.pdev != (slash ? slash + 1 : target))
+                    continue;
+                name.card = std::atoi(e->d_name + 4);
+                int vendor = -1, id = -1;
+                ++c.systemReads;
+                if (readFile(device + "/vendor", buf_))
+                    vendor = parsePciId(buf_);
+                ++c.systemReads;
+                if (readFile(device + "/device", buf_))
+                    id = parsePciId(buf_);
+                std::string ids;
+                if (vendor >= 0 && id >= 0 && !opt_.pciIds.empty() && readWhole(opt_.pciIds, ids)) {
+                    ++c.systemReads;
+                    name.model = gpuModelName(lookupPciIds(ids, vendor, id));
+                }
+                break;
+            }
+            closedir(d);
+        }
+        it = gpuNames_.emplace(dev.pdev, std::move(name)).first;
+    }
+    dev.card = it->second.card;
+    dev.model = it->second.model;
 }
 
 void Sampler::readSystem(unsigned reads, double now, SystemSnapshot &out, Counters &c)
@@ -1093,9 +1173,7 @@ void Sampler::readSystem(unsigned reads, double now, SystemSnapshot &out, Counte
         if (readFile(opt_.procRoot + "/diskstats", buf_)) {
             const double dt = lastDiskTime_ >= 0 ? now - lastDiskTime_ : 0;
             std::map<std::string, DiskStat> nowDisks;
-            for (DiskStat &d : parseDiskstats(buf_)) {
-                if (!std::binary_search(physicalDisks_.begin(), physicalDisks_.end(), d.name))
-                    continue;
+            for (DiskStat &d : parseDiskstats(buf_, &physicalDisks_)) {
                 DiskSnapshot ds;
                 ds.name = d.name;
                 ds.reads = d.reads;

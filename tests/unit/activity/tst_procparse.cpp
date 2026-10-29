@@ -50,6 +50,42 @@ TEST(ProcParse, StatWithoutCodeAddressesClearsThem)
     EXPECT_EQ(st.endCode, 0u);
 }
 
+// AM47: the GPU's name from pci.ids.
+TEST(ProcParse, PciIdsNameAGpu)
+{
+    EXPECT_EQ(parsePciId("0x8086\n"), 0x8086);
+    EXPECT_EQ(parsePciId("0x73FF"), 0x73ff);
+    EXPECT_EQ(parsePciId("8086\n"), -1);
+    EXPECT_EQ(parsePciId("0x80g6"), -1);
+    const std::string ids = "# pci.ids\n"
+                            "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n"
+                            "\t73ff  Navi 23 [Radeon RX 6600/6600 XT/6600M]\n"
+                            "\t\t1002 0e3b  A subsystem named 73ff\n"
+                            "10de  NVIDIA Corporation\n"
+                            "\t2504  GA106 [GeForce RTX 3060 Lite Hash Rate]\n"
+                            "1af4  Red Hat, Inc.\n"
+                            "\t1050  Virtio 1.0 GPU\n"
+                            "8086  Intel Corporation\n"
+                            "\t9bc4  CometLake-H GT2 [UHD Graphics]\n"
+                            "C 03  Display controller\n"
+                            "\t00  VGA compatible controller\n";
+    PciNames amd = lookupPciIds(ids, 0x1002, 0x73ff);
+    EXPECT_EQ(amd.vendor, "Advanced Micro Devices, Inc. [AMD/ATI]");
+    EXPECT_EQ(amd.device, "Navi 23 [Radeon RX 6600/6600 XT/6600M]");
+    EXPECT_EQ(gpuModelName(amd), "AMD Radeon RX 6600/6600 XT/6600M");
+    EXPECT_EQ(gpuModelName(lookupPciIds(ids, 0x10de, 0x2504)), "NVIDIA GeForce RTX 3060 Lite Hash Rate");
+    EXPECT_EQ(gpuModelName(lookupPciIds(ids, 0x1af4, 0x1050)), "Red Hat Virtio 1.0 GPU");
+    EXPECT_EQ(gpuModelName(lookupPciIds(ids, 0x8086, 0x9bc4)), "Intel UHD Graphics");
+    // A device id of another vendor, a subsystem line and a class line are not the device.
+    EXPECT_EQ(lookupPciIds(ids, 0x10de, 0x73ff).device, "");
+    EXPECT_EQ(lookupPciIds(ids, 0x1002, 0x0e3b).device, "");
+    EXPECT_EQ(lookupPciIds(ids, 0x8086, 0x0000).device, "");
+    EXPECT_EQ(lookupPciIds(ids, 0x1234, 0x9bc4).vendor, "");
+    EXPECT_EQ(gpuModelName(lookupPciIds(ids, 0x8086, 0x0000)), ""); // no device name: none
+    // A model that already starts with the vendor's name keeps it once.
+    EXPECT_EQ(gpuModelName({"Intel Corporation", "Intel Arc A770"}), "Intel Arc A770");
+}
+
 TEST(ProcParse, KernelThreadFlag)
 {
     StatFields st;
@@ -130,6 +166,9 @@ TEST(ProcParse, ProcStatAndLoadavg)
     EXPECT_EQ(total.busy(), 161u);
     ASSERT_EQ(per.size(), 2u);
     EXPECT_EQ(per[1].steal, 1u);
+    // The cpu lines come first: nothing after them is read (2b: intr's counters).
+    ASSERT_TRUE(parseProcStat(text + "cpu9 1 1 1 1 1 1 1 1 0 0\n", total, per));
+    EXPECT_EQ(per.size(), 2u);
     EXPECT_EQ(parseLoadavgTasks("0.52 0.40 0.31 2/1734 98765\n"), 1734);
     EXPECT_EQ(parseLoadavgTasks("garbage"), -1);
 }
@@ -147,6 +186,18 @@ TEST(ProcParse, MeminfoPressureSwapsZram)
     EXPECT_EQ(m.activeFile, 3000000u);
     EXPECT_EQ(m.inactiveFile, 2000000u);
     EXPECT_EQ(m.committedAs, 20000000u);
+    // Every key the summary uses, then a line after them: the reading stops once each has been seen (2b).
+    Meminfo all;
+    ASSERT_TRUE(parseMeminfo("MemTotal: 1 kB\nMemAvailable: 2 kB\nBuffers: 3 kB\nCached: 4 kB\nActive(file): 5 kB\n"
+                             "Inactive(file): 6 kB\nUnevictable: 7 kB\nSwapTotal: 8 kB\nSwapFree: 9 kB\nAnonPages: 10 kB\n"
+                             "Shmem: 11 kB\nSUnreclaim: 12 kB\nKernelStack: 13 kB\nPageTables: 14 kB\nCommitLimit: 15 kB\n"
+                             "Committed_AS: 16 kB\nMemTotal: 99 kB\n",
+                             all));
+    const uint64_t got[] = {all.memTotal, all.memAvailable, all.buffers, all.cached, all.activeFile, all.inactiveFile,
+                            all.unevictable, all.swapTotal, all.swapFree, all.anonPages, all.shmem, all.sUnreclaim,
+                            all.kernelStack, all.pageTables, all.commitLimit, all.committedAs};
+    for (uint64_t i = 0; i < 16; ++i)
+        EXPECT_EQ(got[i], i + 1) << i;
     Meminfo none;
     EXPECT_FALSE(parseMeminfo("MemTotal: 1 kB\n", none));
 
@@ -180,6 +231,15 @@ TEST(ProcParse, DiskstatsAndNetDev)
     EXPECT_EQ(disks[0].sectorsWritten, 160000u);
     EXPECT_EQ(disks[0].writeTicksMs, 900u);
     EXPECT_EQ(disks[0].ioTicksMs, 1200u);
+    // The sampler gives the whole physical disks' names: the other lines are left out.
+    const std::vector<std::string> physical{"nvme0n1", "sda"};
+    const auto kept = parseDiskstats("   7       0 loop0 1 0 2 0 0 0 0 0 0 0 0 0 0 0 0\n"
+                                     " 259       0 nvme0n1 1000 10 80000 500 2000 20 160000 900 0 1200 1400 0 0 0 0 0 0\n"
+                                     " 259       1 nvme0n1p1 9 0 9 0 9 0 9 0 0 9 9 0 0 0 0 0 0\n",
+                                     &physical);
+    ASSERT_EQ(kept.size(), 1u);
+    EXPECT_EQ(kept[0].name, "nvme0n1");
+    EXPECT_EQ(kept[0].reads, 1000u);
 
     const auto net = parseNetDev("Inter-|   Receive                                                |  Transmit\n"
                                  " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n"

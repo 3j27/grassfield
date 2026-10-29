@@ -31,6 +31,7 @@ Options options(const Fixture &f, uint32_t uid = kMe)
     o.uidMin = 1000;
     o.clockTicks = 100;
     o.maxKeptFiles = 4096;
+    o.pciIds = f.sys() + "/../hwdata/pci.ids"; // the fixture's, when a test writes one
     return o;
 }
 
@@ -500,6 +501,48 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     EXPECT_DOUBLE_EQ(render, 80.0); // the two clients summed (AM47)
     EXPECT_DOUBLE_EQ(video, 50.0);
     EXPECT_EQ(snap.counters.fdinfoReads, 4u);
+    EXPECT_EQ(gpu.card, -1); // no /sys/class/drm in this fixture: no card, no name
+    EXPECT_EQ(gpu.model, "");
+}
+
+// AM47: a GPU's name is its card's PCI ids looked up in pci.ids, read once; another card's links and the connectors
+// (card1-eDP-1) are not it.
+TEST(Sampler, AGpuIsNamedFromItsCardsPciIds)
+{
+    Fixture f;
+    f.process(100, "game", kMe, 1, 1, nul({"game"}), "/");
+    f.link("/dev/dri/renderD129", "proc/100/fd/7");
+    f.write("proc/100/fdinfo/7", "pos:\t0\ndrm-driver:\ti915\ndrm-pdev:\t0000:00:02.0\ndrm-client-id:\t3\ndrm-engine-render:\t5 ns\n");
+    f.link("../../../devices/pci0000:00/0000:03:00.0", "sys/class/drm/card0/device");
+    f.link("../../../devices/pci0000:00/0000:00:02.0", "sys/class/drm/card1/device");
+    f.link("../../../devices/pci0000:00/0000:00:02.0", "sys/class/drm/card1-eDP-1/device");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/vendor", "0x8086\n");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/device", "0x9bc4\n");
+    f.write("hwdata/pci.ids", "# comment\n8086  Intel Corporation\n\t9bc4  CometLake-H GT2 [UHD Graphics]\n\t\t1028 09be  "
+                              "Subsystem\n");
+    Options o = options(f);
+    o.descriptorTurns = 1;
+    Sampler s(o);
+    const unsigned reads = readsForTab(Tab::Cpu);
+    const Snapshot first = s.sample(reads, 1.0);
+    ASSERT_EQ(first.gpus.size(), 1u);
+    EXPECT_EQ(first.gpus[0].card, 1);
+    EXPECT_EQ(first.gpus[0].model, "Intel UHD Graphics");
+    const uint64_t once = first.counters.systemReads;
+    f.write("hwdata/pci.ids", "8086  Intel Corporation\n\t9bc4  Renamed\n");
+    const Snapshot again = s.sample(reads, 2.0);
+    EXPECT_EQ(again.gpus[0].model, "Intel UHD Graphics"); // read once
+    EXPECT_EQ(again.counters.systemReads + 3, once);      // vendor, device and pci.ids, the first time only
+}
+
+// 2b: every tab reads the four system groups, so each tab's graph keeps its history whichever tab is shown (macOS).
+TEST(Sampler, EveryTabReadsTheSystemFiles)
+{
+    for (Tab tab : {Tab::Cpu, Tab::Memory, Tab::Energy, Tab::Disk, Tab::Network}) {
+        const unsigned reads = readsForTab(tab);
+        for (unsigned r : {ReadSystemCpu, ReadSystemMemory, ReadSystemDisk, ReadSystemNet})
+            EXPECT_TRUE(reads & r) << static_cast<int>(tab) << " " << r;
+    }
 }
 
 // AM45: a client is read through one of its descriptors between two descriptor turns (the integrator's AM-P2 run of
@@ -594,6 +637,45 @@ TEST(Sampler, AClientIdleAtItsTurnIsPickedAndItsWorkShows)
 
 // 2b, the Disk tab's cost: a stat or io line identical to the last one is not parsed again, and the row is the same; a
 // changed line is, whatever its length, and so is a line whose code addresses are wanted again.
+// 2b: the rows of the last sample are emptied and filled again in place; a row takes nothing from the one it reuses.
+TEST(Sampler, ARowTakesNothingFromTheRowItReuses)
+{
+    Fixture f;
+    f.process(100, "foot", kMe, 10, 5000, nul({"/usr/bin/foot", "--server"}),
+              user + "/app.slice/app-graphical.slice/app-Hyprland-org.codeberg.dnkl.foot-1a2b3c4d.scope");
+    f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 4096\nwrite_bytes: 0\ncancelled_write_bytes: 0\n");
+    f.process(300, "a-process-with-a-long-name", kMe, 10, 5000, nul({"/usr/bin/a-process-with-a-long-name"}), "/");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand | ReadIo;
+    const Snapshot first = s.sample(reads, 1.0);
+    ASSERT_EQ(first.rows.size(), 2u);
+    EXPECT_EQ(first.rows[0].command, "/usr/bin/foot --server");
+    EXPECT_FALSE(first.rows[0].appId.empty());
+    EXPECT_TRUE(first.rows[0].hasIo);
+
+    f.remove("proc/100");
+    f.process(50, "sshd", 1001, 10, 6000, nul({"sshd: bob@pts/0"}), "/user.slice/user-1001.slice/session-4.scope");
+    const Snapshot second = s.sample(reads, 2.0);
+    ASSERT_EQ(second.rows.size(), 2u);
+    const ProcessRow &other = second.rows[0]; // the slot foot's row had
+    EXPECT_EQ(other.pid, 50);
+    EXPECT_FALSE(other.own);
+    EXPECT_EQ(other.name, "sshd");
+    EXPECT_EQ(other.command, "");
+    EXPECT_EQ(other.appId, "");
+    EXPECT_EQ(other.kind, Kind::OtherUser);
+    EXPECT_FALSE(other.hasIo);
+    EXPECT_EQ(other.bytesRead, 0u);
+    EXPECT_LT(other.cpuPercent, 0);
+    EXPECT_TRUE(other.gpuDevices.empty());
+    EXPECT_EQ(second.rows[1].name, "a-process-with-a-long-name");
+
+    f.remove("proc/50");
+    const Snapshot third = s.sample(reads, 3.0);
+    ASSERT_EQ(third.rows.size(), 1u); // the rows that went are dropped
+    EXPECT_EQ(third.rows[0].pid, 300);
+}
+
 TEST(Sampler, AnUnchangedLineIsNotParsedAgain)
 {
     Fixture f;
@@ -1007,7 +1089,7 @@ TEST(Sampler, AFailedListingWipesNothing)
 TEST(Sampler, WholePhysicalDisksAndInterfacesButLo)
 {
     Fixture f;
-    f.link("../../devices/pci0000:00/nvme0", "sys/block/nvme0n1/device"); // a link, as sysfs has it (dangling here)
+    f.link("../../../devices/pci0000:00/nvme0", "sys/block/nvme0n1/device"); // a link, as sysfs has it (dangling here)
     f.write("sys/block/loop0/size", "0\n"); // no device link: not counted (AM42)
     f.write("proc/diskstats", " 259 0 nvme0n1 100 0 2000 50 200 0 4000 100 0 300 150 0 0 0 0\n"
                               " 259 1 nvme0n1p1 100 0 2000 50 200 0 4000 100 0 300 150 0 0 0 0\n"

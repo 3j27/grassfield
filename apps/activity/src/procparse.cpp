@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <type_traits>
+#include <utility>
 
 namespace activity
 {
@@ -439,8 +440,11 @@ bool parseProcStat(std::string_view text, CpuTimes &total, std::vector<CpuTimes>
     std::string_view line;
     bool found = false;
     while (nextLine(text, pos, line)) {
-        if (line.size() < 3 || line.substr(0, 3) != "cpu")
+        if (line.size() < 3 || line.substr(0, 3) != "cpu") {
+            if (found)
+                break; // the cpu lines come first: intr's thousands of counters after them are not looked at
             continue;
+        }
         size_t p = 0;
         std::string_view name, w;
         nextWord(line, p, name);
@@ -481,47 +485,34 @@ int parseLoadavgTasks(std::string_view text)
 
 bool parseMeminfo(std::string_view text, Meminfo &out)
 {
-    size_t pos = 0;
+    // Read at every sample by every tab since 2b: a key is converted only when it is one of these, and the reading stops
+    // once each has been seen (VmallocTotal and the huge pages after Committed_AS are not looked at).
+    static constexpr std::pair<std::string_view, uint64_t Meminfo::*> keys[] = {
+        {"MemTotal", &Meminfo::memTotal},         {"MemAvailable", &Meminfo::memAvailable},
+        {"Buffers", &Meminfo::buffers},           {"Cached", &Meminfo::cached},
+        {"Active(file)", &Meminfo::activeFile},   {"Inactive(file)", &Meminfo::inactiveFile},
+        {"SUnreclaim", &Meminfo::sUnreclaim},     {"KernelStack", &Meminfo::kernelStack},
+        {"PageTables", &Meminfo::pageTables},     {"Unevictable", &Meminfo::unevictable},
+        {"Shmem", &Meminfo::shmem},               {"AnonPages", &Meminfo::anonPages},
+        {"SwapTotal", &Meminfo::swapTotal},       {"SwapFree", &Meminfo::swapFree},
+        {"Committed_AS", &Meminfo::committedAs},  {"CommitLimit", &Meminfo::commitLimit},
+    };
+    constexpr size_t keyCount = sizeof keys / sizeof keys[0];
+    size_t pos = 0, seen = 0;
     std::string_view line, key, value;
     bool total = false, available = false;
-    while (nextLine(text, pos, line)) {
+    while (seen < keyCount && nextLine(text, pos, line)) {
         if (!keyValue(line, key, value))
             continue;
-        const uint64_t n = firstNumber(value);
-        if (key == "MemTotal") {
-            out.memTotal = n;
-            total = true;
-        } else if (key == "MemAvailable") {
-            out.memAvailable = n;
-            available = true;
-        } else if (key == "Buffers")
-            out.buffers = n;
-        else if (key == "Cached")
-            out.cached = n;
-        else if (key == "Active(file)")
-            out.activeFile = n;
-        else if (key == "Inactive(file)")
-            out.inactiveFile = n;
-        else if (key == "SUnreclaim")
-            out.sUnreclaim = n;
-        else if (key == "KernelStack")
-            out.kernelStack = n;
-        else if (key == "PageTables")
-            out.pageTables = n;
-        else if (key == "Unevictable")
-            out.unevictable = n;
-        else if (key == "Shmem")
-            out.shmem = n;
-        else if (key == "AnonPages")
-            out.anonPages = n;
-        else if (key == "SwapTotal")
-            out.swapTotal = n;
-        else if (key == "SwapFree")
-            out.swapFree = n;
-        else if (key == "Committed_AS")
-            out.committedAs = n;
-        else if (key == "CommitLimit")
-            out.commitLimit = n;
+        for (const auto &[name, field] : keys) {
+            if (key != name)
+                continue;
+            out.*field = firstNumber(value);
+            total = total || field == &Meminfo::memTotal;
+            available = available || field == &Meminfo::memAvailable;
+            ++seen;
+            break;
+        }
     }
     out.ok = total && available;
     return out.ok;
@@ -597,18 +588,22 @@ bool parseZramMemUsed(std::string_view text, uint64_t &bytes)
     return toNumber(w, bytes);
 }
 
-std::vector<DiskStat> parseDiskstats(std::string_view text)
+std::vector<DiskStat> parseDiskstats(std::string_view text, const std::vector<std::string> *only)
 {
     std::vector<DiskStat> out;
     size_t pos = 0;
     std::string_view line;
     while (nextLine(text, pos, line)) {
         size_t p = 0;
-        std::string_view w;
-        std::vector<std::string_view> f;
-        while (f.size() < 14 && nextWord(line, p, w))
-            f.push_back(w);
-        if (f.size() < 14)
+        std::string_view f[14];
+        size_t n = 0;
+        while (n < 3 && nextWord(line, p, f[n]))
+            ++n;
+        if (n < 3 || (only && !std::binary_search(only->begin(), only->end(), f[2])))
+            continue; // the name is the third word: a line left out goes no further
+        while (n < 14 && nextWord(line, p, f[n]))
+            ++n;
+        if (n < 14)
             continue;
         DiskStat d;
         d.name = std::string(f[2]);
@@ -687,6 +682,106 @@ bool parseDrmFdinfo(std::string_view text, DrmClient &out)
         out.memoryBytes.emplace(region, bytes);
     out.ok = !out.driver.empty();
     return out.ok;
+}
+
+int parsePciId(std::string_view text)
+{
+    while (!text.empty() && (text.back() == '\n' || text.back() == ' '))
+        text.remove_suffix(1);
+    if (text.size() != 6 || text[0] != '0' || (text[1] != 'x' && text[1] != 'X'))
+        return -1;
+    int value = 0;
+    for (char ch : text.substr(2)) {
+        const int digit = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+        if (digit < 0)
+            return -1;
+        value = value * 16 + digit;
+    }
+    return value;
+}
+
+namespace {
+
+// "<4 hex>  <name>" at the start of `line`: its id and name, or -1.
+int pciLine(std::string_view line, std::string_view &name)
+{
+    if (line.size() < 7 || line[4] != ' ' || line[5] != ' ')
+        return -1;
+    int value = 0;
+    for (char ch : line.substr(0, 4)) {
+        const int digit = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : -1;
+        if (digit < 0)
+            return -1;
+        value = value * 16 + digit;
+    }
+    name = line.substr(6);
+    while (!name.empty() && (name.back() == '\r' || name.back() == ' '))
+        name.remove_suffix(1);
+    return value;
+}
+
+} // namespace
+
+PciNames lookupPciIds(std::string_view pciIds, int vendor, int device)
+{
+    PciNames out;
+    if (vendor < 0)
+        return out;
+    bool inVendor = false;
+    size_t pos = 0;
+    while (pos < pciIds.size()) {
+        size_t end = pciIds.find('\n', pos);
+        if (end == std::string_view::npos)
+            end = pciIds.size();
+        const std::string_view line = pciIds.substr(pos, end - pos);
+        pos = end + 1;
+        if (line.empty() || line[0] == '#')
+            continue;
+        std::string_view name;
+        if (line[0] != '\t') {
+            if (inVendor)
+                break; // the vendor's devices are over
+            if (line[0] == 'C' && line.size() > 1 && line[1] == ' ')
+                break; // the device classes, after every vendor
+            if (pciLine(line, name) == vendor) {
+                out.vendor = std::string(name);
+                inVendor = true;
+            }
+        } else if (inVendor && line.size() > 1 && line[1] != '\t' && pciLine(line.substr(1), name) == device) {
+            out.device = std::string(name);
+            break;
+        }
+    }
+    return out;
+}
+
+std::string gpuModelName(const PciNames &names)
+{
+    if (names.device.empty())
+        return std::string();
+    auto lastBracket = [](std::string_view s) -> std::string_view {
+        const size_t close = s.rfind(']');
+        const size_t open = close == std::string_view::npos ? close : s.rfind('[', close);
+        return open == std::string_view::npos || close <= open + 1 ? std::string_view() : s.substr(open + 1, close - open - 1);
+    };
+    std::string_view model = lastBracket(names.device);
+    if (model.empty())
+        model = names.device;
+    std::string_view vendor = lastBracket(names.vendor);
+    if (!vendor.empty()) {
+        vendor = vendor.substr(0, vendor.find('/'));
+    } else {
+        vendor = names.vendor;
+        for (std::string_view suffix : {", Inc.", " Inc.", " Corporation", " Corp.", " Co., Ltd.", " Co., Ltd", " Ltd.", " Limited"}) {
+            if (vendor.size() > suffix.size() && vendor.substr(vendor.size() - suffix.size()) == suffix) {
+                vendor.remove_suffix(suffix.size());
+                break;
+            }
+        }
+    }
+    if (vendor.empty() || (model.size() >= vendor.size() && model.substr(0, vendor.size()) == vendor))
+        return std::string(model);
+    return std::string(vendor) + ' ' + std::string(model);
 }
 
 } // namespace activity
