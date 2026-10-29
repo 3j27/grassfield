@@ -29,6 +29,13 @@ function gone(name, names) {
     return typeof name === "string" && name !== "" && (Array.isArray(names) ? names : []).indexOf(name) < 0;
 }
 
+// A popup of kind `kind` belongs to something on its own output (a window's tiling popover under its zoom light, the
+// suggestions in a layout's empty zone: docs/specs/tiling.md TL22, TL28): it closes when that output goes, instead of
+// moving to another output that does not show what it offers (integrator merge note on #48). Every other popup moves.
+function closesWithScreen(kind) {
+    return kind === "tiling" || kind === "tilingSuggest";
+}
+
 // The output a piece of state moves to when its own output (`current`) went away: the output with the focus if it still exists,
 // else the first one; `current` itself when it is still there (nothing to move) or empty. Everything is read from the arguments:
 // a handler of "the outputs changed" gets the live names and the focus at that moment, never `Compositor.activeScreenName`

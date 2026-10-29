@@ -102,4 +102,12 @@ TestCase {
     function test_noOutputs() {
         compare(ScreenChoice.pick("", "GF-REF", []), "");
     }
+
+    // Integrator merge note on #48: the tiling popover and the suggestions close with their output; other popups move.
+    function test_tilingPopupsCloseWithTheirOutput() {
+        verify(ScreenChoice.closesWithScreen("tiling"));
+        verify(ScreenChoice.closesWithScreen("tilingSuggest"));
+        for (const kind of ["", "system", "app", "appwindow", "controlcenter", "dock", "confirm", "notice", "about"])
+            verify(!ScreenChoice.closesWithScreen(kind), kind);
+    }
 }

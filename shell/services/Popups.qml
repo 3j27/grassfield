@@ -157,7 +157,12 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+            const names = Quickshell.screens.map(s => s.name);
+            if (ScreenChoice.gone(root.screenName, names) && ScreenChoice.closesWithScreen(root.kind)) {
+                root.close(); // what it offered is not on any output that remains
+                return;
+            }
+            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, names);
         }
     }
 
