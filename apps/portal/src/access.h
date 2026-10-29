@@ -5,7 +5,9 @@
 //
 // The request lifecycle is RequestHost's: a Request object at the frontend's handle, the 3-s forward to x-d-p-gtk's Access
 // when the alert cannot show, and the idle quit. The frontend waits on this call without a timeout, so an alert asked while
-// the session is locked opens under the lock and waits there for the user (5-3): nothing is answered for them.
+// the session is locked opens under the lock and waits there for the user (5a-3): nothing is answered for them. A request
+// that ends without the user's answer (refused, closed, its forward failed) ends with a D-Bus error, never a response the
+// frontend would keep as "no".
 #pragma once
 
 #include "chooserlogic.h"
@@ -47,7 +49,7 @@ public:
                              const QString &body, const QVariantMap &options);
 
 signals:
-    // An alert to make for request `id` (toQml, with the application's name as appName).
+    // An alert to make for request `id` (toQml, with the application's icon as appIcon).
     void opened(int id, const QVariantMap &alert);
 
 protected:

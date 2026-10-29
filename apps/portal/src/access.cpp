@@ -27,7 +27,7 @@ bool boolOption(const QVariantMap &options, const QString &key, bool fallback)
 
 Access::Access(const QDBusConnection &bus, const Options &options, QObject *parent)
     : RequestHost(bus, QStringLiteral("org.freedesktop.impl.portal.Access"),
-                  Limits{options.gtkService, options.uiDeadlineMs, options.idleQuitMs, options.maxPending}, parent)
+                  Limits{options.gtkService, options.uiDeadlineMs, options.idleQuitMs, options.maxPending, true}, parent)
 {
     chooser::registerTypes();
 }
@@ -71,8 +71,8 @@ void Access::handle(const QDBusObjectPath &handle, const QString &appId, const Q
     m_choices.insert(id, chooser::parseChoices(options.value(QStringLiteral("choices"))));
     if (!startUi(id))
         return;
+    // The frontend's title names the application already ("Allow Example to Use the Camera?"): no line of its own.
     QVariantMap alert = toQml(appId, parentWindow, title, subtitle, body, options);
-    alert.insert(QStringLiteral("appName"), appName(appId));
     // The application's icon (its desktop entry's Icon=: a theme name or a file, IconSource.js), "" when the frontend could
     // not name it or it has none.
     const QString desktopId = windowAppId(appId);

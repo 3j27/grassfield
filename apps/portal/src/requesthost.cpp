@@ -46,6 +46,8 @@ RequestHost::RequestHost(const QDBusConnection &bus, const QString &interface, c
     , m_limits(limits)
 {
     m_idle.setSingleShot(true);
+    // Never early (a coarse timer may fire 5% before its time): quiet() compares against the same interval.
+    m_idle.setTimerType(Qt::PreciseTimer);
     m_idle.setInterval(m_limits.idleQuitMs);
     connect(&m_idle, &QTimer::timeout, this, &RequestHost::idle);
     armIdle();
@@ -56,7 +58,20 @@ RequestHost::~RequestHost()
     // A process that goes with requests in flight answers them: the frontend never waits on a backend that left.
     const QList<int> ids = m_requests.keys();
     for (int id : ids)
-        finish(id, 2, {});
+        endWithoutAnswer(id);
+}
+
+qint64 RequestHost::quietFor() const
+{
+    return m_requests.isEmpty() ? m_quiet.elapsed() : 0;
+}
+
+bool RequestHost::quiet(const QList<const RequestHost *> &hosts, int ms)
+{
+    for (const RequestHost *host : hosts)
+        if (host->pending() > 0 || host->quietFor() < ms)
+            return false;
+    return true;
 }
 
 QString RequestHost::windowAppId(const QString &appId)
@@ -80,7 +95,28 @@ QString RequestHost::appName(const QString &appId) const
 void RequestHost::refuse(const QDBusMessage &message, const char *why)
 {
     qWarning("grassfield-portal: %s: %s", qPrintable(message.member()), why);
-    m_bus.send(message.createReply(QVariantList{QVariant::fromValue(uint(2)), QVariantMap()}));
+    replyFailed(message, why);
+}
+
+void RequestHost::replyFailed(const QDBusMessage &message, const char *why)
+{
+    if (m_limits.failAsError)
+        m_bus.send(message.createErrorReply(QDBusError::Failed, QString::fromUtf8(why)));
+    else
+        m_bus.send(message.createReply(QVariantList{QVariant::fromValue(uint(2)), QVariantMap()}));
+}
+
+void RequestHost::endWithoutAnswer(int id)
+{
+    const auto r = m_requests.take(id);
+    if (!r)
+        return;
+    replyFailed(r->message, "ended without an answer");
+    m_bus.unregisterObject(r->handle);
+    ended(id);
+    emit closed(id);
+    emit pendingChanged();
+    armIdle();
 }
 
 int RequestHost::begin(const QDBusObjectPath &handle, const QDBusMessage &message, const QString &appId, const QString &parentWindow)
@@ -201,7 +237,7 @@ void RequestHost::close(const QString &handle)
             closeForwarded(r->id, kCloseTries);
             return;
         }
-        finish(r->id, 2, {});
+        endWithoutAnswer(r->id);
         return;
     }
 }
@@ -258,15 +294,13 @@ void RequestHost::forward(int id)
             return;
         const QDBusMessage reply = w->reply();
         const QVariantList args = reply.arguments();
-        uint response = 2;
-        QVariantMap results;
         if (reply.type() == QDBusMessage::ReplyMessage && reply.signature() == QLatin1String("ua{sv}")) {
-            response = args.at(0).toUInt();
-            results = relayed(qdbus_cast<QVariantMap>(args.at(1)));
+            const uint response = args.at(0).toUInt();
+            m_bus.send(forwarded->message.createReply(QVariantList{QVariant::fromValue(response), relayed(qdbus_cast<QVariantMap>(args.at(1)))}));
         } else {
             qWarning("grassfield-portal: x-d-p-gtk did not answer the forwarded request; it ends with an error");
+            replyFailed(forwarded->message, "x-d-p-gtk did not answer");
         }
-        m_bus.send(forwarded->message.createReply(QVariantList{QVariant::fromValue(response), results}));
         m_bus.unregisterObject(forwarded->handle);
         ended(id);
         emit pendingChanged();
@@ -276,8 +310,10 @@ void RequestHost::forward(int id)
 
 void RequestHost::armIdle()
 {
-    if (m_requests.isEmpty())
-        m_idle.start();
+    if (!m_requests.isEmpty())
+        return;
+    m_quiet.restart();
+    m_idle.start();
 }
 
 } // namespace grassfield::portal

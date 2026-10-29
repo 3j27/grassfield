@@ -8,6 +8,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
 #include <QTimer>
@@ -30,9 +31,12 @@ public:
         QString gtkService;
         int uiDeadlineMs = 3000;
         int idleQuitMs = 60000;
-        // At most this many requests at once; one more ends with response 2 at once (an app that loops cannot pile up
-        // windows).
+        // At most this many requests at once; one more ends at once (an app that loops cannot pile up windows).
         int maxPending = 16;
+        // How a request ends without the user's answer (refused, closed, its forward failed, the process going): response 2,
+        // or a D-Bus error (Access: the frontend keeps any response but 0 as "no" for a permission not decided yet, and
+        // nothing after an error; ADR-0035 5a-3).
+        bool failAsError = false;
     };
 
     // `interface`: the D-Bus interface the calls came on, and the one they are forwarded on.
@@ -47,6 +51,10 @@ public:
 
     // org.freedesktop.impl.portal.Request.Close at `handle`.
     void close(const QString &handle);
+    // How long no request has been open, in ms (0 while one is).
+    qint64 quietFor() const;
+    // Every host has had no request for `ms` (the process may quit).
+    static bool quiet(const QList<const RequestHost *> &hosts, int ms);
     // For the QML: the window made for request `id`, before it is shown. It is given the application's id, made the child of
     // the application's window (xdg-foreign v2, "wayland:" handles only) and shown; its first frame cancels the forward.
     Q_INVOKABLE void present(int id, QObject *window);
@@ -82,7 +90,7 @@ protected:
     // The request is open and its window not shown yet / open and not forwarded.
     bool isMaking(int id) const;
     bool isOpen(int id) const;
-    // Answers with response 2 at once, the reason logged.
+    // Ends the call at once without an answer (response 2, or a D-Bus error with failAsError), the reason logged.
     void refuse(const QDBusMessage &message, const char *why);
     // The results of a forwarded call, relayed with their D-Bus types (only what the interface defines).
     virtual QVariantMap relayed(const QVariantMap &gtkResults) const = 0;
@@ -95,9 +103,13 @@ private:
     struct Request;
     void closeForwarded(int id, int tries);
     void armIdle();
+    // Ends request `id` without the user's answer (see Limits::failAsError).
+    void endWithoutAnswer(int id);
+    void replyFailed(const QDBusMessage &message, const char *why);
 
     QString m_interface;
     Limits m_limits;
+    QElapsedTimer m_quiet;
     std::function<bool()> m_uiLoader;
     bool m_uiReady = false;
     int m_nextId = 1;
