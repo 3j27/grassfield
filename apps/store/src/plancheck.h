@@ -93,13 +93,14 @@ struct PlanTools {
 // so an install would fail: the system is updated first, never its databases alone (a partial upgrade, S4). "" when not
 // behind or not known; else a line for the log.
 QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastSync);
-// When pacman last synced the databases: the last "[PACMAN] synchronizing package lists" line of pacman.log (its tail is
-// enough), else `fallback`. checkupdates and Software Update's own syncs log to /dev/null, so every line there is a sync of
-// the system's databases.
-QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback);
-// The newest modification time of pacman's sync databases (<dir>/*.db), invalid when there is none: lastSync's fallback,
-// never later than the sync (pacman sets it to the mirror's Last-Modified, the integrator's review of ff2fd83).
-QDateTime newestSync(const QString &syncDir);
+// When pacman last completed a sync of the databases: the newest status-change time (ctime) of its sync databases
+// (<dir>/*.db), invalid when there is none. pacman writes a database only when it has the mirror's newer copy, and that
+// write is the file's ctime; a sync the mirror answers "not modified" and one that fails (offline, a mirror that does not
+// exist, even forced with -Syy) leave it as it was, while pacman.log says "synchronizing package lists" for all three, and
+// the mtime is the mirror's Last-Modified (S27; the integrator's merge note on PR #54, and the review of ff2fd83). A sync
+// that wrote one database and failed another counts for the one it wrote: the plan's HEADs answer for the rest.
+// checkupdates syncs a copy of its own elsewhere.
+QDateTime lastSync(const QString &syncDir);
 // pacman's messages of a download whose file the mirror no longer serves (404, 410, or an error page larger than pacman
 // lets a file be: "Exceeded the maximum allowed file size"), as grassfield-store-helper logs them: the databases were older
 // than the mirror (S5).

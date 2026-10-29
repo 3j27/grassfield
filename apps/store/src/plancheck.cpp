@@ -105,27 +105,13 @@ QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastS
         .arg(lastSync.toUTC().toString(Qt::ISODate));
 }
 
-QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback)
-{
-    // "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists" (pacman's own format since 5.2).
-    static const QRegularExpression line(QStringLiteral(R"(^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)([+-]\d\d)(\d\d)\] \[PACMAN\] synchronizing package lists\s*$)"),
-                                         QRegularExpression::MultilineOption);
-    QDateTime last;
-    for (QRegularExpressionMatchIterator it = line.globalMatch(QString::fromUtf8(pacmanLogTail)); it.hasNext();) {
-        const QRegularExpressionMatch m = it.next();
-        const QDateTime t = QDateTime::fromString(m.captured(1) + m.captured(2) + QLatin1Char(':') + m.captured(3), Qt::ISODate);
-        if (t.isValid() && (!last.isValid() || t > last))
-            last = t;
-    }
-    return last.isValid() ? last : fallback;
-}
-
-QDateTime newestSync(const QString &syncDir)
+QDateTime lastSync(const QString &syncDir)
 {
     QDateTime newest;
     for (const QFileInfo &f : QDir(syncDir).entryInfoList({QStringLiteral("*.db")}, QDir::Files)) {
-        if (!newest.isValid() || f.lastModified() > newest)
-            newest = f.lastModified();
+        const QDateTime written = f.metadataChangeTime();
+        if (written.isValid() && (!newest.isValid() || written > newest))
+            newest = written;
     }
     return newest;
 }

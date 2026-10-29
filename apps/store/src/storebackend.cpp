@@ -65,20 +65,6 @@ QByteArray readSmall(const QString &path, qint64 max)
     return f.read(max);
 }
 
-// The last `max` bytes of a file that only grows (pacman.log), from the start of a line.
-QByteArray readTail(const QString &path, qint64 max)
-{
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly))
-        return {};
-    if (f.size() > max && !f.seek(f.size() - max))
-        return {};
-    QByteArray tail = f.read(max);
-    if (f.size() > max)
-        tail.remove(0, tail.indexOf('\n') + 1);
-    return tail;
-}
-
 QString dataHome()
 {
     const QString xdg = qEnvironmentVariable("XDG_DATA_HOME");
@@ -1381,7 +1367,7 @@ PlanTools StoreBackend::planTools() const
     tools.heads = [dev](const QList<QUrl> &urls) { return headStatuses(urls, kFetchMs, kHeadsMs, dev); };
     // Software Update's answer against pacman's last sync (ADR-0037 e.4, SD29): the system first.
     tools.behind = databasesBehind(readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024),
-                                   lastSync(readTail(env::pacmanLog(), 1024 * 1024), newestSync(env::syncDir())));
+                                   lastSync(env::syncDir()));
     return tools;
 }
 

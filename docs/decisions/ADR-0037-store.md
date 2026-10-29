@@ -502,9 +502,10 @@ nothing ever signals pacman.
    - the system no older than its mirror (S5; the integrator's notes on PR #36 and the review of ff2fd83; SD29):
      Software Update's last successful answer (`software-update.json` as the shell writes it: up-to-date, available or
      not-set-up, the three states that list the system's updates, or after a failed check the success the shell keeps as
-     `previous`) that counts other updates or an Omarchy release, given after pacman last synced the databases (the last
-     "synchronizing package lists" of pacman.log, else the newest database's date, which pacman sets to the mirror's
-     Last-Modified), means the mirror has moved on (its checker compares what is installed with a fresh copy of the
+     `previous`) that counts other updates or an Omarchy release, given after pacman last completed a sync of the
+     databases (the newest ctime of its sync databases: pacman writes one only with the mirror's newer copy, and a sync
+     that found nothing new or failed leaves them as they were, while pacman.log logs all three alike and the mtime is the
+     mirror's Last-Modified, S27), means the mirror has moved on (its checker compares what is installed with a fresh copy of the
      mirror's databases) and refuses before anything downloads, AUR installs included; then every file of the plan (256
      at most), the AUR's repository dependencies included, is asked with a HEAD request, all at once within 20 s, and one
      the mirror no longer has (404, 410) refuses too; after the fact, an install pacman ended because the mirror answered 404, 410 or more than the allowed
@@ -807,7 +808,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
 
 | SD24 to SD27 | (step 3c, the Flathub source) | | | Written with that part: the probes S20 to S26 (`store-probes-4.sh`) measured their facts and cite these numbers |
 | SD28 | How step 3c (SD11) is delivered | in three parts, each reviewed on its own: 3c part 1, the review notes on grassfield PR #36 (3b2's follow-ups, Arch's app data, the system older than its mirror) and Flathub's groundwork (the probes S20 to S26, the AppStream reader taking Flathub's components); part 2 the Flathub source (its switch, `flatpak --user`, flatpak's own plan, the stop, the uninstall, the runtimes left); part 3 "Get Flatpak…" (the `flatpak` package, which no Omarchy install has, through Omarchy's own `omarchy-pkg-add` in its terminal, pinned) · one PR | three parts | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the integrator asked for the fixes now (the 3c PR opened with them); the Flathub source then rests on measured facts, and the package install, which changes the system, gets a review of its own (e.9); Flathub's switch stays dimmed with SD8's reason meanwhile |
-| SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last synced (pacman.log's last sync, else the database's date); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
+| SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last completed a sync (the newest database's ctime, S27; amended again after PR #54's merge, which found pacman.log's line counted a failed sync); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
 | SD30 | AUR packages with a name of the deny list (the integrator's note on PR #36: "refuse `grassfield-*`/`omarchy-*` on the AUR path, or label by origin") | refused: every name b.1's deny list names (the system's, Omarchy's prefix and lists, `yay`, Grassfield's prefix, `HoldPkg`), the app's and every package its plan builds from the AUR, in the Store (Get dimmed with the reason, the plan refused) and again in the script (exit 7); Omarchy's lists unread refuse · only `grassfield-*` and `omarchy-*` · labelled by origin, installable | the whole deny list, refused | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) what the Store installs, it can remove again (b.1's list refuses the removal of every such name); an AUR package that takes Omarchy's or Grassfield's name is not theirs, and the user should not have to tell. An AUR app whose name only looks like the system's (`linux-wifi-hotspot`) is refused too, as its removal would be |
 
 ## Amendments made in this PR (other documents)
@@ -839,6 +840,11 @@ irreversible action on the owner's machine. The integrator checks each row in th
   the helper in it are models for the probe; the helper is step 3's code. S18 ran polkit 127-3 (the 2026-09-01 snapshot);
   the source lines cited are polkit 128's (Arch's current version; tag 128 of github.com/polkit-org/polkit), where they read
   the same.
+- `docs/audits/store-2026-10-27/store-probes-5.sh` (S27, after PR #54's merge) and its output `probes-5-output.txt` (docker
+  exit 0), the same image, Arch's archive at 2026-10-20: a sync that downloads the databases sets each file's ctime to
+  that moment and its mtime to the mirror's Last-Modified (2026-10-19 and 2026-10-20); the same sync again (not modified)
+  and a forced `-Syy` to a mirror that does not exist (exit 1) change neither, while pacman.log has the same "synchronizing
+  package lists" line for all three.
 - `docs/audits/store-2026-10-27/store-probes-4.sh` (S20 to S26, step 3c) and its outputs `probes-4-output.txt` and
   `probes-4-output-run1.txt` (docker exit 0 both), the same image and Omarchy checkout, Arch's archive at 2026-10-20 and
   Flathub as it was on 2026-10-28: the `flatpak` package owns no application entry and adds its exports to
@@ -1136,3 +1142,17 @@ one MAJOR; no widening of the root surface. Each finding and what changed:
 - NITs: the helper condition of the "outdated" outcome has its test (a web app's failure with pacman's words stays
   "failed"); the probe outputs' trailing spaces removed; the French sheet text reworded and the new texts' apostrophes
   typographic; b.2 says the script checks the names it is given and the Store's plan the dependencies yay builds.
+
+Step 3c part 1 merged (grassfield PR #54, opus security PASS on 41c2235, 2026-10-29) with follow-ups for part 2. Each and
+what changed (step 3c, part 2):
+- `lastSync` counted a failed sync: pacman.log logs "synchronizing package lists" for a sync that downloads, one that
+  finds nothing new and one that fails (an offline `-Syu`; S27), so Software Update's answer stopped counting and only the
+  HEADs were left. The last completed sync is now the newest ctime of the sync databases, which only a sync that wrote a
+  database moves (S27); pacman.log is no longer read for it, so its offset (N6, which survived in Europe/Paris only) is
+  gone with it. `tst_plancheck` reads a database whose mtime is the mirror's; `tst_storebackend` keeps refusing after a
+  sync line in pacman.log that wrote nothing, and stops once the answer predates the database's write.
+- `plancheck.cpp:98`: no test had an Omarchy release alone (N10 survived): the fixture `available-omarchy` (Omarchy 4.0.6
+  and nothing else, by the real checker) is behind.
+- The HEADs' deadline and early stop (N13, N14) were held only by the HTTPS server of `store_catalog.sh`'s container:
+  `tst_fetch` HeadStatusesAgainstALocalServer runs a server of its own on 127.0.0.1 with a throwaway certificate openssl
+  makes for the test, everywhere openssl is.

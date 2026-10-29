@@ -123,14 +123,12 @@ inline QString dbLock()
     return inFixture(QStringLiteral("/db.lck"), QStringLiteral("/var/lib/pacman/db.lck"));
 }
 
-// pacman's sync databases (<DBPath>/sync): their newest mtime, the last sync's fallback (plancheck.h lastSync).
+// pacman's sync databases (<DBPath>/sync): when pacman last wrote one, the last completed sync (plancheck.h lastSync).
 inline QString syncDir()
 {
     return inFixture(QStringLiteral("/sync"), QStringLiteral("/var/lib/pacman/sync"));
 }
 
-// pacman's log (its LogFile, Omarchy's default): an operation's progress, and when pacman last synced the databases
-// (plancheck.h lastSync).
 inline QString pacmanLog()
 {
     return inFixture(QStringLiteral("/pacman.log"), QStringLiteral("/var/log/pacman.log"));
