@@ -1,0 +1,1 @@
+../../../../shell/launchpad/AppsCell.qml

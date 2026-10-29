@@ -700,4 +700,82 @@ TestCase {
             verify(bruteWidest(size, kinds, magOptions(c.m)) <= c.room, "m " + c.m + " room " + c.room + " size " + size);
         }
     }
+
+    // Startup: the Dock window stays unmapped until the settings, the apps and the Dock's output are final, so it is drawn once.
+    function test_settledOnWaitsForEveryInput() {
+        const one = {settings: true, apps: true, screens: ["DP-1"], start: ""};
+        const two = {settings: true, apps: true, screens: ["DP-1", "DP-2"], start: "DP-2"};
+        verify(Geometry.settledOn(one), "one output needs no focus information");
+        verify(Geometry.settledOn(two));
+        verify(!Geometry.settledOn(Object.assign({}, one, {settings: false})), "settings file not read yet (default edge and size)");
+        verify(!Geometry.settledOn(Object.assign({}, one, {apps: false})), "desktop entries not loaded (pinned icons)");
+        verify(!Geometry.settledOn(Object.assign({}, one, {screens: []})), "no output yet");
+        verify(!Geometry.settledOn(Object.assign({}, two, {start: ""})), "two outputs and no focused one: the Dock would start on the wrong side");
+        verify(!Geometry.settledOn(null));
+        verify(!Geometry.settledOn({}));
+        // The fallback timer stands in for the apps model and the focused output, never for the settings file or the outputs.
+        verify(Geometry.settledOn(Object.assign({}, two, {start: "", apps: false, waited: true})), "waited: the Dock appears");
+        verify(!Geometry.settledOn(Object.assign({}, one, {settings: false, waited: true})), "the settings file is always waited for");
+        verify(!Geometry.settledOn(Object.assign({}, one, {screens: [], waited: true})), "no output, no Dock");
+        verify(!Geometry.settledOn(Object.assign({}, two, {start: "", waited: false})));
+    }
+
+    // The fallback latch: no focused output when the Dock settles (timer ran out): it stays on the output it is on, and a focus
+    // event arriving later does not move it.
+    function test_settleScreenLatchesTheFallbackOutput() {
+        const names = ["DP-1", "DP-2"];
+        compare(Geometry.settleScreen("", names, "", ""), "DP-1", "no focus: the output it is on");
+        compare(Geometry.dockScreen(Geometry.settleScreen("", names, "", ""), names, "DP-2", ""), "DP-1", "late focus does not move it");
+        compare(Geometry.settleScreen("", names, "DP-2", ""), "DP-2", "focus known: the focused output");
+        compare(Geometry.settleScreen("DP-2", names, "DP-1", ""), "DP-2", "an earlier choice is kept");
+        compare(Geometry.settleScreen("", [], "", ""), "", "no output, nothing to latch");
+        compare(Geometry.settleScreen("", names, "", "DP-2"), "DP-2", "the dev start hint");
+    }
+
+    // The latched start output and the settled gate together: focus arriving late does not move a Dock that already settled.
+    function test_startScreenKnownOnlyOnceFocusArrives() {
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "", ""), "");
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "DP-2", ""), "DP-2");
+        compare(Geometry.startScreen(["DP-1", "DP-2"], "HDMI-9", ""), "");
+    }
+
+    // Startup with auto-hide on: the machine of a window starts hidden and stays out of sight; one that started shown (the old
+    // initial state) is visible for its whole grace and slides away in front of the user.
+    function test_initialMachineHidesFromTheStart() {
+        const timing = {hideGrace: 450, hideDuration: 250, revealDwell: 120, revealDuration: 200};
+        let m = AutoHide.initial(true);
+        compare(m.state, "hidden");
+        compare(m.visible, 0);
+        let shownMs = 0;
+        for (let t = 0; t < 2000; t += 16) {
+            m = AutoHide.step(m, {}, true, timing, 16);
+            if (m.visible > 0)
+                shownMs += 16;
+        }
+        compare(shownMs, 0, "a hidden start never draws the Dock");
+        let old = AutoHide.create();
+        let oldMs = 0;
+        for (let t = 0; t < 2000; t += 16) {
+            old = AutoHide.step(old, {}, true, timing, 16);
+            if (old.visible > 0)
+                oldMs += 16;
+        }
+        verify(oldMs > 400, "the shown start is what the fix replaces (" + oldMs + " ms)");
+        compare(AutoHide.initial(false).state, "shown");
+        compare(AutoHide.initial(false).visible, 1);
+    }
+
+    // The reveal waits for the surface to have the shape of the settled edge (the real surfaces: a bottom Dock is as wide as the
+    // output, a side one as tall as the output less the menu bar's reserved strip, 1044 on 1080 as in the metrics test above).
+    function test_placedNeedsTheShapeOfTheEdge() {
+        verify(Geometry.placed("bottom", 1920, 190, 190));
+        verify(Geometry.placed("left", 300, 1044, 300), "a side surface is shorter than the output");
+        verify(Geometry.placed("right", 300, 1044, 300));
+        verify(Geometry.placed("right", 300.4, 1044, 300), "rounding");
+        verify(!Geometry.placed("left", 1920, 190, 190), "still the bottom-edge surface after the edge became left");
+        verify(!Geometry.placed("bottom", 300, 1044, 300), "still the left-edge surface after the edge became bottom");
+        verify(!Geometry.placed("bottom", 0, 0, 190), "not configured yet");
+        verify(!Geometry.placed("bottom", 1920, 190, 0));
+        verify(!Geometry.placed("left", 300, 200, 300), "not longer than across");
+    }
 }

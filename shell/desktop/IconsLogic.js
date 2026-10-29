@@ -523,13 +523,48 @@ function parseLauncher(text) {
     return out;
 }
 
+// Whether the desktop may show its icons: the surface is sized, the settings file was read (the Dock edge and size move the
+// grid), the widgets file was read (widgets block slots), the positions file was read and the folder's first complete listing
+// is in. Before that nothing is exposed (not a default layout, not an empty or partial folder), so no icon appears and then
+// moves or goes. `in` is {width, height, settings, widgets, positions, listed}.
+function settledOn(inputs) {
+    if (!inputs)
+        return false;
+    return inputs.width > 0 && inputs.height > 0 && inputs.settings === true && inputs.widgets === true && inputs.positions === true && inputs.listed === true;
+}
+
 // Desktop folder: the configured override, else the XDG desktop dir, else ~/Desktop. An XDG answer
 // that is empty, "/" or the home directory itself (no desktop folder configured) falls back too.
 function desktopDir(override, xdgAnswer, home) {
+    const h = cleanPath(home);
     if (override)
-        return override.replace(/\/+$/, "") || "/";
-    const x = String(xdgAnswer || "").trim().replace(/\/+$/, "");
-    if (x !== "" && x !== home && x.startsWith("/"))
+        return cleanPath(override);
+    const x = cleanPath(String(xdgAnswer || "").trim());
+    if (x !== "" && x !== "/" && x !== h && x.startsWith("/"))
         return x;
-    return home + "/Desktop";
+    return cleanPath(h + "/Desktop");
+}
+
+// The lexical clean form of an absolute path, as the folder model spells its rows: single slashes, no "." and no trailing
+// slash, ".." resolved (never above the root). A relative or empty path is returned with its slashes collapsed only
+// ("" stays ""); the caller refuses it.
+function cleanPath(path) {
+    const p = String(path || "");
+    if (p === "")
+        return "";
+    const abs = p.startsWith("/");
+    const out = [];
+    for (const part of p.split("/")) {
+        if (part === "" || part === ".")
+            continue;
+        if (part === "..") {
+            if (out.length > 0 && out[out.length - 1] !== "..")
+                out.pop();
+            else if (!abs)
+                out.push(part);
+            continue;
+        }
+        out.push(part);
+    }
+    return (abs ? "/" : "") + out.join("/");
 }

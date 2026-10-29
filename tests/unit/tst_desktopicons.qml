@@ -225,6 +225,25 @@ TestCase {
         compare(Logic.parseLauncher("garbage"), {name: "", icon: ""});
     }
 
+    // The folder model spells its rows with single slashes and no "." or "..": the desktop folder must be spelled the same way
+    // or the listing is taken for a stale one (HOME=/home/u/ makes xdg-user-dir print /home/u//Desktop).
+    function test_desktopDirIsCleaned() {
+        compare(Logic.desktopDir("", "/home/u//Desktop", "/home/u/"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/./Desktop/", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/x/../Desktop", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("/tmp//sb/./a/../b/", "", "/home/u"), "/tmp/sb/b");
+        compare(Logic.desktopDir("", "", "/home/u/"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u//", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/.", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/../..", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("//", "", "/home/u"), "/");
+        compare(Logic.cleanPath("/a/b/../../.."), "/");
+        compare(Logic.cleanPath(""), "");
+        // The model's row path is the folder plus the name: the parent check uses the same spelling.
+        const dir = Logic.desktopDir("", "/home/u//Desktop", "/home/u/");
+        compare(Logic.dirName(dir + "/a.txt"), dir);
+    }
+
     function test_desktopDir() {
         compare(Logic.desktopDir("/tmp/sb/", "/home/u/Bureau", "/home/u"), "/tmp/sb");
         compare(Logic.desktopDir("", "/home/u/Bureau\n", "/home/u"), "/home/u/Bureau");
@@ -283,5 +302,21 @@ TestCase {
         // A "|" in the name is kept; no birth time: created falls back to modified.
         compare(m["a|b.txt"], {isDir: false, size: 12, modified: 300, created: 300});
         compare(Object.keys(m).length, 2);
+    }
+
+    // Startup: the desktop exposes nothing before every input of its first layout is final (no default layout that then
+    // moves, no placeholder or partial listing that then goes).
+    function test_settledOnWaitsForEveryInput() {
+        const all = {width: 1920, height: 1080, settings: true, widgets: true, positions: true, listed: true};
+        verify(Logic.settledOn(all));
+        for (const k of Object.keys(all)) {
+            const o = Object.assign({}, all);
+            o[k] = typeof all[k] === "number" ? 0 : false;
+            verify(!Logic.settledOn(o), "not settled without " + k);
+        }
+        verify(!Logic.settledOn(null));
+        verify(!Logic.settledOn({}));
+        // A truthy but not true value (a pending object, a string) does not count as loaded.
+        verify(!Logic.settledOn(Object.assign({}, all, {settings: "yes"})));
     }
 }

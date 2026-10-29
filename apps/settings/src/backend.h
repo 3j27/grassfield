@@ -59,6 +59,12 @@ class Backend : public QObject
     // Update Now (U11): Omarchy's floating-terminal launcher and its update command are installed (found on PATH, not run);
     // without them (not an Omarchy system) the pane disables Update Now and says why.
     Q_PROPERTY(bool omarchyUpdate READ omarchyUpdate CONSTANT)
+    // Update Now without a terminal (ADR-0033 "Step 3", U24): grassfield-update-run's state, read through readText(); ""
+    // without XDG_RUNTIME_DIR. The runner is its only writer.
+    Q_PROPERTY(QString softwareUpdateRunFile READ softwareUpdateRunFile CONSTANT)
+    // The runner, its root helper and pkexec are installed (checked, not run); without them Update Now opens Omarchy's
+    // terminal, as in step 2.
+    Q_PROPERTY(bool updateRunner READ updateRunner CONSTANT)
     // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
     // one per tag, busjobs.h InFlight). A page shows its waiting state from it, also when it is opened again while the dialog
     // is up.
@@ -94,6 +100,8 @@ public:
     bool omarchyLanguage() const;
     QString softwareUpdateFile() const;
     bool omarchyUpdate() const;
+    QString softwareUpdateRunFile() const;
+    bool updateRunner() const;
     QVariantMap pendingActions() const { return m_actions.map(); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
