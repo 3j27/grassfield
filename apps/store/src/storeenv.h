@@ -23,6 +23,7 @@
 #include "signature.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QString>
 #include <QUrl>
 
@@ -193,6 +194,38 @@ inline QString runDir()
         return fixture() + QStringLiteral("/run/store");
     const QString run = qEnvironmentVariable("XDG_RUNTIME_DIR");
     return run.isEmpty() ? QString() : run + QStringLiteral("/grassfield/store");
+}
+
+// flatpak (step 3c): the system's, or the fixture's fake; "" when it is not there (no Flathub: the settings say how to get it).
+inline QString flatpak()
+{
+    const QString path = inFixture(QStringLiteral("/bin/flatpak"), QStringLiteral("/usr/bin/flatpak"));
+    return QFileInfo(path).isExecutable() ? path : QString();
+}
+
+// The user's Flatpak installation, by flatpak's own rule: $FLATPAK_USER_DIR, else $XDG_DATA_HOME/flatpak; or the fixture's.
+inline QString flatpakUserDir()
+{
+    if (!fixture().isEmpty())
+        return fixture() + QStringLiteral("/flatpak");
+    const QString dir = qEnvironmentVariable("FLATPAK_USER_DIR");
+    if (!dir.isEmpty())
+        return dir;
+    const QString xdg = qEnvironmentVariable("XDG_DATA_HOME");
+    return (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.local/share") : xdg) + QStringLiteral("/flatpak");
+}
+
+// Flathub's AppStream in that installation (S21): appstream.xml.gz and icons/<size>/<app id>.png.
+inline QString flathubAppStream(const QString &arch)
+{
+    return flatpakUserDir() + QStringLiteral("/appstream/flathub/") + arch + QStringLiteral("/active");
+}
+
+// Its exported application entries: a session sees them once XDG_DATA_DIRS names this folder, from the login after
+// flatpak's own install (S20).
+inline QString flatpakExports()
+{
+    return flatpakUserDir() + QStringLiteral("/exports/share");
 }
 
 inline const QString gpgv = QStringLiteral("/usr/bin/gpgv");

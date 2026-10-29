@@ -1,0 +1,13 @@
+
+org.gnome.design.Typography permissions:
+    ipc     fallback-x11     wayland     x11    dri
+
+        ID                                    Branch      Op Remote  Download
+ 1.     org.freedesktop.Platform.GL.default   25.08       i  flathub < 147.9 MB
+ 2.     org.freedesktop.Platform.GL.default   25.08-extra i  flathub < 148.0 MB
+ 3.     org.freedesktop.Platform.codecs-extra 25.08-extra i  flathub  < 14.6 MB
+ 4.     org.gnome.Platform.Locale             50          i  flathub < 386.5 MB (partial)
+ 5.     org.gnome.Platform                    50          i  flathub < 418.8 MB
+ 6.     org.gnome.design.Typography.Locale    stable      i  flathub  < 19.7 kB (partial)
+ 7.     org.gnome.design.Typography           stable      i  flathub  < 68.6 kB
+

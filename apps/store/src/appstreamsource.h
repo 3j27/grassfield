@@ -28,6 +28,11 @@ struct AppStreamData {
 // Reads every <root>/xml/*.xml.gz (each at most 64 MiB once decompressed).
 AppStreamData readAppStream(const QString &swcatalogRoot, AppStreamData::Origin origin);
 
+// Flathub's AppStream in the user's Flatpak installation (step 3c; S21): <activeDir>/appstream.xml.gz, flatpak's own copy
+// (it checked it against Flathub's key when it fetched it), at most 128 MiB once decompressed; its icons are
+// <activeDir>/icons/<width>x<height>/<file>. Origin::Installed when the file is there.
+AppStreamData readFlathubAppStream(const QString &activeDir);
+
 // The package file's URL and version from `pacman -Sp archlinux-appstream-data` (its last line), or empty.
 struct PackageFile {
     QString url;

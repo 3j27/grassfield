@@ -11,6 +11,7 @@
 #include "aur.h"
 #include "catalogstore.h"
 #include "channel.h"
+#include "flatpak.h"
 #include "operations.h"
 #include "pacman.h"
 #include "plancheck.h"
@@ -52,6 +53,14 @@ struct Snapshot {
     QHash<QString, QStringList> entries; // package -> the desktop ids of its entries in /usr/share/applications
     DenyList deny;                       // what is never removed (removal.h)
     QList<view::WebAppEntry> webApps;
+    // Flathub (step 3c), while its switch is on and flatpak is there: its AppStream in the user's installation, the apps
+    // installed there (flatpak list --user --app), whether that installation has Flathub, and why Flathub's apps are not
+    // there when they are not: "" | added (remote-add or its AppStream failed: offline, Flathub unreachable) | dev (a dev
+    // session adds nothing to the user's installation).
+    AppStreamData flathub;
+    QSet<QString> flatpaks;
+    bool flathubAdded = false;
+    QString flathubProblem;
     // The catalog's first pinned Omarchy file that differs in the installed Omarchy ("" when they all match, ADR-0037 g):
     // no setup runs then (b.2).
     QString omarchyDiffers;
@@ -92,8 +101,10 @@ class StoreBackend : public QObject
     Q_PROPERTY(QVariantMap appData READ appDataStatus NOTIFY dataChanged)
     // {name, initials, picture}: the local user (passwd, AccountsService's picture).
     Q_PROPERTY(QVariantMap user READ user CONSTANT)
-    // {aur, flathub, flatpak, screenshots}: the optional sources (off until turned on) and the switch of the screenshots
-    // (owner ST6: on), read from grassfield.json's "store" keys (the settings window writes aur and screenshots, SD20).
+    // {aur, flathub, flatpak, flathubReady, flathubProblem, screenshots}: the optional sources (off until turned on) and the
+    // switch of the screenshots (owner ST6: on), read from grassfield.json's "store" keys (the settings window writes them,
+    // SD20); flatpak: the program is there; flathubReady: Flathub is in the user's installation and its apps are read;
+    // flathubProblem: Snapshot::flathubProblem.
     Q_PROPERTY(QVariantMap sources READ sources NOTIFY sourcesChanged)
     // The key window (QGuiApplication::focusWindow), null while no window of the Store has the keyboard. Qt matches a
     // window's Shortcuts and its global menu's keys while one of its transient children has the keyboard too, so a key
@@ -102,7 +113,7 @@ class StoreBackend : public QObject
     // The queue (spec SR18): [{id, app, name, kind, state, blocked, done, total}], the running one first.
     Q_PROPERTY(QVariantList operations READ operations NOTIFY operationsChanged)
     // How the last operation of an app ended, while it says something: app id -> {kind, name, outcome, present, total,
-    // details, source ("aur" for the AUR's commands)}.
+    // details, source ("aur" for the AUR's commands, "flatpak" for a Flatpak's)}.
     Q_PROPERTY(QVariantMap results READ results NOTIFY operationsChanged)
     // pacman stopped mid-way and left its lock (db.lck there, no pacman running): SR20's explanation, then Arch's recovery.
     Q_PROPERTY(bool staleLock READ staleLock NOTIFY operationsChanged)
@@ -148,7 +159,9 @@ public:
     // pacman -Si for the Information list, answered by packageInfo().
     Q_INVOKABLE void requestPackageInfo(const QString &package);
     // Installed (SR23): [{group, apps}], groups in a fixed order, apps by name; "aur" holds the packages installed explicitly
-    // from outside the repositories that the AUR knows (asked once the AUR is on), "foreign" the others that own an entry.
+    // from outside the repositories that the AUR knows (asked once the AUR is on), "foreign" the others that own an entry,
+    // "flatpak" the apps of the user's Flatpak installation (while Flathub is on; one Flathub's AppStream does not have is
+    // "flatpak:<id>", opened and removed as the others).
     Q_INVOKABLE QVariantList installed() const;
     // The AUR (step 3b2; spec SR7, SR11), each asked only while the AUR is on and the Store online, answered by a signal:
     // a search by name after Return (aurResults: the results' summaries with votes and outOfDate, the most voted first, a
@@ -158,6 +171,10 @@ public:
     Q_INVOKABLE void searchAur(const QString &term);
     Q_INVOKABLE void requestAur(const QString &id);
     Q_INVOKABLE void requestBuildScript(const QString &id);
+    // A Flatpak's facts for the Information list (SR11), answered by flatpakInfo: {version, license, download, installed
+    // (sizes as the locale writes them), access (flatpak.h flatpakAccess's keys)}, from `remote-info` while it is not
+    // installed (online only), else from `info --user`; {} when flatpak could not say.
+    Q_INVOKABLE void requestFlatpakInfo(const QString &id);
     // Updates (SR24, read only): software-update.json read again.
     Q_INVOKABLE QVariantMap updates() const;
     // Ctrl+R: everything read again and the catalog fetched, metered or not.
@@ -182,6 +199,8 @@ public:
     Q_INVOKABLE bool install(const QString &id);
     Q_INVOKABLE bool uninstall(const QString &id);
     Q_INVOKABLE bool removeWaiting(const QString &operationId);
+    // The running Flatpak install stops (the ring's square, SD26); false when it cannot.
+    Q_INVOKABLE bool stopOperation(const QString &operationId);
     Q_INVOKABLE void dismiss(const QString &id);
     // Open (SR21): the app's entry through uwsm (ADR-0011), a web app by omarchy-launch-webapp; false when it did not start.
     Q_INVOKABLE bool open(const QString &id);
@@ -212,6 +231,7 @@ signals:
     void aurResults(const QString &term, const QVariantList &apps, const QString &problem);
     void aurInfo(const QString &id);
     void buildScript(const QString &id, const QString &text, bool ok);
+    void flatpakInfo(const QString &id, const QVariantMap &facts);
 
 protected:
     // The snapshot in use from now on. Protected for the unit tests (tst_storebackend), which hand it states a load
@@ -223,6 +243,7 @@ private:
         bool fetchCatalog = false;
         bool forced = false; // Ctrl+R
         bool fetchAppData = false;
+        bool fetchFlathub = false; // Flathub's AppStream fetched again (older than 6 hours, Ctrl+R)
     };
     void run(Job job);
     void readAppearance();
@@ -232,6 +253,11 @@ private:
     const StoreApp *storeApp(const QString &id) const;
     // A web app of Installed that our catalog does not list ("webapp:<its launcher's file name>"): opened and removed too.
     std::optional<view::WebAppEntry> otherWebApp(const QString &id) const;
+    // A Flatpak of the user's installation that Flathub's AppStream does not have ("flatpak:<app id>"): its app id, or "".
+    QString otherFlatpak(const QString &id) const;
+    // Why a Flatpak cannot be installed or removed now, or "": dev (no fake flatpak in a dev session), noFlatpak, flathubOff.
+    QString flatpakBlock() const;
+    FlatpakTools flatpakTools() const;
     // Why `a` cannot be installed now, or "": dev (no fake program in a dev session), missing (Omarchy's commands or the
     // helper are not there), offline, icon (a web app's icon not cached yet), omarchyChanged (a setup: the installed
     // Omarchy differs from the catalog's pins), source (its source cannot install yet); for the AUR, aurOff, repository,

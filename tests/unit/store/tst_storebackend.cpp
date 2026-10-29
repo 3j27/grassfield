@@ -834,3 +834,165 @@ TEST(StoreBackend, RealSignedCatalog)
     EXPECT_EQ(backend.catalogStatus().value(QStringLiteral("problem")), QStringLiteral("refused"));
     EXPECT_TRUE(backend.catalogStatus().value(QStringLiteral("inUse")).toBool()); // the accepted copy stays in use
 }
+
+// flatpak's stand-in in the fixture (step 3c part 2), the user's installation under <fixture>/flatpak as the Store reads it:
+// remotes, remote-add (it writes the remote), update --appstream (Flathub's AppStream fixture and an icon), list, info,
+// remote-info, install on a terminal (flatpak's own questions, S23) and without one (--noninteractive), uninstall.
+const QByteArray kFlatpak = R"SH(root=$(dirname "$0")/..
+echo "$*" >>"$root/flatpak-calls"
+active=$root/flatpak/appstream/flathub/$(uname -m)/active
+case "$1" in
+  remotes) [ -f "$root/flatpak/remote" ] && echo flathub; exit 0 ;;
+  remote-add) mkdir -p "$root/flatpak" && echo "$6" >"$root/flatpak/remote" ;;
+  update) mkdir -p "$active/icons/128x128" && cp "$root/../flathub.xml.gz" "$active/appstream.xml.gz" && echo png >"$active/icons/128x128/org.example.Notes.png" ;;
+  list) cat "$root/flatpaks" 2>/dev/null ;;
+  info) for id; do :; done; grep -qx "$id" "$root/flatpaks" 2>/dev/null || exit 1
+        case "$3" in --show-metadata) printf '[Context]\nshared=network;\n' ;; *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
+  remote-info)
+    case "$3" in --show-metadata) printf '[Context]\nshared=network;\nfilesystems=home;\n' ;;
+                 *) printf '           Ref: %s\n       Version: 1.2\n       License: MIT\n Download Size: 1.5 MB\nInstalled Size: 4.0 MB\n' "$4" ;; esac ;;
+  install)
+    if [ "$3" = --noninteractive ]; then
+      id=$(echo "$5" | cut -d/ -f2)
+      echo "Installing app/$id/x86_64/stable"; echo "$id" >>"$root/flatpaks"; exit 0
+    fi
+    [ -t 0 ] || exit 1
+    echo 'Required runtime for org.example.Notes/x86_64/stable (runtime/org.gnome.Platform/x86_64/50) found in remote flathub'
+    printf 'Do you want to install it? [Y/n]: '; read a
+    printf '\n        ID                  Branch Op Remote  Download\n'
+    printf ' 1.     org.gnome.Platform  50     i  flathub < 418.8 MB\n 2.     org.example.Notes   stable i  flathub < 1.5 MB\n\n'
+    printf 'Proceed with these changes to the user installation? [Y/n]: '; read b; exit 1 ;;
+  uninstall) [ "$4" = --unused ] && exit 0
+             grep -vx "$5" "$root/flatpaks" >"$root/f2"; mv "$root/f2" "$root/flatpaks" ;;
+  *) exit 2 ;;
+esac)SH";
+
+// Flathub turned on (step 3c part 2): added to the user's installation and its AppStream read, its apps offered with
+// flatpak's own plan and what they can reach, installed and removed as the Store's own child, listed in Installed with the
+// user's other Flatpaks, opened by their exported entry or `flatpak run`; nothing of it while Flathub is off.
+TEST(StoreBackend, Flathub)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    const QString installer = storetest::script(s.path(QStringLiteral("installer")), "echo \"$*\" >>\"$(dirname \"$0\")/opened\"");
+    s.env->set("GRASSFIELD_STORE_INSTALLER", installer);
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), kFlatpak);
+    storetest::writeFile(s.path(QStringLiteral("flathub.xml.gz")), storetest::gzip(storetest::readFixture(QStringLiteral("appstream-flathub.xml"))));
+    storetest::writeFile(s.path(QStringLiteral("fixture/flatpaks")), "com.other.App\n");
+    const auto calls = [&s] {
+        QFile f(s.path(QStringLiteral("fixture/flatpak-calls")));
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+    };
+    {
+        // Off: flatpak is not asked, no Flathub app.
+        StoreBackend backend;
+        backend.start();
+        ASSERT_TRUE(settle(backend));
+        EXPECT_TRUE(backend.sources().value(QStringLiteral("flatpak")).toBool());
+        EXPECT_FALSE(backend.sources().value(QStringLiteral("flathubReady")).toBool());
+        EXPECT_TRUE(backend.app(QStringLiteral("org.example.Notes")).isEmpty());
+        EXPECT_TRUE(calls().isEmpty());
+    }
+    storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"flathub":true}}})");
+    StoreBackend backend;
+    QList<QVariantMap> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &, const QString &, const QVariantMap &p) { plans.append(p); });
+    QVariantMap facts;
+    QObject::connect(&backend, &StoreBackend::flatpakInfo, &backend, [&facts](const QString &, const QVariantMap &f) { facts = f; });
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    EXPECT_TRUE(calls().contains(QStringLiteral("remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo\n"
+                                                "update --user --appstream flathub\n")))
+        << calls().toStdString();
+    EXPECT_TRUE(backend.sources().value(QStringLiteral("flathubReady")).toBool());
+    EXPECT_EQ(backend.sources().value(QStringLiteral("flathubProblem")).toString(), QString());
+    const QVariantMap notes = backend.app(QStringLiteral("org.example.Notes"));
+    ASSERT_FALSE(notes.isEmpty());
+    EXPECT_EQ(notes.value(QStringLiteral("kind")).toString(), QStringLiteral("flatpak"));
+    EXPECT_EQ(notes.value(QStringLiteral("flatpakId")).toString(), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(notes.value(QStringLiteral("runtime")).toString(), QStringLiteral("org.gnome.Platform 50"));
+    EXPECT_TRUE(notes.value(QStringLiteral("verified")).toBool());
+    EXPECT_TRUE(notes.value(QStringLiteral("icon")).toString().endsWith(QLatin1String("/icons/128x128/org.example.Notes.png")));
+    EXPECT_EQ(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("get")).toString(), QString());
+    EXPECT_TRUE(std::any_of(backend.search(QStringLiteral("notes")).cbegin(), backend.search(QStringLiteral("notes")).cend(),
+                            [](const QVariant &v) { return v.toMap().value(QStringLiteral("id")) == QLatin1String("org.example.Notes"); }));
+
+    // Its facts before an install (remote-info), and its plan: flatpak's own, what it can reach.
+    backend.requestFlatpakInfo(QStringLiteral("org.example.Notes"));
+    QEventLoop loop;
+    for (int i = 0; i < 500 && facts.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_EQ(facts.value(QStringLiteral("version")).toString(), QStringLiteral("1.2"));
+    EXPECT_EQ(facts.value(QStringLiteral("license")).toString(), QStringLiteral("MIT"));
+    EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home")}));
+    EXPECT_FALSE(facts.value(QStringLiteral("download")).toString().isEmpty());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("install"));
+    for (int i = 0; i < 500 && plans.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plans.size(), 1);
+    EXPECT_EQ(plans.last().value(QStringLiteral("refusal")).toString(), QString()) << plans.last().value(QStringLiteral("detail")).toString().toStdString();
+    const QVariantList refs = plans.last().value(QStringLiteral("packages")).toList();
+    ASSERT_EQ(refs.size(), 2);
+    EXPECT_EQ(refs.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("org.gnome.Platform"));
+    EXPECT_EQ(plans.last().value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home")}));
+
+    // Installed by the queue: then in Installed's Flatpak group, beside the user's other Flatpak.
+    ASSERT_TRUE(backend.install(QStringLiteral("org.example.Notes")));
+    for (int i = 0; i < 500 && !backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("installed")).toBool(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_TRUE(settle(backend));
+    EXPECT_TRUE(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("installed")).toBool());
+    EXPECT_TRUE(calls().contains(QStringLiteral("install --user --noninteractive flathub app/org.example.Notes/x86_64/stable\n")));
+    QStringList group;
+    for (const QVariant &g : backend.installed()) {
+        if (g.toMap().value(QStringLiteral("group")) == QLatin1String("flatpak")) {
+            for (const QVariant &a : g.toMap().value(QStringLiteral("apps")).toList())
+                group.append(a.toMap().value(QStringLiteral("id")).toString());
+        }
+    }
+    EXPECT_EQ(group, (QStringList{QStringLiteral("flatpak:com.other.App"), QStringLiteral("org.example.Notes")}));
+    EXPECT_EQ(backend.actions(QStringLiteral("flatpak:com.other.App")).value(QStringLiteral("uninstall")).toString(), QString());
+
+    // Open: `flatpak run` while the session does not see the export folder, its entry once it does (S20).
+    EXPECT_TRUE(backend.open(QStringLiteral("org.example.Notes")));
+    const QString exports = s.path(QStringLiteral("fixture/flatpak/exports/share"));
+    QDir().mkpath(exports + QStringLiteral("/applications"));
+    storetest::writeFile(exports + QStringLiteral("/applications/org.example.Notes.desktop"), "[Desktop Entry]\n");
+    s.env->set("XDG_DATA_DIRS", exports + QStringLiteral(":/usr/share"));
+    EXPECT_TRUE(backend.open(QStringLiteral("org.example.Notes")));
+    EXPECT_TRUE(backend.open(QStringLiteral("flatpak:com.other.App")));
+    QFile opened(s.path(QStringLiteral("opened")));
+    for (int i = 0; i < 250 && opened.size() < 10; ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_TRUE(opened.open(QIODevice::ReadOnly));
+    const QByteArray lines = opened.readAll();
+    EXPECT_TRUE(lines.contains("uwsm-app -- /usr/bin/flatpak run org.example.Notes\n")) << lines.toStdString();
+    EXPECT_TRUE(lines.contains("uwsm-app -- org.example.Notes.desktop\n")) << lines.toStdString();
+    EXPECT_TRUE(lines.contains("uwsm-app -- /usr/bin/flatpak run com.other.App\n")) << lines.toStdString();
+
+    // Removed: the app, then the runtimes no app needs (SD27).
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("remove"));
+    for (int i = 0; i < 500 && plans.size() < 2; ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plans.size(), 2);
+    EXPECT_EQ(plans.last().value(QStringLiteral("refusal")).toString(), QString());
+    ASSERT_TRUE(backend.uninstall(QStringLiteral("org.example.Notes")));
+    for (int i = 0; i < 500 && backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("installed")).toBool(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_TRUE(settle(backend));
+    EXPECT_FALSE(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("installed")).toBool());
+    EXPECT_TRUE(calls().contains(QStringLiteral("uninstall --user --noninteractive -- org.example.Notes\nuninstall --user --noninteractive --unused\n")));
+    EXPECT_TRUE(backend.results().isEmpty()) << "done: nothing to say";
+}

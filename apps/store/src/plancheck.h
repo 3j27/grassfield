@@ -59,6 +59,7 @@ struct InstallPlan {
     QStringList unfinished; // Unfinished: pacman -Qu's lines
     QStringList upgrades;   // Outdated: the installed packages the plan would upgrade
     QString protectedPackage; // Protected (AUR): the name of the deny list it would build
+    QStringList access;     // (Flatpak) what its metadata lets it reach (flatpak.h flatpakAccess)
     QString detail;         // pacman's own message, for Details
 };
 
