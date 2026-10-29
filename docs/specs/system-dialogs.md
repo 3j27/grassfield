@@ -201,17 +201,22 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
 
 ### Degraded behavior · Known limitations
 As section 1 (forward to gtk). The frontend's wording is xdg-desktop-portal's ("Allow %s to Use the Camera?"), not macOS's
-sentence; Grassfield does not rewrite it (it is translated upstream).
+sentence. xdg-desktop-portal 1.22.1 sends it in English (its French catalog is empty): Grassfield gives its known wording in
+Grassfield's language and its button labels as the alert's own (ADR-0035 5a-9); another version's new wording shows as it
+comes until it is added.
 
-Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`; the decisions are ADR-0035 5a-1 to 5a-8):
+Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`; the decisions are ADR-0035 5a-1 to 5a-9):
 - AC1 as written: the alert shape of the shell's alerts, the frontend's title in bold, its question, its note in the secondary
   colour, its choices (pop-ups and check boxes), "Don't Allow" and "Allow" (or the frontend's labels) of one width; the
-  application's icon from its desktop entry, the frontend's symbolic icon for an application it cannot name.
+  application's icon from its desktop entry, the frontend's symbolic icon, in the text colour, for an application it cannot
+  name; the buttons one above the other, the default at the bottom, when they do not fit side by side; one alert at a time, the
+  others waiting in order; the frontend's own wording in Grassfield's language (5a-4, 5a-9).
 - AC2 for the camera and screen capture (the frontend's icon names them; xdg-desktop-portal 1.22.1 asks nothing about the
   microphone); Return grants the other questions, as AC2 says; Esc and the window closed are "Don't Allow" (5a-6); the keyboard
   starts on the alert, never on a button, and no click, key or close answers for 500 ms each time the alert becomes the active
   window (a key meanwhile starts that time again), and an alert back after more than 1.5 s away (the lock, another window) takes
-  keys only after a click, as at a late first activation (5a-5).
+  keys only after a click, as at a late first activation; that click, armed or not, only ends the hold, and the hint stands in
+  the buttons' place meanwhile (5a-5).
 - AC3 as above; a request that ends without the user's answer ends with a D-Bus error, so the frontend keeps nothing (5a-3).
   FC7's forward: an alert that has not drawn in 3 s, or a process without a display, goes to x-d-p-gtk's Access.
 - Evidence: `tests/unit/portal/tst_access.cpp`, `tests/unit/tst_accessalert.qml`, and `tests/integration/portal_filechooser.sh`

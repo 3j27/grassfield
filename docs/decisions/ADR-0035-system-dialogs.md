@@ -552,15 +552,19 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   user's absence that only Settings can undo). For the same reason a request that ends without the user's answer (Close,
   over the bound, a forward that failed, the process going) ends with a D-Bus error, never a response the frontend would keep
   as "no" (review of step 5a, MINOR 1).
-- **5a-4. The alert's shape and window.** Options: (a) the shell's alert (`shell/overlay/Dialog.qml`) moved into
-  Grassfield.Ui and shared; (b) the same shape built in the portal from the same tokens; (c) a sheet like the panels'.
-  **Choice: (b)**: macOS asks for a permission with the same alert as every other alert, so the shape is the shell's (the
-  application's icon in a 64-pt frame at the top left, the title in bold, the message under it, capsule buttons of one width);
-  moving the shell's Dialog into the library would change the shell's alerts in a portal step (a later step that needs the
-  alert in a third process does that, with its review). A window of its own, opaque like the panels and every application
-  window (ADR-0002), with every window's radius (20, ADR-0024 C-1: a window rule cannot go past `decoration.rounding`, so the
-  shell's 24 is not available to a window; `Hyprland --verify-config` refuses it); the application's icon from its desktop
-  entry, the frontend's symbolic icon for an application it cannot name.
+- **5a-4. The alert's shape and window.** Options: (a) the shell's alert (`shell/overlay/Dialog.qml`) moved into Grassfield.Ui
+  and shared; (b) the same shape built in the portal from the same tokens; (c) a sheet like the panels'. **Choice: (b)**: macOS
+  asks for a permission with the same alert as every other alert, so the shape is the shell's (the application's icon in a 64-pt
+  frame at the top left, the title in bold, the message under it, capsule buttons of one width); moving the shell's Dialog into
+  the library would change the shell's alerts in a portal step (a later step that needs the alert in a third process does that,
+  with its review). A window of its own, opaque like the panels and every application window (ADR-0002), with every window's
+  radius (20, ADR-0024 C-1: a window rule cannot go past `decoration.rounding`, so the shell's 24 is not available to a window;
+  `Hyprland --verify-config` refuses it); the application's icon from its desktop entry, the frontend's symbolic icon for an
+  application it cannot name, drawn in the text colour (its theme's grey was 1.2:1 on the dark window; A2 asserts 3:1). Two
+  buttons that do not fit side by side (French: "Ne pas autoriser" and "Autoriser") stack at the row's width, the default button
+  at the bottom, as macOS stacks an alert's buttons. One alert at a time, as macOS shows them: the others wait in the order they
+  came, with no 3-s deadline while they wait (`RequestHost::queue`), and the next shows when the one on screen goes (integrator
+  nested pass of 1745c0c: MAJOR 1, MINOR 3, MINOR 5).
 - **5a-5. No answer by accident.** Question: what keeps a click or a key meant for something else from answering an alert that
   appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click, key
   or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the window
@@ -568,7 +572,11 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   only on a button reached with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the
   keyboard late, the first time or after more than `filesPanelLateFocusMs` (1.5 s) away (the lock, the screen saver or another
   window came in front of it; integrator review of e24ea5c, MINOR 1: a Return after the unlock granted a location alert), whose
-  ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
+  ending click is not an answer: the first press in the alert ends the hold even before it is armed, the press that made it
+  active included (it may come just before the activation), the alert is armed again from that press (a double click never
+  answers), and the hint takes the buttons' place meanwhile, so the alert keeps one size and nothing moves under the pointer
+  (integrator nested pass of 1745c0c, MINOR 2: it took three clicks after the unlock; MINOR 4: the hint resized the window,
+  which Hyprland centred again). **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
   click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no technical
   intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to undo; the
   alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera and screen capture, as on
@@ -588,6 +596,16 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   of its own already, its answer goes only to itself, and the integrator's nested passes call the backend directly
   (`tests/fixtures/portal-client.py`); a check of the caller is a follow-up for both interfaces together (review of step 5a,
   MINOR 6).
+- **5a-9. The frontend's wording in Grassfield's language.** xdg-desktop-portal 1.22.1 sends its title, question and note in
+  English whatever the language: its installed French catalog is empty (integrator nested pass of 1745c0c, MINOR 6; D-5 had
+  assumed the text arrives translated). Options: (a) show it as it comes; (b) give the frontend's known wording (`src/camera.c`,
+  `location.c`, `screenshot.c`, `wallpaper.c`, `background.c` of 1.22.1, matched whole, the application's name kept) in
+  Grassfield's language from Grassfield's catalog, any other wording as it comes; (c) write Grassfield's own sentences per
+  question. **Choice: (b)**, and the frontend's own button labels ("Deny Access"/"Grant Access", "Deny"/"Allow", "Don't
+  allow"/"Allow") become the alert's "Don't Allow" and "Allow", the words macOS gives every privacy alert. Rule applied: macOS
+  first (an alert in the user's language, the same two buttons on every privacy question), no technical intervention (nothing to
+  install or set). (c) would rewrite the questions the frontend asks and break with its wording ("Allow Apps to …" for an
+  application it cannot name) on its next version; with (b) a new wording shows in English until it is added.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
