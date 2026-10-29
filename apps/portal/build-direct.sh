@@ -31,10 +31,12 @@ read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick
 read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client)"
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
+"$moc" "${kf_includes[@]}" "$here/src/requesthost.h" -o "$out/moc_portal_requesthost.cpp"
 "$moc" "${kf_includes[@]}" "$here/src/filechooser.h" -o "$out/moc_portal_filechooser.cpp"
 
 defs=()
-sources=("$here/src/filechooser.cpp" "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp" "$out/moc_portal_filechooser.cpp")
+sources=("$here/src/requesthost.cpp" "$here/src/filechooser.cpp" "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp"
+         "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp")
 target=$out/grassfield-portal
 case $mode in
   --tests)
