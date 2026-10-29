@@ -436,6 +436,8 @@ QtObject {
     readonly property real dockAttentionHeightScale: 0.34
     // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockAttentionReveal: 3000
+    // estimate: the longest the Dock waits at startup for the apps model and the focused output once the settings file is in (the file itself it always waits for), ms; inside gate P5's 2 s [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
+    readonly property int dockSettleTimeout: 1000
     // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockAttentionHighlightOpacity: 0.35
     // estimate: the launch bounce stops after this long without a window, ms [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -2091,6 +2093,8 @@ QtObject {
     readonly property int desktopIconThumbnailMax: 128
     // estimate: desktop icons v1, px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconDragThreshold: 6
+    // estimate: an icon stays invisible until its image and its launcher file are in (macOS shows each icon whole); after this long it shows as it is, ms [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
+    readonly property int desktopIconLoadTimeout: 600
     // estimate: desktop icons v1, debounce of the positions file [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSaveMs: 300
     // ADR-0012 spike: ms the 1x1 kicker surface is mapped (and unmapped) so Hyprland re-evaluates the keyboard focus without pointer motion; 60 measured, 30 untested
@@ -2256,6 +2260,22 @@ QtObject {
     readonly property int filesPreviewThumbGap: 11
     // macOS 27 Finder: the kind and size line right under the name's last line box [ref: docs/specs/files.md § Preview pane]
     readonly property int filesPreviewNameGap: 0
+    // estimate: the Open and Save panels' width, a little narrower than a Finder window as macOS panels are [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelWidth: 780
+    // estimate: the Open and Save panels' height, the browser and the footer [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelHeight: 480
+    // estimate: the smallest panel that keeps the sidebar, the browser and the footer's buttons [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelMinWidth: 560
+    // estimate: the smallest expanded panel that keeps a few rows of the browser [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelMinHeight: 340
+    // estimate: the compact Save panel's width (Save As and Where) [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelCompactWidth: 520
+    // estimate: the column of the Save panel's right-aligned labels (Save As, Where, Format) [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelLabelWidth: 96
+    // estimate: the Save As field and the Where pop-up of the Save panel [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelFieldWidth: 300
+    // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
+    readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
@@ -3295,6 +3315,12 @@ QtObject {
     readonly property int softwareUpdateRecheckMs: 1800000
     // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateMeteredTimeoutMs: 10000
-    // estimate: after Update Now the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
+    // estimate: after Update in Terminal… the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11, U28) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateLaunchCheckMs: 5000
+    // while Update Now runs, the pane reads the runner's state and the helper's progress this often; they are replaced by rename, never watched (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunPollMs: 500
+    // estimate: after Update Now the pane says Waiting for permission… until the runner writes its state, at most this long, then shows the last run again (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunStartMs: 10000
+    // a run whose state says it started up to this long before Update Now was clicked is that click's (the runner's clock is in whole seconds) (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
+    readonly property int softwareUpdateRunClockSlackMs: 2000
 }

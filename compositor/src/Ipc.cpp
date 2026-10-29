@@ -346,25 +346,30 @@ namespace gf::ipc {
                         CGrassfieldTitlebar::onAppearanceChanged();
                     return;
                 }
-                // Window tiling (core/Tiling.hpp): Settings windows.tilingEdges / tilingMenuBar / tilingOptionDrag / tilingMargins.
-                if (key.ok && value.ok &&
-                    (key.view() == tiling::kConfigEdges || key.view() == tiling::kConfigMenuBar || key.view() == tiling::kConfigAltDrag ||
-                     key.view() == tiling::kConfigMargins)) {
+                // Window tiling (core/Tiling.hpp): the switches of Desktop & Dock > Windows (tiling.md TL32).
+                if (const auto sw = key.ok && value.ok ? tiling::switchOf(key.view()) : std::nullopt) {
                     const auto on = tiling::parseBool(value.view());
                     if (!on) {
                         logRequest(Log::WARN, "config: rejected ({} = true|false)", key.view());
                         return;
                     }
                     logRequest(Log::INFO, "config: {} = {}", key.view(), value.view());
-                    if (key.view() == tiling::kConfigEdges)
-                        state().tilingDrag.edges = *on;
-                    else if (key.view() == tiling::kConfigMenuBar)
-                        state().tilingDrag.menuBar = *on;
-                    else if (key.view() == tiling::kConfigAltDrag)
-                        state().tilingDrag.altDrag = *on;
-                    else if (state().tilingMargins != *on) {
-                        state().tilingMargins = *on;
-                        tiler::marginsChanged(); // every tiled window placed again (tiling.md TL2)
+                    switch (*sw) {
+                        case tiling::Switch::Edges: state().tilingDrag.edges = *on; break;
+                        case tiling::Switch::MenuBar: state().tilingDrag.menuBar = *on; break;
+                        case tiling::Switch::AltDrag: state().tilingDrag.altDrag = *on; break;
+                        case tiling::Switch::Margins:
+                            if (state().tilingMargins != *on) {
+                                state().tilingMargins = *on;
+                                tiler::marginsChanged(); // every tiled window placed again (tiling.md TL2)
+                            }
+                            break;
+                        case tiling::Switch::Layouts: state().tilingLayouts = *on; break;
+                        case tiling::Switch::Suggestions:
+                            state().tilingSuggestions = *on;
+                            if (!*on)
+                                tiler::suggestionsOff(); // the pending one ends with the switch (TL32)
+                            break;
                     }
                     return;
                 }

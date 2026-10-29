@@ -47,6 +47,8 @@
 #   popover-verb   tile_popover(address) posts tile-hover "open" for the window, tileable, its light in the titlebar's band
 #   hover          the pointer on that light: no "enter" before tiling.hoverDelay, "enter" after it; moving away posts
 #                  "leave"
+#   layouts-off    (step 5, TL32) config tilingLayouts false: the pointer resting on the light posts no "enter";
+#                  tile_popover still posts "open"; then true again
 #   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
@@ -72,6 +74,9 @@
 #                  now offers zone 1
 #   pick-held      a pick into a zone the layout holds is refused (reason invalid): nothing moves, the suggestion stays
 #   stale          any other change of the records (Return to Previous Size of the second window) ends it (null)
+#   suggest-off    (step 5, TL32) a zone placement's suggestion ends when config tilingSuggestions turns false and does not
+#                  come back when it turns true; while false, a zone placement posts placed and the reply has no
+#                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
 # Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
@@ -1126,6 +1131,19 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     check "hover: leaving the light posts tile-hover leave" event_came "$(hover_filter leave)"
     sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 300) / 1000 }')" # the shell's popover closes by itself
     close_popover
+    # layouts-off: "Show layouts when hovering over the green button" off (TL32).
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingLayouts\", \"false\")" >>"$log" 2>&1
+    pointer abs $((lcx - mx + 200)) $((lcy - my + 150)) sleep 200
+    mark_events
+    pointer abs $((lcx - mx)) $((lcy - my)) sleep 300
+    sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+    check "layouts-off: the pointer resting on the zoom light posts no enter" no_early_enter
+    mark_events
+    nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
+    check "layouts-off: tile_popover still posts open" event_came "$(hover_filter open)"
+    close_popover
+    nestctl dispatch "hl.plugin.grassfield.config(\"tilingLayouts\", \"true\")" >>"$log" 2>&1
+    pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 300
   else
     check "hover: needs the light from the open event" false
   fi
@@ -1340,6 +1358,28 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
 
   tile_ipc "$addr2" previous
   check "stale: another change ends the suggestion" test "$(suggestion)" = null
+
+  # suggest-off: "Suggest windows to fill the rest of a layout" off (TL32).
+  suggests_again() {
+    local sg
+    sg=$(suggestion)
+    say "  suggestion: $sg"
+    jq -e --arg a "${addr#0x}" '.address == $a and ([.zones[].zone] == [0, 1])' <<<"$sg" >/dev/null
+  }
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: switched on, a zone placement has its suggestion" suggests_again
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
+  check "suggest-off: the pending suggestion ends with the switch" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
+  check "suggest-off: it does not come back when the switch turns on" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"false\")" >>"$log" 2>&1
+  mark_events
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: the zone placement posts placed" event_came '.type == "tiling" and .reason == "placed"'
+  check "suggest-off: the reply has no suggestion" test "$(suggestion)" = null
+  nestctl dispatch "hl.plugin.grassfield.config(\"tilingSuggestions\", \"true\")" >>"$log" 2>&1
+  arrange "{\"layout\":\"thirds\",\"windows\":[\"$addr\"],\"zone\":2}"
+  check "suggest-off: on again, the same placement has a suggestion" suggests_again
 
   nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr3\")" >>"$log" 2>&1
   sleep 1
@@ -1583,5 +1623,12 @@ fi
 
 c1_cases
 
+# Every SKIP of the run again at the end, so a case that did not run (the X11 menu without an X display, Chromium not
+# installed...) is not lost in the log (integrator follow-up of PR #42).
+mapfile -t skips < <(grep -o 'SKIP: .*' "$log")
+if ((${#skips[@]})); then
+  say "tiling: ${#skips[@]} skipped, NOT VERIFIED in this run:"
+  for line in "${skips[@]}"; do say "  ${line#SKIP: }"; done
+fi
 check "Hyprland alive" alive
 exit $fail

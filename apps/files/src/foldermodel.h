@@ -82,6 +82,11 @@ class FolderModel : public QSortFilterProxyModel
     // Recents (Recents::locationUrl): a search-like flat list of the recently used files; isSearch is true too.
     Q_PROPERTY(bool isRecents READ isRecents NOTIFY urlChanged)
     Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
+    // The Open and Save panels (grassfield-portal, ADR-0035 D-4): {globs, mimeTypes, foldersOnly, single}, empty in Files.
+    // Files the panel cannot take (a folder panel: every file; else those its filter, FileLogic::passesFilter, refuses) are
+    // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
+    // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file).
+    Q_PROPERTY(QVariantMap chooser READ chooser WRITE setChooser NOTIFY chooserChanged)
     // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
     Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
 
@@ -112,6 +117,8 @@ public:
         GroupRole,
         // Not a QML role (not in roleNames): only signalled by dataChanged when a picture's size arrives (dimensionsAt).
         DimensionsRole,
+        // A file the panel cannot take (chooser).
+        DimmedRole,
     };
     Q_ENUM(Roles)
 
@@ -149,6 +156,8 @@ public:
     bool isSearch() const;
     bool isRecents() const;
     bool searchLimited() const { return m_searchLimited; }
+    QVariantMap chooser() const { return m_chooser; }
+    void setChooser(const QVariantMap &chooser);
     bool isApplications() const { return ApplicationsLogic::isLocationUrl(m_url); }
 
     // Where folder looks are read from (FilesApp's store; null: no folder is customised).
@@ -216,6 +225,7 @@ signals:
     void rootChanged();
     void previewSizeChanged();
     void groupsChanged();
+    void chooserChanged();
     // The view should scroll to `row`, and start inline renaming when `rename` is true.
     void revealRequested(int row, bool rename);
     // The listed folder was deleted or the listing redirected elsewhere.
@@ -247,7 +257,9 @@ private:
         QPointer<KIO::PreviewJob> job;
     };
 
-    void applySelection(const QSet<QUrl> &next);
+    void applySelection(QSet<QUrl> next);
+    // A file the panel cannot take (see chooser).
+    bool dimmed(const KFileItem &item) const;
     void setCurrent(const QUrl &url);
     void setError(const QString &error);
     void checkExpected();
@@ -389,4 +401,10 @@ private:
     SearchRunner *m_search = nullptr;
     OrgKdeKDirNotifyInterface *m_notify = nullptr;
     bool m_searchLimited = false;
+
+    QVariantMap m_chooser;
+    QStringList m_chooserGlobs;
+    QStringList m_chooserMimeTypes;
+    bool m_chooserFoldersOnly = false;
+    bool m_chooserSingle = false;
 };

@@ -48,7 +48,8 @@ Usage: frame-attribution.py <frames.txt> <renders.all> <marks.all> <events> <ref
   --drag-mark=NAME a gated scenario's resized windows come from the drag's own marks "NAME:F/E" in its windows (the plugin
                marks each drag's end: F of the edge's E windows followed it; integrator review of 0c4c8f2: a count the harness
                assumes would halve a regression's rate): every drag must have F = E, all with the same E, which is N; no
-               mark, or a drag some windows did not follow, fails.
+               mark, or a drag some windows did not follow, fails. Only marks inside the scenario's own windows count; the
+               baseline (Hyprland's own resize) holds none: a mark there fails (follow-up of PR #42).
 """
 import sys
 from collections import defaultdict
@@ -285,6 +286,11 @@ def main(argv):
             b = per.get(baseline)
             if b is None or b["animation"]["frames"] == 0 or b["anim_us"] <= 0:
                 print(f"FAIL {name}: the baseline {baseline} was not measured, (b) cannot be judged; {work_text}")
+                status = 1
+                continue
+            if drag_mark and b["drags"]:
+                print(f"FAIL {name}: the baseline {baseline} holds {len(b['drags'])} {drag_mark} mark(s), so it is not Hyprland's own resize "
+                      f"alone; {work_text}")
                 status = 1
                 continue
             base_rate = b["animation"]["compositor"] / (b["anim_us"] / 1e6)

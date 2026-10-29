@@ -72,7 +72,8 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 | QtMultimedia + FFmpeg backend | Preview, and the shell for video wallpapers (ADR-0016 W7) | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review** (docs/legal/licenses-audit.md, gap G9: now also loaded into the shell process). |
 | ffmpeg and ffprobe programs | `grassfield-wallpaper` transcodes and probes video wallpapers (argument vector, a separate process, plain-file protocol whitelist; ADR-0016) | GPL-3.0-only per pacman (ffmpeg 9.0.1). The programs are run, not linked. **Needs legal review.** |
 | curl | `grassfield-wallpaper fetch` downloads the online pictures of the day (argument vector, https only) | curl licence (MIT-style); run, not linked |
-| KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
+| KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` and `grassfield-portal` (the Files library) | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
+| KF6 WindowSystem 6.31.0 | linked by `grassfield-portal`: an Open or Save panel becomes the child of the application's window (xdg-foreign v2, ADR-0035 D-4); already installed as a dependency of KIO | header: LGPL-2.1-or-later (`kwindowsystem.h`) |
 | extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
 | uwsm | session launcher | MIT |
 

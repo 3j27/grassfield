@@ -90,8 +90,13 @@ bool asksForPassword(const QStringList &argv);
 int actionTimeoutMs(const QStringList &argv, int requested);
 
 // A program Settings starts and leaves running (Backend::launch: detached, never stopped by a timeout or by Settings closing):
-//   omarchy-launch-floating-terminal-with-presentation omarchy-update   Software Update > Update Now (U11): Omarchy's update in
-//                                                                       its floating terminal, where Omarchy asks first
+//   /usr/lib/grassfield/grassfield-update-run                            Software Update > Update Now (U24, owner decision
+//                                                                       SU-M1): the user's runner of the update without a
+//                                                                       terminal, which asks for the password through pkexec
+//   omarchy-launch-floating-terminal-with-presentation omarchy-update   Software Update > Update in Terminal… (U11, U28): Omarchy's
+//                                                                       update in its floating terminal, where Omarchy asks first
+//   omarchy-launch-floating-terminal-with-presentation omarchy-migrate  Software Update > Finish in Terminal… (U28): Omarchy's
+//                                                                       migrations a run could not finish
 //   /usr/lib/grassfield/grassfield-session-end logout|restart            Software Update > Log Out…, Restart… (U14), after the
 //                                                                       pane's own confirmation: the path of the Grassfield menu
 // Exactly these argument vectors, nothing else.
