@@ -562,25 +562,27 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   shell's 24 is not available to a window; `Hyprland --verify-config` refuses it); the application's icon from its desktop
   entry, the frontend's symbolic icon for an application it cannot name.
 - **5a-5. No answer by accident.** Question: what keeps a click or a key meant for something else from answering an alert that
-  appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click,
-  key or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the
-  window before never arms it), the keyboard starts on the alert and never on a button (Space acts only on a button reached
-  with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the keyboard late, whose
-  ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
-  click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no technical
-  intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to undo; the
-  alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera, the microphone and
-  screen capture, as on macOS 15 and later.
+  appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click, key
+  or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the window
+  before never arms it), the keyboard starts on the alert and never on a button, again each time it becomes active (Space acts
+  only on a button reached with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the
+  keyboard late, whose ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the
+  lock took the first click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no
+  technical intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to
+  undo; the alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera, the microphone
+  and screen capture, as on macOS 15 and later.
 - **5a-6. Esc and the window closed are "Don't Allow".** The alert has no Cancel: the frontend reads any answer but 0 as "no",
   so Esc and a close by the compositor say it plainly, as macOS's Esc does (a close before the alert is armed is refused,
   5a-5). The application's name is in the frontend's title ("Allow Example to Use the Camera?"), not on a line of its own.
+- **5a-7. The forward.** xdg-desktop-portal uses one Access backend (no fallback at runtime), so an alert that cannot show is
+  forwarded to x-d-p-gtk's Access by the backend itself, as the panels are (FC7); its answer and its choices are relayed. A
+  forwarded request the application or the frontend closes ends with a D-Bus error, not x-d-p-gtk's answer to its closed dialog,
+  which the frontend would keep as "no" (counter-review of step 5a).
 - **5a-8. Who may call.** Any process on the session bus can call the backend directly (as for the panels). Options: (a) only
   the owner of `org.freedesktop.portal.Desktop`; (b) any caller. **Choice: (b)** for now: such a process can draw any window
   of its own already, its answer goes only to itself, and the integrator's nested passes call the backend directly
   (`tests/fixtures/portal-client.py`); a check of the caller is a follow-up for both interfaces together (review of step 5a,
   MINOR 6).
-- **5a-7. The forward.** xdg-desktop-portal uses one Access backend (no fallback at runtime), so an alert that cannot show is
-  forwarded to x-d-p-gtk's Access by the backend itself, as the panels are (FC7); its answer and its choices are relayed.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
