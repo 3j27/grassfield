@@ -20,7 +20,7 @@ TestCase {
             "file:///home/u/Documents": [["a.txt", false], ["b.png", false], ["Sub", true]],
             "file:///home/u/Documents/Sub": [["x.txt", false]],
             "file:///home/u/My Documents": [["c.txt", false]],
-            "grassfield-apps:/": [["Text Editor", false]],
+            "grassfield-apps:/": [["Text Editor", false], ["org.gnome.TextEditor", false], ["org.kde.kate", false], ["org.example.Other", false]],
             "smb://server/share": [["remote.txt", false]]
         })
 
@@ -66,10 +66,16 @@ TestCase {
             onUrlChanged: listing.relist()
             onChooserChanged: listing.relist()
 
-            // FolderModel::dimmed: a file the panel cannot take (folders only; else a "*.ext" glob it does not match).
+            // FolderModel::dimmed: a file the panel cannot take (folders only; else a "*.ext" glob it does not match); in the
+            // Applications location, every application but those Choose Application takes (the tree names them by id).
             function dimmedFor(name: string, isDir: bool): bool {
                 const c = listing.chooser;
-                if (!c || Object.keys(c).length === 0 || isDir)
+                if (!c || Object.keys(c).length === 0)
+                    return false;
+                // The URL itself: onUrlChanged runs before the isApplications binding has followed it.
+                if (String(listing.url).startsWith("grassfield-apps:"))
+                    return !(c.allApplications === true || (c.applications || []).indexOf(name) >= 0);
+                if (isDir)
                     return false;
                 if (c.foldersOnly)
                     return true;
@@ -81,7 +87,7 @@ TestCase {
                 listing.clear();
                 const entries = test.entries(String(listing.url)) || [];
                 for (const e of entries) {
-                    const url = String(listing.url) + "/" + e[0];
+                    const url = String(listing.url).startsWith("grassfield-apps:") ? "grassfield-app:/" + e[0] : String(listing.url) + "/" + e[0];
                     listing.append({name: e[0], url: url, iconName: "", thumbnail: "", largeThumbnail: "", emblem: "", isDir: e[1], canPreview: false,
                                     hidden: false, dimmed: listing.dimmedFor(e[0], e[1]), tagColors: [], folderColor: "", folderGlyph: "",
                                     selected: keep.indexOf(url) >= 0 && !listing.dimmedFor(e[0], e[1]), modifiedText: "", sizeText: "", kind: "", group: ""});
@@ -261,6 +267,16 @@ TestCase {
         function applicationsFor(urls: var): var {
             return [];
         }
+        function applicationsUrl(): url {
+            return "grassfield-apps:/";
+        }
+        function applicationUrl(id: string): url {
+            return "grassfield-app:/" + id;
+        }
+        function applicationId(target: url): string {
+            const s = String(target);
+            return s.startsWith("grassfield-app:/") ? s.substring("grassfield-app:/".length) : "";
+        }
         function baseNameLength(name: string, isDir: bool): int {
             const dot = name.lastIndexOf(".");
             return dot > 0 ? dot : name.length;
@@ -337,6 +353,15 @@ TestCase {
         }
     }
 
+    // AppChooser (apps/portal/src/appchooser.h) as a Choose Application panel uses it.
+    QtObject {
+        id: fakeAppHost
+        property var answers: []
+        function answer(id: int, response: int, map: var): void {
+            fakeAppHost.answers = fakeAppHost.answers.concat([{id: id, response: response, map: map}]);
+        }
+    }
+
     // FilePanels.qml as a panel reads it.
     QtObject {
         id: fakeManager
@@ -354,6 +379,7 @@ TestCase {
         FilePanel {
             app: fakeApp
             host: fakeHost
+            appHost: fakeAppHost
             manager: fakeManager
             requestId: 7
             places: test.places
@@ -371,6 +397,7 @@ TestCase {
     // A panel for `fields`, shown and active.
     function openPanel(fields: var, extra: var): var {
         fakeHost.answers = [];
+        fakeAppHost.answers = [];
         fakeHost.remembered = [];
         fakeHost.kinds = {};
         // What the backend probed before the panel (FileChooser::handle): the folders it may start in.
@@ -872,6 +899,111 @@ TestCase {
         mousePress(panel.contentItem, 10, 10);
         mouseRelease(panel.contentItem, 10, 10);
         verify(!panel.keysHeld);
+    }
+
+    // Choose Application (grassfield-portal's AppChooser; ADR-0035 D-5, step 5b) ------------------------------------------------
+
+    function appRequest(fields: var): var {
+        return Object.assign({kind: "application", applications: ["org.gnome.TextEditor"], lastChoice: "org.kde.kate", contentType: "text/plain",
+                              filename: "notes.txt", uri: "file:///home/u/notes.txt"}, fields);
+    }
+
+    function test_logic_application_filter(): void {
+        const recommended = PanelLogic.applicationFilter(["org.gnome.TextEditor"], "org.kde.kate", 0);
+        compare(recommended.applications, ["org.gnome.TextEditor", "org.kde.kate"], "the candidates and the last choice");
+        verify(!recommended.allApplications);
+        verify(recommended.foldersOnly, "no file elsewhere");
+        verify(recommended.single);
+        compare(PanelLogic.applicationFilter(["a", "b"], "b", 0).applications, ["a", "b"], "the last choice once");
+        const all = PanelLogic.applicationFilter(["a"], "", 1);
+        verify(all.allApplications);
+        compare(all.applications, []);
+    }
+
+    // The macOS panel: an Open panel in the Applications location, the document named over it, "Recommended Applications"
+    // enabling the frontend's candidates and its last choice, the others dimmed.
+    function test_choose_application_opens_in_applications(): void {
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000, "it opens in Applications");
+        compare(panel.title, "Choose Application");
+        compare(panel.message, "Choose an application to open the document “notes.txt”.");
+        compare(panel.filterIndex, 0, "Recommended Applications");
+        compare(panel.formatEntries.length, 2, "the Enable pop-up");
+        const m = tab.folder;
+        verify(!m.get(test.rowOf(m, "org.gnome.TextEditor")).dimmed, "a candidate");
+        verify(!m.get(test.rowOf(m, "org.kde.kate")).dimmed, "the last choice");
+        verify(m.get(test.rowOf(m, "org.example.Other")).dimmed, "not recommended");
+        verify(!panel.acceptEnabled, "nothing selected yet");
+        tryVerify(() => m.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "the last choice is selected once listed");
+    }
+
+    // Open answers the selected application's desktop id; the panel keeps nothing in FileChooser's memory.
+    function test_choose_application_answers_the_id(): void {
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tab.folder.select(test.rowOf(tab.folder, "org.gnome.TextEditor"), 0);
+        verify(panel.acceptEnabled);
+        panel.pressDefault();
+        compare(fakeAppHost.answers.length, 1);
+        compare(fakeAppHost.answers[0].response, 0);
+        compare(fakeAppHost.answers[0].map.choice, "org.gnome.TextEditor");
+        compare(fakeHost.answers.length, 0, "FileChooser gets no answer");
+        compare(fakeHost.remembered.length, 0, "and keeps nothing");
+    }
+
+    // "All Applications" enables every one; a double-click chooses it.
+    function test_all_applications_and_a_double_click(): void {
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        const m = tab.folder;
+        tab.activate(test.rowOf(m, "org.example.Other"), m, 0);
+        compare(fakeAppHost.answers.length, 0, "dimmed: nothing chosen");
+        panel.filterIndex = 1;
+        tryVerify(() => !m.get(test.rowOf(m, "org.example.Other")).dimmed, 2000, "All Applications");
+        tab.activate(test.rowOf(m, "org.example.Other"), m, 0);
+        compare(fakeAppHost.answers.length, 1);
+        compare(fakeAppHost.answers[0].map.choice, "org.example.Other");
+    }
+
+    // With no candidate and no last choice, the panel opens on All Applications; UpdateChoices changes the candidates.
+    function test_no_candidates_and_new_ones(): void {
+        const panel = test.openPanel(test.appRequest({applications: [], lastChoice: ""}));
+        compare(panel.filterIndex, 1, "All Applications");
+        panel.filterIndex = 0;
+        panel.recommended = ["org.example.Other"];
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        const m = tab.folder;
+        tryVerify(() => !m.get(test.rowOf(m, "org.example.Other")).dimmed, 2000, "the new candidate");
+        verify(m.get(test.rowOf(m, "org.gnome.TextEditor")).dimmed);
+        compare(panel.message, "Choose an application to open the document “notes.txt”.");
+    }
+
+    // Cancel answers AppChooser with response 1; a link (no document name) is named by its address.
+    function test_choose_application_cancel_and_a_link(): void {
+        const panel = test.openPanel(test.appRequest({filename: "", uri: "magnet:?xt=1"}));
+        compare(panel.message, "Choose an application to open “magnet:?xt=1”.");
+        panel.cancel();
+        compare(fakeAppHost.answers.length, 1);
+        compare(fakeAppHost.answers[0].response, 1);
+        compare(fakeHost.answers.length, 0);
+    }
+
+    // The integration test's "accept": a Choose Application panel answers once an application is selected (the listing's
+    // preselection comes after the first frame).
+    function test_the_test_answer_waits_for_a_selection(): void {
+        fakeManager.testAnswer = "accept";
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tryVerify(() => panel.testWaiting, 2000);
+        compare(fakeAppHost.answers.length, 0);
+        tab.folder.select(test.rowOf(tab.folder, "org.kde.kate"), 0);
+        tryVerify(() => fakeAppHost.answers.length === 1, 2000);
+        compare(fakeAppHost.answers[0].map.choice, "org.kde.kate");
     }
 
     // The shown Sheet under `item` (Sheet.shown), or null.

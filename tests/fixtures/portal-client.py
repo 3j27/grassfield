@@ -19,6 +19,9 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
     portal-client.py access OPTIONS SECONDS    org.freedesktop.impl.portal.Access's AccessDialog made to grassfield-portal
                                                directly, as the frontend makes it (OPTIONS: icon, deny_label, grant_label,
                                                choices, modal); its reply, as for impl
+    portal-client.py open-file PATH SECONDS    org.freedesktop.portal.OpenURI's OpenFile (the file passed as a descriptor, as an
+                                               application does: OpenURI refuses file URIs) with "ask" (the frontend asks the
+                                               AppChooser backend whatever it would pick itself): the Response, as for choose
     portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
                                                Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
@@ -134,6 +137,20 @@ def camera(conn, seconds):
                                                       None, Gio.DBusCallFlags.NONE, 10000, None), seconds)
 
 
+def open_file(conn, path, seconds):
+    token = "gffile%d" % (GLib.get_monotonic_time() % 1000000)
+    sender = conn.get_unique_name()[1:].replace(".", "_")
+    request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+    options = {"handle_token": GLib.Variant("s", token), "ask": GLib.Variant("b", True)}
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    fds = Gio.UnixFDList.new()
+    index = fds.append(fd)
+    os.close(fd)
+    response_of(conn, request, lambda: conn.call_with_unix_fd_list_sync(DEST, PATH, "org.freedesktop.portal.OpenURI", "OpenFile",
+                                                                        GLib.Variant("(sha{sv})", ("", index, options)),
+                                                                        None, Gio.DBusCallFlags.NONE, 10000, fds, None), seconds)
+
+
 def access(conn, given, seconds):
     handle = "/org/freedesktop/portal/desktop/request/1_1/access%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
     options = {}
@@ -178,6 +195,9 @@ def main():
         return
     if command == "access":
         access(conn, json.loads(sys.argv[2]), sys.argv[3])
+        return
+    if command == "open-file":
+        open_file(conn, sys.argv[2], sys.argv[3])
         return
     if command == "permission":
         permission(conn, sys.argv[2], sys.argv[3])
