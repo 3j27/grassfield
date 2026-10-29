@@ -79,6 +79,10 @@ function getBlockText(reason, kind) {
         return qsTr("Omarchy's package lists can't be read, so the Store installs nothing from the AUR.");
     case "repository":
         return qsTr("A repository has this package: the Store installs it from there, from its own page.");
+    case "flathubOff":
+        return qsTr("Turn on Flathub in the Store's settings to install from it.");
+    case "noFlatpak":
+        return qsTr("Flathub needs the flatpak package.");
     case "source":
         return qsTr("Installing apps from this source comes in a later version of the Store.");
     }
@@ -127,7 +131,8 @@ function operationText(op) {
     return removing ? qsTr("Uninstalling…") : qsTr("Installing…");
 }
 
-// How the last operation of an app ended, in one line (SR19, SR20); "" when there is nothing to say (done, or cancelled).
+// How the last operation of an app ended, in one line (SR19, SR20); "" when there is nothing to say (done, cancelled, or a
+// Flatpak install the user stopped: "stopped").
 function resultText(result) {
     if (!result)
         return "";
@@ -206,8 +211,36 @@ function uninstallReasonText(reason, kind) {
         return omarchyChangedText("aur");
     case "aurOff":
         return qsTr("Turn on the AUR in the Store's settings to uninstall it from the Store.");
+    case "flathubOff":
+        return qsTr("Turn on Flathub in the Store's settings to uninstall it from the Store.");
+    case "noFlatpak":
+        return qsTr("Flathub needs the flatpak package.");
     }
     return "";
+}
+
+// What a Flatpak can reach beyond its own window and folder (SR11, SD25), from its metadata's keys (flatpak.h
+// flatpakAccess), each in plain words; [] when it reaches nothing more.
+function accessWords(keys) {
+    const words = {
+        "network": qsTr("The internet"),
+        "allFiles": qsTr("All your files"),
+        "home": qsTr("Your home folder"),
+        "folders": qsTr("Some of your folders"),
+        "devices": qsTr("Devices such as cameras, USB drives and game controllers"),
+        "audio": qsTr("Your speakers and microphone"),
+        "x11": qsTr("The X11 display, where it can see what other X11 apps show and what you type in them"),
+        "bus": qsTr("Every service of your session"),
+        "bluetooth": qsTr("Bluetooth"),
+        "outside": qsTr("Programs outside its sandbox")
+    };
+    return (keys || []).filter(k => words[k] !== undefined).map(k => words[k]);
+}
+
+// The same in one line: "Can access" (SR11); "Only its own window and files" when it reaches nothing more.
+function accessText(keys) {
+    const words = accessWords(keys);
+    return words.length === 0 ? qsTr("Only its own window and files") : words.join(", ");
 }
 
 function buttonText(state) {
@@ -277,6 +310,8 @@ function groupTitle(group) {
         return qsTr("Web Apps");
     case "aur":
         return qsTr("AUR");
+    case "flatpak":
+        return qsTr("Flathub");
     case "foreign":
         return qsTr("Not from a Repository");
     }

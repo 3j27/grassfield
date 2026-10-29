@@ -41,6 +41,25 @@ TestCase {
         verify(Store.aurWarning().startsWith("AUR packages are made by users and reviewed by no one"));
     }
 
+    // Flathub (step 3c part 2): why Get or Uninstall… is not offered, what a Flatpak can reach in plain words (SR11, SD25),
+    // its Installed group, a stopped install said nothing about (SD26).
+    function test_flathubTexts() {
+        compare(Store.getBlockText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to install from it.");
+        compare(Store.getBlockText("noFlatpak", "flatpak"), "Flathub needs the flatpak package.");
+        compare(Store.uninstallReasonText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to uninstall it from the Store.");
+        compare(Store.accessWords(["network", "allFiles", "home", "folders", "devices", "audio", "x11", "bus", "bluetooth", "outside", "unknown"]),
+                ["The internet", "All your files", "Your home folder", "Some of your folders", "Devices such as cameras, USB drives and game controllers",
+                 "Your speakers and microphone", "The X11 display, where it can see what other X11 apps show and what you type in them",
+                 "Every service of your session", "Bluetooth", "Programs outside its sandbox"]);
+        compare(Store.accessText(["network", "home"]), "The internet, Your home folder");
+        compare(Store.accessText([]), "Only its own window and files");
+        compare(Store.accessText(undefined), "Only its own window and files");
+        compare(Store.groupTitle("flatpak"), "Flathub");
+        compare(Store.resultText({kind: "install", outcome: "stopped"}), "", "stopped by the user: nothing to say");
+        verify(!Store.canTryAgain({outcome: "stopped"}));
+        compare(Store.resultText({kind: "install", outcome: "failed", source: "flatpak"}), "The installation failed.");
+    }
+
     function test_symbols() {
         compare(Store.symbolIcon("discover"), "sparkle");
         compare(Store.symbolIcon("category-internet"), "globe");

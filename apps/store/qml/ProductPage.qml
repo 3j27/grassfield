@@ -8,13 +8,16 @@ import "Store.js" as Store
 // the screenshots (when AppStream has them and they are on, owner ST6: fetched when the page opens); the description;
 // What's New (AppStream's releases, else the package's version and build date); and the Information list. An AUR app's
 // page asks for the AUR's facts when it opens (maintainer or orphaned, votes, popularity, last update, the out-of-date
-// flag; SR11) and offers its build script, fetched on click (ADR-0037 e.6: plain text, never run by the Store).
+// flag; SR11) and offers its build script, fetched on click (ADR-0037 e.6: plain text, never run by the Store). A Flatpak's
+// page asks flatpak for its version, sizes and what it can reach (Flathub's before an install, the user's installation's
+// after), and shows its app id, runtime and Flathub's verified flag (SR11).
 ScrollPage {
     id: root
 
     required property var backend
     property var app: ({})
-    // pacman -Si's facts, asked for when the page opens (version, sizes, build date).
+    // pacman -Si's facts, asked for when the page opens (version, sizes, build date); a Flatpak's from flatpak (version,
+    // licence, download and installed sizes, access).
     property var facts: ({})
     readonly property string factsPackage: root.app.package ? root.app.package : (root.app.packages && root.app.packages.length > 0 ? root.app.packages[0] : "")
 
@@ -43,6 +46,8 @@ ScrollPage {
             root.backend.requestPackageInfo(root.factsPackage);
         if (root.app.kind === "aur")
             root.backend.requestAur(root.app.id);
+        if (root.app.kind === "flatpak")
+            root.backend.requestFlatpakInfo(root.app.id);
     }
 
     Connections {
@@ -54,6 +59,11 @@ ScrollPage {
         function onAurInfo(id: string): void {
             if (id === root.app.id)
                 root.app = root.backend.app(id);
+        }
+        function onFlatpakInfo(id: string, facts: var): void {
+            if (id === root.app.id)
+                root.facts = {version: facts.version, downloadSize: facts.download, installedSize: facts.installed,
+                              licenses: facts.license, access: facts.access};
         }
     }
 
@@ -429,6 +439,10 @@ ScrollPage {
                 {label: qsTr("Developer"), value: root.app.developer || ""},
                 {label: root.app.kind === "setup" ? qsTr("Packages") : qsTr("Package"),
                  value: root.app.kind === "setup" ? (root.app.packages || []).join(", ") : (root.app.package || "")},
+                {label: qsTr("App ID"), value: root.app.kind === "flatpak" ? (root.app.flatpakId || "") : ""},
+                {label: qsTr("Runtime"), value: root.app.kind === "flatpak" ? (root.app.runtime || "") : ""},
+                {label: qsTr("Verified Developer"), value: root.app.kind === "flatpak" && root.app.verified ? qsTr("Verified by Flathub") : ""},
+                {label: qsTr("Can Access"), value: root.app.kind === "flatpak" && root.facts.access !== undefined ? Store.accessText(root.facts.access) : ""},
                 {label: qsTr("Version"), value: root.facts.version || root.aur.version || ""},
                 {label: qsTr("Maintainer"), value: root.app.kind !== "aur" ? "" : root.aur.orphaned ? qsTr("Orphaned") : (root.aur.maintainer || "")},
                 {label: qsTr("Votes"), value: root.aur.votes !== undefined ? String(root.aur.votes) : ""},
@@ -440,7 +454,7 @@ ScrollPage {
                 {label: qsTr("Category"), value: (root.app.categories || []).join(", ")},
                 {label: qsTr("Languages"), value: Store.languagesText(root.app.languages)},
                 {label: qsTr("Content Rating"), value: Store.ratingText(root.app.rated, root.app.rating)},
-                {label: qsTr("Licence"), value: root.app.license || qsTr("Not stated")},
+                {label: qsTr("Licence"), value: root.app.license || root.facts.licenses || qsTr("Not stated")},
                 {label: qsTr("What This Setup Changes"), value: info.setup.changes || ""},
                 {label: qsTr("Setup"), value: info.setup.install || ""},
                 {label: qsTr("Address"), value: root.app.webUrl || ""},

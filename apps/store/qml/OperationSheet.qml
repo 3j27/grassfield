@@ -10,7 +10,9 @@ import "Store.js" as Store
 // recipe Omarchy's terminal runs and, for a removal, the files it deletes (ADR-0037 e.1, b.2); for the AUR, its warning every
 // time (SR16), then what yay builds from the AUR and what pacman adds from the repositories, with "Install from the AUR"
 // beside Cancel, which is the default (Return cancels: the build runs the package's script before any password; common
-// rule 3). A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
+// rule 3); for a Flatpak (SD25), what it can reach and flatpak's own plan (the runtimes it pulls, each at most its
+// download), installed in the user's own folder without a password, and for a removal that its data stays and the runtimes
+// no other app needs go with it (SD27). A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
 // or Cancel close it and nothing runs.
 Sheet {
     id: root
@@ -25,6 +27,7 @@ Sheet {
     readonly property bool webApp: root.app.kind === "webapp"
     readonly property bool setup: root.app.kind === "setup"
     readonly property bool aur: root.app.kind === "aur"
+    readonly property bool flatpak: root.app.kind === "flatpak"
     readonly property var setupInfo: root.app.setup || ({})
     readonly property string refusal: root.plan ? (root.plan.refusal || "") : ""
     readonly property bool updateFirst: root.refusal === "unfinished" || root.refusal === "outdated"
@@ -88,6 +91,16 @@ Sheet {
                     parts.push(qsTr("It also deletes: %1").arg(root.setupInfo.removes));
                 parts.push(root.removing ? qsTr("These packages will be removed:") : qsTr("These packages will be installed:"));
                 return parts.filter(t => t !== "").join("\n\n");
+            }
+            if (root.flatpak) {
+                // The user's own installation: no password, nothing of the system changes (b.3).
+                if (root.removing)
+                    return qsTr("Its data in ~/.var/app/%1 stays. Runtimes no other app needs are removed too.").arg(root.app.flatpakId || root.app.name || "");
+                const access = Store.accessWords(root.plan.access);
+                return [qsTr("It's installed in your own folder, for you alone, without administrator rights."),
+                        access.length === 0 ? qsTr("It can reach only its own window and files.")
+                                            : qsTr("It can reach: %1.").arg(access.join(", ")),
+                        qsTr("These will be installed:")].join("\n\n");
             }
             if (root.aur) {
                 // yay builds them in Omarchy's terminal and pacman installs them there: the password is asked there (sudo).
@@ -168,7 +181,9 @@ Sheet {
                 [qsTr("Source"), Store.sourceLabel(root.app.kind, root.app.repo)],
                 [qsTr("Licence"), root.app.license || qsTr("Licence not stated")],
                 // An AUR package's sizes are its build's, unknown before it: those of the repositories' part only.
-                [root.aur ? qsTr("Download from the repositories") : qsTr("Download"), root.plan && !root.removing ? (root.plan.download || "") : ""],
+                // flatpak gives the most each ref downloads (its "<"): a total no larger than this.
+                [root.aur ? qsTr("Download from the repositories") : root.flatpak ? qsTr("Download, at most") : qsTr("Download"),
+                 root.plan && !root.removing ? (root.plan.download || "") : ""],
                 [qsTr("Installed size"), root.plan && !root.removing && !root.aur ? (root.plan.installed || "") : ""]
             ].filter(row => row[1] !== "")
 
