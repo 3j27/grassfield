@@ -127,8 +127,8 @@ void FileChooser::handle(chooser::Kind kind, const QDBusObjectPath &handle, cons
     });
     r->deadline.start();
     // The folders the panel may start in are asked about off the GUI thread first (FC7): the application's, the remembered
-    // one and the places, three calls at once, so that none, hung, keeps the others from answering (re-review of 65311e0,
-    // MAJOR 1). One that does not answer in time is passed over, as one that does not exist is.
+    // one and each place, a call each at once, so that none, hung, keeps the others from answering (re-reviews of 65311e0
+    // and 24bdf58, MAJOR 1). One that does not answer in time is passed over, as one that does not exist is.
     QVariantMap qml = chooser::toQml(parsed);
     const QVariantMap places = placeUrls();
     QStringList placeList;
@@ -141,7 +141,7 @@ void FileChooser::handle(chooser::Kind kind, const QDBusObjectPath &handle, cons
     };
     auto gathered = std::make_shared<Gathered>();
     const auto gather = [this, id, qml, places, gathered](const QVariantMap &kinds) mutable {
-        gathered->kinds.insert(kinds);
+        mergeKinds(gathered->kinds, kinds);
         if (--gathered->waiting > 0)
             return;
         const auto shown = m_requests.value(id);
@@ -156,14 +156,13 @@ void FileChooser::handle(chooser::Kind kind, const QDBusObjectPath &handle, cons
         qml.insert(QStringLiteral("folderKinds"), gathered->kinds);
         emit opened(id, qml);
     };
-    QList<QStringList> calls{QStringList{qml.value(QStringLiteral("currentFolder")).toString()},
-                             QStringList{memory(parsed.appId).value(QStringLiteral("folder")).toString()}, placeList};
-    for (QStringList &urls : calls)
-        urls.removeAll(QString());
-    calls.removeAll(QStringList());
+    QStringList calls{qml.value(QStringLiteral("currentFolder")).toString(), memory(parsed.appId).value(QStringLiteral("folder")).toString()};
+    calls << placeList;
+    calls.removeAll(QString());
+    calls.removeDuplicates();
     gathered->waiting = int(calls.size());
-    for (const QStringList &urls : std::as_const(calls))
-        askDisk(urls, gather);
+    for (const QString &url : std::as_const(calls))
+        askDisk({url}, gather);
 }
 
 void FileChooser::present(int id, QObject *object)
@@ -297,7 +296,9 @@ QVariantMap FileChooser::placeUrls() const
 int FileChooser::askDisk(const QStringList &urls, std::function<void(const QVariantMap &)> done)
 {
     // Tolerant, as the panels' answers: QML prints a URL with its spaces as they are.
+    // The paths in the order given (re-review of 24bdf58: a hash's order changes from one process to the next).
     QVariantMap kinds;
+    QStringList paths;
     QHash<QString, QStringList> urlsOf;
     for (const QString &text : urls) {
         const QUrl url(text);
@@ -306,9 +307,11 @@ int FileChooser::askDisk(const QStringList &urls, std::function<void(const QVari
             kinds.insert(text, -1);
             continue;
         }
+        if (!urlsOf.contains(path))
+            paths << path;
         urlsOf[path].append(text);
     }
-    const int token = m_disk.probe(urlsOf.keys());
+    const int token = m_disk.probe(paths);
     m_diskAsked.insert(token, [kinds, urlsOf, done = std::move(done)](const QHash<QString, int> &answered) mutable {
         for (auto it = urlsOf.cbegin(); it != urlsOf.cend(); ++it)
             for (const QString &url : it.value())
@@ -316,6 +319,13 @@ int FileChooser::askDisk(const QStringList &urls, std::function<void(const QVari
         done(kinds);
     });
     return token;
+}
+
+void FileChooser::mergeKinds(QVariantMap &into, const QVariantMap &from)
+{
+    for (auto it = from.cbegin(); it != from.cend(); ++it)
+        if (it.value().toInt() != kNotResponding || !into.contains(it.key()))
+            into.insert(it.key(), it.value());
 }
 
 int FileChooser::probe(const QStringList &urls)

@@ -20,9 +20,11 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
+#include <QMutex>
 #include <QProcess>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -461,8 +463,8 @@ TEST_F(FileChooserTest, AHungFolderStallsNoOtherRequest)
     ASSERT_TRUE(waitFor([&] { return slow->done && quick->done; }));
 }
 
-// The folders a panel may start in are three calls at once (re-review of 65311e0, MAJOR 1): a hung remembered folder never
-// hides the application's healthy folder, and the panel opens once the remembered one has had its deadline.
+// The folders a panel may start in are a call each, all at once (re-review of 65311e0, MAJOR 1): a hung remembered folder
+// never hides the application's healthy folder, and the panel opens once the remembered one has had its deadline.
 TEST_F(FileChooserTest, AHungRememberedFolderHidesNotTheApplicationsFolder)
 {
     chooser->setUiLoader([] { return true; });
@@ -474,6 +476,77 @@ TEST_F(FileChooserTest, AHungRememberedFolderHidesNotTheApplicationsFolder)
     EXPECT_EQ(kinds.value("file:///slowmnt/remembered").toInt(), FileChooser::kNotResponding);
     chooser->answer(opened.first().first, 1);
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
+}
+
+// A hung place hides not the application's folder either (re-review of 24bdf58, MAJOR 1: with ~/Documents hung, a browser's
+// ~/Downloads opened Home): each place is a call of its own, and a real answer wins when the calls merge. Every request is
+// checked, the first (Documents read and hung) and the next (Documents stuck), for Downloads and Desktop.
+TEST_F(FileChooserTest, AHungPlaceHidesNotTheApplicationsFolder)
+{
+    QTemporaryDir config;
+    ASSERT_TRUE(config.isValid());
+    const QString downloads = dir.filePath(QStringLiteral("Downloads"));
+    const QString desktop = dir.filePath(QStringLiteral("Desktop"));
+    ASSERT_TRUE(QDir().mkpath(downloads) && QDir().mkpath(desktop));
+    QFile dirs(config.filePath(QStringLiteral("user-dirs.dirs")));
+    ASSERT_TRUE(dirs.open(QIODevice::WriteOnly));
+    dirs.write(QStringLiteral("XDG_DOCUMENTS_DIR=\"/slowmnt/Documents\"\nXDG_DOWNLOAD_DIR=\"%1\"\nXDG_DESKTOP_DIR=\"%2\"\n").arg(downloads, desktop).toUtf8());
+    dirs.close();
+    struct ConfigHome {
+        QByteArray saved = qgetenv("XDG_CONFIG_HOME");
+        bool had = qEnvironmentVariableIsSet("XDG_CONFIG_HOME");
+        ~ConfigHome() { had ? qputenv("XDG_CONFIG_HOME", saved) : qunsetenv("XDG_CONFIG_HOME"); }
+    } restore;
+    qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+    ASSERT_EQ(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation), QStringLiteral("/slowmnt/Documents"));
+    chooser->setUiLoader([] { return true; });
+    int n = 0;
+    for (const QString &start : {downloads, desktop}) {
+        for (int i = 0; i < 2; ++i) {
+            opened.clear();
+            QByteArray folder = start.toUtf8();
+            folder.append('\0');
+            auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/p%1").arg(++n), {{QStringLiteral("current_folder"), folder}});
+            ASSERT_TRUE(waitFor([&] { return !opened.isEmpty(); }, kSlowMs));
+            const QVariantMap request = opened.first().second;
+            EXPECT_EQ(request.value("folderKinds").toMap().value(QUrl::fromLocalFile(start).toString(QUrl::FullyEncoded)).toInt(), 2)
+                << qPrintable(start) << ", request " << n;
+            EXPECT_EQ(request.value("places").toMap().value("documents").toString(), QString()) << "request " << n;
+            EXPECT_EQ(request.value("places").toMap().value("downloads").toString(), QUrl::fromLocalFile(downloads).toString(QUrl::FullyEncoded))
+                << "request " << n;
+            EXPECT_EQ(request.value("places").toMap().value("desktop").toString(), QUrl::fromLocalFile(desktop).toString(QUrl::FullyEncoded))
+                << "request " << n;
+            chooser->answer(opened.first().first, 1);
+            ASSERT_TRUE(waitFor([&] { return reply->done; }));
+        }
+    }
+}
+
+// The disk is asked about the URLs in the order given (re-review of 24bdf58, MAJOR 1: a hash's order, which changes from one
+// process to the next).
+TEST_F(FileChooserTest, TheDiskIsAskedInTheOrderGiven)
+{
+    auto mutex = std::make_shared<QMutex>();
+    auto order = std::make_shared<QStringList>();
+    FileChooser::Options options;
+    options.gtkService = QString::fromLatin1(kFakeGtk);
+    options.probeDeadlineMs = kProbeMs;
+    options.statPath = [mutex, order](const QString &path) {
+        const QMutexLocker lock(mutex.get());
+        order->append(path);
+        return 0;
+    };
+    FileChooser ordered(*backendBus, options);
+    QStringList urls, paths;
+    for (const char *name : {"h", "c", "a", "f", "b", "g", "e", "d"}) {
+        paths << QStringLiteral("/order/") + QLatin1String(name);
+        urls << QStringLiteral("file:///order/") + QLatin1String(name);
+    }
+    QSignalSpy probed(&ordered, &FileChooser::probed);
+    ordered.probe(urls);
+    ASSERT_TRUE(probed.wait(kSlowMs));
+    const QMutexLocker lock(mutex.get());
+    EXPECT_EQ(*order, paths);
 }
 
 // SaveFiles' names, as many as a panel takes, are one job: 17 names (past the job bound) and 4096 (the interface's bound)
@@ -626,6 +699,22 @@ TEST_F(FileChooserTest, ThePanelsMemoryGoesThroughTheState)
     EXPECT_EQ(m.value("folder").toString(), QStringLiteral("file:///home/u/Documents"));
     EXPECT_EQ(m.value("view").toString(), QStringLiteral("columns"));
     EXPECT_TRUE(m.value("expanded").toBool());
+}
+
+// Answers about the same URLs from several calls: a real answer wins over "not responding", whichever comes first.
+TEST(FileChooserMerge, ARealAnswerWins)
+{
+    QVariantMap kinds{{QStringLiteral("a"), 2}, {QStringLiteral("b"), FileChooser::kNotResponding}};
+    FileChooser::mergeKinds(kinds, {{QStringLiteral("a"), FileChooser::kNotResponding},
+                                    {QStringLiteral("b"), 0},
+                                    {QStringLiteral("c"), FileChooser::kNotResponding},
+                                    {QStringLiteral("d"), -1}});
+    EXPECT_EQ(kinds.value(QStringLiteral("a")).toInt(), 2);
+    EXPECT_EQ(kinds.value(QStringLiteral("b")).toInt(), 0);
+    EXPECT_EQ(kinds.value(QStringLiteral("c")).toInt(), FileChooser::kNotResponding);
+    EXPECT_EQ(kinds.value(QStringLiteral("d")).toInt(), -1);
+    FileChooser::mergeKinds(kinds, {{QStringLiteral("c"), 1}});
+    EXPECT_EQ(kinds.value(QStringLiteral("c")).toInt(), 1);
 }
 
 TEST(FileChooserIds, APanelCountsAsTheApplicationsWindow)

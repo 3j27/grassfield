@@ -88,6 +88,9 @@ public:
     // not answered, -1 for anything but a local file URL, else DiskProbe::kindOf's. Returns the token.
     Q_INVOKABLE int probe(const QStringList &urls);
     static constexpr int kNotResponding = DiskProbe::kNotResponding;
+    // Merges answers about the same URLs from several calls (the panel's start folders): a real answer wins over "not
+    // responding", whichever comes first (re-review of 24bdf58, MAJOR 1).
+    static void mergeKinds(QVariantMap &into, const QVariantMap &from);
     // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
     // has no entry.
     Q_INVOKABLE QString appName(const QString &appId) const;
@@ -115,8 +118,8 @@ private:
     void finish(int id, uint response, const QVariantMap &results);
     void forward(int id);
     void closeForwarded(int id, int tries);
-    // Asks the disk about `urls` (file URLs as given); done({url: kind}) when DiskProbe answers, never from inside the call.
-    // Returns DiskProbe's token.
+    // Asks the disk about `urls` (file URLs as given, read in that order); done({url: kind}) when DiskProbe answers, never
+    // from inside the call. Returns DiskProbe's token.
     int askDisk(const QStringList &urls, std::function<void(const QVariantMap &kinds)> done);
     QVariantMap placeUrls() const;
     void armIdle();
