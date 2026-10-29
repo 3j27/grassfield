@@ -1359,6 +1359,9 @@ PlanTools StoreBackend::planTools() const
     tools.devPlumbing = !env::fixture().isEmpty();
     const bool dev = tools.devPlumbing;
     tools.head = [dev](const QUrl &url) { return headStatus(url, kFetchMs, dev); };
+    // Software Update's answer against the databases' age (the integrator's note on PR #36): the system first.
+    tools.behind = databasesBehind(readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024),
+                                   newestSync(env::syncDir()));
     return tools;
 }
 

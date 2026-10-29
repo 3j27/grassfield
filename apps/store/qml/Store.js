@@ -145,7 +145,9 @@ function resultText(result) {
     case "unfinished":
         return qsTr("Finish the system update first.");
     case "outdated":
-        return qsTr("Update your system first.");
+        // The databases are older than the mirror (a plan refused before anything downloaded, or a file the mirror no
+        // longer had): the system is updated first (the integrator's note on PR #36).
+        return qsTr("Your system needs to be updated before you can install apps.");
     case "refused":
         // The AUR's plan checked again in the terminal (a repository has the package now, or it is protected or needed).
         return removing ? qsTr("This app can't be uninstalled from the Store.")
@@ -160,6 +162,12 @@ function resultText(result) {
         return qsTr("The terminal did not open.");
     }
     return "";
+}
+
+// A result that Software Update answers (the last system update did not finish, or the system is older than the mirror):
+// "Update Now…" opens it, and nothing of pacman's output is shown.
+function needsUpdate(result) {
+    return !!result && (result.outcome === "outdated" || result.outcome === "unfinished");
 }
 
 // A result the user can try again (the same plan; --needed completes a partial install).

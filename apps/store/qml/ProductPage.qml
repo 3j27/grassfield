@@ -21,6 +21,8 @@ ScrollPage {
     signal linkRequested(string url)
     signal uninstallRequested(var app)
     signal detailsRequested(string id)
+    // The system must be updated first (Store.needsUpdate): Software Update.
+    signal softwareUpdateRequested(string id)
     signal tryAgainRequested(var app, string kind)
     signal buildScriptRequested(var app)
 
@@ -198,7 +200,8 @@ ScrollPage {
                 }
             }
 
-            // How its last operation ended (SR19), with Try Again and Details….
+            // How its last operation ended (SR19), with Try Again and Details…, or Update Now… when the system must be updated
+            // first.
             Row {
                 visible: !!root.result && Store.resultText(root.result) !== ""
                 width: parent.width
@@ -228,6 +231,13 @@ ScrollPage {
                     }
 
                     LinkText {
+                        visible: Store.needsUpdate(root.result)
+                        text: qsTr("Update Now…")
+                        onActivated: root.softwareUpdateRequested(root.app.id)
+                    }
+
+                    LinkText {
+                        visible: !Store.needsUpdate(root.result) // pacman's output stays in the log then
                         text: qsTr("Details…")
                         onActivated: root.detailsRequested(root.app.id)
                     }

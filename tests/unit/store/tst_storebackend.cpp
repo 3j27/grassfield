@@ -316,6 +316,73 @@ TEST(StoreBackend, ArchsAppDataProblems)
     EXPECT_EQ(problem().value(QStringLiteral("problem")), QStringLiteral("unverified"));
 }
 
+// A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7 failed mid-download on files the
+// mirror no longer had): Get's plan says so before anything downloads, by Software Update's own answer when it came after
+// the databases were synced, or by a file of the plan the mirror (on disk here) no longer has; the Store never syncs.
+TEST(StoreBackend, SystemOlderThanTheMirror)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    s.env->set("GRASSFIELD_STORE_PKEXEC", s.path(QStringLiteral("fixture/bin/pkexec"))); // never run: no plan is accepted here
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QString mirror = QUrl::fromLocalFile(s.path(QStringLiteral("served"))).toString();
+    // pacman: nothing unfinished, and Paint's plan: its package and one dependency, both on the mirror in served/.
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  -Qq) printf '%s\\n' gimp sketch cafe ;;\n"
+                      "  -S) printf '%s\\n' 'paint 1-1 extra 1000 " + mirror.toUtf8() + "/paint-1-1-x86_64.pkg.tar.zst' "
+                      "'libpaint 2-1 extra 500 " + mirror.toUtf8() + "/libpaint-2-1-x86_64.pkg.tar.zst' ;;\n"
+                      "  *) exec '" + base.toUtf8() + "' \"$@\" ;;\n"
+                      "esac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/sync")));
+    const QDateTime synced = QDateTime::currentDateTimeUtc().addDays(-50);
+    storetest::writeFile(s.path(QStringLiteral("fixture/sync/extra.db")), "db");
+    const auto syncAt = [&s](const QDateTime &when) {
+        QFile db(s.path(QStringLiteral("fixture/sync/extra.db")));
+        return db.open(QIODevice::ReadWrite) && db.setFileTime(when, QFileDevice::FileModificationTime);
+    };
+    ASSERT_TRUE(syncAt(synced));
+    const QString checked = QDateTime::currentDateTimeUtc().addSecs(-3600).toString(Qt::ISODate);
+    storetest::writeFile(s.path(QStringLiteral("state/software-update.json")),
+                         (QStringLiteral(R"({"version":1,"state":"available","checkedAt":"%1","others":37,"omarchy":{"installed":"4.0.4","available":""}})").arg(checked)).toUtf8());
+    StoreBackend backend;
+    QList<QVariantMap> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &, const QString &, const QVariantMap &p) { plans.append(p); });
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    const auto planOf = [&](const char *id) {
+        const qsizetype before = plans.size();
+        backend.plan(QLatin1String(id), QStringLiteral("install"));
+        QEventLoop loop;
+        for (int i = 0; i < 500 && plans.size() == before; ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+        return plans.size() > before ? plans.last() : QVariantMap();
+    };
+    // Software Update found 37 updates an hour ago; the databases are 50 days old: Software Update first.
+    QVariantMap plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));
+    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().startsWith(QStringLiteral("Software Update, ")));
+    EXPECT_FALSE(backend.install(QStringLiteral("org.example.Paint"))) << "no plan was accepted";
+
+    // The databases synced since: Software Update's answer no longer says they are behind. Paint's dependency is gone from
+    // the mirror (its package is there): refused, before anything downloads.
+    ASSERT_TRUE(syncAt(QDateTime::currentDateTimeUtc()));
+    storetest::writeFile(s.path(QStringLiteral("served/paint-1-1-x86_64.pkg.tar.zst")), "package");
+    plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));
+    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().endsWith(QStringLiteral("libpaint-2-1-x86_64.pkg.tar.zst: HTTP 404")))
+        << plan.value(QStringLiteral("detail")).toString().toStdString();
+    // Both files there: the plan goes to its sheet.
+    storetest::writeFile(s.path(QStringLiteral("served/libpaint-2-1-x86_64.pkg.tar.zst")), "package");
+    plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QString());
+    EXPECT_EQ(plan.value(QStringLiteral("packages")).toList().size(), 2);
+}
+
 // French: the catalog's words come in French where the built-in categories have them.
 // GRASSFIELD_STORE_OFFLINE is dev plumbing (ADR-0019): in a dev session the Store counts as offline, so screenshotSource
 // gives nothing and the screenshot provider's gate is shut; a packaged session (GRASSFIELD_SESSION=1) ignores it.

@@ -6549,6 +6549,10 @@
         <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou&#xa0;: rien ne s’installe tant qu’il est là.</translation>
     </message>
     <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
+    </message>
+    <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
     </message>
@@ -7353,6 +7357,10 @@
         <translation>Ces paquets seront supprimés. Vos fichiers et vos réglages restent.</translation>
     </message>
     <message>
+        <source>Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.</source>
+        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps. Mise à jour de logiciels le met à jour ; obtenez ensuite l&apos;app à nouveau.</translation>
+    </message>
+    <message>
         <source>These packages will be installed:</source>
         <translation>Ces paquets seront installés&#xa0;:</translation>
     </message>
@@ -7391,10 +7399,6 @@
     <message>
         <source>The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.</source>
         <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
-    </message>
-    <message>
-        <source>This app needs newer packages than this computer has. Update your system in Software Update, then try again.</source>
-        <translation>Cette app a besoin de paquets plus récents que ceux de cet ordinateur. Mettez le système à jour dans Mise à jour de logiciels, puis réessayez.</translation>
     </message>
     <message>
         <source>Try again when it has finished.</source>
@@ -7441,12 +7445,12 @@
         <translation>Installer depuis l&apos;AUR</translation>
     </message>
     <message>
-        <source>Open Software Update</source>
-        <translation>Ouvrir Mise à jour de logiciels</translation>
-    </message>
-    <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+    <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
     </message>
     <message>
         <source>Checking</source>
@@ -8108,6 +8112,10 @@
     <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
     </message>
     <message>
         <source>Details…</source>
@@ -10609,8 +10617,8 @@
         <translation>Terminez d’abord la mise à jour du système.</translation>
     </message>
     <message>
-        <source>Update your system first.</source>
-        <translation>Mettez d’abord le système à jour.</translation>
+        <source>Your system needs to be updated before you can install apps.</source>
+        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps.</translation>
     </message>
     <message>
         <source>This app can&apos;t be uninstalled from the Store.</source>

@@ -105,7 +105,7 @@ Sheet {
         case "unfinished":
             return qsTr("The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.");
         case "outdated":
-            return qsTr("This app needs newer packages than this computer has. Update your system in Software Update, then try again.");
+            return qsTr("Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.");
         case "busy":
             return qsTr("Try again when it has finished.");
         case "offline":
@@ -129,7 +129,7 @@ Sheet {
     confirmText: {
         if (root.refusal === "")
             return root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
-        return root.updateFirst ? qsTr("Open Software Update") : qsTr("OK");
+        return root.updateFirst ? qsTr("Update Now…") : qsTr("OK");
     }
     destructive: root.removing && root.refusal === ""
     // An AUR install is never the default: a click, or Tab and Space, on "Install from the AUR".

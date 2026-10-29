@@ -123,6 +123,12 @@ inline QString dbLock()
     return inFixture(QStringLiteral("/db.lck"), QStringLiteral("/var/lib/pacman/db.lck"));
 }
 
+// pacman's sync databases (<DBPath>/sync): their age against Software Update's answer (plancheck.h databasesBehind).
+inline QString syncDir()
+{
+    return inFixture(QStringLiteral("/sync"), QStringLiteral("/var/lib/pacman/sync"));
+}
+
 inline QString pacmanLog()
 {
     return inFixture(QStringLiteral("/pacman.log"), QStringLiteral("/var/log/pacman.log"));

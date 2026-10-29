@@ -94,7 +94,9 @@ TEST(PlanCheck, InstallPlan)
     EXPECT_EQ(p.packages.at(0).name, QStringLiteral("xterm")) << "the app's own package first";
     EXPECT_EQ(p.downloadSize, 680000);
     EXPECT_EQ(p.installedSize, qint64(3.5 * 1024 * 1024));
-    EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst")});
+    // Every file of the plan is asked of the mirror, not the first alone (the owner's rc1-7 failed on a later one).
+    EXPECT_EQ(f.heads, (QStringList{QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst"),
+                                    QStringLiteral("https://mirror.example/extra/os/x86_64/libxaw-1.0.16-1-x86_64.pkg.tar.zst")}));
 }
 
 TEST(PlanCheck, InstallRefusals)
@@ -140,6 +142,89 @@ TEST(PlanCheck, InstallRefusals)
     holder.waitForFinished();
     EXPECT_FALSE(lockHeld(f.tools.updateLock));
     EXPECT_FALSE(lockHeld(f.dir.filePath(QStringLiteral("missing.lock"))));
+}
+
+// A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7, databases of 2026-09-08 and a mirror
+// gone on, 404s mid-download): told before anything downloads, by Software Update's own answer or by any file of the plan
+// the mirror no longer has; and recognised in pacman's messages when it happens anyway. Nothing ever syncs the databases.
+TEST(PlanCheck, SystemOlderThanTheMirror)
+{
+    const QDateTime synced = QDateTime::fromString(QStringLiteral("2026-09-08T10:00:00Z"), Qt::ISODate);
+    const auto answer = [](const char *state, const char *checked, int others, const char *omarchy) {
+        return QStringLiteral(R"({"version":1,"state":"%1","checkedAt":"%2","others":%3,"omarchy":{"installed":"4.0.4","available":"%4"},
+                                 "grassfield":{"installed":"1.0.0-1","available":"1.0.1-1"}})")
+            .arg(QLatin1String(state), QLatin1String(checked)).arg(others).arg(QLatin1String(omarchy)).toUtf8();
+    };
+    // Updates for the system, found after the databases were synced: behind.
+    const QString behind = databasesBehind(answer("available", "2026-10-28T23:00:00Z", 37, ""), synced);
+    EXPECT_EQ(behind, QStringLiteral("Software Update, 2026-10-28T23:00:00Z: 37 other updates; the package databases date from 2026-09-08T10:00:00Z"));
+    EXPECT_FALSE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 0, "4.0.6"), synced).isEmpty()) << "an Omarchy release";
+    // Not behind: the databases synced after that answer, Grassfield's own release alone, nothing available, no answer.
+    EXPECT_TRUE(databasesBehind(answer("available", "2026-09-07T23:00:00Z", 37, ""), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 0, ""), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(answer("up-to-date", "2026-10-28T23:00:00Z", 0, ""), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(answer("failed", "2026-10-28T23:00:00Z", 37, ""), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(answer("available", "", 37, ""), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(answer("available", "2026-10-28T23:00:00Z", 37, ""), QDateTime()).isEmpty());
+    EXPECT_TRUE(databasesBehind("not json", synced).isEmpty());
+
+    // The databases' age: the newest *.db of pacman's sync folder.
+    QTemporaryDir sync;
+    EXPECT_FALSE(newestSync(sync.path()).isValid());
+    storetest::writeFile(sync.filePath(QStringLiteral("core.db")), "db");
+    storetest::writeFile(sync.filePath(QStringLiteral("extra.db")), "db");
+    storetest::writeFile(sync.filePath(QStringLiteral("extra.files")), "files");
+    QFile core(sync.filePath(QStringLiteral("core.db")));
+    ASSERT_TRUE(core.open(QIODevice::ReadWrite));
+    ASSERT_TRUE(core.setFileTime(synced, QFileDevice::FileModificationTime));
+    QFile extra(sync.filePath(QStringLiteral("extra.db")));
+    ASSERT_TRUE(extra.open(QIODevice::ReadWrite));
+    ASSERT_TRUE(extra.setFileTime(synced.addDays(1), QFileDevice::FileModificationTime));
+    EXPECT_EQ(newestSync(sync.path()), synced.addDays(1));
+
+    // pacman's own lines, as the owner's helper log had them.
+    EXPECT_TRUE(downloadGone(QStringLiteral(
+        "(1/30) checking keys in keyring\n"
+        "error: failed retrieving file 'kstatusnotifieritem-6.29.0-1-x86_64.pkg.tar.zst' from stable-mirror.omarchy.org : The requested URL returned error: 404\n"
+        "error: failed to commit transaction (failed to retrieve some files)\n")));
+    EXPECT_TRUE(downloadGone(QStringLiteral(
+        "error: failed retrieving file 'mariadb-12.3.3-2-x86_64.pkg.tar.zst.sig' from stable-mirror.omarchy.org : Exceeded the maximum allowed file size (16384) with 16384 bytes\n")));
+    EXPECT_TRUE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : The requested URL returned error: 410")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : The requested URL returned error: 401")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : Could not resolve host: m.example")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed to commit transaction (conflicting files)\na: /usr/bin/a exists in filesystem")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("note: error: failed retrieving file 'x' from m : The requested URL returned error: 404"))) << "pacman's line only";
+
+    Fixture f;
+    // Software Update says the system is behind: refused before pacman plans or the mirror is asked.
+    f.tools.behind = behind;
+    InstallPlan p = checkInstall({QStringLiteral("xterm")}, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, behind);
+    EXPECT_TRUE(p.packages.isEmpty());
+    EXPECT_TRUE(f.heads.isEmpty());
+    // The last update unfinished still says so first (its own words, the same Software Update).
+    storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
+    EXPECT_EQ(checkInstall({QStringLiteral("xterm")}, f.tools, true, false).refusal, Refusal::Unfinished);
+    QFile::remove(f.dir.filePath(QStringLiteral("qu")));
+    f.tools.behind.clear();
+
+    // A later file of the plan gone from the mirror: refused, its address in Details.
+    f.tools.head = [&f](const QUrl &url) {
+        f.heads.append(url.toString());
+        return url.path().contains(QStringLiteral("libxaw")) ? 404 : 200;
+    };
+    p = checkInstall({QStringLiteral("xterm")}, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/os/x86_64/libxaw-1.0.16-1-x86_64.pkg.tar.zst: HTTP 404"));
+    // A mirror that does not answer: no more files asked, nothing refused (pacman says what happens).
+    f.heads.clear();
+    f.tools.head = [&f](const QUrl &url) {
+        f.heads.append(url.toString());
+        return 0;
+    };
+    EXPECT_EQ(checkInstall({QStringLiteral("xterm")}, f.tools, true, false).refusal, Refusal::None);
+    EXPECT_EQ(f.heads.size(), 1);
 }
 
 TEST(PlanCheck, RemovePlan)
@@ -322,7 +407,17 @@ TEST(PlanCheck, AurPlans)
     EXPECT_EQ(p.installedSize, 2 * 1024 * 1024);
     EXPECT_FALSE(p.incomplete);
     EXPECT_EQ(asked, (QList<QStringList>{{QStringLiteral("example-app-bin")}, {QStringLiteral("example-lib")}}));
-    EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst")}) << "the repositories' first file, as any install";
+    EXPECT_EQ(f.heads, (QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst"), QStringLiteral("https://mirror.example/extra/gtk-common.pkg.tar.zst")}))
+        << "the repositories' files, as any install's";
+
+    // The system older than the mirror (Software Update's answer): refused as any install, the AUR not asked.
+    f.tools.behind = QStringLiteral("Software Update: 37 other updates");
+    asked.clear();
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("Software Update: 37 other updates"));
+    EXPECT_TRUE(asked.isEmpty());
+    f.tools.behind.clear();
 
     // A repository has it, or a package that provides it (yay installs what pacman resolves): from there; pacman that does
     // not answer is no answer. The AUR does not know it, or one of its dependencies is on neither.

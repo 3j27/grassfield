@@ -36,6 +36,16 @@ if [ "$mode" = refuse ]; then
   echo 4 >"$root/run/.$op.exit" && mv "$root/run/.$op.exit" "$root/run/$op.exit"
   exit 4
 fi
+# pacman -Sw failing as the owner's rc1-7 did (a file the mirror no longer has), or on a mirror that does not answer.
+if [ "$mode" = gone ] || [ "$mode" = unreachable ]; then
+  why="The requested URL returned error: 404"
+  [ "$mode" = unreachable ] && why="Could not resolve host: mirror.example"
+  echo "error: failed retrieving file '$1-1-1-x86_64.pkg.tar.zst' from mirror.example : $why" >>"$root/run/$op.log"
+  echo "error: failed to commit transaction (failed to retrieve some files)" >>"$root/run/$op.log"
+  echo "grassfield-store-helper: pacman could not download the packages" >>"$root/run/$op.log"
+  echo 1 >"$root/run/.$op.exit" && mv "$root/run/.$op.exit" "$root/run/$op.exit"
+  exit 1
+fi
 n=0
 for p in "$@"; do
   n=$((n + 1))
@@ -265,6 +275,20 @@ TEST(Operations, OutcomesFromCodeAndState)
     ops.enqueue(helperRecord(QStringLiteral("b"), QStringLiteral("remove"), {QStringLiteral("b")}));
     ASSERT_TRUE(waitFor([&] { return finished.count() == 4; }));
     EXPECT_FALSE(ops.results().contains(QStringLiteral("b")));
+
+    // A planned file the mirror no longer has (the integrator's note on PR #36): the system is older than the mirror,
+    // "outdated" (Software Update); pacman's lines stay in the details, not in the line. A mirror that does not answer
+    // is a failure like any other.
+    f.mode("gone");
+    ops.enqueue(helperRecord(QStringLiteral("d"), QStringLiteral("install"), {QStringLiteral("d")}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 5; }));
+    const Operations::Result gone = ops.results().value(QStringLiteral("d"));
+    EXPECT_EQ(gone.outcome, QStringLiteral("outdated"));
+    EXPECT_TRUE(gone.details.contains(QStringLiteral("returned error: 404"))) << qPrintable(gone.details);
+    f.mode("unreachable");
+    ops.enqueue(helperRecord(QStringLiteral("e"), QStringLiteral("install"), {QStringLiteral("e")}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 6; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("e")).outcome, QStringLiteral("failed"));
 }
 
 TEST(Operations, OneAtATimeAndTheLocks)
