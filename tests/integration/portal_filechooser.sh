@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# grassfield-portal's Open and Save panels and permission alerts (ADR-0035 D-4, D-5, steps 4b and 5a; docs/specs/system-
-# dialogs.md sections 1 and 2) with the real xdg-desktop-portal frontend.
+# grassfield-portal's Open and Save panels, Choose Application and permission alerts (ADR-0035 D-4, D-5, steps 4b, 5a and 5b;
+# docs/specs/system-dialogs.md sections 1 and 2) with the real xdg-desktop-portal frontend.
 # Static (always): the .portal file, the D-Bus service file and the unit name the same bus name and program and list
-# FileChooser and Access; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
+# FileChooser, Access and AppChooser; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
 # QT_QPA_PLATFORMTHEME and is hardened; the PKGBUILD builds and installs every piece; the session's window rules give a panel's
 # and an alert's xdg tags the client-chrome tag.
 # Runtime, on a private bus of the test's own (the frontend under env -i with a scratch HOME, XDG_CURRENT_DESKTOP=Hyprland and
