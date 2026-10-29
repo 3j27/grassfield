@@ -624,6 +624,17 @@ restart kernel
         // A pid reused by another process (another start time) is not the runner.
         const reused = Object.assign({}, gone, {"/proc/4242/stat": testCase.runnerStat.replace(" 777 ", " 999 ")});
         verify(!make(available(), {runner: true, files: reused}).updates.running);
+        // A new session (the log out took the runner's folder): the helper `last` names, while it runs.
+        const session = {"/run/grassfield-update/last": testCase.runOp + "\n"};
+        session[helperFile("started")] = "5151 888\n";
+        session["/proc/5151/stat"] = testCase.helperStat;
+        session[helperFile("progress")] = "installing 3 4\n";
+        const s = make(available(), {runner: true, files: session});
+        verify(s.updates.running);
+        compare(row(s.page, "Installing updates…").subtitle, "3 of 4");
+        session[helperFile("exit")] = "0\npackages 4\n";
+        verify(!make(available(), {runner: true, files: session}).updates.running, "an ended helper shows nothing");
+        verify(!make(available(), {runner: true, files: {"/run/grassfield-update/last": "../../etc\n"}}).updates.running, "only an operation id");
     }
 
     // U28-U30: what an ended run says, with its one action; the same sentence when Settings opens again.
@@ -650,6 +661,21 @@ restart kernel
                 verify(!button(t.page, "Update in Terminal…") && !button(t.page, "Finish in Terminal…"), c[0] + " offers no terminal");
             verify(button(t.page, "Update Now").enabled, c[0] + ": Update Now can be tried again");
         }
+        // A lock an earlier pacman left: said so, with Omarchy's terminal.
+        const stale = {};
+        stale[testCase.runFile] = runState("done", "stalelock");
+        const st = make(available(), {runner: true, files: stale});
+        verify(row(st.page, "An earlier update stopped before it finished."));
+        verify(button(st.page, "Update in Terminal…"));
+        // Once the checked databases were the system's, "Nothing was changed" is not said.
+        const synced = {};
+        synced[testCase.runFile] = runState("done", "failed", {synced: true});
+        const fs = make(available(), {runner: true, files: synced});
+        verify(row(fs.page, "The update could not be installed."));
+        verify(!row(fs.page, "The update could not be installed. Nothing was changed."));
+        synced[testCase.runFile] = runState("done", "terminal", {synced: true});
+        compare(row(make(available(), {runner: true, files: synced}).page, "This update asks questions that need Omarchy's terminal.").subtitle,
+            "The updates were not installed. Omarchy's update asks them in its terminal and installs everything listed here.");
         const files = {};
         files[testCase.runFile] = runState("done", "failed-partial", {snapshot: "made"});
         compare(row(make(available(), {runner: true, files: files}).page, "The update stopped before it finished.").subtitle,

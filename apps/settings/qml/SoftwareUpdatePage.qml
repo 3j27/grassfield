@@ -80,9 +80,15 @@ SettingsPage {
                 subtitle: qsTr("Software Update checks again later and tells you when it's ready."), action: "" };
         case "terminal":
             return { title: qsTr("This update asks questions that need Omarchy's terminal."),
-                subtitle: qsTr("Nothing was changed. Omarchy's update asks them in its terminal and installs everything listed here."), action: "terminal" };
+                subtitle: root.run.synced ? qsTr("The updates were not installed. Omarchy's update asks them in its terminal and installs everything listed here.")
+                    : qsTr("Nothing was changed. Omarchy's update asks them in its terminal and installs everything listed here."), action: "terminal" };
+        case "stalelock":
+            return { title: qsTr("An earlier update stopped before it finished."),
+                subtitle: qsTr("Nothing was changed. Omarchy's update in its terminal shows how to finish it."), action: "terminal" };
         case "failed":
-            return { title: qsTr("The update could not be installed. Nothing was changed."),
+            return root.run.synced ? { title: qsTr("The update could not be installed."),
+                subtitle: qsTr("The updates were not installed. Check that this computer is online, then try Update Now again."), action: "" }
+                : { title: qsTr("The update could not be installed. Nothing was changed."),
                 subtitle: qsTr("Check that this computer is online, then try Update Now again."), action: "" };
         case "failed-partial":
             return { title: qsTr("The update stopped before it finished."),

@@ -9221,8 +9221,28 @@
         <translation>Cette mise à jour pose des questions qui nécessitent le terminal d’Omarchy.</translation>
     </message>
     <message>
+        <source>The updates were not installed. Omarchy&apos;s update asks them in its terminal and installs everything listed here.</source>
+        <translation>Les mises à jour n’ont pas été installées. La mise à jour d’Omarchy les pose dans son terminal et installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
         <source>Nothing was changed. Omarchy&apos;s update asks them in its terminal and installs everything listed here.</source>
         <translation>Rien n’a été modifié. La mise à jour d’Omarchy les pose dans son terminal et installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
+        <source>An earlier update stopped before it finished.</source>
+        <translation>Une mise à jour précédente s’est arrêtée avant la fin.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Omarchy&apos;s update in its terminal shows how to finish it.</source>
+        <translation>Rien n’a été modifié. La mise à jour d’Omarchy, dans son terminal, indique comment la terminer.</translation>
+    </message>
+    <message>
+        <source>The update could not be installed.</source>
+        <translation>La mise à jour n’a pas pu être installée.</translation>
+    </message>
+    <message>
+        <source>The updates were not installed. Check that this computer is online, then try Update Now again.</source>
+        <translation>Les mises à jour n’ont pas été installées. Vérifiez que cet ordinateur est connecté, puis réessayez Mettre à jour maintenant.</translation>
     </message>
     <message>
         <source>The update could not be installed. Nothing was changed.</source>

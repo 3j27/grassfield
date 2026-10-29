@@ -117,6 +117,11 @@ QtObject {
     function readRun(): void {
         const r = root.runFile !== "" ? root.backend.readText(root.runFile) : { ok: false, text: "" };
         let state = SoftwareUpdateLogic.parseRun(r.ok ? r.text : "");
+        // No runner's state (a log out ended the runner and its folder): the helper the last run started, while it runs.
+        if (state === null && root.runLaunchedAt === 0) {
+            const last = root.backend.readText(root.helperDir + "/last");
+            state = SoftwareUpdateLogic.helperRun(last.ok ? last.text : "");
+        }
         // Until the runner writes a run started since Update Now, the last one is not this one.
         if (root.runLaunchedAt > 0) {
             if (state !== null && state.startedAt >= root.runLaunchedAt - Tokens.softwareUpdateRunClockSlackMs)

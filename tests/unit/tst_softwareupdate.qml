@@ -274,6 +274,14 @@ TestCase {
         compare(Logic.parseRun(""), null);
         compare(Logic.parseRun("x".repeat(5000)), null);
         compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {pid: -1, startTime: "x1"}))).pid, 0);
+        compare(Logic.parseRun(JSON.stringify(good)).synced, false);
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {phase: "done", result: "stalelock", synced: true}))).synced, true);
+        compare(Logic.parseRun(JSON.stringify(Object.assign({}, good, {synced: "true"}))).synced, false, "only a JSON true");
+        // The helper `last` names, without a runner's state.
+        compare(Logic.helperRun(op + "\n").op, op);
+        compare(Logic.helperRun(op).phase, "authorizing");
+        for (const bad of ["", "x", op + "0", "../" + op, op.toUpperCase()])
+            compare(Logic.helperRun(bad), null, bad);
     }
 
     // The start time of /proc/<pid>/stat, whose command name may hold spaces and parentheses.

@@ -272,8 +272,8 @@ function answered(before, after) {
 // grassfield-update-run's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json) and grassfield-update-helper's files
 // (/run/grassfield-update/<op>.progress, .exit, .started), read by Settings.
 const RUN_PHASES = ["authorizing", "configuring", "done"];
-const RUN_RESULTS = ["up-to-date", "done", "failed-partial", "busy", "space", "power", "incompatible", "terminal", "failed",
-    "cancelled", "denied", "bootimage"];
+const RUN_RESULTS = ["up-to-date", "done", "failed-partial", "busy", "space", "power", "incompatible", "terminal", "stalelock",
+    "failed", "cancelled", "denied", "bootimage"];
 const HELPER_PHASES = ["checking", "snapshot", "keyring", "downloading", "installing", "finishing"];
 const MAX_RUN_TEXT = 4096;
 
@@ -300,6 +300,8 @@ function parseRun(text) {
         result: result,
         restart: v.restart === "restart" || v.restart === "logout" ? v.restart : "",
         snapshot: v.snapshot === "made" || v.snapshot === "none" || v.snapshot === "failed" ? v.snapshot : "",
+        // The checked sync databases became the system's before the run stopped: "nothing was changed" is then not said.
+        synced: v.synced === true,
         deferred: Array.isArray(v.deferred) ? v.deferred.filter(d => d === "migrations" || d === "aur") : [],
         startedAt: typeof v.startedAt === "number" ? v.startedAt : 0,
         finishedAt: typeof v.finishedAt === "number" ? v.finishedAt : 0
@@ -344,17 +346,18 @@ function percentOf(phase, done, total) {
     return -1;
 }
 
-// What the pane shows of a run: {state, phase, done, total, percent, result, restart, snapshot, deferred}. `state`: "none",
+// What the pane shows of a run: {state, phase, done, total, percent, result, restart, snapshot, synced, deferred}. `state`: "none",
 // "running" (authorizing, the helper's phases, configuring) or "done". `run`: parseRun's; `alive`: the runner's process is
 // still the one the state names; `progress`: parseProgress of the helper's file for run.op; `helperAlive`: the helper of
 // run.op still runs (its .started process). A runner that ended without its last state (a log out) shows the helper while
 // it runs, then nothing.
 function runView(run, alive, progress, helperAlive) {
-    const none = { state: "none", phase: "", done: 0, total: 0, percent: -1, result: "", restart: "", snapshot: "", deferred: [] };
+    const none = { state: "none", phase: "", done: 0, total: 0, percent: -1, result: "", restart: "", snapshot: "", synced: false, deferred: [] };
     if (run === null)
         return none;
     if (run.phase === "done")
-        return { state: "done", phase: "done", done: 0, total: 0, percent: -1, result: run.result, restart: run.restart, snapshot: run.snapshot, deferred: run.deferred };
+        return { state: "done", phase: "done", done: 0, total: 0, percent: -1, result: run.result, restart: run.restart, snapshot: run.snapshot,
+            synced: run.synced === true, deferred: run.deferred };
     if (!alive && !helperAlive)
         return none;
     let phase = run.phase === "configuring" ? "configuring" : progress !== null ? progress.phase : "authorizing";
@@ -362,5 +365,16 @@ function runView(run, alive, progress, helperAlive) {
         phase = "checking";
     const done = phase === "downloading" || phase === "installing" ? progress.done : 0;
     const total = phase === "downloading" || phase === "installing" ? progress.total : 0;
-    return { state: "running", phase: phase, done: done, total: total, percent: percentOf(phase, done, total), result: "", restart: "", snapshot: "", deferred: [] };
+    return { state: "running", phase: phase, done: done, total: total, percent: percentOf(phase, done, total), result: "", restart: "", snapshot: "",
+        synced: false, deferred: [] };
+}
+
+// The run the helper's `last` names, when no runner's state is left (a log out ended the runner and its runtime folder, a new
+// session opened Settings): {op, phase: "authorizing"} for runView with the runner not alive, or null for a text that is not
+// an operation id.
+function helperRun(lastText) {
+    const op = String(lastText || "").trim();
+    if (!/^[0-9a-f]{32}$/.test(op))
+        return null;
+    return { op: op, pid: 0, startTime: "", phase: "authorizing", result: "", restart: "", snapshot: "", synced: false, deferred: [], startedAt: 0, finishedAt: 0 };
 }
