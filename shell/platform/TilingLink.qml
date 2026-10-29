@@ -29,12 +29,17 @@ Singleton {
     property bool awaiting: false
     // A fetch was asked while the previous process was still running: start it when that one ends.
     property bool startPending: false
+    // The Split View picker the user dismissed ({address, gen} of its suggestion): a later reply does not show it again (its
+    // window fills instead).
+    property var declined: null
     // A fetch gave up at its deadline: one more is made shortly (the tile groups and the Split View Desktops would otherwise
     // wait for the next notice; re-review of e5bd9d2: a Split View learnt only through a timed-out fetch never filled).
     property bool retried: false
 
     // The suggestion ends (Esc, a click outside, the lock): nothing more is taken for that arrangement.
     function dismiss(): void {
+        if (root.suggestion)
+            root.declined = {address: root.suggestion.address, gen: root.suggestion.gen};
         root.wantedGen = -1;
         root.awaiting = false;
         root.suggestion = null;
@@ -114,13 +119,27 @@ Singleton {
                 // A reply that does not read (a fetch killed at its deadline, hyprctl missing) keeps the last Split View
                 // Desktops; a reply read lets a later deadline retry again.
                 const splits = WindowTiling.parseSplits(text);
+                const sg = WindowTiling.parseSuggestion(text);
+                // A Split View the shell did not start still shows its picker (D48): its suggestion is taken as if asked. Its
+                // member counts as waiting for it from now (awaiting) so that it is not filled meanwhile (TilingSuggest).
+                let adopted = root.wantedGen < 0 && Compositor.canLayouts && Compositor.canSplit ? WindowTiling.splitPicker(splits, sg, root.declined) : null;
+                if (adopted !== null && root.suggestion !== null && root.suggestion.address === adopted.address && root.suggestion.gen === adopted.gen)
+                    adopted = null; // already the one shown: kept as it is
+                if (adopted !== null) {
+                    Compositor.suggestionAsked = {address: adopted.address, until: Date.now() + WindowTiling.suggestionWaitMs};
+                    root.awaiting = true;
+                }
                 if (Compositor.canSplit && splits !== null)
                     root.splits = splits;
                 if (splits !== null)
                     root.retried = false;
+                if (adopted !== null) {
+                    root.suggestion = adopted;
+                    root.awaiting = false;
+                    return;
+                }
                 if (root.wantedGen < 0)
                     return; // no suggestion wanted, or it ended meanwhile
-                const sg = WindowTiling.parseSuggestion(text);
                 const asked = Compositor.suggestionAsked;
                 root.suggestion = sg !== null && sg.gen === root.wantedGen && asked !== null && sg.address === asked.address ? sg : null;
                 root.awaiting = false; // after the suggestion was shown (or refused): a Split View's picker is that one now

@@ -121,4 +121,19 @@ TestCase {
     function test_aWindowWithoutAKnownDesktopAtOpenStillRestoresOnTheFocusedOne() {
         compare(FR.restoreTarget({address: "a1", workspaceId: 0, gen: 4}, null, now()), {kind: "remembered", address: "a1"});
     }
+
+    // ---- The surface's own action chose a window (the tiling suggestions' pick, #48 nested pass MINOR E) ----
+
+    function test_aChosenWindowIsFocusedWhereItIsNow() {
+        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: false}, 7), {kind: "window", address: "b2"}, "on the focused Desktop: it becomes key");
+    }
+
+    function test_aChosenWindowNotShownIsNotPulledBack() {
+        compare(FR.chosenTarget("b2", null, 7), null, "gone");
+        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: true}, 7), null, "minimized or hidden");
+        compare(FR.chosenTarget("b2", {workspaceId: -98, parked: false}, 7), null, "on a special workspace");
+        compare(FR.chosenTarget("b2", {workspaceId: -1, parked: false}, -1), null, "on no Desktop, none focused");
+        compare(FR.chosenTarget("b2", {workspaceId: 3, parked: false}, 7), null, "on a Desktop not shown: the user moved on");
+        compare(FR.chosenTarget("", {workspaceId: 7, parked: false}, 7), null, "nothing chosen");
+    }
 }

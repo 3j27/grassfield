@@ -24,6 +24,15 @@ TestCase {
         verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":1,"h":1,"tileable":"yes"}').tileable);
     }
 
+    // #48 nested pass, MAJOR C (TL8): a window that does not fit half of its output; only the plugin's true counts.
+    function test_parseHoverReadsSplittable() {
+        verify(WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,"splittable":true}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,"splittable":false}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true}').splittable, "an older plugin: not known to fit");
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":14,"h":14,"splittable":"yes"}').splittable);
+        verify(!WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"leave","splittable":true}').splittable, "leave carries nothing");
+    }
+
     function test_parseHoverRefusesAnythingElse() {
         const bad = [
             "", "not json", "null", "[]",
@@ -354,6 +363,37 @@ TestCase {
         compare(JSON.stringify(WindowTiling.lonelyMembers([split(4, ["a1", "b2"], true)], "")), "[]", "two members: nothing to fill");
         compare(JSON.stringify(WindowTiling.lonelyMembers([split(6, ["d4"], false)], "")), "[]", "not waiting: the plugin fills it itself");
         compare(JSON.stringify(WindowTiling.lonelyMembers(null, "")), "[]");
+    }
+
+    // #48 nested pass, MAJOR B (D48): the picker of a Split View the shell did not start.
+    function test_splitPickerAdoptsTheSuggestionOfAWaitingSplitView() {
+        const split = (windows, waiting) => ({workspace: 4, output: "DP-1", home: 1, windows: windows, waiting: waiting});
+        const sg = (address, gen, layout) => ({gen: gen, address: address, layout: layout || "left-right", output: "DP-1", zones: [{zone: 1, x: 0, y: 0, w: 9, h: 9}], windows: ["b2"]});
+        const waiting = [split(["a1"], true)];
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), null), sg("a1", 3), "its one member waits: its picker shows");
+        compare(WindowTiling.splitPicker(waiting, sg("0xA1", 3), null), sg("0xA1", 3), "the address in any case, with or without 0x");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3, "top-bottom"), null), null, "another layout's suggestion is not a Split View's");
+        compare(WindowTiling.splitPicker(waiting, sg("b2", 3), null), null, "the suggestion of another window");
+        compare(WindowTiling.splitPicker([split(["a1"], false)], sg("a1", 3), null), null, "not waiting: the plugin fills it");
+        compare(WindowTiling.splitPicker([split(["a1", "b2"], true)], sg("a1", 3), null), null, "two members: nothing to pick");
+        compare(WindowTiling.splitPicker([], sg("a1", 3), null), null, "no Split View Desktop");
+        compare(WindowTiling.splitPicker(null, sg("a1", 3), null), null);
+        compare(WindowTiling.splitPicker(waiting, null, null), null, "no suggestion");
+        compare(WindowTiling.splitPicker(waiting, sg("", 3), null), null, "no address");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "0xa1", gen: 3}), null, "dismissed: not shown again (its window fills)");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 4), {address: "a1", gen: 3}), sg("a1", 4), "a later Split View of the same window has its own picker");
+        compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
+    }
+
+    // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
+    function test_keptSelectionStartsOnTheFirstTile() {
+        compare(WindowTiling.keptSelection(-1, 3, true), 0, "a new suggestion: the first");
+        compare(WindowTiling.keptSelection(2, 3, true), 0, "a new suggestion resets");
+        compare(WindowTiling.keptSelection(-1, 3, false), 0, "the windows came after the suggestion: the first");
+        compare(WindowTiling.keptSelection(2, 3, false), 2, "kept while in range");
+        compare(WindowTiling.keptSelection(3, 3, false), 0, "out of range (a window closed): the first");
+        compare(WindowTiling.keptSelection(1, 0, false), -1, "no tile");
+        compare(WindowTiling.keptSelection(-1, 0, true), -1);
     }
 
     // #48 review, MINOR 7: a Split View Desktop takes no number, the Desktops keep theirs.

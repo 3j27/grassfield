@@ -48,10 +48,15 @@ Singleton {
         return "opened";
     }
 
-    // The window `address` into the zone the suggestions show (the first empty one). False when nothing was sent.
+    // The window `address` into the zone the suggestions show (the first empty one). False when nothing was sent. The window
+    // picked is focused once the suggestions close (macOS: the window just chosen becomes key; #48 nested pass, MINOR E), unless
+    // the plugin refuses the pick.
     function pick(address: string): bool {
         const sg = root.shown ? Popups.data.suggestion : null;
-        return sg ? Compositor.pickSuggestion(address, sg.layout, sg.zones[0].zone, sg.address) : false;
+        const sent = sg ? Compositor.pickSuggestion(address, sg.layout, sg.zones[0].zone, sg.address) : false;
+        if (sent)
+            FocusReturn.choose(address);
+        return sent;
     }
 
     // Esc, or a click outside: the suggestions end for that arrangement (on a Split View Desktop the window then fills it
@@ -69,15 +74,22 @@ Singleton {
     readonly property string pendingAddress: root.shown && Popups.data.suggestion ? Popups.data.suggestion.address : TilingLink.awaiting && Compositor.suggestionAsked ? Compositor.suggestionAsked.address : ""
     readonly property var lonely: SessionState.locked ? [] : WindowTiling.lonelyMembers(TilingLink.splits, root.pendingAddress)
     property var filled: ({})
+    // The last window whose fill was sent ("" none; tests/shell/split_view).
+    property string lastSent: ""
 
-    onLonelyChanged: root.fillLonely()
+    // At the end of the event that changed it: the shell's own lock closes its popups, the picker with them, just before its
+    // lock state changes (Lock.lock()), so a fill sent at once went out as the lock began instead of at the unlock (#48 nested
+    // pass, MINOR B). Read then, `lonely` is empty under the lock.
+    onLonelyChanged: Qt.callLater(root.fillLonely)
 
     function fillLonely(): void {
         const next = {};
         for (const address of root.lonely) {
             next[address] = true;
-            if (root.filled[address] !== true)
+            if (root.filled[address] !== true) {
+                root.lastSent = address;
                 Compositor.fillAlone(address);
+            }
         }
         root.filled = next;
     }
@@ -89,6 +101,8 @@ Singleton {
         target: Compositor
 
         function onTilingNotice(notice: var): void {
+            if (root.shown && (notice.reason === "invalid" || notice.reason === "locked"))
+                FocusReturn.choose(""); // a refused pick: the window was not placed, nothing chosen
             if (notice.reason !== "locked" || Object.keys(root.filled).length === 0)
                 return;
             root.filled = ({});

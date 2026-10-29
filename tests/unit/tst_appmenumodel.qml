@@ -261,6 +261,13 @@ TestCase {
         const staged = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splitBlocked: true, fullscreen: false, outputs: []});
         compare(staged.rows[0].submenu.map(i => i.enabled).join(","), "true,false,false");
         verify(staged.sections.every(s => s.items.every(i => i.enabled)), "only the halves");
+        // #48 nested pass, MAJOR C (TL8): a window wider or taller than half of its output: the halves greyed, Entire Screen and
+        // the glyphs stay; a ctx that does not say (undefined) changes nothing.
+        const wide = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splittable: false, fullscreen: false, outputs: []});
+        compare(wide.rows[0].submenu.map(i => i.enabled).join(","), "true,false,false");
+        verify(wide.sections.every(s => s.items.every(i => i.enabled)), "only the halves");
+        const fits = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splittable: true, fullscreen: false, outputs: []});
+        compare(fits.rows[0].submenu.map(i => i.enabled).join(","), "true,true,true");
         // Without tiling-split: the plain row that enters full screen.
         const plain = model.tilingPopover({alt: false, tileable: true, canArrange: true, fullscreen: false, outputs: []});
         compare(plain.rows[0].id, "fullscreen");
@@ -298,7 +305,8 @@ TestCase {
         verify(!split.find(i => i.id === "zoom").enabled, "no Zoom on a Split View Desktop");
         verify(!split.find(i => i.place === "fill").enabled, "the Desktop places its windows");
         verify(!split.find(i => i.id === "moveResize").enabled);
-        verify(split.find(i => i.id === "minimize").enabled);
+        verify(!split.find(i => i.id === "minimize").enabled, "D56: not minimized, as in full screen");
+        verify(model.windowMenu(ctx({canTile: true, canSplit: true})).find(i => i.id === "minimize").enabled, "elsewhere Minimize stays");
         verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, focusedWindow: null})).find(i => i.id === "exitSplit").enabled);
     }
 

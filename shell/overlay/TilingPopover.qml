@@ -33,6 +33,7 @@ FocusScope {
         canLayouts: Compositor.canLayouts,
         canSplit: Compositor.canSplit,
         splitBlocked: Compositor.splitBlocked,
+        splittable: Popups.data.splittable === true,
         outputClass: Compositor.outputClassOf(Popups.screenName),
         fullscreen: root.fullscreen,
         inSplit: root.inSplit,
@@ -73,11 +74,39 @@ FocusScope {
     Accessible.name: qsTr("Window tiling")
 
     // Entering or leaving full screen or a Split View Desktop, or the window gone: what the popover offers no longer holds (TL22).
-    onFullscreenChanged: Popups.close()
-    onInSplitChanged: Popups.close()
-    onToplevelChanged: {
-        if (!root.toplevel)
+    // Judged against the state the popover opened in, once it settled, and closed after the binding round (integrator nested
+    // pass of 1ee992e, BLOCKER A: closing from inside the first evaluation of `inSplit` re-entered `content`, `address` and the
+    // overlay's Loader; the popover never showed and the overlay stayed mapped, swallowing input).
+    // Each deferred step acts only while the popover is still the popup open (another popup may have taken its place).
+    property var openedIn: null
+    function settle(): void {
+        if (Popups.kind !== "tiling")
+            return;
+        if (!root.toplevel) {
+            Popups.close(); // the window is gone, or no window has that address: nothing to offer
+            return;
+        }
+        root.openedIn = {address: root.address, fullscreen: root.fullscreen, inSplit: root.inSplit};
+    }
+    function closeIfOpen(): void {
+        if (Popups.kind === "tiling")
             Popups.close();
+    }
+    function closeIfChanged(): void {
+        const o = root.openedIn;
+        if (o !== null && o.address === root.address && (o.fullscreen !== root.fullscreen || o.inSplit !== root.inSplit))
+            Qt.callLater(root.closeIfOpen);
+    }
+    Component.onCompleted: Qt.callLater(root.settle)
+    onAddressChanged: {
+        root.openedIn = null; // another window's popover: its own state, once settled
+        Qt.callLater(root.settle);
+    }
+    onFullscreenChanged: root.closeIfChanged()
+    onInSplitChanged: root.closeIfChanged()
+    onToplevelChanged: {
+        if (!root.toplevel && root.openedIn !== null)
+            Qt.callLater(root.closeIfOpen);
     }
 
     function indexOf(key: string): int {

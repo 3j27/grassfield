@@ -272,6 +272,12 @@ Singleton {
     function minimize(toplevel: var): bool {
         if (!toplevel || Minimized.has(root.minimized, toplevel))
             return false;
+        // A member of a Split View Desktop is not minimized, as a window in full screen (macOS; ADR-0036 D56): the Window
+        // menu greys Minimize, the plugin greys its light, and Super+M or a request does nothing.
+        if (root.inSplit(toplevel)) {
+            console.info("grassfield: minimize refused: a window of a Split View Desktop");
+            return false;
+        }
         const top = hyprlandToplevel(toplevel);
         const address = top ? Minimized.normalizeAddress(top.address) : "";
         if (address === "")
@@ -1400,7 +1406,8 @@ Singleton {
     // does not exist.
     function placementOf(address: string): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
-        const top = all.find(t => t.address === address);
+        const hex = Minimized.normalizeAddress(address);
+        const top = hex !== "" ? all.find(t => Minimized.normalizeAddress(t.address) === hex) : undefined;
         if (!top)
             return null;
         const data = top.lastIpcObject;

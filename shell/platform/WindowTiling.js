@@ -13,7 +13,8 @@ function finite(v) {
 // {address, state, light: {x, y, w, h} | null, tileable} for a `tile-hover` event, null for anything else (other types,
 // foreign protocol versions, malformed text, an enter or open without a usable light). `address` is lower-case hex without
 // 0x; `light` is the zoom light's rectangle in global layout coordinates (null for leave); `tileable` whether the window can
-// be tiled now (the popover greys its tiles otherwise).
+// be tiled now (the popover greys its tiles otherwise); `splittable` whether it also fits half of its output's Split View
+// (TL33, TL8: the popover greys Left and Right of Screen otherwise).
 function parseHover(data) {
     let msg = null;
     try {
@@ -28,10 +29,10 @@ function parseHover(data) {
         return null;
     const address = hex[1].toLowerCase();
     if (msg.state === "leave")
-        return {address: address, state: "leave", light: null, tileable: false};
+        return {address: address, state: "leave", light: null, tileable: false, splittable: false};
     if (!finite(msg.x) || !finite(msg.y) || !finite(msg.w) || !finite(msg.h) || msg.w <= 0 || msg.h <= 0)
         return null;
-    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true};
+    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true, splittable: msg.splittable === true};
 }
 
 // Where the popover opens for a light (global layout coordinates) among `screens` ([{name, x, y, width, height}], logical):
@@ -189,6 +190,15 @@ function suggestionGrid(count, width, height, aspect, labelHeight, gap, maxWidth
     return best;
 }
 
+// The keyboard's tile of the suggestions among `count` tiles (TL28; #48 nested pass, MINOR D: macOS selects the first window
+// as the picker opens, and a first Return takes it): the first one when `reset` (a new suggestion) or when `index` is out of
+// range (none yet, or the windows changed under it); else `index` stays. -1 when there is no tile.
+function keptSelection(index, count, reset) {
+    if (!(count > 0))
+        return -1;
+    return reset || !(index >= 0 && index < count) ? 0 : index;
+}
+
 // The tile `key` moves to from `index` among `count` tiles in rows of `columns` (TL28: the suggestions are navigable with the
 // arrows): "left"/"right" the previous or next tile (wrapping over the rows), "up"/"down" the tile above or below (staying
 // put at the first or last row), "home"/"end" the first or last; from -1 (none yet) any key chooses the first. -1 when there
@@ -302,6 +312,20 @@ function splitOfWindow(splits, address) {
 function lonelyMembers(splits, pending) {
     const p = hexAddress(pending);
     return (splits || []).filter(d => d.waiting && d.windows.length === 1 && d.windows[0] !== p).map(d => d.windows[0]);
+}
+
+// TL33, ADR-0036 D48 (integrator nested pass of 1ee992e, MAJOR B): the picker of a Split View the shell did not start (a
+// key, another client, a test): the reply's `suggestion` (parseSuggestion) when it is the one of a Split View Desktop of
+// `splits` whose one member still waits for its second window, in the "left-right" layout; null otherwise, and for the
+// picker the user dismissed (`declined`: {address, gen} of that suggestion, or null; that window fills instead; a later
+// Split View of the same window has a new generation and its own picker).
+function splitPicker(splits, suggestion, declined) {
+    if (!suggestion || suggestion.layout !== "left-right")
+        return null;
+    const a = hexAddress(suggestion.address); // "" matches no member (parseSplits keeps valid addresses only)
+    if (declined && hexAddress(declined.address) === a && declined.gen === suggestion.gen)
+        return null;
+    return (splits || []).some(d => d.waiting && d.windows.length === 1 && d.windows[0] === a) ? suggestion : null;
 }
 
 // The Desktops `spaces` ([{id, ...}] in id order) as the shell lists them (TL33, ADR-0036 D41): each Split View Desktop of

@@ -182,8 +182,9 @@ QtObject {
         return ids.filter(id => root.layoutZones[id] !== undefined).map(id => ({id: id, text: root.layoutNames[id], zones: root.layoutZones[id], enabled: enabled}));
     }
 
-    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, canSplit, splitBlocked, outputClass,
-    // fullscreen, inSplit, outputs}. {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with
+    // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, canSplit, splitBlocked, splittable,
+    // outputClass, fullscreen, inSplit, outputs} (`splittable` false: the window does not fit half of its output, TL8).
+    // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with
     // Alt: the quarters, Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the
     // plugin's tiling-layouts, layoutsSection), then Full Screen (fullScreenRow) and one Move to <display> row per other output;
     // in full screen or on a Split View Desktop only Exit Full Screen. The glyphs of a window that cannot be tiled now are greyed.
@@ -204,7 +205,7 @@ QtObject {
                     ]}
             ],
             layouts: ctx.canLayouts === true ? root.layoutsSection(ctx.outputClass, can) : [],
-            rows: [root.fullScreenRow(ctx.canSplit === true, can && ctx.splitBlocked !== true)].concat(root.moveToOutputItems(ctx.outputs, can))
+            rows: [root.fullScreenRow(ctx.canSplit === true, can && ctx.splitBlocked !== true && ctx.splittable !== false)].concat(root.moveToOutputItems(ctx.outputs, can))
         };
     }
 
@@ -338,7 +339,8 @@ QtObject {
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 
         const items = [
-            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct},
+            // A window of a Split View Desktop is not minimized, as in full screen (D56).
+            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true},
             {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true}
         ].concat(tiling, fullScreen, [
             {separator: true},

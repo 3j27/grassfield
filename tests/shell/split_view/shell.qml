@@ -17,8 +17,11 @@ import "platform/WindowTiling.js" as WindowTiling
 //  - the fetch of the picker's suggestion gives up at its deadline: the member is filled, and a reply that does not read
 //    keeps the Split View Desktops;
 //  - two members, or one that no longer waits: nothing is filled;
+//  - the shell's own lock (its popups close, then its lock state changes): no fill as it begins;
 //  - locked: nothing is filled, and fillAlone, tile, split and unsplit are refused by their own gates (SessionState names
-//    the refusal); unlocked: the lonely member is sent again.
+//    the refusal); unlocked: the lonely member is sent again;
+//  - a popup that closes itself as it opens (the tiling popover on a member, #48 nested pass): nothing stays open or active
+//    (the overlay would stay mapped over every click and key).
 // Prints "split-view: PASS (n checks)" or the failures. It refuses to run outside scripts/dev/test.sh's scratch session
 // (a compositor reachable through HYPRLAND_INSTANCE_SIGNATURE would receive the fills).
 ShellRoot {
@@ -29,6 +32,15 @@ ShellRoot {
     property int checks: 0
     property int step: -1
     property real started: 0
+    // A popup that closes itself as it opens (step "a popup closing itself as it opens"): its close runs inside the update of
+    // Popups.active, as the tiling popover's did inside the overlay's Loader.
+    property bool selfClosing: false
+    readonly property bool popupActive: Popups.active
+
+    onPopupActiveChanged: {
+        if (root.popupActive && root.selfClosing)
+            Popups.close();
+    }
 
     function check(name: string, ok: bool): void {
         checks++;
@@ -149,6 +161,19 @@ ShellRoot {
                 until: () => true,
                 check: () => root.check("one member, not waiting: the plugin fills it itself", TilingSuggest.lonely.length === 0)
             }, {
+                name: "the shell's own lock",
+                act: () => {
+                    // A picker shown for a lonely member, then Lock.lock(): the popups close first, the lock state changes
+                    // next, in the same event (#48 nested pass, MINOR B).
+                    Popups.open("tilingSuggest", "", 0, 0, "zone", {suggestion: {gen: 2, address: "a1", layout: "left-right", output: "", zones: [{zone: 1, x: 0, y: 0, w: 900, h: 900}], windows: ["b2"]}});
+                    TilingLink.splits = [root.split(["a1"], true)];
+                    TilingSuggest.lastSent = "";
+                    Popups.close();
+                    SessionState.locked = true;
+                },
+                until: () => true,
+                check: () => root.check("the shell's own lock: no fill as it begins (" + TilingSuggest.lastSent + ")", TilingSuggest.lastSent === "")
+            }, {
                 name: "locked",
                 act: () => {
                     SessionState.locked = true; // first: nothing may be sent while the lonely member appears
@@ -172,6 +197,21 @@ ShellRoot {
                 check: () => {
                     root.check("unlocked: the lonely member fills (" + JSON.stringify(TilingSuggest.lonely) + ")", JSON.stringify(TilingSuggest.lonely) === JSON.stringify(["a1"]));
                     root.check("unlocked: its fill is sent again", TilingSuggest.filled["a1"] === true);
+                    root.check("unlocked: that fill went out now (" + TilingSuggest.lastSent + ")", TilingSuggest.lastSent === "a1");
+                }
+            }, {
+                name: "a popup closing itself as it opens",
+                act: () => {
+                    // The tiling popover on a member did (#48 nested pass, BLOCKER A): its close, made inside the open, left
+                    // Popups.active true with no popup, and the overlay mapped over every click and key.
+                    root.selfClosing = true;
+                    Popups.open("tiling", "", 0, 0, "below", {address: "a1"});
+                    root.selfClosing = false;
+                },
+                until: () => true,
+                check: () => {
+                    root.check("closing itself as it opens: closed (" + Popups.kind + ")", Popups.kind === "");
+                    root.check("closing itself as it opens: nothing left active for the overlay", !Popups.active);
                 }
             }, {
                 name: "end",
