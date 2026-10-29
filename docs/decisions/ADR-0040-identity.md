@@ -5,7 +5,8 @@ integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A a
 technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
-NITs), answered in "Review history"; each changed place says which review. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
+NITs), and after the review of step 1a's 6c310a8 (FAIL: one MAJOR, one MINOR, three NITs), answered in "Review
+history"; each changed place says which review. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
 (0039 is the design-polish ADR, pull request #45, merged as e03c859; the open pull requests #47 and #48 add none)
 
 This ADR proposes one identity for Grassfield across its wallpapers, its brand (mark, name, accent, About, app icons),
@@ -111,16 +112,29 @@ and IQ-B3 here changes the palette only, not which controls read it.
   artwork), so the dark desktop never shows the bright Day. Mockup: `mockups/w1-default-wallpaper.svg` (option C strip;
   its Day and Night panels are the light Day and the dark Night).
 - **The time-of-day rule (the integrator's condition: the exact rule before building it).**
-  - **Times from the time zone only.** No location service, no network. The zone's reference point is its row in
-    tzdata's `zone1970.tab` (the coordinates of the zone's principal city). Sunrise and sunset for the local date
-    come from the NOAA approximation (solar zenith 90.833°). Probe:
-    `docs/audits/identity-2026-10-29/timeofday-probe.py` gives Europe/Paris on 2026-10-29 07:31 and 17:37 CET, on
-    2026-06-21 05:46 and 21:57 CEST, and America/New_York on 2026-10-29 07:21 and 17:57 EDT (the published times,
-    within a minute).
+  - **Times from the time zone only.** No location service, no network. The zone is the system's (`timedatectl`'s
+    zone, which is the target of `/etc/localtime` under the zoneinfo directory). Its reference point, in this order
+    (review of 6c310a8: zones tzdata now treats as aliases, the owner's Europe/Amsterdam among them, have no row in
+    `zone1970.tab`):
+    1. its row in tzdata's `zone1970.tab` (the coordinates of the zone's principal city);
+    2. its row in `zone.tab`, which keeps one for those aliases (Europe/Amsterdam, Africa/Douala, Europe/Stockholm,
+       Europe/Oslo, Europe/Copenhagen, Arctic/Longyearbyen, ...);
+    3. the zone it links to (`tzdata.zi` "L" lines), looked up in 1 and 2;
+    4. none: the fixed hours.
+    Sunrise and sunset for the local date come from the NOAA approximation (solar zenith 90.833°).
+  - **Probe** `docs/audits/identity-2026-10-29/timeofday-probe.py` (12 checks, exit 1 on a failure): Europe/Paris on
+    2026-10-29 07:31 and 17:37 CET and on 2026-06-21 05:46 and 21:57 CEST; America/New_York on 2026-10-29 07:21 and
+    17:57 EDT; Europe/Amsterdam on 2026-12-21 08:47 and 16:28 CET from `zone.tab` (the review's own figures); Africa/Douala
+    and Europe/Stockholm from `zone.tab`; America/Montreal through its link to America/Toronto; Arctic/Longyearbyen
+    in polar night and polar day (the fixed hours); UTC (no point); and two explicit points for the short-day and
+    short-night rules. Without `zone.tab` (the first rule's behaviour) five checks fail, Amsterdam among them. An
+    independent formula agrees within 3 minutes (the integrator's check); agreement with published times is NOT
+    VERIFIED (no network here).
   - **Phases.** Dawn from 30 min before sunrise; Day from 90 min after sunrise; Evening from 90 min before sunset; Night
-    from 30 min after sunset (tokens `wallpaper.phase*`).
-  - **Fixed hours** where the zone gives no point (UTC, `Etc/*`, a zone missing from `zone1970.tab`) or the sun neither
-    rises nor sets that day (polar day or night): Dawn 06:00, Day 08:00, Evening 18:00, Night 20:30, local time.
+    from 30 min after sunset (tokens `wallpaper.phase*`). A day shorter than 3 h has no Day (Dawn runs to the middle of
+    the daylight, then Evening); a night shorter than 1 h has no Night.
+  - **Fixed hours** where the zone gives no point after the four lookups (UTC, `Etc/*`) or the sun neither rises nor
+    sets that day (polar day or night): Dawn 06:00, Day 08:00, Evening 18:00, Night 20:30, local time.
   - **Changes.** A slow crossfade through the two-slot model (`wallpaper.phaseFadeMs`, 20 s; Reduce Motion: a cut),
     never during a pointer drag or while a full-screen window is on that output: deferred to the first moment neither
     holds.
@@ -142,7 +156,8 @@ and IQ-B3 here changes the palette only, not which controls read it.
   b44d17e and ed21d46).
 - **Videos (IQ-W3, owner: A, the drawn animation in 1.0).** No video file ships; the user's own videos stay as built
   (ADR-0016 W7). The default artwork gets a **moving** variant drawn live (clouds drift, the light changes slowly), also
-  a screen saver kind. The integrator's conditions (2026-10-29): off by default; it pauses like a video, when hidden,
+  a screen saver kind (in `shell/saver`; nothing in `shell/security`, review of 6c310a8). The integrator's conditions
+  (2026-10-29): off by default; it pauses like a video, when hidden,
   in Low Power Mode or on battery, under a full-screen app, while locked (and when idle, with Reduce Motion and in the
   Reduced profile, as the video policy already does); P1 and P3 are measured with it on before its pull request asks
   for a merge, and a cost over budget blocks it.
@@ -189,8 +204,11 @@ and IQ-B3 here changes the palette only, not which controls read it.
   login theme in the lock screen's layout for SDDM's own greeter, and a boot theme with the mark for the disk password.
   The integrator's conditions (2026-10-29):
   - its own ADR first, and an opus security review; SDDM's own PAM service, no PAM file; no change to Omarchy's Limine
-    or disk-encryption flow beyond the theme. The ADR shows how R12 holds: a theme for SDDM's greeter, not a greeter
-    (master-prompt §4 allows "SDDM theming later");
+    or disk-encryption flow beyond the theme. The ADR shows how R12 holds for both themes:
+    - SDDM: a theme for SDDM's own greeter, not a greeter; master-prompt §4 allows "SDDM theming later";
+    - **Plymouth is outside today's allowance** (review of 6c310a8): plymouthd runs as root inside the boot image and
+      draws the disk-password prompt, and master-prompt §4 allows SDDM theming only. The L1 ADR needs the owner's
+      explicit go-ahead for Plymouth, inside that ADR, before any Plymouth work;
   - every root step (install, initramfs rebuild, enabling the theme) is a command the owner runs;
   - a broken theme must never hide the disk-password prompt: a tested fallback to the text prompt;
   - the last identity step, after the lock steps.
@@ -498,8 +516,8 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | 7 | Exit: the countdown (ID-21), the exit cover (ID-10) | — | reviewer |
 | 2c | Photographs (IQ-W2 C): first the list (thumbnail, source, licence) to the owner for the legal call; then the files, their `docs/legal` entries, the helper path, the package weight in the pull request | the owner's legal call on the list | reviewer; legal rows |
 | 8 | App icons (IQ-B5 C): own icons for Store, Activity Monitor and the Apps tile on one grammar; the two new drawings to the owner's legal call first | `apps/store`, `apps/activity` merged | reviewer; legal row |
-| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, the video pause rules; P1 and P3 measured with it on before the merge request, over budget blocks it | step 2 | reviewer; P1, P3 |
-| 10 | Login and boot themes (IQ-L1 C): their own ADR first; SDDM theme in the lock's layout, Plymouth theme with the mark, a tested fallback to the text disk-password prompt; every root step an owner command | steps 4a, 4b and 5 (the last identity step) | **opus security review**; owner runs |
+| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, the video pause rules, also a screen saver kind in `shell/saver`; nothing in `shell/security` (review of 6c310a8); P1 and P3 measured with it on before the merge request, over budget blocks it | step 2 | reviewer; P1, P3 |
+| 10 | Login and boot themes (IQ-L1 C): their own ADR first; SDDM theme in the lock's layout; Plymouth theme with the mark only with the owner's explicit go-ahead inside that ADR (outside master-prompt §4's allowance; plymouthd runs as root in the boot image); a tested fallback to the text disk-password prompt; every root step an owner command | steps 4a, 4b and 5 (the last identity step) | **opus security review**; owner runs |
 
 ## Not verified, assumptions, unknowns
 - **NOT VERIFIED:** every proposal's rendering in Grassfield (no nested session in this container); the mockups were
@@ -511,9 +529,10 @@ this ADR follows it, and any later pull request of either lane that meets one of
   references have no capture of any of these (`docs/testing/f1-reference-gaps.md:317-321`).
 - **VERIFY on Hyprland 0.56.2:** changing `background_color` at run time (ID-2); whether a session lock is confirmed
   while the displays are off (IQ-T4 A with a delay). `misc:lockdead_screen_delay` exists (the integrator's check, review
-  of b44d17e); what it draws during the delay is checked in the nested pass if the owner chooses IQ-T5 A.
-- **VERIFY on the owner's machine:** that Arch's tzdata installs `/usr/share/zoneinfo/zone1970.tab` (it does in this
-  container; IQ-W1 C reads it, and falls back to the fixed hours without it).
+  of b44d17e); the owner chose IQ-T5 A, so step 5's nested pass shows that only black is drawn during the delay.
+- **VERIFY on the owner's machine:** that Arch's tzdata installs `zone1970.tab`, `zone.tab` and `tzdata.zi` under
+  `/usr/share/zoneinfo` (they are in this container; IQ-W1 C reads them, and falls back to the fixed hours without
+  them).
 - **UNKNOWN:** the look of Omarchy's boot and disk-password screens on the owner's machine (not readable here).
 
 ## Alternatives rejected
@@ -578,6 +597,17 @@ this ADR follows it, and any later pull request of either lane that meets one of
     `shell/security`; the lock's output unchanged" (`WallpaperArt` without a parameter keeps today's drawing).
   - NIT 3, stale line references in `visual-review.md` after the merge: `MenuBar.qml:870`, `STATE.md:120, 233`.
   - NIT 4, an interrupted `releasing` needs a new PAM success: said in section 4.
+- **Opus review of 6c310a8 (step 1a, pull request #52; integrator, 2026-10-29): FAIL, one MAJOR, one MINOR, three
+  NITs.** The answers table, the conditions and the `DevicePicture` move were confirmed.
+  - MAJOR 1, the time-of-day rule read `zone1970.tab` only, so aliased zones (the owner's Europe/Amsterdam, Africa/Douala,
+    Stockholm, Oslo, Copenhagen) fell to the fixed hours: the rule now looks up `zone1970.tab`, then `zone.tab`, then
+    the linked zone (`tzdata.zi`), and the probe checks Amsterdam, Douala, Stockholm, a link, the polar branch (which now
+    runs: Longyearbyen has a `zone.tab` row), UTC, and the new short-day and short-night rules (12 checks; without
+    `zone.tab`, 5 fail).
+  - MINOR 2, the R12 argument covered SDDM only: Plymouth is now outside today's allowance and needs the owner's explicit
+    go-ahead inside the L1 ADR (section 3, step 10).
+  - NIT 3, step 9 says "nothing in `shell/security`"; NIT 4, the stale IQ-T5 wording is fixed; NIT 5, commit 135f0ef's
+    author: not rewritten (no history rewrite), the later commits are authored as the owner.
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.
