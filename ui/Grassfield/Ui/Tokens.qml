@@ -1257,6 +1257,8 @@ QtObject {
     readonly property int settingsDockSliderCenter: 36
     // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property real settingsDockSliderLabelBaseline: 56.5
+    // Least gap between two end labels when a longer language pushes one against the other [ref: ADR-0024 spacing scale]
+    readonly property int settingsDockSliderLabelGap: 8
     // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsDockSizeSliderWidth: 200
     // macOS 27: the Magnification slider from the group's left edge (490); it runs to 10 from the right edge [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]

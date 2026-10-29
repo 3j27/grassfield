@@ -250,4 +250,41 @@ TestCase {
             compare(last(t.store), {["hotCorners." + keys[i]]: "overview"});
         }
     }
+
+    Component {
+        id: dockSliderComponent
+        SettingsQml.DockSlider {
+            x: Tokens.settingsDockMagnificationX
+            width: 250
+            height: Tokens.settingsDockSlidersHeight
+            title: "Magnification"
+            // French-sized labels: "Désactivé" is wider than the room between its place and Small's.
+            labels: [{text: "Désactivé", at: 0}, {text: "Petit", at: Tokens.settingsDockMagnificationSmallAt}, {text: "Grand", at: 1}]
+        }
+    }
+
+    // The end labels never overlap, whatever the language: each starts after the one before it plus a gap, in a long
+    // language as in English.
+    function test_sliderLabelsNeverOverlap() {
+        const slider = createTemporaryObject(dockSliderComponent, testCase);
+        verify(slider);
+        waitForRendering(slider);
+        const texts = ["Désactivé", "Petit", "Grand"].map(w => find(slider, i => i.text === w && i.baselineOffset !== undefined));
+        for (const t of texts)
+            verify(t);
+        for (let i = 1; i < texts.length; i++)
+            verify(texts[i].x >= texts[i - 1].x + texts[i - 1].width + Tokens.settingsDockSliderLabelGap, "label " + i + " starts at " + texts[i].x + " after " + (texts[i - 1].x + texts[i - 1].width));
+        verify(texts[2].x + texts[2].width <= slider.width, "the last label stays inside the track's end");
+    }
+
+    // Short labels keep their measured places (macOS: Small centred under its tick).
+    function test_sliderLabelsKeepTheirPlaces() {
+        const slider = createTemporaryObject(dockSliderComponent, testCase);
+        slider.labels = [{text: "Off", at: 0}, {text: "Small", at: Tokens.settingsDockMagnificationSmallAt}, {text: "Large", at: 1}];
+        waitForRendering(slider);
+        const small = find(slider, i => i.text === "Small" && i.baselineOffset !== undefined);
+        verify(small);
+        const centre = slider.slider.knobWidth / 2 + Tokens.settingsDockMagnificationSmallAt * slider.slider.travel;
+        verify(Math.abs(small.x + small.width / 2 - centre) <= 1, "English Small stays centred on its place");
+    }
 }
