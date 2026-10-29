@@ -81,8 +81,9 @@ Window {
     }
 
     // The keyboard at the start: the alert, none of its buttons (Return grants where Allow is the default; Tab reaches them).
+    // The alert's own item, not the scope: a scope gives the keyboard back to the button it had.
     function focusStart(): void {
-        keys.forceActiveFocus();
+        home.forceActiveFocus();
     }
 
     onVisibleChanged: {
@@ -91,13 +92,20 @@ Window {
     }
 
     onActiveChanged: {
-        if (!alert.active)
-            return;
-        // A click or a key that made it the active window is not an answer.
+        if (alert.active)
+            alert.becameActive();
+    }
+
+    function becameActive(): void {
+        // A click or a key that made it the active window is not an answer, and the keyboard starts on the alert again (a
+        // button that had it before would take a Space).
         alert.armed = false;
         arm.restart();
-        if (alert.everActive)
+        if (alert.everActive) {
+            if (!alert.keysHeld)
+                alert.focusStart();
             return;
+        }
         alert.everActive = true;
         if (Date.now() - alert.shownAt > Tokens.filesPanelLateFocusMs)
             alert.keysHeld = true;
@@ -158,6 +166,12 @@ Window {
         Keys.onPressed: event => {
             if (keys.unarmedKey())
                 event.accepted = true;
+        }
+
+        // Where the keyboard starts: it acts on nothing, so its keys go on to the alert's (above).
+        Item {
+            id: home
+            focus: true
         }
 
         Column {
@@ -273,7 +287,7 @@ Window {
                 visible: alert.keysHeld
                 width: parent.width
                 textFormat: Text.PlainText
-                text: qsTr("Click the alert to use the keyboard in it.")
+                text: qsTr("Click the alert before you answer it.")
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
@@ -299,6 +313,8 @@ Window {
                 onClicked: {
                     if (alert.armed)
                         alert.answer(false);
+                    else
+                        arm.restart();
                 }
             }
 
@@ -311,6 +327,8 @@ Window {
                 onClicked: {
                     if (alert.armed)
                         alert.answer(true);
+                    else
+                        arm.restart();
                 }
             }
         }

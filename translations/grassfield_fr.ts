@@ -162,8 +162,8 @@
         <translation>Autoriser</translation>
     </message>
     <message>
-        <source>Click the alert to use the keyboard in it.</source>
-        <translation>Cliquez dans l’alerte pour y utiliser le clavier.</translation>
+        <source>Click the alert before you answer it.</source>
+        <translation>Cliquez dans l’alerte avant d’y répondre.</translation>
     </message>
 </context>
 <context>
