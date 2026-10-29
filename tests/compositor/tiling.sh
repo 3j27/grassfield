@@ -1719,6 +1719,31 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     }
     check "split pick: one tile group (the shared edge resizes both)" split_pair
     check "split pick: the reply lists both members" split_members "$next" "$addr" "$addr2"
+    # Step 6b (TL33): the separator (the shared edge between the two members) dragged 80 px, then double-clicked: both back
+    # to equal halves, still members.
+    if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+      read -r slx sly slw slh _ < <(geometry_of tiling-foot)
+      read -r srx _ _ _ _ < <(geometry_of tiling-foot2)
+      shx=$((slx + slw + (srx - slx - slw) / 2 - mx)) shy=$((sly - tb + (slh + tb) / 2 - my))
+      say "  separator at $shx,$shy (left member right side $((slx + slw)), right member at $srx)"
+      separator_moved() {
+        local _x _y w _h _a
+        read -r _x _y w _h _a < <(geometry_of tiling-foot)
+        say "  left member ${w:-?} wide (was $slw)"
+        (( ${w:-0} >= slw + 60 ))
+      }
+      pointer abs "$shx" "$shy" sleep 300 down drag $((shx + 80)) "$shy" sleep 200 up sleep 400
+      check "split separator: dragged 80 px, the left member grew" separator_moved
+      mark_events
+      pointer abs $((shx + 80)) "$shy" sleep 300 down sleep 40 up sleep 100 down sleep 40 up sleep 500
+      check "split separator: a double-click puts the left member back in its half" half_of tiling-foot left
+      check "split separator: and the right member in its half" half_of tiling-foot2 right
+      check "split separator: the plugin posts resized" event_came '.type == "tiling" and .reason == "resized"'
+      check "split separator: both still members" split_members "$next" "$addr" "$addr2"
+      pointer abs 20 $((mh / 2)) sleep 200
+    else
+      say "SKIP: split separator (the plugin does not advertise tiling-shared-edge)"
+    fi
     # D50 (integrator review of c7a6b6e, MAJOR 1): an app's own full screen, or a zoom, keeps a member and its half; the other
     # does not fill meanwhile, and the window comes back to its half after.
     for mode in fullscreen maximized; do

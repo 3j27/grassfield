@@ -82,6 +82,12 @@ namespace gf::tiler {
             uint8_t                     sides = 0;
             gf::titlebar::CClickTracker clicks{}; // braces: its default constructor is explicit
         };
+        // TL33 (step 6b): the presses on a Split View Desktop's separator (the shared edge between its two members), for its
+        // double-click: equal halves again.
+        struct SSeparatorClicks {
+            int64_t                     workspace = 0;
+            gf::titlebar::CClickTracker clicks{}; // braces: its default constructor is explicit
+        };
         struct SExtend {
             PHLWINDOWREF window;
             uint8_t      sides = 0; // with Alt's opposite sides (core extendedSides)
@@ -146,6 +152,7 @@ namespace gf::tiler {
             uint32_t                         pressMs = 0;
             std::optional<SMoveRelease>      moveRelease;
             SBorderClicks                    border;
+            SSeparatorClicks                 separator;
             std::optional<SExtend>           extend;
             std::optional<tiling::Suggestion> suggestion; // TL28: valid while the book is at its generation
             std::optional<SEdgeDrag>          edge;            // TL30: a shared edge being dragged
@@ -964,6 +971,35 @@ namespace gf::tiler {
             return tiling::zoneFrame(lr->zones[static_cast<size_t>(zone == 1 ? 1 : 0)], area);
         }
 
+        // TL33 (step 6b): the separator's double-click: the two members of `d` back to their halves of the whole output (their
+        // zones of "left-right", fitted as the split placed them; TL8). Nothing while locked, nor when a member is not Tiled in its
+        // half (full screen or zoomed: Suspended, it comes back to its half anyway).
+        void splitHalvesAgain(const tiling::SplitDesk& d) {
+            auto&       s      = st();
+            const auto  m      = splitMonitor(d);
+            const auto* layout = tiling::layoutById("left-right");
+            if (!m || !layout || d.members.size() != 2 || gf::deferredFocus::sessionLocked())
+                return;
+            std::vector<tiling::Zone> zones;
+            std::vector<PHLWINDOW>    windows;
+            for (const auto id : d.members) {
+                const auto w = windowById(id);
+                const auto r = s.book.find(id);
+                if (!w || !r || r->state != tiling::TileState::Tiled || r->where.layout != layout->id || r->where.zone < 0 || r->where.zone > 1)
+                    return;
+                zones.push_back(layout->zones[static_cast<size_t>(r->where.zone)]);
+                windows.push_back(w);
+            }
+            const auto frames = fitted(zones, windows, areaFor(m, d.workspace));
+            for (size_t i = 0; i < windows.size(); ++i) {
+                const CBox surface = toCBox(tiling::surfaceOf(frames[i], gf::chrome::bandOf(windows[i])));
+                applySurface(windows[i], surface);
+                s.book.setBox(d.members[i], toRect(surface), m->m_name);
+            }
+            logRequest(Log::DEBUG, "split: the separator of Desktop {} double-clicked: equal halves again", d.workspace);
+            notify(tiling::Reason::Resized);
+        }
+
         // The suggestion of the Split View that window `id` started is still pending (published, nothing changed since): its
         // picker may still give it its second window.
         bool picking(uint64_t id) {
@@ -1405,8 +1441,10 @@ namespace gf::tiler {
                        d.windows.size(), d.delta, d.steps, d.held, nowMs() - d.beganMs, d.workUs, d.maxWorkUs, why);
         }
 
-        // A plain left press on a handle: the drag begins (every window of the edge Resizing), the press is the plugin's.
-        bool edgePress(const Vector2D& p) {
+        // A plain left press on a handle: the drag begins (every window of the edge Resizing), the press is the plugin's. The
+        // second press of a double-click on a Split View Desktop's separator puts its two members back to equal halves instead
+        // (TL33, step 6b; the press and its release stay the plugin's, nothing is dragged).
+        bool edgePress(const Vector2D& p, uint32_t timeMs) {
             auto& s = st();
             // Hyprland's held buttons before this press is recorded: another device holding one would make the release
             // this press owes ambiguous (the bus names no device; FR13, as P6).
@@ -1419,6 +1457,19 @@ namespace gf::tiler {
             const auto                      edge = handleAt(p, &windows, &grid);
             if (!edge)
                 return false;
+            if (const auto* d = tiling::splitOfEdge(s.splits, *edge)) {
+                if (s.separator.workspace != d->workspace) {
+                    s.separator.workspace = d->workspace;
+                    s.separator.clicks.reset();
+                }
+                if (s.separator.clicks.press(timeMs, p.x, p.y)) {
+                    splitHalvesAgain(*d);
+                    s.edgeReleaseOwed = true;
+                    return true;
+                }
+            } else {
+                s.separator.workspace = 0;
+            }
             std::erase_if(windows, [&](const tiling::EdgeWindow& w) {
                 return std::ranges::find(edge->before, w.id) == edge->before.end() && std::ranges::find(edge->after, w.id) == edge->after.end();
             });
@@ -2331,7 +2382,7 @@ namespace gf::tiler {
             edgeEnd("released");
             return true;
         }
-        if (button == BTN_LEFT && pressed && edgePress(pointer))
+        if (button == BTN_LEFT && pressed && edgePress(pointer, timeMs))
             return true;
         if (pressed) {
             if (button == BTN_LEFT) {

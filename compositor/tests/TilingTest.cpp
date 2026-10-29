@@ -1463,6 +1463,23 @@ TEST(TilingSplit, AWindowTooWideForAHalfDoesNotFit) {
               R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true})");
 }
 
+// Step 6b (TL33): the separator is the shared edge between the two members of a Split View Desktop, one on each side.
+TEST(TilingSplit, TheSeparatorIsTheEdgeBetweenTheTwoMembers) {
+    const std::array<SplitDesk, 2> splits{SplitDesk{.workspace = 7, .output = "GF-REF", .home = 2, .members = {0xa1, 0xb2}},
+                                          SplitDesk{.workspace = 9, .output = "GF-REF", .home = 2, .members = {0xc3}, .waiting = true}};
+    const auto edge = [](std::vector<uint64_t> before, std::vector<uint64_t> after) {
+        return SharedEdge{.vertical = true, .group = 1, .at = 960, .gap = 8, .before = std::move(before), .after = std::move(after), .handles = {}};
+    };
+    ASSERT_NE(splitOfEdge(splits, edge({0xa1}, {0xb2})), nullptr);
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xb2}))->workspace, 7);
+    EXPECT_EQ(splitOfEdge(splits, edge({0xb2}, {0xa1}))->workspace, 7) << "either member on either side";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xd4})), nullptr) << "a member and another window";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xd4}, {0xe5})), nullptr) << "an ordinary tile group";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1, 0xd4}, {0xb2})), nullptr) << "more than the two members";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xc3}, {0xc3})), nullptr) << "a Split View with one member has no separator";
+    EXPECT_EQ(splitOfEdge(splits, edge({}, {0xb2})), nullptr);
+}
+
 // D43: two members stay; one fills alone unless it is still choosing its second window; none ends the Desktop.
 TEST(TilingSplit, OneMemberFillsNoneEnds) {
     EXPECT_EQ(splitStep(2, false), SplitStep::Keep);

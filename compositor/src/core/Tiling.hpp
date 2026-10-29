@@ -628,6 +628,10 @@ namespace gf::tiling {
     // The Split View Desktop window `id` is a member of, or nullptr.
     const SplitDesk* splitOfWindow(std::span<const SplitDesk> splits, uint64_t id);
 
+    // The Split View Desktop whose two members `edge` separates (one on each side, nothing else on it: the separator, TL33),
+    // or nullptr (an edge of an ordinary tile group).
+    const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge);
+
     // Keeps the members of `d` still on its workspace (`on`: the windows there now, in any state), in their order. True when
     // one left.
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on);

@@ -1350,6 +1350,13 @@ namespace gf::tiling {
         return it == splits.end() ? nullptr : &*it;
     }
 
+    const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge) {
+        if (edge.before.size() != 1 || edge.after.size() != 1)
+            return nullptr;
+        const auto* d = splitOfWindow(splits, edge.before.front());
+        return d && d->members.size() == 2 && std::ranges::find(d->members, edge.after.front()) != d->members.end() ? d : nullptr;
+    }
+
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
         return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
     }
