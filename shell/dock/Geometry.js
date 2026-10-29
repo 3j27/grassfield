@@ -399,6 +399,14 @@ function latchScreen(chosen, names, focused, preferred) {
     return chosen === "" ? startScreen(names, focused, preferred) : chosen;
 }
 
+// The output the Dock latches on at the first settled layout: the start output, else (no focused output was ever reported: a
+// compositor without focus events, the fallback timer ran out) the output it is on, so that a focus event arriving later does
+// not move a Dock that is already drawn.
+function settleScreen(chosen, names, focused, preferred) {
+    const latched = latchScreen(chosen, names, focused, preferred);
+    return latched !== "" ? latched : dockScreen("", names, focused, preferred);
+}
+
 // Whether the output of a Dock window takes the Dock from the one that has it: an output without the Dock acts as an
 // auto-hidden Dock that stays away, and its machine starting to reveal (AutoHide.js: the pointer rested on the edge
 // strip for the reveal dwell) is the pointer having reached the Dock's edge there.

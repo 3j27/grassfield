@@ -40,6 +40,8 @@ desc="Dock: settle() resets every window's machine, then sets settled in a final
 check before $D "function settle(): void {" "} finally {" 25
 check before $D "} finally {" "windows.instances.forEach(w => w.resetHide())" 6
 check before $D "windows.instances.forEach(w => w.resetHide())" "settled = true" 4
+desc="Dock: settle() latches the output with Geometry.settleScreen (the fallback latch)"
+check has $D "chosenScreen = Geometry.settleScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);"
 desc="Dock: resetHide starts the machine from AutoHide.initial(autohide)"
 check has $D "hideMachine = AutoHide.initial(autohide);"
 desc="Dock: the inputs are the settings file and the apps model"

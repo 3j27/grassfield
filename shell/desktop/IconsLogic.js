@@ -536,10 +536,35 @@ function settledOn(inputs) {
 // Desktop folder: the configured override, else the XDG desktop dir, else ~/Desktop. An XDG answer
 // that is empty, "/" or the home directory itself (no desktop folder configured) falls back too.
 function desktopDir(override, xdgAnswer, home) {
+    const h = cleanPath(home);
     if (override)
-        return override.replace(/\/+$/, "") || "/";
-    const x = String(xdgAnswer || "").trim().replace(/\/+$/, "");
-    if (x !== "" && x !== home && x.startsWith("/"))
+        return cleanPath(override);
+    const x = cleanPath(String(xdgAnswer || "").trim());
+    if (x !== "" && x !== "/" && x !== h && x.startsWith("/"))
         return x;
-    return home + "/Desktop";
+    return cleanPath(h + "/Desktop");
+}
+
+// The lexical clean form of an absolute path, as the folder model spells its rows: single slashes, no "." and no trailing
+// slash, ".." resolved (never above the root). A relative or empty path is returned with its slashes collapsed only
+// ("" stays ""); the caller refuses it.
+function cleanPath(path) {
+    const p = String(path || "");
+    if (p === "")
+        return "";
+    const abs = p.startsWith("/");
+    const out = [];
+    for (const part of p.split("/")) {
+        if (part === "" || part === ".")
+            continue;
+        if (part === "..") {
+            if (out.length > 0 && out[out.length - 1] !== "..")
+                out.pop();
+            else if (!abs)
+                out.push(part);
+            continue;
+        }
+        out.push(part);
+    }
+    return (abs ? "/" : "") + out.join("/");
 }

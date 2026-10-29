@@ -426,10 +426,8 @@ Scope {
             return;
         settleTimer.stop();
         try {
-            latchStartScreen();
             // The fallback (no focused output ever reported): the Dock stays on the output it is on, whatever focus does later.
-            if (chosenScreen === "")
-                chosenScreen = dockScreen;
+            chosenScreen = Geometry.settleScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
             rebuild();
         } catch (e) {
             console.warn("grassfield-shell: Dock first layout failed:", e);

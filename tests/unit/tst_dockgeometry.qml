@@ -720,6 +720,18 @@ TestCase {
         verify(!Geometry.settledOn(Object.assign({}, two, {start: "", waited: false})));
     }
 
+    // The fallback latch: no focused output when the Dock settles (timer ran out): it stays on the output it is on, and a focus
+    // event arriving later does not move it.
+    function test_settleScreenLatchesTheFallbackOutput() {
+        const names = ["DP-1", "DP-2"];
+        compare(Geometry.settleScreen("", names, "", ""), "DP-1", "no focus: the output it is on");
+        compare(Geometry.dockScreen(Geometry.settleScreen("", names, "", ""), names, "DP-2", ""), "DP-1", "late focus does not move it");
+        compare(Geometry.settleScreen("", names, "DP-2", ""), "DP-2", "focus known: the focused output");
+        compare(Geometry.settleScreen("DP-2", names, "DP-1", ""), "DP-2", "an earlier choice is kept");
+        compare(Geometry.settleScreen("", [], "", ""), "", "no output, nothing to latch");
+        compare(Geometry.settleScreen("", names, "", "DP-2"), "DP-2", "the dev start hint");
+    }
+
     // The latched start output and the settled gate together: focus arriving late does not move a Dock that already settled.
     function test_startScreenKnownOnlyOnceFocusArrives() {
         compare(Geometry.startScreen(["DP-1", "DP-2"], "", ""), "");

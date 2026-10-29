@@ -225,6 +225,25 @@ TestCase {
         compare(Logic.parseLauncher("garbage"), {name: "", icon: ""});
     }
 
+    // The folder model spells its rows with single slashes and no "." or "..": the desktop folder must be spelled the same way
+    // or the listing is taken for a stale one (HOME=/home/u/ makes xdg-user-dir print /home/u//Desktop).
+    function test_desktopDirIsCleaned() {
+        compare(Logic.desktopDir("", "/home/u//Desktop", "/home/u/"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/./Desktop/", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/x/../Desktop", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("/tmp//sb/./a/../b/", "", "/home/u"), "/tmp/sb/b");
+        compare(Logic.desktopDir("", "", "/home/u/"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u//", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/home/u/.", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("", "/../..", "/home/u"), "/home/u/Desktop");
+        compare(Logic.desktopDir("//", "", "/home/u"), "/");
+        compare(Logic.cleanPath("/a/b/../../.."), "/");
+        compare(Logic.cleanPath(""), "");
+        // The model's row path is the folder plus the name: the parent check uses the same spelling.
+        const dir = Logic.desktopDir("", "/home/u//Desktop", "/home/u/");
+        compare(Logic.dirName(dir + "/a.txt"), dir);
+    }
+
     function test_desktopDir() {
         compare(Logic.desktopDir("/tmp/sb/", "/home/u/Bureau", "/home/u"), "/tmp/sb");
         compare(Logic.desktopDir("", "/home/u/Bureau\n", "/home/u"), "/home/u/Bureau");
