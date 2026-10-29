@@ -256,15 +256,19 @@ function blurCall(size, passes) {
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
-// tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
+// tilingEdges / tilingMenuBar / tilingOptionDrag / tilingMargins: Settings windows.tiling* (feature "window-tiling");
+// tilingLayouts (feature "tile-hover"), tilingSuggestions (feature "tiling-layouts"): docs/specs/tiling.md TL32. titlebarDoubleClick "fill" with feature "tiling-arrange" (the shell sends "zoom" without it).
 // appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
 // stagesEnabled: Settings windows.stages (feature "stages-available"; ADR-0013, owner decision D-4).
 var pluginConfig = {
-    titlebarDoubleClick: ["zoom", "minimize", "none"],
+    titlebarDoubleClick: ["zoom", "minimize", "fill", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
+    tilingOptionDrag: ["true", "false"],
     tilingMargins: ["true", "false"],
+    tilingLayouts: ["true", "false"],
+    tilingSuggestions: ["true", "false"],
     appearance: ["dark", "light"],
     stagesEnabled: ["true", "false"]
 };

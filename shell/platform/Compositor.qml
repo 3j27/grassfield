@@ -313,18 +313,36 @@ Singleton {
     // ---- Plugin settings (gfc/1 `config`, allowlisted keys in Minimized.js) ----
 
     // Settings the titlebars honor; pushed after the capabilities handshake (and again on each
-    // capabilities event, e.g. a reloaded plugin) and whenever they change.
-    readonly property string titlebarDoubleClick: Settings.titlebarDoubleClick
+    // capabilities event, e.g. a reloaded plugin) and whenever they change. Fill (TL32) needs the plugin's arrangements
+    // (feature "tiling-arrange"): without them the double-click zooms, the macOS default (ADR-0036 D36).
+    readonly property string titlebarDoubleClick: Settings.titlebarDoubleClick === "fill" && !Capabilities.has("tiling-arrange") ? "zoom" : Settings.titlebarDoubleClick
     // The minimize animation (Settings dock.minimizeEffect); Reduce Motion replaces it with a quick fade in place, as
     // macOS does. Without the plugin the fallback minimize has no animation at all.
     readonly property string minimizeEffect: Settings.reduceMotion ? "fade" : Settings.dockMinimizeEffect
-    // Window tiling (macOS "Drag windows to screen edges to tile", "... to menu bar to fill screen", "Tiled windows have
-    // margins"; Settings windows.tiling*): the plugin tiles titlebar drags at the edges, corners and menu bar.
+    // Window tiling (Desktop & Dock > Windows, docs/specs/tiling.md TL32; Settings windows.tiling*): the plugin tiles
+    // titlebar drags at the edges, corners and menu bar, with Alt anywhere, with or without margins (feature
+    // "window-tiling"); it posts the green button's hover (feature "tile-hover") and keeps the suggestion after an
+    // arrangement (feature "tiling-layouts") only while the switch is on. Each key goes once the plugin advertises its
+    // feature. "Bring tile groups forward together" is the shell's alone (groupForward): the plugin raises a group only when
+    // asked (ADR-0036 D38).
     readonly property var tilingConfig: ({
             tilingEdges: Settings.windowsTilingEdges ? "true" : "false",
             tilingMenuBar: Settings.windowsTilingMenuBar ? "true" : "false",
-            tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
+            tilingOptionDrag: Settings.windowsTilingOptionDrag ? "true" : "false",
+            tilingMargins: Settings.windowsTilingMargins ? "true" : "false",
+            tilingLayouts: Settings.windowsTilingLayouts ? "true" : "false",
+            tilingSuggestions: Settings.windowsTilingSuggestions ? "true" : "false"
         })
+    readonly property var tilingConfigFeature: ({
+            tilingEdges: "window-tiling",
+            tilingMenuBar: "window-tiling",
+            tilingOptionDrag: "window-tiling",
+            tilingMargins: "window-tiling",
+            tilingLayouts: "tile-hover",
+            tilingSuggestions: "tiling-layouts"
+        })
+    // "Suggest windows to fill the rest of a layout" (TL32): TilingLink drops a suggestion shown when it turns off.
+    readonly property bool suggestionsOn: Settings.windowsTilingSuggestions
 
     // The appearance the shell shows: the compositor-drawn titlebars follow it (feature "appearance", audit UX-06).
     readonly property string chromeAppearance: Appearance.dark ? "dark" : "light"
@@ -484,8 +502,8 @@ Singleton {
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
         if (Capabilities.has("appearance") && dispatchRequest(Minimized.configCall("appearance", root.chromeAppearance)))
             console.info("grassfield: compositor setting appearance =", root.chromeAppearance);
-        if (Capabilities.has("window-tiling")) {
-            for (const key of Object.keys(root.tilingConfig))
+        for (const key of Object.keys(root.tilingConfig)) {
+            if (Capabilities.has(root.tilingConfigFeature[key]))
                 dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));
         }
     }
@@ -532,7 +550,8 @@ Singleton {
     property var suggestionAsked: null
 
     function askSuggestion(address: string): void {
-        root.suggestionAsked = root.canLayouts && address !== "" ? {address: address, until: Date.now() + WindowTiling.suggestionWaitMs} : null;
+        const on = root.canLayouts && root.suggestionsOn && address !== "";
+        root.suggestionAsked = on ? {address: address, until: Date.now() + WindowTiling.suggestionWaitMs} : null;
     }
 
     // A zone of the Layouts section (TL27): the window alone into zone `zone` of `layout`.
@@ -567,6 +586,16 @@ Singleton {
     // (a window on a special workspace is not raised, its restore raises it). Only for a window in a group of the last
     // reply (WindowTiling.membersOf); refused while locked (the plugin refuses too).
     function groupForward(address: string): bool {
+        if (SessionState.refuses("tile group forward"))
+            return false;
+        if (!Settings.windowsTilingGroups)
+            return false; // "Bring tile groups forward together" off (TL32): the window comes forward alone
+        return groupFront(address);
+    }
+
+    // group_front for a window in a group of the last reply, never while locked: the activation paths through groupForward
+    // (the switch), Show Tile Group directly (the user asked for the group, whatever the switch; ADR-0036 D37).
+    function groupFront(address: string): bool {
         if (SessionState.refuses("tile group forward"))
             return false;
         if (!root.canGroups || WindowTiling.membersOf(TilingLink.groups, address).length === 0)
@@ -636,7 +665,7 @@ Singleton {
                 dispatchRequest(Minimized.focusWindowRequest(step.address));
                 break;
             case "groupFront":
-                groupForward(step.address);
+                groupFront(step.address);
                 break;
             }
         }

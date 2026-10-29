@@ -63,6 +63,11 @@ Singleton {
                 root.dismiss();
         }
 
+        function onSuggestionsOnChanged(): void {
+            if (!Compositor.suggestionsOn)
+                root.dismiss();
+        }
+
         function onCanGroupsChanged(): void {
             if (Compositor.canGroups)
                 root.fetch();

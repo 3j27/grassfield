@@ -104,15 +104,19 @@ first_decision("shell/services/TilingSuggest.qml", "show", R)
 # refuses while locked; a menu's window row or Show Tile Group runs after the menu's surface is gone, and refuses then if
 # the lock engaged meanwhile (a restore is not refused while locked, GF-116).
 first_decision("shell/platform/Compositor.qml", "groupForward", R, text=compositor, lines=1)
+# Tiling step 5: Show Tile Group brings the group forward through groupFront whatever "Bring tile groups forward together"
+# says (groupForward's switch is not its gate); it refuses first too.
+first_decision("shell/platform/Compositor.qml", "groupFront", R, text=compositor, lines=1)
 first_decision("shell/platform/Compositor.qml", "runPendingActivation", R, text=compositor, lines=4)
 def calls(path, name, pattern, text=None):
     body = function(text if text is not None else read(path), name) if name else (text if text is not None else read(path))
     expect(f"{path}: {name or 'the file'} goes through {pattern}", body is not None and re.search(pattern, code(body)) is not None)
 # Only a window in a group of the last reply sends group_front (integrator NIT on PR #38).
-calls("shell/platform/Compositor.qml", "groupForward", r"WindowTiling\.membersOf\(TilingLink\.groups, address\)\.length === 0", compositor)
+calls("shell/platform/Compositor.qml", "groupFront", r"WindowTiling\.membersOf\(TilingLink\.groups, address\)\.length === 0", compositor)
 calls("shell/platform/Compositor.qml", "activateWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
 calls("shell/platform/Compositor.qml", "unminimizeWithGroup", r"groupForward\(addressOf\(toplevel\)\)", compositor)
-calls("shell/platform/Compositor.qml", "showTileGroup", r"groupForward\(step\.address\)", compositor)
+calls("shell/platform/Compositor.qml", "groupForward", r"return groupFront\(address\)", compositor)
+calls("shell/platform/Compositor.qml", "showTileGroup", r"groupFront\(step\.address\)", compositor)
 calls("shell/platform/Compositor.qml", "runPendingActivation", r"showTileGroup\(p\.toplevel, p\.members\)[\s\S]*activateWithGroup\(p\.toplevel\)", compositor)
 calls("shell/dock/Dock.qml", "", r"Compositor\.groupForward\(Compositor\.addressOf\(plan\[plan\.length - 1\]\)\)")
 calls("shell/dock/Dock.qml", "", r"Compositor\.unminimizeWithGroup\(item\.toplevel\)")
@@ -528,6 +532,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/services/TilingSuggest.qml#SessionState.refuses("tiling suggestions")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("tile group forward")#false' \
   'shell/platform/Compositor.qml# || WindowTiling.membersOf(TilingLink.groups, address).length === 0)#)' \
+  'shell/platform/Compositor.qml#function groupFront(address: string): bool {\n        if (SessionState.refuses("tile group forward"))#function groupFront(address: string): bool {\n        if (false)' \
   'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \
   'shell/overview/Overview.qml#if (target.kind === "window" && !locked)#if (target.kind === "window")' \
   'shell/overview/Overview.qml#        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);\n        // A window chosen brings its tile group forward (TL29), sent after its focus request as from the other entry points.\n        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);#        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);\n        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);' \

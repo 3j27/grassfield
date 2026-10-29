@@ -66,6 +66,23 @@ TestCase {
         compare(Minimized.configCall("constructor", "zoom"), "");
     }
 
+    // Settings > Desktop & Dock > Windows (docs/specs/tiling.md TL32): the tiling switches as "true" | "false", Fill as an
+    // action of the title bar's double-click.
+    function test_configCallTiling() {
+        compare(Minimized.configCall("titlebarDoubleClick", "fill"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"titlebarDoubleClick\", \"fill\") end end");
+        for (const key of ["tilingEdges", "tilingMenuBar", "tilingOptionDrag", "tilingMargins", "tilingLayouts", "tilingSuggestions"]) {
+            compare(Minimized.configCall(key, "false"),
+                    "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"" + key + "\", \"false\") end end", key);
+            verify(Minimized.configCall(key, "true") !== "", key);
+            compare(Minimized.configCall(key, false), "", key + ": strings only");
+            compare(Minimized.configCall(key, "on"), "", key);
+            compare(Minimized.configCall(key, "true\") os.exit() --"), "", key);
+        }
+        compare(Minimized.configCall("tilingAltDrag", "true"), "", "the plugin's key is tilingOptionDrag");
+        compare(Minimized.configCall("tilingGroups", "true"), "", "Bring tile groups forward together is the shell's alone");
+    }
+
     // Stages from Settings (owner decision D-4, audit ARCH-05): the flag key and the verb the strip uses.
     function test_stagesFlagAndVerb() {
         compare(Minimized.configCall("stagesEnabled", "true"),
