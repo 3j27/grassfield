@@ -17,7 +17,8 @@ class KCoreDirLister;
 // Mount and eject go through Solid::StorageAccess (udisks2 + polkit); nothing is mounted by hand. Whether each standard
 // folder exists is asked off the GUI thread (DiskProbe, ADR-0035 4b-18): the list comes at once, a folder that is not there
 // leaves it when the disk answers, and one that does not answer is listed dimmed ("unavailable"), as the Finder shows a
-// server that went away; Files and grassfield-portal's panels never wait on a hung mount for their sidebar.
+// server that went away, until its read returns (DiskProbe::answeredLate); Files and grassfield-portal's panels never wait on
+// a hung mount for their sidebar.
 class PlacesModel : public QAbstractListModel
 {
     Q_OBJECT

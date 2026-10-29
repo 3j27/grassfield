@@ -58,6 +58,13 @@ PlacesModel::PlacesModel(QObject *parent, const DiskProbe::Options &disk)
         if (changed)
             relist();
     });
+    // A folder that did not answer comes back when its read returns (the Finder shows a server that is back).
+    connect(&m_disk, &DiskProbe::answeredLate, this, [this](const QString &path, int kind) {
+        if (!m_folderKinds.contains(path) || m_folderKinds.value(path) == kind)
+            return;
+        m_folderKinds.insert(path, kind);
+        relist();
+    });
     rebuild();
     auto *notifier = Solid::DeviceNotifier::instance();
     connect(notifier, &Solid::DeviceNotifier::deviceAdded, this, &PlacesModel::rebuild);

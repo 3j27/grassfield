@@ -7,22 +7,24 @@
 
 #include <thread>
 
-// What a call's thread shares with the DiskProbe: the thread posts an answer only while the DiskProbe lives (the mutex
-// orders that against its destructor); a thread stuck on a hung mount outlives it harmlessly.
+// What the threads share with the DiskProbe, under the mutex: a thread posts an answer only while the DiskProbe lives (the
+// mutex orders that against its destructor); a thread stuck on a hung mount outlives it harmlessly.
 struct DiskProbe::Shared {
     QMutex mutex;
     DiskProbe *receiver = nullptr;
+    // The paths a thread is reading now: one read per path.
+    QSet<QString> reading;
+    int threads = 0;
 };
 
-// A call's thread state: the path being read, and whether the call ended (the thread then reads nothing more).
+// A call's thread state: whether the call ended (the thread then reads nothing more).
 struct DiskProbe::Job {
-    QString reading;
     bool ended = false;
 };
 
 struct DiskProbe::Call {
     QHash<QString, int> kinds;
-    int waiting = 0;
+    QSet<QString> waiting;
     QElapsedTimer since;
     QElapsedTimer quiet;
     std::shared_ptr<Job> job;
@@ -55,6 +57,12 @@ int DiskProbe::kindOf(const QString &path)
     return info.isDir() ? 2 : 1;
 }
 
+int DiskProbe::threads() const
+{
+    const QMutexLocker lock(&m_shared->mutex);
+    return m_shared->threads;
+}
+
 int DiskProbe::probe(const QStringList &paths)
 {
     const int token = m_next++;
@@ -64,31 +72,43 @@ int DiskProbe::probe(const QStringList &paths)
         if (call->kinds.contains(path))
             continue;
         call->kinds.insert(path, kNotResponding);
-        // A read that hangs is not started again; with kMaxStuck of them, no new read starts.
-        if (m_stuck.contains(path) || m_stuck.size() >= kMaxStuck)
+        // A read that hangs is not started again, nor waited for.
+        if (m_stuck.contains(path))
             continue;
         toRead << path;
     }
-    call->waiting = int(toRead.size());
+    if (!toRead.isEmpty()) {
+        const QMutexLocker lock(&m_shared->mutex);
+        if (m_shared->threads >= kMaxThreads)
+            toRead.clear();
+        else
+            ++m_shared->threads;
+    }
+    call->waiting = QSet<QString>(toRead.cbegin(), toRead.cend());
     call->since.start();
     call->quiet.start();
     m_calls.insert(token, call);
     if (!toRead.isEmpty()) {
         call->job = std::make_shared<Job>();
-        std::thread([shared = m_shared, job = call->job, token, toRead, stat = m_options.stat] {
+        std::thread([shared = m_shared, job = call->job, toRead, stat = m_options.stat] {
             for (const QString &path : toRead) {
                 {
                     const QMutexLocker lock(&shared->mutex);
                     if (job->ended || !shared->receiver)
-                        return;
-                    job->reading = path;
+                        break;
+                    // Another call's thread is reading it: that read answers this call too.
+                    if (shared->reading.contains(path))
+                        continue;
+                    shared->reading.insert(path);
                 }
                 const int kind = stat ? stat(path) : kindOf(path);
                 const QMutexLocker lock(&shared->mutex);
-                job->reading.clear();
+                shared->reading.remove(path);
                 if (DiskProbe *receiver = shared->receiver)
-                    QMetaObject::invokeMethod(receiver, [receiver, token, path, kind] { receiver->readDone(token, path, kind); }, Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(receiver, [receiver, path, kind] { receiver->readDone(path, kind); }, Qt::QueuedConnection);
             }
+            const QMutexLocker lock(&shared->mutex);
+            --shared->threads;
         }).detach();
     }
     // Always answered later, never from inside probe(): the asker connects to answered before it can arrive.
@@ -96,19 +116,24 @@ int DiskProbe::probe(const QStringList &paths)
     return token;
 }
 
-void DiskProbe::readDone(int token, const QString &path, int kind)
+void DiskProbe::readDone(const QString &path, int kind)
 {
-    // The read returned: the path is no longer stuck, whether or not its call is still waiting.
-    const auto stuck = m_stuck.constFind(path);
-    if (stuck != m_stuck.cend() && *stuck == token)
-        m_stuck.erase(stuck);
-    const auto call = m_calls.value(token);
-    if (!call)
-        return;
-    call->kinds.insert(path, kind);
-    call->quiet.restart();
-    if (--call->waiting == 0)
+    // The read returned: the path is no longer stuck, and every call waiting for it has its answer.
+    const bool late = m_stuck.remove(path);
+    QList<int> done;
+    for (auto it = m_calls.cbegin(); it != m_calls.cend(); ++it) {
+        Call &call = *it.value();
+        if (!call.waiting.remove(path))
+            continue;
+        call.kinds.insert(path, kind);
+        call.quiet.restart();
+        if (call.waiting.isEmpty())
+            done << it.key();
+    }
+    for (const int token : std::as_const(done))
         finish(token);
+    if (late)
+        emit answeredLate(path, kind);
 }
 
 void DiskProbe::check(int token)
@@ -118,7 +143,7 @@ void DiskProbe::check(int token)
         return;
     const qint64 quietLeft = m_options.quietMs - call->quiet.elapsed();
     const qint64 totalLeft = m_options.totalMs - call->since.elapsed();
-    if (call->waiting > 0 && quietLeft > 0 && totalLeft > 0) {
+    if (!call->waiting.isEmpty() && quietLeft > 0 && totalLeft > 0) {
         QTimer::singleShot(int(qMin(quietLeft, totalLeft)), this, [this, token] { check(token); });
         return;
     }
@@ -130,12 +155,14 @@ void DiskProbe::finish(int token)
     const auto call = m_calls.take(token);
     if (!call)
         return;
-    if (call->job) {
-        // The thread reads nothing more for this call; the path it is reading now, if any, is stuck.
+    {
+        // The thread reads nothing more for this call; a path it waited for that a thread is reading now is stuck.
         const QMutexLocker lock(&m_shared->mutex);
-        call->job->ended = true;
-        if (!call->job->reading.isEmpty())
-            m_stuck.insert(call->job->reading, token);
+        if (call->job)
+            call->job->ended = true;
+        for (const QString &path : std::as_const(call->waiting))
+            if (m_shared->reading.contains(path))
+                m_stuck.insert(path);
     }
     emit answered(token, call->kinds);
 }

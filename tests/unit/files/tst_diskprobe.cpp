@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDeadlineTimer>
+#include <QMutex>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -21,8 +22,15 @@ namespace {
 
 constexpr int kHungMs = 1500;
 constexpr int kSlowMs = 150;
+constexpr int kSharedMs = 400;
 std::atomic<int> g_hungReads{0};
+std::atomic<int> g_sharedReads{0};
+std::atomic<int> g_countReads{0};
+QMutex g_orderMutex;
+QStringList g_order;
 
+// /hung: a read that hangs (then answers a folder); /slow: a share slow but answering; /shared: a read long enough for a
+// second call to ask the same path meanwhile; /count: counted, nothing there; /order: the order of the reads kept.
 int slowDisk(const QString &path)
 {
     if (path.startsWith(QLatin1String("/hung"))) {
@@ -33,6 +41,20 @@ int slowDisk(const QString &path)
     if (path.startsWith(QLatin1String("/slow"))) {
         QThread::msleep(kSlowMs);
         return 2;
+    }
+    if (path.startsWith(QLatin1String("/shared"))) {
+        ++g_sharedReads;
+        QThread::msleep(kSharedMs);
+        return 2;
+    }
+    if (path.startsWith(QLatin1String("/count"))) {
+        ++g_countReads;
+        return 0;
+    }
+    if (path.startsWith(QLatin1String("/order"))) {
+        const QMutexLocker lock(&g_orderMutex);
+        g_order << path;
+        return 0;
     }
     return DiskProbe::kindOf(path);
 }
@@ -115,36 +137,107 @@ TEST(DiskProbe, AHealthyPathBehindAHungOneIsReadAgain)
     EXPECT_EQ(g_hungReads - before, 1) << "a stuck path is not read twice";
 }
 
-// A stuck read gives its place back when it returns (re-review of 65311e0, MINOR 5): the path is read again by the next call.
+// The paths are read in the order given (re-review of 24bdf58, MAJOR 1: a hash's order changed from one process to the next).
+TEST(DiskProbe, ReadsInTheOrderGiven)
+{
+    DiskProbe probe(options());
+    const QStringList paths{QStringLiteral("/order/h"), QStringLiteral("/order/c"), QStringLiteral("/order/a"), QStringLiteral("/order/f"),
+                            QStringLiteral("/order/b"), QStringLiteral("/order/g"), QStringLiteral("/order/e"), QStringLiteral("/order/d")};
+    {
+        const QMutexLocker lock(&g_orderMutex);
+        g_order.clear();
+    }
+    ask(probe, paths);
+    const QMutexLocker lock(&g_orderMutex);
+    EXPECT_EQ(g_order, paths);
+}
+
+// A stuck read gives its place back when it returns (re-review of 65311e0, MINOR 5): the path is read again by the next call;
+// its late answer is given (re-review of 24bdf58, MINOR 2: a dimmed place comes back).
 TEST(DiskProbe, AStuckReadGivesItsPlaceBack)
 {
     DiskProbe probe(options());
+    QList<QPair<QString, int>> late;
+    QObject::connect(&probe, &DiskProbe::answeredLate, [&](const QString &path, int kind) { late.append({path, kind}); });
     const int before = g_hungReads;
     EXPECT_EQ(ask(probe, {QStringLiteral("/hung/b")}).value(QStringLiteral("/hung/b")), DiskProbe::kNotResponding);
     EXPECT_EQ(probe.stuck(), 1);
+    EXPECT_TRUE(late.isEmpty());
     ASSERT_TRUE(waitFor([&] { return probe.stuck() == 0; }, kHungMs + 1000)) << "the read returned";
+    ASSERT_EQ(late.size(), 1);
+    EXPECT_EQ(late.first().first, QStringLiteral("/hung/b"));
+    EXPECT_EQ(late.first().second, 2);
     // Read again (and hung again): a second read.
     EXPECT_EQ(ask(probe, {QStringLiteral("/hung/b")}).value(QStringLiteral("/hung/b")), DiskProbe::kNotResponding);
     EXPECT_EQ(g_hungReads - before, 2);
     waitFor([&] { return probe.stuck() == 0; }, kHungMs + 1000);
 }
 
-// With kMaxStuck reads stuck, a new path is not responding at once, healthy or not: stuck reads cannot pile up threads.
-TEST(DiskProbe, StuckReadsAreBounded)
+// With kMaxThreads threads alive, a new path is not responding at once, healthy or not: hung reads cannot pile up threads.
+TEST(DiskProbe, ThreadsAreBounded)
 {
     DiskProbe probe(options(200));
     int ended = 0;
     const auto connection = QObject::connect(&probe, &DiskProbe::answered, [&] { ++ended; });
-    for (int i = 0; i < DiskProbe::kMaxStuck; ++i)
+    for (int i = 0; i < DiskProbe::kMaxThreads; ++i)
         probe.probe({QStringLiteral("/hung/bound-%1").arg(i)});
-    ASSERT_TRUE(waitFor([&] { return ended == DiskProbe::kMaxStuck; }, 1000)) << "all at once, well before the reads return";
+    ASSERT_TRUE(waitFor([&] { return ended == DiskProbe::kMaxThreads; }, 1000)) << "all at once, well before the reads return";
     QObject::disconnect(connection);
-    EXPECT_EQ(probe.stuck(), DiskProbe::kMaxStuck);
+    EXPECT_EQ(probe.stuck(), DiskProbe::kMaxThreads);
+    EXPECT_EQ(probe.threads(), DiskProbe::kMaxThreads);
     qint64 took = 0;
     EXPECT_EQ(ask(probe, {QStringLiteral("/tmp")}, &took).value(QStringLiteral("/tmp")), DiskProbe::kNotResponding);
     EXPECT_LT(took, 150);
-    ASSERT_TRUE(waitFor([&] { return probe.stuck() == 0; }, kHungMs + 2000));
+    EXPECT_EQ(probe.threads(), DiskProbe::kMaxThreads) << "no thread started";
+    ASSERT_TRUE(waitFor([&] { return probe.stuck() == 0 && probe.threads() == 0; }, kHungMs + 2000));
     EXPECT_EQ(ask(probe, {QStringLiteral("/tmp")}).value(QStringLiteral("/tmp")), 2) << "the bound is given back";
+}
+
+// One read per path (re-review of 24bdf58, MINOR 3: 30 calls on one hung path left 30 threads): calls asking a path another
+// call's thread is reading wait for that read; their threads end at once.
+TEST(DiskProbe, OneReadPerPath)
+{
+    DiskProbe probe(options(200));
+    const int before = g_hungReads;
+    int ended = 0;
+    QHash<QString, int> last;
+    const auto connection = QObject::connect(&probe, &DiskProbe::answered, [&](int, const QHash<QString, int> &kinds) {
+        ++ended;
+        last = kinds;
+    });
+    for (int i = 0; i < 30; ++i)
+        probe.probe({QStringLiteral("/hung/one")});
+    EXPECT_TRUE(waitFor([&] { return probe.threads() == 1; }, 1000)) << probe.threads() << " threads";
+    ASSERT_TRUE(waitFor([&] { return ended == 30; }, 1000));
+    QObject::disconnect(connection);
+    EXPECT_EQ(last.value(QStringLiteral("/hung/one")), DiskProbe::kNotResponding);
+    EXPECT_EQ(probe.stuck(), 1);
+    ASSERT_TRUE(waitFor([&] { return probe.threads() == 0; }, kHungMs + 1000));
+    EXPECT_EQ(g_hungReads - before, 1);
+
+    // A read that answers (400 ms, within the 1-s deadline): the second call waits for the first call's read and has its
+    // answer.
+    DiskProbe patient(options(1000));
+    const int sharedBefore = g_sharedReads;
+    QHash<int, QHash<QString, int>> answers;
+    QObject::connect(&patient, &DiskProbe::answered, [&](int token, const QHash<QString, int> &kinds) { answers.insert(token, kinds); });
+    const int first = patient.probe({QStringLiteral("/shared/x")});
+    const int second = patient.probe({QStringLiteral("/shared/x")});
+    ASSERT_TRUE(waitFor([&] { return answers.size() == 2; }, 3000));
+    EXPECT_EQ(answers.value(first).value(QStringLiteral("/shared/x")), 2);
+    EXPECT_EQ(answers.value(second).value(QStringLiteral("/shared/x")), 2);
+    EXPECT_EQ(g_sharedReads - sharedBefore, 1);
+}
+
+// A call that ended reads nothing more: its thread, back from a hung read, does not go on to the paths queued behind it.
+TEST(DiskProbe, AnEndedCallReadsNothingMore)
+{
+    DiskProbe probe(options());
+    const int before = g_countReads;
+    const QHash<QString, int> kinds = ask(probe, {QStringLiteral("/hung/ended"), QStringLiteral("/count/behind")});
+    EXPECT_EQ(kinds.value(QStringLiteral("/count/behind")), DiskProbe::kNotResponding);
+    ASSERT_TRUE(waitFor([&] { return probe.threads() == 0; }, kHungMs + 1000)) << "the hung read returned";
+    EXPECT_EQ(g_countReads - before, 0);
 }
 
 // The deadline counts from the last answer, and a call ends after totalMs at most (re-review of 65311e0, MINOR 3): a share
@@ -197,6 +290,10 @@ TEST(PlacesModelDisk, AHungStandardFolderIsListedUnavailable)
     }, 1000)) << "a folder that does not answer stays, dimmed";
     EXPECT_GE(row(QStringLiteral("Home")), 0);
     EXPECT_FALSE(places.data(places.index(row(QStringLiteral("Home"))), PlacesModel::UnavailableRole).toBool());
+    // Its read returns (a folder): it is shown again (re-review of 24bdf58, MINOR 2).
+    EXPECT_TRUE(waitFor([&] {
+        const int r = row(QStringLiteral("Documents"));
+        return r >= 0 && !places.data(places.index(r), PlacesModel::UnavailableRole).toBool();
+    }, kHungMs + 1000)) << "back when its read returns";
     QFile::remove(dirs.fileName());
-    waitFor([] { return false; }, kHungMs); // the hung read returns before the next test
 }
