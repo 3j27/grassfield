@@ -64,7 +64,7 @@ Sheet {
         case "dependency":
             return qsTr("“%1” can't be uninstalled").arg(root.appName);
         case "protected":
-            return qsTr("Uninstalling it would also remove part of the system");
+            return root.removing ? qsTr("Uninstalling it would also remove part of the system") : qsTr("“%1” can't be installed from the AUR").arg(root.appName);
         case "repository":
             return qsTr("“%1” is in a repository").arg(root.appName);
         }
@@ -105,7 +105,7 @@ Sheet {
         case "unfinished":
             return qsTr("The last system update did not finish: some packages are newer in the repositories than on this computer. Finish the update in Software Update, then try again.");
         case "outdated":
-            return qsTr("This app needs newer packages than this computer has. Update your system in Software Update, then try again.");
+            return qsTr("Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.");
         case "busy":
             return qsTr("Try again when it has finished.");
         case "offline":
@@ -113,6 +113,8 @@ Sheet {
         case "dependency":
             return qsTr("Other apps need it: %1.").arg((root.plan.dependents || []).join(", "));
         case "protected":
+            if (!root.removing)
+                return qsTr("It would build %1 from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn't install it.").arg(root.plan.protected || "");
             return qsTr("Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.").arg(root.appName).arg(root.plan.protected || "");
         case "omarchyChanged":
             return Store.omarchyChangedText(root.app.kind);
@@ -129,7 +131,7 @@ Sheet {
     confirmText: {
         if (root.refusal === "")
             return root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
-        return root.updateFirst ? qsTr("Open Software Update") : qsTr("OK");
+        return root.updateFirst ? qsTr("Update Now…") : qsTr("OK");
     }
     destructive: root.removing && root.refusal === ""
     // An AUR install is never the default: a click, or Tab and Space, on "Install from the AUR".
@@ -247,12 +249,13 @@ Sheet {
         }
     }
 
-    // pacman's own words, when it gave some (an unresolved plan, the last update's packages).
+    // pacman's own words, when it gave some (an unresolved plan, the last update's packages); never for a system older than
+    // its mirror, said in plain words with Update Now… (its detail goes to the log).
     Text {
         width: parent.width
         visible: text !== ""
         textFormat: Text.PlainText
-        text: root.plan && root.refusal !== "" && root.refusal !== "unavailable" && root.refusal !== "notOnAur" && root.refusal !== "repository"
+        text: root.plan && ["", "unavailable", "notOnAur", "repository", "outdated"].indexOf(root.refusal) < 0
               ? (root.refusal === "unfinished" ? (root.plan.unfinished || []).slice(0, 6).join("\n") : (root.plan.detail || "")) : ""
         wrapMode: Text.WrapAnywhere
         maximumLineCount: 6

@@ -36,6 +36,16 @@ if [ "$mode" = refuse ]; then
   echo 4 >"$root/run/.$op.exit" && mv "$root/run/.$op.exit" "$root/run/$op.exit"
   exit 4
 fi
+# pacman -Sw failing as the owner's rc1-7 did (a file the mirror no longer has), or on a mirror that does not answer.
+if [ "$mode" = gone ] || [ "$mode" = unreachable ]; then
+  why="The requested URL returned error: 404"
+  [ "$mode" = unreachable ] && why="Could not resolve host: mirror.example"
+  echo "error: failed retrieving file '$1-1-1-x86_64.pkg.tar.zst' from mirror.example : $why" >>"$root/run/$op.log"
+  echo "error: failed to commit transaction (failed to retrieve some files)" >>"$root/run/$op.log"
+  echo "grassfield-store-helper: pacman could not download the packages" >>"$root/run/$op.log"
+  echo 1 >"$root/run/.$op.exit" && mv "$root/run/.$op.exit" "$root/run/$op.exit"
+  exit 1
+fi
 n=0
 for p in "$@"; do
   n=$((n + 1))
@@ -63,7 +73,9 @@ exit $rc)SH";
 const QByteArray kInstaller = R"SH(root=$(dirname "$0")
 cmd=$1; shift
 case $cmd in
-  omarchy-webapp-install) printf '[Desktop Entry]\nName=%s\nExec=omarchy-launch-webapp %s\nIcon=%s\n' "$1" "$2" "$3" >"$root/apps/$1.desktop" ;;
+  omarchy-webapp-install)
+    [ "$1" = Gone ] && { echo "error: failed retrieving file 'gone-1-1-any.pkg.tar.zst' from mirror.example : The requested URL returned error: 404"; exit 1; }
+    printf '[Desktop Entry]\nName=%s\nExec=omarchy-launch-webapp %s\nIcon=%s\n' "$1" "$2" "$3" >"$root/apps/$1.desktop" ;;
   omarchy-webapp-remove) [ "$OMARCHY_REMOVE_NOTIFY" = false ] || exit 3; rm -f "$root/apps/$1.desktop" ;;
   omarchy-launch-floating-terminal-with-presentation)
     [ $# = 1 ] || exit 2
@@ -265,6 +277,20 @@ TEST(Operations, OutcomesFromCodeAndState)
     ops.enqueue(helperRecord(QStringLiteral("b"), QStringLiteral("remove"), {QStringLiteral("b")}));
     ASSERT_TRUE(waitFor([&] { return finished.count() == 4; }));
     EXPECT_FALSE(ops.results().contains(QStringLiteral("b")));
+
+    // A planned file the mirror no longer has (the integrator's note on PR #36): the system is older than the mirror,
+    // "outdated" (Software Update); pacman's lines stay in the details, not in the line. A mirror that does not answer
+    // is a failure like any other.
+    f.mode("gone");
+    ops.enqueue(helperRecord(QStringLiteral("d"), QStringLiteral("install"), {QStringLiteral("d")}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 5; }));
+    const Operations::Result gone = ops.results().value(QStringLiteral("d"));
+    EXPECT_EQ(gone.outcome, QStringLiteral("outdated"));
+    EXPECT_TRUE(gone.details.contains(QStringLiteral("returned error: 404"))) << qPrintable(gone.details);
+    f.mode("unreachable");
+    ops.enqueue(helperRecord(QStringLiteral("e"), QStringLiteral("install"), {QStringLiteral("e")}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 6; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("e")).outcome, QStringLiteral("failed"));
 }
 
 TEST(Operations, OneAtATimeAndTheLocks)
@@ -347,6 +373,15 @@ TEST(Operations, WebApps)
     ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
     EXPECT_FALSE(QFile::exists(f.dir.filePath(QStringLiteral("apps/Chat Room.desktop"))));
     EXPECT_TRUE(ops.results().isEmpty()) << "OMARCHY_REMOVE_NOTIFY=false reached the command";
+    // A web app's command that fails with words like pacman's download error is a failure, never "update the system first":
+    // only the helper's pacman downloads from the mirror (the integrator's review of ff2fd83: that condition's mutant).
+    r.id = newOperationId();
+    r.kind = QStringLiteral("install");
+    r.webName = QStringLiteral("Gone");
+    ops.enqueue(r);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("chat")).outcome, QStringLiteral("failed"));
+    EXPECT_TRUE(ops.results().value(QStringLiteral("chat")).details.contains(QStringLiteral("returned error: 404")));
 }
 
 TEST(Operations, RecoveryAtStart)

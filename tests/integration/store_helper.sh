@@ -566,6 +566,9 @@ out=$(aur aur-install gs-lib "$W/pins" /srv/gsaur-rpc)
 expect "a name a repository has (gs-lib, [gstest]): refused by the plan (repository)" eval 'grep -q "^plan=repository " <<<"$out"'
 out=$(aur aur-install gs-aur-gone "$W/pins" /srv/gsaur-rpc)
 expect "a name the AUR does not know: refused by the plan (notOnAur)" eval 'grep -q "^plan=notOnAur .*detail=gs-aur-gone$" <<<"$out"'
+out=$(aur aur-install omarchy-gs-theme "$W/pins" /srv/gsaur-rpc)
+expect "a name with Omarchy's prefix (anyone can name an AUR package so): refused by the plan (protected), nothing built" \
+  eval 'grep -q "^plan=protected " <<<"$out" && ! pacman -Q omarchy-gs-theme >/dev/null 2>&1'
 out=$(aur aur-install gs-aur-app "$W/pins" /srv/gsaur-rpc)
 sed 's/^/    /' <<<"$out"
 expect "aur-install gs-aur-app: built gs-aur-app and gs-aur-lib, gs-lib from the repository, done (exit 0 and the state)" \

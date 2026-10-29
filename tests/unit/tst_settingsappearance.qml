@@ -216,4 +216,95 @@ TestCase {
         profile.picked("reduced");
         compare(last(t.store), ["material.profile", "reduced"]);
     }
+
+    // The names under the choices never touch, whatever the language: with French names wider than the icon style's pitch,
+    // the picker widens its pitch so each name keeps a gap from the next and stays centred under its own picture.
+    Component {
+        id: pickerComponent
+        SettingsQml.ChoicePicker {
+            model: [{id: "default", text: "Par défaut"}, {id: "dark", text: "Sombre"}, {id: "clear", text: "Transparent"}, {id: "tinted", text: "Teinté"}]
+            value: "default"
+            pictureWidth: Tokens.settingsIconStyleSize
+            pictureHeight: Tokens.settingsIconStyleSize
+            pitch: Tokens.settingsIconStylePitch
+            ringGap: Tokens.settingsAccentRingGap
+            captionBaseline: Tokens.settingsIconStyleCaptionBaseline
+            picture: Component {
+                Rectangle {
+                    property string choice: ""
+                }
+            }
+        }
+    }
+
+    function test_choiceNamesNeverTouch() {
+        const picker = createTemporaryObject(pickerComponent, testCase);
+        verify(picker);
+        waitForRendering(picker);
+        const names = picker.model.map(m => find(picker, i => i.text === m.text && i.visible && i.baselineOffset !== undefined));
+        for (const n of names)
+            verify(n);
+        for (let i = 1; i < names.length; i++) {
+            const a = names[i - 1].mapToItem(picker, 0, 0).x + names[i - 1].width;
+            const b = names[i].mapToItem(picker, 0, 0).x;
+            verify(b - a >= Tokens.settingsChoiceCaptionGap - 1, names[i].text + " starts " + (b - a) + " px after " + names[i - 1].text);
+        }
+        for (let i = 0; i < names.length; i++) {
+            const c = names[i].mapToItem(picker, 0, 0).x + names[i].width / 2;
+            const pic = picker.ringPad + i * picker.usedPitch + picker.pictureWidth / 2;
+            verify(Math.abs(c - pic) <= 1, names[i].text + " is centred under its picture");
+        }
+    }
+
+    // A choice row never overlaps its title (macOS): at Settings' minimum window width (its rows are 288 wide), in French as in
+    // English, the icon styles sit beside the title when they fit and on their own line under it when they do not, never over
+    // the title, never past the row, and no two names touch.
+    function checkIconRow(title, names) {
+        const t = make();
+        const picker = named(t.page, "Icon style");
+        verify(picker);
+        const row = picker.parent;
+        // The page width at which the group's rows are Settings' minimum 288 wide.
+        const delta = row.width - t.page.width;
+        t.page.width = 288 - delta;
+        row.title = title;
+        picker.model = names.map((n, i) => ({id: ["default", "dark", "clear", "tinted"][i], text: n}));
+        waitForRendering(t.page);
+        compare(row.width, 288);
+        const label = find(row, i => i.text === title && i.baselineOffset !== undefined && i.visible && i !== picker);
+        verify(label);
+        const titleBox = label.mapToItem(row, 0, 0);
+        const pictures = [];
+        for (let i = 0; i < names.length; i++)
+            pictures.push({x: picker.x + picker.ringPad + i * picker.usedPitch, y: picker.y + picker.ringPad, w: picker.pictureWidth, h: picker.pictureHeight});
+        for (const p of pictures) {
+            const apart = p.x >= titleBox.x + label.contentWidth || p.x + p.w <= titleBox.x || p.y >= titleBox.y + label.height || p.y + p.h <= titleBox.y;
+            verify(apart, "a picture at " + p.x + "," + p.y + " overlaps the title " + titleBox.x + "," + titleBox.y + " " + label.contentWidth + "x" + label.height);
+        }
+        for (const n of names) {
+            const c = find(picker, i => i.text === n && i.visible && i.baselineOffset !== undefined);
+            verify(c);
+            const box = c.mapToItem(row, 0, 0);
+            verify(box.x >= 0 && box.x + c.width <= row.width, n + " is inside the row (" + box.x + " to " + (box.x + c.width) + ")");
+        }
+        verify(picker.x >= 0 && picker.x + picker.implicitWidth <= row.width, "the picker is inside the row");
+        verify(row.height >= picker.y + picker.implicitHeight - picker.ringPad, "the row holds the picker");
+        return row.stacked;
+    }
+
+    function test_iconRowAtMinimumWidthFrench() {
+        verify(checkIconRow("Style des icônes", ["Par défaut", "Sombre", "Transparent", "Teinté"]), "French goes on its own line");
+    }
+
+    function test_iconRowAtMinimumWidthEnglish() {
+        checkIconRow("Icon style", ["Default", "Dark", "Clear", "Tinted"]);
+    }
+
+    // The measured pitch holds when the names are short (English): the audit's 51.5.
+    function test_choicePitchHoldsForShortNames() {
+        const picker = createTemporaryObject(pickerComponent, testCase, {model: [{id: "default", text: "Default"}, {id: "dark", text: "Dark"}, {id: "clear", text: "Clear"}, {id: "tinted", text: "Tinted"}]});
+        verify(picker);
+        waitForRendering(picker);
+        compare(picker.usedPitch, Tokens.settingsIconStylePitch);
+    }
 }

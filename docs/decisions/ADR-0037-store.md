@@ -375,12 +375,17 @@ and the recipes call sudo themselves and write in the user's home, so the helper
   `omarchy-pkg-missing` it calls first; the Store asks the same of the catalog), every pin matching (exit 5). The script's
   checks run in the C locale, as the Store's and the helper's children (bash's `[a-z]` follows the locale's collation:
   under en_US.UTF-8 "exämple" would pass), the recipe in the user's own. Then, under the lock, the script checks the AUR's
-  plan again (exit 7, nothing run): an install only of names pacman does not resolve from the repositories (`pacman -Sp`,
-  as the user: a package of that name, a provider of it or a group is what yay would install; the Store's plan asks the
-  same); a removal only of packages installed explicitly (`-Qqe`) from
-  outside the repositories (`-Qqm`), that b.1's deny list does not name (the helper's case list, copied as it is, Omarchy's
-  two lists read from `$OMARCHY_PATH/install`, `HoldPkg`), and whose whole `pacman -Rs --print` plan names no denied
-  package (read one name a line, never as words or patterns). No application entry is needed: the user installed it from
+  plan again (exit 7, nothing run): for both commands, no name that b.1's deny list names (the helper's case list, copied
+  as it is, Omarchy's two lists read from `$OMARCHY_PATH/install`, missing lists refusing, `HoldPkg`): what the Store
+  could not remove it does not build either, and anyone can name an AUR package `omarchy-*` or `grassfield-*` (SD30; the
+  Store's plan refuses the same for every package it would build from the AUR); an install only of names pacman does
+  not resolve from the repositories (`pacman -Sp`, as the user: a package of that name, a provider of it or a group is
+  what yay would install; the Store's plan asks the same), "not there" being pacman's whole line `error: target not
+  found: <name>`, never a longer name's; a removal only of packages installed explicitly (`-Qqe`) from outside the
+  repositories (`-Qqm`) and whose whole `pacman -Rs --print` plan names no denied package (read one name a line, never
+  as words or patterns). The script checks the names it is given; the packages yay builds as their dependencies are
+  checked by the Store's plan before the terminal opens (each denied name refused, SD30), not again there: the script has
+  no copy of the AUR's answer, and yay builds what each PKGBUILD asks, which the user accepted with the warning. No application entry is needed: the user installed it from
   the AUR. Success is exit 0 and every planned package present by name (an AUR package's version is whatever its build
   makes; the repositories' packages at their planned versions), or, for a removal, every planned package gone.
 
@@ -405,7 +410,12 @@ nothing ever signals pacman.
   Only then does it extract the XML and icons into its cache (`bsdtar` given only `usr/share/swcatalog`, with no owner,
   permission, extended attribute or ACL from the archive). That copy is used for display only: a package name it
   gives must exist in pacman's database, and the sheet shows the package that will be installed. It is replaced when
-  pacman's database names another version. (3) pacman for every package: version, sizes, licence (`License`, used when
+  pacman's database names another version. When there is none, the Store says why in its own words, one reason each
+  (the integrator's note on PR #36): the package or its signature could not be downloaded ("Arch's app data couldn't be
+  downloaded. Check for updates, then try again.", with Open Software Update: the usual cause is databases older than
+  the mirror, e.4), the signature did not pass ("could not be verified": that alone), or the copy could not be made
+  (unpacked, cached); the details go to the log. The Store works with what it has: the catalog alone, or Arch's data
+  alone when there is no catalog host. (3) pacman for every package: version, sizes, licence (`License`, used when
   AppStream has none), description. (4) The AUR RPC for AUR packages (ST7). (5) Flathub's AppStream through `flatpak` (ST2).
 - **Display.** Every remote or package-provided text is plain text (`Text.PlainText`), control and format characters
   removed (by code point, so the ones beyond U+FFFF too) except line feeds, bounded (name 80, summary 200, description 4000 characters); AppStream's description markup (`<p>`, `<ul>`,
@@ -489,8 +499,19 @@ nothing ever signals pacman.
      S1 shows no recipe or helper of Omarchy's runs `-y`, and grassfield-packages' CI refuses a catalog that names a recipe
      whose text has `-Sy`, `-Syu` or `yay -Sy` (g);
    - `pacman -S --print` must resolve and must not upgrade an installed package (S4);
-   - the first package URL of `pacman -Sp` that answers 404 means the databases are older than the mirror (S5): "Update your
-     system first";
+   - the system no older than its mirror (S5; the integrator's notes on PR #36 and the review of ff2fd83; SD29):
+     Software Update's last successful answer (`software-update.json` as the shell writes it: up-to-date, available or
+     not-set-up, the three states that list the system's updates, or after a failed check the success the shell keeps as
+     `previous`) that counts other updates or an Omarchy release, given after pacman last synced the databases (the last
+     "synchronizing package lists" of pacman.log, else the newest database's date, which pacman sets to the mirror's
+     Last-Modified), means the mirror has moved on (its checker compares what is installed with a fresh copy of the
+     mirror's databases) and refuses before anything downloads, AUR installs included; then every file of the plan (256
+     at most), the AUR's repository dependencies included, is asked with a HEAD request, all at once within 20 s, and one
+     the mirror no longer has (404, 410) refuses too; after the fact, an install pacman ended because the mirror answered 404, 410 or more than the allowed
+     size for a package or its `.sig` ends "outdated". Each says "Your system needs to be updated before you can install
+     apps." with one action, Update Now… (Software Update, SD14), and the app is offered again after the update; the
+     mirror's and pacman's words go to the log, never to the sheet. The Store never syncs the databases alone (a partial
+     upgrade, S12);
    - no `db.lck` and Omarchy's update lock free (S11, ADR-0033 d.5).
 5. **Validated input, argument vectors only.** Package names `^[a-z0-9@_+][a-z0-9@._+-]{0,127}$`; a setup's `install` field
    `^omarchy-install-[a-z0-9-]+$` and its `remove` field `^omarchy-remove-[a-z0-9-]+$` (one cannot name the other kind), run
@@ -784,6 +805,11 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD22 | How much one AUR operation does, its plan and its success (3b2) | one AUR package per operation, the one the user chose; the plan before the sheet: pacman does not resolve the name from the repositories (`pacman -Sp`: a package of that name, a provider of it or a group; else the repositories install it), the AUR knows it, the dependencies the system lacks (`pacman -T`) split into those pacman resolves (checked as any install: `pacman -S --print`, never an upgrade, the first file on the mirror) and those asked of the AUR in turn (at most 25 packages in 6 rounds; one the AUR does not have refuses the plan, one it cannot read marks it incomplete); success by name for what yay builds · several packages per operation · no plan, yay's own prompts | one package, the plan, success by name | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) the sheet lists what the operation adds before anything runs, as for every source; (b) yay's questions never reach the user (`--noconfirm`, Omarchy's own flags), and an AUR package's version is whatever its build makes, unknown before it |
 | SD23 | The script's AUR checks and their exit code (3b2) | `grassfield-store-run` kind `aur`: the add refuses a name pacman resolves from the repositories (the package, a provider, a group); the drop requires a package installed explicitly from outside the repositories, not denied, whose whole `-Rs` plan names no denied package; a refusal is exit 7, nothing run (the Store says "The installation was refused: the system changed since the Store checked it. Try again from its page.", or for a removal "This app can't be uninstalled from the Store.") · the Store's checks only | the script checks again, exit 7 | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the state can change between the sheet and the terminal (another window, Omarchy's menu); a check under the lock refuses what the plan no longer matches, the same way for every path (b.1's helper checks again too) |
 
+| SD24 to SD27 | (step 3c, the Flathub source) | | | Written with that part: the probes S20 to S26 (`store-probes-4.sh`) measured their facts and cite these numbers |
+| SD28 | How step 3c (SD11) is delivered | in three parts, each reviewed on its own: 3c part 1, the review notes on grassfield PR #36 (3b2's follow-ups, Arch's app data, the system older than its mirror) and Flathub's groundwork (the probes S20 to S26, the AppStream reader taking Flathub's components); part 2 the Flathub source (its switch, `flatpak --user`, flatpak's own plan, the stop, the uninstall, the runtimes left); part 3 "Get Flatpak…" (the `flatpak` package, which no Omarchy install has, through Omarchy's own `omarchy-pkg-add` in its terminal, pinned) · one PR | three parts | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the integrator asked for the fixes now (the 3c PR opened with them); the Flathub source then rests on measured facts, and the package install, which changes the system, gets a review of its own (e.9); Flathub's switch stays dimmed with SD8's reason meanwhile |
+| SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last synced (pacman.log's last sync, else the database's date); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
+| SD30 | AUR packages with a name of the deny list (the integrator's note on PR #36: "refuse `grassfield-*`/`omarchy-*` on the AUR path, or label by origin") | refused: every name b.1's deny list names (the system's, Omarchy's prefix and lists, `yay`, Grassfield's prefix, `HoldPkg`), the app's and every package its plan builds from the AUR, in the Store (Get dimmed with the reason, the plan refused) and again in the script (exit 7); Omarchy's lists unread refuse · only `grassfield-*` and `omarchy-*` · labelled by origin, installable | the whole deny list, refused | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) what the Store installs, it can remove again (b.1's list refuses the removal of every such name); an AUR package that takes Omarchy's or Grassfield's name is not theirs, and the user should not have to tell. An AUR app whose name only looks like the system's (`linux-wifi-hotspot`) is refused too, as its removal would be |
+
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
 - **ADR-0033**: d (the Store reads the list of other updates that Software Update's step 2 adds, `otherPackages`, in PR #16's
@@ -813,6 +839,15 @@ irreversible action on the owner's machine. The integrator checks each row in th
   the helper in it are models for the probe; the helper is step 3's code. S18 ran polkit 127-3 (the 2026-09-01 snapshot);
   the source lines cited are polkit 128's (Arch's current version; tag 128 of github.com/polkit-org/polkit), where they read
   the same.
+- `docs/audits/store-2026-10-27/store-probes-4.sh` (S20 to S26, step 3c) and its outputs `probes-4-output.txt` and
+  `probes-4-output-run1.txt` (docker exit 0 both), the same image and Omarchy checkout, Arch's archive at 2026-10-20 and
+  Flathub as it was on 2026-10-28: the `flatpak` package owns no application entry and adds its exports to
+  `XDG_DATA_DIRS` only from the next login; `flatpak remote-add --user` takes a second, no root; Flathub's AppStream
+  (3316 desktop apps, 2540 verified) and icons in the user's installation; `remote-info` gives sizes and permissions;
+  flatpak's own plan on a pseudo-terminal, answered no; an install, stopped with SIGTERM, SIGINT and SIGKILL at several
+  moments and resumed; uninstalling keeps `~/.var/app`, `--unused` keeps the runtimes installed explicitly. Flathub's key
+  is printed by its long id only (its fingerprint reads as a secret to gitleaks; the integrator's note); the two outputs,
+  which ran before that change, have that one line cut to the long id the same way.
 - The macOS 27 reference: `docs/audits/store-2026-10-27/parity.md` (Apple's user guide, two public captures, not committed).
 
 ## Consequences
@@ -1062,3 +1097,42 @@ finding and what changed:
 - INFO: View Build Script now says that yay fetches the script again and that the package's other files are not shown.
 - From grassfield-packages #12's note: `omarchy-pkg-missing`, which `omarchy-pkg-aur-add` calls, must be pinned too; the
   Store (`requiredPins`) and the script require it.
+
+Step 3b2 merged (grassfield PR #36, opus security PASS, 2026-10-28) with follow-ups for step 3c, and three notes on the
+same PR after it (2026-10-28 20:50, 2026-10-29 00:42 and 00:56). Each and what changed (step 3c, part 1; SD28):
+- MINOR: the AUR's info request sent a `+` as it is (a space in a query): each name is percent-encoded, as the search's
+  term (`tst_aur` with `libc++`).
+- MINOR: an AUR install could take a name of the deny list (`omarchy-*`, `grassfield-*`: the AUR is anyone's): refused,
+  the whole list, the app's and each package the plan builds, in the Store and in the script (b.2, SD30).
+- MINOR, test gaps: `aurOff` in Get and Uninstall… and `aurUnchecked` were held only by the container's signed catalog:
+  `tst_storebackend` AurBlocksAgainstACatalog hands the backend a snapshot with a catalog and kills the three mutants
+  outside the container (`apply` protected for it).
+- INFO: "target not found: <name>" was matched as a substring (a longer name's line passed): pacman's whole line, in the
+  Store's plan and in the script.
+- The probes' output printed Flathub's key fingerprint, which gitleaks reads as a secret (handled on main by
+  `.gitleaksignore`): the probe prints the long id only.
+- "Arch's app data could not be verified" showed for a download that failed: the reason is typed (download, signature
+  download, verification, the rest), each with its own words, the download's with Open Software Update (c); the Store
+  works on Arch's data alone without a catalog host (`tst_storebackend` NoCatalogHostButArchsData, ArchsAppDataProblems
+  with a 404 on the package, a 404 on the `.sig` and a bad signature).
+- A package database older than the mirror (404s): told to update the system first, before anything downloads, with
+  Update Now… to Software Update and no raw output, never a refresh of the databases alone (e.4, SD29; `tst_plancheck`
+  and `tst_storebackend` SystemOlderThanTheMirror with a fake mirror answering 404 and a database older than Software
+  Update's check, `tst_operations` for pacman's 404 after the fact, `tst_storeoperations` for the words).
+
+Integrator review of step 3c part 1 (grassfield PR #54 at ff2fd83, independent opus security review; 2026-10-29): FAIL,
+one MAJOR; no widening of the root surface. Each finding and what changed:
+- MAJOR: the system-older check read only the `available` state, which the checker writes only for a Grassfield or
+  Omarchy release: Arch's updates alone answer up-to-date, Grassfield's repository off not-set-up (the owner's machine:
+  384 other updates and Omarchy 4.0.6, so the check never fired). It now reads any of the three states that carry the
+  counts, and a failed check's `previous`; AUR installs get it too, and their repository dependencies the HEADs (e.4,
+  SD29 amended). Tested on fixtures the real checker writes (`tests/fixtures/store/software-update/`, made by
+  `docs/audits/store-2026-10-27/tools/make-software-update-fixtures.sh`).
+- MINOR: the last sync was the newest database's mtime, which pacman sets to the mirror's Last-Modified (a sync on 10-29
+  left a database dated 10-16, so an older answer kept refusing): pacman.log's last "synchronizing package lists" now,
+  the mtime only without it.
+- MINOR: up to 64 HEADs one after another, each on a new connection: now every file (256 at most) at once on one
+  connection pool, within 20 s for the whole set, the rest dropped once one is gone (fetch.h headStatuses).
+- NITs: the helper condition of the "outdated" outcome has its test (a web app's failure with pacman's words stays
+  "failed"); the probe outputs' trailing spaces removed; the French sheet text reworded and the new texts' apostrophes
+  typographic; b.2 says the script checks the names it is given and the Store's plan the dependencies yay builds.

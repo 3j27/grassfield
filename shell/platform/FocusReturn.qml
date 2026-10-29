@@ -31,6 +31,9 @@ Singleton {
     // now, so a Stages swap, a Desktop switch or a new window while the surface was open is not undone).
     property int generation: 0
     property bool restoreWanted: false
+    // A window the surface's own action chose ("" none: FR.chosenTarget): the close that follows focuses it instead of the
+    // remembered one (the tiling suggestions' pick, #48 nested pass MINOR E).
+    property string chosen: ""
 
     function anyOpen(): bool {
         return Object.keys(holders).length > 0;
@@ -45,8 +48,10 @@ Singleton {
     function opened(name: string): void {
         surfaceOpened(name);
         cancelFallback();
-        if (!anyOpen())
+        if (!anyOpen()) {
             previous = DesktopState.holdsKeyboard ? null : stamp(Compositor.activeWindow());
+            chosen = "";
+        }
         const next = Object.assign({}, holders);
         next[name] = true;
         holders = next;
@@ -91,6 +96,14 @@ Singleton {
     function skip(): void {
         restoreWanted = false;
         previous = null;
+        chosen = "";
+    }
+
+    // The window `address` was chosen by the open surface ("": that choice is withdrawn, a refused pick): its close focuses
+    // it (FR.chosenTarget).
+    function choose(address: string): void {
+        if (anyOpen())
+            chosen = address;
     }
 
     function decide(): void {
@@ -101,16 +114,19 @@ Singleton {
         }
         const prev = previous;
         const wanted = restoreWanted;
+        const pick = chosen;
         previous = null;
         restoreWanted = false;
+        chosen = "";
         if (!wanted || locked)
             return;
+        const focusedWorkspaceId = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1;
         const now = {
             gen: generation,
-            focusedWorkspaceId: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1,
+            focusedWorkspaceId: focusedWorkspaceId,
             placement: prev ? Compositor.placementOf(prev.address) : null
         };
-        const target = FR.restoreTarget(prev, Compositor.activeWindow(), now);
+        const target = pick !== "" ? FR.chosenTarget(pick, Compositor.placementOf(pick), focusedWorkspaceId) : FR.restoreTarget(prev, Compositor.activeWindow(), now);
         if (target)
             request(target);
     }

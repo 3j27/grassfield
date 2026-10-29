@@ -50,6 +50,10 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaMoveTo = "move_to";
     // hl.plugin.grassfield.group_front(address): the window's tile group comes forward with it (tiling.md TL29)
     inline constexpr std::string_view kLuaGroupFront = "group_front";
+    // hl.plugin.grassfield.split(address, side): Full Screen › Left or Right of Screen, a Split View Desktop (tiling.md TL33)
+    inline constexpr std::string_view kLuaSplit = "split";
+    // hl.plugin.grassfield.unsplit(address): Exit Full Screen of a window of a Split View Desktop (tiling.md TL33)
+    inline constexpr std::string_view kLuaUnsplit = "unsplit";
     // `hyprctl grassfield-tiling`: the tiling state (the `tiling` event is only a change notice, ADR-0036).
     inline constexpr std::string_view kHyprctlTilingCommand = "grassfield-tiling";
 
@@ -121,18 +125,21 @@ namespace gf::gfc {
     // ADR-0036 step 4c (tiling.md TL30): the shared edge's handle between windows of a tile group (the plugin's own drag; no
     // verb, no event: the tiling notice says "resized" at its end). Only together with window-tiling and tiling-arrange.
     inline constexpr std::string_view kFeatureTilingSharedEdge = "tiling-shared-edge";
+    // ADR-0036 step 6a (tiling.md TL33): hl.plugin.grassfield.split and unsplit, the Split View Desktops (the grassfield-tiling
+    // reply lists them in "splits"). Only together with window-tiling and tiling-arrange.
+    inline constexpr std::string_view kFeatureTilingSplit = "tiling-split";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
     // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
-    // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling), tiling-groups and
-    // tiling-shared-edge (each only together with tiling-arrange).
+    // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling), tiling-groups,
+    // tiling-shared-edge and tiling-split (each only together with tiling-arrange).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,
                                            bool frameTimes = false, bool keyboardFocus = false, bool tilingArrange = false, bool tileHover = false,
-                                           bool tilingGroups = false, bool sharedEdge = false);
+                                           bool tilingGroups = false, bool sharedEdge = false, bool split = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
     // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).

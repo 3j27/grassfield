@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
 #include <QNetworkRequest>
 #include <QString>
 #include <QUrl>
@@ -31,10 +32,12 @@ QNetworkRequest storeRequest(const QUrl &url, const FetchLimits &limits, const Q
 // devPlumbing: the URL came from GRASSFIELD_STORE_CATALOG_URL in a dev session (file:// allowed then).
 FetchResult fetch(const QUrl &url, const FetchLimits &limits, const QByteArray &etag = {}, bool devPlumbing = false);
 
-// A HEAD request (the first package of a plan, ADR-0037 e.4 and S5): the HTTP status after the redirects fetch allows, 0
-// when no answer came, -1 when the URL is not one the Store requests (not https). Through dev plumbing a file:// URL
-// answers 200 when the file exists, else 404.
-int headStatus(const QUrl &url, int timeoutMs, bool devPlumbing = false);
+// HEAD requests for a plan's files (ADR-0037 e.4 and S5), all at once on one QNetworkAccessManager (it keeps its
+// connections and runs several to a host), within `deadlineMs` for the whole set: each URL's HTTP status after the
+// redirects fetch allows, in order; 0 for one with no answer by the deadline, -1 for one the Store does not request (not
+// https). Once one answers 404 or 410 the others still running are dropped (0): that answer is enough. Through dev
+// plumbing a file:// URL answers 200 when the file exists, else 404.
+QList<int> headStatuses(const QList<QUrl> &urls, int timeoutMs, int deadlineMs, bool devPlumbing = false);
 
 // The same request saved to `file`, written whole and then renamed into place; on any failure nothing is left there (the
 // AppStream package file and its signature, appstreamsource.h).

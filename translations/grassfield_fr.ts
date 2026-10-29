@@ -873,8 +873,20 @@
         <translation>Remplir et disposer</translation>
     </message>
     <message>
+        <source>Left of Screen</source>
+        <translation>À gauche de l’écran</translation>
+    </message>
+    <message>
+        <source>Right of Screen</source>
+        <translation>À droite de l’écran</translation>
+    </message>
+    <message>
         <source>Full Screen</source>
         <translation>Plein écran</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
     </message>
     <message>
         <source>About %1</source>
@@ -975,6 +987,10 @@
     <message>
         <source>Halves</source>
         <translation>Moitiés</translation>
+    </message>
+    <message>
+        <source>Full Screen Tile</source>
+        <translation>Mosaïque plein écran</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -6549,6 +6565,10 @@
         <translation>Un gestionnaire de paquets s’est arrêté en cours de route et a laissé son verrou&#xa0;: rien ne s’installe tant qu’il est là.</translation>
     </message>
     <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
+    </message>
+    <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
     </message>
@@ -7353,12 +7373,20 @@
         <translation>Ces paquets seront supprimés. Vos fichiers et vos réglages restent.</translation>
     </message>
     <message>
+        <source>Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.</source>
+        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps. Mettez-le à jour dans Mise à jour de logiciels, puis obtenez de nouveau l’app.</translation>
+    </message>
+    <message>
         <source>These packages will be installed:</source>
         <translation>Ces paquets seront installés&#xa0;:</translation>
     </message>
     <message>
         <source>AUR</source>
         <translation>AUR</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be installed from the AUR</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
     </message>
     <message>
         <source>“%1” is in a repository</source>
@@ -7393,10 +7421,6 @@
         <translation>La dernière mise à jour du système n’est pas terminée&#xa0;: des paquets sont plus récents dans les dépôts que sur cet ordinateur. Terminez la mise à jour dans Mise à jour de logiciels, puis réessayez.</translation>
     </message>
     <message>
-        <source>This app needs newer packages than this computer has. Update your system in Software Update, then try again.</source>
-        <translation>Cette app a besoin de paquets plus récents que ceux de cet ordinateur. Mettez le système à jour dans Mise à jour de logiciels, puis réessayez.</translation>
-    </message>
-    <message>
         <source>Try again when it has finished.</source>
         <translation>Réessayez quand elle sera terminée.</translation>
     </message>
@@ -7407,6 +7431,10 @@
     <message>
         <source>Other apps need it: %1.</source>
         <translation>D’autres apps en ont besoin&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>It would build %1 from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn&apos;t install it.</source>
+        <translation>Elle compilerait %1 depuis l’AUR, un nom qu’utilise le système, Omarchy ou Grassfield. Le Store ne l’installe pas.</translation>
     </message>
     <message>
         <source>Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.</source>
@@ -7441,12 +7469,12 @@
         <translation>Installer depuis l&apos;AUR</translation>
     </message>
     <message>
-        <source>Open Software Update</source>
-        <translation>Ouvrir Mise à jour de logiciels</translation>
-    </message>
-    <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+    <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
     </message>
     <message>
         <source>Checking</source>
@@ -7521,6 +7549,14 @@
     <message>
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
+    </message>
+    <message>
+        <source>%1 and %2</source>
+        <translation>%1 et %2</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
     <message>
         <source>%1, minimized</source>
@@ -8108,6 +8144,10 @@
     <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Update Now…</source>
+        <translation>Mettre à jour maintenant…</translation>
     </message>
     <message>
         <source>Details…</source>
@@ -9372,6 +9412,10 @@
         <translation>Le Store n’est pas disponible pour le moment</translation>
     </message>
     <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
+    </message>
+    <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
     </message>
@@ -9450,6 +9494,10 @@
         <translation>Le catalogue du %1, vérifié.</translation>
     </message>
     <message>
+        <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
+        <translation>Les données d’apps d’Arch n’ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
+    </message>
+    <message>
         <source>Arch&apos;s app data could not be verified.</source>
         <translation>Les données d’apps d’Arch n’ont pas pu être vérifiées.</translation>
     </message>
@@ -9516,6 +9564,10 @@
     <message>
         <source>Stable</source>
         <translation>Stable</translation>
+    </message>
+    <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
     </message>
     <message>
         <source>Refreshing…</source>
@@ -10477,6 +10529,14 @@
         <translation>Activez l&apos;AUR dans les réglages du Store pour installer depuis celui-ci.</translation>
     </message>
     <message>
+        <source>The system, Omarchy or Grassfield uses this name, so the Store doesn&apos;t build it from the AUR.</source>
+        <translation>Le système, Omarchy ou Grassfield utilise ce nom&#xa0;: le Store ne le compile pas depuis l’AUR.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s package lists can&apos;t be read, so the Store installs nothing from the AUR.</source>
+        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues&#xa0;: le Store n’installe rien depuis l’AUR.</translation>
+    </message>
+    <message>
         <source>A repository has this package: the Store installs it from there, from its own page.</source>
         <translation>Un dépôt propose ce paquet : le Store l&apos;installe depuis ce dépôt, à partir de sa propre page.</translation>
     </message>
@@ -10597,8 +10657,8 @@
         <translation>Terminez d’abord la mise à jour du système.</translation>
     </message>
     <message>
-        <source>Update your system first.</source>
-        <translation>Mettez d’abord le système à jour.</translation>
+        <source>Your system needs to be updated before you can install apps.</source>
+        <translation>Votre système doit être mis à jour avant que vous puissiez installer des apps.</translation>
     </message>
     <message>
         <source>This app can&apos;t be uninstalled from the Store.</source>
@@ -10799,6 +10859,10 @@
     <message>
         <source>The Grassfield catalog could not be fetched.</source>
         <translation>Le catalogue Grassfield n’a pas pu être récupéré.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
+        <translation>Les données d’apps d’Arch n’ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
     </message>
     <message>
         <source>Arch&apos;s app data could not be verified.</source>
@@ -11183,6 +11247,10 @@
     <message>
         <source>%1, zone %2 of %3</source>
         <translation>%1, zone %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
 </context>
 <context>

@@ -24,14 +24,19 @@ FocusScope {
     readonly property bool hoverOpened: Popups.data.hover === true
     property bool altHeld: false
     readonly property bool fullscreen: root.toplevel ? root.toplevel.fullscreen : false
+    readonly property bool inSplit: root.toplevel ? Compositor.inSplit(root.toplevel) : false
 
     readonly property var content: AppMenus.model.tilingPopover({
         alt: root.altHeld,
         tileable: Popups.data.tileable === true,
         canArrange: Compositor.canArrange,
         canLayouts: Compositor.canLayouts,
+        canSplit: Compositor.canSplit,
+        splitBlocked: Compositor.splitBlocked,
+        splittable: Popups.data.splittable === true,
         outputClass: Compositor.outputClassOf(Popups.screenName),
         fullscreen: root.fullscreen,
+        inSplit: root.inSplit,
         outputs: Compositor.otherOutputs(root.toplevel)
     })
     // The Layouts section in rows of this many layouts, as the glyph sections.
@@ -55,6 +60,12 @@ FocusScope {
     readonly property string currentKey: root.current >= 0 && root.current < root.entries.length ? root.entries[root.current].key : ""
     // The layout a number key picked (TL26): its zones show their numbers until a second number picks one; -1 for none.
     property int pickedLayout: -1
+    // The row whose submenu is open (Full Screen ›, docs/specs/tiling.md TL33), -1 for none: opened by the pointer on the row, a
+    // click, Right or Return; Left or Esc in it closes it.
+    property int subRow: -1
+    readonly property var subModel: root.subRow >= 0 && root.subRow < root.content.rows.length ? (root.content.rows[root.subRow].submenu || []) : []
+    // The open submenu, for the overlay's blur region (it lies outside the popover).
+    readonly property Item submenuItem: root.subRow >= 0 ? subMenu : null
 
     width: Tokens.tilingPopoverWidth
     height: column.implicitHeight + 2 * Tokens.menuPadding
@@ -62,20 +73,74 @@ FocusScope {
     Accessible.role: Accessible.PopupMenu
     Accessible.name: qsTr("Window tiling")
 
-    // Entering or leaving full screen, or the window gone: what the popover offers no longer holds (TL22).
-    onFullscreenChanged: Popups.close()
-    onToplevelChanged: {
-        if (!root.toplevel)
+    // Entering or leaving full screen or a Split View Desktop, or the window gone: what the popover offers no longer holds (TL22).
+    // Judged against the state the popover opened in, once it settled, and closed after the binding round (integrator nested
+    // pass of 1ee992e, BLOCKER A: closing from inside the first evaluation of `inSplit` re-entered `content`, `address` and the
+    // overlay's Loader; the popover never showed and the overlay stayed mapped, swallowing input).
+    // Each deferred step acts only while the popover is still the popup open (another popup may have taken its place).
+    property var openedIn: null
+    function settle(): void {
+        if (Popups.kind !== "tiling")
+            return;
+        if (!root.toplevel) {
+            Popups.close(); // the window is gone, or no window has that address: nothing to offer
+            return;
+        }
+        root.openedIn = {address: root.address, fullscreen: root.fullscreen, inSplit: root.inSplit};
+    }
+    function closeIfOpen(): void {
+        if (Popups.kind === "tiling")
             Popups.close();
+    }
+    function closeIfChanged(): void {
+        const o = root.openedIn;
+        if (o !== null && o.address === root.address && (o.fullscreen !== root.fullscreen || o.inSplit !== root.inSplit))
+            Qt.callLater(root.closeIfOpen);
+    }
+    Component.onCompleted: Qt.callLater(root.settle)
+    onAddressChanged: {
+        root.openedIn = null; // another window's popover: its own state, once settled
+        Qt.callLater(root.settle);
+    }
+    onFullscreenChanged: root.closeIfChanged()
+    onInSplitChanged: root.closeIfChanged()
+    onToplevelChanged: {
+        if (!root.toplevel && root.openedIn !== null)
+            Qt.callLater(root.closeIfOpen);
     }
 
     function indexOf(key: string): int {
         return root.entries.findIndex(e => e.key === key);
     }
 
+    // Opens the submenu of row `r` beside it (on the right, or on the left when the output has no room); `byKey`: it takes the
+    // keyboard on its first row.
+    function openSub(r: int, byKey: bool): void {
+        const rowItem = rowRepeater.itemAt(r);
+        if (!rowItem)
+            return;
+        root.subRow = r;
+        const right = root.mapToItem(null, root.width, 0).x;
+        const room = root.Window.window ? root.Window.window.width - right : 0;
+        subMenu.x = room >= subMenu.width + Tokens.spacingSm ? root.width - Tokens.menuSubmenuOverlap : Tokens.menuSubmenuOverlap - subMenu.width;
+        subMenu.y = rowItem.mapToItem(root, 0, 0).y - Tokens.menuPadding;
+        subMenu.currentIndex = byKey ? 0 : -1;
+        if (byKey)
+            subMenu.forceActiveFocus();
+    }
+
+    function closeSub(): void {
+        root.subRow = -1;
+        root.forceActiveFocus();
+    }
+
     function run(item: var): void {
         if (!item || item.enabled === false)
             return;
+        if (item.submenu) {
+            root.openSub(root.content.rows.findIndex(r => r.id === item.id), true);
+            return;
+        }
         const window = root.toplevel;
         switch (item.id) {
         case "tile":
@@ -86,6 +151,12 @@ FocusScope {
             break;
         case "fullscreen":
             Compositor.toggleFullscreen(window);
+            break;
+        case "split":
+            Compositor.split(window, item.side);
+            break;
+        case "exitSplit":
+            Compositor.unsplit(window);
             break;
         case "moveToOutput":
             Compositor.moveToOutput(window, item.output);
@@ -111,7 +182,9 @@ FocusScope {
         const p = root.mapFromItem(null, x, y);
         const l = root.light;
         const inLight = l !== null && x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h;
-        if (inLight || root.contains(p))
+        const s = subMenu.mapFromItem(null, x, y);
+        const inSub = root.subRow >= 0 && subMenu.containsPoint(s.x, s.y);
+        if (inLight || inSub || root.contains(p))
             away.stop();
         else if (!away.running)
             away.start();
@@ -154,8 +227,14 @@ FocusScope {
             if (root.current >= 0 && root.current < root.entries.length)
                 root.run(root.entries[root.current].item);
             break;
-        case Qt.Key_Left:
         case Qt.Key_Right:
+            // A row with a submenu (Full Screen ›) opens it, as a menu does; elsewhere Right moves along a glyph row.
+            if (root.current >= 0 && root.current < root.entries.length && root.entries[root.current].item.submenu && root.entries[root.current].enabled) {
+                root.run(root.entries[root.current].item);
+                break;
+            }
+            // fallthrough
+        case Qt.Key_Left:
         case Qt.Key_Up:
         case Qt.Key_Down:
         case Qt.Key_Home:
@@ -348,6 +427,7 @@ FocusScope {
         }
 
         Repeater {
+            id: rowRepeater
             model: root.content.rows
 
             Item {
@@ -400,6 +480,7 @@ FocusScope {
                     width: parent.width - x - Tokens.menuItemPadding
                     anchors.verticalCenter: parent.verticalCenter
                     elide: Text.ElideRight
+                    rightPadding: row.modelData.submenu ? Tokens.menuIconSize : 0
                     text: row.modelData.text
                     color: row.enabledHere ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
                     font.family: Appearance.fontFamily
@@ -408,16 +489,44 @@ FocusScope {
                     font.weight: Tokens.typographySmallWeight
                 }
 
+                // A submenu's chevron (Full Screen ›).
+                Icon {
+                    visible: !!row.modelData.submenu
+                    anchors.right: parent.right
+                    anchors.rightMargin: Tokens.menuItemPadding
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Tokens.menuIconSize
+                    name: "chevron-right"
+                    color: rowLabel.color
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: row.enabledHere
-                    onEntered: root.current = root.indexOf(row.key)
-                    onExited: if (row.highlighted)
+                    onEntered: {
+                        root.current = root.indexOf(row.key);
+                        if (row.modelData.submenu)
+                            root.openSub(row.index, false);
+                        else if (root.subRow >= 0)
+                            root.closeSub();
+                    }
+                    onExited: if (row.highlighted && root.subRow !== row.index)
                         root.current = -1
                     onClicked: root.run(row.modelData)
                 }
             }
         }
+    }
+
+    // Full Screen ›'s submenu (TL33): beside its row, the frosted menu of the menu bar's submenus (the overlay blurs it too).
+    PopupMenu {
+        id: subMenu
+        visible: root.subRow >= 0
+        isSubmenu: true
+        model: root.subModel
+        accessibleName: qsTr("Full Screen")
+        onActivated: item => root.run(item)
+        onCloseRequested: root.closeSub()
     }
 }

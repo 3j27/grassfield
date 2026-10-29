@@ -17,10 +17,10 @@
 #   4. checks again: no db.lck, pacman -Qu answers (exit 0 or 1) and lists nothing but "[ignored]" (S12), the recipe is
 #      Omarchy's and pinned (with omarchy-pkg-missing for omarchy-pkg-aur-add, which calls it), and every file the
 #      catalog pins (<op-id>.pins, the signed catalog's pins the Store wrote there) is unchanged in the installed
-#      Omarchy; for the AUR (step 3b2), its plan again: an install only of names pacman does not resolve from the
-#      repositories (a package, a provider, a group: yay would take the repository's), a removal only of packages
-#      installed explicitly from outside the repositories, that the deny list (the helper's, ADR-0037 b.1) does not
-#      name, and whose whole plan (-Rs) names no denied package;
+#      Omarchy; for the AUR (step 3b2), its plan again: Omarchy's package lists read, and no name the deny list (the
+#      helper's, ADR-0037 b.1) names; an install only of names pacman does not resolve from the repositories (a package,
+#      a provider, a group: yay would take the repository's), a removal only of packages installed explicitly from
+#      outside the repositories, and whose whole plan (-Rs) names no denied package;
 #   5. runs the recipe, ${OMARCHY_PATH:-/usr/share/omarchy}/bin/<recipe>, with its arguments, as an argument vector;
 #   6. writes <op-id>.exit with the code (by rename, the Store never reads half a file) and exits with it.
 # setup: <recipe> is omarchy-install-<name> or omarchy-remove-<name>, with at most 4 arguments of [a-z0-9][a-z0-9.-]{0,63}.
@@ -174,10 +174,28 @@ denied() { # name: 0 when the system, Omarchy or Grassfield needs it
 # 4b. The AUR's plan, checked again (the Store checked it before; the system may have changed since).
 if [[ $kind == aur ]]; then
   refuse() { finish 7 "$1: nothing was run."; }
+  # What denied() reads, for both commands: Omarchy's two package lists (in the installed Omarchy), pacman's HoldPkg.
+  declare -A omarchy_lists=() hold=() explicit=() foreign=()
+  for list in "$omarchy/install/omarchy-base.packages" "$omarchy/install/omarchy-other.packages"; do
+    [[ -f $list ]] || continue
+    while IFS= read -r line; do
+      line=${line%%#*}
+      for word in $line; do omarchy_lists[$word]=1; done
+    done <"$list"
+  done
+  ((${#omarchy_lists[@]})) || refuse "Omarchy's package lists are missing or empty"
+  while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9>&-)
+  stop
   if [[ $recipe == omarchy-pkg-aur-add ]]; then
+    # Never a name of the deny list: what the Store could not remove it does not build, and an AUR package never takes a
+    # name of the system's, Omarchy's or Grassfield's (grassfield-*, omarchy-*: anyone can name a package on the AUR).
+    for name in "$@"; do
+      denied "$name" && refuse "$name is a name the system, Omarchy or Grassfield uses: Grassfield Store does not build it from the AUR"
+    done
     # yay installs from the repositories whatever pacman resolves a name to (the package, a provider of it, a group): only
-    # names pacman does not resolve (-Sp, as the user: S10). Exit 0 resolved; 1 with "target not found" not there;
-    # anything else is not an answer. A system whose pacman lists no repository at all is not read as "not there".
+    # names pacman does not resolve (-Sp, as the user: S10). Exit 0 resolved; 1 with pacman's whole line "error: target
+    # not found: <name>" (never a longer name's) not there; anything else is not an answer. A system whose pacman lists
+    # no repository at all is not read as "not there".
     [[ -n $(pacman -Slq 2>/dev/null 9>&- | head -n 1) ]] || finish 1 "pacman lists no repository: nothing was run."
     stop
     for name in "$@"; do
@@ -185,20 +203,10 @@ if [[ $kind == aur ]]; then
       code=$?
       stop
       ((code == 0)) && refuse "A repository has $name, or a package that provides it: Grassfield Store installs it from there"
-      [[ $out == *"target not found: $name"* ]] || finish 1 "pacman could not read the repositories (exit code $code): nothing was run."
+      [[ $'\n'$out$'\n' == *$'\n'"error: target not found: $name"$'\n'* ]] ||
+        finish 1 "pacman could not read the repositories (exit code $code): nothing was run."
     done
   else
-    # What denied() reads: Omarchy's two package lists (in the installed Omarchy), pacman's HoldPkg.
-    declare -A omarchy_lists=() hold=() explicit=() foreign=()
-    for list in "$omarchy/install/omarchy-base.packages" "$omarchy/install/omarchy-other.packages"; do
-      [[ -f $list ]] || continue
-      while IFS= read -r line; do
-        line=${line%%#*}
-        for word in $line; do omarchy_lists[$word]=1; done
-      done <"$list"
-    done
-    ((${#omarchy_lists[@]})) || refuse "Omarchy's package lists are missing or empty"
-    while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9>&-)
     while IFS= read -r line; do [[ -n $line ]] && explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null 9>&-)
     while IFS= read -r line; do [[ -n $line ]] && foreign[$line]=1; done < <(pacman -Qqm 2>/dev/null 9>&-)
     stop
