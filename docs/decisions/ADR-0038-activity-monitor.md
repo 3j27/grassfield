@@ -835,3 +835,13 @@ records); 9 of 15 mutants killed.
 | NIT: six surviving mutants (the seen count, a key without the start time or the code flag, the NUL, a 120-byte io buffer, the reuse branch) | a case each: `AnEndedProcessIsSweptBesideAKernelThread`, `AReusedPidWithTheSameLineButItsStartIsAnotherProcess`, `TheCodeAddressFlagIsPartOfTheCache`, `StatEndsWhereItsTextEnds`, `IoOfABusyProcess`; the seven mutants (with MINOR 1's) each killed |
 | NIT: the load is read after the build | read just before the measures, the worse phase counts, printed again beside the verdicts |
 | NIT: an idle fixture favours the cache | `activity_cost.sh --changing 10` (the default): Disk measured again with every tenth process changing its stat and io lines between samples (the bench pokes them outside the measured time), against A10's one pass on the same fixture poked the same way between its rounds (reading a process that just ran costs any reader more), at 1.15: 1.06 and 1.11 × here |
+
+**Step 2b, pull request #53: the integrator's opus review of 91dcb63 (FAIL: three MAJORs, NITs; 2026-10-29).** 25 of 27
+mutants killed; the integrator's decision: until the owner's system and the packages move to Qt 6.12 together, Grassfield
+code loads and passes its checks on Qt 6.11.2 too, and a Qt 6.12 API is used only behind a guard.
+| Note | Answer |
+|---|---|
+| MAJOR 1: `ProcessList.qml` sets `Accessible.expandable` and `.expanded`, which Qt 6.11.2 lacks: the window does not load | set from `Component.onCompleted` only when the attached object has them; A-W1 checks the state on Qt 6.12, and every check runs on Qt 6.11.2 too (`step2b.md`) |
+| MAJOR 2: with transparent huge pages `always`, the changing fixture's stat lines seldom change | its region is `madvise(MADV_NOHUGEPAGE)`; `activity_cost.sh` fails when fewer stat or io lines are parsed a sample than 90 % of the changing processes (shown failing on a huge-page build) |
+| MAJOR 3: the battery's times count to the last battery state, set only when it changes | each sample moves that time; a case checks the time and the graph between two states |
+| NIT: `windowsOf` strips `.desktop` with case; two surviving mutants; the PSS range and 1.60 % at 1 s | without case, with a case; a case each (the vendor's end, the pruning); −12 to +292 kB, and the 1.60 % stated as a miss here |
