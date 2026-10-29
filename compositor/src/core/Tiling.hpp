@@ -598,9 +598,9 @@ namespace gf::tiling {
     // is no member (D52).
     struct SplitDesk {
         int64_t               workspace = 0;
-        std::string           output;
+        std::string           output{};
         int64_t               home = 0;
-        std::vector<uint64_t> members;
+        std::vector<uint64_t> members{};
         bool                  waiting = false; // its second window not chosen yet (the suggestion pending): one member does not fill it
 
         bool                  operator==(const SplitDesk&) const = default;

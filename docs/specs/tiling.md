@@ -479,8 +479,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   a member back in its half at the release; the tiling keys, Arrange and an edge double-click refuse a member, Fill aside for
   one alone (D50). Its picker ending without a second window in any way (dismissed, refused over another surface, timed out,
   ended by another change) makes the one member fill the Desktop; while locked, at the unlock (D51). Exit Full Screen of a
-  window tiled on its Desktop before the split puts it back into that tile when its zone is still free (D54). A Split View
-  Desktop emptied while locked ends at the unlock (D55); it follows its workspace to another output when its output goes
+  window tiled on its Desktop before the split puts it back into that tile when its zone is still free, the picked window's
+  too, and a member zoomed or in full screen by a key leaves that first (D54, D50). Nothing of a Split View changes behind
+  the lock: the lock ends a pending picker, and the fill of a lone member or the end of an emptied Desktop waits for the
+  unlock, when the plugin does it itself; a fill the shell sent and the plugin refused as locked is sent again (D55,
+  integrator re-review of e5bd9d2). A Split View Desktop follows its workspace to another output when its output goes
   away. The Overview names it after its apps and gives it no number, the Desktops keep theirs, and the Window menu's Move to
   Desktop lists the Desktops only (D53). Step 6b: the separator's
   double-click reset, the drag that swaps the two, the titles hidden and revealed at the top, the Split View rows (Replace

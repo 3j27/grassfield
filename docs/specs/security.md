@@ -424,8 +424,9 @@ shell no longer relies on that alone:
   fills through `Compositor.fillAlone` and `Compositor.tile`, which both ask `SessionState.refuses` first (integrator
   review of c7a6b6e, MAJOR 2: `tile` did not), and services/TilingSuggest computes no window to fill while locked (it
   sends the fill at the unlock). What the plugin does on its own after a member left (the other fills, an empty Split View
-  Desktop shown goes back home) moves only windows of that Desktop and shows no new surface, and an emptied Split View
-  Desktop is not left behind the lock screen: it ends at the unlock. The Split View Desktops the shell reads from the
+  Desktop shown goes back home) moves only windows of that Desktop and shows no new surface, and none of it happens behind
+  the lock screen: the lock ends a pending picker, and the fill of a lone member or the end of an emptied Split View
+  Desktop waits for the unlock (integrator re-review of e5bd9d2). The Split View Desktops the shell reads from the
   `hyprctl grassfield-tiling` reply are Desktop ids, output names and window addresses only. lock_surfaces.sh checks the
   four refusals and the fill path, each with a mutation; tests/shell/split_view checks them on the real singletons.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
