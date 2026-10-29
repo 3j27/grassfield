@@ -145,6 +145,7 @@ inline void skipField(const char *&p)
 
 bool parseStat(std::string_view text, StatFields &out, bool codeAddresses)
 {
+    out.startCode = out.endCode = 0; // read only with codeAddresses; every other field is set when it returns true
     const size_t open = text.find('(');
     if (open == std::string_view::npos)
         return false;

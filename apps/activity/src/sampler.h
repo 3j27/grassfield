@@ -191,6 +191,7 @@ struct Counters {
     uint64_t listed = 0, statReads = 0, statusReads = 0, ioReads = 0, threadStatusReads = 0, fdListReads = 0, fdLinks = 0,
              fdinfoReads = 0, sockDumps = 0, cmdlineReads = 0, cgroupReads = 0, exeLinks = 0, systemReads = 0,
              statmReads = 0, ownerStats = 0;
+    uint64_t statParses = 0, ioParses = 0; // lines parsed: an unchanged one is not (2b)
     size_t keptFiles = 0;
 };
 
@@ -259,6 +260,11 @@ private:
         double ioTime = 0;
         double readRate = -1, writeRate = -1;
         std::string comm, name; // stat's name at the last identification; the name shown
+        // The last stat and io read, and what they gave: a line identical to the last one is not parsed again (most
+        // processes are idle between two samples; 2b, the Disk tab's cost).
+        std::string statText, ioText;
+        StatFields stat;
+        bool statParsed = false, statCode = false, ioParsed = false;
         // The rest: read in turns, on some tabs, or once.
         uint64_t vmSwapKb = 0, vmHwmKb = 0;
         std::string exe; // the exe link at the last identification

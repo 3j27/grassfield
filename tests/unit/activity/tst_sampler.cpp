@@ -592,6 +592,42 @@ TEST(Sampler, AClientIdleAtItsTurnIsPickedAndItsWorkShows)
     EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0);
 }
 
+// 2b, the Disk tab's cost: a stat or io line identical to the last one is not parsed again, and the row is the same; a
+// changed line is, whatever its length, and so is a line whose code addresses are wanted again.
+TEST(Sampler, AnUnchangedLineIsNotParsedAgain)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    f.process(101, "other", kMe + 1, 50, 1, nul({"other"}), "/");
+    auto io = [&](unsigned long long read) {
+        f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: " + std::to_string(read)
+                                   + "\nwrite_bytes: 0\ncancelled_write_bytes: 0\n");
+    };
+    io(1000);
+    Sampler s(options(f));
+    const unsigned reads = readsForTab(Tab::Disk);
+    Snapshot first = s.sample(reads, 1.0);
+    EXPECT_EQ(first.counters.statParses, 2u);
+    EXPECT_EQ(first.counters.ioParses, 1u);
+    Snapshot same = s.sample(reads, 2.0);
+    EXPECT_EQ(same.counters.statParses, 0u);
+    EXPECT_EQ(same.counters.ioParses, 0u);
+    ASSERT_NE(row(same, 100), nullptr);
+    EXPECT_EQ(row(same, 100)->name, "mine");
+    EXPECT_EQ(row(same, 100)->bytesRead, 1000u);
+    EXPECT_DOUBLE_EQ(row(same, 100)->readRate, 0.0);
+    EXPECT_EQ(row(same, 101)->name, "other");
+
+    // Same lengths, other bytes: parsed, and the rates follow.
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 200, 0, 1, 1));
+    io(5000);
+    Snapshot changed = s.sample(reads, 3.0);
+    EXPECT_EQ(changed.counters.statParses, 1u);
+    EXPECT_EQ(changed.counters.ioParses, 1u);
+    EXPECT_DOUBLE_EQ(row(changed, 100)->readRate, 4000.0);
+    EXPECT_DOUBLE_EQ(row(changed, 100)->cpuPercent, 100.0);
+}
+
 // AM8: back on screen after a time hidden, no rate is drawn across the gap; the next sample starts every rate again.
 TEST(Sampler, NoRateIsDrawnAcrossAGap)
 {

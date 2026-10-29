@@ -37,6 +37,19 @@ TEST(ProcParse, StatRefusesTruncatedOrBrokenText)
     EXPECT_FALSE(parseStat("abc (x) S 1 2 3 0 -1 0 0 0 0 0 1 1 0 0 20 0 1 0 5 1 1 0", st));
 }
 
+// The sampler parses into the fields it keeps (2b): read without the code addresses, they are 0 again.
+TEST(ProcParse, StatWithoutCodeAddressesClearsThem)
+{
+    const std::string text = "7 (x) S 1 7 7 0 -1 0 0 0 0 0 1 1 0 0 20 0 1 0 5 1 1 0 4096 8192\n";
+    StatFields st;
+    ASSERT_TRUE(parseStat(text, st, true));
+    EXPECT_EQ(st.startCode, 4096u);
+    EXPECT_EQ(st.endCode, 8192u);
+    ASSERT_TRUE(parseStat(text, st, false));
+    EXPECT_EQ(st.startCode, 0u);
+    EXPECT_EQ(st.endCode, 0u);
+}
+
 TEST(ProcParse, KernelThreadFlag)
 {
     StatFields st;

@@ -603,21 +603,34 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                     continue;
                 }
             }
-            StatFields st;
-            if (!parseStat(text, st, fresh || p.dirUid == opt_.uid)) { // code addresses: 0 for others (not traceable)
-                closeProc(p);
-                procs_.erase(it);
-                continue;
+            // Parsed again only when the line changed: the same bytes give the same fields (2b).
+            const StatFields &st = p.stat;
+            const bool code = fresh || p.dirUid == opt_.uid; // code addresses: 0 for others (not traceable)
+            if (!p.statParsed || p.statCode != code || text != p.statText) {
+                p.statParsed = false;
+                ++c.statParses;
+                if (!parseStat(text, p.stat, code)) {
+                    closeProc(p);
+                    procs_.erase(it);
+                    continue;
+                }
+                p.statText.assign(text.data(), text.size());
+                p.statCode = code;
+                p.statParsed = true;
             }
             if (!fresh && st.starttime != p.start) { // a pid reused, read by path: another process
                 closeProc(p);
                 p = Proc{};
                 fresh = true;
-                if (!readKept(p.statFd, pid, "stat", text, c.statReads) || !parseStat(text, st)) {
+                ++c.statParses;
+                if (!readKept(p.statFd, pid, "stat", text, c.statReads) || !parseStat(text, p.stat)) {
                     closeProc(p);
                     procs_.erase(it);
                     continue;
                 }
+                p.statText.assign(text.data(), text.size());
+                p.statCode = true;
+                p.statParsed = true;
             }
             if (fresh)
                 p.turn = nextTurn_++;
@@ -790,7 +803,18 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             if (own && (reads & ReadIo)) {
                 IoFields io;
                 std::string_view ioText; // kept and re-read with pread, as stat (the kernel checks the access at each read)
-                if (readKept(p.ioFd, pid, "io", ioText, c.ioReads) && parseIo(ioText, io)) {
+                bool ioOk = readKept(p.ioFd, pid, "io", ioText, c.ioReads);
+                if (ioOk && p.ioParsed && ioText == p.ioText) { // unchanged: the counters last read (2b)
+                    io.readBytes = p.ioRead;
+                    io.writeBytes = p.ioWrite;
+                } else if (ioOk) {
+                    ++c.ioParses;
+                    ioOk = parseIo(ioText, io);
+                    p.ioParsed = ioOk;
+                    if (ioOk)
+                        p.ioText.assign(ioText.data(), ioText.size());
+                }
+                if (ioOk) {
                     if (p.haveIo && now > p.ioTime) {
                         p.readRate = rate(io.readBytes, p.ioRead, now - p.ioTime);
                         p.writeRate = rate(io.writeBytes, p.ioWrite, now - p.ioTime);
