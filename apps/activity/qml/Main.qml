@@ -59,6 +59,10 @@ Window {
                 value: root.backend.tab
                 accessibleName: qsTr("Resource")
                 onPicked: id => root.backend.tab = id
+
+                HoverHandler {
+                    id: tabsHover
+                }
             },
             SearchField {
                 id: search
@@ -69,6 +73,10 @@ Window {
                 // AM14: a live filter, no Return needed.
                 onTextChanged: root.backend.search = search.text
                 Keys.onDownPressed: processList.forceActiveFocus()
+
+                HoverHandler {
+                    id: searchHover
+                }
             }
         ]
 
@@ -113,6 +121,19 @@ Window {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         focus: true
+    }
+
+    // AM3: every toolbar control has a tooltip, under it after the shared delay; declared after the list so it shows over it.
+    Tooltip {
+        id: toolbarTip
+        objectName: "toolbarTip"
+        readonly property Item over: tabsHover.hovered ? tabs : searchHover.hovered ? search : null
+        readonly property point place: over ? over.mapToItem(root.contentItem, 0, over.height) : Qt.point(0, 0)
+        text: over === tabs ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID") : ""
+        shown: over !== null
+        x: Math.round(Math.max(Tokens.spacingXs, Math.min(root.width - width - Tokens.spacingXs, place.x + ((over ? over.width : 0) - width) / 2)))
+        y: Math.round(place.y + Tokens.spacingXs)
+        z: 10
     }
 
     // ---- Appearance (grassfield.json, read by the backend) and the window's own surface.

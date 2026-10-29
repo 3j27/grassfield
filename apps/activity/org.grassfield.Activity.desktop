@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
 Name=Activity Monitor
-Name[fr]=Moniteur d'activité
+Name[fr]=Moniteur d’activité
 GenericName=System Monitor
 GenericName[fr]=Moniteur système
 Comment=See the processes and the resources they use
-Comment[fr]=Voir les processus et les ressources qu'ils utilisent
+Comment[fr]=Voir les processus et les ressources qu’ils utilisent
 Keywords=processes;cpu;memory;energy;disk;network;tasks;monitor;
 Keywords[fr]=processus;processeur;mémoire;énergie;disque;réseau;tâches;moniteur;
 Exec=grassfield-activity

@@ -6445,6 +6445,14 @@
         <source>Search processes</source>
         <translation>Rechercher des processus</translation>
     </message>
+    <message>
+        <source>Choose the resource the table shows</source>
+        <translation>Choisir la ressource affichée dans le tableau</translation>
+    </message>
+    <message>
+        <source>Search processes by name, user, command or PID</source>
+        <translation>Rechercher des processus par nom, utilisateur, commande ou PID</translation>
+    </message>
 </context>
 <context>
     <name>MediaView</name>

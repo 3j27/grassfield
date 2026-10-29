@@ -85,6 +85,21 @@ TestCase {
         verify(t.backend.calls.indexOf("sortBy:pid") >= 0);
     }
 
+    // AM3: every toolbar control has a tooltip, under it.
+    function test_toolbarTooltips() {
+        const t = make();
+        const tip = findAll(t.win.contentItem, i => i.objectName === "toolbarTip")[0];
+        verify(tip);
+        verify(!tip.visibleNow);
+        mouseMove(t.win.tabs, t.win.tabs.width / 2, t.win.tabs.height / 2);
+        tryVerify(() => tip.visibleNow, 3000, "the tabs' tooltip");
+        compare(tip.text, "Choose the resource the table shows");
+        verify(tip.y >= t.win.tabs.mapToItem(t.win.contentItem, 0, t.win.tabs.height).y, "under the control");
+        mouseMove(t.win.searchField, t.win.searchField.width / 2, t.win.searchField.height / 2);
+        tryVerify(() => tip.text === "Search processes by name, user, command or PID", 3000, "the search field's tooltip");
+        verify(tip.visibleNow);
+    }
+
     function test_columnsMenuShowsAnOptionalColumn() {
         const t = make();
         const header = findAll(t.win.contentItem, i => i.Accessible && i.Accessible.role === Accessible.ColumnHeader && i.Accessible.name === "% CPU")[0];
