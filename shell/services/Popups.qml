@@ -116,16 +116,30 @@ Singleton {
             root.pointerReleased(screen, x, y);
     }
 
+    // An open in progress: its content is created inside the change of `kind` (the Overlay's Loader), and the popup that
+    // closes itself at once does so inside it. Such a close waits for the end of the open (closeLater): made there, it re-entered
+    // the bindings still updating for the open (`active`, the Overlay's `open`), which then kept their stale value: the overlay
+    // stayed mapped with no popup, swallowing every click and key (#48 nested pass, BLOCKER A).
+    property bool opening: false
+    // One more at each open: a close deferred for an open does not close a later one.
+    property int openCount: 0
+
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
         // Nothing opens over the lock screen (GF-116): menus, Control Center, panels and sheets included.
         if (SessionState.refuses("popup " + popupKind))
             return;
-        data = payload ? payload : {};
-        screenName = ScreenChoice.pick(screen, Compositor.activeScreenName, Quickshell.screens.map(s => s.name));
-        anchorX = x;
-        anchorY = y;
-        align = alignment;
-        kind = popupKind;
+        root.openCount++;
+        root.opening = true;
+        try {
+            data = payload ? payload : {};
+            screenName = ScreenChoice.pick(screen, Compositor.activeScreenName, Quickshell.screens.map(s => s.name));
+            anchorX = x;
+            anchorY = y;
+            align = alignment;
+            kind = popupKind;
+        } finally {
+            root.opening = false;
+        }
     }
 
     // Opens on the screen of the current popup, or the active display (IPC and keyboard use).
@@ -161,8 +175,19 @@ Singleton {
     }
 
     function close(): void {
+        if (root.opening) {
+            root.closeLater(root.openCount);
+            return;
+        }
         kind = "";
         data = {};
+    }
+
+    function closeLater(count: int): void {
+        Qt.callLater(() => {
+            if (root.openCount === count)
+                root.close();
+        });
     }
 
     // The session locks: whatever is open closes (Lock.lock() closes it too, before it asks for the lock).

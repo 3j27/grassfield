@@ -68,6 +68,7 @@ case ${1-} in
   -Sp) # what pacman resolves: a repository's package (/run/test/sl) or one that provides the name (/run/test/provides)
     [[ -e /run/test/sl ]] && {
       [[ -e /run/test/sp-fail ]] && { echo "error: failed to init transaction (unable to lock database)" >&2; exit 1; }
+      [[ -e /run/test/sp-other ]] && { echo "error: target not found: $(cat /run/test/sp-other)" >&2; exit 1; }
       name=${!#}
       grep -qx -- "$name" /run/test/sl && { echo "$name"; exit 0; }
       provider=$(awk -v n="$name" '$1 == n {print $2}' /run/test/provides 2>/dev/null)
@@ -331,6 +332,31 @@ op=$(newop); aurpins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
 expect "pacman -Sp fails otherwise (its database locked) -> exit 1, not run" bash -c "test $rc == 1 && test \$(wc -l <$M/aur) == 1"
 rm -f "$T/sp-fail"
+# pacman's whole line for the name asked: a longer name's "target not found" (example-app-bin-extra for example-app-bin)
+# is no answer about it.
+printf 'example-app-bin-extra' >"$T/sp-other"
+op=$(newop); aurpins "$op"
+run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?
+expect "pacman's 'target not found' for a longer name only -> exit 1, not run" bash -c "test $rc == 1 && test \$(wc -l <$M/aur) == 1"
+rm -f "$T/sp-other"
+# Never a name of the deny list (the helper's): an AUR package with the name of Omarchy's, Grassfield's or the system's.
+add_refused() { # description name... : exit 7, the command not run
+  local desc=$1 op rc
+  shift
+  op=$(newop); aurpins "$op"
+  run "$op" "$(soon)" aur omarchy-pkg-aur-add "$@"; rc=$?
+  expect "$desc -> exit 7, not run" bash -c "test $rc:$(exitfile "$op") == 7:7 && test \$(wc -l <$M/aur) == 1"
+}
+add_refused "omarchy-theme-example (Omarchy's prefix)" omarchy-theme-example
+expect "  the message says why" grep -q 'omarchy-theme-example is a name the system, Omarchy or Grassfield uses' /tmp/run.out
+add_refused "grassfield-shell-git (Grassfield's prefix)" grassfield-shell-git
+add_refused "linux-example (the kernels' prefix)" linux-example
+add_refused "example-app-bin, then btop (in Omarchy's package list, before any repository is asked)" example-app-bin btop
+expect "  the message names btop" grep -q 'btop is a name the system, Omarchy or Grassfield uses' /tmp/run.out
+add_refused "example-app-bin, then glibc (the system's)" example-app-bin glibc
+mv "$O/install/omarchy-base.packages" "$O/install/base.away"
+add_refused "Omarchy's package lists missing" example-app-bin
+mv "$O/install/base.away" "$O/install/omarchy-base.packages"
 mv "$T/sl" "$T/sl.kept" && : >"$T/sl"
 op=$(newop); aurpins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-aur-add example-app-bin; rc=$?

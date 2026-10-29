@@ -158,6 +158,31 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   keys (a WARN line for each, two per push); the shell's own gates keep the behaviour right (ADR-0036 D39). The shell now sends `tilingOptionDrag` (with `window-tiling`) and
   `titlebarDoubleClick` = `fill` (only with `tiling-arrange`, `zoom` otherwise). "Bring tile groups forward together" adds
   no key: the plugin raises a group only on `group_front`.
+- Window tiling, step 6a (2026-10-29, additive, ADR-0036 D40-D47, docs/specs/tiling.md TL33): verbs `split(address, side)`
+  and `unsplit(address)`, feature `tiling-split` (advertised with `tiling-arrange` when both registered). `split` (Full
+  Screen › Left or Right of Screen, `side` ∈ left|right) makes a Split View Desktop: a new Desktop with the next free id on
+  the window's output, shown, the window in that half of the whole output (the menu bar, the Dock and the Stages strip are
+  not reserved there; one separator of the tiling margin between the halves), tiled in the `left-right` layout; the
+  `hyprctl grassfield-tiling` reply's `suggestion` then offers the other half with the windows of the Desktop it came from
+  (always, whatever `tilingSuggestions` says); a pick is an `arrange` with `zone` and `with` as in step 4a and joins the
+  window's tile group. No suggestion, or a window left alone once the other left, and it fills the Desktop. `unsplit`
+  (a Split View window's Exit Full Screen) sends that window back to the Desktop it came from at its box from before,
+  shown; the other fills the Split View Desktop alone; one left empty ends, and goes back to the Desktop it came from when
+  it was shown. Refused while the session is locked (`tiling` notice `reason:"locked"`) and for an unknown window, a
+  window that cannot be tiled now, one not on the Desktop its output shows or already on a Split View Desktop, a side
+  other than left or right, a window of no Split View Desktop (`unsplit`) or while the Stages strip shows on that output
+  (`reason:"invalid"`). The reply gains `"splits":[{"workspace":N,"output":"<name>","home":N,"windows":["<hex>",…],
+  "waiting":bool}]` (always present, empty without a Split View Desktop): its members (the window it was made for and the
+  one picked, whatever their state; another window on that Desktop is none) and whether its one member still waits for
+  its second window. The shell lists each right after the Desktop it came from, unnumbered, hides the menu bar and the Dock
+  on it, sends `unsplit` for the Exit Full Screen of a member, and `tile(address, "fill")` for a member still waiting once
+  its picker is no longer pending (dismissed, refused, timed out). `tile` (except that Fill of a lone member) and
+  `arrange` refuse a member (`reason:"invalid"`), and `tile(…, "previous")` does nothing for one: its Desktop places it
+  (integrator review of c7a6b6e). The `tile-hover` event's `enter` and `open` add `splittable` (the window can be tiled
+  now and fits either half of its output's Split View Desktop, its minimum size with its titlebar band: the popover greys
+  Left and Right of Screen otherwise); `split`, and a pick into the other half of a Split View Desktop, refuse a window
+  that does not fit its half (`reason:"invalid"`), and the suggestion of that half offers only windows that fit
+  (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -184,12 +209,12 @@ event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
-event tile-hover: address state x y w h tileable
+event tile-hover: address state x y w h tileable splittable
 event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
@@ -200,8 +225,8 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit
 ```
 
 ## Evidence

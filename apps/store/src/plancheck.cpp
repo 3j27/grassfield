@@ -4,8 +4,11 @@
 #include "pacman.h"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -73,6 +76,69 @@ QString setupDifference(const SetupCheck &setup)
 }
 
 } // namespace
+
+QString databasesBehind(const QByteArray &softwareUpdate, const QDateTime &lastSync)
+{
+    if (softwareUpdate.size() > 512 * 1024 || !lastSync.isValid())
+        return {};
+    const QJsonObject file = QJsonDocument::fromJson(softwareUpdate).object();
+    if (file.value(QStringLiteral("version")).toInt() != 1)
+        return {};
+    // The last successful answer: the file's own, else the one a failed check left as `previous` (the shell's combine()).
+    static const QStringList kSuccess{QStringLiteral("up-to-date"), QStringLiteral("available"), QStringLiteral("not-set-up")};
+    const auto success = [](const QJsonObject &o) { return kSuccess.contains(o.value(QStringLiteral("state")).toString()); };
+    const QJsonObject previous = file.value(QStringLiteral("previous")).toObject();
+    const QJsonObject o = success(file) ? file : success(previous) ? previous : QJsonObject();
+    const QDateTime checked = QDateTime::fromString(o.value(QStringLiteral("checkedAt")).toString(), Qt::ISODate);
+    if (o.isEmpty() || !checked.isValid() || checked <= lastSync)
+        return {};
+    // Grassfield's own release alone is not the mirror's: the Store installs nothing from Grassfield's repository.
+    const int others = o.value(QStringLiteral("others")).toInt();
+    const QString omarchy = o.value(QStringLiteral("omarchy")).toObject().value(QStringLiteral("available")).toString();
+    if (others <= 0 && omarchy.isEmpty())
+        return {};
+    return QStringLiteral("Software Update (%1), %2: %3 other updates%4; the package databases were synced %5")
+        .arg(o.value(QStringLiteral("state")).toString())
+        .arg(checked.toUTC().toString(Qt::ISODate))
+        .arg(qMax(0, others))
+        .arg(omarchy.isEmpty() ? QString() : QStringLiteral(", Omarchy ") + omarchy.left(64))
+        .arg(lastSync.toUTC().toString(Qt::ISODate));
+}
+
+QDateTime lastSync(const QByteArray &pacmanLogTail, const QDateTime &fallback)
+{
+    // "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists" (pacman's own format since 5.2).
+    static const QRegularExpression line(QStringLiteral(R"(^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)([+-]\d\d)(\d\d)\] \[PACMAN\] synchronizing package lists\s*$)"),
+                                         QRegularExpression::MultilineOption);
+    QDateTime last;
+    for (QRegularExpressionMatchIterator it = line.globalMatch(QString::fromUtf8(pacmanLogTail)); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        const QDateTime t = QDateTime::fromString(m.captured(1) + m.captured(2) + QLatin1Char(':') + m.captured(3), Qt::ISODate);
+        if (t.isValid() && (!last.isValid() || t > last))
+            last = t;
+    }
+    return last.isValid() ? last : fallback;
+}
+
+QDateTime newestSync(const QString &syncDir)
+{
+    QDateTime newest;
+    for (const QFileInfo &f : QDir(syncDir).entryInfoList({QStringLiteral("*.db")}, QDir::Files)) {
+        if (!newest.isValid() || f.lastModified() > newest)
+            newest = f.lastModified();
+    }
+    return newest;
+}
+
+bool downloadGone(const QString &log)
+{
+    // pacman's own lines (LC_ALL=C): "error: failed retrieving file '<file>' from <host> : The requested URL returned error:
+    // 404", or "... : Exceeded the maximum allowed file size (16384) with 16384 bytes" for an error page served as the file.
+    static const QRegularExpression gone(QStringLiteral(R"(^error: failed retrieving file '[^']+' from \S+ : )"
+                                                        R"((The requested URL returned error: (404|410)|Exceeded the maximum allowed file size))"),
+                                         QRegularExpression::MultilineOption);
+    return gone.match(log).hasMatch();
+}
 
 QStringList requiredPins(const QString &recipe)
 {
@@ -174,6 +240,12 @@ InstallPlan checkInstall(const QStringList &packages, const PlanTools &tools, bo
     plan.refusal = readiness(tools, ownOperation, &plan.unfinished, &plan.detail);
     if (plan.refusal != Refusal::None)
         return plan;
+    // The mirror has moved on since the databases were synced: the system is updated first, before anything downloads.
+    if (!tools.behind.isEmpty()) {
+        plan.refusal = Refusal::Outdated;
+        plan.detail = tools.behind;
+        return plan;
+    }
 
     // What pacman would add (S10): --needed leaves out what is there; a dependency it must update shows as an installed
     // package, which this database (equal to the system's, -Qu being empty) can only mean for a package held back.
@@ -210,13 +282,20 @@ InstallPlan checkInstall(const QStringList &packages, const PlanTools &tools, bo
         plan.refusal = Refusal::Outdated;
         return plan;
     }
-    // The first file still on the mirror (S5): a 404 means the databases are older than the mirror.
-    if (tools.head) {
-        const int status = tools.head(QUrl(plan.packages.constFirst().url));
-        if (status == 404 || status == 410) {
-            plan.refusal = Refusal::Outdated;
-            plan.detail = QStringLiteral("%1: HTTP %2").arg(plan.packages.constFirst().url).arg(status);
-            return plan;
+    // Every file still on the mirror (S5; the owner's rc1-7 failed on its 30th file, after the first had answered): a 404 or
+    // 410 means the databases are older than the mirror. All of them (256 at most), asked at once within one deadline
+    // (tools.heads); one the mirror does not answer in time is pacman's to report, not a plan's.
+    if (tools.heads) {
+        QList<QUrl> urls;
+        for (qsizetype i = 0; i < plan.packages.size() && i < 256; ++i)
+            urls.append(QUrl(plan.packages.at(i).url));
+        const QList<int> statuses = tools.heads(urls);
+        for (qsizetype i = 0; i < statuses.size() && i < urls.size(); ++i) {
+            if (statuses.at(i) == 404 || statuses.at(i) == 410) {
+                plan.refusal = Refusal::Outdated;
+                plan.detail = QStringLiteral("%1: HTTP %2").arg(urls.at(i).toString()).arg(statuses.at(i));
+                return plan;
+            }
         }
     }
     QStringList names;
@@ -302,7 +381,7 @@ RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup
 }
 
 InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
-                            const PlanTools &tools, bool online, bool ownOperation)
+                            const DenyList &deny, const PlanTools &tools, bool online, bool ownOperation)
 {
     constexpr int kRounds = 6;
     constexpr int kBuiltMax = 25;
@@ -311,6 +390,17 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
         plan.refusal = Refusal::Failed;
         return plan;
     }
+    // Never a name of the deny list (b.1), the app's or a dependency's built from the AUR: what the Store could not
+    // remove it does not build, and the AUR is anyone's (an omarchy-* or grassfield-* there is not Omarchy's or ours).
+    const auto denied = [&plan, &deny](const QString &n) {
+        if (protection(n, deny) == Protection::None)
+            return false;
+        plan.refusal = Refusal::Protected;
+        plan.protectedPackage = n;
+        return true;
+    };
+    if (denied(name))
+        return plan;
     if (const QString differs = setupDifference(setup); !differs.isEmpty()) {
         plan.refusal = Refusal::OmarchyChanged;
         plan.detail = differs;
@@ -323,6 +413,11 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
     plan.refusal = readiness(tools, ownOperation, &plan.unfinished, &plan.detail);
     if (plan.refusal != Refusal::None)
         return plan;
+    if (!tools.behind.isEmpty()) { // as any install (checkInstall): the system first
+        plan.refusal = Refusal::Outdated;
+        plan.detail = tools.behind;
+        return plan;
+    }
     // Whatever pacman resolves the name to (the package, a provider of it, a group of that name): yay would install that
     // from the repositories, not the AUR's. pacman -Sp, as the user (S10): exit 0 resolved; 1 with "target not found"
     // (LC_ALL=C, childprocess.cpp) not in the repositories; anything else is not an answer.
@@ -338,7 +433,7 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
         plan.detail = name;
         return plan;
     }
-    if (!sp.err.contains("target not found: " + name.toUtf8())) {
+    if (!sp.err.split('\n').contains("error: target not found: " + name.toUtf8())) { // pacman's whole line: not a longer name's
         plan.refusal = Refusal::Failed;
         plan.detail = firstLines(sp.err + sp.out);
         return plan;
@@ -361,6 +456,8 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
                 plan.detail = n;
                 return plan;
             }
+            if (denied(it->name))
+                return plan;
             PlannedPackage built;
             built.name = it->name;
             built.version = it->version;

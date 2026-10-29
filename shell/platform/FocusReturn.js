@@ -89,6 +89,15 @@ function changesFront(name, data, remembered) {
     return false;
 }
 
+// The target of a close after the surface's own action chose a window (the tiling suggestions' pick; macOS: the window just
+// chosen becomes key): that window where it is now (`placement` {workspaceId, parked}, null: gone), when it is shown on the
+// focused Desktop (`focusedWorkspaceId`); else null (nothing is requested).
+function chosenTarget(address, placement, focusedWorkspaceId) {
+    if (!address || !placement || placement.parked || !(placement.workspaceId > 0) || placement.workspaceId !== focusedWorkspaceId)
+        return null;
+    return {kind: "window", address: address};
+}
+
 // The target a surface's close asks for (macOS: the key window is whatever is frontmost NOW; the remembered window only
 // when nothing changed meanwhile): the window active when the surface opened, or null (nothing is requested and Hyprland
 // focuses what it chooses: no window then, another window focused since, the frontmost changed while the surface was

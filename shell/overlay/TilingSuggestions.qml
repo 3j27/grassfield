@@ -23,8 +23,9 @@ FocusScope {
     readonly property real labelHeight: Tokens.menuItemHeight
     readonly property var grid: WindowTiling.suggestionGrid(root.windows.length, root.width, root.height, Tokens.tilingSuggestThumbAspect, root.labelHeight, Tokens.spacingMd,
                                                             Tokens.tilingSuggestTileWidth)
-    // The keyboard's window: the first when a suggestion opens (a visible focus at once; Return takes it).
-    property int current: root.windows.length > 0 ? 0 : -1
+    // The keyboard's window: the first when a suggestion opens or its windows come (a visible focus at once; Return takes it),
+    // kept while it is still one of them (WindowTiling.keptSelection).
+    property int current: -1
     // A window was picked: the plugin's next suggestion (or the end) follows; no second pick meanwhile.
     property bool picked: false
 
@@ -34,12 +35,14 @@ FocusScope {
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Choose a window for this zone")
 
+    Component.onCompleted: root.current = WindowTiling.keptSelection(root.current, root.windows.length, true)
     onSuggestionChanged: {
         root.picked = false;
-        root.current = root.windows && root.windows.length > 0 ? 0 : -1; // windows is not evaluated yet at creation
+        root.current = WindowTiling.keptSelection(root.current, root.windows.length, true);
     }
     // Every window offered closed meanwhile: the suggestions end.
     onWindowsChanged: {
+        root.current = WindowTiling.keptSelection(root.current, root.windows.length, false);
         if (root.windows.length === 0)
             Qt.callLater(TilingSuggest.dismiss);
     }

@@ -9,6 +9,8 @@
 #include <QDirIterator>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -252,6 +254,140 @@ TEST(StoreBackend, WithoutACatalog)
     EXPECT_FALSE(backend.catalogStatus().value(QStringLiteral("inUse")).toBool());
     EXPECT_EQ(backend.catalogStatus().value(QStringLiteral("problem")), QStringLiteral("untrusted"));
     EXPECT_TRUE(backend.sections().at(0).toMap().value(QStringLiteral("builtIn")).toBool());
+}
+
+// The owner's rc1-7 (the integrator's note on PR #36): no catalog host yet ("unconfigured", no dev plumbing URL) and Arch's
+// app data installed: the Store works on Arch's data alone, its Discover the built-in one with rows of apps, never the page
+// that says the Store isn't available.
+TEST(StoreBackend, NoCatalogHostButArchsData)
+{
+    Scratch s;
+    s.env->unset("GRASSFIELD_STORE_CATALOG_URL");
+    StoreBackend backend;
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    EXPECT_EQ(backend.catalogStatus().value(QStringLiteral("problem")), QStringLiteral("unconfigured"));
+    EXPECT_EQ(backend.appDataStatus().value(QStringLiteral("origin")), QStringLiteral("installed"));
+    const QVariantList sections = backend.sections();
+    ASSERT_EQ(ids(sections), QStringList{QStringLiteral("discover")});
+    const QVariantMap discover = sections.at(0).toMap();
+    EXPECT_TRUE(discover.value(QStringLiteral("builtIn")).toBool());
+    EXPECT_FALSE(discover.value(QStringLiteral("blocks")).toList().isEmpty()); // rows: the page has something to show
+    EXPECT_EQ(ids(backend.search(QStringLiteral("gimp"))).value(0), QStringLiteral("org.gimp.GIMP"));
+}
+
+// Arch's app data fetched from the mirror (archlinux-appstream-data not installed), each failure with its own reason (the
+// integrator's note on PR #36): the package file the mirror no longer has and its .sig not served are "download" (the
+// window then offers Software Update), a signature pacman's rule refuses is "unverified".
+TEST(StoreBackend, ArchsAppDataProblems)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0")); // the refresh runs only online
+    QDir(s.path(QStringLiteral("fixture/swcatalog"))).removeRecursively(); // not installed: fetched from the mirror
+    // pacman: the fixture's, and -Sp naming the package file in served/ (a file:// mirror, dev plumbing).
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QString package = s.path(QStringLiteral("served/archlinux-appstream-data-20261017-1-any.pkg.tar.zst"));
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "[ \"$1\" = -Sp ] && { echo '" + QUrl::fromLocalFile(package).toString().toUtf8() + "'; exit 0; }\nexec '" + base.toUtf8() + "' \"$@\"");
+    // gpg: a good signature by a packager pacman's keyring does not trust fully (S19).
+    storetest::script(s.path(QStringLiteral("fixture/bin/gpg")),
+                      "case \" $* \" in\n"
+                      "*' --verify '*) printf '[GNUPG:] NEWSIG\\n[GNUPG:] GOODSIG 1 Packager\\n[GNUPG:] VALIDSIG AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                      " 2026-10-27 1 0 4 0 22 10 00 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n[GNUPG:] TRUST_UNDEFINED 0 pgp\\n' ;;\n"
+                      "*' --list-keys '*) printf 'pub:f:255:22:1:1:::-:::scSC::::::23::0:\\nfpr:::::::::AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:\\n' ;;\n"
+                      "esac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/gnupg")));
+    storetest::writeFile(s.path(QStringLiteral("fixture/gnupg/pubring.gpg")), "keys");
+    storetest::writeFile(s.path(QStringLiteral("fixture/gnupg/trustdb.gpg")), "trust");
+    const auto problem = [] {
+        StoreBackend backend;
+        backend.start();
+        settle(backend);
+        return backend.appDataStatus();
+    };
+    // The mirror has moved on: no such package file.
+    QVariantMap data = problem();
+    EXPECT_EQ(data.value(QStringLiteral("origin")), QStringLiteral("none"));
+    EXPECT_EQ(data.value(QStringLiteral("problem")), QStringLiteral("download"));
+    // The file there, its signature not.
+    storetest::writeFile(package, "package bytes");
+    EXPECT_EQ(problem().value(QStringLiteral("problem")), QStringLiteral("download"));
+    // Both there, the signature refused by pacman's rule: the only case called "unverified".
+    storetest::writeFile(package + QStringLiteral(".sig"), "signature bytes");
+    EXPECT_EQ(problem().value(QStringLiteral("problem")), QStringLiteral("unverified"));
+}
+
+// A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7 failed mid-download on files the
+// mirror no longer had; the review of ff2fd83: the owner's Software Update answers not-set-up): Get's plan says so before
+// anything downloads, by Software Update's own answer (the real checker's file) when it came after pacman last synced, or by
+// a file of the plan the mirror (on disk here) no longer has; the Store never syncs.
+TEST(StoreBackend, SystemOlderThanTheMirror)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    s.env->set("GRASSFIELD_STORE_PKEXEC", s.path(QStringLiteral("fixture/bin/pkexec"))); // never run: no plan is accepted here
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QString mirror = QUrl::fromLocalFile(s.path(QStringLiteral("served"))).toString();
+    // pacman: nothing unfinished, and Paint's plan: its package and one dependency, both on the mirror in served/.
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  -Qq) printf '%s\\n' gimp sketch cafe ;;\n"
+                      "  -S) printf '%s\\n' 'paint 1-1 extra 1000 " + mirror.toUtf8() + "/paint-1-1-x86_64.pkg.tar.zst' "
+                      "'libpaint 2-1 extra 500 " + mirror.toUtf8() + "/libpaint-2-1-x86_64.pkg.tar.zst' ;;\n"
+                      "  *) exec '" + base.toUtf8() + "' \"$@\" ;;\n"
+                      "esac");
+    // The owner's case: Grassfield's repository off (not-set-up), Omarchy 4.0.6 and others pending, the databases synced
+    // 50 days before that check.
+    const QByteArray answer = storetest::readFixture(QStringLiteral("software-update/software-update-not-set-up.json"));
+    storetest::writeFile(s.path(QStringLiteral("state/software-update.json")), answer);
+    const QDateTime checked = QDateTime::fromString(QJsonDocument::fromJson(answer).object().value(QStringLiteral("checkedAt")).toString(), Qt::ISODate);
+    ASSERT_TRUE(checked.isValid());
+    QDir().mkpath(s.path(QStringLiteral("fixture/sync")));
+    storetest::writeFile(s.path(QStringLiteral("fixture/sync/extra.db")), "db");
+    QFile db(s.path(QStringLiteral("fixture/sync/extra.db")));
+    ASSERT_TRUE(db.open(QIODevice::ReadWrite) && db.setFileTime(checked.addDays(-50), QFileDevice::FileModificationTime));
+    db.close();
+    StoreBackend backend;
+    QList<QVariantMap> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &, const QString &, const QVariantMap &p) { plans.append(p); });
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    const auto planOf = [&](const char *id) {
+        const qsizetype before = plans.size();
+        backend.plan(QLatin1String(id), QStringLiteral("install"));
+        QEventLoop loop;
+        for (int i = 0; i < 500 && plans.size() == before; ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+        return plans.size() > before ? plans.last() : QVariantMap();
+    };
+    // Software Update found updates after the last sync (no pacman.log here: the database's date): Software Update first.
+    QVariantMap plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));
+    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().startsWith(QStringLiteral("Software Update (not-set-up), ")))
+        << plan.value(QStringLiteral("detail")).toString().toStdString();
+    EXPECT_FALSE(backend.install(QStringLiteral("org.example.Paint"))) << "no plan was accepted";
+
+    // pacman's log says the databases were synced after that check, while the database keeps its old date (the mirror's
+    // Last-Modified): Software Update's answer no longer counts. Paint's dependency is gone from the mirror (its package is
+    // there): refused, before anything downloads.
+    storetest::writeFile(s.path(QStringLiteral("fixture/pacman.log")),
+                         "[" + checked.addSecs(3600).toOffsetFromUtc(3600).toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss'+0100'")).toUtf8()
+                             + "] [PACMAN] synchronizing package lists\n");
+    storetest::writeFile(s.path(QStringLiteral("served/paint-1-1-x86_64.pkg.tar.zst")), "package");
+    plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QStringLiteral("outdated"));
+    EXPECT_TRUE(plan.value(QStringLiteral("detail")).toString().endsWith(QStringLiteral("libpaint-2-1-x86_64.pkg.tar.zst: HTTP 404")))
+        << plan.value(QStringLiteral("detail")).toString().toStdString();
+    // Both files there: the plan goes to its sheet.
+    storetest::writeFile(s.path(QStringLiteral("served/libpaint-2-1-x86_64.pkg.tar.zst")), "package");
+    plan = planOf("org.example.Paint");
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")), QString());
+    EXPECT_EQ(plan.value(QStringLiteral("packages")).toList().size(), 2);
 }
 
 // French: the catalog's words come in French where the built-in categories have them.
@@ -512,6 +648,76 @@ esac)");
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-app-bin")).value(QStringLiteral("get")), QStringLiteral("source"));
 }
 
+namespace {
+
+// A backend whose snapshot is the test's own (StoreBackend::apply).
+class SnapshotBackend : public StoreBackend
+{
+public:
+    using StoreBackend::apply;
+};
+
+} // namespace
+
+// The AUR's Get and Uninstall… against a catalog, outside the container whose keys sign one (the integrator's note on PR
+// #36: mutants C13 to C15 lived here): a catalog AUR app while the AUR is off (the snapshot built while it was on, in use
+// for a moment); a catalog that does not pin the AUR's commands; a name of the deny list; Omarchy's lists unread; then
+// offered (offline aside). Nothing runs: Omarchy's terminal is a dev session's stand-in.
+TEST(StoreBackend, AurBlocksAgainstACatalog)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
+    const QList<std::pair<QString, QString>> setupPins{{QStringLiteral("bin/omarchy-install-gaming-steam"), QString(64, QLatin1Char('a'))}};
+    const QList<std::pair<QString, QString>> aurPins{{QStringLiteral("bin/omarchy-pkg-aur-add"), QString(64, QLatin1Char('b'))},
+                                                    {QStringLiteral("bin/omarchy-pkg-drop"), QString(64, QLatin1Char('c'))},
+                                                    {QStringLiteral("bin/omarchy-pkg-missing"), QString(64, QLatin1Char('d'))}};
+    // aur-game not installed; aur-kept installed explicitly from the AUR; aur-omarchy-theme with Omarchy's prefix.
+    const auto snapshot = [](const QList<std::pair<QString, QString>> &pins, const QSet<QString> &lists) {
+        auto snap = std::make_shared<Snapshot>();
+        Catalog catalog;
+        catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+        snap->catalog = catalog;
+        snap->deny.omarchy = lists;
+        snap->explicitPackages = {QStringLiteral("example-kept")};
+        snap->foreign = {QStringLiteral("example-kept")};
+        for (const auto &[id, package] : {std::pair{QStringLiteral("aur-game"), QStringLiteral("example-game")},
+                                          std::pair{QStringLiteral("aur-kept"), QStringLiteral("example-kept")},
+                                          std::pair{QStringLiteral("aur-omarchy-theme"), QStringLiteral("omarchy-theme-example")}}) {
+            StoreApp a;
+            a.id = id;
+            a.source = CatalogSource::Kind::Aur;
+            a.package = package;
+            a.installed = package == QLatin1String("example-kept");
+            a.inCatalog = true;
+            snap->index.insert(id, int(snap->apps.size()));
+            snap->apps.append(a);
+        }
+        return std::shared_ptr<const Snapshot>(std::move(snap));
+    };
+    const auto get = [](const StoreBackend &b, const QString &id) { return b.actions(id).value(QStringLiteral("get")).toString(); };
+    const auto uninstall = [](const StoreBackend &b, const QString &id) { return b.actions(id).value(QStringLiteral("uninstall")).toString(); };
+    {
+        SnapshotBackend backend; // the AUR off
+        backend.apply(snapshot(setupPins + aurPins, {QStringLiteral("btop")}));
+        EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("aurOff"));
+        EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("aurOff"));
+    }
+    storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"aur":true}}})");
+    SnapshotBackend backend;
+    backend.apply(snapshot(setupPins, {QStringLiteral("btop")}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("aurUnchecked")) << "the catalog pins no AUR command";
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("aurUnchecked"));
+    backend.apply(snapshot(setupPins + aurPins, {QStringLiteral("btop")}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("offline")) << "offered once online";
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QString());
+    EXPECT_EQ(get(backend, QStringLiteral("aur-omarchy-theme")), QStringLiteral("aurProtected")) << "the AUR is anyone's: never Omarchy's name";
+    backend.apply(snapshot(setupPins + aurPins, {}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("listsMissing"));
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("listsMissing"));
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;
@@ -581,10 +787,11 @@ TEST(StoreBackend, RealSignedCatalog)
     EXPECT_TRUE(get.isEmpty() || get == QLatin1String("offline")) << qPrintable(get);
     EXPECT_EQ(backend.actions(steam).value(QStringLiteral("uninstall")).toString(), QStringLiteral("notInstalled"));
     // The catalog's AUR app (step 3b2): not in the Store while the AUR is off (the model leaves it out); once it is on, with
-    // Omarchy's terminal there and the pins matching, refused while the catalog does not pin the AUR's command and the
-    // omarchy-pkg-missing it calls (this fixture pins only the Steam setup's files).
+    // Omarchy's terminal there, its package lists and the pins matching, refused while the catalog does not pin the AUR's
+    // command and the omarchy-pkg-missing it calls (this fixture pins only the Steam setup's files).
     const QString aurGame = QStringLiteral("aur-game");
     EXPECT_TRUE(backend.app(aurGame).isEmpty()) << "a catalog AUR app while the AUR is off";
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "btop\n");
     s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
     int changes = 0;
     QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&changes] { ++changes; });
