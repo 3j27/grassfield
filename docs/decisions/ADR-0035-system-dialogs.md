@@ -526,7 +526,7 @@ through chooserlogic's functions, no default button for the camera, the micropho
 object as FileChooser; `main.cpp` makes both roots of the UI at the first request of either and quits once both are idle.
 `apps/files/qml/AccessAlerts.qml` and `AccessAlert.qml` (the alert). Packaging: `grassfield.portal` lists Access, the
 session's `hyprland-portals.conf` routes `Access=grassfield;gtk`, `config/hypr/grassfield/windows.lua` gives the alert's tag
-(`access-alert`) the client-chrome tag and the alert's radius (24). Tests: `tests/unit/portal/tst_access.cpp` (the backend on
+(`access-alert`) the client-chrome tag. Tests: `tests/unit/portal/tst_access.cpp` (the backend on
 the run's private dbus-daemon with a fake frontend and a fake x-d-p-gtk), `tests/unit/tst_accessalert.qml` (the alert over a
 stand-in), `tests/integration/portal_filechooser.sh` scenario 7 (the camera asked through the real frontend: the alert's
 answer reaches the application and the frontend's permission store keeps "yes" or "no").
@@ -549,23 +549,36 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   again; (c) the alert opens under the lock as a panel does (FC8) and waits there; the lock hides it and takes the keyboard;
   after the unlock it takes keys only after a click (the hold rule). **Choice: (c).** Rule applied: macOS first (the alert is
   there when the user is back, as a macOS alert waits on the screen), no technical intervention (no decision made in the
-  user's absence that only Settings can undo).
+  user's absence that only Settings can undo). For the same reason a request that ends without the user's answer (Close,
+  over the bound, a forward that failed, the process going) ends with a D-Bus error, never a response the frontend would keep
+  as "no" (review of step 5a, MINOR 1).
 - **5a-4. The alert's shape and window.** Options: (a) the shell's alert (`shell/overlay/Dialog.qml`) moved into
   Grassfield.Ui and shared; (b) the same shape built in the portal from the same tokens; (c) a sheet like the panels'.
   **Choice: (b)**: macOS asks for a permission with the same alert as every other alert, so the shape is the shell's (the
   application's icon in a 64-pt frame at the top left, the title in bold, the message under it, capsule buttons of one width);
   moving the shell's Dialog into the library would change the shell's alerts in a portal step (a later step that needs the
   alert in a third process does that, with its review). A window of its own, opaque like the panels and every application
-  window (ADR-0002), the alert's radius by window rule; the application's icon from its desktop entry, the frontend's symbolic
-  icon for an application it cannot name.
+  window (ADR-0002), with every window's radius (20, ADR-0024 C-1: a window rule cannot go past `decoration.rounding`, so the
+  shell's 24 is not available to a window; `Hyprland --verify-config` refuses it); the application's icon from its desktop
+  entry, the frontend's symbolic icon for an application it cannot name.
 - **5a-5. No answer by accident.** Question: what keeps a click or a key meant for something else from answering an alert that
-  appears under it? Options: (a) nothing more than macOS shows; (b) clicks and keys ignored for a short time after the alert
-  drew (`portalAlertArmMs`, 500 ms), and the panels' hold rule for an alert that gets the keyboard late. **Choice: (b).** Rule
-  applied: no technical intervention: the frontend keeps the answer, and an "Allow" given by a stray click or a Return typed
-  in the window below would need Settings to undo; the alert looks and answers as macOS's otherwise. With AC2, neither button
-  is the default for the camera, the microphone and screen capture, as on macOS 15 and later.
+  appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click,
+  key or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the
+  window before never arms it), the keyboard starts on the alert and never on a button (Space acts only on a button reached
+  with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the keyboard late, whose
+  ending click is not an answer. **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
+  click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no technical
+  intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to undo; the
+  alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera, the microphone and
+  screen capture, as on macOS 15 and later.
 - **5a-6. Esc and the window closed are "Don't Allow".** The alert has no Cancel: the frontend reads any answer but 0 as "no",
-  so Esc and a close by the compositor say it plainly, as macOS's Esc does.
+  so Esc and a close by the compositor say it plainly, as macOS's Esc does (a close before the alert is armed is refused,
+  5a-5). The application's name is in the frontend's title ("Allow Example to Use the Camera?"), not on a line of its own.
+- **5a-8. Who may call.** Any process on the session bus can call the backend directly (as for the panels). Options: (a) only
+  the owner of `org.freedesktop.portal.Desktop`; (b) any caller. **Choice: (b)** for now: such a process can draw any window
+  of its own already, its answer goes only to itself, and the integrator's nested passes call the backend directly
+  (`tests/fixtures/portal-client.py`); a check of the caller is a follow-up for both interfaces together (review of step 5a,
+  MINOR 6).
 - **5a-7. The forward.** xdg-desktop-portal uses one Access backend (no fallback at runtime), so an alert that cannot show is
   forwarded to x-d-p-gtk's Access by the backend itself, as the panels are (FC7); its answer and its choices are relayed.
 

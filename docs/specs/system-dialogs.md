@@ -184,8 +184,8 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
   every app that can open the type (DesktopEntries); a search field filters; "Always Open With" maps to the frontend's
   `always` handling; `UpdateChoices` refreshes the list live; returns `choice` and `activation_token`.
 - AC1 `AccessDialog(handle, app_id, parent_window, title, subtitle, body, options{deny_label, grant_label, icon, choices})`:
-  the alert with the app's icon and name (from `app_id`; "An application" when empty), title/subtitle/body as given (plain
-  text, capped), the labels given (else "Don't Allow"/"Allow"), `choices` as radio groups or check boxes; returns response
+  the alert with the app's icon (from `app_id`) and its name as the frontend's title gives it ("Allow Example to Use the
+  Camera?"; "Allow Apps to …" when it cannot name it), title/subtitle/body as given (plain text, capped), the labels given (else "Don't Allow"/"Allow"), `choices` as radio groups or check boxes; returns response
   0 (grant) or 1 (deny) and the choices.
 - AC2 no default button on Camera and Screenshot alerts (the frontend's icon or title tells which: `camera-web-symbolic`,
   `applets-screenshooter-symbolic`); other alerts default to the grant label as the frontend's wording intends.
@@ -203,13 +203,15 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
 As section 1 (forward to gtk). The frontend's wording is xdg-desktop-portal's ("Allow %s to Use the Camera?"), not macOS's
 sentence; Grassfield does not rewrite it (it is translated upstream).
 
-Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`; the decisions are ADR-0035 5a-1 to 5a-7):
+Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`; the decisions are ADR-0035 5a-1 to 5a-8):
 - AC1 as written: the alert shape of the shell's alerts, the frontend's title in bold, its question, its note in the secondary
   colour, its choices (pop-ups and check boxes), "Don't Allow" and "Allow" (or the frontend's labels) of one width; the
   application's icon from its desktop entry, the frontend's symbolic icon for an application it cannot name.
 - AC2 for the camera, the microphone and screen capture (the frontend's icon names them); Esc and the window closed are "Don't
-  Allow" (5a-6); no click or key answers in the first 500 ms after the alert drew (5a-5).
-- AC3 as above. FC7's forward: an alert that has not drawn in 3 s, or a process without a display, goes to x-d-p-gtk's Access.
+  Allow" (5a-6); the keyboard starts on the alert, never on a button, and no click, key or close answers for 500 ms each time
+  the alert becomes the active window (a key meanwhile starts that time again; 5a-5).
+- AC3 as above; a request that ends without the user's answer ends with a D-Bus error, so the frontend keeps nothing (5a-3).
+  FC7's forward: an alert that has not drawn in 3 s, or a process without a display, goes to x-d-p-gtk's Access.
 - Evidence: `tests/unit/portal/tst_access.cpp`, `tests/unit/tst_accessalert.qml`, and `tests/integration/portal_filechooser.sh`
   scenario 7: the camera asked through the real frontend on a private bus, the alert's answer back to the application and
   kept by the frontend's permission store ("yes" or "no"); A-AC1 in a nested session and A-AC2 are the integrator's.
