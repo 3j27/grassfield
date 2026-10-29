@@ -1255,8 +1255,8 @@ QtObject {
     readonly property real settingsDockSliderTitleBaseline: 22.5
     // macOS 27: the sliders' tracks centred this far under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsDockSliderCenter: 36
-    // Least gap between two end labels when a longer language pushes one against the other [ref: ADR-0024 spacing scale]
-    readonly property int settingsDockSliderLabelGap: 8
+    // Least gap between two end labels when a longer language pushes one against the other; small enough that English keeps the measured places at the real 220 wide [ref: ADR-0024 spacing scale, spacingXs]
+    readonly property int settingsDockSliderLabelGap: 4
     // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property real settingsDockSliderLabelBaseline: 56.5
     // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]

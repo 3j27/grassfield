@@ -12,6 +12,7 @@ ShellRoot {
 
     property var seen: []
     property int frames: 0
+    property bool judged: false
 
     function items(): var {
         const out = [];
@@ -61,8 +62,9 @@ ShellRoot {
             function onFrameSwapped(): void {
                 root.seen.push(grid.contentY);
                 root.frames++;
-                if (root.frames >= 6)
-                    root.finish();
+                // The first frame is drawn: judge it, and what a moment of later frames does to it (no jump).
+                if (!settle.running && !root.judged)
+                    settle.start();
             }
         }
     }
@@ -79,6 +81,16 @@ ShellRoot {
                 root.seen.push(grid.contentY);
             });
         });
+    }
+
+    // A short wait after the first frame for the view to settle; the long timer below is only a safety net.
+    Timer {
+        id: settle
+        interval: 400
+        onTriggered: {
+            root.judged = true;
+            root.finish();
+        }
     }
 
     Timer {

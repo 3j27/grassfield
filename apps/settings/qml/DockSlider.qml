@@ -4,7 +4,8 @@ import Grassfield.Ui
 
 // A slider with its title above it and its end labels under it (macOS 27 Size and Magnification). A label sits centred on its
 // place along the track; when a longer language makes it reach into the label before it, it moves right to keep a gap (the
-// last one stays against the track's end), so two labels never overlap.
+// last one stays against the track's end), and one that cannot fit whole inside the track is left out: two labels never
+// overlap and none leaves the track.
 Item {
     id: root
 
@@ -16,21 +17,59 @@ Item {
 
     height: parent ? parent.height : 0
 
-    // Lay the labels out from the first: its wanted place, or just after the label before it.
+    // Lay the labels out. The first and last labels sit at the track's ends, a middle one is centred on its place, moved right
+    // to keep a gap from the label before it. A label that does not fit whole between its neighbours and the track's ends is
+    // not shown (the first and last come first, then the middle ones in order); the slider's own name and value still tell it.
     function layout(): void {
-        let edge = -Tokens.settingsDockSliderLabelGap;
-        for (let i = 0; i < labelRepeater.count; i++) {
-            const label = labelRepeater.itemAt(i);
-            if (!label)
-                continue;
+        const gap = Tokens.settingsDockSliderLabelGap;
+        const n = labelRepeater.count;
+        const items = [];
+        for (let i = 0; i < n; i++)
+            items.push(labelRepeater.itemAt(i));
+        if (items.some(l => !l) || root.labels.length !== n)
+            return;
+        const order = [];
+        if (n > 0)
+            order.push(0);
+        if (n > 1)
+            order.push(n - 1);
+        for (let i = 1; i < n - 1; i++)
+            order.push(i);
+        const placed = [];
+        for (const i of order) {
+            const label = items[i];
             const at = root.labels[i].at;
-            const wanted = at === 0 ? 0 : at === 1 ? root.width - label.width : Math.round((control.knobWidth / 2 + at * control.travel - label.width / 2) * 2) / 2;
-            label.x = Math.max(wanted, edge + Tokens.settingsDockSliderLabelGap);
-            edge = label.x + label.width;
+            let x = at === 0 ? 0 : at === 1 ? root.width - label.width : Math.round((control.knobWidth / 2 + at * control.travel - label.width / 2) * 2) / 2;
+            // The nearest label shown on each side.
+            let before = null;
+            let after = null;
+            for (const j of placed) {
+                if (j < i && (before === null || j > before))
+                    before = j;
+                if (j > i && (after === null || j < after))
+                    after = j;
+            }
+            if (before !== null)
+                x = Math.max(x, items[before].x + items[before].width + gap);
+            const fits = x >= 0 && x + label.width <= root.width && (after === null || x + label.width + gap <= items[after].x);
+            label.visible = fits;
+            if (fits) {
+                label.x = x;
+                placed.push(i);
+            }
         }
     }
 
-    onWidthChanged: root.layout()
+    // After the slider's own width and travel settle (they follow this item's width).
+    onWidthChanged: Qt.callLater(root.layout)
+
+    Connections {
+        target: control
+
+        function onTravelChanged(): void {
+            root.layout();
+        }
+    }
 
     Text {
         y: Tokens.settingsDockSliderTitleBaseline - baselineOffset
