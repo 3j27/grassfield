@@ -22,6 +22,11 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
     portal-client.py open-file PATH SECONDS    org.freedesktop.portal.OpenURI's OpenFile (the file passed as a descriptor, as an
                                                application does: OpenURI refuses file URIs) with "ask" (the frontend asks the
                                                AppChooser backend whatever it would pick itself): the Response, as for choose
+    portal-client.py apps CHOICES OPTIONS SECONDS
+                                               org.freedesktop.impl.portal.AppChooser's ChooseApplication made to
+                                               grassfield-portal directly, as the frontend makes it (CHOICES a JSON list of desktop
+                                               ids; OPTIONS: last_choice, filename, uri, modal, activation_token, strings or a
+                                               boolean); its reply, as for impl
     portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
                                                Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
@@ -171,6 +176,19 @@ def access(conn, given, seconds):
         print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
 
 
+def apps(conn, choices, given, seconds):
+    handle = "/org/freedesktop/portal/desktop/request/1_1/apps%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
+    options = {k: GLib.Variant("b" if isinstance(v, bool) else "s", v) for k, v in given.items()}
+    try:
+        reply = conn.call_sync("org.freedesktop.impl.portal.desktop.grassfield", PATH, "org.freedesktop.impl.portal.AppChooser",
+                               "ChooseApplication", GLib.Variant("(ossasa{sv})", (handle, "org.example.Writer", "", choices, options)),
+                               GLib.VariantType("(ua{sv})"), Gio.DBusCallFlags.NONE, int(float(seconds) * 1000), None)
+        code, results = reply.unpack()
+        print(json.dumps({"response": code, "results": plain(results)}))
+    except GLib.Error as error:
+        print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
+
+
 def permission(conn, table, entry):
     try:
         reply = conn.call_sync("org.freedesktop.impl.portal.PermissionStore", "/org/freedesktop/impl/portal/PermissionStore",
@@ -198,6 +216,9 @@ def main():
         return
     if command == "open-file":
         open_file(conn, sys.argv[2], sys.argv[3])
+        return
+    if command == "apps":
+        apps(conn, json.loads(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4])
         return
     if command == "permission":
         permission(conn, sys.argv[2], sys.argv[3])
