@@ -757,6 +757,10 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
             default:
                 result.outcome = QStringLiteral("failed");
             }
+        } else if (exitCode && *exitCode == 1 && present == 0 && record.path == QLatin1String("helper") && downloadGone(details)) {
+            // pacman could not download a planned file the mirror no longer has (the owner's rc1-7): the databases are older
+            // than the mirror, so the system is updated first; pacman's lines stay in the helper's log, not on screen.
+            result.outcome = QStringLiteral("outdated");
         } else if (exitCode && present == 0) {
             // Nothing happened: what the exit code says (the helper's codes, pkexec's 126 and 127).
             switch (*exitCode) {

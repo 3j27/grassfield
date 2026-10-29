@@ -17,7 +17,6 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QTimeZone>
-#include <QUrlQuery>
 
 #include <algorithm>
 
@@ -281,12 +280,11 @@ AurConfig aurConfig(const QString &storeCacheDir)
 
 QUrl aurInfoUrl(const QUrl &base, const QStringList &names)
 {
-    QUrl u(base.toString(QUrl::StripTrailingSlash) + QStringLiteral("/rpc/v5/info"));
-    QUrlQuery q;
+    // Each name percent-encoded as the search's term: a '+' left as it is (libc++) reads as a space in a query.
+    QStringList args;
     for (const QString &n : names)
-        q.addQueryItem(QStringLiteral("arg[]"), n);
-    u.setQuery(q);
-    return u;
+        args.append(QStringLiteral("arg[]=") + QString::fromLatin1(QUrl::toPercentEncoding(n)));
+    return QUrl(base.toString(QUrl::StripTrailingSlash) + QStringLiteral("/rpc/v5/info?") + args.join(QLatin1Char('&')));
 }
 
 QUrl aurSearchUrl(const QUrl &base, const QString &term)

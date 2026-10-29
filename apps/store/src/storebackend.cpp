@@ -40,6 +40,7 @@ constexpr int kStaleHours = 6;       // SR26: the catalog is fetched again when 
 constexpr int kOldDays = 30;         // SR29: a catalog older than this is used with a note
 constexpr qint64 kSignatureMax = 64 * 1024;
 constexpr int kFetchMs = 15000;      // ADR-0037 c
+constexpr int kHeadsMs = 20000;      // a plan's HEADs, all of them (ADR-0037 e.4)
 constexpr qint64 kAppStreamPackageMax = 64 * 1024 * 1024;
 constexpr int kAppStreamDownloadMs = 120000;
 constexpr int kMaxWebApps = 500;
@@ -62,6 +63,20 @@ QByteArray readSmall(const QString &path, qint64 max)
     if (!f.open(QIODevice::ReadOnly) || f.size() > max)
         return {};
     return f.read(max);
+}
+
+// The last `max` bytes of a file that only grows (pacman.log), from the start of a line.
+QByteArray readTail(const QString &path, qint64 max)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    if (f.size() > max && !f.seek(f.size() - max))
+        return {};
+    QByteArray tail = f.read(max);
+    if (f.size() > max)
+        tail.remove(0, tail.indexOf('\n') + 1);
+    return tail;
 }
 
 QString dataHome()
@@ -252,9 +267,27 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
             tools.download = [devPlumbing](const QString &url, const QString &file, qint64 maxBytes, int timeoutMs) {
                 return downloadTo(QUrl(url), file, FetchLimits{maxBytes, timeoutMs}, devPlumbing);
             };
-            QString error;
-            if (!refreshFetched(env::cacheDir(), tools, &error))
-                snap->appstreamProblem = error.contains(QLatin1String("signature")) ? QStringLiteral("unverified") : QStringLiteral("unavailable");
+            // Each reason has its own words (the integrator's note on PR #36): a file the mirror no longer has (a package
+            // database older than the mirror, most often) is "download", never "unverified".
+            QString detail;
+            switch (refreshFetched(env::cacheDir(), tools, &detail)) {
+            case RefreshProblem::None:
+                break;
+            case RefreshProblem::Download:
+            case RefreshProblem::SignatureDownload:
+                snap->appstreamProblem = QStringLiteral("download");
+                break;
+            case RefreshProblem::Unverified:
+                snap->appstreamProblem = QStringLiteral("unverified");
+                break;
+            case RefreshProblem::NoPackageFile:
+            case RefreshProblem::Unpack:
+            case RefreshProblem::Cache:
+                snap->appstreamProblem = QStringLiteral("unavailable");
+                break;
+            }
+            if (!snap->appstreamProblem.isEmpty())
+                qInfo("grassfield-store: Arch's app data: %s", qPrintable(detail));
         }
         snap->appstream = readFetched(env::cacheDir());
     }
@@ -1020,6 +1053,11 @@ QString StoreBackend::getBlock(const StoreApp &a) const
             return QStringLiteral("aurOff");
         if (m_snapshot && std::any_of(m_snapshot->sync.cbegin(), m_snapshot->sync.cend(), [&a](const SyncPackage &p) { return p.name == a.package; }))
             return QStringLiteral("repository"); // yay would install the repository's: the Store does, from its page
+        // Never a name of the deny list (b.1): what the Store could not remove it does not build, and the AUR is anyone's.
+        if (m_snapshot && protection(a.package, m_snapshot->deny) != Protection::None)
+            return QStringLiteral("aurProtected");
+        if (m_snapshot && !m_snapshot->deny.omarchyRead())
+            return QStringLiteral("listsMissing");
         if (const QString block = aurBlock(kAurAdd); !block.isEmpty())
             return block;
         break;
@@ -1340,7 +1378,10 @@ PlanTools StoreBackend::planTools() const
     tools.updateLock = env::updateLock();
     tools.devPlumbing = !env::fixture().isEmpty();
     const bool dev = tools.devPlumbing;
-    tools.head = [dev](const QUrl &url) { return headStatus(url, kFetchMs, dev); };
+    tools.heads = [dev](const QList<QUrl> &urls) { return headStatuses(urls, kFetchMs, kHeadsMs, dev); };
+    // Software Update's answer against pacman's last sync (ADR-0037 e.4, SD29): the system first.
+    tools.behind = databasesBehind(readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024),
+                                   lastSync(readTail(env::pacmanLog(), 1024 * 1024), newestSync(env::syncDir())));
     return tools;
 }
 
@@ -1428,7 +1469,7 @@ void StoreBackend::plan(const QString &id, const QString &kind)
         QVariantMap out;
         if (install) {
             const auto info = [&aurService](const QStringList &names) { return grassfield::store::aurInfo(aurService, names); };
-            InstallPlan p = aur     ? checkAurInstall(packages.value(0), check, info, tools, online, own)
+            InstallPlan p = aur     ? checkAurInstall(packages.value(0), check, info, deny, tools, online, own)
                             : setup ? checkSetupInstall(packages, check, tools, online, own)
                                     : checkInstall(packages, tools, online, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
@@ -1439,7 +1480,10 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                    {QStringLiteral("installed"), view::sizeText(p.installedSize, locale)},
                    {QStringLiteral("unfinished"), p.unfinished},
                    {QStringLiteral("upgrades"), p.upgrades},
+                   {QStringLiteral("protected"), p.protectedPackage},
                    {QStringLiteral("detail"), p.detail}};
+            if (p.refusal == Refusal::Outdated) // the sheet says it in plain words: pacman's, the mirror's are for the log
+                qInfo("grassfield-store: %s: update the system first: %s", qPrintable(id), qPrintable(p.detail));
             if (*cancel)
                 return;
             QMetaObject::invokeMethod(this, [this, id, kind, out, p] {

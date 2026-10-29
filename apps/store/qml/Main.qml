@@ -484,6 +484,8 @@ Window {
             actions: {
                 if (root.transientNotice !== "")
                     return [];
+                if (result && Store.needsUpdate(result))
+                    return [{id: "update", text: qsTr("Update Now…")}, {id: "close", text: qsTr("Close")}];
                 if (result)
                     return (Store.canTryAgain(result) ? [{id: "again", text: qsTr("Try Again")}] : [])
                         .concat([{id: "details", text: qsTr("Details…")}, {id: "close", text: qsTr("Close")}]);
@@ -501,6 +503,9 @@ Window {
                         root.requestGet(a);
                 } else if (id === "details") {
                     root.showDetails(app);
+                } else if (id === "update") {
+                    root.backend.dismiss(app); // its page offers Get again once the system is up to date
+                    root.backend.openSoftwareUpdate();
                 } else if (id === "close") {
                     root.backend.dismiss(app);
                 } else if (id === "lock") {
@@ -627,6 +632,7 @@ Window {
             onOpened: id => root.openApp(id)
             onCategoryRequested: id => root.openCategory(id)
             onRetry: root.backend.refresh()
+            onSoftwareUpdateRequested: root.backend.openSoftwareUpdate()
         }
     }
 
@@ -658,6 +664,10 @@ Window {
             onBuildScriptRequested: app => root.showBuildScript(app)
             onUninstallRequested: app => root.requestUninstall(app)
             onDetailsRequested: id => root.showDetails(id)
+            onSoftwareUpdateRequested: id => {
+                root.backend.dismiss(id);
+                root.backend.openSoftwareUpdate();
+            }
             onTryAgainRequested: (app, kind) => {
                 root.backend.dismiss(app.id);
                 if (kind === "remove")

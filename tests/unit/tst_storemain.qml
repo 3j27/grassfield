@@ -409,6 +409,23 @@ TestCase {
         verify(shown("Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. "
                      + "What you search for stays on this computer until you press Return, which sends it to the AUR."));
         verify(!shown("Nothing on a metered connection unless you choose Refresh. What you search for stays on this computer."));
+        // Arch's app data: each reason in its own words; a download that failed offers Software Update (the integrator's
+        // note on PR #36: a 404 is not a signature that fails).
+        const softwareUpdate = () => find(sw.contentItem, i => i.text === "Open Software Update" && i.visible);
+        t.backend.appData = {origin: "none", problem: "download"};
+        verify(shown("Arch's app data couldn't be downloaded. Check for updates, then try again."));
+        verify(!shown("Arch's app data could not be verified."));
+        const button = softwareUpdate();
+        verify(button);
+        const before = t.backend.calls.filter(c => c === "openSoftwareUpdate").length;
+        button.clicked(); // below the window's fold: its signal, not a click at its place
+        compare(t.backend.calls.filter(c => c === "openSoftwareUpdate").length, before + 1);
+        t.backend.appData = {origin: "none", problem: "unverified"};
+        verify(shown("Arch's app data could not be verified."));
+        verify(!softwareUpdate());
+        t.backend.appData = {origin: "installed", problem: ""};
+        verify(shown("Arch's app data: installed on this computer."));
+        verify(!softwareUpdate());
         t.win.settingsWindow.close();
     }
 
@@ -469,6 +486,22 @@ TestCase {
         const before = t.backend.calls.filter(c => c === "refresh").length;
         mouseClick(again);
         compare(t.backend.calls.filter(c => c === "refresh").length, before + 1);
+        // Arch's app data that could not be downloaded (the owner's rc1-7: a package database older than the mirror): said
+        // so, never "could not be verified", with Software Update beside Try Again.
+        t.backend.catalog = {inUse: false, problem: "unconfigured", channel: "stable", date: "", old: false};
+        t.backend.appData = {origin: "none", problem: "download"};
+        tryVerify(() => reason.text === "This version of Grassfield has no catalog host yet. Arch's app data couldn't be downloaded. "
+                  + "Check for updates, then try again.", 2000, reason.text);
+        const update = find(t.win.page, i => i.text === "Open Software Update" && i.visible);
+        verify(update);
+        // The row places its buttons on its next layout pass: Try Again moves aside first.
+        tryVerify(() => update.mapToItem(t.win.contentItem, 0, 0).x + update.width <= again.mapToItem(t.win.contentItem, 0, 0).x);
+        const asked = t.backend.calls.filter(c => c === "openSoftwareUpdate").length;
+        mouseClick(update);
+        compare(t.backend.calls.filter(c => c === "openSoftwareUpdate").length, asked + 1);
+        t.backend.appData = {origin: "none", problem: "unverified"};
+        tryVerify(() => reason.text.indexOf("Arch's app data could not be verified.") >= 0);
+        verify(!find(t.win.page, i => i.text === "Open Software Update" && i.visible));
         // Offline: the reason says so.
         t.backend.online = false;
         tryVerify(() => reason.text.indexOf("You're offline") === 0);

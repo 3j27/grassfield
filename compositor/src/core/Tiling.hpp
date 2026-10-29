@@ -173,7 +173,8 @@ namespace gf::tiling {
         Open,
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false);
+    // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false);
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -590,6 +591,57 @@ namespace gf::tiling {
     // event grows with the windows); the state is the reply of `hyprctl grassfield-tiling`.
     std::string noticeJson(uint64_t generation, Reason reason);
 
+    // ---- the Full Screen tile (macOS Split View, docs/specs/tiling.md TL33, step 6a) ----
+
+    // A Split View Desktop: the workspace the plugin made for it, its output, and the Desktop its first window came from (its
+    // home: Exit Full Screen sends a window back there, ADR-0036 D44). Its members are the window it was made for and the one
+    // picked for its other half, whatever their state (full screen and zoomed included, D50); another window on that workspace
+    // is no member (D52).
+    struct SplitDesk {
+        int64_t               workspace = 0;
+        std::string           output{};
+        int64_t               home = 0;
+        std::vector<uint64_t> members{};
+        bool                  waiting = false; // its second window not chosen yet (the suggestion pending): one member does not fill it
+
+        bool                  operator==(const SplitDesk&) const = default;
+    };
+
+    // The area of a Split View Desktop (ADR-0036 D42): the whole output `output` (no menu bar, Dock or Stages strip), its two
+    // halves one tiling margin apart and no margin at the outer edges, whatever the margins switch says; `grid` the output's.
+    Area splitArea(const Rect& output, const Grid& grid);
+
+    // A window with limits `c` fits `frame` (titlebar included, layout coordinates): its minimum surface with its band inside
+    // (TL8). A Split View half too narrow for it is refused rather than overlapped (integrator nested pass of 1ee992e, MAJOR C).
+    bool fitsFrame(const Constraints& c, const Rect& frame);
+
+    // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
+    // the Overview's "+" does (ADR-0036 D41); 1 when there is none.
+    int64_t nextDesktopId(std::span<const int64_t> ids);
+
+    // The zone of the "left-right" layout a side of the Full Screen tile takes: "left" 0, "right" 1; nullopt otherwise.
+    std::optional<int> splitZone(std::string_view side);
+
+    // The Split View Desktop `workspace` is, or nullptr.
+    const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
+
+    // The Split View Desktop window `id` is a member of, or nullptr.
+    const SplitDesk* splitOfWindow(std::span<const SplitDesk> splits, uint64_t id);
+
+    // Keeps the members of `d` still on its workspace (`on`: the windows there now, in any state), in their order. True when
+    // one left.
+    bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on);
+
+    // What a Split View Desktop does after a change (TL33, ADR-0036 D43): with two members it stays; with one it fills it
+    // alone, unless that window is still choosing its second one (`picking`: the suggestion of its Split View pending); with
+    // none it ends.
+    enum class SplitStep : uint8_t {
+        Keep,
+        Fill,
+        End,
+    };
+    SplitStep splitStep(size_t members, bool picking);
+
     struct StateOutput {
         std::string                    name;
         Rect                           area; // the work area a placement would use now
@@ -597,7 +649,9 @@ namespace gf::tiling {
         int                            grid        = 1;
         std::vector<const TileRecord*> windows;
     };
-    // The reply of `hyprctl grassfield-tiling`: "suggestion" is null without one.
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr);
+    // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops with their members and whether one waits for
+    // its second window (TL33), "suggestion" null without one.
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
+                          std::span<const SplitDesk> splits = {});
 
 } // namespace gf::tiling

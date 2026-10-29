@@ -87,6 +87,10 @@ namespace gf::tiler {
     // `w` can be tiled now (TL9): what the tiling popover greys when not (the tile-hover event's "tileable").
     bool tileable(const PHLWINDOW& w);
 
+    // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
+    // popover greys Left and Right of Screen otherwise; split refuses it).
+    bool splittable(const PHLWINDOW& w);
+
     // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
     // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
     // the address and the output are compared with the live ones. Refused while locked (reason "locked") and for an
@@ -101,6 +105,31 @@ namespace gf::tiler {
     // windows. Refused while locked (reason "locked") and for an unknown window (reason "invalid"); the tile records do not
     // change (no notice otherwise).
     void groupFrontRequest(std::string_view address);
+
+    // hl.plugin.grassfield.split(address, side) (tiling.md TL33, ADR-0036 D41-D43): Full Screen › Left or Right of Screen. A new
+    // Desktop with the next free id on the window's output, shown; the window, its first member, in that half of the whole
+    // output (core splitArea) and the suggestion of the other half from the Desktop it came from (always: the Split View asks
+    // for its second window; a pick is its second member); nothing to suggest, it fills the Desktop alone, and so it does once
+    // the suggestion is over without a pick (D43). A refusal after the move puts the window back (ADR-0007). Untrusted: the address is compared with the live windows.
+    // Refused while locked (reason "locked"); for a window that cannot be tiled now, one not on the Desktop its output shows,
+    // one already in a Split View Desktop, a side other than left or right, or while Stages shows its strip (D47): "invalid".
+    void splitRequest(std::string_view address, std::string_view side);
+
+    // hl.plugin.grassfield.unsplit(address) (TL33, D44): Exit Full Screen of a member of a Split View Desktop. It goes back to
+    // its home Desktop, shown: into its tile there from before the split when that zone is still free, else at its box from
+    // before tiling; the other member fills the Split View Desktop alone, and one left without a member ends. Refused while
+    // locked (reason "locked") and for a window that is no member of a Split View Desktop ("invalid").
+    void unsplitRequest(std::string_view address);
+
+    // `w` is a member of a Split View Desktop (one of its two windows, whatever its state; another window there is none, D52):
+    // its titlebar drag does nothing (D46; step 6b swaps the two), nor do the tiling keys, Arrange or an edge double-click,
+    // and one of Hyprland's moves (Super+drag) puts it back in its half at the release.
+    bool inSplit(const PHLWINDOW& w);
+
+    // The zoom light of a member (with or without Alt): it leaves its Split View Desktop as unsplit does (macOS: the green
+    // button of a window in Split View exits full screen; D49). False when `w` is no member or the session is locked (the
+    // light then zooms as usual).
+    bool leaveSplit(const PHLWINDOW& w);
 
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.

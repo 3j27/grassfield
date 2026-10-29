@@ -4,7 +4,7 @@
 // (tests/compositor/tiling.sh, the shared edge's handle behind a popup).
 // Never run it against the owner's session: use tests/tools/xdgact/xdgact.sh, which targets only the verified nested socket.
 //
-// Usage: xdgact APP_ID
+// Usage: xdgact APP_ID [MIN_WIDTH]
 // Opens a small toplevel with the app id, prints "mapped" once it is shown, and waits. On SIGUSR1 it asks the compositor for an
 // activation token and activates its own surface with it: what an app does to bring its window forward (a real client request,
 // handled by Hyprland's CWindow::activate with misc.focus_on_activate), as opposed to the focus dispatcher. Prints "activated" when
@@ -12,6 +12,8 @@
 // app that closes to the tray does), and prints "unmapped". On SIGHUP it opens an xdg popup (no grab) on the middle of its right
 // edge, extending right, and prints "popup mapped APP_ID"; a pointer button pressed on that popup prints "popup pressed APP_ID". The
 // toplevel draws a buffer of the size the compositor configures. Ends on SIGTERM/SIGINT or when the window is closed.
+// With MIN_WIDTH the toplevel also asks for that minimum width (xdg_toplevel.set_min_size) and never draws
+// narrower, as an app with a wide minimum does (tests/compositor/tiling.sh: a window too wide for half of the output, TL33).
 #define _GNU_SOURCE
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -49,6 +51,7 @@ static int                         mapped;
 static int                         unmapped;
 static int                         popup_mapped;
 static int                         cfg_w = WIDTH, cfg_h = HEIGHT; // the size the compositor configured (its default before any)
+static int                         min_w = 0;                     // the minimum width asked (0: none)
 static int                         buf_w, buf_h;
 
 static void on_signal(int sig) {
@@ -147,7 +150,7 @@ static void toplevel_configure(void* data, struct xdg_toplevel* t, int32_t w, in
     (void)t;
     (void)states;
     if (w > 0 && h > 0) {
-        cfg_w = w;
+        cfg_w = w < min_w ? min_w : w;
         cfg_h = h;
     }
 }
@@ -291,9 +294,20 @@ static void request_activation(const char* app_id) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: xdgact APP_ID\n");
+    if (argc != 2 && argc != 3) {
+        fprintf(stderr, "usage: xdgact APP_ID [MIN_WIDTH]\n");
         return 2;
+    }
+    if (argc == 3) {
+        char* end = NULL;
+        long  v   = strtol(argv[2], &end, 10);
+        if (!end || *end != '\0' || v < 1 || v > 16384) {
+            fprintf(stderr, "xdgact: MIN_WIDTH must be 1-16384\n");
+            return 2;
+        }
+        min_w = (int)v;
+        if (cfg_w < min_w)
+            cfg_w = min_w;
     }
     display = wl_display_connect(NULL);
     if (!display) {
@@ -324,6 +338,8 @@ int main(int argc, char** argv) {
     xdg_toplevel_add_listener(top, &toplevel_listener, NULL);
     xdg_toplevel_set_app_id(top, argv[1]);
     xdg_toplevel_set_title(top, argv[1]);
+    if (min_w > 0)
+        xdg_toplevel_set_min_size(top, min_w, 0);
     wl_surface_commit(surface);
 
     while (!want_exit && !closed) {

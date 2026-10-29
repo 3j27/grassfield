@@ -71,7 +71,7 @@ AppStreamData readFetched(const QString &cacheDir)
     return data;
 }
 
-bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QString *error)
+RefreshProblem refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QString *detail)
 {
     // An empty cache folder: pacman then names the mirror's URL, never a file:// of its own cache (S15).
     QTemporaryDir emptyCache;
@@ -79,32 +79,36 @@ bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QStrin
                                                       QStringLiteral("archlinux-appstream-data")});
     const PackageFile file = packageFileFromPrint(print.ok() ? print.out : QByteArray());
     if (file.url.isEmpty()) {
-        *error = QStringLiteral("pacman names no archlinux-appstream-data package file");
-        return false;
+        *detail = QStringLiteral("pacman names no archlinux-appstream-data package file");
+        return RefreshProblem::NoPackageFile;
     }
     const QString base = cacheDir + QStringLiteral("/appstream");
     if (readSmall(base + QStringLiteral("/current")) == file.version && QDir(base + QLatin1Char('/') + file.version).exists())
-        return true; // already the version pacman's database names
+        return RefreshProblem::None; // already the version pacman's database names
     QDir().mkpath(base);
     // What an interrupted refresh left (a crash, a power cut) goes first; one refresh runs at a time.
     for (const QString &left : QDir(base).entryList({QStringLiteral(".work-*")}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot))
         QDir(base + QLatin1Char('/') + left).removeRecursively();
     QTemporaryDir work(base + QStringLiteral("/.work-XXXXXX"));
     if (!work.isValid() || !tools.download) {
-        *error = QStringLiteral("no work folder");
-        return false;
+        *detail = QStringLiteral("no work folder");
+        return RefreshProblem::Cache;
     }
     const QString pkg = work.filePath(QStringLiteral("package")), sig = pkg + QStringLiteral(".sig");
-    if (!tools.download(file.url, pkg, kPackageMax, 300000) || !tools.download(file.url + QStringLiteral(".sig"), sig, 4096, 15000)) {
-        *error = QStringLiteral("the package file or its signature could not be downloaded");
-        return false;
+    if (!tools.download(file.url, pkg, kPackageMax, 300000)) {
+        *detail = file.url + QStringLiteral(": the package file could not be downloaded");
+        return RefreshProblem::Download;
+    }
+    if (!tools.download(file.url + QStringLiteral(".sig"), sig, 4096, 15000)) {
+        *detail = file.url + QStringLiteral(".sig: the signature could not be downloaded");
+        return RefreshProblem::SignatureDownload;
     }
     // pacman's own rule: one good signature by a key pacman's keyring trusts fully and has not disabled (S17, S19).
     // Nothing is unpacked before it passes.
     QString why;
     if (!verifyPacmanSignature(tools.gpg, tools.pacmanGnupg, pkg, sig, &why)) {
-        *error = QStringLiteral("the package file's signature does not pass pacman's rule: ") + why;
-        return false;
+        *detail = QStringLiteral("the package file's signature does not pass pacman's rule: ") + why;
+        return RefreshProblem::Unverified;
     }
     const QString unpacked = work.filePath(QStringLiteral("tree"));
     QDir().mkpath(unpacked);
@@ -116,24 +120,24 @@ bool refreshFetched(const QString &cacheDir, const AppStreamTools &tools, QStrin
                                                     QStringLiteral("--no-xattrs"), QStringLiteral("--no-acls"), kSwcatalog},
                                      extract);
     if (!tar.ok() || !QDir(unpacked + QLatin1Char('/') + kSwcatalog + QStringLiteral("/xml")).exists()) {
-        *error = QStringLiteral("the package file could not be unpacked");
-        return false;
+        *detail = QStringLiteral("the package file could not be unpacked");
+        return RefreshProblem::Unpack;
     }
     const QString target = base + QLatin1Char('/') + file.version;
     QDir(target).removeRecursively();
     if (!QDir().rename(unpacked, target)) {
-        *error = QStringLiteral("the cache folder cannot be written");
-        return false;
+        *detail = QStringLiteral("the cache folder cannot be written");
+        return RefreshProblem::Cache;
     }
     const QString previous = readSmall(base + QStringLiteral("/current"));
     QSaveFile current(base + QStringLiteral("/current"));
     if (!current.open(QIODevice::WriteOnly) || current.write(file.version.toUtf8()) < 0 || !current.commit()) {
-        *error = QStringLiteral("the cache folder cannot be written");
-        return false;
+        *detail = QStringLiteral("the cache folder cannot be written");
+        return RefreshProblem::Cache;
     }
     if (validVersion(previous) && previous != file.version)
         QDir(base + QLatin1Char('/') + previous).removeRecursively();
-    return true;
+    return RefreshProblem::None;
 }
 
 } // namespace grassfield::store

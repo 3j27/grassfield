@@ -104,7 +104,10 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   app's, while the installed Omarchy differs from the catalog's pins or the catalog does not pin the AUR's two commands,
   with that reason (ADR-0037 g, SD19, SD21); an AUR app's while the AUR is off ("Turn on the AUR in the Store's settings
   to install from it.") or when a repository has its name ("A repository has this package: the Store installs it from
-  there, from its own page."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
+  there, from its own page."); an AUR app whose name the deny list names ("The system, Omarchy or Grassfield uses this
+  name, so the Store doesn't build it from the AUR." « Le système, Omarchy ou Grassfield utilise ce nom : le Store ne le
+  compile pas depuis l'AUR. »; ADR-0037 SD30), or while Omarchy's package lists cannot be read ("Omarchy's package lists
+  can't be read, so the Store installs nothing from the AUR."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
   a square in it while the operation waits in the queue, which takes it out.
 - SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »). For the AUR the button is
   "Install from the AUR" (« Installer depuis l'AUR ») and the default is Cancel: Return and Esc close the sheet, the
@@ -115,14 +118,24 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   can reach and the runtimes it pulls. For the AUR (ADR-0037 SD22) the list has what yay builds, marked "AUR", then what
   pacman adds from the repositories; the sizes are the repositories' part only ("Download from the repositories"), and a
   line says when a dependency could not be read ("the build may install more than this"). Its refusals: a repository has
-  the package; it, or a dependency, is neither in the repositories nor on the AUR (named). Cancel (Esc) closes it and
-  nothing runs.
+  the package; it, or a dependency, is neither in the repositories nor on the AUR (named); it would build a package whose
+  name the deny list names ("“…” can't be installed from the AUR", "It would build … from the AUR, a name the system,
+  Omarchy or Grassfield uses. The Store doesn't install it."; SD30). Cancel (Esc) closes it and nothing runs.
 - SR15. Before the operation runs, the plan check of ADR-0037 e.4, and again right before it starts (the helper and
   `grassfield-store-run` check under Omarchy's lock):
   - `pacman -Qu` lists a package not marked "[ignored]" (the last system update did not finish, S12) → "Finish the system
-    update first" (« Terminez d'abord la mise à jour du système ») with "Open Software Update";
-  - a plan that upgrades an installed package, an unresolvable plan, or a package file the mirror no longer has → "Update your
-    system first" (« Mettez d'abord le système à jour ») with "Open Software Update";
+    update first" (« Terminez d'abord la mise à jour du système ») with "Update Now…" (« Mettre à jour maintenant… »),
+    which opens Software Update;
+  - the system older than its mirror (ADR-0037 e.4, SD29: Software Update's last successful check, whatever its state,
+    found other updates or an Omarchy release after pacman last synced the databases; or a file of the plan the mirror no
+    longer has, every file asked with a HEAD at once before anything downloads, AUR installs included), a
+    plan that upgrades an installed package, or an unresolvable plan → "Update your system first" (« Mettez d'abord le
+    système à jour »): "Your system needs to be updated before you can install apps. Software Update brings it up to date;
+    then get the app again." with "Update Now…". An install pacman ended because the mirror answered 404, 410 or too
+    much for a package or its `.sig` ends the same way: "Your system needs to be updated before you can install apps."
+    (« Votre système doit être mis à jour avant que vous puissiez installer des apps. ») with "Update Now…" in the notice
+    and on the app's page, no "Try Again" and no "Details…". The mirror's and pacman's words go to the log only; the
+    Store never refreshes the databases alone;
   - `db.lck` present or Omarchy's update lock held → "Another installation or an update is running" (« Une autre installation
     ou une mise à jour est en cours »).
   Nothing is queued then. The web apps and Flatpaks, which pacman does not install, skip the first two checks.
@@ -227,7 +240,11 @@ Catalog and network (step 1)
   that package's file and its `.sig` from pacman's own mirror (`pacman -Sp`), checks the signature as pacman does, as the
   user (gpg against a private copy of pacman's keyring: one good detached signature by a key fully trusted and not
   disabled; S17, S19, SD4; a failed check keeps nothing and says "Arch's app data could not be verified" « Les données
-  d'apps d'Arch n'ont pas pu être vérifiées » in the settings window), and keeps its XML
+  d'apps d'Arch n'ont pas pu être vérifiées » in the settings window; a download that failed, the package's or its
+  `.sig`'s, says "Arch's app data couldn't be downloaded. Check for updates, then try again." « Les données d'apps
+  d'Arch n'ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez. » with "Open Software Update"
+  « Ouvrir Mise à jour de logiciels », in the settings window and on a page left empty; anything else, unavailable),
+  and keeps its XML
   and icons in its cache (64 MiB at most), replaced when pacman's database names another version. Used for
   display only: a package it names must exist in pacman's database.
 
@@ -297,14 +314,16 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
 |---|---|
-| A plan that upgrades an installed package or cannot be resolved (database newer than the system, S4) | sheet: "Update your system first", "Open Software Update"; nothing runs |
-| A package the mirror no longer has (database older than the mirror, S5) | same message |
+| A plan that upgrades an installed package or cannot be resolved (database newer than the system, S4) | sheet: "Update your system first", "Your system needs to be updated before you can install apps. …", "Update Now…"; nothing runs |
+| The system older than its mirror: Software Update's last successful check (up-to-date, available or not-set-up) found other updates or an Omarchy release after pacman last synced, or a file of the plan the mirror no longer has (HEAD 404/410; S5; SD29) | same sheet, before anything downloads; the mirror's answer in the log only |
+| An install pacman ended on the mirror's 404, 410 or oversized answer for a package or its `.sig` | "Your system needs to be updated before you can install apps." with "Update Now…" (notice and page), no Try Again, no Details…; pacman's output in the log |
 | `pacman -Qu` lists packages not "[ignored]" (the last system update did not finish, S12) | "Finish the system update first", "Open Software Update"; nothing installs from a repository, the AUR or a setup |
 | `db.lck` present, or Omarchy's update running (S11) | "Another installation or an update is running"; nothing queued |
 | An exit code 0 without the planned state, or the planned state without an exit code | "interrupted" (SR20), never "installed" |
 | Omarchy's terminal does not start the script within 60 s | "The terminal did not open"; the late script refuses to start |
 | "Uninstall" of a package of Omarchy's two lists, Grassfield's packages, the system's (deny list, `HoldPkg`), a dependency, a package without an application entry (from a repository), or a package whose `-Rs --print` plan names a protected one | not offered, with the reason (SR22); the helper refuses them too (ADR-0037 b.1) |
 | A fetched AppStream package whose signature does not pass pacman's rule (ADR-0037 c, S19) | not used, not cached; "Arch's app data could not be verified" in the settings window; pacman's descriptions only |
+| Arch's AppStream package, or its `.sig`, that could not be downloaded | "Arch's app data couldn't be downloaded. Check for updates, then try again." with "Open Software Update" (settings window, an empty page); the catalog alone is used, or nothing (Try Again) |
 | A catalog whose `channel` is not the channel it was fetched from | not used, as a bad signature |
 | A stale `db.lck` with no pacman running | an explanation and Arch's recovery as text; the Store never removes it |
 | An uninstall that would break another installed package | the sheet names the packages that need it; nothing runs |
@@ -314,6 +333,7 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | A file the catalog pins differs or is missing in the installed Omarchy (an Omarchy update the catalog has not checked yet) | every setup's Get and Uninstall… dimmed with "This setup hasn't been checked with your version of Omarchy yet" (SD19); the plan check and `grassfield-store-run` refuse it too (exit 5), naming the file |
 | A catalog without valid Omarchy pins, or a setup whose recipes they do not name | the setup is dropped (ADR-0037 g) |
 | An AUR install while the AUR source is off | not offered: "Turn on the AUR in the Store's settings to install from it." |
+| An AUR package whose name the deny list names (Omarchy's prefix and lists, `yay`, Grassfield's prefix, the system's, `HoldPkg`), or a plan that would build one; Omarchy's lists unread | not offered ("The system, Omarchy or Grassfield uses this name, …"); the plan refuses a dependency so named; `grassfield-store-run` refuses them too (exit 7; ADR-0037 SD30) |
 | An AUR package whose name a repository has | not offered from the AUR (its repository page installs it); the plan and `grassfield-store-run` refuse it too (ADR-0037 b.2, exit 7) |
 | An AUR name a repository resolves otherwise (a package that provides it, a group) | the plan refuses it: "A repository has this package, or one that provides it: the Store installs it from there, without building it."; `grassfield-store-run` too (`pacman -Sp`, exit 7) |
 | An AUR package, or one of its dependencies, that neither the repositories nor the AUR have | the sheet: "The AUR doesn't have this package (anymore)." or "It needs …, which neither the repositories nor the AUR have."; nothing runs |

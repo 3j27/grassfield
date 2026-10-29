@@ -329,6 +329,20 @@ TestCase {
             compare(Minimized.groupFrontCall(address), "", String(address));
     }
 
+    // TL33 (step 6a): Full Screen › Left or Right of Screen, and Exit Full Screen of a Split View window.
+    function test_splitCallsAreBuiltFromValidatedPieces() {
+        for (const v of ["split", "unsplit"])
+            verify(Minimized.isPluginVerb(v), v);
+        const guard = verb => "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(";
+        compare(Minimized.splitCall("0x55AB", "left"), guard("split") + "\"0x55ab\", \"left\") end end");
+        compare(Minimized.splitCall("55ab", "right"), guard("split") + "\"0x55ab\", \"right\") end end");
+        compare(Minimized.unsplitCall("0x55AB"), guard("unsplit") + "\"0x55ab\") end end");
+        for (const side of ["", "LEFT", "top", "fill", "left\") end os.exit() --", null, undefined, 0])
+            compare(Minimized.splitCall("55ab", side), "", String(side));
+        for (const address of ["", "zz", "0x", "0x12345678901234567", "55ab\"", null])
+            compare(Minimized.splitCall(address, "left") + Minimized.unsplitCall(address), "", String(address));
+    }
+
     // TL27, TL28 (step 4a): a zone of the Layouts section, and a pick of the suggestions into the layout of another window.
     function test_zoneCallsAreBuiltFromValidatedPieces() {
         const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.arrange then p.arrange(";

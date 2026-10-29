@@ -20,6 +20,8 @@ ScrollPage {
     signal opened(string id)
     signal categoryRequested(string id)
     signal retry
+    // Arch's app data could not be downloaded (a package database older than the mirror, most often): Software Update.
+    signal softwareUpdateRequested
 
     title: root.section.builtIn ? qsTr("Discover") : root.section.title
     Accessible.role: Accessible.Pane
@@ -113,11 +115,22 @@ ScrollPage {
             font.pixelSize: Tokens.storeBodySize
         }
 
-        Button {
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            push: true
-            text: qsTr("Try Again")
-            onClicked: root.retry()
+            spacing: Tokens.spacingMd
+
+            Button {
+                visible: root.online && root.appData.problem === "download"
+                push: true
+                text: qsTr("Open Software Update")
+                onClicked: root.softwareUpdateRequested()
+            }
+
+            Button {
+                push: true
+                text: qsTr("Try Again")
+                onClicked: root.retry()
+            }
         }
     }
 }

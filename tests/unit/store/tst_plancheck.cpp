@@ -8,6 +8,8 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QThread>
@@ -30,6 +32,7 @@ case "$1" in
                  'xterm 411-1 extra 450000 https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst' ;;
         needsglib) printf '%s\n' 'needsglib 1-1 extra 1000 https://mirror.example/needsglib-1-1.pkg.tar.zst' \
                      'glib2 2.86-1 core 5000000 https://mirror.example/glib2-2.86-1.pkg.tar.zst' ;;
+        huge) i=0; while [ $i -lt 300 ]; do echo "dep$i 1-1 extra 1000 https://mirror.example/dep$i-1-1.pkg.tar.zst"; i=$((i+1)); done ;;
         *) echo "error: target not found: $last" >&2; exit 1 ;;
       esac ;;
   -Si) printf '%s\n' 'Repository      : extra' 'Name            : libxaw' 'Installed Size  : 1.00 MiB' '' \
@@ -57,9 +60,13 @@ struct Fixture {
         tools.pacman = storetest::script(dir.filePath(QStringLiteral("pacman")), kPacman);
         tools.dbLock = dir.filePath(QStringLiteral("db.lck"));
         tools.updateLock = dir.filePath(QStringLiteral("omarchy-update.lock"));
-        tools.head = [this](const QUrl &url) {
-            heads.append(url.toString());
-            return headStatus;
+        tools.heads = [this](const QList<QUrl> &urls) {
+            QList<int> out;
+            for (const QUrl &url : urls) {
+                heads.append(url.toString());
+                out.append(headStatus);
+            }
+            return out;
         };
         storetest::writeFile(dir.filePath(QStringLiteral("installed")), "bash\nglibc\n");
     }
@@ -94,7 +101,9 @@ TEST(PlanCheck, InstallPlan)
     EXPECT_EQ(p.packages.at(0).name, QStringLiteral("xterm")) << "the app's own package first";
     EXPECT_EQ(p.downloadSize, 680000);
     EXPECT_EQ(p.installedSize, qint64(3.5 * 1024 * 1024));
-    EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst")});
+    // Every file of the plan is asked of the mirror, not the first alone (the owner's rc1-7 failed on a later one).
+    EXPECT_EQ(f.heads, (QStringList{QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst"),
+                                    QStringLiteral("https://mirror.example/extra/os/x86_64/libxaw-1.0.16-1-x86_64.pkg.tar.zst")}));
 }
 
 TEST(PlanCheck, InstallRefusals)
@@ -140,6 +149,128 @@ TEST(PlanCheck, InstallRefusals)
     holder.waitForFinished();
     EXPECT_FALSE(lockHeld(f.tools.updateLock));
     EXPECT_FALSE(lockHeld(f.dir.filePath(QStringLiteral("missing.lock"))));
+}
+
+// A system older than its mirror (the integrator's note on PR #36: the owner's rc1-7, databases of 2026-09-08 and a mirror
+// gone on, 404s mid-download; the review of ff2fd83: Software Update's answer in every state it writes): told before
+// anything downloads, by Software Update's own answer or by any file of the plan the mirror no longer has; and recognised in
+// pacman's messages when it happens anyway. Nothing ever syncs the databases.
+TEST(PlanCheck, SystemOlderThanTheMirror)
+{
+    // Software Update's file as its real checker answers and the shell writes it (tests/fixtures/store/software-update,
+    // docs/audits/store-2026-10-27/tools/make-software-update-fixtures.sh), checked 2026-10-26T07:33:20Z.
+    const auto file = [](const char *name) {
+        return storetest::readFixture(QStringLiteral("software-update/software-update-%1.json").arg(QLatin1String(name)));
+    };
+    const QDateTime synced = QDateTime::fromString(QStringLiteral("2026-09-08T10:00:00Z"), Qt::ISODate);
+    // The owner's machine: Grassfield's repository off (not-set-up), Omarchy 4.0.6 and three others pending.
+    const QString behind = databasesBehind(file("not-set-up"), synced);
+    EXPECT_EQ(behind, QStringLiteral("Software Update (not-set-up), 2026-10-26T07:33:20Z: 3 other updates, Omarchy 4.0.6-1; the package "
+                                     "databases were synced 2026-09-08T10:00:00Z"));
+    EXPECT_FALSE(databasesBehind(file("up-to-date-others"), synced).isEmpty()) << "Arch's updates alone: up-to-date, others counted";
+    EXPECT_FALSE(databasesBehind(file("available"), synced).isEmpty()) << "Grassfield's and Omarchy's releases";
+    // A later check failed: the last success the shell keeps (`previous`) still says so.
+    EXPECT_TRUE(databasesBehind(file("failed-previous"), synced).startsWith(QStringLiteral("Software Update (not-set-up), 2026-10-26T07:33:20Z")));
+    // Not behind: nothing pending; Grassfield's own release alone; a failed check with no success kept; a state with no
+    // counts; the databases synced after the answer; no sync known; not the file's version; not JSON.
+    EXPECT_TRUE(databasesBehind(file("up-to-date"), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("available-grassfield"), synced).isEmpty());
+    QJsonObject failed = QJsonDocument::fromJson(file("failed-previous")).object();
+    failed.remove(QStringLiteral("previous"));
+    EXPECT_TRUE(databasesBehind(QJsonDocument(failed).toJson(), synced).isEmpty());
+    QJsonObject running = QJsonDocument::fromJson(file("not-set-up")).object();
+    running.insert(QStringLiteral("state"), QStringLiteral("update-running"));
+    EXPECT_TRUE(databasesBehind(QJsonDocument(running).toJson(), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), QDateTime::fromString(QStringLiteral("2026-10-26T08:00:00Z"), Qt::ISODate)).isEmpty());
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), QDateTime()).isEmpty());
+    QJsonObject later = QJsonDocument::fromJson(file("not-set-up")).object();
+    later.insert(QStringLiteral("version"), 2);
+    EXPECT_TRUE(databasesBehind(QJsonDocument(later).toJson(), synced).isEmpty());
+    EXPECT_TRUE(databasesBehind("not json", synced).isEmpty());
+
+    // When pacman last synced: its log's last "synchronizing package lists" (checkupdates' own syncs log nowhere), in its
+    // own offset; else the fallback. The integrator's case: the log says 10-29 while the newest database is dated 10-16
+    // (pacman sets the mirror's Last-Modified): Software Update's answer of 10-26 predates the sync and says nothing now.
+    const QDateTime dbDate = QDateTime::fromString(QStringLiteral("2026-10-16T06:00:00Z"), Qt::ISODate);
+    const QByteArray log = "[2026-10-16T09:00:00+0200] [PACMAN] Running 'pacman -Syu'\n"
+                           "[2026-10-16T09:00:01+0200] [PACMAN] synchronizing package lists\n"
+                           "[2026-10-16T09:05:00+0200] [ALPM] upgraded linux (6.17-1 -> 6.18-1)\n"
+                           "[2026-10-29T10:12:33+0100] [PACMAN] Running 'pacman -Syu'\n"
+                           "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists\n"
+                           "[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n"
+                           "[2026-10-30T08:00:00+0100] [ALPM] installed amarok (3.2-1)\n"
+                           "a note: [2026-10-31T00:00:00+0000] [PACMAN] synchronizing package lists\n";
+    EXPECT_EQ(lastSync(log, dbDate), QDateTime::fromString(QStringLiteral("2026-10-29T09:12:33Z"), Qt::ISODate));
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), lastSync(log, dbDate)).isEmpty());
+    EXPECT_EQ(lastSync("[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n", dbDate), dbDate);
+    EXPECT_EQ(lastSync({}, dbDate), dbDate);
+    EXPECT_FALSE(databasesBehind(file("not-set-up"), lastSync({}, dbDate)).isEmpty()) << "no log: the database's date, earlier";
+
+    // The fallback: the newest *.db of pacman's sync folder.
+    QTemporaryDir sync;
+    EXPECT_FALSE(newestSync(sync.path()).isValid());
+    storetest::writeFile(sync.filePath(QStringLiteral("core.db")), "db");
+    storetest::writeFile(sync.filePath(QStringLiteral("extra.db")), "db");
+    storetest::writeFile(sync.filePath(QStringLiteral("extra.files")), "files");
+    QFile core(sync.filePath(QStringLiteral("core.db")));
+    ASSERT_TRUE(core.open(QIODevice::ReadWrite));
+    ASSERT_TRUE(core.setFileTime(synced, QFileDevice::FileModificationTime));
+    QFile extra(sync.filePath(QStringLiteral("extra.db")));
+    ASSERT_TRUE(extra.open(QIODevice::ReadWrite));
+    ASSERT_TRUE(extra.setFileTime(synced.addDays(1), QFileDevice::FileModificationTime));
+    EXPECT_EQ(newestSync(sync.path()), synced.addDays(1));
+
+    // pacman's own lines, as the owner's helper log had them.
+    EXPECT_TRUE(downloadGone(QStringLiteral(
+        "(1/30) checking keys in keyring\n"
+        "error: failed retrieving file 'kstatusnotifieritem-6.29.0-1-x86_64.pkg.tar.zst' from stable-mirror.omarchy.org : The requested URL returned error: 404\n"
+        "error: failed to commit transaction (failed to retrieve some files)\n")));
+    EXPECT_TRUE(downloadGone(QStringLiteral(
+        "error: failed retrieving file 'mariadb-12.3.3-2-x86_64.pkg.tar.zst.sig' from stable-mirror.omarchy.org : Exceeded the maximum allowed file size (16384) with 16384 bytes\n")));
+    EXPECT_TRUE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : The requested URL returned error: 410")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : The requested URL returned error: 401")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed retrieving file 'a-1-1-any.pkg.tar.zst' from m.example : Could not resolve host: m.example")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("error: failed to commit transaction (conflicting files)\na: /usr/bin/a exists in filesystem")));
+    EXPECT_FALSE(downloadGone(QStringLiteral("note: error: failed retrieving file 'x' from m : The requested URL returned error: 404"))) << "pacman's line only";
+
+    Fixture f;
+    // Software Update says the system is behind: refused before pacman plans or the mirror is asked.
+    f.tools.behind = behind;
+    InstallPlan p = checkInstall({QStringLiteral("xterm")}, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, behind);
+    EXPECT_TRUE(p.packages.isEmpty());
+    EXPECT_TRUE(f.heads.isEmpty());
+    // The last update unfinished still says so first (its own words, the same Software Update).
+    storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
+    EXPECT_EQ(checkInstall({QStringLiteral("xterm")}, f.tools, true, false).refusal, Refusal::Unfinished);
+    QFile::remove(f.dir.filePath(QStringLiteral("qu")));
+    f.tools.behind.clear();
+
+    // Every file of the plan asked at once; a later one gone from the mirror: refused, its address in the detail.
+    QList<QList<QUrl>> asked;
+    f.tools.heads = [&asked](const QList<QUrl> &urls) {
+        asked.append(urls);
+        QList<int> out;
+        for (const QUrl &url : urls)
+            out.append(url.path().contains(QStringLiteral("xterm")) ? 404 : 200);
+        return out;
+    };
+    p = checkInstall({QStringLiteral("xterm")}, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/os/x86_64/xterm-411-1-x86_64.pkg.tar.zst: HTTP 404"));
+    ASSERT_EQ(asked.size(), 1) << "one set of requests, not one per file";
+    EXPECT_EQ(asked.at(0).size(), 2);
+    // 256 files at most; a mirror that does not answer (0) refuses nothing (pacman says what happens).
+    asked.clear();
+    f.tools.heads = [&asked](const QList<QUrl> &urls) {
+        asked.append(urls);
+        return QList<int>(urls.size(), 0);
+    };
+    EXPECT_EQ(checkInstall({QStringLiteral("huge")}, f.tools, true, false).refusal, Refusal::None);
+    ASSERT_EQ(asked.size(), 1);
+    EXPECT_EQ(asked.at(0).size(), 256);
+    EXPECT_EQ(asked.at(0).last(), QUrl(QStringLiteral("https://mirror.example/dep255-1-1.pkg.tar.zst")));
 }
 
 TEST(PlanCheck, RemovePlan)
@@ -252,6 +383,7 @@ case "$1" in
          gimp) echo gimp; exit 0 ;;
          pdf-viewer) echo zathura; exit 0 ;;
          locked) echo 'error: failed to init transaction (unable to lock database)' >&2; exit 1 ;;
+         example) echo 'error: target not found: example-app' >&2; exit 1 ;;
          *) echo "error: target not found: $n" >&2; exit 1 ;;
        esac ;;
   -Si) [ "$3" = gimp ] && { echo 'Name            : gimp'; exit 0; }
@@ -293,6 +425,7 @@ TEST(PlanCheck, AurPlans)
     };
     const SetupCheck setup{root, QStringLiteral("omarchy-pkg-aur-add"),
                            {pin(QStringLiteral("bin/omarchy-pkg-aur-add")), pin(QStringLiteral("bin/omarchy-pkg-missing"))}};
+    const DenyList deny{{QStringLiteral("btop")}, {QStringLiteral("glibc")}};
     const AurAnswer all = parseAurAnswer(storetest::readFixture(QStringLiteral("aur/info.json")), QStringLiteral("multiinfo"));
     QList<QStringList> asked;
     const auto info = [&all, &asked](const QStringList &names) {
@@ -313,7 +446,7 @@ TEST(PlanCheck, AurPlans)
 
     // example-app-bin: it and example-lib (an AUR dependency) built; gtk3 (and what it needs) from the repositories; cmake
     // and glibc are there.
-    InstallPlan p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false);
+    InstallPlan p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::None) << p.detail.toStdString();
     EXPECT_EQ(names(p.built), (QStringList{QStringLiteral("example-app-bin 2.4.1-1"), QStringLiteral("example-lib 1.3-2")}));
     EXPECT_EQ(p.built.at(0).repo, QStringLiteral("aur"));
@@ -322,50 +455,86 @@ TEST(PlanCheck, AurPlans)
     EXPECT_EQ(p.installedSize, 2 * 1024 * 1024);
     EXPECT_FALSE(p.incomplete);
     EXPECT_EQ(asked, (QList<QStringList>{{QStringLiteral("example-app-bin")}, {QStringLiteral("example-lib")}}));
-    EXPECT_EQ(f.heads, QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst")}) << "the repositories' first file, as any install";
+    EXPECT_EQ(f.heads, (QStringList{QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst"), QStringLiteral("https://mirror.example/extra/gtk-common.pkg.tar.zst")}))
+        << "the repositories' files, as any install's";
+    // A repository dependency gone from the mirror: refused as any install (the review of ff2fd83: the AUR's repository part
+    // comes from the same databases), before yay is ever started.
+    f.headStatus = 404;
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("https://mirror.example/extra/gtk3.pkg.tar.zst: HTTP 404"));
+    f.headStatus = 200;
+
+    // The system older than the mirror (Software Update's answer): refused as any install, the AUR not asked.
+    f.tools.behind = QStringLiteral("Software Update: 37 other updates");
+    asked.clear();
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Outdated);
+    EXPECT_EQ(p.detail, QStringLiteral("Software Update: 37 other updates"));
+    EXPECT_TRUE(asked.isEmpty());
+    f.tools.behind.clear();
 
     // A repository has it, or a package that provides it (yay installs what pacman resolves): from there; pacman that does
     // not answer is no answer. The AUR does not know it, or one of its dependencies is on neither.
-    p = checkAurInstall(QStringLiteral("gimp"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("gimp"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Repository);
-    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Repository) << "a provider in the repositories";
-    p = checkAurInstall(QStringLiteral("locked"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("locked"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Failed);
     EXPECT_TRUE(p.detail.contains(QLatin1String("unable to lock database"))) << p.detail.toStdString();
-    p = checkAurInstall(QStringLiteral("nope"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("nope"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::NotOnAur);
     EXPECT_EQ(p.detail, QStringLiteral("nope"));
-    p = checkAurInstall(QStringLiteral("example-tool-git"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-tool-git"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::NotOnAur) << "its checkdepends python-pytest is on neither";
     EXPECT_EQ(p.detail, QStringLiteral("python-pytest"));
+    // pacman's "target not found" for a longer name only (example-app for example) is no answer about this one.
+    p = checkAurInstall(QStringLiteral("example"), setup, info, deny, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Failed);
+
+    // Never a name of the deny list (the integrator's note on PR #36): the app's, refused before pacman or the AUR is asked;
+    // a dependency the AUR would build, refused at it.
+    asked.clear();
+    for (const QString &name : {QStringLiteral("omarchy-theme-example"), QStringLiteral("grassfield-shell-git"), QStringLiteral("yay-bin"),
+                                QStringLiteral("btop"), QStringLiteral("glibc"), QStringLiteral("linux-example"), QStringLiteral("example-firmware")}) {
+        p = checkAurInstall(name, setup, info, deny, f.tools, true, false);
+        EXPECT_EQ(p.refusal, Refusal::Protected) << name.toStdString();
+        EXPECT_EQ(p.protectedPackage, name);
+    }
+    EXPECT_TRUE(asked.isEmpty());
+    DenyList lib = deny;
+    lib.omarchy.insert(QStringLiteral("example-lib"));
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, lib, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Protected);
+    EXPECT_EQ(p.protectedPackage, QStringLiteral("example-lib")) << "a dependency the AUR would build";
 
     // The AUR does not answer; offline; the pins; the last update unfinished; an unread dependency marks the plan.
     const auto silent = [](const QStringList &) { return AurAnswer{false, {}, QStringLiteral("unavailable")}; };
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, silent, f.tools, true, false).refusal, Refusal::Failed);
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, false, false).refusal, Refusal::Offline);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, silent, deny, f.tools, true, false).refusal, Refusal::Failed);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, false, false).refusal, Refusal::Offline);
     SetupCheck changed = setup;
     changed.pins.first().second = QString(64, QLatin1Char('0'));
-    p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
     EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-aur-add"));
     // The command's helper (omarchy-pkg-missing) not pinned: the catalog does not vouch for the command.
     SetupCheck helperless = setup;
     helperless.pins.removeLast();
-    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
     EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-missing"));
     SetupCheck wrong = setup;
     wrong.recipe = QStringLiteral("omarchy-pkg-add");
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, f.tools, true, false).refusal, Refusal::OmarchyChanged);
-    EXPECT_EQ(checkAurInstall(QStringLiteral("-rf"), setup, info, f.tools, true, false).refusal, Refusal::Failed);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, deny, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("-rf"), setup, info, deny, f.tools, true, false).refusal, Refusal::Failed);
     const auto unread = [&info](const QStringList &n) {
         AurAnswer a = info(n);
         for (AurPackage &p : a.packages)
             p.dependenciesUnread = true;
         return a;
     };
-    EXPECT_TRUE(checkAurInstall(QStringLiteral("example-lib"), setup, unread, f.tools, true, false).incomplete);
+    EXPECT_TRUE(checkAurInstall(QStringLiteral("example-lib"), setup, unread, deny, f.tools, true, false).incomplete);
     storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false).refusal, Refusal::Unfinished);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false).refusal, Refusal::Unfinished);
 }

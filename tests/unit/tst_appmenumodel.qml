@@ -234,6 +234,82 @@ TestCase {
         compare(model.tilingPopover({alt: true, tileable: true, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: []}).layouts.length, 4);
     }
 
+    // TL33 (step 6a): with the plugin's tiling-split the Full Screen row is the submenu Entire Screen, Left of Screen, Right of
+    // Screen; the halves greyed for a window that cannot be tiled now; on a Split View Desktop only Exit Full Screen, which
+    // sends the window back (exitSplit).
+    function test_tilingPopoverFullScreenSubmenu() {
+        const outputs = [{name: "DP-1", model: "LG UltraFine", builtIn: false}];
+        const p = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, fullscreen: false, outputs: outputs});
+        compare(p.rows.map(i => i.id).join(","), "fullScreenMenu,moveToOutput");
+        const row = p.rows[0];
+        compare(row.text, "Full Screen");
+        verify(row.enabled);
+        compare(row.submenu.map(i => i.id + ":" + (i.side || "") + ":" + i.text).join("|"), "fullscreen::Entire Screen|split:left:Left of Screen|split:right:Right of Screen");
+        verify(row.submenu.every(i => i.enabled));
+        compare(JSON.stringify(row.submenu[0].glyph), JSON.stringify(model.placeGlyph("fill")), "Entire Screen: the whole output");
+        compare(JSON.stringify(row.submenu[1].glyph.zones), JSON.stringify(Tokens.tilingLayoutLeftRight));
+        compare(row.submenu[1].glyph.own, 0, "Left of Screen: the left half the window's own");
+        compare(row.submenu[2].glyph.own, 1);
+        // Alt changes the glyph sections, not the Full Screen submenu.
+        const alt = model.tilingPopover({alt: true, tileable: true, canArrange: true, canSplit: true, fullscreen: false, outputs: []});
+        compare(alt.rows.map(i => i.id).join(","), "fullScreenMenu");
+        // A window that cannot be tiled now: the halves greyed, Entire Screen stays.
+        const no = model.tilingPopover({alt: false, tileable: false, canArrange: true, canSplit: true, fullscreen: false, outputs: []});
+        compare(no.rows[0].submenu.map(i => i.enabled).join(","), "true,false,false");
+        verify(no.rows[0].enabled);
+        // D47: while Stages shows its strip the plugin refuses the halves: greyed, Entire Screen stays.
+        const staged = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splitBlocked: true, fullscreen: false, outputs: []});
+        compare(staged.rows[0].submenu.map(i => i.enabled).join(","), "true,false,false");
+        verify(staged.sections.every(s => s.items.every(i => i.enabled)), "only the halves");
+        // #48 nested pass, MAJOR C (TL8): a window wider or taller than half of its output: the halves greyed, Entire Screen and
+        // the glyphs stay; a ctx that does not say (undefined) changes nothing.
+        const wide = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splittable: false, fullscreen: false, outputs: []});
+        compare(wide.rows[0].submenu.map(i => i.enabled).join(","), "true,false,false");
+        verify(wide.sections.every(s => s.items.every(i => i.enabled)), "only the halves");
+        const fits = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, splittable: true, fullscreen: false, outputs: []});
+        compare(fits.rows[0].submenu.map(i => i.enabled).join(","), "true,true,true");
+        // Without tiling-split: the plain row that enters full screen.
+        const plain = model.tilingPopover({alt: false, tileable: true, canArrange: true, fullscreen: false, outputs: []});
+        compare(plain.rows[0].id, "fullscreen");
+        compare(plain.rows[0].submenu, undefined);
+        // On a Split View Desktop: Exit Full Screen only, which unsplits (not Hyprland's full screen).
+        const split = model.tilingPopover({alt: false, tileable: true, canArrange: true, canSplit: true, fullscreen: false, inSplit: true, outputs: outputs});
+        compare(split.sections.length, 0);
+        compare(split.layouts.length, 0);
+        compare(split.rows.map(i => i.id + ":" + i.text).join(","), "exitSplit:Exit Full Screen");
+        verify(split.rows[0].enabled);
+    }
+
+    // TL33 (step 6a, M29): the Window menu's Full Screen Tile › Left of Screen, Right of Screen after Enter Full Screen, with the
+    // plugin's tiling-split; greyed where the tiling items are (full screen, zoomed). On a Split View Desktop: Exit Full Screen
+    // (exitSplit), no Zoom, no tiling item, no Full Screen Tile.
+    function test_windowMenuFullScreenTile() {
+        compare(ids(model.windowMenu(ctx({canTile: true}))).indexOf("fullScreenTile"), -1, "no Full Screen Tile without tiling-split");
+        const items = model.windowMenu(ctx({canTile: true, canSplit: true}));
+        const all = ids(items);
+        compare(all.indexOf("fullScreenTile"), all.indexOf("fullscreen") + 1, "right after Enter Full Screen");
+        const tile = items.find(i => i.id === "fullScreenTile");
+        compare(tile.text, "Full Screen Tile");
+        verify(tile.enabled);
+        compare(tile.submenu.map(i => i.id + ":" + i.side + ":" + i.text).join("|"), "split:left:Left of Screen|split:right:Right of Screen");
+        verify(tile.submenu.every(i => i.enabled));
+        for (const over of [{fullscreen: true}, {maximized: true}, {focusedWindow: null}, {splitBlocked: true}]) {
+            const t = model.windowMenu(ctx(Object.assign({canTile: true, canSplit: true}, over))).find(i => i.id === "fullScreenTile");
+            verify(!t.enabled && t.submenu.every(i => !i.enabled), JSON.stringify(over));
+        }
+        verify(model.windowMenu(ctx({canTile: true, canSplit: true, splitBlocked: true})).find(i => i.place === "fill").enabled, "D47 greys the halves only");
+        const split = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true}));
+        compare(ids(split).join(","), "minimize,zoom,tile,tile,moveResize,exitSplit,moveMenu,bringAll,window,window");
+        compare(split.find(i => i.id === "exitSplit").text, "Exit Full Screen");
+        verify(split.find(i => i.id === "exitSplit").enabled);
+        verify(!split.find(i => i.id === "zoom").enabled, "no Zoom on a Split View Desktop");
+        verify(!split.find(i => i.place === "fill").enabled, "the Desktop places its windows");
+        verify(!split.find(i => i.id === "moveResize").enabled);
+        verify(!split.find(i => i.id === "minimize").enabled, "D56: not minimized, as in full screen");
+        verify(model.windowMenu(ctx({canTile: true, canSplit: true})).find(i => i.id === "minimize").enabled, "elsewhere Minimize stays");
+        verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, focusedWindow: null})).find(i => i.id === "exitSplit").enabled);
+    }
+
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {
         const items = model.windowMenu(ctx({displayOnly: true}));
         for (const id of ["minimize", "zoom", "fullscreen", "moveMenu"])

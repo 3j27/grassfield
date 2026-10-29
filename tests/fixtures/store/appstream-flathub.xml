@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Made up in the form of Flathub's AppStream in a user's installation (appstream/flathub/x86_64/active/appstream.xml,
+     store-probes-4.sh S21): no pkgname, a <bundle type="flatpak"> naming the app's ref and its runtime, Flathub's
+     verification in <custom>. No such apps exist. -->
+<components version="0.8" origin="flatpak">
+  <component type="desktop-application">
+    <id>org.example.Notes</id>
+    <name>Example Notes</name>
+    <name xml:lang="fr">Notes d'exemple</name>
+    <summary>Notes that link to each other</summary>
+    <project_license>GPL-3.0-or-later</project_license>
+    <developer id="org.example"><name>Example Developers</name></developer>
+    <launchable type="desktop-id">org.example.Notes.desktop</launchable>
+    <icon height="64" type="cached" width="64">org.example.Notes.png</icon>
+    <icon height="128" type="cached" width="128">org.example.Notes.png</icon>
+    <icon height="128" scale="2" type="cached" width="128">org.example.Notes.png</icon>
+    <icon height="128" type="remote" width="128">https://dl.flathub.org/media/org/example/Notes/icons/128x128/org.example.Notes.png</icon>
+    <categories><category>Office</category></categories>
+    <custom>
+      <value key="Purism::form_factor">mobile</value>
+      <value key="flathub::verification::verified">true</value>
+      <value key="flathub::verification::method">website</value>
+    </custom>
+    <bundle type="flatpak" runtime="org.gnome.Platform/x86_64/50" sdk="org.gnome.Sdk/x86_64/50">app/org.example.Notes/x86_64/stable</bundle>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Paint</id>
+    <name>Example Paint</name>
+    <summary>Paints</summary>
+    <custom>
+      <value key="flathub::verification::verified">false</value>
+      <value key="flathub::verification::login_name">true</value>
+    </custom>
+    <bundle type="flatpak" runtime="org.freedesktop.Platform/x86_64/25.08;rm">app/org.example.Paint/x86_64/stable</bundle>
+  </component>
+  <component type="runtime">
+    <id>org.example.Platform</id>
+    <name>A runtime</name>
+    <bundle type="flatpak">runtime/org.example.Platform/x86_64/1</bundle>
+  </component>
+  <component type="desktop-application">
+    <id>notanid</id>
+    <name>Not a Flatpak id</name>
+    <bundle type="flatpak" runtime="org.gnome.Platform/x86_64/50">app/notanid/x86_64/stable</bundle>
+  </component>
+  <component type="desktop-application">
+    <id>org.example.Packaged</id>
+    <name>Another kind of bundle</name>
+    <bundle type="package">app/org.example.Packaged/x86_64/stable</bundle>
+  </component>
+</components>
