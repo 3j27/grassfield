@@ -8,6 +8,14 @@ local self_path = debug and debug.getinfo and debug.getinfo(1, "S").source or ""
 local config_dir = self_path:match("^@(.+)/[^/]+$") or "/usr/share/grassfield/hypr"
 package.path = config_dir .. "/?.lua;" .. package.path
 
+-- ADR-0001 amendment 2026-10-29: Hyprland's file watcher is off in the real session. A package upgrade unlinks and
+-- recreates the installed files; the watcher reloaded in that window and failed ("cannot open ...session.lua", an error
+-- the files coming back do not clear, or Grassfield's bindings and plugin dropped for a missing module). The installed
+-- files are read again only at the next login or at an explicit reload (the shell's, grassfield-lid's, Omarchy's tools'
+-- and Omarchy's own pacman hook after an omarchy-settings transaction). Set first: a reload resets every option before
+-- it runs this file, so a parse that stops at a missing module still leaves the watcher off. dev.lua keeps the watcher.
+hl.config({ misc = { disable_autoreload = true } })
+
 -- A parse starts with none of Grassfield's modules loaded, so each one runs again on a reload (should Hyprland keep
 -- package.loaded) and a module loaded before core.lua stays loaded for the rest of this parse: bindings.lua reads the
 -- Trackpad gestures from grassfield.input, which omarchy.lua loads.
@@ -65,14 +73,6 @@ require("grassfield.system")
 -- with the Omarchy session. Never touch it from this session; the theme reaches clients through XCURSOR_* (cursor.lua).
 -- GTK applications keep whatever theme dconf already holds.
 hl.config({ cursor = { sync_gsettings_theme = false } })
-
--- ADR-0001 amendment 2026-10-29: the installed files (/usr/share/grassfield/hypr) are read at the login only. Hyprland's
--- file watcher reloads while pacman has unlinked this very file or a module, which fails ("cannot open ...session.lua",
--- or Grassfield's bindings and plugin dropped for a missing module), and an error on the entry file is not cleared by
--- the files coming back. A package upgrade never disturbs the running session (macOS: an update takes effect at the next
--- login). Everything the shell changes at run time asks for its reload itself (shell/platform/SessionConfig.qml), and
--- Omarchy's tools do the same (hyprctl reload / eval); the nested dev session (dev.lua) keeps the watcher.
-hl.config({ misc = { disable_autoreload = true } })
 
 -- Optional compositor extension (ADR-0009, "Amendment 2026-10-23"). Loaded at parse time (Hyprland applies the plugin
 -- list right after parsing). grassfield.compositor picks the build made for the Hyprland that runs: the packaged one, else

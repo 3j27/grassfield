@@ -55,11 +55,16 @@ entry file: with the entry file absent the reload fails ("cannot open .../sessio
 file is back and a `touch` does not clear it (the watch on the entry file is lost; only an explicit `reload` does); with
 a module absent (`grassfield/core.lua`) the reload ran with the module missing and the compositor dropped to 3 binds, the
 default gaps and no compositor extension until the next reload. A rename over a file is harmless.
-- `config/hypr/session.lua` sets `misc.disable_autoreload = true`: the installed files take effect at the next login
-  (macOS: an update never disturbs the running session). `dev.lua` (nested) keeps the watcher.
+- `config/hypr/session.lua` sets `misc.disable_autoreload = true`, as its first option (a reload resets every option
+  before it runs the file, so a parse that stops at a missing module still leaves the watcher off). The installed files
+  are read again at the next login or at an explicit reload: the shell's, `grassfield-lid`'s, Omarchy's tools', and
+  Omarchy's own pacman hook, which reloads every running Hyprland after an omarchy-settings transaction (so a
+  transaction with both omarchy-settings and grassfield-desktop applies the new files at once). macOS: an update does
+  not disturb the running session. `dev.lua` (nested) keeps the watcher.
 - Hyprland reads the files only through the shell's explicit reload (shell/platform/SessionConfig.qml and Displays.qml:
-  `mouse-trackpad.lua`, `keyboard.lua`, the display trial), `grassfield-lid` and Omarchy's clamshell and scaling tools
-  (`hyprctl reload` / `eval`). None of them used the watcher: the Grassfield files are read as text with `io.open`, which
+  `mouse-trackpad.lua`, `keyboard.lua`, the display trial), `grassfield-lid` (which stands in for Omarchy's clamshell
+  tool in this session) and Omarchy's scaling tool (`hyprctl eval` applies the scale at once; its GDK_SCALE edit of
+  `monitors.lua` now waits for a reload or the next login). None of them used the watcher: the Grassfield files are read as text with `io.open`, which
   Hyprland does not watch (proven in nested: a write alone changes nothing, a reload applies it).
 - Cost, accepted: a hand edit of `~/.config/hypr/monitors.lua` or `input.lua` (Omarchy's Setup menu opens an editor, it
   runs no reload) needs `hyprctl reload` or the next login. Omarchy's own pacman hook for omarchy-settings pauses and
