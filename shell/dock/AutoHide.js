@@ -21,6 +21,11 @@ function create() {
     };
 }
 
+// The machine a Dock window starts with: out of sight when it hides (auto-hide on, or an output without the Dock), shown otherwise.
+function initial(hides) {
+    return hides ? {state: "hidden", visible: 0, timer: 0} : create();
+}
+
 // True when the Dock must not leave (or must come back to) the shown state.
 function inhibited(inh) {
     return !!(inh.pointer || inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced || inh.attention);

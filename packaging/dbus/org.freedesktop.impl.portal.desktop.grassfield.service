@@ -1,0 +1,7 @@
+# The Open and Save panels of the Grassfield session (ADR-0035 D-4): started by D-Bus activation through its unit when the
+# portal frontend calls it, again after it quit (60 s after its last request) or crashed. Outside a Grassfield session the
+# unit's condition fails, the program refuses to run, and the session's routing never names it.
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.grassfield
+Exec=/usr/lib/grassfield/grassfield-portal
+SystemdService=grassfield-portal.service

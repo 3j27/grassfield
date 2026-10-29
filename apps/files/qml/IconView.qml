@@ -572,6 +572,8 @@ FocusScope {
         required property string folderGlyph
         required property bool canPreview
         required property bool hidden
+        // A file the Open or Save panel cannot take (FolderModel.chooser).
+        required property bool dimmed
         required property var tagColors
 
         readonly property bool renaming: root.tab.isRenaming(root.model, cell.url)
@@ -581,7 +583,7 @@ FocusScope {
 
         width: root.cellWidth
         height: Tokens.filesIconCellHeight
-        opacity: cell.hidden ? Tokens.filesHiddenOpacity : 1
+        opacity: cell.dimmed ? Tokens.materialDisabledOpacity : cell.hidden ? Tokens.filesHiddenOpacity : 1
         Accessible.role: Accessible.ListItem
         Accessible.name: DisplayName.text(cell.name)
         Accessible.selectable: true
@@ -633,7 +635,7 @@ FocusScope {
         // Colour tags: dots before the first line of the name; dots and name are centred together.
         TagDots {
             id: dots
-            visible: !cell.renaming && colors.length > 0
+            visible: !cell.renaming && dots.shown.length > 0
             colors: cell.tagColors
             x: label.x + (label.width - label.paintedWidth) / 2 - width - Tokens.spacingXs
             y: label.y + (label.paintedHeight / Math.max(1, label.lineCount) - height) / 2

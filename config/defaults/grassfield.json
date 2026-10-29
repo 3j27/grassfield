@@ -39,7 +39,11 @@
     "titlebarDoubleClick": "zoom",
     "tilingEdges": true,
     "tilingMenuBar": true,
+    "tilingOptionDrag": true,
     "tilingMargins": true,
+    "tilingLayouts": true,
+    "tilingSuggestions": true,
+    "tilingGroups": true,
     "stages": false,
     "rebuildExtension": false
   },

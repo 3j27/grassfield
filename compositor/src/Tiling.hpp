@@ -125,6 +125,10 @@ namespace gf::tiler {
     // The margins setting changed: every tiled window is placed again from its zone (TL2).
     void marginsChanged();
 
+    // "Suggest windows to fill the rest of a layout" turned off (TL32): the suggestion pending in the state reply ends; it
+    // never comes back when the switch turns on again (integrator review of 1c08d6b).
+    void suggestionsOff();
+
     // The reply of `hyprctl grassfield-tiling` (core stateJson). It moves no window: it only drops the records of closed
     // windows and of windows moved by other means.
     std::string stateReply();

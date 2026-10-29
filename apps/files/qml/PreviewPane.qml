@@ -49,11 +49,12 @@ Item {
         const m = root.model;
         return m && m.dimensionsAt && root.info && root.row >= 0 ? m.dimensionsAt(root.row) : "";
     }
-    // The selection's quick actions (FilesApp.rotatableImages): local pictures Files can rotate.
+    // The selection's quick actions (FilesApp.rotatableImages): local pictures Files can rotate. None in an Open or Save
+    // panel, which changes no file.
     readonly property var rotatable: {
         root.revision;
         const m = root.model;
-        return m && root.selectedCount > 0 ? root.tab.app.rotatableImages(m.selectedUrls()) : [];
+        return m && root.selectedCount > 0 && !root.tab.chooser ? root.tab.app.rotatableImages(m.selectedUrls()) : [];
     }
     readonly property bool hasActions: root.rotatable.length > 0 && root.rotatable.length === root.selectedCount
     // What the Tags field tags: the selection, else the shown folder.
@@ -66,7 +67,8 @@ Item {
             return m.selectedUrls();
         return root.info && root.info.url ? [root.info.url] : [];
     }
-    readonly property bool taggable: root.tagUrls.length > 0 && root.tab.app.tagsUnavailable(root.tagUrls) === ""
+    // Not in an Open or Save panel: it changes no file.
+    readonly property bool taggable: !root.tab.chooser && root.tagUrls.length > 0 && root.tab.app.tagsUnavailable(root.tagUrls) === ""
 
     // The exact size: zero and one spelt out (qsTr's %Ln count is an int, too small for a file's size). `text`: the
     // number written for the locale.

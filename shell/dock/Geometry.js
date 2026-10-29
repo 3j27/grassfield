@@ -399,9 +399,47 @@ function latchScreen(chosen, names, focused, preferred) {
     return chosen === "" ? startScreen(names, focused, preferred) : chosen;
 }
 
+// The output the Dock latches on at the first settled layout: the start output, else (no focused output was ever reported: a
+// compositor without focus events, the fallback timer ran out) the output it is on, so that a focus event arriving later does
+// not move a Dock that is already drawn.
+function settleScreen(chosen, names, focused, preferred) {
+    const latched = latchScreen(chosen, names, focused, preferred);
+    return latched !== "" ? latched : dockScreen("", names, focused, preferred);
+}
+
 // Whether the output of a Dock window takes the Dock from the one that has it: an output without the Dock acts as an
 // auto-hidden Dock that stays away, and its machine starting to reveal (AutoHide.js: the pointer rested on the edge
 // strip for the reveal dwell) is the pointer having reached the Dock's edge there.
 function movesDock(isDockScreen, previousState, nextState) {
     return !isDockScreen && previousState !== "revealing" && nextState === "revealing";
+}
+
+// ---- Startup: the Dock appears once, in its final place (the owner's report of 2026-10-29) ----
+
+// Whether every input of the Dock's first layout is final: the settings file was read (edge, size, magnification, pinned
+// apps), the apps model is ready (the icons of the pinned apps), and the output that has the Dock is known (with several
+// outputs, the focused one; `start` is startScreen()). Until then the window stays unmapped, so nothing is drawn at a default
+// edge or size and then moved. The settings file is always waited for (its read ends in `loaded` whatever the file is, and is
+// bounded); `waited` (the fallback timer ran out) stands in for the other two, which a compositor without focus events or an
+// empty apps model may never give. `inputs` is {settings, apps, screens, start, waited}.
+function settledOn(inputs) {
+    if (!inputs || inputs.settings !== true)
+        return false;
+    const n = inputs.screens ? inputs.screens.length : 0;
+    if (n === 0)
+        return false;
+    if (inputs.waited === true)
+        return true;
+    return inputs.apps === true && (n === 1 || String(inputs.start || "") !== "");
+}
+
+// Whether a Dock surface has the shape of its edge: across the Dock `depth`, and along it longer than across (a side surface
+// is as tall as the output less the menu bar's reserved strip, a bottom one as wide as the output: only the orientation is
+// checked along). Until then an anchor change (the settled edge) has not been answered by the compositor and the Dock would
+// be drawn in a surface of the old edge.
+function placed(edge, width, height, depth) {
+    if (!(depth > 0) || !(width > 0) || !(height > 0))
+        return false;
+    const near = (a, b) => Math.abs(a - b) < 1;
+    return isVertical(edge) ? (near(width, depth) && height > width) : (near(height, depth) && width > height);
 }

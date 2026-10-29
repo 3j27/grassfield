@@ -9,7 +9,9 @@
 # absence) is restored at exit. Pointer input through scripts/dev/pointer.sh, hyprctl read-only.
 #   minimize -> a double-click on the bar hides the window on special:minimized (minimize-request path);
 #   none     -> a double-click changes nothing (no zoom, no minimize);
-#   zoom     -> a double-click maximizes, a second one restores the geometry.
+#   zoom     -> a double-click maximizes, a second one restores the geometry;
+#   fill     -> (plugin with "tiling-arrange", docs/specs/tiling.md TL32) a double-click tiles the window over the usable
+#               area: larger on both axes, not full screen, on the same Desktop.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/double-click/run-<timestamp>.log.
 set -uo pipefail
 
@@ -59,7 +61,7 @@ cleanup() {
   if ((had_settings)); then cp "$backup" "$settings"; else rm -f "$settings"; fi
 }
 trap cleanup EXIT
-set_setting() { # <zoom|minimize|none>: rewrite the dev settings file, give the shell time to push it
+set_setting() { # <zoom|minimize|none|fill>: rewrite the dev settings file, give the shell time to push it
   mkdir -p "$dev/config"
   local base=$root/config/defaults/grassfield.json
   ((had_settings)) && base=$backup
@@ -124,6 +126,17 @@ double_click $((mx + mw / 2)) $((my - GF_TB_MID))
 read -r x y w h fs ws < <(geom)
 [[ $fs == 0 && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
 check "double-click restores" $? "${w}x${h} at ($x,$y) fullscreen $fs"
+
+if query grassfield | jq -e '.features | index("tiling-arrange")' >/dev/null 2>&1; then
+  say "fill"
+  set_setting fill
+  double_click "$bar_x" "$bar_y"
+  read -r x y w h fs ws < <(geom)
+  [[ $fs == 0 && $ws == "$ws0" ]] && ((w > w0 && h > h0))
+  check "double-click fills" $? "${w}x${h} at ($x,$y) fullscreen $fs on $ws (was ${w0}x${h0})"
+else
+  say "fill: SKIP (the plugin does not advertise tiling-arrange; the shell sends zoom instead)"
+fi
 
 kill -0 "$hypr_pid" 2>/dev/null
 check "nested Hyprland alive" $? "pid $hypr_pid"

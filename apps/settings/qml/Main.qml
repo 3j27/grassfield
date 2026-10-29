@@ -59,7 +59,7 @@ Window {
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about software update storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
-        {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window")},
+        {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins")},
         {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
         {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands clipboard copy paste")},
@@ -992,6 +992,7 @@ Window {
         MenuBarPage {
             store: cfg
             hasBattery: root.hasBattery
+            backend: root.backend
             onClockOptionsRequested: clockSheet.open()
             onBatteryOptionsRequested: batteryOptionsSheet.open()
         }
@@ -1192,6 +1193,29 @@ Window {
         onAccepted: updateState.endSession("restart")
     }
 
+    // Update Now's end (U29, owner decision SU-M1): when the run this window watched asks for a restart or a log out, it asks
+    // once, as macOS does; Later keeps the pane's row. Nothing restarts by itself.
+    Sheet {
+        id: finishSheet
+        property string action: "restart"
+        title: finishSheet.action === "restart" ? qsTr("Restart your computer to finish updating") : qsTr("Log out to finish updating Grassfield")
+        message: finishSheet.action === "restart" ? qsTr("The updates are installed. Open applications will be closed when the computer restarts.")
+            : qsTr("The new version of Grassfield starts when you log in again. Open applications will be closed.")
+        cancelText: finishSheet.action === "restart" ? qsTr("Restart Later") : qsTr("Log Out Later")
+        confirmText: finishSheet.action === "restart" ? qsTr("Restart") : qsTr("Log Out")
+        onAccepted: updateState.endSession(finishSheet.action)
+    }
+
+    Connections {
+        target: updateState
+        function onRunFinished(result: string, restart: string): void {
+            if (result === "done" && (restart === "restart" || restart === "logout") && !updateState.restartBlocked) {
+                finishSheet.action = restart;
+                finishSheet.open();
+            }
+        }
+    }
+
     Component {
         id: aboutPage
         AboutPage {
@@ -1321,7 +1345,7 @@ Window {
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
         volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
-        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet]
+        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet]
 
     Instantiator {
         model: root.sheets

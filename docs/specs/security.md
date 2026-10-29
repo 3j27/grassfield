@@ -687,6 +687,10 @@ VERIFIED until run).
   call idle status` shows `busInhibited`.
 
 ## Polkit details (SEC-07, D-4)
+Software Update's two actions (ADR-0033 c and "Step 3"), `org.grassfield.packages.set-channel` and
+`org.grassfield.packages.update-system` (Update Now, owner decision SU-M1: an administrator's password every time), are shown
+as polkit gives them: their own message and "Action: <id>"; the sheet reads nothing from them. The update helper's
+arguments (an operation id, migration names) say nothing a person needs to decide on.
 Grassfield Store's action (ADR-0037 b.1, SD2, SD17): for `org.grassfield.store.manage-packages` only, the sheet reads polkit's
 message, which polkitd expands with the helper's argument vector as pkexec reports it (`$(command_line)`), by one strict
 pattern (`AuthDialogModel.storeRequestOf`: the policy's English or French message, `/usr/lib/grassfield/grassfield-store-helper`,

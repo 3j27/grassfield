@@ -297,6 +297,8 @@ FocusScope {
             required property string folderColor
             required property string folderGlyph
             required property bool hidden
+            // A file the Open or Save panel cannot take (FolderModel.chooser).
+            required property bool dimmed
             required property var tagColors
 
             readonly property bool renaming: root.tab.isRenaming(root.model, row.url)
@@ -306,7 +308,7 @@ FocusScope {
 
             width: list.contentWidth
             height: Tokens.filesListRowHeight
-            opacity: row.hidden ? Tokens.filesHiddenOpacity : 1
+            opacity: row.dimmed ? Tokens.materialDisabledOpacity : row.hidden ? Tokens.filesHiddenOpacity : 1
             Accessible.role: Accessible.Row
             Accessible.name: DisplayName.text(row.name)
             Accessible.description: [row.modifiedText, row.sizeText, row.kind].join(", ")
@@ -356,7 +358,7 @@ FocusScope {
             // Colour tags right after the name.
             TagDots {
                 id: rowDots
-                visible: !row.renaming && colors.length > 0
+                visible: !row.renaming && rowDots.shown.length > 0
                 colors: row.tagColors
                 x: nameText.x + nameText.paintedWidth + Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter

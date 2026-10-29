@@ -2368,52 +2368,12 @@
         <translation>Fichiers</translation>
     </message>
     <message>
-        <source>Navigation</source>
-        <translation>Navigation</translation>
-    </message>
-    <message>
-        <source>Back</source>
-        <translation>Précédent</translation>
-    </message>
-    <message>
-        <source>Forward</source>
-        <translation>Suivant</translation>
-    </message>
-    <message>
-        <source>View</source>
-        <translation>Présentation</translation>
-    </message>
-    <message>
-        <source>as Icons</source>
-        <translation>en icônes</translation>
-    </message>
-    <message>
-        <source>as List</source>
-        <translation>en liste</translation>
-    </message>
-    <message>
-        <source>as Columns</source>
-        <translation>en colonnes</translation>
-    </message>
-    <message>
-        <source>as Gallery</source>
-        <translation>en galerie</translation>
-    </message>
-    <message>
         <source>Group By</source>
         <translation>Grouper par</translation>
     </message>
     <message>
         <source>Action</source>
         <translation>Action</translation>
-    </message>
-    <message>
-        <source>Search in this folder</source>
-        <translation>Rechercher dans ce dossier</translation>
-    </message>
-    <message>
-        <source>Search</source>
-        <translation>Recherche</translation>
     </message>
     <message>
         <source>Dismiss</source>
@@ -3070,6 +3030,14 @@
         <translation>Rétrécissement</translation>
     </message>
     <message>
+        <source>Fill</source>
+        <translation>Remplir</translation>
+    </message>
+    <message>
+        <source>No Action</source>
+        <translation>Aucune action</translation>
+    </message>
+    <message>
         <source>Minimize windows into application icon</source>
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
     </message>
@@ -3124,14 +3092,6 @@
     <message>
         <source>Minimize</source>
         <translation>Réduire</translation>
-    </message>
-    <message>
-        <source>Do Nothing</source>
-        <translation>Ne rien faire</translation>
-    </message>
-    <message>
-        <source>Drag windows to screen edges to tile</source>
-        <translation>Faire glisser les fenêtres vers les bords de l’écran pour les disposer en mosaïque</translation>
     </message>
     <message>
         <source>Drag windows to menu bar to fill screen</source>
@@ -3192,6 +3152,34 @@
     <message>
         <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
         <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield.</translation>
+    </message>
+    <message>
+        <source>Drag windows to left or right edge of screen to tile</source>
+        <translation>Faire glisser les fenêtres vers le bord gauche ou droit de l’écran pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Hold Alt key while dragging windows to tile</source>
+        <translation>Maintenir la touche Alt enfoncée en faisant glisser les fenêtres pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Hold ⌥ key while dragging windows to tile</source>
+        <translation>Maintenir la touche ⌥ enfoncée en faisant glisser les fenêtres pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Show layouts when hovering over the green button</source>
+        <translation>Afficher les dispositions au survol du bouton vert</translation>
+    </message>
+    <message>
+        <source>Suggest windows to fill the rest of a layout</source>
+        <translation>Suggérer des fenêtres pour compléter une disposition</translation>
+    </message>
+    <message>
+        <source>Bring tile groups forward together</source>
+        <translation>Faire passer les groupes en mosaïque au premier plan ensemble</translation>
     </message>
     <message>
         <source>Screen Corners…</source>
@@ -3725,6 +3713,169 @@
     <message>
         <source>%1 at %2</source>
         <translation>%1 à %2</translation>
+    </message>
+</context>
+<context>
+    <name>FilePanel</name>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>This location can’t be used</source>
+        <translation>Cet emplacement ne peut pas être utilisé</translation>
+    </message>
+    <message>
+        <source>“%1” can only use items on this computer. Choose an item in a folder on this computer.</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut utiliser que des éléments de cet ordinateur. Choisissez un élément dans un dossier de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The application can only use items on this computer. Choose an item in a folder on this computer.</source>
+        <translation>L’app ne peut utiliser que des éléments de cet ordinateur. Choisissez un élément dans un dossier de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The name “%1” can’t be used.</source>
+        <translation>Le nom «&#xa0;%1&#xa0;» ne peut pas être utilisé.</translation>
+    </message>
+    <message>
+        <source>Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.</source>
+        <translation>Un nom ne peut pas être vide, être «&#xa0;.&#xa0;» ou «&#xa0;..&#xa0;», contenir «&#xa0;/&#xa0;» ni dépasser 255 octets.</translation>
+    </message>
+    <message>
+        <source>“%1” is a folder.</source>
+        <translation>«&#xa0;%1&#xa0;» est un dossier.</translation>
+    </message>
+    <message>
+        <source>Choose another name, or open the folder to save in it.</source>
+        <translation>Choisissez un autre nom, ou ouvrez le dossier pour enregistrer dedans.</translation>
+    </message>
+    <message>
+        <source>“%1” already exists. Do you want to replace it?</source>
+        <translation>«&#xa0;%1&#xa0;» existe déjà. Voulez-vous le remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>A file or folder with the same name already exists in the folder “%1”. Replacing it will overwrite its current contents.</source>
+        <translation>Un fichier ou un dossier du même nom existe déjà dans le dossier «&#xa0;%1&#xa0;». Le remplacer écrasera son contenu actuel.</translation>
+    </message>
+    <message>
+        <source>Replace</source>
+        <translation>Remplacer</translation>
+    </message>
+    <message>
+        <source>A folder in “%1” has the name of an item to save.</source>
+        <translation>Un dossier de «&#xa0;%1&#xa0;» porte le nom d’un élément à enregistrer.</translation>
+    </message>
+    <message>
+        <source>and %1 more</source>
+        <translation>et %1 autres</translation>
+    </message>
+    <message>
+        <source>%1 items already exist in “%2”. Do you want to replace them?</source>
+        <translation>%1 éléments existent déjà dans «&#xa0;%2&#xa0;». Voulez-vous les remplacer&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Replacing them will overwrite their current contents.</source>
+        <translation>Les remplacer écrasera leur contenu actuel.</translation>
+    </message>
+    <message>
+        <source>“%1” isn’t responding.</source>
+        <translation>«&#xa0;%1&#xa0;» ne répond pas.</translation>
+    </message>
+    <message>
+        <source>Choose another folder, or try again later.</source>
+        <translation>Choisissez un autre dossier ou réessayez plus tard.</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>untitled folder</source>
+        <translation>dossier sans titre</translation>
+    </message>
+    <message>
+        <source>Save As:</source>
+        <translation>Enregistrer sous&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Save As</source>
+        <translation>Enregistrer sous</translation>
+    </message>
+    <message>
+        <source>Show Less</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show More</source>
+        <translation>Afficher plus</translation>
+    </message>
+    <message>
+        <source>Where:</source>
+        <translation>Emplacement&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Location: %1</source>
+        <translation>Dossier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Show:</source>
+        <translation>Afficher&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Format:</source>
+        <translation>Format&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Show</source>
+        <translation>Afficher</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>Nouveau dossier</translation>
+    </message>
+    <message>
+        <source>Click the panel to use the keyboard in it.</source>
+        <translation>Cliquez dans la fenêtre pour y utiliser le clavier.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Go to the folder:</source>
+        <translation>Aller au dossier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>~/Documents, /usr/share or trash:/</source>
+        <translation>~/Documents, /usr/share ou trash:/</translation>
+    </message>
+    <message>
+        <source>Go</source>
+        <translation>Aller</translation>
+    </message>
+    <message>
+        <source>The folder “%1” can’t be found.</source>
+        <translation>Le dossier «&#xa0;%1&#xa0;» est introuvable.</translation>
+    </message>
+    <message>
+        <source>Name of new folder:</source>
+        <translation>Nom du nouveau dossier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Create</source>
+        <translation>Créer</translation>
     </message>
 </context>
 <context>
@@ -5727,10 +5878,6 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
-        <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
-    </message>
-    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -5797,6 +5944,10 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+    </message>
+    <message>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins</source>
+        <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre mosaïque disposer dispositions suggestions marges</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -5997,6 +6148,30 @@
     <message>
         <source>Restart</source>
         <translation>Redémarrer</translation>
+    </message>
+    <message>
+        <source>Restart your computer to finish updating</source>
+        <translation>Redémarrez l’ordinateur pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>Log out to finish updating Grassfield</source>
+        <translation>Fermez la session pour terminer la mise à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Open applications will be closed when the computer restarts.</source>
+        <translation>Les mises à jour sont installées. Les applications ouvertes seront fermées au redémarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>The new version of Grassfield starts when you log in again. Open applications will be closed.</source>
+        <translation>La nouvelle version de Grassfield démarre à votre prochaine connexion. Les applications ouvertes seront fermées.</translation>
+    </message>
+    <message>
+        <source>Restart Later</source>
+        <translation>Redémarrer plus tard</translation>
+    </message>
+    <message>
+        <source>Log Out Later</source>
+        <translation>Fermer la session plus tard</translation>
     </message>
     <message>
         <source>Delete your search history?</source>
@@ -6316,6 +6491,10 @@
         <translation>Jamais</translation>
     </message>
     <message>
+        <source>The wallpaper is too busy under the menu bar for its text to be read, so a background is shown.</source>
+        <translation>Le fond d’écran est trop chargé sous la barre des menus pour que son texte reste lisible : un arrière-plan est donc affiché.</translation>
+    </message>
+    <message>
         <source>Show menu bar background</source>
         <translation>Afficher l’arrière-plan de la barre des menus</translation>
     </message>
@@ -6412,6 +6591,21 @@
     <message>
         <source>Mouse</source>
         <translation>Souris</translation>
+    </message>
+</context>
+<context>
+    <name>NavCapsule</name>
+    <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
     </message>
 </context>
 <context>
@@ -8326,6 +8520,18 @@
         <translation>coins de l’écran</translation>
     </message>
     <message>
+        <source>tile</source>
+        <translation>mosaïque</translation>
+    </message>
+    <message>
+        <source>tiling</source>
+        <translation>disposer</translation>
+    </message>
+    <message>
+        <source>layouts</source>
+        <translation>dispositions</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -8524,6 +8730,17 @@
     <message>
         <source>Pinned items are full</source>
         <translation>Le nombre maximal d’éléments épinglés est atteint</translation>
+    </message>
+</context>
+<context>
+    <name>SearchCapsule</name>
+    <message>
+        <source>Search in this folder</source>
+        <translation>Rechercher dans ce dossier</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
     </message>
 </context>
 <context>
@@ -9149,6 +9366,134 @@
         <translation>Aujourd’hui, %1</translation>
     </message>
     <message>
+        <source>Preparing the update…</source>
+        <translation>Préparation de la mise à jour…</translation>
+    </message>
+    <message>
+        <source>Saving a snapshot of this computer…</source>
+        <translation>Enregistrement d’un instantané de cet ordinateur…</translation>
+    </message>
+    <message>
+        <source>Downloading updates…</source>
+        <translation>Téléchargement des mises à jour…</translation>
+    </message>
+    <message>
+        <source>Installing updates…</source>
+        <translation>Installation des mises à jour…</translation>
+    </message>
+    <message>
+        <source>Finishing the update…</source>
+        <translation>Fin de la mise à jour…</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Enter an administrator&apos;s password to start the update.</source>
+        <translation>Saisissez le mot de passe d’un administrateur pour lancer la mise à jour.</translation>
+    </message>
+    <message>
+        <source>You can keep working; the update goes on if you close Settings.</source>
+        <translation>Vous pouvez continuer à travailler&#xa0;; la mise à jour se poursuit si vous fermez Réglages.</translation>
+    </message>
+    <message>
+        <source>This update needs a newer version of Grassfield, which isn&apos;t available yet.</source>
+        <translation>Cette mise à jour nécessite une version plus récente de Grassfield, qui n’est pas encore disponible.</translation>
+    </message>
+    <message>
+        <source>Software Update checks again later and tells you when it&apos;s ready.</source>
+        <translation>Mise à jour de logiciels vérifiera de nouveau plus tard et vous préviendra quand elle sera prête.</translation>
+    </message>
+    <message>
+        <source>This update asks questions that need Omarchy&apos;s terminal.</source>
+        <translation>Cette mise à jour pose des questions qui nécessitent le terminal d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>The updates were not installed. Omarchy&apos;s update asks them in its terminal and installs everything listed here.</source>
+        <translation>Les mises à jour n’ont pas été installées. La mise à jour d’Omarchy les pose dans son terminal et installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Omarchy&apos;s update asks them in its terminal and installs everything listed here.</source>
+        <translation>Rien n’a été modifié. La mise à jour d’Omarchy les pose dans son terminal et installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
+        <source>An earlier update stopped before it finished.</source>
+        <translation>Une mise à jour précédente s’est arrêtée avant la fin.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Omarchy&apos;s update in its terminal shows how to finish it.</source>
+        <translation>Rien n’a été modifié. La mise à jour d’Omarchy, dans son terminal, indique comment la terminer.</translation>
+    </message>
+    <message>
+        <source>The update could not be installed.</source>
+        <translation>La mise à jour n’a pas pu être installée.</translation>
+    </message>
+    <message>
+        <source>The updates were not installed. Check that this computer is online, then try Update Now again.</source>
+        <translation>Les mises à jour n’ont pas été installées. Vérifiez que cet ordinateur est connecté, puis réessayez Mettre à jour maintenant.</translation>
+    </message>
+    <message>
+        <source>The update could not be installed. Nothing was changed.</source>
+        <translation>La mise à jour n’a pas pu être installée. Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source>Check that this computer is online, then try Update Now again.</source>
+        <translation>Vérifiez que cet ordinateur est connecté, puis réessayez Mettre à jour maintenant.</translation>
+    </message>
+    <message>
+        <source>The update stopped before it finished.</source>
+        <translation>La mise à jour s’est arrêtée avant la fin.</translation>
+    </message>
+    <message>
+        <source>Try Update Now again. The snapshot saved before the update can be chosen when the computer starts.</source>
+        <translation>Réessayez Mettre à jour maintenant. L’instantané enregistré avant la mise à jour peut être choisi au démarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>Try Update Now again.</source>
+        <translation>Réessayez Mettre à jour maintenant.</translation>
+    </message>
+    <message>
+        <source>This computer needs 10 GB of free space to update.</source>
+        <translation>Cet ordinateur a besoin de 10&#xa0;Go d’espace libre pour se mettre à jour.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed.</source>
+        <translation>Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source>Connect this computer to power to update.</source>
+        <translation>Branchez cet ordinateur sur le secteur pour le mettre à jour.</translation>
+    </message>
+    <message>
+        <source>Another update is running.</source>
+        <translation>Une autre mise à jour est en cours.</translation>
+    </message>
+    <message>
+        <source>Try again when it has finished.</source>
+        <translation>Réessayez quand elle sera terminée.</translation>
+    </message>
+    <message>
+        <source>Software Update was not allowed to update this computer.</source>
+        <translation>Mise à jour de logiciels n’a pas été autorisée à mettre à jour cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Some of Omarchy&apos;s last steps need its terminal.</source>
+        <translation>Certaines des dernières étapes d’Omarchy nécessitent son terminal.</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Omarchy finishes them in its terminal.</source>
+        <translation>Les mises à jour sont installées. Omarchy les termine dans son terminal.</translation>
+    </message>
+    <message>
+        <source>Apps from the AUR are updated in Omarchy&apos;s terminal.</source>
+        <translation>Les apps de l’AUR sont mises à jour dans le terminal d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Everything else is up to date.</source>
+        <translation>Tout le reste est à jour.</translation>
+    </message>
+    <message>
         <source>Checking for updates…</source>
         <translation>Recherche de mises à jour…</translation>
     </message>
@@ -9245,12 +9590,20 @@
         <translation>Les mises à jour de Grassfield n’ont pas été désactivées&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Don&apos;t restart this computer yet</source>
+        <translation>Ne redémarrez pas encore cet ordinateur</translation>
+    </message>
+    <message>
         <source>Restart to finish updating</source>
         <translation>Redémarrez pour terminer la mise à jour</translation>
     </message>
     <message>
         <source>Log out to finish updating Grassfield</source>
         <translation>Fermez la session pour terminer la mise à jour de Grassfield</translation>
+    </message>
+    <message>
+        <source>The update could not prepare the computer&apos;s startup files. Get help before restarting.</source>
+        <translation>La mise à jour n’a pas pu préparer les fichiers de démarrage de l’ordinateur. Demandez de l’aide avant de redémarrer.</translation>
     </message>
     <message>
         <source>Part of the update is used only after the computer restarts.</source>
@@ -9313,6 +9666,14 @@
         <translation>Désactiver les mises à jour de Grassfield…</translation>
     </message>
     <message>
+        <source>Finish in Terminal…</source>
+        <translation>Terminer dans le terminal…</translation>
+    </message>
+    <message>
+        <source>Update in Terminal…</source>
+        <translation>Mettre à jour dans le terminal…</translation>
+    </message>
+    <message>
         <source>Grassfield %1</source>
         <translation>Grassfield %1</translation>
     </message>
@@ -9353,6 +9714,10 @@
         <translation>La mise à jour d’Omarchy ne peut pas s’exécuter tant que le dépôt de Grassfield est inutilisable.</translation>
     </message>
     <message>
+        <source>Update Now installs everything listed here.</source>
+        <translation>Mettre à jour maintenant installe tout ce qui est listé ici.</translation>
+    </message>
+    <message>
         <source>Omarchy&apos;s update installs everything listed here.</source>
         <translation>La mise à jour d’Omarchy installe tout ce qui est listé ici.</translation>
     </message>
@@ -9363,6 +9728,10 @@
     <message>
         <source>Grassfield&apos;s own updates are not available in this build: it has no package repository or signing key yet.</source>
         <translation>Les mises à jour propres à Grassfield ne sont pas disponibles dans cette version&#xa0;: elle n’a pas encore de dépôt de paquets ni de clé de signature.</translation>
+    </message>
+    <message>
+        <source>It asks for an administrator&apos;s password and saves a snapshot first.</source>
+        <translation>Elle demande le mot de passe d’un administrateur et enregistre d’abord un instantané.</translation>
     </message>
     <message>
         <source>It runs in Omarchy&apos;s terminal and asks before it starts.</source>
@@ -10666,6 +11035,29 @@
     <message>
         <source>Apps from the repositories update with the whole system, in Software Update (Settings &gt; General).</source>
         <translation>Les apps des dépôts se mettent à jour avec tout le système, dans Mise à jour de logiciels (Réglages &gt; Général).</translation>
+    </message>
+</context>
+<context>
+    <name>ViewSwitcher</name>
+    <message>
+        <source>as Icons</source>
+        <translation>en icônes</translation>
+    </message>
+    <message>
+        <source>as List</source>
+        <translation>en liste</translation>
+    </message>
+    <message>
+        <source>as Columns</source>
+        <translation>en colonnes</translation>
+    </message>
+    <message>
+        <source>as Gallery</source>
+        <translation>en galerie</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>Présentation</translation>
     </message>
 </context>
 <context>
