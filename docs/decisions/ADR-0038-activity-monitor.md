@@ -549,7 +549,15 @@ Answer: A (see "Answers").
   with its own xdg-activation token, if it has one, and leaves. The window comes forward with that token (Qt's Wayland
   window takes `XDG_ACTIVATION_TOKEN` for its next activation request); without one the compositor decides. No Grassfield
   app had one: the spec's "the mechanism Settings and the Store use" was the Dock's activation plan, which a launch from
-  Apps or a key does not go through, and a monitor running twice would sample twice.
+  Apps or a key does not go through, and a monitor running twice would sample twice. Launched again while its window is
+  off screen (minimized, or on another Desktop: the compositor suspends it, AD35), the app also asks the shell's Dock to
+  bring it back, `qs ipc -p <shell> call dock reopen org.grassfield.Activity` (apps/runmode.h `shellIpcArgs`, as Settings'
+  `update check`): the Dock does what a click on its tile does (`Launch.activationPlan`: everything minimized, the most
+  recent window comes back), the path the Dock uses for a minimized window. xdg-activation alone switches Desktops but
+  leaves a window on `special:minimized`, which the shell hides again as soon as an activation shows it (the integrator's
+  nested pass of 983b7de; macOS: launching a running app brings its window back). The action is in the IPC table
+  (`docs/specs/security.md`), and `tests/security/ipc_inventory.sh` counts a Grassfield app as its caller only through
+  `shellIpcArgs()`.
 - **AD35. The sampler on its own thread, only while the window is shown** (AM8, AM9, AM-P3; step 2a). A sample costs up to
   17 ms on the reference machine's CPU tab and more on Energy and Network (AM-P2): too long for the window's thread. One
   sample at a time, on a low-priority thread, at the update frequency; the window is shown when it is visible, exposed and
@@ -752,5 +760,6 @@ Desktop, and resumes on restore; WAYLAND_DEBUG shows one more toplevel state (`s
 | MINOR: mutants L03, L05, L09, J01 survive | four cases (`step2a.md`); 13 of 13 mutants of the round caught |
 | NITs: the entry's apostrophe; no tooltip on the tabs and the search field (AM3) | `Moniteur d’activité`; Grassfield.Ui's `Tooltip` under each control (`test_toolbarTooltips`) |
 | MAJOR (nested): a second titlebar, the `gf-client-chrome` rule lacks `org.grassfield.Activity` | added there and to the maximize exemption; `client_chrome_rules.sh` checks that every app making a ChromeTagger is in the rule, under each app id it sets (Glance keeps its own rule), with a negative control |
-| MINOR (nested): a second launch leaves a minimized window minimized | xdg-activation alone switches Desktops but the shell hides `special:minimized` again when the activation shows it; bringing the window back needs the shell (a `dock reopen` IPC action the app calls, or the shell restoring an activated minimized window): put to the integrator, open |
+| MINOR (nested): a second launch leaves a minimized window minimized | the integrator chose the Dock's path: `dock reopen <desktop id>` (AD34), called by the app when its window is off screen (`activateWindow`, A-W1); `DockModel.windowsOf`; the IPC inventory counts an app caller built on `shellIpcArgs()`, with two selftests |
 | Cost: CPU 17.93 ms against 17 at load 3.9, 1.06 × A10's step-1 plan | **Integrator's decision**: AM-P2's limits are re-based on A10's step-1 plan, × 1.3 (d; spec "Performance"). `activity_cost.sh` runs A10 before and after the product on the same fixture, takes each tab's worse step-1 plan, prints the plan, the limit and the ratio, and fails a tab over 1.3 ×; `--model` is accepted and changes nothing. The reference machine's figures come from the integrator's run at idle before the merge |
+| Check of 737cdb0: Disk at 1.27–1.35 × its step-1 plan against 1.3; find what it spends beyond the plan and cut it to about 1.15 × | the Disk tab reads exactly the plan's files (strace: per sample `stat` of every process, `io` of the own ones, a tenth of the owners, the listing, `diskstats`). A10 now also reads them in one pass, in the sampler's order: 1.20–1.44 × the summed plan here, whose parts are each measured alone with warm caches; the product is 1.11–1.16 × that one pass. Reading `io` in a second pass costs more (2.55–2.64 against 2.38–2.53 ms). So 1.15 × the summed plan would need the product faster than C doing the same reads: put to the integrator |
