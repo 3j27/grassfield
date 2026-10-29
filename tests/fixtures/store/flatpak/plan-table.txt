@@ -10,4 +10,3 @@ org.gnome.design.Typography permissions:
  5.     org.gnome.Platform                    50          i  flathub < 418.8 MB
  6.     org.gnome.design.Typography.Locale    stable      i  flathub  < 19.7 kB (partial)
  7.     org.gnome.design.Typography           stable      i  flathub  < 68.6 kB
-
