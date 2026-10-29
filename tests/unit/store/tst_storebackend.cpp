@@ -914,7 +914,8 @@ TEST(StoreBackend, Flathub)
     EXPECT_TRUE(notes.value(QStringLiteral("verified")).toBool());
     EXPECT_TRUE(notes.value(QStringLiteral("icon")).toString().endsWith(QLatin1String("/icons/128x128/org.example.Notes.png")));
     EXPECT_EQ(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("get")).toString(), QString());
-    EXPECT_TRUE(std::any_of(backend.search(QStringLiteral("notes")).cbegin(), backend.search(QStringLiteral("notes")).cend(),
+    const QVariantList found = backend.search(QStringLiteral("notes"));
+    EXPECT_TRUE(std::any_of(found.cbegin(), found.cend(),
                             [](const QVariant &v) { return v.toMap().value(QStringLiteral("id")) == QLatin1String("org.example.Notes"); }));
 
     // Its facts before an install (remote-info), and its plan: flatpak's own, what it can reach.
@@ -967,13 +968,16 @@ TEST(StoreBackend, Flathub)
     s.env->set("XDG_DATA_DIRS", exports + QStringLiteral(":/usr/share"));
     EXPECT_TRUE(backend.open(QStringLiteral("org.example.Notes")));
     EXPECT_TRUE(backend.open(QStringLiteral("flatpak:com.other.App")));
-    QFile opened(s.path(QStringLiteral("opened")));
-    for (int i = 0; i < 250 && opened.size() < 10; ++i) {
+    // Three detached programs, each writing its line: all three, whatever their order.
+    const auto openedLines = [&s] {
+        QFile f(s.path(QStringLiteral("opened")));
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    for (int i = 0; i < 500 && openedLines().count('\n') < 3; ++i) {
         QTimer::singleShot(20, &loop, &QEventLoop::quit);
         loop.exec();
     }
-    ASSERT_TRUE(opened.open(QIODevice::ReadOnly));
-    const QByteArray lines = opened.readAll();
+    const QByteArray lines = openedLines();
     EXPECT_TRUE(lines.contains("uwsm-app -- /usr/bin/flatpak run org.example.Notes\n")) << lines.toStdString();
     EXPECT_TRUE(lines.contains("uwsm-app -- org.example.Notes.desktop\n")) << lines.toStdString();
     EXPECT_TRUE(lines.contains("uwsm-app -- /usr/bin/flatpak run com.other.App\n")) << lines.toStdString();

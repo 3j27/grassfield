@@ -161,6 +161,7 @@ TEST(Flatpak, WhatItCanReach)
     EXPECT_TRUE(flatpakAccess("[Context]\nshared=ipc;\nsockets=wayland;\ndevices=dri;\n[Extension x]\nfilesystems=host;\n").isEmpty())
         << "another group's keys are not the app's";
     EXPECT_TRUE(flatpakAccess("[Session Bus Policy]\norg.freedesktop.Flatpak=none\n").isEmpty());
+    EXPECT_TRUE(flatpakAccess("[Context]\nfilesystems=!host;!home;!xdg-download;\ndevices=!all;\n").isEmpty()) << "taken away, not granted";
     EXPECT_TRUE(flatpakAccess({}).isEmpty());
 }
 
