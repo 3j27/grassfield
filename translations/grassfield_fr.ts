@@ -152,6 +152,21 @@
     </message>
 </context>
 <context>
+    <name>AccessAlert</name>
+    <message>
+        <source>Don&apos;t Allow</source>
+        <translation>Ne pas autoriser</translation>
+    </message>
+    <message>
+        <source>Allow</source>
+        <translation>Autoriser</translation>
+    </message>
+    <message>
+        <source>Click the alert to use the keyboard in it.</source>
+        <translation>Cliquez dans l’alerte pour y utiliser le clavier.</translation>
+    </message>
+</context>
+<context>
     <name>AccessibilityDisplayPage</name>
     <message>
         <source>White</source>
@@ -3780,6 +3795,10 @@
     <message>
         <source>Replacing them will overwrite their current contents.</source>
         <translation>Les remplacer écrasera leur contenu actuel.</translation>
+    </message>
+    <message>
+        <source>Replacing it will overwrite its current contents.</source>
+        <translation>Le remplacer écrasera son contenu actuel.</translation>
     </message>
     <message>
         <source>“%1” isn’t responding.</source>
