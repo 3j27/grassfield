@@ -4096,12 +4096,36 @@
 <context>
     <name>FilePanel</name>
     <message>
+        <source>Recommended Applications</source>
+        <translation>Applications recommandées</translation>
+    </message>
+    <message>
+        <source>All Applications</source>
+        <translation>Toutes les applications</translation>
+    </message>
+    <message>
+        <source>Choose an application to open the document “%1”.</source>
+        <translation>Choisissez une application pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Choose an application to open “%1”.</source>
+        <translation>Choisissez une application pour ouvrir «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Choose an application.</source>
+        <translation>Choisissez une application.</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
     <message>
         <source>Save</source>
         <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>Choose Application</source>
+        <translation>Choisir une application</translation>
     </message>
     <message>
         <source>This location can’t be used</source>
@@ -4216,12 +4240,20 @@
         <translation>Format&#xa0;:</translation>
     </message>
     <message>
+        <source>Enable:</source>
+        <translation>Activer&#xa0;:</translation>
+    </message>
+    <message>
         <source>Show</source>
         <translation>Afficher</translation>
     </message>
     <message>
         <source>Format</source>
         <translation>Format</translation>
+    </message>
+    <message>
+        <source>Enable</source>
+        <translation>Activer</translation>
     </message>
     <message>
         <source>New Folder</source>
