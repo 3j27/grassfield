@@ -12,6 +12,10 @@ SettingsPage {
     required property var store
     // Battery is listed on a computer with a battery only (Main reads it from the power state).
     property bool hasBattery: false
+    // The backend, to read the shell's status file (wallpaper-state.json, block `bar`: the outputs whose band is on because of the
+    // wallpaper, ADR-0016 D1); null in a test.
+    property var backend: null
+    property bool bandForced: false
 
     title: qsTr("Menu Bar")
 
@@ -87,7 +91,41 @@ SettingsPage {
         }
     }
 
+    function loadBand(): void {
+        const f = root.backend ? root.backend.readText(root.backend.wallpaperStatusFile) : null;
+        let forced = false;
+        if (f && f.exists && f.ok) {
+            try {
+                const bar = JSON.parse(f.text).bar;
+                forced = !!bar && typeof bar === "object" && Object.keys(bar).some(k => bar[k] === true);
+            } catch (e) {
+                forced = false;
+            }
+        }
+        root.bandForced = forced;
+    }
+
+    Connections {
+        target: root.backend
+        ignoreUnknownSignals: true
+
+        function onFileChanged(p: string): void {
+            if (root.backend && p === root.backend.wallpaperStatusFile)
+                root.loadBand();
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.backend) {
+            root.backend.watch(root.backend.wallpaperStatusFile);
+            root.loadBand();
+        }
+    }
+
     SettingsGroup {
+        // Shown while the wallpaper forces the band, whatever the switch says (macOS turns the background on by itself the same way).
+        footnote: root.bandForced && !root.store.value("menubar.showBackground") ? qsTr("The wallpaper is too busy under the menu bar for its text to be read, so a background is shown.") : ""
+
         SettingsRow {
             title: qsTr("Automatically hide and show the menu bar")
             ComboBox {
