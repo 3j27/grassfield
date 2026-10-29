@@ -130,6 +130,9 @@ namespace gf::tiler {
     // window leaves its box (reconcile would forget it).
     void memberDragBegin(const PHLWINDOW& w);
 
+    // The titlebar that drove that drag is destroyed mid-drag (its window keeps its place): the exemption ends, nothing moves.
+    void memberDragForget();
+
     // That drag ends (every end calls it, a click included): released at `at` over the other half the two members swap halves
     // (macOS); anywhere else, without a move or without a release (`at` nullopt: a cancelled drag) it goes back in its half.
     // Nothing swaps while the session is locked.

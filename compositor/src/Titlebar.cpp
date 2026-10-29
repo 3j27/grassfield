@@ -560,6 +560,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
             // pointer consumes it; elsewhere the seat drops it, as the client never saw the press).
             if (input.grab.dragging)
                 gf::tiler::dragDone();
+            if (input.grab.member)
+                gf::tiler::memberDragForget(); // reconcile checks its record again (integrator PASS on 12e3dd3, NIT)
             input.grab = {};
             input.presses.dropGesture();
         }

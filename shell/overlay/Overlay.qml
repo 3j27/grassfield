@@ -73,12 +73,12 @@ Variants {
             shown: win.hasPopup
         }
 
-        // While mapped: `open` is computed again when it disagrees with Popups (a value left stale by a binding loop would keep
+        // While mapped or open: `open` is computed again when it disagrees with Popups (a value left stale by a binding loop would keep
         // this surface over every click and key; integrator PASS on 8316ed2).
         Timer {
             interval: 1000
             repeat: true
-            running: win.visible
+            running: win.visible || win.open // open with no popup never maps: it is checked (and logged) too
             onTriggered: {
                 if (Popups.verify())
                     Popups.verifyOpen(win.open, win.modelData ? win.modelData.name : "");

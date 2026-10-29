@@ -2103,6 +2103,10 @@ namespace gf::tiler {
             s.memberDrag = w;
     }
 
+    void memberDragForget() {
+        st().memberDrag.reset();
+    }
+
     void memberDrop(const PHLWINDOW& w, std::optional<Vector2D> at) {
         auto& s = st();
         s.memberDrag.reset(); // first: from here the record is checked as any other (nothing below reconciles before it is placed)

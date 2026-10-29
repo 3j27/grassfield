@@ -1817,6 +1817,29 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       fi
       check "split cancelled: a second button ends the drag, back in its half" half_of tiling-foot left
       check "split cancelled: no swap" half_of tiling-foot2 right
+      # The drag exemption (integrator PASS on 12e3dd3, MINOR A): the plugin's state read during a member's drag (the shell's
+      # fetch does so at any notice) keeps the dragged member's record, and the drop still swaps; then back.
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 3000 up sleep 200 &
+        held_pid=$!
+        sleep 1.8
+        record_mid_drag() {
+          local r
+          r=$(record_of "$addr")
+          say "  during the drag: $r"
+          jq -e '.state == "tiled" and .layout == "left-right" and .zone == 0' <<<"$r" >/dev/null
+        }
+        check "split drag read: a state read during the drag keeps the dragged member's record" record_mid_drag
+        check "split drag read: both still members during the drag" split_members "$next" "$addr" "$addr2"
+        wait "$held_pid"
+        sleep 0.8
+        check "split drag read: the drop after it still swaps" half_of tiling-foot right
+        check "split drag read: the other window in the left half" half_of tiling-foot2 left
+        if read -r gx gy < <(grip_of "$addr"); then
+          pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
+        fi
+        check "split drag read: swapped back" half_of tiling-foot left
+      fi
     else
       check "split titlebar: the first window's grip found" false
     fi
@@ -2047,6 +2070,13 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
         sleep 1
         check "full-screen popover $round: the window is in full screen" test "$(fs_of "$addr")" = 2
+        if ((round == 1)); then
+          # D61: Super+M (the shell's windows minimize, as the key binding) does nothing to a window in full screen.
+          timeout 5 "$root/tests/visual/ipc.sh" windows minimize >>"$log" 2>&1
+          sleep 1
+          check "full-screen popover: Super+M leaves the window in full screen" test "$(fs_of "$addr")" = 2
+          check "full-screen popover: and not minimized" test "$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.name')" != special:minimized
+        fi
         fs_reveal
         pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep "$fs_rest"
         check "full-screen popover $round: resting on the revealed zoom light opens the tiling popover" test "$(open_kind)" = "tiling@$out"
