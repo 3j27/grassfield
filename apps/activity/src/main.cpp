@@ -1,6 +1,5 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -59,20 +58,9 @@ int main(int argc, char *argv[])
     // AM1: one instance. A second launch brings the running app's window forward with its activation token, and leaves.
     activity::ActivityService service;
     QDBusConnection bus = QDBusConnection::sessionBus();
-    const QString serviceName = activity::ActivityService::serviceName();
-    const QString objectPath = QStringLiteral("/org/grassfield/Activity");
-    if (bus.isConnected()) {
-        bus.registerObject(objectPath, &service, QDBusConnection::ExportScriptableSlots);
-        if (!bus.registerService(serviceName)) {
-            QDBusMessage call = QDBusMessage::createMethodCall(serviceName, objectPath, QStringLiteral("org.grassfield.Activity"),
-                                                               QStringLiteral("Activate"));
-            call << qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
-            const QDBusMessage reply = bus.call(call, QDBus::Block, 2000);
-            if (reply.type() == QDBusMessage::ReplyMessage)
-                return 0;
-            // No answer from the name's owner (stuck, or gone meanwhile): this instance runs.
-        }
-    }
+    if (bus.isConnected()
+        && activity::claimOrHandOver(bus, &service, qEnvironmentVariable("XDG_ACTIVATION_TOKEN")) == activity::Launch::Leave)
+        return 0;
 
     // The sampler's options: this machine's; in a dev session GRASSFIELD_PROC_ROOT and GRASSFIELD_SYS_ROOT point it at a
     // fixture tree (AM79, runmode.h devValue); they are ignored outside one.
@@ -110,7 +98,7 @@ int main(int argc, char *argv[])
     if (window) {
         new activity::ShownWatch(window, &backend);
         QObject::connect(&service, &activity::ActivityService::activateRequested, window, [window](const QString &token) {
-            activity::activateWindow(window, token, [] { activity::askShellToReopen(); });
+            activity::activateWindow(window, token, [window] { activity::askShellToReopen(window); });
         });
     }
     return app.exec();

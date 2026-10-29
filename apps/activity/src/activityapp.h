@@ -10,11 +10,13 @@
 #include "processtable.h"
 #include "samplerworker.h"
 
+#include <QDBusConnection>
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QLocale>
 #include <QObject>
+#include <QProcessEnvironment>
 #include <QThread>
 #include <QTimer>
 #include <QVariantList>
@@ -164,11 +166,24 @@ private:
 // Desktop but leaves a window on special:minimized. Empty when there is no shell to call (a dev session that names none:
 // the installed shell is never driven from it, apps/runmode.h).
 QStringList reopenCommand();
-// Runs reopenCommand() detached, without the QS_* variables (the shell is named by its directory) or a spent token.
-void askShellToReopen();
+// Runs reopenCommand() without the QS_* variables (the shell is named by its directory) or a spent token, killed after
+// kShellIpcMs as Settings' shell calls are (the shell answers at once; review of PR #47).
+void askShellToReopen(QObject *parent);
+// Runs `command` (program, arguments) with `env`, its output dropped; killed after `timeoutMs`; the process deletes itself
+// when it ends. nullptr for an empty command.
+class QProcess *runWithTimeout(const QStringList &command, const QProcessEnvironment &env, int timeoutMs, QObject *parent);
+constexpr int kShellIpcMs = 5000;
 
 // AM1: one instance. The running app owns org.grassfield.Activity on the session bus (".Dev" in a dev session, which
 // shares the owner's bus); a second launch calls Activate with its activation token and leaves.
+class ActivityService;
+enum class Launch { Run, Leave };
+// A launch takes the bus name (Run), or hands its activation token over to the app that holds it and leaves (Leave). The
+// running app answers once its window exists, which a slow start delays (the review of PR #47: a launch that gave up after
+// 2 s ran a second window and a second sampler): a launch leaves whatever the answer, and runs only when the name has
+// no owner left, after taking it. `answerMs` bounds the wait for the token's delivery.
+Launch claimOrHandOver(QDBusConnection &bus, ActivityService *service, const QString &token, int answerMs = 25000);
+
 class ActivityService : public QObject
 {
     Q_OBJECT

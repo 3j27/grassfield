@@ -7,6 +7,7 @@
 #include "translationloader.h"
 
 #include <QClipboard>
+#include <QDBusMessage>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -495,24 +496,58 @@ QStringList reopenCommand()
         + QStringList{QStringLiteral("dock"), QStringLiteral("reopen"), QStringLiteral("org.grassfield.Activity")};
 }
 
-void askShellToReopen()
+QProcess *runWithTimeout(const QStringList &command, const QProcessEnvironment &env, int timeoutMs, QObject *parent)
 {
-    const QStringList command = reopenCommand();
     if (command.isEmpty())
-        return;
+        return nullptr;
+    auto *process = new QProcess(parent);
+    process->setProcessEnvironment(env);
+    process->setProgram(command.first());
+    process->setArguments(command.mid(1));
+    process->setStandardOutputFile(QProcess::nullDevice());
+    process->setStandardErrorFile(QProcess::nullDevice());
+    QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    QObject::connect(process, &QProcess::errorOccurred, process, [process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            process->deleteLater();
+    });
+    QTimer::singleShot(timeoutMs, process, [process] { process->kill(); });
+    process->start();
+    return process;
+}
+
+void askShellToReopen(QObject *parent)
+{
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     for (const QString &key : env.keys()) {
         if (key.startsWith(QLatin1String("QS_")))
             env.remove(key);
     }
     env.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
-    QProcess process;
-    process.setProcessEnvironment(env);
-    process.setProgram(command.first());
-    process.setArguments(command.mid(1));
-    process.setStandardOutputFile(QProcess::nullDevice());
-    process.setStandardErrorFile(QProcess::nullDevice());
-    process.startDetached();
+    runWithTimeout(reopenCommand(), env, kShellIpcMs, parent);
+}
+
+Launch claimOrHandOver(QDBusConnection &bus, ActivityService *service, const QString &token, int answerMs)
+{
+    const QString name = ActivityService::serviceName();
+    const QString path = QStringLiteral("/org/grassfield/Activity");
+    bus.registerObject(path, service, QDBusConnection::ExportScriptableSlots);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (bus.registerService(name))
+            return Launch::Run;
+        QDBusMessage call = QDBusMessage::createMethodCall(name, path, QStringLiteral("org.grassfield.Activity"), QStringLiteral("Activate"));
+        call << token;
+        const QDBusMessage reply = bus.call(call, QDBus::Block, answerMs);
+        if (reply.type() == QDBusMessage::ReplyMessage)
+            return Launch::Leave;
+        // Only a name left meanwhile is taken; a running app that answers late (still starting) or not at all keeps its
+        // one window, as a busy app on macOS opens nothing more.
+        const QString error = reply.errorName();
+        if (error != QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
+            && error != QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner"))
+            return Launch::Leave;
+    }
+    return Launch::Leave;
 }
 
 QString ActivityService::serviceName()
