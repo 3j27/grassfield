@@ -479,6 +479,11 @@ Singleton {
         return dispatchRequest(Minimized.stagesCall(request));
     }
 
+    // What the last push sent of the tiling switches, and how many pushes so far: the tiling-switches harness checks that a
+    // Settings change reaches the plugin.
+    property var tilingSent: []
+    property int tilingSendCount: 0
+
     // The tiling switches the plugin is sent now: those whose feature it advertises (the tiling-switches harness reads it).
     function tilingPushes(): var {
         return Minimized.tilingConfigPairs(Settings, feature => Capabilities.has(feature));
@@ -491,8 +496,13 @@ Singleton {
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
         if (Capabilities.has("appearance") && dispatchRequest(Minimized.configCall("appearance", root.chromeAppearance)))
             console.info("grassfield: compositor setting appearance =", root.chromeAppearance);
-        for (const [key, value] of root.tilingPushes())
-            dispatchRequest(Minimized.configCall(key, value));
+        const sent = [];
+        for (const [key, value] of root.tilingPushes()) {
+            if (dispatchRequest(Minimized.configCall(key, value)))
+                sent.push([key, value]);
+        }
+        root.tilingSent = sent;
+        root.tilingSendCount++;
     }
 
     // Window > Move & Resize and the tiling keys (macOS 15+): the plugin places the window (FR49). False without the

@@ -18,7 +18,11 @@ import "platform/WindowTiling.js" as WindowTiling
 //  - suggestions off: the suggestion on screen ends, an arrangement asks for none; the plugin is sent tilingSuggestions false;
 //  - tile groups off: groupForward says "off", groupFront (Show Tile Group) still goes on; no key is sent for it;
 //  - Fill: sent as zoom without tiling-arrange, as fill with it (D36); each tiling key goes only with its own feature.
+// Each switch changed in the file reaches the plugin: a push follows, holding its new value.
 // The file that was there before is put back at the end. Prints "tiling-switches: PASS (n checks)" or the failures.
+// It refuses to run anywhere but scripts/dev/test.sh's scratch config, before touching anything (integrator re-review of
+// eb99ef8): run by hand, `qs -p` would point Settings at ~/.config/grassfield, which the live shell applies at once, and the
+// Compositor singleton would push the switches to the live compositor.
 ShellRoot {
     id: root
 
@@ -32,6 +36,8 @@ ShellRoot {
     // When the plugin's features were set: TilingLink fetches the tile groups then, and a fetch that never answers (no
     // hyprctl) ends at its deadline by dropping any suggestion; the steps that show one start after it.
     property real featuresAt: 0
+    // The plugin pushes so far when a step acted (Compositor.tilingSendCount).
+    property int sendsBefore: 0
 
     function check(name: string, ok: bool): void {
         checks++;
@@ -60,6 +66,22 @@ ShellRoot {
     function shows(layouts: bool, suggestions: bool, groups: bool, doubleClick: string): bool {
         return !sh.running && Settings.windowsTilingLayouts === layouts && Settings.windowsTilingSuggestions === suggestions
             && Settings.windowsTilingGroups === groups && Settings.titlebarDoubleClick === doubleClick;
+    }
+
+    // Why this run may not touch its config, "" when it may: test.sh's dev session sets GRASSFIELD_CONFIG_HOME under its scratch
+    // GRASSFIELD_TEST_TMP and unsets HYPRLAND_INSTANCE_SIGNATURE; Settings must read that folder and no other.
+    function refusal(): string {
+        const tmp = Quickshell.env("GRASSFIELD_TEST_TMP");
+        const home = Quickshell.env("GRASSFIELD_CONFIG_HOME");
+        if (!tmp || !home)
+            return "GRASSFIELD_TEST_TMP and GRASSFIELD_CONFIG_HOME are not both set (scripts/dev/test.sh sets them)";
+        if (String(home).indexOf(String(tmp) + "/") !== 0)
+            return "GRASSFIELD_CONFIG_HOME (" + home + ") is not under GRASSFIELD_TEST_TMP (" + tmp + ")";
+        if (Settings.configDir !== String(home))
+            return "Settings reads " + Settings.configDir + ", not GRASSFIELD_CONFIG_HOME (" + home + ")";
+        if (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE"))
+            return "HYPRLAND_INSTANCE_SIGNATURE is set: the switches would be pushed to a live compositor";
+        return "";
     }
 
     function hover(state: string): var {
@@ -108,7 +130,10 @@ ShellRoot {
                 check: () => root.check("control: a suggestion on screen stays while another setting changes", TilingLink.suggestion !== null)
             }, {
                 name: "layouts off",
-                act: () => root.writeWindows(root.switches(false, true, true, "minimize")),
+                act: () => {
+                    root.sendsBefore = Compositor.tilingSendCount;
+                    root.writeWindows(root.switches(false, true, true, "minimize"));
+                },
                 until: () => root.shows(false, true, true, "minimize"),
                 check: () => {
                     const enter = TilingHover.show(root.hover("enter"));
@@ -116,6 +141,8 @@ ShellRoot {
                     const open = TilingHover.show(root.hover("open"));
                     root.check("layouts off: an open (Super+Ctrl+L, the Window menu) is not refused for it (" + open + ")", open !== "off");
                     root.check("layouts off: the plugin is sent tilingLayouts false", root.pushed("tilingLayouts") === "false");
+                    root.check("layouts off: the change was pushed (" + JSON.stringify(Compositor.tilingSent) + ")", Compositor.tilingSendCount > root.sendsBefore
+                        && JSON.stringify(Compositor.tilingSent).indexOf('["tilingLayouts","false"]') >= 0);
                     root.check("layouts off: the other switches are still sent on", root.pushed("tilingSuggestions") === "true" && root.pushed("tilingOptionDrag") === "true");
                     root.check("layouts off: the suggestion on screen stays (not its switch)", TilingLink.suggestion !== null);
                     root.check("layouts off: groupForward is not refused for it", Compositor.groupForward("a") === "no group");
@@ -124,6 +151,7 @@ ShellRoot {
                 name: "suggestions off",
                 act: () => {
                     Compositor.askSuggestion("a");
+                    root.sendsBefore = Compositor.tilingSendCount;
                     root.writeWindows(root.switches(true, false, true, "minimize"));
                 },
                 until: () => root.shows(true, false, true, "minimize"),
@@ -132,6 +160,8 @@ ShellRoot {
                     Compositor.askSuggestion("a");
                     root.check("suggestions off: an arrangement asks for none", Compositor.suggestionAsked === null);
                     root.check("suggestions off: the plugin is sent tilingSuggestions false", root.pushed("tilingSuggestions") === "false");
+                    root.check("suggestions off: the change was pushed (" + JSON.stringify(Compositor.tilingSent) + ")", Compositor.tilingSendCount > root.sendsBefore
+                        && JSON.stringify(Compositor.tilingSent).indexOf('["tilingSuggestions","false"]') >= 0 && JSON.stringify(Compositor.tilingSent).indexOf('["tilingLayouts","true"]') >= 0);
                     const why = TilingHover.show(root.hover("enter"));
                     root.check("suggestions off: a hover enter is not refused for it (" + why + ")", why !== "off");
                 }
@@ -195,6 +225,13 @@ ShellRoot {
     // then checks. A step that times out is a failure; the next steps still run, the restore last.
     function tick(): void {
         if (root.step < 0) {
+            const why = root.refusal();
+            if (why !== "") {
+                ticker.stop();
+                console.log("tiling-switches: FAIL: refused to run, it would replace " + root.file + ": " + why);
+                Qt.exit(1);
+                return;
+            }
             root.begin(0);
             return;
         }
