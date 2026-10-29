@@ -96,7 +96,8 @@ TEST(AppStream, FlathubComponents)
     EXPECT_FALSE(isFlatpakRuntime(QStringLiteral("org.freedesktop.Platform/x86_64")));
     EXPECT_FALSE(isFlatpakRuntime(QStringLiteral("../x/x86_64/1")));
     // Arch's components keep their own rule: a pkgname, no Flatpak fields.
-    const AppStreamComponent *gimp = find(parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml"))), QStringLiteral("org.gimp.GIMP"));
+    const QList<AppStreamComponent> arch = parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml")));
+    const AppStreamComponent *gimp = find(arch, QStringLiteral("org.gimp.GIMP"));
     ASSERT_TRUE(gimp);
     EXPECT_TRUE(gimp->flatpak.isEmpty());
     EXPECT_FALSE(gimp->verified);
