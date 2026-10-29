@@ -9372,6 +9372,10 @@
         <translation>Le Store n’est pas disponible pour le moment</translation>
     </message>
     <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
+    </message>
+    <message>
         <source>Try Again</source>
         <translation>Réessayer</translation>
     </message>
@@ -9450,6 +9454,10 @@
         <translation>Le catalogue du %1, vérifié.</translation>
     </message>
     <message>
+        <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
+        <translation>Les données d&apos;apps d&apos;Arch n&apos;ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
+    </message>
+    <message>
         <source>Arch&apos;s app data could not be verified.</source>
         <translation>Les données d’apps d’Arch n’ont pas pu être vérifiées.</translation>
     </message>
@@ -9516,6 +9524,10 @@
     <message>
         <source>Stable</source>
         <translation>Stable</translation>
+    </message>
+    <message>
+        <source>Open Software Update</source>
+        <translation>Ouvrir Mise à jour de logiciels</translation>
     </message>
     <message>
         <source>Refreshing…</source>
@@ -10799,6 +10811,10 @@
     <message>
         <source>The Grassfield catalog could not be fetched.</source>
         <translation>Le catalogue Grassfield n’a pas pu être récupéré.</translation>
+    </message>
+    <message>
+        <source>Arch&apos;s app data couldn&apos;t be downloaded. Check for updates, then try again.</source>
+        <translation>Les données d&apos;apps d&apos;Arch n&apos;ont pas pu être téléchargées. Recherchez les mises à jour, puis réessayez.</translation>
     </message>
     <message>
         <source>Arch&apos;s app data could not be verified.</source>

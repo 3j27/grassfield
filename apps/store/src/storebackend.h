@@ -44,7 +44,7 @@ struct Snapshot {
     QDateTime catalogFetchedAt;
     QString fetchProblem; // "" or why the last fetch of the catalog was not used: untrusted, refused, unavailable
     AppStreamData appstream;
-    QString appstreamProblem; // "" or unverified, unavailable
+    QString appstreamProblem; // "" or download, unverified, unavailable
     QList<SyncPackage> sync;
     QSet<QString> explicitPackages;
     QSet<QString> foreign;          // packages no repository has (pacman -Qm)
@@ -86,7 +86,9 @@ class StoreBackend : public QObject
     // {inUse, channel, date, old, problem}: problem is "", "unconfigured" (no hosting yet), "untrusted" (no trusted key),
     // "refused" (a bad signature, a rule, a replay) or "unavailable" (not fetched).
     Q_PROPERTY(QVariantMap catalog READ catalogStatus NOTIFY dataChanged)
-    // {origin: installed | fetched | none, problem: "" | unverified | unavailable}
+    // {origin: installed | fetched | none, problem: "" | download (the package file or its signature could not be
+    // downloaded: a package database older than the mirror, most often) | unverified (its signature fails pacman's rule) |
+    // unavailable (pacman names no file, or it could not be unpacked or cached)}
     Q_PROPERTY(QVariantMap appData READ appDataStatus NOTIFY dataChanged)
     // {name, initials, picture}: the local user (passwd, AccountsService's picture).
     Q_PROPERTY(QVariantMap user READ user CONSTANT)

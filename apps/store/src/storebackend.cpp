@@ -252,9 +252,27 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
             tools.download = [devPlumbing](const QString &url, const QString &file, qint64 maxBytes, int timeoutMs) {
                 return downloadTo(QUrl(url), file, FetchLimits{maxBytes, timeoutMs}, devPlumbing);
             };
-            QString error;
-            if (!refreshFetched(env::cacheDir(), tools, &error))
-                snap->appstreamProblem = error.contains(QLatin1String("signature")) ? QStringLiteral("unverified") : QStringLiteral("unavailable");
+            // Each reason has its own words (the integrator's note on PR #36): a file the mirror no longer has (a package
+            // database older than the mirror, most often) is "download", never "unverified".
+            QString detail;
+            switch (refreshFetched(env::cacheDir(), tools, &detail)) {
+            case RefreshProblem::None:
+                break;
+            case RefreshProblem::Download:
+            case RefreshProblem::SignatureDownload:
+                snap->appstreamProblem = QStringLiteral("download");
+                break;
+            case RefreshProblem::Unverified:
+                snap->appstreamProblem = QStringLiteral("unverified");
+                break;
+            case RefreshProblem::NoPackageFile:
+            case RefreshProblem::Unpack:
+            case RefreshProblem::Cache:
+                snap->appstreamProblem = QStringLiteral("unavailable");
+                break;
+            }
+            if (!snap->appstreamProblem.isEmpty())
+                qInfo("grassfield-store: Arch's app data: %s", qPrintable(detail));
         }
         snap->appstream = readFetched(env::cacheDir());
     }

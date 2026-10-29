@@ -254,6 +254,68 @@ TEST(StoreBackend, WithoutACatalog)
     EXPECT_TRUE(backend.sections().at(0).toMap().value(QStringLiteral("builtIn")).toBool());
 }
 
+// The owner's rc1-7 (the integrator's note on PR #36): no catalog host yet ("unconfigured", no dev plumbing URL) and Arch's
+// app data installed: the Store works on Arch's data alone, its Discover the built-in one with rows of apps, never the page
+// that says the Store isn't available.
+TEST(StoreBackend, NoCatalogHostButArchsData)
+{
+    Scratch s;
+    s.env->unset("GRASSFIELD_STORE_CATALOG_URL");
+    StoreBackend backend;
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    EXPECT_EQ(backend.catalogStatus().value(QStringLiteral("problem")), QStringLiteral("unconfigured"));
+    EXPECT_EQ(backend.appDataStatus().value(QStringLiteral("origin")), QStringLiteral("installed"));
+    const QVariantList sections = backend.sections();
+    ASSERT_EQ(ids(sections), QStringList{QStringLiteral("discover")});
+    const QVariantMap discover = sections.at(0).toMap();
+    EXPECT_TRUE(discover.value(QStringLiteral("builtIn")).toBool());
+    EXPECT_FALSE(discover.value(QStringLiteral("blocks")).toList().isEmpty()); // rows: the page has something to show
+    EXPECT_EQ(ids(backend.search(QStringLiteral("gimp"))).value(0), QStringLiteral("org.gimp.GIMP"));
+}
+
+// Arch's app data fetched from the mirror (archlinux-appstream-data not installed), each failure with its own reason (the
+// integrator's note on PR #36): the package file the mirror no longer has and its .sig not served are "download" (the
+// window then offers Software Update), a signature pacman's rule refuses is "unverified".
+TEST(StoreBackend, ArchsAppDataProblems)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0")); // the refresh runs only online
+    QDir(s.path(QStringLiteral("fixture/swcatalog"))).removeRecursively(); // not installed: fetched from the mirror
+    // pacman: the fixture's, and -Sp naming the package file in served/ (a file:// mirror, dev plumbing).
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QString package = s.path(QStringLiteral("served/archlinux-appstream-data-20261017-1-any.pkg.tar.zst"));
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "[ \"$1\" = -Sp ] && { echo '" + QUrl::fromLocalFile(package).toString().toUtf8() + "'; exit 0; }\nexec '" + base.toUtf8() + "' \"$@\"");
+    // gpg: a good signature by a packager pacman's keyring does not trust fully (S19).
+    storetest::script(s.path(QStringLiteral("fixture/bin/gpg")),
+                      "case \" $* \" in\n"
+                      "*' --verify '*) printf '[GNUPG:] NEWSIG\\n[GNUPG:] GOODSIG 1 Packager\\n[GNUPG:] VALIDSIG AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                      " 2026-10-27 1 0 4 0 22 10 00 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n[GNUPG:] TRUST_UNDEFINED 0 pgp\\n' ;;\n"
+                      "*' --list-keys '*) printf 'pub:f:255:22:1:1:::-:::scSC::::::23::0:\\nfpr:::::::::AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:\\n' ;;\n"
+                      "esac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/gnupg")));
+    storetest::writeFile(s.path(QStringLiteral("fixture/gnupg/pubring.gpg")), "keys");
+    storetest::writeFile(s.path(QStringLiteral("fixture/gnupg/trustdb.gpg")), "trust");
+    const auto problem = [] {
+        StoreBackend backend;
+        backend.start();
+        settle(backend);
+        return backend.appDataStatus();
+    };
+    // The mirror has moved on: no such package file.
+    QVariantMap data = problem();
+    EXPECT_EQ(data.value(QStringLiteral("origin")), QStringLiteral("none"));
+    EXPECT_EQ(data.value(QStringLiteral("problem")), QStringLiteral("download"));
+    // The file there, its signature not.
+    storetest::writeFile(package, "package bytes");
+    EXPECT_EQ(problem().value(QStringLiteral("problem")), QStringLiteral("download"));
+    // Both there, the signature refused by pacman's rule: the only case called "unverified".
+    storetest::writeFile(package + QStringLiteral(".sig"), "signature bytes");
+    EXPECT_EQ(problem().value(QStringLiteral("problem")), QStringLiteral("unverified"));
+}
+
 // French: the catalog's words come in French where the built-in categories have them.
 // GRASSFIELD_STORE_OFFLINE is dev plumbing (ADR-0019): in a dev session the Store counts as offline, so screenshotSource
 // gives nothing and the screenshot provider's gate is shut; a packaged session (GRASSFIELD_SESSION=1) ignores it.

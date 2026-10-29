@@ -627,6 +627,7 @@ Window {
             onOpened: id => root.openApp(id)
             onCategoryRequested: id => root.openCategory(id)
             onRetry: root.backend.refresh()
+            onSoftwareUpdateRequested: root.backend.openSoftwareUpdate()
         }
     }
 

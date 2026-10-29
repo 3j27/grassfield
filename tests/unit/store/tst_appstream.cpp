@@ -172,7 +172,7 @@ TEST(AppStream, AFetchedCopyIsUnpackedOnlyAfterItsSignaturePasses)
     QTemporaryDir cache;
     QString error;
     Tools bad("20260821-1", false); // a good signature by a key pacman does not trust fully (S19)
-    EXPECT_FALSE(refreshFetched(cache.path(), bad.tools, &error));
+    EXPECT_EQ(refreshFetched(cache.path(), bad.tools, &error), RefreshProblem::Unverified);
     EXPECT_TRUE(error.contains(QStringLiteral("pacman trusts fully"))) << error.toStdString();
     EXPECT_EQ(readFetched(cache.path()).origin, AppStreamData::Origin::None);
     EXPECT_FALSE(QDir(cache.filePath(QStringLiteral("appstream/20260821-1"))).exists());
@@ -181,7 +181,7 @@ TEST(AppStream, AFetchedCopyIsUnpackedOnlyAfterItsSignaturePasses)
     // What an interrupted refresh left goes at the start of the next one.
     QDir().mkpath(cache.filePath(QStringLiteral("appstream/.work-left/tree")));
     Tools good("20260821-1", true);
-    ASSERT_TRUE(refreshFetched(cache.path(), good.tools, &error)) << error.toStdString();
+    ASSERT_EQ(refreshFetched(cache.path(), good.tools, &error), RefreshProblem::None) << error.toStdString();
     EXPECT_FALSE(QDir(cache.filePath(QStringLiteral("appstream/.work-left"))).exists());
     // bsdtar's arguments: only the swcatalog tree, no owner, permission, extended attribute or ACL from the archive.
     QFile args(good.dir.filePath(QStringLiteral("bsdtar.args")));
@@ -203,19 +203,59 @@ TEST(AppStream, AFetchedCopyIsUnpackedOnlyAfterItsSignaturePasses)
 
     // The same version again: nothing downloaded.
     Tools same("20260821-1", true);
-    ASSERT_TRUE(refreshFetched(cache.path(), same.tools, &error));
+    ASSERT_EQ(refreshFetched(cache.path(), same.tools, &error), RefreshProblem::None);
     EXPECT_TRUE(same.downloads.isEmpty());
 
     // A newer version whose signature fails: the previous copy stays in use.
     Tools newerBad("20261017-1", false);
-    EXPECT_FALSE(refreshFetched(cache.path(), newerBad.tools, &error));
+    EXPECT_EQ(refreshFetched(cache.path(), newerBad.tools, &error), RefreshProblem::Unverified);
     EXPECT_EQ(readFetched(cache.path()).version, QStringLiteral("20260821-1"));
 
     // A newer good one replaces it, and the old version is removed.
     Tools newer("20261017-1", true);
-    ASSERT_TRUE(refreshFetched(cache.path(), newer.tools, &error));
+    ASSERT_EQ(refreshFetched(cache.path(), newer.tools, &error), RefreshProblem::None);
     EXPECT_EQ(readFetched(cache.path()).version, QStringLiteral("20261017-1"));
     EXPECT_FALSE(QDir(cache.filePath(QStringLiteral("appstream/20260821-1"))).exists());
+}
+
+// Each reason of a refresh that fails has its own value (the integrator's note on PR #36: the owner's Store said "could not
+// be verified" for a package file its mirror no longer had): the package file the mirror does not serve (404), its .sig
+// not served, a signature that fails pacman's rule, no package file named; the previous copy stays in use each time and
+// nothing is unpacked.
+TEST(AppStream, EachRefreshProblemIsItsOwn)
+{
+    QTemporaryDir cache;
+    QString detail;
+    Tools gone("20261017-1", true);
+    gone.tools.download = [&gone](const QString &url, const QString &, qint64, int) {
+        gone.downloads.append(url);
+        return false; // the mirror answers 404: fetch.h gives up
+    };
+    EXPECT_EQ(refreshFetched(cache.path(), gone.tools, &detail), RefreshProblem::Download);
+    EXPECT_TRUE(detail.contains(QStringLiteral("package file could not be downloaded"))) << detail.toStdString();
+    EXPECT_EQ(gone.downloads.size(), 1); // the .sig is not asked for then
+
+    Tools noSig("20261017-1", true);
+    noSig.tools.download = [&noSig](const QString &url, const QString &file, qint64, int) {
+        noSig.downloads.append(url);
+        if (url.endsWith(QStringLiteral(".sig")))
+            return false;
+        storetest::writeFile(file, "package bytes");
+        return true;
+    };
+    EXPECT_EQ(refreshFetched(cache.path(), noSig.tools, &detail), RefreshProblem::SignatureDownload);
+    EXPECT_TRUE(detail.endsWith(QStringLiteral(".sig: the signature could not be downloaded"))) << detail.toStdString();
+
+    Tools untrusted("20261017-1", false);
+    EXPECT_EQ(refreshFetched(cache.path(), untrusted.tools, &detail), RefreshProblem::Unverified);
+
+    Tools none("20261017-1", true);
+    none.tools.pacman = storetest::script(none.dir.filePath(QStringLiteral("pacman")), "echo 'error: target not found' >&2; exit 1");
+    EXPECT_EQ(refreshFetched(cache.path(), none.tools, &detail), RefreshProblem::NoPackageFile);
+
+    for (const Tools *t : {&gone, &noSig, &untrusted, &none})
+        EXPECT_FALSE(QFile::exists(t->dir.filePath(QStringLiteral("bsdtar.args")))); // nothing unpacked
+    EXPECT_EQ(readFetched(cache.path()).origin, AppStreamData::Origin::None);
 }
 
 // The real gpg and bsdtar (tests/integration/store_catalog.sh): a package made and signed by a throwaway packager key,
@@ -237,7 +277,7 @@ TEST(AppStream, RealPackage)
                                                                              : QStringLiteral("/appstream.pkg.tar.zst")),
                                file);
         };
-        return refreshFetched(cache.path(), tools, error);
+        return refreshFetched(cache.path(), tools, error) == RefreshProblem::None;
     };
     QString error;
     QTemporaryDir untrusted, disabled, trusted;

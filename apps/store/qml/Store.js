@@ -318,7 +318,9 @@ function unavailableReason(catalog, appData, online) {
         parts.push(qsTr("The Grassfield catalog could not be fetched."));
         break;
     }
-    if (appData && appData.problem === "unverified")
+    if (appData && appData.problem === "download")
+        parts.push(qsTr("Arch's app data couldn't be downloaded. Check for updates, then try again."));
+    else if (appData && appData.problem === "unverified")
         parts.push(qsTr("Arch's app data could not be verified."));
     else if (!appData || appData.origin === "none")
         parts.push(qsTr("Arch's app data isn't installed and could not be fetched."));
