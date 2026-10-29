@@ -108,7 +108,7 @@ Variants {
             if (shown) {
                 grid.warmPool();
                 field.text = "";
-                grid.positionViewAtBeginning();
+                grid.toBeginning();
                 host.focusZone("search");
                 host.updateView();
                 firstFrame.done = false;
