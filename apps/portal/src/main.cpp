@@ -1,8 +1,10 @@
-// grassfield-portal (ADR-0035 D-4; step 4b): the Open and Save panels of the Grassfield session, served to
-// xdg-desktop-portal as org.freedesktop.impl.portal.FileChooser under org.freedesktop.impl.portal.desktop.grassfield. Started
-// by D-Bus activation (grassfield-portal.service), it quits 60 s after its last request. The panels are the Files browser:
-// this binary links the Files library (apps/files/files-core.cmake) and loads Files' QML (FilePanels.qml), so a panel has
-// the sidebar, views, path pop-up, search, Quick Look and KIO sheets of Grassfield Files.
+// grassfield-portal (ADR-0035 D-4, D-5; steps 4b and 5a): the Open and Save panels and the permission alerts of the Grassfield
+// session, served to xdg-desktop-portal as org.freedesktop.impl.portal.FileChooser and org.freedesktop.impl.portal.Access
+// under org.freedesktop.impl.portal.desktop.grassfield. Started by D-Bus activation (grassfield-portal.service), it quits 60 s
+// after its last request. The panels are the Files browser: this binary links the Files library (apps/files/files-core.cmake)
+// and loads Files' QML (FilePanels.qml), so a panel has the sidebar, views, path pop-up, search, Quick Look and KIO sheets of
+// Grassfield Files; the alerts are AccessAlerts.qml, next to it.
+#include "access.h"
 #include "appicons.h"
 #include "applicationslogic.h"
 #include "filechooser.h"
@@ -99,59 +101,84 @@ int main(int argc, char *argv[])
         options.uiDeadlineMs = ms;
     if (const int ms = runmode::devValue("PORTAL_IDLE_MS").toInt(); ms > 0)
         options.idleQuitMs = ms;
+    grassfield::portal::Access::Options accessOptions;
+    accessOptions.uiDeadlineMs = options.uiDeadlineMs;
+    accessOptions.idleQuitMs = options.idleQuitMs;
     const QString serviceName = QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield");
     grassfield::portal::FileChooser chooser(bus, options);
     new grassfield::portal::FileChooserAdaptor(&chooser);
-    // Idle: the name goes first, so a call on its way starts a new instance (D-Bus activation) instead of reaching one that is
-    // quitting; a call that reached this one before (it comes ahead of ReleaseName's reply) is served, the name taken back.
-    // Under systemd the unit (Type=dbus) stops once the name goes, which takes such a call with it: response 2, the window a
-    // few microseconds every idle period (review of step 4b, MINOR 6).
-    QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), [&]() {
+    // Both interfaces live on the one exported object (FileChooser's).
+    grassfield::portal::Access access(bus, accessOptions);
+    new grassfield::portal::AccessAdaptor(&chooser, &access);
+    // Idle (each interface's own idle(), so both are idle): the name goes first, so a call on its way starts a new instance
+    // (D-Bus activation) instead of reaching one that is quitting; a call that reached this one before (it comes ahead of
+    // ReleaseName's reply) is served, the name taken back. Under systemd the unit (Type=dbus) stops once the name goes, which
+    // takes such a call with it: response 2, the window a few microseconds every idle period (review of step 4b, MINOR 6).
+    const auto busy = [&]() { return chooser.pending() > 0 || access.pending() > 0; };
+    const auto quitWhenIdle = [&]() {
+        if (busy())
+            return;
         bus.unregisterService(serviceName);
         QMetaObject::invokeMethod(app.get(), [&]() {
-            if (chooser.pending() == 0)
+            if (!busy())
                 QCoreApplication::quit();
             else
                 bus.registerService(serviceName);
         }, Qt::QueuedConnection);
-    });
+    };
+    QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), quitWhenIdle);
+    QObject::connect(&access, &grassfield::portal::Access::idle, app.get(), quitWhenIdle);
 
-    // The panels' UI is made at the first request (the frontend starts every backend when it starts; an idle start costs
-    // no QML). The Files backend outlives the engine: bindings that run while the engine tears the windows down still see it.
+    // The UI is made at the first request of either interface (the frontend starts every backend when it starts; an idle
+    // start costs no QML), once: the panels' and the alerts' roots in one engine. The Files backend outlives the engine:
+    // bindings that run while the engine tears the windows down still see it.
     std::unique_ptr<FilesApp> files;
     std::unique_ptr<QQmlApplicationEngine> engine;
-    if (gui) {
-        chooser.setUiLoader([&]() -> bool {
-            grassfield::i18n::installForApplication();
-            // Windows that draw their own chrome are tagged for the compositor plugin (ADR-0015): the panels draw a sheet's.
-            new grassfield::apps::ChromeTagger(app.get());
-            files = std::make_unique<FilesApp>(QList<QUrl>());
-            engine = std::make_unique<QQmlApplicationEngine>();
-            engine->addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
-            const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
-            for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
-                engine->addImportPath(*it);
-            engine->addImageProvider(QStringLiteral("icon"), new IconProvider);
-            engine->addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
-            // As in Files: the icon decoders and the walks of the applications end before Qt's shutdown.
-            QObject::connect(app.get(), &QCoreApplication::aboutToQuit, app.get(), [] {
-                AppIconProvider::shutdown();
-                ApplicationsLogic::waitForListings(3500);
-            });
-            engine->addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
-            QString qmlDir = runmode::devValue("FILES_QML");
-            if (qmlDir.isEmpty())
-                qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);
-            engine->setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(files.get())},
-                                          {QStringLiteral("host"), QVariant::fromValue(&chooser)},
-                                          {QStringLiteral("testAnswer"), runmode::devValue("PORTAL_TEST_ANSWER")}});
-            engine->load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("FilePanels.qml"))));
-            if (engine->rootObjects().isEmpty()) {
-                qWarning("grassfield-portal: the panels' QML did not load; every request goes to x-d-p-gtk");
-                return false;
-            }
-            return true;
+    const auto makeUi = [&]() -> bool {
+        grassfield::i18n::installForApplication();
+        // Windows that draw their own chrome are tagged for the compositor plugin (ADR-0015): the panels draw a sheet's, the
+        // alerts an alert's.
+        new grassfield::apps::ChromeTagger(app.get());
+        files = std::make_unique<FilesApp>(QList<QUrl>());
+        engine = std::make_unique<QQmlApplicationEngine>();
+        engine->addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
+        const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+        for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
+            engine->addImportPath(*it);
+        engine->addImageProvider(QStringLiteral("icon"), new IconProvider);
+        engine->addImageProvider(QStringLiteral("appicon"), new AppIconProvider);
+        // As in Files: the icon decoders and the walks of the applications end before Qt's shutdown.
+        QObject::connect(app.get(), &QCoreApplication::aboutToQuit, app.get(), [] {
+            AppIconProvider::shutdown();
+            ApplicationsLogic::waitForListings(3500);
         });
+        engine->addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
+        QString qmlDir = runmode::devValue("FILES_QML");
+        if (qmlDir.isEmpty())
+            qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);
+        const QString testAnswer = runmode::devValue("PORTAL_TEST_ANSWER");
+        engine->setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(files.get())},
+                                      {QStringLiteral("host"), QVariant::fromValue(&chooser)},
+                                      {QStringLiteral("testAnswer"), testAnswer}});
+        engine->load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("FilePanels.qml"))));
+        const qsizetype panels = engine->rootObjects().size();
+        engine->setInitialProperties({{QStringLiteral("host"), QVariant::fromValue(&access)}, {QStringLiteral("testAnswer"), testAnswer}});
+        engine->load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("AccessAlerts.qml"))));
+        if (panels == 0 || engine->rootObjects().size() != panels + 1) {
+            qWarning("grassfield-portal: the panels' or the alerts' QML did not load; every request goes to x-d-p-gtk");
+            return false;
+        }
+        return true;
+    };
+    if (gui) {
+        auto made = std::make_shared<int>(-1); // -1 not yet, then 0 or 1
+        const auto loadUi = [made, &makeUi]() -> bool {
+            if (*made < 0)
+                *made = makeUi() ? 1 : 0;
+            return *made == 1;
+        };
+        chooser.setUiLoader(loadUi);
+        access.setUiLoader(loadUi);
     } else {
         qWarning("grassfield-portal: no display; every request goes to x-d-p-gtk");
     }
@@ -166,8 +193,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     const int code = app->exec();
-    // The panels go, then the Files backend they used; requests still open end with an error after them, at the return, when
-    // FileChooser's destructor answers them.
+    // The windows go, then the Files backend the panels used; requests still open end with an error after them, at the return,
+    // when RequestHost's destructor answers them.
     engine.reset();
     files.reset();
     return code;
