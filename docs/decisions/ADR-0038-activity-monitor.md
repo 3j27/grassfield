@@ -225,10 +225,11 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   update frequency. Nothing else wakes the app.
 - **Budget (AM-P1 to AM-P4, `tests/apps/activity_cost.sh`).** One sample's CPU time on the sampler's thread
   (`CLOCK_THREAD_CPUTIME_ID`) for the reference fixture of A10 (about 600 processes, 1 600 threads, 6 800 descriptors, 220
-  TCP sockets): **CPU ≤ 17 ms, Memory ≤ 25 ms, Disk ≤ 17 ms, Energy ≤ 40 ms, Network ≤ 45 ms** on the reference machine,
-  A10's worse of two runs there at idle (13.0, 19.1, 13.3, 30.8 and 34.6 ms) plus about 30 %, set by the integrator on
-  2026-10-28 (pull request #40; step 1). Step 0's limits, from the cloud machine (6, 10, 7, 13 and 7 ms), were 3 to 6 times
-  below the reference machine's costs. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
+  TCP sockets): **each tab ≤ 1.3 × A10's step-1 plan** (A10 reading what the sampler reads), the worse of A10's two runs
+  on the same fixture, before and after the product's (the integrator's decision on pull request #47, 2026-10-29; the
+  reference machine's figures from its run at idle). Until then the limits were A10's step-0 plan there plus about 30 %:
+  CPU 17, Memory 25, Disk 17, Energy 40 and Network 45 ms (pull request #40), and before that, from the cloud machine,
+  6, 10, 7, 13 and 7 ms. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
   sec) on every tab; at Very Often (1 sec) ≤ 1.5 % on CPU, Memory, Disk and Network and ≤ 2 % on Energy; ≤ 0.1 % minimized
   with a Dock graph at 5 s; PSS ≤ 120 MB after 10 minutes and < 5 MB of growth over an hour (AM-P1 to AM-P4 are step 2's
   gates, measured on the whole app; on the reference machine, 0.5 % of a core at 5 s is 25 ms a sample and 1.5 % at 1 s is
@@ -740,3 +741,16 @@ Network 36.0, at 1.39, 1.22, 1.24, 1.31 and 1.07 × A10's step-1 plan. Network i
 | 2. A pause right after the first Memory sample is missed (`memoryInterval_` is 0 after a full read): use the configured interval | the pause is told by the interval set, `Options::interval` and `Sampler::setInterval` (AM9, Normally by default; the window sets it at step 2); AD32; spec AM30; `APauseRightAfterTheFirstMemorySampleIsSeen` (your probe: Memory at 5 s, back at 3 605 s, every swap new) |
 | 3. Mutant R13: `parseIo` accepts a line with one of its two byte fields | each byte field is one bit, and both are needed: one alone, or one twice, is no `io` (`ProcParse.Io`) |
 | 4. Carried from step 1: AM47's GPU name, AM38, AM39 | step 2 |
+
+**Step 2a, pull request #47: the integrator's review of 983b7de (PASS with a condition) and nested pass on 983b7de and
+bd50b9c (2026-10-29).** The stop on minimize is proven nested: the sampler's thread stays flat minimized and on another
+Desktop, and resumes on restore; WAYLAND_DEBUG shows one more toplevel state (`suspended`) on minimize, as AD35 says.
+| Note | Answer |
+|---|---|
+| Condition: the stop on minimize rests on what the compositor sends; say which in the ADR | AD35: the xdg_toplevel `suspended` state, read in Hyprland 0.56.2's and Qt 6.11.2's sources; A-W1 drives Qt's side (unexposed, then minimized); proven nested |
+| MINOR: an amdgpu client idle at its turn is never picked | picked by its identity, engine lines or not (d; `AClientIdleAtItsTurnIsPickedAndItsWorkShows`) |
+| MINOR: mutants L03, L05, L09, J01 survive | four cases (`step2a.md`); 13 of 13 mutants of the round caught |
+| NITs: the entry's apostrophe; no tooltip on the tabs and the search field (AM3) | `Moniteur d’activité`; Grassfield.Ui's `Tooltip` under each control (`test_toolbarTooltips`) |
+| MAJOR (nested): a second titlebar, the `gf-client-chrome` rule lacks `org.grassfield.Activity` | added there and to the maximize exemption; `client_chrome_rules.sh` checks that every app making a ChromeTagger is in the rule, under each app id it sets (Glance keeps its own rule), with a negative control |
+| MINOR (nested): a second launch leaves a minimized window minimized | xdg-activation alone switches Desktops but the shell hides `special:minimized` again when the activation shows it; bringing the window back needs the shell (a `dock reopen` IPC action the app calls, or the shell restoring an activated minimized window): put to the integrator, open |
+| Cost: CPU 17.93 ms against 17 at load 3.9, 1.06 × A10's step-1 plan | **Integrator's decision**: AM-P2's limits are re-based on A10's step-1 plan, × 1.3 (d; spec "Performance"). `activity_cost.sh` runs A10 before and after the product on the same fixture, takes each tab's worse step-1 plan, prints the plan, the limit and the ratio, and fails a tab over 1.3 ×; `--model` is accepted and changes nothing. The reference machine's figures come from the integrator's run at idle before the merge |

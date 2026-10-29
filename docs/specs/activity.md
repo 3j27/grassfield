@@ -494,19 +494,24 @@ contention.
 
 ## Performance (gates; one threshold per tab, from ADR-0038 A10, review of e3882de)
 The reference fixture is A10's: about 600 processes (400 of the user with 4 threads and about 17 descriptors each, 200 of
-another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. The AM-P2 thresholds below are A10's worse of
-two runs plus about 30 % on the reference machine, set by the integrator on 2026-10-28 (i5-10400H, 8 threads, kernel
-7.2.5, the owner's live session at idle, load average 2.0, outside any sandbox; pull request #40, the integrator's comment
-of 18:59 UTC). Step 0's thresholds came from the cloud machine (A10 there: 4.7, 7.7, 10.3, 5.1 and 5.2 ms; limits 6, 10,
-13, 7 and 7 ms), 3 to 6 times faster than the reference machine. Each is measured per tab, the window visible on that tab.
+another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. Since the integrator's decision on pull request
+#47 (2026-10-29; ADR-0038 "Review history"), each tab's AM-P2 limit is 1.3 × A10 reading what the sampler reads, its
+"step 1" plan: `activity_cost.sh` runs A10 before and after the product on the same fixture and takes the worse run, so a
+product more than 1.3 × its own plan fails on any machine. The reference machine's figures come from the integrator's run
+at idle (load under 2) before step 2a's merge. Before that decision the limits were A10's step-0 plan, worse of two runs
+plus about 30 %, on the reference machine (i5-10400H, 8 threads, kernel 7.2.5, the owner's live session, outside any
+sandbox; pull request #40, the integrator's comment of 18:59 UTC of 2026-10-28): CPU 17, Memory 25, Energy 40, Disk 17 and
+Network 45 ms, from A10's step-0 plan of 13.0, 19.1, 30.8, 13.3 and 34.6 ms. Step 1 changed the reads on purpose (AD32,
+AD33, the owners' turns), so that plan no longer measured the product. Step 0's first limits came from the cloud machine
+(6, 10, 13, 7 and 7 ms). Each is measured per tab, the window visible on that tab.
 
-| Tab | One sample (AM-P2), sampler thread's CPU time | A10 worse run, reference machine | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
+| Tab | One sample (AM-P2), sampler thread's CPU time | A10 step-1 plan, reference machine | App CPU at Normally (5 sec) (AM-P1) | App CPU at Very Often (1 sec) (AM-P1) |
 |---|---|---|---|---|
-| CPU | ≤ 17 ms | 13.0 ms | ≤ 0.5 % of one core | ≤ 1.5 % |
-| Memory | ≤ 25 ms | 19.1 ms (`status` every sample, step 0's reads) | ≤ 0.5 % | ≤ 1.5 % |
-| Energy | ≤ 40 ms | 30.8 ms | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 17 ms | 13.3 ms | ≤ 0.5 % | ≤ 1.5 % |
-| Network | ≤ 45 ms | 34.6 ms | ≤ 0.5 % | ≤ 1.5 % |
+| CPU | ≤ 1.3 × the plan | the integrator's idle run (16.92 ms at load 3.9) | ≤ 0.5 % of one core | ≤ 1.5 % |
+| Memory | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Energy | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 2 % |
+| Disk | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Network | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 
 The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
 sample, and 1.5 % (2 % on Energy) at Very Often (1 sec) is 15 ms (20 ms): below AM-P2's limits for some tabs. AM-P1 is
@@ -521,11 +526,9 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   open and re-read with `pread` while their process lives (`stat`; `statm` and `status` on the Memory tab; `io` of the
   user's processes on the Disk and Energy tabs); the app raises its soft `RLIMIT_NOFILE` at start to the hard limit, at most
   16 384 (the session's soft limit is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is
-  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). After the review of 949fc98 the
-  product is also held to its model: `activity_cost.sh --model` runs probe A10 on the same fixture in the same run and
-  prints each tab's ratio to A10 reading the same as the sampler (its "step 1" plan, review of f68789c: 1.1 to 1.4
-  measured here; 0.7 to 1.1 against step 0's plan, the limits' source), and the bench prints each sample's user and kernel
-  time.
+  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). The limit is 1.3 × the tab's step-1
+  plan (the table above): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
+  each tab's plan, limit and ratio, and fails a tab over its limit; the bench prints each sample's user and kernel time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
 - The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window
