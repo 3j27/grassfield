@@ -1,6 +1,6 @@
 # ADR-0039: Design polish: one grammar for materials, controls, windows and accessibility settings
-Status: Proposed (owner brief "Cohérence et finition", 2026-10-29, step 0: docs only, no code). The owner's questions Q1 to
-Q8 are open (section "Questions for the owner"); the steps that do not depend on them can start, one pull request each ·
+Status: Proposed (owner brief "Cohérence et finition", 2026-10-29, step 0: docs only, no code). The owner answered Q1 to Q8
+on 2026-10-29 (AskUserQuestion), recorded in "Owner decisions (2026-10-29)"; the steps start one pull request each ·
 Date: 2026-10-29 · Decider: owner (Q1 to Q8), integrator (the steps, the review, the nested pass) · Number: 0039 (free on
 main 11c9e69 and on the open pull requests #41 and #43)
 
@@ -105,25 +105,25 @@ few files), M (a surface family).
 |---|---|---|---|---|---|---|
 | 1 | **Increase Contrast and pixel grid in the shared controls:** no border around the bezel-less inline pop-up (only its chevron disc), its disc on whole pixels; Toggle, Switch and Slider outlined under Increase Contrast; the check box label and the right-aligned menu shortcuts on whole pixels | `ui/Grassfield/Ui/ComboBox.qml`, `Toggle.qml`, `Switch.qml`, `Slider.qml`, `CheckBox.qml`, `MenuItem.qml`; `tests/unit/tst_pixelgrid.qml` and an Increase Contrast case | free, now | renders (`tools/run.sh`), unit tests, A2 | S | G8, G9, G23 |
 | 2 | **CI guard for literals:** `tests/ci/qml_literals.py` from the audit's tool, run by `just check-quick`; zero literal radius, font size, opacity, geometry value and animation duration; the 20 colours and the timers allowlisted; the OSD's hide delay to a token | `tests/ci/`, `tests/inventory.json`, `justfile`, `shell/osd/Osd.qml`, `tokens.json` | free, now | the guard fails on a planted literal | S | rule 6 |
-| 3 | **Preview's window and settings:** `windowSurface`, window neutrals in Viewer and Glance, `windowSecondary`, text selection in `highlight`, Increase Contrast read by the backend and bound (Text size too once Q7 is answered) | `apps/preview/qml/Viewer.qml`, `Glance.qml`, `Theme.qml`, `TextView.qml`, `apps/preview/src/previewapp.{h,cpp}` | free, now | build, unit tests, a render or nested capture | S–M | G11 (part), G12 |
+| 3 | **Preview's window and settings:** `windowSurface`, window neutrals in Viewer and Glance, `windowSecondary`, text selection in `highlight`, Increase Contrast and Text size read by the backend and bound (Q7) | `apps/preview/qml/Viewer.qml`, `Glance.qml`, `Theme.qml`, `TextView.qml`, `apps/preview/src/previewapp.{h,cpp}` | free, now | build, unit tests, a render or nested capture | S–M | G11 (part), G12 |
 | 4 | **Shell sheets' blur radius** from the dialog's own corner | `shell/overlay/Overlay.qml` | free, now | nested capture (NOT VERIFIED here) | S | G2 |
 | 5 | **Reduce Motion as crossfades** on the free surfaces: banners and the Notification Center fade instead of sliding, knobs, Overview tiles, Search's height, the stack fan and the OSD jump (the Files tab bar with step 23); the saver's slide crossfade capped; Preview's animated images and Settings' spinner still | `shell/notifications`, `shell/overview`, `shell/search`, `shell/overlay`, `shell/osd`, `shell/saver`, `ui/Grassfield/Ui/Toggle.qml`, `Switch.qml`, `apps/preview`, `apps/settings/qml/Spinner.qml` | free, now (a shared helper in `Appearance.qml` after its merge) | unit tests with `reduceMotion`, nested `reduce-motion-compositor.sh` unchanged | M | G10 |
 | 6 | **Window edge per appearance (C-4):** border tokens per appearance, pushed by the shell with the appearance as it pushes the blur | `shell/platform/Compositor.qml`, `Minimized.js`, `tokens.json`, `config/hypr/grassfield/looknfeel.lua` | free, now | a unit test of the call; nested capture of a light window's edge | S–M | G15 |
 | 7 | **One focus ring** on the free surfaces: `FocusRing` or `focusRingColor`, outside the shape, keyboard focus only; Clear All in the Notification Center and the Stages tiles on the keyboard | `shell/overlay`, `shell/notifications`, `shell/launchpad`, `shell/overview`, `shell/switcher`, `shell/widgets`, `shell/stages`, `ui/Grassfield/Ui/LinkText.qml`, `WindowLight.qml`; Settings' `ArrangeSheet`, `ColorWell`, `WallpaperSection`, `PrivacyCategoryPage`, `LoginItemsPage` | free, now | unit tests (ring after a key, none after a click) | M | G7 |
 | 8 | **Menu grammar:** section headers aligned with the check column; Volume, the tiling popover and the stack list on `PopupMenu`'s metrics (the tiling popover against ADR-0036's spec first) | `ui/Grassfield/Ui/PopupMenu.qml`, `shell/overlay/VolumeMenu.qml`, `TilingPopover.qml`, `StackPopup.qml` | free, now | renders, unit tests | S–M | G17 (part) |
-| 9 | **Dark secondary text** in app windows (Q3) | `tokens.json` `color.dark.windowTextSecondary`, `tests/visual/test_contrast_tokens.py` | after Q3 | A2, renders | S | G13 |
-| 10 | **Sheet buttons and radii** (Q1, Q2): the shared `Sheet`'s buttons, its radius and concentric controls; `radius.sheet` and `radius.alert` | `ui/Grassfield/Ui/Sheet.qml`, `tokens.json`, `shell/overlay/Dialog.qml` | after Q1, Q2 | renders of a Settings sheet, nested capture of the shell's | S–M | G3, G4 |
-| 11 | **One green for "on"** (Q4) | `Toggle.qml`, `Switch.qml`, `Slider.qml` | after Q4 | A2 (knob 3:1), renders | S | G14 |
+| 9 | **Dark secondary text** in app windows (Q3) | `tokens.json` `color.dark.windowTextSecondary`, `tests/visual/test_contrast_tokens.py` | decided (Q3: #A1A1A6) | A2, renders | S | G13 |
+| 10 | **Sheet buttons and radii** (Q1, Q2): the shared `Sheet`'s buttons, its radius and concentric controls; `radius.sheet` and `radius.alert` | `ui/Grassfield/Ui/Sheet.qml`, `tokens.json`, `shell/overlay/Dialog.qml` | radii now (Q2); buttons after the macOS 27 sheet measurement (D-Q1) | renders of a Settings sheet, nested capture of the shell's | S–M | G3, G4 |
+| 11 | **One green for "on"** (Q4) | `Toggle.qml`, `Switch.qml`, `Slider.qml` | after the macOS 27 dark check (D-Q4) | A2 (knob 3:1), renders | S | G14 |
 | 12 | **Hover and selection roles:** one token per role (control hover, neutral row selection on glass, accent menu selection, grid selection) replacing the multipliers | `shell/overlay/StackPopup.qml`, `shell/overview`, `shell/switcher`, `shell/overlay/TilingPopover.qml`, `tokens.json` | free, now | renders, A2 | S–M | G6 |
 | 13 | **Radius roles and concentric shapes:** `radius.group` for Settings' groups, `radius.dialog` removed, the inner radii of G5, rounded tiling-suggestion thumbnails; the switcher's selection measured first | `tokens.json`, `apps/settings/qml/SettingsGroup.qml` and its readers, `shell/overlay/ForceQuitPanel.qml`, `StackPopup.qml`, `controlcenter/NowPlaying.qml`, `shell/widgets/builtin/nowplaying/NowPlaying.qml`, `shell/notifications/NotificationContent.qml`, `TilingSuggestions.qml` | free, now (Sheet with step 10) | renders | S–M | G5 |
 | 14 | **Shared toolbar and search field:** `toolbar.*` tokens (capsule 36, button 34, divider) replacing the borrowed `files.*` and `settings.*`; `RimmedCapsule` on them; `SearchField` as the rimmed 28-pt capsule with a clear button, used by Settings; icon-only `ToolButton`s show their name as a tooltip | `ui/Grassfield/Ui/RimmedCapsule.qml`, `SearchField.qml`, `ToolButton.qml`, `tokens.json`, `apps/settings/qml/Main.qml` | free, now (Files and Store with steps 23 and 24) | renders, unit tests | M | G16 (part) |
 | 15 | **Settings finish** (Software Update excluded): `InfoButton` and `MoreButton` on `ToolButton`'s states, the colour well's field and popover on `TextField` and `Material`, one empty-list style, `ErrorNote` in `windowSecondary`, the 34 literal hairlines on the token, content that scrolls under the toolbar with its rule (D3), the glass preview on the class tints and Reduce Transparency, unused tokens removed | `apps/settings/qml/*` | free, now | renders (`settings.py`), unit tests | M | G22 (Settings), G12 (preview) |
 | 16 | **Preview's structure:** the edge-to-edge sidebar, toolbar capsules on the shared tokens with 34-pt buttons, scroll bars, the toolbar rule | `apps/preview/qml/Viewer.qml`, `ToolbarGroup.qml`, `ImageView.qml`, `TextView.qml` | free, after step 14 | nested capture | M | G11 |
 | 17 | **Inactive windows:** the selection of a window that is not key turns neutral; the toolbar title and glyphs dim | `ui/Grassfield/Ui/UnifiedToolbar.qml`, `apps/settings/qml/Main.qml`, `apps/preview` | free, now; Files and Store after their merges | renders with `Window.active` false; a macOS 27 capture of an inactive window (NOT VERIFIED until then) | S–M | G18 |
-| 18 | **Text size everywhere** (Q7): Preview (with step 3) and Files (with step 23); the apps' text tokens follow `textScale` | `tokens.json`, `apps/preview`, `apps/files` | after Q7 | unit tests at 130 % | S | G12 |
-| 19 | **Native text in the apps** (Q5) | the apps' `main.cpp` (Settings, Preview now; Files, Store, Activity Monitor after their merges) | after Q5 | `shots/metrics.txt` method, the owner's side-by-side | S | G21 |
-| 20 | **Motion tokens** (Q6): a panel-and-sheet curve, one easing per role (enter, exit, move), Hyprland's curves aligned with them | `tokens.json`, the free surfaces, `config/hypr/grassfield/looknfeel.lua`, `shell/platform/Minimized.js` | after Q6 | nested recordings, P3 | M | G20 |
-| 21 | **Third-party title bars** (Q8) | `tokens.json` `titlebar.*`, the plugin's theme (nested only, gates C1–C3) | after Q8 | nested capture | S | G19 |
+| 18 | **Text size everywhere** (Q7): Preview (with step 3) and Files (with step 23); the apps' text tokens follow `textScale` | `tokens.json`, `apps/preview`, `apps/files` | decided (Q7: every app) | unit tests at 130 % | S | G12 |
+| 19 | **Native text in the apps** (Q5) | the apps' `main.cpp` (Settings, Preview now; Files, Store, Activity Monitor after their merges) | decided (Q5: the apps' static text) | `shots/metrics.txt` method, the owner's side-by-side | S | G21 |
+| 20 | **Motion tokens** (Q6): a panel-and-sheet curve, one easing per role (enter, exit, move), Hyprland's curves aligned with them | `tokens.json`, the free surfaces, `config/hypr/grassfield/looknfeel.lua`, `shell/platform/Minimized.js` | decided (Q6: the 650-ms stand-in) | nested recordings, P3 | M | G20 |
+| 21 | **Third-party title bars** (Q8) | `tokens.json` `titlebar.*`, the plugin's theme (nested only, gates C1–C3) | decided (Q8: the window tokens) | nested capture | S | G19 |
 | 22 | **Glass classes for every surface:** classes for the Overview band and gallery (0.15) and widgets (0.92); the switcher, tooltips, Stages badges and the About This Wallpaper card on a class; tails and close capsules on their body's tint, the Increase Contrast frost and Reduce Transparency; Material's inner rim stronger toward the top left (ADR-0024 §2.5) and its dark edge raised by Increase Contrast | `Appearance.qml`, `Material.qml`, `Tooltip.qml`, `shell/overview`, `shell/widgets`, `shell/switcher`, `shell/stages`, `shell/overlay/DockMenu.qml`, `StackPopup.qml`, `shell/notifications` | **after the Appearance and Material fixes merge** | A2 per class and appearance, nested captures (blur) | M | G1 |
 | 23 | **Files finish:** `windowSecondary`, Increase Contrast and Text size, Customize Folder's wells on `Appearance.fillOpacity`, a rounded tags ring, capsules and search on step 14's pieces, an in-view loading indicator, keyboard paths for the column headers, path bar and preview-pane actions, native text (Q5) | `apps/files` | **after #41 merges** | renders, unit tests, nested | M | G12, G16, G22 (Files) |
 | 24 | **Store finish:** buttons with hover and pressed states and the shared disabled opacity, the shared progress indicators (D4), menu host and search field (28), an empty state on the category page, the hairline token, rings on keyboard focus, native text (Q5) | `apps/store` | **after step 3c merges** | renders (store shots), unit tests | M | G16, G22 (Store), G7 |
@@ -131,10 +131,11 @@ few files), M (a surface family).
 | 26 | **Software Update panel:** step 15's Settings rules on its three files | `apps/settings/qml/SoftwareUpdate*.qml` | **after step 3 merges** | renders (`settings.py --update`) | S | G22 |
 | 27 | **Activity Monitor:** its window built on these rules from the start (a checklist in its step, ADR-0038) | `apps/activity` | at its window step | its own review | — | — |
 
-Steps 1 to 8 need neither an answer nor a merge. Steps 9 to 11 and 18 to 21 wait for the owner's answers; if the owner
-delegates them, the integrator applies the recommended option (owner rule of 2026-10-21).
+Steps 1 to 8 need neither an answer nor a merge. Steps 9 to 11 and 18 to 21 follow the owner's answers of 2026-10-29
+("Owner decisions (2026-10-29)" below): step 10's buttons and step 11's colour start with a measurement of the macOS 27
+reference the owner named (Q1, Q4); every other answered step can start in this order.
 
-## Questions for the owner
+## Questions for the owner (answered on 2026-10-29)
 
 **Q1. The buttons at the foot of a sheet.** A Settings sheet ends with 32-pt rounded rectangles; the shell's sheets (About,
 Force Quit) with 24-pt capsules; alerts with 28-pt capsules (`shots/gallery-light-2x-controls.png`). The reference library has
@@ -147,6 +148,7 @@ no macOS 27 sheet.
 - (c) 28-pt capsules, as alerts, in every sheet and alert. Pros: one shape for every dialog button, a middle size. Cons: a
   third height next to Settings' 24-pt rows inside one window.
 - **Recommendation: (a),** checked again when a macOS 27 sheet capture exists.
+- **Owner's answer (2026-10-29):** « Il faut la même que sur Mac OS 27 » ("the same as on macOS 27"): see D-Q1.
 
 **Q2. The corner of sheets and alerts.** Windows have one corner: Hyprland's 20 at power 2.6 has the 45° point of a 16.0-pt
 circle (macOS 27 measures 16.6; ADR-0024). Sheets are 26 and alerts 24 (macOS 26 values), 8–10 pt rounder than the window
@@ -157,6 +159,7 @@ under them.
 - (b) Keep 26 and 24. Pros: measured, on macOS 26. Cons: the sheet's corners stand out against its window's.
 - (c) Wait for a macOS 27 sheet and alert capture from the owner. Pros: certainty. Cons: the step waits.
 - **Recommendation: (a).**
+- **Owner's answer (2026-10-29): (a),** the window's radius for sheets and alerts.
 
 **Q3. Secondary text in dark app windows.** Today #DCDCE4: 10.67:1 on the window against 13.36:1 for the primary text, so
 secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Every option keeps A2 (4.5:1).
@@ -166,6 +169,7 @@ secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Ev
 - (b) #B4B4BA: 7.05, 6.31 and 7.62. Pros: a wide margin. Cons: a weaker hierarchy (luminance ratio 2.0).
 - (c) Keep #DCDCE4. Pros: the highest contrast. Cons: no hierarchy.
 - **Recommendation: (a).**
+- **Owner's answer (2026-10-29): (a),** #A1A1A6.
 
 **Q4. One green for "on" in the dark appearance.** Switches and slider fills use the bright green #4FB36B; checkboxes,
 radio buttons, default buttons and selected rows the deeper #2E8049 chosen for white text (owner decision of 2026-10-26).
@@ -175,6 +179,7 @@ radio buttons, default buttons and selected rows the deeper #2E8049 chosen for w
 - (c) Checkboxes and radio buttons on #4FB36B with a dark mark. Pros: one bright green. Cons: breaks white-on-accent (F1,
   2026-10-26) with a dark checkmark, which macOS never draws.
 - **Recommendation: (a).**
+- **Owner's answer (2026-10-29):** « Même chose que sur Mac OS 27 » ("the same as on macOS 27"): see D-Q4.
 
 **Q5. Native text rendering in the apps (T-2, open since 2026-10-26).** Distance-field text carries 7.7 % less ink than
 native glyphs at 1x and 19.5 % less at 2x (13 px), so it reads greyer and softer than macOS text.
@@ -186,6 +191,7 @@ native glyphs at 1x and 19.5 % less at 2x (13 px), so it reads greyer and softer
   shell text that moves must be excluded one by one.
 - (c) Keep distance fields. Pros: no change. Cons: the gap stays.
 - **Recommendation: (a),** after the side-by-side on the owner's screen.
+- **Owner's answer (2026-10-29): (a),** native rendering for the apps' static text.
 
 **Q6. Motion of panels and sheets.** No motion was ever recorded on a Mac (2026-10-26 decision 6); today panels use 120,
 220 and 350 ms on one curve, and nothing springs.
@@ -196,12 +202,14 @@ native glyphs at 1x and 19.5 % less at 2x (13 px), so it reads greyer and softer
   follow them. Pros: exact. Cons: needs a Mac and the owner's time.
 - (c) Keep today's durations; only one easing per role. Pros: cheapest. Cons: motion stays the least macOS-like trait.
 - **Recommendation: (a),** calibrated later with (b) if a Mac is at hand.
+- **Owner's answer (2026-10-29): (a),** Apple's default spring as a 650-ms stand-in.
 
 **Q7. How far Text size reaches.** Today: the shell's panels, Settings and the Store; not Files or Preview; menus never.
 - (a) Every Grassfield app (Files and Preview too); menus keep their size, as now. Pros: one setting behaves the same
   everywhere. Cons: Files' list and icon metrics need checking at 130 %.
 - (b) Keep today's reach; the pane already says what it scales. Pros: no work. Cons: two apps out of five ignore it.
 - **Recommendation: (a).**
+- **Owner's answer (2026-10-29): (a),** every Grassfield app.
 
 **Q8. Title bars of third-party windows.** The compositor draws them #ECECEE in the light appearance and #28282C in the dark
 one; Grassfield's own windows are #FFFFFF and #292929, and the macOS reference draws the window's own colour (visual-tahoe,
@@ -211,6 +219,34 @@ low confidence).
 - (b) A near-white #F6F6F6 (dark unchanged). Pros: softer above grey apps. Cons: still a band, a value of its own.
 - (c) Keep #ECECEE. Pros: no change. Cons: the grey band the 2026-10-25 audit noted.
 - **Recommendation: (a).**
+- **Owner's answer (2026-10-29): (a),** the window tokens #FFFFFF and #292929.
+
+## Owner decisions (2026-10-29)
+Asked with AskUserQuestion after step 0 was written; the answers verbatim where the owner wrote their own.
+
+| | Answer | What the steps do |
+|---|---|---|
+| Q1 sheet buttons | « Il faut la même que sur Mac OS 27 » | D-Q1 below (step 10) |
+| Q2 sheet and alert corners | (a) the window's radius | step 10: `radius.sheet` and `radius.alert` take the window's circle-equivalent (16), inner controls concentric |
+| Q3 dark secondary text | (a) #A1A1A6 | step 9: `color.dark.windowTextSecondary` #A1A1A6, A2 asserted on window, group and sidebar |
+| Q4 "on" in the dark appearance | « Même chose que sur Mac OS 27 » | D-Q4 below (step 11) |
+| Q5 native text | (a) the apps' static text | step 19: native rendering in Settings and Preview first, then Files, the Store and Activity Monitor after their merges; distance fields where text is scaled or animated; the owner's side-by-side on the reference screen before it is kept (decision of 2026-10-26) |
+| Q6 motion | (a) Apple's default spring as a 650-ms stand-in | step 20: a panel-and-sheet curve token (650 ms, cubic-bezier 0.24, 0.24, 0.15, 1.04); menus stay instant; P3 measured |
+| Q7 Text size | (a) every Grassfield app | step 18: Files and Preview follow Text size; menus keep their size |
+| Q8 third-party title bars | (a) the window tokens | step 21: `titlebar.backgroundLight` #FFFFFF, `backgroundDark` #292929, a hairline under the bar |
+
+- **D-Q1 (the owner's answer, read by the integrator).** Sheets take the push buttons macOS 27 draws in its sheets: shape,
+  height, width rule and placement. The reference library holds no macOS 27 sheet (C-2), so step 10's buttons start by
+  measuring one: macOS 27 release captures of a sheet found by web research (data only, never stored in the repository, as in
+  `docs/audits/ui-finesse-2026-10-25.md` §7), or a capture from the owner. Until that measurement exists, step 10 changes
+  only the radii (Q2) and the buttons keep today's shapes. The measured shape then applies to the shared `Sheet` and to the
+  shell's sheets alike (one grammar), and alerts follow the macOS 27 alert if the same source shows one.
+- **D-Q4 (the owner's answer, read by the integrator).** macOS draws switches, checkboxes, radio buttons and slider fills in
+  one accent fill with white marks, in both appearances (ui-finesse §7.2: white text on the accent in the dark menu, F1).
+  Grassfield's fill that holds white marks in the dark appearance is the selection colour (#2E8049 for the green, the derived
+  shade per accent of 2026-10-26), so "the same as on macOS 27" is option (a): switches and slider fills move to it. Step 11
+  first checks this on the dark macOS 27 release captures (a switch and a checkbox side by side); if they show two fills, the
+  step follows what they show and records it here.
 
 ## macOS reference
 - macOS 27: one window radius, edge-to-edge sidebars, bars with a rule once content scrolls, white text on the accent, its
