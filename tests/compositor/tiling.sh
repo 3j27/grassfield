@@ -423,9 +423,14 @@ run_c1_edge() {
   kill "$xdg_pid" 2>/dev/null
   sleep 0.3
 }
-# A popup in front of the handle gets the click (TL30, ADR-0036 D35; integrator re-review of ce82fd3): two xdgact windows
-# arranged left and right, the left one opens an xdg popup on the middle of its right edge (SIGHUP), over the handle. The drag
-# there reaches the popup (xdgact prints "popup pressed") and moves neither window.
+# A popup in front of the handle keeps the click from it (TL30, ADR-0036 D35; integrator re-review of ce82fd3 and nested pass
+# of 3d56d60): two xdgact windows arranged left and right, the left one opens an xdg popup on the middle of its right edge
+# (SIGHUP), over the handle.
+#   frontmost  the left window raised first (a popup opens from a click in its window): the drag there reaches the popup
+#              (xdgact prints "popup pressed") and moves neither window
+#   below      the right window raised over it, the popup still there: the plugin does not take the press (the left window
+#              keeps its box: the edge's drag would widen it); Hyprland's own routing gives the press to the right window's
+#              border grab area, which its windowAt finds before the lower window's popup (as without the plugin): logged
 run_edge_popup() {
   local tb=$GF_TB_HEIGHT a b apid bpid lx ly lw lh rx rw l1 r1 hx hy mark
   close_shell_popup "shared-edge popup"
@@ -448,6 +453,8 @@ run_edge_popup() {
     return
   fi
   hx=$((lx + lw + (rx - lx - lw) / 2 - mx)) hy=$((ly - tb + (lh + tb) / 2 - my))
+  nestctl dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$a' })" >>"$log" 2>&1
+  sleep 0.3
   mark=$(grep -ac "" "$run/xdgact.out" 2>/dev/null || echo 0)
   kill -HUP "$apid" 2>/dev/null
   popup_line() { tail -n +"$((mark + 1))" "$run/xdgact.out" 2>/dev/null | grep -aq -- "$1"; }
@@ -456,11 +463,21 @@ run_edge_popup() {
   sleep 0.3
   pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 400
   for _ in $(seq 1 20); do popup_line "popup pressed gf-edge-popup-a" && break; sleep 0.1; done
-  check "shared-edge popup: the popup in front of the handle gets the press" popup_line "popup pressed gf-edge-popup-a"
+  check "shared-edge popup frontmost: the popup in front of the handle gets the press" popup_line "popup pressed gf-edge-popup-a"
   read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
   read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
   say "  left window $l1 (was $lx $ly $lw $lh), right window $r1 (was $rx $rw)"
-  check "shared-edge popup: neither window moved" test "$l1" = "$lx $ly $lw $lh" -a "$r1" = "$rx $rw"
+  check "shared-edge popup frontmost: neither window moved" test "$l1" = "$lx $ly $lw $lh" -a "$r1" = "$rx $rw"
+  # The right window over the left one, the popup still mapped: no window's box but the right one's grab area holds the point.
+  nestctl dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$b' })" >>"$log" 2>&1
+  sleep 0.3
+  mark=$(grep -ac "" "$run/xdgact.out" 2>/dev/null || echo 0)
+  pointer abs 20 $((mh / 2)) sleep 200 abs "$hx" "$hy" sleep 300 down drag $((hx + 60)) "$hy" sleep 200 up sleep 600
+  read -r l1 < <(nestctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  read -r r1 < <(nestctl clients -j | jq -r --arg a "$b" '.[] | select(.address == $a) | "\(.at[0]) \(.size[0])"')
+  say "  popup below: left window $l1 (was $lx $ly $lw $lh), right window $r1 (was $rx $rw; Hyprland's own border resize may move it)," \
+    "the popup $(popup_line "popup pressed gf-edge-popup-a" && echo pressed || echo "not pressed"), $(popup_line "popup done" && echo dismissed || echo "still mapped")"
+  check "shared-edge popup below: the plugin does not take the press (the left window keeps its box)" test "$l1" = "$lx $ly $lw $lh"
   kill "$apid" "$bpid" 2>/dev/null
   sleep 0.3
 }
