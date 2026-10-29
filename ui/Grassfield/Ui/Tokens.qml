@@ -1835,8 +1835,8 @@ QtObject {
     readonly property int settingsSaverThumbPhotoTilt: 7
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures' white border, a fraction of the picture's height
     readonly property real settingsSaverThumbPhotoBorder: 0.04
-    // Least gap between two choice names when a longer language is wider than the pitch [ref: ADR-0024 spacing scale]
-    readonly property int settingsChoiceCaptionGap: 6
+    // Least gap between two choice names when a longer language is wider than the pitch [ref: ADR-0024 spacing scale, spacingXs]
+    readonly property int settingsChoiceCaptionGap: 4
     // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsChoiceRingWidth: 3
     // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
@@ -1903,6 +1903,8 @@ QtObject {
     readonly property real settingsIconStylePitch: 51.5
     // macOS 27: the last sample icon's centre from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property real settingsIconStyleInset: 27.5
+    // The icon styles on their own line under the title (when they do not fit beside it): their top below the row's, the title's baseline (23) plus spacingMd [ref: ADR-0024 spacing scale]
+    readonly property int settingsIconStyleStackedTop: 35
     // macOS 27: an icon style's name, its baseline below the icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsIconStyleCaptionBaseline: 15
     // macOS 27: the Folder color row, below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
