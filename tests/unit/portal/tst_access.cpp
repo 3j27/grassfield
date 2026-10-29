@@ -14,6 +14,7 @@
 #include <QDeadlineTimer>
 #include <QTest>
 
+#include <functional>
 #include <limits>
 #include <memory>
 
@@ -37,14 +38,36 @@ public:
     QStringList calls;
     uint response = 0;
     QVariantMap answer;
+    bool hold = false; // keep the call open (until a Close)
+    QDBusMessage held;
 
 public Q_SLOTS:
     uint AccessDialog(const QDBusObjectPath &handle, const QString &, const QString &, const QString &title, const QString &,
-                      const QString &, const QVariantMap &, QVariantMap &results)
+                      const QString &, const QVariantMap &, const QDBusMessage &message, QVariantMap &results)
     {
         calls << QStringLiteral("AccessDialog %1 %2").arg(handle.path(), title);
+        if (hold) {
+            message.setDelayedReply(true);
+            held = message;
+            return 0;
+        }
         results = answer;
         return response;
+    }
+};
+
+// x-d-p-gtk's Request object of a forwarded call.
+class FakeGtkRequest : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.impl.portal.Request")
+public:
+    std::function<void()> onClose;
+public Q_SLOTS:
+    Q_SCRIPTABLE void Close()
+    {
+        if (onClose)
+            onClose();
     }
 };
 
@@ -311,6 +334,24 @@ TEST_F(AccessTest, WithoutAUiTheCallGoesToGtk)
     EXPECT_EQ(reply->response, 1u);
     EXPECT_EQ(choicesOf(reply->results), (QList<Pair>{Pair{QStringLiteral("remember"), QStringLiteral("true")}}));
     EXPECT_FALSE(reply->results.contains("uris")) << "only what the interface defines";
+}
+
+// Close of a forwarded request reaches x-d-p-gtk, and its closed dialog's answer is no answer of the user's: the call ends
+// with an error (counter-review of step 5a, MINOR).
+TEST_F(AccessTest, CloseOfAForwardedRequestIsNoAnswer)
+{
+    access->setUiLoader([] { return false; });
+    gtk.hold = true;
+    FakeGtkRequest gtkRequest;
+    gtkRequest.onClose = [&] { gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(2u), QVariantMap()})); };
+    ASSERT_TRUE(gtkBus->registerObject(QStringLiteral("/r/f1"), &gtkRequest, QDBusConnection::ExportScriptableSlots));
+    auto reply = call(QStringLiteral("/r/f1"), {});
+    ASSERT_TRUE(waitFor([&] { return gtk.held.type() == QDBusMessage::MethodCallMessage; }));
+    frontendBus->asyncCall(QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/r/f1"),
+                                                          QStringLiteral("org.freedesktop.impl.portal.Request"), QStringLiteral("Close")));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_TRUE(reply->error) << "an error, not response " << reply->response;
+    gtkBus->unregisterObject(QStringLiteral("/r/f1"));
 }
 
 // An alert that has not drawn its first frame within the deadline is dropped and the call goes to x-d-p-gtk (FC7).

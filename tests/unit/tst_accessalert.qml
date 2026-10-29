@@ -189,6 +189,25 @@ TestCase {
         compare(fakeHost.answers[0].grant, false);
     }
 
+    // Each time the alert becomes the active window again it is armed again, and the keyboard is back on the alert, never on
+    // the button it had (counter-review of step 5a).
+    function test_becoming_active_again_rearms_it(): void {
+        const alert = test.openAlert({});
+        keyClick(Qt.Key_Tab);
+        verify(test.button(alert, "Allow").activeFocus || test.button(alert, "Don't Allow").activeFocus, "Tab reached a button");
+        // The active window again (onActiveChanged's call: the offscreen platform moves no activation between windows; the first
+        // activation, which openAlert waits on, goes through the same function).
+        alert.becameActive();
+        verify(!alert.armed, "not armed right after it became active again");
+        verify(!test.button(alert, "Allow").activeFocus && !test.button(alert, "Don't Allow").activeFocus, "the keyboard is on the alert");
+        const grant = test.button(alert, "Allow");
+        mouseClick(grant, grant.width / 2, grant.height / 2);
+        keyClick(Qt.Key_Space);
+        wait(50);
+        compare(fakeHost.answers.length, 0, "the click and the key that came with it answer nothing");
+        tryVerify(() => alert.armed, 2000);
+    }
+
     // AC3: an alert that gets the keyboard late (it opened behind the lock) takes keys only after a click in it.
     function test_an_alert_that_gets_the_keyboard_late_waits_for_a_click(): void {
         const alert = test.openAlert({}, {shownAt: 1});
