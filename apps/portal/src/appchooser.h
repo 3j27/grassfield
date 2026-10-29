@@ -46,11 +46,11 @@ public:
 
     // What the panel is given, checked (pure; the tests read it): FilePanel's request map with kind "application":
     // {kind, appId, title, acceptLabel, modal, parented, multiple, directory, filters, currentFilter, choices, currentName,
-    // files, currentFolder, applications (the candidates: desktop ids, at most kMaxApplications, each once), lastChoice
-    // (a desktop id or ""), contentType, filename (a plain name or ""), uri}.
+    // files, currentFolder, applications (the candidates: desktop ids, at most kMaxApplications, each once, from the first
+    // 4 * kMaxApplications given), lastChoice (a desktop id or ""), filename (a plain name or ""), uri (one line)}.
     static QVariantMap toQml(const QString &appId, const QString &parentWindow, const QStringList &choices,
                              const QVariantMap &options);
-    // The desktop ids among `ids` (no ".desktop", the characters of a desktop file id), each once, in order.
+    // The desktop ids among `ids` (isDesktopId), each once, in order.
     static QStringList desktopIds(const QStringList &ids);
     static bool isDesktopId(const QString &id);
 

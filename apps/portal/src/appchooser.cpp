@@ -3,8 +3,9 @@
 #include "chooserlogic.h"
 
 #include <QDBusConnection>
-#include <QRegularExpression>
 #include <QSet>
+
+#include <algorithm>
 
 namespace grassfield::portal {
 
@@ -35,17 +36,26 @@ AppChooser::AppChooser(const QDBusConnection &bus, const Options &options, QObje
 
 bool AppChooser::isDesktopId(const QString &id)
 {
-    // A desktop file id without ".desktop" (the frontend's get_app_id): the characters of a D-Bus name plus '-', as the
-    // Applications location makes them from a file's path (ApplicationsLogic, '/' written '-').
-    static const QRegularExpression valid(QStringLiteral("^[A-Za-z0-9_][A-Za-z0-9._-]{0,254}$"));
-    return valid.match(id).hasMatch() && !id.endsWith(QLatin1String(".desktop"));
+    // A desktop file id without ".desktop", as the frontend gives it and takes it back (src/open-uri.c: get_app_id, then
+    // g_desktop_app_info_new(id + ".desktop")) and as the Applications location makes it from a file's path ('/' written
+    // '-'): a name, so no '/', no control character, not hidden, at most 255 bytes with its suffix. Spaces, '+' and any
+    // letter are a name's (Wine's "wine-Programs-Notepad++", a game's "Some Game"; review of step 5b, m4).
+    if (id.isEmpty() || id.startsWith(QLatin1Char('.')) || id.endsWith(QLatin1String(".desktop")) || id.toUtf8().size() > 255 - 8)
+        return false;
+    for (const QChar c : id)
+        if (c == QLatin1Char('/') || c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+            return false;
+    return true;
 }
 
 QStringList AppChooser::desktopIds(const QStringList &ids)
 {
     QStringList out;
     QSet<QString> seen;
-    for (const QString &id : ids) {
+    // A bounded look: any process on the session bus can send a list of any length (review of step 5b, n9).
+    const qsizetype looked = std::min<qsizetype>(ids.size(), 4 * kMaxApplications);
+    for (qsizetype i = 0; i < looked; ++i) {
+        const QString &id = ids.at(i);
         if (out.size() >= kMaxApplications)
             break;
         if (isDesktopId(id) && !seen.contains(id)) {
@@ -58,10 +68,6 @@ QStringList AppChooser::desktopIds(const QStringList &ids)
 
 QVariantMap AppChooser::toQml(const QString &appId, const QString &parentWindow, const QStringList &choices, const QVariantMap &options)
 {
-    static const QRegularExpression mimeType(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$"));
-    QString contentType = stringOption(options, QStringLiteral("content_type"));
-    if (!mimeType.match(contentType).hasMatch())
-        contentType.clear();
     // The document's name as the panel's message names it: a plain name, never a path.
     QString filename = chooser::oneLine(stringOption(options, QStringLiteral("filename")));
     if (filename.contains(QLatin1Char('/')) || filename == QLatin1String(".") || filename == QLatin1String(".."))
@@ -86,7 +92,6 @@ QVariantMap AppChooser::toQml(const QString &appId, const QString &parentWindow,
         {QStringLiteral("currentFolder"), QString()},
         {QStringLiteral("applications"), desktopIds(choices)},
         {QStringLiteral("lastChoice"), isDesktopId(last) ? last : QString()},
-        {QStringLiteral("contentType"), contentType},
         {QStringLiteral("filename"), filename},
         {QStringLiteral("uri"), chooser::oneLine(stringOption(options, QStringLiteral("uri")))},
     };
