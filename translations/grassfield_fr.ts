@@ -12297,7 +12297,7 @@
 <context>
     <name>activity::Summary</name>
     <message>
-        <source>%1 %</source>
+        <source>%1%</source>
         <translation>%1&#xa0;%</translation>
     </message>
     <message>

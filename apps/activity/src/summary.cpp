@@ -177,7 +177,7 @@ QString Summary::percent(double fraction) const
 {
     if (fraction < 0)
         return dash();
-    return tr("%1 %").arg(formatDecimal(fraction * 100.0, m_locale));
+    return tr("%1%").arg(formatDecimal(fraction * 100.0, m_locale));
 }
 
 void Summary::rebuild()
@@ -221,7 +221,7 @@ void Summary::rebuild()
         if (!b.present)
             break; // AM39: without a battery only the graph shows
         QVariantList rows;
-        rows << figure(tr("Remaining charge:"), tr("%1 %").arg(m_locale.toString(qRound(b.percent))));
+        rows << figure(tr("Remaining charge:"), tr("%1%").arg(m_locale.toString(qRound(b.percent))));
         if (b.charge == BatteryCharge::Full) {
             rows << figure(tr("Battery Is Charged"), QString());
         } else if (b.charge == BatteryCharge::Charging || b.charge == BatteryCharge::PendingCharge) {

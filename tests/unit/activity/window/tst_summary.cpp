@@ -96,10 +96,10 @@ TEST(Summary, CpuFiguresAndItsLoadGraph)
     EXPECT_EQ(changed.count(), 2);
     ASSERT_EQ(s.blocks().size(), 3);
     EXPECT_EQ(block(s, 0).value(QStringLiteral("kind")).toString(), QStringLiteral("figures"));
-    EXPECT_EQ(figureOf(s, QStringLiteral("System:")).value(QStringLiteral("value")).toString(), QStringLiteral("5.0 %"));
+    EXPECT_EQ(figureOf(s, QStringLiteral("System:")).value(QStringLiteral("value")).toString(), QStringLiteral("5.0%"));
     EXPECT_EQ(figureOf(s, QStringLiteral("System:")).value(QStringLiteral("swatch")).toString(), QStringLiteral("activityGraphSystem"));
-    EXPECT_EQ(figureOf(s, QStringLiteral("User:")).value(QStringLiteral("value")).toString(), QStringLiteral("25.0 %"));
-    EXPECT_EQ(figureOf(s, QStringLiteral("Idle:")).value(QStringLiteral("value")).toString(), QStringLiteral("70.0 %"));
+    EXPECT_EQ(figureOf(s, QStringLiteral("User:")).value(QStringLiteral("value")).toString(), QStringLiteral("25.0%"));
+    EXPECT_EQ(figureOf(s, QStringLiteral("Idle:")).value(QStringLiteral("value")).toString(), QStringLiteral("70.0%"));
     EXPECT_EQ(figureOf(s, QStringLiteral("Idle:")).value(QStringLiteral("swatch")).toString(), QString());
     EXPECT_EQ(figureOf(s, QStringLiteral("Threads:")).value(QStringLiteral("value")).toString(), QStringLiteral("1734"));
     EXPECT_EQ(figureOf(s, QStringLiteral("Processes:")).value(QStringLiteral("value")).toString(), QStringLiteral("412"));
@@ -269,7 +269,7 @@ TEST(Summary, EnergyGraphAndTheBattery)
                  {static_cast<uint>(now.toSecsSinceEpoch()), 81.6, 2}};
     s.setBattery(b, now);
     ASSERT_EQ(s.blocks().size(), 3);
-    EXPECT_EQ(figureOf(s, QStringLiteral("Remaining charge:")).value(QStringLiteral("value")).toString(), QStringLiteral("82 %"));
+    EXPECT_EQ(figureOf(s, QStringLiteral("Remaining charge:")).value(QStringLiteral("value")).toString(), QStringLiteral("82%"));
     EXPECT_EQ(figureOf(s, QStringLiteral("Time remaining:")).value(QStringLiteral("value")).toString(), QStringLiteral("2:05"));
     EXPECT_EQ(figureOf(s, QStringLiteral("Time on battery:")).value(QStringLiteral("value")).toString(), QStringLiteral("3:07"));
     g = graphOf(s, QStringLiteral("battery"));

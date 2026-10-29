@@ -118,7 +118,7 @@ TestCase {
     function test_summaryFiguresAndGraphs() {
         const t = make();
         const shown = texts(t.win.summary);
-        for (const text of ["System:", "5.0 %", "User:", "Idle:", "70.0 %", "Threads:", "1734", "Processes:", "412", "CPU Load"])
+        for (const text of ["System:", "5.0%", "User:", "Idle:", "70.0%", "Threads:", "1734", "Processes:", "412", "CPU Load"])
             verify(shown.indexOf(text) >= 0, text + " in the summary");
         compare(t.backend.summary.capacity, Tokens.activityHistorySamples);
         const graphs = findAll(t.win.summary, i => i.visible && i.Accessible && i.Accessible.role === Accessible.Graphic);

@@ -79,9 +79,9 @@ QtObject {
     readonly property QtObject summary: QtObject {
         property int capacity: 1
         property var blocks: [
-            {kind: "figures", rows: [{label: "System:", value: "5.0 %", swatch: "activityGraphSystem"},
-                                     {label: "User:", value: "25.0 %", swatch: "activityGraphUser"},
-                                     {label: "Idle:", value: "70.0 %", swatch: ""}]},
+            {kind: "figures", rows: [{label: "System:", value: "5.0%", swatch: "activityGraphSystem"},
+                                     {label: "User:", value: "25.0%", swatch: "activityGraphUser"},
+                                     {label: "Idle:", value: "70.0%", swatch: ""}]},
             {kind: "graph", key: "cpu", title: "CPU Load", style: "stacked", max: 1,
              series: [{values: [-1, 0.05, 0.1], color: "activityGraphSystem"}, {values: [-1, 0.25, 0.3], color: "activityGraphUser"}]},
             {kind: "figures", rows: [{label: "Threads:", value: "1734", swatch: ""}, {label: "Processes:", value: "412", swatch: ""}]}
