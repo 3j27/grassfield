@@ -51,27 +51,14 @@ FocusScope {
     property real captionExtra: 0
     readonly property real naturalWidth: root.model.length > 0 ? (root.model.length - 1) * root.naturalPitch + root.pictureWidth + 2 * root.ringPad : 0
 
-    function measureHeights(): void {
-        let tallest = 0;
-        let one = 0;
-        for (let i = 0; i < cells.count; i++) {
-            const item = cells.itemAt(i);
-            if (item) {
-                tallest = Math.max(tallest, item.captionHeight);
-                one = item.lineHeight;
-            }
-        }
-        root.captionExtra = Math.max(0, tallest - one);
-    }
+    // Each name reports the height it takes and one line's height; the extra is the tallest beyond one line.
+    property var nameHeights: ({})
 
-    function measureCaptions(): void {
-        let widest = 0;
-        for (let i = 0; i < measure.count; i++) {
-            const item = measure.itemAt(i);
-            if (item)
-                widest = Math.max(widest, item.implicitWidth);
-        }
-        root.widestCaption = widest;
+    function noteHeight(index: int, height: real, line: real): void {
+        const next = Object.assign({}, root.nameHeights);
+        next[index] = Math.max(0, height - line);
+        root.nameHeights = next;
+        root.captionExtra = Math.max(0, ...Object.values(next));
     }
 
     // Invisible copies of the names in the bold weight, to know how wide they get.
@@ -120,7 +107,6 @@ FocusScope {
     }
 
     Repeater {
-        id: cells
         model: root.model
 
         delegate: Item {
@@ -130,8 +116,8 @@ FocusScope {
             required property int index
             readonly property bool selected: cell.index === root.currentIndex
             readonly property real captionHeight: caption.height
-            readonly property real lineHeight: caption.font.pixelSize > 0 ? lineMetrics.height : 0
-            onCaptionHeightChanged: root.measureHeights()
+            onCaptionHeightChanged: root.noteHeight(cell.index, cell.captionHeight, lineMetrics.height)
+            Component.onCompleted: root.noteHeight(cell.index, cell.captionHeight, lineMetrics.height)
 
             FontMetrics {
                 id: lineMetrics
