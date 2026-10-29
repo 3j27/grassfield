@@ -168,17 +168,12 @@ QtObject {
         return glassAlphaOver(glassClass, t, under ?? known);
     }
 
-    // The same over a backdrop range the host knows ({lumMin, lumMax}), the appearance's own palette and both texts; null = the
-    // worst case (black to white).
+    // The same over a backdrop range the host knows ({lumMin, lumMax}; null = the worst case, black to white).
     function glassAlphaOver(glassClass: string, t: real, backdrop: var): real {
-        return glassAlphaFor(glassClass, t, backdrop, colors, false);
-    }
-
-    function glassAlphaFor(glassClass: string, t: real, backdrop: var, palette: var, primaryOnly: bool): real {
         const target = glassTargets[glassClass];
         if (target === undefined)
             return tintAlpha(t);
-        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, palette.materialTint, primaryOnly ? [palette.text] : [palette.text, palette.textSecondary], palette.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
+        return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
     }
 
     // Adaptive tone of a glass band over a backdrop range the host measured (ADR-0024 point 3, the menu bar: macOS 26's glass
@@ -190,11 +185,22 @@ QtObject {
     function glassBand(glassClass: string, t: real, backdrop: var, darkGlass: bool): var {
         const target = glassTargets[glassClass];
         if (t <= 0 || !backdrop || target === undefined)
-            return {dark: dark, alpha: glassAlphaFor(glassClass, t, backdrop, colors, false), colors: colors};
+            return {dark: dark, alpha: glassAlphaOver(glassClass, t, backdrop), colors: colors};
         const palette = darkGlass ? darkColors : lightColors;
         // The states the band can show (GlassTint.bandAlpha): at rest, under the open title's capsule at its real fill, dimmed.
         const alpha = GlassTint.bandAlpha(target, t, Tokens.materialDefaultTransparency, backdrop, palette.materialTint, palette.text, palette.hover, Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor, Tokens.menubarInactiveOpacity, 4.5, 3, Tokens.glassContrastMargin);
         return {dark: darkGlass, alpha: alpha, colors: palette};
+    }
+
+    // The foreground of the menu bar, {text, hover}: over the band the band's own palette (its tone), or the appearance's when
+    // the band has no strip to adapt to; without a band the bar sits on the wallpaper and follows the wallpaper's tone.
+    function barForeground(showBackground: bool, band: var, darkTone: bool): var {
+        if (!showBackground) {
+            const p = darkTone ? lightColors : darkColors;
+            return {text: p.barText, hover: p.hover};
+        }
+        const c = band ? band.colors : colors;
+        return {text: c.text, hover: c.hover};
     }
 
     // The menu bar's band for the strip under it, or null when there is none to judge it on: no range (the artwork, a colour, a

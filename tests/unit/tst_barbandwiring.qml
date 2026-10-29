@@ -25,12 +25,16 @@ TestCase {
         // The tone mapping and Reduce Transparency both live in the tested functions the bar must call.
         has(bar, "Appearance.barBand(bandRange, BarTone.bandDarkOf(win.screen.name))", "band");
         // The text, hover tint and tint of the band are the band's own, not the appearance's.
-        has(bar, "showBackground ? (band ? band.colors.text : Appearance.colors.text)", "band text");
-        has(bar, "showBackground ? (band ? band.colors.hover : Appearance.colors.hover)", "band hover");
+        has(bar, "Appearance.barForeground(showBackground, band, darkTone)", "foreground");
+        has(bar, "barText: foreground.text", "band text");
+        has(bar, "barTint: foreground.hover", "band hover");
+        // Every text and glyph of the bar takes win.barText (the logo, the app name, the menus, the status items, the clock):
+        // none is drawn in the appearance's own colour.
+        verify(bar.indexOf("Appearance.colors.text") < 0, "a bar item draws in the appearance's text colour");
+        verify((bar.match(/color: win\.barText/g) || []).length >= 10, "the bar's items use win.barText");
         has(bar, "tintColor: win.band ? win.band.colors.materialTint : Appearance.colors.materialTint", "band tint colour");
         has(bar, "tintAlphaOverride: win.band ? win.band.alpha : -1", "band alpha");
         has(bar, 'glassClass: "menu"', "glass class");
-        verify(bar.indexOf("barText: showBackground ? Appearance.colors.text") < 0, "the band text must not be the appearance's");
     }
 
     function test_materialTintColorDefaultsToTheAppearance() {

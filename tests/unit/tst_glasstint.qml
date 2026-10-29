@@ -176,6 +176,26 @@ TestCase {
         }
     }
 
+    // What the bar's logo, titles, status items and clock take (MenuBar's barText and barTint): the band's own text and hover over
+    // a band, the appearance's when the band has no strip, the wallpaper's tone without a background.
+    function test_barForegroundFollowsTheBand() {
+        for (const appearanceDark of [false, true]) {
+            Appearance.dark = appearanceDark;
+            const darkBand = Appearance.glassBand("menu", 0.49, strips.dark, true);
+            const lightBand = Appearance.glassBand("menu", 0.49, strips.light, false);
+            compare(Appearance.barForeground(true, darkBand, false).text, Tokens.colorDark.text);
+            compare(Appearance.barForeground(true, darkBand, false).hover, Tokens.colorDark.hover);
+            compare(Appearance.barForeground(true, lightBand, true).text, Tokens.colorLight.text);
+            compare(Appearance.barForeground(true, lightBand, true).hover, Tokens.colorLight.hover);
+            // No strip to adapt to: the appearance's own.
+            compare(Appearance.barForeground(true, null, true).text, Appearance.colors.text);
+            compare(Appearance.barForeground(true, null, false).hover, Appearance.colors.hover);
+            // No background: the wallpaper's tone ("dark" tone: black text).
+            compare(Appearance.barForeground(false, darkBand, true).text, Tokens.colorLight.barText);
+            compare(Appearance.barForeground(false, darkBand, false).text, Tokens.colorDark.barText);
+        }
+    }
+
     // A Material's tint colour defaults to the appearance's material tint (every other surface keeps it).
     function test_materialTintColorDefault() {
         for (const appearanceDark of [false, true]) {

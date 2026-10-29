@@ -283,9 +283,10 @@ Scope {
             readonly property var band: Appearance.barBand(bandRange, BarTone.bandDarkOf(win.screen.name))
             readonly property bool darkTone: BarTone.toneOf(win.screen.name) === "dark"
             readonly property var barPalette: darkTone ? Appearance.lightColors : Appearance.darkColors
-            readonly property color barText: showBackground ? (band ? band.colors.text : Appearance.colors.text) : barPalette.barText
+            readonly property var foreground: Appearance.barForeground(showBackground, band, darkTone)
+            readonly property color barText: foreground.text
             readonly property color barTextDisabled: Appearance.withAlpha(barText, Tokens.materialDisabledOpacity)
-            readonly property color barTint: showBackground ? (band ? band.colors.hover : Appearance.colors.hover) : barPalette.hover
+            readonly property color barTint: foreground.hover
             readonly property color barShadow: darkTone ? barPalette.materialHighlight : barPalette.shadow
             readonly property var battery: UPower.displayDevice
             // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
