@@ -118,6 +118,24 @@ void suspend(QQuickWindow *win, bool suspended)
     QCoreApplication::sendEvent(win, &e);
 }
 
+// Counts the events of one type a window receives.
+struct EventCounter : QObject {
+    EventCounter(QObject *target, QEvent::Type type, int &count)
+        : m_type(type)
+        , m_count(count)
+    {
+        target->installEventFilter(this);
+    }
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (event->type() == m_type)
+            ++m_count;
+        return false;
+    }
+    QEvent::Type m_type;
+    int &m_count;
+};
+
 struct Window {
     Fixture f;
     QTemporaryDir config, state;
@@ -264,6 +282,34 @@ TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)
     activateWindow(w.win, QString(), [&] { ++reopens; });
     EXPECT_EQ(reopens, 1);
     qunsetenv("XDG_ACTIVATION_TOKEN");
+
+    // A second launch keeps the window's size and its maximized state: no state is asked of the platform (on Wayland a
+    // maximize request toggles Hyprland's maximize; the integrator's check of f2ff9a0). The platform reports each request
+    // with a WindowStateChange event, even an unchanged one.
+    int stateRequests = 0;
+    EventCounter counter(w.win, QEvent::WindowStateChange, stateRequests);
+    for (const bool maximized : {false, true}) {
+        if (maximized) {
+            w.win->showMaximized();
+            ASSERT_TRUE(becomes([&] { return w.win->visibility(); }, QWindow::Maximized, 2000));
+        }
+        QTest::qWait(50);
+        stateRequests = 0;
+        const QSize size = w.win->size();
+        activateWindow(w.win, QString(), [&] { ++reopens; });
+        QTest::qWait(50);
+        EXPECT_EQ(stateRequests, 0) << (maximized ? "maximized" : "normal");
+        EXPECT_EQ(w.win->size(), size);
+        EXPECT_EQ(w.win->visibility(), maximized ? QWindow::Maximized : QWindow::Windowed);
+    }
+    EXPECT_EQ(reopens, 1); // on screen both times
+    // Minimized as Qt says it (offscreen keeps the state): off screen, so the Dock is asked, and the state goes.
+    w.win->showMinimized();
+    ASSERT_TRUE(becomes([&] { return w.win->visibility(); }, QWindow::Minimized, 2000));
+    activateWindow(w.win, QString(), [&] { ++reopens; });
+    EXPECT_EQ(reopens, 2);
+    ASSERT_TRUE(becomes([&] { return w.win->visibility() != QWindow::Minimized; }, true, 2000));
+    w.win->showNormal();
 
     // AM2: the size it closes at is the one it opens at.
     w.win->resize(700, 400);

@@ -44,16 +44,21 @@ private:
     ActivityApp *m_backend;
 };
 
-// AM1, AD34: a second launch's activation. Qt's next activation request takes the token (xdg-activation-v1); the window is
-// shown and raised. Off screen (minimized, or on another Desktop: the compositor suspends it, AD35), `reopen` asks the
-// shell's Dock to bring it back, which xdg-activation alone does not do for a window on special:minimized.
+// AM1, AD34: a second launch's activation. Qt's next activation request takes the token (xdg-activation-v1) and the window
+// is raised. Off screen (minimized, or on another Desktop: the compositor suspends it, AD35), `reopen` asks the shell's
+// Dock to bring it back, which xdg-activation alone does not do for a window on special:minimized. The window's states are
+// left alone: on Wayland Qt asks the compositor for whatever setWindowStates gives, and Hyprland toggles its maximize on
+// any maximize request (the integrator's check of f2ff9a0: a normal window came back maximized, a maximized one normal).
+// Only a Minimized state Qt still holds (a platform that keeps it; never on Wayland) is cleared.
 inline void activateWindow(QWindow *window, const QString &token, const std::function<void()> &reopen)
 {
     const bool offScreen = !window->isExposed() || window->visibility() == QWindow::Minimized;
     if (!token.isEmpty())
         qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
-    window->setWindowStates(window->windowStates() & ~Qt::WindowMinimized);
-    window->show();
+    if (window->windowStates() & Qt::WindowMinimized)
+        window->setWindowStates(window->windowStates() & ~Qt::WindowMinimized);
+    if (!window->isVisible())
+        window->show();
     window->raise();
     window->requestActivate();
     if (offScreen && reopen)
