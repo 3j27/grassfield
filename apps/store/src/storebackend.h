@@ -213,6 +213,11 @@ signals:
     void aurInfo(const QString &id);
     void buildScript(const QString &id, const QString &text, bool ok);
 
+protected:
+    // The snapshot in use from now on. Protected for the unit tests (tst_storebackend), which hand it states a load
+    // builds only from a signed catalog (its keys are tests/integration/store_catalog.sh's) or only for a moment.
+    void apply(std::shared_ptr<const Snapshot> snapshot);
+
 private:
     struct Job {
         bool fetchCatalog = false;
@@ -220,7 +225,6 @@ private:
         bool fetchAppData = false;
     };
     void run(Job job);
-    void apply(std::shared_ptr<const Snapshot> snapshot);
     void readAppearance();
     void readNetwork();
     bool catalogStale() const;
@@ -230,7 +234,8 @@ private:
     std::optional<view::WebAppEntry> otherWebApp(const QString &id) const;
     // Why `a` cannot be installed now, or "": dev (no fake program in a dev session), missing (Omarchy's commands or the
     // helper are not there), offline, icon (a web app's icon not cached yet), omarchyChanged (a setup: the installed
-    // Omarchy differs from the catalog's pins), source (its source cannot install yet).
+    // Omarchy differs from the catalog's pins), source (its source cannot install yet); for the AUR, aurOff, repository,
+    // aurProtected (a name of the deny list), listsMissing, aurUnchecked (the catalog does not pin its command).
     QString getBlock(const StoreApp &a) const;
     // "" when "Uninstall…" is offered for `a`, else why not (SR22): system, omarchy, grassfield, dependency, notApp,
     // notFromRepository, listsMissing, notInstalled, source, dev, missing, omarchyChanged.

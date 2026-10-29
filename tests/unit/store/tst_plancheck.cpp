@@ -337,6 +337,7 @@ case "$1" in
          gimp) echo gimp; exit 0 ;;
          pdf-viewer) echo zathura; exit 0 ;;
          locked) echo 'error: failed to init transaction (unable to lock database)' >&2; exit 1 ;;
+         example) echo 'error: target not found: example-app' >&2; exit 1 ;;
          *) echo "error: target not found: $n" >&2; exit 1 ;;
        esac ;;
   -Si) [ "$3" = gimp ] && { echo 'Name            : gimp'; exit 0; }
@@ -378,6 +379,7 @@ TEST(PlanCheck, AurPlans)
     };
     const SetupCheck setup{root, QStringLiteral("omarchy-pkg-aur-add"),
                            {pin(QStringLiteral("bin/omarchy-pkg-aur-add")), pin(QStringLiteral("bin/omarchy-pkg-missing"))}};
+    const DenyList deny{{QStringLiteral("btop")}, {QStringLiteral("glibc")}};
     const AurAnswer all = parseAurAnswer(storetest::readFixture(QStringLiteral("aur/info.json")), QStringLiteral("multiinfo"));
     QList<QStringList> asked;
     const auto info = [&all, &asked](const QStringList &names) {
@@ -398,7 +400,7 @@ TEST(PlanCheck, AurPlans)
 
     // example-app-bin: it and example-lib (an AUR dependency) built; gtk3 (and what it needs) from the repositories; cmake
     // and glibc are there.
-    InstallPlan p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false);
+    InstallPlan p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::None) << p.detail.toStdString();
     EXPECT_EQ(names(p.built), (QStringList{QStringLiteral("example-app-bin 2.4.1-1"), QStringLiteral("example-lib 1.3-2")}));
     EXPECT_EQ(p.built.at(0).repo, QStringLiteral("aur"));
@@ -413,7 +415,7 @@ TEST(PlanCheck, AurPlans)
     // The system older than the mirror (Software Update's answer): refused as any install, the AUR not asked.
     f.tools.behind = QStringLiteral("Software Update: 37 other updates");
     asked.clear();
-    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Outdated);
     EXPECT_EQ(p.detail, QStringLiteral("Software Update: 37 other updates"));
     EXPECT_TRUE(asked.isEmpty());
@@ -421,46 +423,65 @@ TEST(PlanCheck, AurPlans)
 
     // A repository has it, or a package that provides it (yay installs what pacman resolves): from there; pacman that does
     // not answer is no answer. The AUR does not know it, or one of its dependencies is on neither.
-    p = checkAurInstall(QStringLiteral("gimp"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("gimp"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Repository);
-    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("pdf-viewer"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Repository) << "a provider in the repositories";
-    p = checkAurInstall(QStringLiteral("locked"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("locked"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::Failed);
     EXPECT_TRUE(p.detail.contains(QLatin1String("unable to lock database"))) << p.detail.toStdString();
-    p = checkAurInstall(QStringLiteral("nope"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("nope"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::NotOnAur);
     EXPECT_EQ(p.detail, QStringLiteral("nope"));
-    p = checkAurInstall(QStringLiteral("example-tool-git"), setup, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-tool-git"), setup, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::NotOnAur) << "its checkdepends python-pytest is on neither";
     EXPECT_EQ(p.detail, QStringLiteral("python-pytest"));
+    // pacman's "target not found" for a longer name only (example-app for example) is no answer about this one.
+    p = checkAurInstall(QStringLiteral("example"), setup, info, deny, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Failed);
+
+    // Never a name of the deny list (the integrator's note on PR #36): the app's, refused before pacman or the AUR is asked;
+    // a dependency the AUR would build, refused at it.
+    asked.clear();
+    for (const QString &name : {QStringLiteral("omarchy-theme-example"), QStringLiteral("grassfield-shell-git"), QStringLiteral("yay-bin"),
+                                QStringLiteral("btop"), QStringLiteral("glibc"), QStringLiteral("linux-example"), QStringLiteral("example-firmware")}) {
+        p = checkAurInstall(name, setup, info, deny, f.tools, true, false);
+        EXPECT_EQ(p.refusal, Refusal::Protected) << name.toStdString();
+        EXPECT_EQ(p.protectedPackage, name);
+    }
+    EXPECT_TRUE(asked.isEmpty());
+    DenyList lib = deny;
+    lib.omarchy.insert(QStringLiteral("example-lib"));
+    p = checkAurInstall(QStringLiteral("example-app-bin"), setup, info, lib, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::Protected);
+    EXPECT_EQ(p.protectedPackage, QStringLiteral("example-lib")) << "a dependency the AUR would build";
 
     // The AUR does not answer; offline; the pins; the last update unfinished; an unread dependency marks the plan.
     const auto silent = [](const QStringList &) { return AurAnswer{false, {}, QStringLiteral("unavailable")}; };
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, silent, f.tools, true, false).refusal, Refusal::Failed);
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, false, false).refusal, Refusal::Offline);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, silent, deny, f.tools, true, false).refusal, Refusal::Failed);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, false, false).refusal, Refusal::Offline);
     SetupCheck changed = setup;
     changed.pins.first().second = QString(64, QLatin1Char('0'));
-    p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-app-bin"), changed, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
     EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-aur-add"));
     // The command's helper (omarchy-pkg-missing) not pinned: the catalog does not vouch for the command.
     SetupCheck helperless = setup;
     helperless.pins.removeLast();
-    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, f.tools, true, false);
+    p = checkAurInstall(QStringLiteral("example-app-bin"), helperless, info, deny, f.tools, true, false);
     EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
     EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-missing"));
     SetupCheck wrong = setup;
     wrong.recipe = QStringLiteral("omarchy-pkg-add");
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, f.tools, true, false).refusal, Refusal::OmarchyChanged);
-    EXPECT_EQ(checkAurInstall(QStringLiteral("-rf"), setup, info, f.tools, true, false).refusal, Refusal::Failed);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), wrong, info, deny, f.tools, true, false).refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("-rf"), setup, info, deny, f.tools, true, false).refusal, Refusal::Failed);
     const auto unread = [&info](const QStringList &n) {
         AurAnswer a = info(n);
         for (AurPackage &p : a.packages)
             p.dependenciesUnread = true;
         return a;
     };
-    EXPECT_TRUE(checkAurInstall(QStringLiteral("example-lib"), setup, unread, f.tools, true, false).incomplete);
+    EXPECT_TRUE(checkAurInstall(QStringLiteral("example-lib"), setup, unread, deny, f.tools, true, false).incomplete);
     storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
-    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, f.tools, true, false).refusal, Refusal::Unfinished);
+    EXPECT_EQ(checkAurInstall(QStringLiteral("example-app-bin"), setup, info, deny, f.tools, true, false).refusal, Refusal::Unfinished);
 }

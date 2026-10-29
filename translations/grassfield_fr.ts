@@ -7369,6 +7369,10 @@
         <translation>AUR</translation>
     </message>
     <message>
+        <source>“%1” can&apos;t be installed from the AUR</source>
+        <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
+    </message>
+    <message>
         <source>“%1” is in a repository</source>
         <translation>« %1 » est dans un dépôt</translation>
     </message>
@@ -7411,6 +7415,10 @@
     <message>
         <source>Other apps need it: %1.</source>
         <translation>D’autres apps en ont besoin&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>It would build %1 from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn&apos;t install it.</source>
+        <translation>Elle compilerait %1 depuis l’AUR, un nom qu’utilise le système, Omarchy ou Grassfield. Le Store ne l’installe pas.</translation>
     </message>
     <message>
         <source>Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.</source>
@@ -10495,6 +10503,14 @@
     <message>
         <source>Turn on the AUR in the Store&apos;s settings to install from it.</source>
         <translation>Activez l&apos;AUR dans les réglages du Store pour installer depuis celui-ci.</translation>
+    </message>
+    <message>
+        <source>The system, Omarchy or Grassfield uses this name, so the Store doesn&apos;t build it from the AUR.</source>
+        <translation>Le système, Omarchy ou Grassfield utilise ce nom&#xa0;: le Store ne le compile pas depuis l’AUR.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s package lists can&apos;t be read, so the Store installs nothing from the AUR.</source>
+        <translation>Les listes de paquets d’Omarchy ne peuvent pas être lues&#xa0;: le Store n’installe rien depuis l’AUR.</translation>
     </message>
     <message>
         <source>A repository has this package: the Store installs it from there, from its own page.</source>

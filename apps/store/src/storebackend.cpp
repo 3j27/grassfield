@@ -1038,6 +1038,11 @@ QString StoreBackend::getBlock(const StoreApp &a) const
             return QStringLiteral("aurOff");
         if (m_snapshot && std::any_of(m_snapshot->sync.cbegin(), m_snapshot->sync.cend(), [&a](const SyncPackage &p) { return p.name == a.package; }))
             return QStringLiteral("repository"); // yay would install the repository's: the Store does, from its page
+        // Never a name of the deny list (b.1): what the Store could not remove it does not build, and the AUR is anyone's.
+        if (m_snapshot && protection(a.package, m_snapshot->deny) != Protection::None)
+            return QStringLiteral("aurProtected");
+        if (m_snapshot && !m_snapshot->deny.omarchyRead())
+            return QStringLiteral("listsMissing");
         if (const QString block = aurBlock(kAurAdd); !block.isEmpty())
             return block;
         break;
@@ -1449,7 +1454,7 @@ void StoreBackend::plan(const QString &id, const QString &kind)
         QVariantMap out;
         if (install) {
             const auto info = [&aurService](const QStringList &names) { return grassfield::store::aurInfo(aurService, names); };
-            InstallPlan p = aur     ? checkAurInstall(packages.value(0), check, info, tools, online, own)
+            InstallPlan p = aur     ? checkAurInstall(packages.value(0), check, info, deny, tools, online, own)
                             : setup ? checkSetupInstall(packages, check, tools, online, own)
                                     : checkInstall(packages, tools, online, own);
             out = {{QStringLiteral("refusal"), refusalName(p.refusal)},
@@ -1460,7 +1465,10 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                    {QStringLiteral("installed"), view::sizeText(p.installedSize, locale)},
                    {QStringLiteral("unfinished"), p.unfinished},
                    {QStringLiteral("upgrades"), p.upgrades},
+                   {QStringLiteral("protected"), p.protectedPackage},
                    {QStringLiteral("detail"), p.detail}};
+            if (p.refusal == Refusal::Outdated) // the sheet says it in plain words: pacman's, the mirror's are for the log
+                qInfo("grassfield-store: %s: update the system first: %s", qPrintable(id), qPrintable(p.detail));
             if (*cancel)
                 return;
             QMetaObject::invokeMethod(this, [this, id, kind, out, p] {

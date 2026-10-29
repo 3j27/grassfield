@@ -121,6 +121,9 @@ TEST(Aur, SearchTermsAndUrls)
     const QUrl aur(QStringLiteral("https://aur.archlinux.org"));
     EXPECT_EQ(aurInfoUrl(aur, {QStringLiteral("yay"), QStringLiteral("example-lib")}).toString(),
               QStringLiteral("https://aur.archlinux.org/rpc/v5/info?arg[]=yay&arg[]=example-lib"));
+    // A '+' as sent (QNetworkAccessManager sends the fully encoded form): percent-encoded, never a space.
+    EXPECT_EQ(aurInfoUrl(aur, {QStringLiteral("libc++"), QStringLiteral("gtk+3")}).toEncoded(),
+              QByteArray("https://aur.archlinux.org/rpc/v5/info?arg[]=libc%2B%2B&arg[]=gtk%2B3"));
     EXPECT_EQ(aurSearchUrl(aur, QStringLiteral("web browser?x")).toString(QUrl::FullyEncoded),
               QStringLiteral("https://aur.archlinux.org/rpc/v5/search/web%20browser%3Fx?by=name"));
     EXPECT_EQ(aurPkgbuildUrl(aur, QStringLiteral("example-app-bin")).toString(),

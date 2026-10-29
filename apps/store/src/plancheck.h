@@ -40,7 +40,7 @@ enum class Refusal {
     Outdated,   // the plan upgrades an installed package, does not resolve, or its first file is gone from the mirror
     Offline,    // an install needs the network
     Dependency, // (uninstall) other installed packages need it
-    Protected,  // (uninstall) the plan takes a protected package along
+    Protected,  // (uninstall) the plan takes a protected package along; (AUR) it would build one
     OmarchyChanged, // (setup, AUR) the installed Omarchy lacks the recipe, or a pinned file differs from the catalog's pin
     Repository, // (AUR) a repository has the package: it is installed from there
     NotOnAur,   // (AUR) the AUR does not know the package, or a dependency is on neither the repositories nor the AUR
@@ -58,6 +58,7 @@ struct InstallPlan {
     qint64 installedSize = 0;
     QStringList unfinished; // Unfinished: pacman -Qu's lines
     QStringList upgrades;   // Outdated: the installed packages the plan would upgrade
+    QString protectedPackage; // Protected (AUR): the name of the deny list it would build
     QString detail;         // pacman's own message, for Details
 };
 
@@ -124,12 +125,13 @@ RemovePlan checkRemove(const QStringList &packages, const DenyList &deny, const 
 // omarchy-pkg-drop).
 InstallPlan checkSetupInstall(const QStringList &packages, const SetupCheck &setup, const PlanTools &tools, bool online, bool ownOperation);
 RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup, const DenyList &deny, const PlanTools &tools, bool ownOperation);
-// An AUR package (b.2, step 3b2): the AUR's command (setup.recipe, omarchy-pkg-aur-add) and the pins first, as a setup's;
-// then no repository may have the name (yay would take the repository's), the AUR must know it, and the dependencies
+// An AUR package (b.2, step 3b2): no name of the deny list, the app's or any it would build (Protected, the name in
+// `protectedPackage`); the AUR's command (setup.recipe, omarchy-pkg-aur-add) and the pins, as a setup's; then no
+// repository may have the name (yay would take the repository's), the AUR must know it, and the dependencies
 // (depends, makedepends, checkdepends) the system lacks (pacman -T) come from the repositories (pacman -S --print: what
 // pacman adds, never an upgrade) or from the AUR, whose own are read in turn: at most 25 packages to build, in 6 rounds.
 // `info` asks the AUR (aur.h aurInfo). The repositories' packages are in `packages`, the AUR's in `built`.
 InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
-                            const PlanTools &tools, bool online, bool ownOperation);
+                            const DenyList &deny, const PlanTools &tools, bool online, bool ownOperation);
 
 } // namespace grassfield::store

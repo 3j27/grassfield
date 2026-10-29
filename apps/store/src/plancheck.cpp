@@ -359,7 +359,7 @@ RemovePlan checkSetupRemove(const QStringList &packages, const SetupCheck &setup
 }
 
 InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const std::function<AurAnswer(const QStringList &)> &info,
-                            const PlanTools &tools, bool online, bool ownOperation)
+                            const DenyList &deny, const PlanTools &tools, bool online, bool ownOperation)
 {
     constexpr int kRounds = 6;
     constexpr int kBuiltMax = 25;
@@ -368,6 +368,17 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
         plan.refusal = Refusal::Failed;
         return plan;
     }
+    // Never a name of the deny list (b.1), the app's or a dependency's built from the AUR: what the Store could not
+    // remove it does not build, and the AUR is anyone's (an omarchy-* or grassfield-* there is not Omarchy's or ours).
+    const auto denied = [&plan, &deny](const QString &n) {
+        if (protection(n, deny) == Protection::None)
+            return false;
+        plan.refusal = Refusal::Protected;
+        plan.protectedPackage = n;
+        return true;
+    };
+    if (denied(name))
+        return plan;
     if (const QString differs = setupDifference(setup); !differs.isEmpty()) {
         plan.refusal = Refusal::OmarchyChanged;
         plan.detail = differs;
@@ -400,7 +411,7 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
         plan.detail = name;
         return plan;
     }
-    if (!sp.err.contains("target not found: " + name.toUtf8())) {
+    if (!sp.err.split('\n').contains("error: target not found: " + name.toUtf8())) { // pacman's whole line: not a longer name's
         plan.refusal = Refusal::Failed;
         plan.detail = firstLines(sp.err + sp.out);
         return plan;
@@ -423,6 +434,8 @@ InstallPlan checkAurInstall(const QString &name, const SetupCheck &setup, const 
                 plan.detail = n;
                 return plan;
             }
+            if (denied(it->name))
+                return plan;
             PlannedPackage built;
             built.name = it->name;
             built.version = it->version;

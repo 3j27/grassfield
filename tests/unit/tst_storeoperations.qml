@@ -145,8 +145,10 @@ TestCase {
         verify(t.backend.calls.indexOf("install:org.example.Paint") < 0);
 
         t.win.requestGet(t.backend.find("org.example.Paint"));
-        t.backend.planReady("org.example.Paint", "install", {refusal: "outdated", packages: [], upgrades: ["glib2"], detail: ""});
+        t.backend.planReady("org.example.Paint", "install", {refusal: "outdated", packages: [], upgrades: ["glib2"],
+                            detail: "https://mirror.example/extra/paint-1-1-x86_64.pkg.tar.zst: HTTP 404"});
         compare(s.title, "Update your system first");
+        verify(!find(s, i => i.text !== undefined && String(i.text).indexOf("HTTP 404") >= 0 && i.visible), "the mirror's answer stays in the log");
         // The system older than the mirror (the integrator's note on PR #36): plain words and one action, Software Update.
         compare(s.message, "Your system needs to be updated before you can install apps. Software Update brings it up to date; then get the app again.");
         compare(s.confirmText, "Update Now…");
@@ -278,6 +280,13 @@ TestCase {
             compare(s.confirmText, "OK");
             s.close();
         }
+        // A dependency the AUR would build under a name of the deny list (the integrator's note on PR #36).
+        t.win.requestGet(app);
+        t.backend.planReady("aur:example-app-bin", "install", {refusal: "protected", protected: "omarchy-example-lib", packages: [], detail: ""});
+        compare(s.title, "“example-app-bin” can't be installed from the AUR");
+        compare(s.message, "It would build omarchy-example-lib from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn't install it.");
+        compare(s.confirmText, "OK");
+        s.close();
         t.win.requestUninstall(Object.assign({}, app, {installed: true}));
         t.backend.planReady("aur:example-app-bin", "remove", {refusal: "", packages: [{name: "example-app-bin", version: "2.4.1-1", repo: "", size: ""}]});
         compare(s.message, "It is removed in a Terminal window, which asks for your password.\n\nThese packages will be removed. Your files and settings stay.");

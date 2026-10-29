@@ -73,6 +73,10 @@ function getBlockText(reason, kind) {
         return omarchyChangedText("aur");
     case "aurOff":
         return qsTr("Turn on the AUR in the Store's settings to install from it.");
+    case "aurProtected":
+        return qsTr("The system, Omarchy or Grassfield uses this name, so the Store doesn't build it from the AUR.");
+    case "listsMissing":
+        return qsTr("Omarchy's package lists can't be read, so the Store installs nothing from the AUR.");
     case "repository":
         return qsTr("A repository has this package: the Store installs it from there, from its own page.");
     case "source":

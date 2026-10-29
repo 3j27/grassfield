@@ -64,7 +64,7 @@ Sheet {
         case "dependency":
             return qsTr("“%1” can't be uninstalled").arg(root.appName);
         case "protected":
-            return qsTr("Uninstalling it would also remove part of the system");
+            return root.removing ? qsTr("Uninstalling it would also remove part of the system") : qsTr("“%1” can't be installed from the AUR").arg(root.appName);
         case "repository":
             return qsTr("“%1” is in a repository").arg(root.appName);
         }
@@ -113,6 +113,8 @@ Sheet {
         case "dependency":
             return qsTr("Other apps need it: %1.").arg((root.plan.dependents || []).join(", "));
         case "protected":
+            if (!root.removing)
+                return qsTr("It would build %1 from the AUR, a name the system, Omarchy or Grassfield uses. The Store doesn't install it.").arg(root.plan.protected || "");
             return qsTr("Uninstalling “%1” would also remove %2, which the system, Omarchy or Grassfield needs. It stays installed.").arg(root.appName).arg(root.plan.protected || "");
         case "omarchyChanged":
             return Store.omarchyChangedText(root.app.kind);
@@ -247,12 +249,13 @@ Sheet {
         }
     }
 
-    // pacman's own words, when it gave some (an unresolved plan, the last update's packages).
+    // pacman's own words, when it gave some (an unresolved plan, the last update's packages); never for a system older than
+    // its mirror, said in plain words with Update Now… (its detail goes to the log).
     Text {
         width: parent.width
         visible: text !== ""
         textFormat: Text.PlainText
-        text: root.plan && root.refusal !== "" && root.refusal !== "unavailable" && root.refusal !== "notOnAur" && root.refusal !== "repository"
+        text: root.plan && ["", "unavailable", "notOnAur", "repository", "outdated"].indexOf(root.refusal) < 0
               ? (root.refusal === "unfinished" ? (root.plan.unfinished || []).slice(0, 6).join("\n") : (root.plan.detail || "")) : ""
         wrapMode: Text.WrapAnywhere
         maximumLineCount: 6

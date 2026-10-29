@@ -641,6 +641,76 @@ esac)");
     EXPECT_EQ(backend.actions(QStringLiteral("aur:example-app-bin")).value(QStringLiteral("get")), QStringLiteral("source"));
 }
 
+namespace {
+
+// A backend whose snapshot is the test's own (StoreBackend::apply).
+class SnapshotBackend : public StoreBackend
+{
+public:
+    using StoreBackend::apply;
+};
+
+} // namespace
+
+// The AUR's Get and Uninstall… against a catalog, outside the container whose keys sign one (the integrator's note on PR
+// #36: mutants C13 to C15 lived here): a catalog AUR app while the AUR is off (the snapshot built while it was on, in use
+// for a moment); a catalog that does not pin the AUR's commands; a name of the deny list; Omarchy's lists unread; then
+// offered (offline aside). Nothing runs: Omarchy's terminal is a dev session's stand-in.
+TEST(StoreBackend, AurBlocksAgainstACatalog)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    s.env->set("GRASSFIELD_STORE_AUR_URL", QUrl::fromLocalFile(QStringLiteral(STORE_FIXTURES "/aur")).toString());
+    const QList<std::pair<QString, QString>> setupPins{{QStringLiteral("bin/omarchy-install-gaming-steam"), QString(64, QLatin1Char('a'))}};
+    const QList<std::pair<QString, QString>> aurPins{{QStringLiteral("bin/omarchy-pkg-aur-add"), QString(64, QLatin1Char('b'))},
+                                                    {QStringLiteral("bin/omarchy-pkg-drop"), QString(64, QLatin1Char('c'))},
+                                                    {QStringLiteral("bin/omarchy-pkg-missing"), QString(64, QLatin1Char('d'))}};
+    // aur-game not installed; aur-kept installed explicitly from the AUR; aur-omarchy-theme with Omarchy's prefix.
+    const auto snapshot = [](const QList<std::pair<QString, QString>> &pins, const QSet<QString> &lists) {
+        auto snap = std::make_shared<Snapshot>();
+        Catalog catalog;
+        catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+        snap->catalog = catalog;
+        snap->deny.omarchy = lists;
+        snap->explicitPackages = {QStringLiteral("example-kept")};
+        snap->foreign = {QStringLiteral("example-kept")};
+        for (const auto &[id, package] : {std::pair{QStringLiteral("aur-game"), QStringLiteral("example-game")},
+                                          std::pair{QStringLiteral("aur-kept"), QStringLiteral("example-kept")},
+                                          std::pair{QStringLiteral("aur-omarchy-theme"), QStringLiteral("omarchy-theme-example")}}) {
+            StoreApp a;
+            a.id = id;
+            a.source = CatalogSource::Kind::Aur;
+            a.package = package;
+            a.installed = package == QLatin1String("example-kept");
+            a.inCatalog = true;
+            snap->index.insert(id, int(snap->apps.size()));
+            snap->apps.append(a);
+        }
+        return std::shared_ptr<const Snapshot>(std::move(snap));
+    };
+    const auto get = [](const StoreBackend &b, const QString &id) { return b.actions(id).value(QStringLiteral("get")).toString(); };
+    const auto uninstall = [](const StoreBackend &b, const QString &id) { return b.actions(id).value(QStringLiteral("uninstall")).toString(); };
+    {
+        SnapshotBackend backend; // the AUR off
+        backend.apply(snapshot(setupPins + aurPins, {QStringLiteral("btop")}));
+        EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("aurOff"));
+        EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("aurOff"));
+    }
+    storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"aur":true}}})");
+    SnapshotBackend backend;
+    backend.apply(snapshot(setupPins, {QStringLiteral("btop")}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("aurUnchecked")) << "the catalog pins no AUR command";
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("aurUnchecked"));
+    backend.apply(snapshot(setupPins + aurPins, {QStringLiteral("btop")}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("offline")) << "offered once online";
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QString());
+    EXPECT_EQ(get(backend, QStringLiteral("aur-omarchy-theme")), QStringLiteral("aurProtected")) << "the AUR is anyone's: never Omarchy's name";
+    backend.apply(snapshot(setupPins + aurPins, {}));
+    EXPECT_EQ(get(backend, QStringLiteral("aur-game")), QStringLiteral("listsMissing"));
+    EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("listsMissing"));
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;
