@@ -246,6 +246,7 @@
  {"path": "tests/integration/store_catalog.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/integration/store_helper.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/integration/store_run.sh", "layer": "logic", "runner": "bare"},
+ {"path": "tests/integration/update_helper.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/unit/activity/tst_memory.cpp", "layer": "logic"},
  {"path": "tests/unit/activity/tst_netdiag.cpp", "layer": "logic"},
  {"path": "tests/unit/activity/tst_procparse.cpp", "layer": "logic"},

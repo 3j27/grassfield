@@ -289,6 +289,13 @@ bool Backend::omarchyUpdate() const
         && !QStandardPaths::findExecutable(QStringLiteral("omarchy-update")).isEmpty();
 }
 
+bool Backend::updateRunner() const
+{
+    return QFileInfo(QStringLiteral("/usr/lib/grassfield/grassfield-update-run")).isExecutable()
+        && QFileInfo(QStringLiteral("/usr/lib/grassfield/grassfield-update-helper")).isExecutable()
+        && QFileInfo(QStringLiteral("/usr/bin/pkexec")).isExecutable();
+}
+
 QString Backend::softwareUpdateFile() const
 {
     return grassfield::apps::runmode::stateDir() + QStringLiteral("/software-update.json");
@@ -667,6 +674,12 @@ QString envDir(const char *name)
 constexpr int kMaxDisplayLines = 16;
 constexpr qint64 kMaxTrialSeconds = 60;
 } // namespace
+
+QString Backend::softwareUpdateRunFile() const
+{
+    const QString run = envDir("XDG_RUNTIME_DIR");
+    return run.isEmpty() ? QString() : run + QStringLiteral("/grassfield/software-update-run.json");
+}
 
 QString Backend::displaysStateFile() const
 {
