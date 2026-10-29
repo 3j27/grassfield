@@ -5,15 +5,20 @@ import qs.platform
 import qs.services
 import "platform/WindowTiling.js" as WindowTiling
 
-// Tiling step 6a (docs/specs/tiling.md TL33, ADR-0036 D43, D51; integrator review of c7a6b6e, MAJORs 2 and 3, MINOR 9): a
-// Split View Desktop never keeps an empty half, and nothing of it acts behind the lock, on the REAL singletons
-// (scripts/dev/test.sh: offscreen, a dev session whose config is under the scratch dir; no compositor: the plugin's features
-// and its reply's Split View Desktops are set by hand, and nothing reaches a compositor). Checks:
+// Tiling step 6a (docs/specs/tiling.md TL33, ADR-0036 D43, D51; integrator reviews of c7a6b6e and e5bd9d2): a Split View
+// Desktop never keeps an empty half, and nothing of it acts behind the lock, on the REAL singletons (scripts/dev/test.sh:
+// offscreen, a dev session whose config is under the scratch dir; no compositor: the plugin's features and its reply's Split
+// View Desktops are set by hand, and nothing reaches a compositor). TilingLink is created and its startup fetch done before
+// any Split View Desktop is set (re-review of e5bd9d2: that fetch overwrote them). Checks:
 //  - one member waiting for its second window while its picker is on its way (a suggestion asked, its reply awaited): it is
-//    not filled;
-//  - the reply came without a picker shown (refused over another surface, timed out, dismissed): it is filled (sent once);
+//    not filled; nor while its picker is shown;
+//  - the reply came without a picker shown (refused over another surface, dismissed): it is filled (sent once);
+//  - the plugin refuses that fill because it still reports the lock (the unlock race): the fill is sent again;
+//  - the fetch of the picker's suggestion gives up at its deadline: the member is filled, and a reply that does not read
+//    keeps the Split View Desktops;
 //  - two members, or one that no longer waits: nothing is filled;
-//  - locked: nothing is filled, and fillAlone, tile, split and unsplit refuse; unlocked: the lonely member is sent again.
+//  - locked: nothing is filled, and fillAlone, tile, split and unsplit are refused by their own gates (SessionState names
+//    the refusal); unlocked: the lonely member is sent again.
 // Prints "split-view: PASS (n checks)" or the failures. It refuses to run outside scripts/dev/test.sh's scratch session
 // (a compositor reachable through HYPRLAND_INSTANCE_SIGNATURE would receive the fills).
 ShellRoot {
@@ -35,6 +40,13 @@ ShellRoot {
         return {workspace: 4, output: "GF-REF", home: 1, windows: windows, waiting: waiting};
     }
 
+    // `call` refused by the gate named `surface` (SessionState.refuses records the last surface it refused).
+    function refusedBy(surface: string, call: var): bool {
+        SessionState.lastRefused = "";
+        const result = call();
+        return result === false && SessionState.lastRefused === surface;
+    }
+
     function refusal(): string {
         const tmp = Quickshell.env("GRASSFIELD_TEST_TMP");
         const home = Quickshell.env("GRASSFIELD_CONFIG_HOME");
@@ -49,15 +61,16 @@ ShellRoot {
 
     function steps(): var {
         return [{
-                // The features make TilingLink fetch the reply (no hyprctl here: it ends empty or at its deadline, setting no
-                // Split View Desktop); the steps set theirs after it.
+                // TilingLink created now; the features make it fetch the reply (no compositor here: it ends unread or at its
+                // deadline, then one retry); the steps set their Split View Desktops after it.
                 name: "features",
                 act: () => {
+                    TilingLink.splits = [];
                     Capabilities.features = root.features;
                     Capabilities.pluginPresent = true;
                     SessionState.locked = false;
                 },
-                until: () => Date.now() - root.started > WindowTiling.suggestionWaitMs + 500
+                until: () => Date.now() - root.started > WindowTiling.suggestionWaitMs * 2 + 500
             }, {
                 name: "picker on its way",
                 act: () => {
@@ -71,9 +84,21 @@ ShellRoot {
                     root.check("picker on its way: nothing sent", TilingSuggest.filled["a1"] !== true);
                 }
             }, {
+                name: "picker shown",
+                act: () => {
+                    // The reply came and its picker shows (shown first: no moment without a pending picker).
+                    Popups.open("tilingSuggest", "", 0, 0, "zone", {suggestion: {gen: 1, address: "a1", layout: "left-right", output: "", zones: [{zone: 1, x: 0, y: 0, w: 900, h: 900}], windows: ["b2"]}});
+                    TilingLink.awaiting = false;
+                },
+                until: () => true,
+                check: () => {
+                    root.check("picker shown: it is shown", TilingSuggest.shown);
+                    root.check("picker shown: the member is not filled (" + JSON.stringify(TilingSuggest.lonely) + ")", TilingSuggest.lonely.length === 0);
+                }
+            }, {
                 name: "no picker",
                 act: () => {
-                    TilingLink.awaiting = false; // the reply came, no picker could show (TilingSuggest.show refused it)
+                    Popups.close(); // dismissed, or refused over another surface: no picker any more
                 },
                 until: () => true,
                 check: () => {
@@ -81,8 +106,34 @@ ShellRoot {
                     root.check("no picker: its fill was sent", TilingSuggest.filled["a1"] === true);
                 }
             }, {
+                name: "refused while the plugin is locked",
+                act: () => {
+                    Compositor.tilingNotice({v: "gfc/1", type: "tiling", gen: 9, reason: "locked"});
+                    root.check("refused: the fill is not taken as done", TilingSuggest.filled["a1"] !== true);
+                },
+                until: () => Date.now() - root.started > 900,
+                check: () => root.check("refused: the fill is sent again", TilingSuggest.filled["a1"] === true)
+            }, {
+                name: "deadline",
+                act: () => {
+                    TilingLink.splits = [root.split(["a1", "b2"], false)]; // the fill above is forgotten
+                    Compositor.suggestionAsked = {address: "c3", until: Date.now() + 60000};
+                    TilingLink.awaiting = true;
+                    TilingLink.splits = [root.split(["c3"], true)];
+                    root.check("deadline: before it, its picker is on its way", TilingSuggest.lonely.length === 0);
+                    TilingLink.giveUp();
+                },
+                until: () => Date.now() - root.started > WindowTiling.suggestionWaitMs / 3 + 1500,
+                check: () => {
+                    root.check("deadline: the member fills (" + JSON.stringify(TilingSuggest.lonely) + ")", JSON.stringify(TilingSuggest.lonely) === JSON.stringify(["c3"]));
+                    root.check("deadline: its fill was sent", TilingSuggest.filled["c3"] === true);
+                    root.check("deadline: the retry's unread reply kept the Split View Desktops (" + JSON.stringify(TilingLink.splits) + ")",
+                        TilingLink.splits.length === 1 && TilingLink.splits[0].windows[0] === "c3");
+                }
+            }, {
                 name: "two members",
                 act: () => {
+                    Compositor.suggestionAsked = null;
                     TilingLink.splits = [root.split(["a1", "b2"], false)];
                 },
                 until: () => true,
@@ -107,10 +158,10 @@ ShellRoot {
                 check: () => {
                     root.check("locked: nothing is filled", TilingSuggest.lonely.length === 0);
                     root.check("locked: nothing remembered as sent", TilingSuggest.filled["a1"] !== true);
-                    root.check("locked: fillAlone refuses", Compositor.fillAlone("a1") === false);
-                    root.check("locked: tile refuses", Compositor.tile(null, "fill") === false);
-                    root.check("locked: split refuses", Compositor.split(null, "left") === false);
-                    root.check("locked: unsplit refuses", Compositor.unsplit(null) === false);
+                    root.check("locked: fillAlone is refused by its gate", root.refusedBy("windows fill alone", () => Compositor.fillAlone("a1")));
+                    root.check("locked: tile is refused by its gate", root.refusedBy("windows tile", () => Compositor.tile("a1", "fill")));
+                    root.check("locked: split is refused by its gate", root.refusedBy("windows split", () => Compositor.split("a1", "left")));
+                    root.check("locked: unsplit is refused by its gate", root.refusedBy("windows unsplit", () => Compositor.unsplit("a1")));
                 }
             }, {
                 name: "unlocked",
@@ -150,7 +201,8 @@ ShellRoot {
         }
     }
 
-    // Each step acts, then its checks run at the next tick (the bindings have settled). A step that times out is a failure.
+    // Each step acts, then its checks run once its condition holds (the bindings have settled at the next tick). A step that
+    // times out is a failure.
     function tick(): void {
         if (root.step < 0) {
             const why = root.refusal();
@@ -165,7 +217,7 @@ ShellRoot {
         }
         const s = root.steps()[root.step];
         if (!s.until()) {
-            if (Date.now() - root.started < WindowTiling.suggestionWaitMs + 8000)
+            if (Date.now() - root.started < WindowTiling.suggestionWaitMs * 2 + 8000)
                 return;
             root.check(s.name + ": timed out", false);
         } else if (s.check) {

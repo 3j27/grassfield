@@ -32,6 +32,10 @@ QtObject {
         if (!locked)
             return false;
         console.info("grassfield: " + surface + " refused: the session is locked");
+        root.lastRefused = surface;
         return true;
     }
+
+    // The surface the last refusal named (tests/shell harnesses check that a call was refused by its own gate).
+    property string lastRefused: ""
 }

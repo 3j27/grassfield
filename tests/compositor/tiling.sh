@@ -1807,13 +1807,75 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     move_off "$addr" special:minimized
     check "split leave: the other window fills the Split View Desktop" fills_output tiling-foot3
     move_off "$addr" "$home"
-    # D49: the green button of a member leaves the Split View (macOS exits full screen), here its last one.
+    # D49: the green button of a member leaves the Split View (macOS exits full screen), here its last one, zoomed by a key
+    # first (re-review of e5bd9d2: it went home still zoomed).
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$addr3\" })" >>"$log" 2>&1
+    sleep 1
     green_click "$addr3"
     check "split green: the member's zoom light: the Desktop it came from shown" test "$(shown_desktop)" = "$home"
     check "split green: the window is back on it" test "$(desktop_of "$addr3")" = "$home"
     check "split green: it was not zoomed" test "$(nestctl clients -j | jq -r --arg a "$addr3" '.[] | select(.address == $a) | .fullscreen')" = 0
     check "split leave: the Split View Desktop ended" split_gone "$next2" "$home"
     tile_ipc "$addr" previous
+
+    # D51, D55 (re-review of e5bd9d2: MAJOR A and the glue mutants G4, G5): nothing of a Split View changes behind the lock,
+    # and it settles at the unlock. An xdgact window is the first member here (it is closed while locked).
+    addr_box() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"'; }
+    fills_addr() { # address: the whole output (with the plugin's titlebar band above the surface, or none: client chrome)
+      local x y w h
+      read -r x y w h < <(addr_box "$1")
+      say "  $1 at ${x:-?},${y:-?} ${w:-?}x${h:-?} (output $mx,$my ${mw}x$mh, band $tb or none)"
+      [[ -n ${h:-} ]] && near "$x" "$mx" 1 && near "$w" "$mw" 1 && { { near $((y - tb)) "$my" 1 && near $((h + tb)) "$mh" 1; } || { near "$y" "$my" 1 && near "$h" "$mh" 1; }; }
+    }
+    open_xdg gf-split-lock
+    if [[ -n $xdg_addr ]]; then
+      next3=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$xdg_addr" left
+      check "split lock: the xdgact window makes Split View Desktop $next3" test "$(desktop_of "$xdg_addr")" = "$next3"
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr2\"],\"zone\":1,\"with\":\"$xdg_addr\"}"
+      check "split lock: the second window picked" split_members "$next3" "$xdg_addr" "$addr2"
+      # D49 with two members: the green button sends that window back, the other fills.
+      green_click "$addr2"
+      check "split green with two members: the window is back on its Desktop" test "$(desktop_of "$addr2")" = "$home"
+      check "split green with two members: the other fills alone" fills_addr "$xdg_addr"
+      nestctl dispatch "hl.dsp.focus({ workspace = \"$next3\" })" >>"$log" 2>&1
+      sleep 0.8
+      # D55: its last member closed while locked: the Desktop stays shown and listed until the unlock (G5), then ends and the
+      # output goes back home (the unlock listener, G4).
+      if lock_session; then
+        kill "$xdg_pid" 2>/dev/null
+        sleep 1.5
+        check "split locked close: no Desktop switch behind the lock" test "$(shown_desktop)" = "$next3"
+        check "split locked close: still listed while locked" split_listed "$next3" "$home"
+      else
+        check "split locked close: the foreign locker holds the session lock (${locked:-no answer})" false
+      fi
+      check "split locked close: released, Hyprland reports the session unlocked" unlock_session
+      sleep 1.5
+      check "split locked close: at the unlock, the Desktop it came from shown" test "$(shown_desktop)" = "$home"
+      check "split locked close: at the unlock, it ended" split_gone "$next3" "$home"
+      # MAJOR A: lock with a Split View still waiting for its second window: the lock ends its picker; nothing moves while
+      # locked; at the unlock the plugin fills the member itself.
+      tile_ipc "$addr2" previous
+      next4=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr3" left
+      waiting_now() { tiling_state | jq -e --argjson w "$next4" 'any(.splits[]; .workspace == $w and .waiting == true)' >/dev/null; }
+      check "split locked picker: waiting for its second window" waiting_now
+      if lock_session; then
+        sleep 1
+        check "split locked picker: nothing moves behind the lock" half_of tiling-foot3 left
+      else
+        check "split locked picker: the foreign locker holds the session lock (${locked:-no answer})" false
+      fi
+      check "split locked picker: released, Hyprland reports the session unlocked" unlock_session
+      sleep 1.5
+      check "split locked picker: at the unlock, the member fills its Desktop" fills_output tiling-foot3
+      unsplit_ipc "$addr3"
+      check "split locked picker: Exit Full Screen ends it" split_gone "$next4" "$home"
+      tile_ipc "$addr3" previous
+    else
+      check "split lock: the xdgact window opened" false
+    fi
   else
     say "SKIP: step 6a cases (the plugin does not advertise tiling-split)"
   fi

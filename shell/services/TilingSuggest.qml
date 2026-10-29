@@ -70,7 +70,9 @@ Singleton {
     readonly property var lonely: SessionState.locked ? [] : WindowTiling.lonelyMembers(TilingLink.splits, root.pendingAddress)
     property var filled: ({})
 
-    onLonelyChanged: {
+    onLonelyChanged: root.fillLonely()
+
+    function fillLonely(): void {
         const next = {};
         for (const address of root.lonely) {
             next[address] = true;
@@ -78,6 +80,27 @@ Singleton {
                 Compositor.fillAlone(address);
         }
         root.filled = next;
+    }
+
+    // A fill the plugin refused because it still reported the lock (the shell's own lock state goes first at the unlock;
+    // re-review of e5bd9d2, MAJOR A) is not done: sent again shortly. The plugin also fills a lonely member itself at the
+    // unlock; this covers a refusal the plugin's own state did not.
+    Connections {
+        target: Compositor
+
+        function onTilingNotice(notice: var): void {
+            if (notice.reason !== "locked" || Object.keys(root.filled).length === 0)
+                return;
+            root.filled = ({});
+            resend.restart();
+        }
+    }
+
+    Timer {
+        id: resend
+
+        interval: 500
+        onTriggered: root.fillLonely()
     }
 
     Connections {

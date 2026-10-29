@@ -29,6 +29,9 @@ Singleton {
     property bool awaiting: false
     // A fetch was asked while the previous process was still running: start it when that one ends.
     property bool startPending: false
+    // A fetch gave up at its deadline: one more is made shortly (the tile groups and the Split View Desktops would otherwise
+    // wait for the next notice; re-review of e5bd9d2: a Split View learnt only through a timed-out fetch never filled).
+    property bool retried: false
 
     // The suggestion ends (Esc, a click outside, the lock): nothing more is taken for that arrangement.
     function dismiss(): void {
@@ -108,8 +111,13 @@ Singleton {
                 fetchDeadline.stop();
                 if (Compositor.canGroups)
                     root.groups = WindowTiling.parseGroups(text);
-                if (Compositor.canSplit)
-                    root.splits = WindowTiling.parseSplits(text) || [];
+                // A reply that does not read (a fetch killed at its deadline, hyprctl missing) keeps the last Split View
+                // Desktops; a reply read lets a later deadline retry again.
+                const splits = WindowTiling.parseSplits(text);
+                if (Compositor.canSplit && splits !== null)
+                    root.splits = splits;
+                if (splits !== null)
+                    root.retried = false;
                 if (root.wantedGen < 0)
                     return; // no suggestion wanted, or it ended meanwhile
                 const sg = WindowTiling.parseSuggestion(text);
@@ -127,17 +135,31 @@ Singleton {
     }
 
     // A reply that does not come in this time: nothing is shown (a stale suggestion would offer zones that changed); the
-    // groups stay as last read (the plugin checks them again at each request).
+    // groups and the Split View Desktops stay as last read (the plugin checks them again at each request), and one more fetch
+    // reads them again shortly. Called by the deadline (and by tests/shell/split_view).
+    function giveUp(): void {
+        root.startPending = false;
+        stateFetch.running = false;
+        root.wantedGen = -1;
+        root.awaiting = false; // a Split View's picker is not on its way any more: its member fills (TilingSuggest)
+        root.suggestion = null;
+        if (!root.retried && (Compositor.canGroups || Compositor.canSplit)) {
+            root.retried = true;
+            retry.restart();
+        }
+    }
+
     Timer {
         id: fetchDeadline
 
         interval: WindowTiling.suggestionWaitMs
-        onTriggered: {
-            root.startPending = false;
-            stateFetch.running = false;
-            root.wantedGen = -1;
-            root.awaiting = false;
-            root.suggestion = null;
-        }
+        onTriggered: root.giveUp()
+    }
+
+    Timer {
+        id: retry
+
+        interval: WindowTiling.suggestionWaitMs / 3
+        onTriggered: root.fetch()
     }
 }
