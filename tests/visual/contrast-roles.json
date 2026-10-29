@@ -3,7 +3,7 @@
   "Text roles of the shell for the exact token calculation of gate A2 (tests/visual/test_contrast_tokens.py).",
   "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
   "text alpha (numbers or token paths such as lock.focusRingOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
-  "flat wallpaper colour, with and without a fill overlay), accent (solid accent), selection (solid selection: the light accent in both appearances), rename-field",
+  "flat wallpaper colour, with and without a fill overlay), window (an opaque app window: windowBackground and sidebarFill, bare and under a rimmed capsule's fill), accent (solid accent), selection (solid selection: the light accent in both appearances), rename-field",
   "(colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), bar-light-tone and bar-dark-tone (the adaptive menu bar: the wallpaper itself, for the wallpaper colours the tone can be chosen for, see test_contrast_tokens.py), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow), lock (lock screen: dark shadow-colour scrim at lock.dimOpacity over the blurred wallpaper, the same in both appearances and at",
   "every transparency), lock-field (lock + the dark password field fill at lock.fieldFillOpacity), lock-avatar (lock + the light avatar disc at",
@@ -26,8 +26,7 @@
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "primary", "count": 6},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "backdrop", "count": 2},
    {"file": "shell/security/polkit/AuthAgent.qml", "class": "backdrop", "count": 1},
-   {"file": "shell/security/polkit/AuthAgent.qml", "class": "primary", "count": 1},
-   {"file": "ui/Grassfield/Ui/RimmedCapsule.qml", "class": "alpha", "count": 1}
+   {"file": "shell/security/polkit/AuthAgent.qml", "class": "primary", "count": 1}
   ]},
   {"id": "secondary on material", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text", "sites": [
         {"file": "ui/Grassfield/Ui/Appearance.qml", "class": "secondary", "count": 1},
@@ -44,7 +43,7 @@
    {"file": "shell/overlay/controlcenter/Caption.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/RadioRow.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/ListRow.qml", "class": "secondary", "count": 1},
-   {"file": "shell/search/SearchPanel.qml", "class": "secondary", "count": 8},
+   {"file": "shell/search/SearchPanel.qml", "class": "secondary", "count": 7},
    {"file": "shell/security/PasswordField.qml", "class": "secondary", "count": 1},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "secondary", "count": 4},
    {"file": "shell/security/polkit/AuthAgent.qml", "class": "secondary", "count": 1},
@@ -147,8 +146,6 @@
     {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 1},
     {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "alpha", "count": 1},
     {"file": "shell/security/PasswordField.qml", "class": "opacity-dynamic", "count": 2},
-    {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "alpha", "count": 1},
-    {"file": "shell/overlay/TilingPopover.qml", "class": "alpha", "count": 3},
     {"file": "ui/Grassfield/Ui/Button.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "ui/Grassfield/Ui/CheckBox.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "ui/Grassfield/Ui/ComboBox.qml", "class": "opacity-dynamic", "count": 1},
@@ -157,18 +154,28 @@
     {"file": "ui/Grassfield/Ui/SpinBox.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "ui/Grassfield/Ui/TextField.qml", "class": "opacity-dynamic", "count": 1}
   ]},
+  {"id": "disabled text in the text colour", "fg": "colors.text", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
+   "exempt": "disabled or inactive component: exempt from WCAG 1.4.3 (a menu row, the tiling popover's disabled layouts and rows)",
+   "sites": [
+    {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "alpha", "count": 1},
+    {"file": "shell/overlay/TilingPopover.qml", "class": "alpha", "count": 3}
+  ]},
   {"id": "inline pop-up disc (text colour at the disc opacity)", "fg": "colors.text", "opacity": ["settings.popupIndicatorOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the background of the pop-up's two-chevron glyph, which is drawn in the full text colour; the control is named by its value text (docs/specs/settings.md, macOS 27 pop-up in a row)", "sites": [{"file": "ui/Grassfield/Ui/ComboBox.qml", "class": "alpha", "count": 1}]},
   {"id": "stepped slider stops (text colour at the stop opacity)", "fg": "colors.text", "opacity": ["control.sliderStopOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration under a stepped slider's track, as macOS 27 draws it (183 on 247): the knob's position and the slider's accessible value give the stop; its contrast is listed, not asserted", "sites": [{"file": "ui/Grassfield/Ui/Slider.qml", "class": "alpha", "count": 1}]},
   {"id": "segmented control hairline (text colour at the divider opacity)", "fg": "colors.text", "opacity": ["control.segmentDividerOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration between two unselected tabs, as macOS 27 draws it (181 on 236): each tab's label and the control's accessible value tell them apart; its contrast is listed, not asserted", "sites": [{"file": "ui/Grassfield/Ui/SegmentedControl.qml", "class": "alpha", "count": 1}]},
   {"id": "scroll bar thumb (text colour at the thumb opacity)", "fg": "colors.text", "opacity": ["control.scrollbarThumbOpacity"], "backdrop": "material", "kind": "icon", "exempt": "overlay scroll bar thumb: a redundant, transient position indicator (the view also scrolls by wheel, keys and touch); its contrast is listed, not asserted", "sites": [
     {"file": "ui/Grassfield/Ui/ScrollBar.qml", "class": "alpha", "count": 1}
   ]},
-  {"id": "neutral highlight of the tiling popover's rows and suggestions (text colour at the hover opacity)", "fg": "colors.text", "opacity": ["material.hoverOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the keyboard-current or hovered row or window of the tiling popover and its suggestions, a neutral fill where the menus use the accent (ADR-0039 G6 and step 8); the text on it is covered by 'text on material', whose backdrop already holds the stronger fill overlay (material.fillOpacity); the highlight's own contrast is listed, not asserted, and tracked in docs/specs/tiling.md Known limitations", "sites": [
+  {"id": "neutral highlight of the tiling popover's layout glyphs, rows and suggestions (text colour at the hover opacity)", "fg": "colors.text", "opacity": ["material.hoverOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the keyboard-current or hovered layout glyph or row of the tiling popover and window of its suggestions, a neutral fill where the menus use the accent (ADR-0039 G6, closed by step 12); the text on it is covered by 'text on material', whose backdrop already holds the stronger fill overlay (material.fillOpacity); the highlight's own contrast is listed, not asserted, and tracked in docs/specs/tiling.md Known limitations", "sites": [
     {"file": "shell/overlay/TilingPopover.qml", "class": "alpha", "count": 2},
     {"file": "shell/overlay/TilingSuggestions.qml", "class": "alpha", "count": 1}
   ]},
   {"id": "clipboard page border in Search (text colour at the fill opacity)", "fg": "colors.text", "opacity": ["material.fillOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration: the hairline round the clipboard preview's page in Search; the page's own text carries the content and has its role; its contrast is listed, not asserted", "sites": [
     {"file": "shell/search/SearchPanel.qml", "class": "alpha", "count": 1}
+  ]},
+  {"id": "secondary text on an app window, its sidebar and their rimmed capsules", "fg": "colors.textSecondary", "backdrop": "window", "kind": "text", "sites": [
+    {"file": "ui/Grassfield/Ui/RimmedCapsule.qml", "class": "alpha", "count": 1},
+    {"file": "shell/search/SearchPanel.qml", "class": "secondary", "count": 1}
   ]}
  ]
 }
