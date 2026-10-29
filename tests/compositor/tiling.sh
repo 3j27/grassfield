@@ -1616,5 +1616,12 @@ fi
 
 c1_cases
 
+# Every SKIP of the run again at the end, so a case that did not run (the X11 menu without an X display, Chromium not
+# installed...) is not lost in the log (integrator follow-up of PR #42).
+mapfile -t skips < <(grep -o 'SKIP: .*' "$log")
+if ((${#skips[@]})); then
+  say "tiling: ${#skips[@]} skipped, NOT VERIFIED in this run:"
+  for line in "${skips[@]}"; do say "  ${line#SKIP: }"; done
+fi
 check "Hyprland alive" alive
 exit $fail

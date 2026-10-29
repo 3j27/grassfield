@@ -100,7 +100,7 @@ namespace gf::tiler {
             uint32_t                                    steps     = 0; // applications that changed a frame
             uint32_t                                    held      = 0; // motions that waited for the next refresh
             std::vector<uint64_t>                       left;          // windows that left it (gate C1): no longer set, still bounds
-            std::vector<uint64_t>                       moved;         // windows set at least once (the frame probe's mark at the end)
+            std::vector<uint64_t>                       moved;         // windows set at another size than at the press (the probe's mark)
             uint64_t                                    workUs    = 0; // the plugin's own time in the drag's motions and frames
             uint64_t                                    maxWorkUs = 0; // the longest of them (one motion or one refresh's frames)
         };
@@ -1171,7 +1171,9 @@ namespace gf::tiler {
                 }
                 g_layoutManager->setTargetGeom(toCBox(tiling::surfaceOf(f.second, e->limits.band)), t);
                 t->warpPositionSize();
-                if (std::ranges::find(d.moved, id) == d.moved.end())
+                // Followed: set at a size other than its size at the press (integrator follow-up of PR #42: a frame set at the
+                // same size resized nothing).
+                if ((f.second.w != e->frame.w || f.second.h != e->frame.h) && std::ranges::find(d.moved, id) == d.moved.end())
                     d.moved.push_back(id);
             }
             for (const uint64_t id : gone) {
@@ -1231,7 +1233,8 @@ namespace gf::tiler {
             notify(tiling::Reason::Resized);
             edgeCursor(std::nullopt);
             // The drag's own count for P3 (integrator review of 0c4c8f2: the windows it resized, not a number the harness
-            // assumes): "edge-drag:F/E", F of the edge's E windows followed it (set at least once and never left it).
+            // assumes): "edge-drag:F/E", F of the edge's E windows followed it (set at another size than at the press, and never
+            // left it).
             const auto followed = std::ranges::count_if(d.windows, [&d](const tiling::EdgeWindow& e) {
                 return std::ranges::find(d.moved, e.id) != d.moved.end() && std::ranges::find(d.left, e.id) == d.left.end();
             });
