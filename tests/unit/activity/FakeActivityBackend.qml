@@ -96,11 +96,12 @@ QtObject {
     ]
 
     function row(name: string, cpu: string, pid: string): var {
-        return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"]};
+        return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"],
+                depth: 0, expandable: false, expanded: true, group: false};
     }
 
-    property var table: {
-        const rows = [backend.row("firefox", "12.3", "1234"), backend.row("Hyprland", "4.0", "812"), backend.row("foot", "0.1", "2001")];
+    // A table of `rows` with the table's methods, the calls they get recorded in `clicks`.
+    function makeTable(rows: var): var {
         rows.selectedCount = 0;
         rows.currentRow = -1;
         rows.clicks = [];
@@ -120,6 +121,14 @@ QtObject {
         rows.clearSelection = () => {
             rows.selectedCount = 0;
         };
+        rows.setExpanded = (r, expanded) => {
+            rows.clicks.push("expanded:" + r + ":" + expanded);
+        };
+        rows.toggleExpanded = r => {
+            rows.clicks.push("toggle:" + r);
+        };
         return rows;
     }
+    property var table: backend.makeTable([backend.row("firefox", "12.3", "1234"), backend.row("Hyprland", "4.0", "812"),
+                                           backend.row("foot", "0.1", "2001")])
 }

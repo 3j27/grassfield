@@ -275,6 +275,40 @@ TEST(ActivityWindow, TheSummaryShowsTheSystemFigures)
     EXPECT_TRUE(textsUnder(summary).contains(QStringLiteral("Memory Pressure")));
 }
 
+// AM13: All Processes, Hierarchically with the real table: a child one level in, its parent's triangle closes it.
+TEST(ActivityWindow, HierarchicallyIndentsAndCollapses)
+{
+    Window w;
+    ASSERT_NE(w.win, nullptr);
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(w.win));
+    ASSERT_TRUE(w.backend->ready() || w.sampled());
+    w.f.write("proc/103/stat", Fixture::statLine(103, "delta", 'S', 100, 0, 50, 0, 1, 2));
+    w.f.write("proc/103/status", Fixture::statusText("delta", kMe, 1000, 0));
+    w.f.write("proc/103/cmdline", nul({"delta"}));
+    w.f.write("proc/103/cgroup", "0::/\n");
+    w.backend->setView(QStringLiteral("tree"));
+    w.backend->setInterval(1);
+    ASSERT_TRUE(becomes([&] { return rows(w.win); }, 4, 4000));
+    ProcessTable &t = w.backend->processTable();
+    int alpha = -1;
+    for (int i = 0; i < t.count(); ++i) {
+        if (t.data(t.index(i), ProcessTable::NameRole).toString() == QLatin1String("alpha"))
+            alpha = i;
+    }
+    ASSERT_GE(alpha, 0);
+    EXPECT_TRUE(t.data(t.index(alpha), ProcessTable::ExpandableRole).toBool());
+    EXPECT_EQ(t.data(t.index(alpha + 1), ProcessTable::NameRole).toString(), "delta");
+    EXPECT_EQ(t.data(t.index(alpha + 1), ProcessTable::DepthRole).toInt(), 1);
+    // The triangle of alpha's row, in the view: a click there closes it.
+    QQuickItem *list = named(w.win, "processRows");
+    const qreal rowHeight = list->property("contentHeight").toReal() / t.count();
+    settledClick(w.win, [&] {
+        return list->mapToScene(QPointF(10, (alpha + 0.5) * rowHeight - list->property("contentY").toReal())).toPoint();
+    });
+    ASSERT_TRUE(becomes([&] { return rows(w.win); }, 3, 2000));
+    EXPECT_FALSE(t.data(t.index(alpha), ProcessTable::ExpandedRole).toBool());
+}
+
 TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)
 {
     Window w;

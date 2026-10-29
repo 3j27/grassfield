@@ -3378,6 +3378,8 @@ QtObject {
     readonly property int activityGraphWidth: 200
     // estimate: a column of the summary's figures at most, a label and its value such as "Compressed: 1.23 GB" with room between (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityFigureWidth: 210
+    // estimate: one level of All Processes, Hierarchically and of a GPU's group, the disclosure triangle and its gap, as an outline list (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityTreeIndent: 16
     // own value: the legend square beside a figure that a graph draws, in the graph's colour (AM7: the figures stay text at 4.5:1, the colour is the square's) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activitySwatchSize: 8
     // own value: the samples a graph shows, two minutes at Very Often and ten at Normally (AM29) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]

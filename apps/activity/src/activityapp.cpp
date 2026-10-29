@@ -178,10 +178,13 @@ void ActivityApp::setView(const QString &key)
     const std::optional<View> view = viewFromKey(key);
     if (!view || (*view == m_state.view && *view != View::Selected))
         return;
+    const unsigned readsBefore = readsForView(m_state.view);
     m_state.view = *view;
     m_table.setView(*view);
     emit viewChanged();
     scheduleSave();
+    if (readsForView(*view) != readsBefore)
+        requestSample(); // the GPU views read the GPU clients (AM49): a sample now fills them
 }
 
 QVariantList ActivityApp::views() const
@@ -377,7 +380,7 @@ void ActivityApp::requestSample()
         m_inhibitors.refresh(); // AM38: asked at each sample while the Energy tab is shown
         m_battery.refresh();    // AM39: the battery's figures and graph, the same way
     }
-    emit sampleRequested(readsForColumns(m_state.tab, tabState().columns), m_state.interval, m_forget);
+    emit sampleRequested(readsForColumns(m_state.tab, tabState().columns) | readsForView(m_state.view), m_state.interval, m_forget);
     m_forget = false;
 }
 
@@ -393,6 +396,20 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
         emit columnsChanged();
     }
     m_summary.addSample(*snapshot);
+    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU.
+    bool named = false;
+    for (const GpuDevice &gpu : snapshot->gpus) {
+        const QString pdev = QString::fromStdString(gpu.pdev);
+        const QString name = !gpu.model.empty() ? QString::fromStdString(gpu.model)
+                             : gpu.card >= 0 ? QCoreApplication::translate("ActivityApp", "GPU %1").arg(gpu.card + 1)
+                                             : pdev;
+        if (m_gpuNames.value(pdev) != name) {
+            m_gpuNames.insert(pdev, name);
+            named = true;
+        }
+    }
+    if (named)
+        m_table.setGpuNames(m_gpuNames);
     m_table.setRows(tableRows(*snapshot));
     m_ready = true;
     emit sampled();

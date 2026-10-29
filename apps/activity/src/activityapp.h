@@ -162,6 +162,7 @@ private:
     DesktopApps m_apps;
     InhibitorWatch m_inhibitors;
     QHash<uint32_t, QString> m_users;
+    QHash<QString, QString> m_gpuNames; // AM47: every GPU seen since the app started, by drm-pdev
     QFileSystemWatcher m_watcher;
     bool m_autoAppearance = false, m_macDevice = false;
     bool m_dark = true, m_reduceMotion = false, m_increaseContrast = false, m_canMinimize = true;
