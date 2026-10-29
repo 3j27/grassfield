@@ -5,10 +5,14 @@
 # samples of each tab back to back on the sampler's thread clock, runs A10 again, and compares each tab's median with its
 # limit. The fixture is stopped at the end, whatever happens.
 #
-#   tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only]
+#   tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--changing P] [--report-only]
 #     defaults: 400 processes of 4 threads and 9 extra descriptors each, 100 TCP connections, 101 samples (A10's fixture;
 #     the other owners' processes are whatever this machine runs). --report-only prints the numbers and exits 0. --model,
 #     which used to add A10's run, is accepted and changes nothing: A10 always runs now.
+#     --changing P (default 10; 0 skips it): then Disk is measured again on the same fixture where P % of the processes
+#     change their stat and io lines between two samples (the bench pokes them outside the measured time), against A10's
+#     one pass on that fixture, at the same 1.15 margin: an idle fixture favours the sampler's unchanged-line cache
+#     (review of PR #53).
 #   Exit 0 every tab within its limit (or SKIP without gcc and g++), 1 a tab over, 2 usage or a refused run (also a run
 #   started at a load average of 2 or more: its numbers print and do not count).
 #
@@ -27,7 +31,7 @@ set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd "$root"
 
-processes=400 threads=4 fds=9 tcp=100 samples=101 report=0
+processes=400 threads=4 fds=9 tcp=100 samples=101 report=0 changing=10
 while (($#)); do
   case $1 in
     --processes) processes=${2:?}; shift ;;
@@ -35,9 +39,10 @@ while (($#)); do
     --fds) fds=${2:?}; shift ;;
     --tcp) tcp=${2:?}; shift ;;
     --samples) samples=${2:?}; shift ;;
+    --changing) changing=${2:?}; shift ;;
     --report-only) report=1 ;;
     --model) ;;
-    *) echo "usage: tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--report-only]" >&2; exit 2 ;;
+    *) echo "usage: tests/apps/activity_cost.sh [--processes N] [--threads T] [--fds F] [--tcp K] [--samples S] [--changing P] [--report-only]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -54,23 +59,24 @@ probe=$root/.dev/build/activity-sampcost
 gcc -O2 -o "$probe" docs/audits/activity-2026-10-28/sampcost.c -lpthread || { echo "FAIL: building probe A10"; exit 1; }
 
 pids=()
+tmp=$(mktemp -d)
 cleanup() {
   for p in "${pids[@]}"; do
     pkill -P "$p" 2>/dev/null
     kill "$p" 2>/dev/null
   done
+  rm -rf "$tmp"
 }
 trap cleanup EXIT
 "$bench" spawn "$processes" "$threads" "$fds" &
-pids+=($!)
+spawned=$!
+pids+=($spawned)
 "$bench" tcp "$tcp" &
 pids+=($!)
 sleep 3
 
 echo "fixture: $processes processes of $threads threads and $fds extra descriptors, $tcp TCP connections; $(nproc) processors; soft RLIMIT_NOFILE $(ulimit -Sn) (the sampler and the probe raise it)"
 echo "machine: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//'), kernel $(uname -r)"
-load=$(cut -d' ' -f1 /proc/loadavg)
-echo "load average at the start: $load (a run counts under $max_load)"
 # A10's step-1 plan of each tab: the worse of its two runs.
 declare -A plan=()
 model() { # <run label>: runs A10, prints what it read, keeps each tab's worse step-1 plan
@@ -90,32 +96,67 @@ model() { # <run label>: runs A10, prints what it read, keeps each tab's worse s
   done
 }
 
+# The load average just before the measures (the builds above are done), and the worse of the phases' (review of PR #53).
+load=$(cut -d' ' -f1 /proc/loadavg)
+echo "load average before the measures: $load (a run counts under $max_load)"
 model "before the product"
 out=$("$bench" measure --tab all --samples "$samples") || { echo "FAIL: the bench failed"; exit 1; }
 echo "$out"
 model "after the product"
 
-status=0
-while read -r line; do
-  tab=$(sed -n 's/^tab \([a-z]*\):.*/\1/p' <<<"$line")
-  median=$(sed -n 's/.* median \([0-9.]*\) ms.*/\1/p' <<<"$line")
-  [[ -n $tab && -n $median && -n ${plan[$tab]:-} ]] || continue
-  k=$margin kind="step 1"
-  [[ $tab == disk ]] && k=$disk_margin kind="step 1 in one pass"
-  limit=$(awk -v p="${plan[$tab]}" -v k="$k" 'BEGIN { printf "%.3f", p * k }')
-  ratio=$(awk -v m="$median" -v p="${plan[$tab]}" 'BEGIN { printf "%.2f", m / p }')
-  echo "plan: $tab $kind ${plan[$tab]} ms (the worse A10 run), limit $limit ms ($k x)"
+verdicts=() status=0
+judge() { # <label> <bench line> <plan ms> <margin> <kind>
+  local median limit ratio
+  median=$(sed -n 's/.* median \([0-9.]*\) ms.*/\1/p' <<<"$2")
+  limit=$(awk -v p="$3" -v k="$4" 'BEGIN { printf "%.3f", p * k }')
+  ratio=$(awk -v m="$median" -v p="$3" 'BEGIN { printf "%.2f", m / p }')
+  echo "plan: $1 $5 $3 ms (the worse A10 run), limit $limit ms ($4 x)"
   if awk -v m="$median" -v l="$limit" 'BEGIN { exit !(m <= l) }'; then
-    echo "PASS: $tab median $median ms <= $limit ms, $ratio x its plan (AM-P2)"
+    verdicts+=("PASS: $1 median $median ms <= $limit ms, $ratio x its plan (AM-P2)")
   else
-    echo "FAIL: $tab median $median ms > $limit ms, $ratio x its plan (AM-P2)"
+    verdicts+=("FAIL: $1 median $median ms > $limit ms, $ratio x its plan (AM-P2)")
     status=1
   fi
+}
+while read -r line; do
+  tab=$(sed -n 's/^tab \([a-z]*\):.*/\1/p' <<<"$line")
+  [[ -n $tab && -n ${plan[$tab]:-} ]] || continue
+  if [[ $tab == disk ]]; then
+    judge disk "$line" "${plan[$tab]}" "$disk_margin" "step 1 in one pass"
+  else
+    judge "$tab" "$line" "${plan[$tab]}" "$margin" "step 1"
+  fi
 done <<<"$out"
-echo "load average at the end: $(cut -d' ' -f1 /proc/loadavg)"
+
+# Disk again, a part of the fixture changing between two samples.
+if ((changing > 0)); then
+  pkill -P "$spawned" 2>/dev/null
+  kill "$spawned" 2>/dev/null
+  wait "$spawned" 2>/dev/null
+  every=$(((100 + changing / 2) / changing))
+  "$bench" spawn "$processes" "$threads" "$fds" "$every" "$tmp/group" &
+  spawned=$!
+  pids+=($spawned)
+  sleep 3
+  group=$(cat "$tmp/group" 2>/dev/null)
+  [[ $group =~ ^[0-9]+$ && $group != 0 ]] || { echo "FAIL: the changing fixture did not start"; exit 1; }
+  echo "fixture again: every ${every}th of its $processes processes changes its stat and io lines between two samples"
+  changed_load=$(cut -d' ' -f1 /proc/loadavg)
+  echo "load average before these measures: $changed_load"
+  awk -v a="$changed_load" -v b="$load" 'BEGIN { exit !(a > b) }' && load=$changed_load
+  unset 'plan[disk]'
+  model "before the product, the fixture changing"
+  disk=$("$bench" measure --tab disk --samples "$samples" --poke "$group") || { echo "FAIL: the bench failed"; exit 1; }
+  echo "$disk"
+  model "after the product, the fixture changing"
+  judge "disk ($changing % changing)" "$disk" "${plan[disk]}" "$disk_margin" "step 1 in one pass"
+fi
+
+printf '%s\n' "${verdicts[@]}"
+echo "load average: $load before the measures (the worse phase), $(cut -d' ' -f1 /proc/loadavg) at the end"
 ((report)) && exit 0
 if awk -v l="$load" -v m="$max_load" 'BEGIN { exit !(l >= m) }'; then
-  echo "NOT COUNTED: started at a load average of $load, $max_load or more (AM-P2); run again on a quieter machine"
+  echo "NOT COUNTED: the measures started at a load average of $load, $max_load or more (AM-P2); run again on a quieter machine"
   exit 2
 fi
 exit "$status"
