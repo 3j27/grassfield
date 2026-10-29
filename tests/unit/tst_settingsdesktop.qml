@@ -150,6 +150,76 @@ TestCase {
         }
     }
 
+    // TL32: the tiling switches in their order, each writing its key, under the compositor extension's footnote; the
+    // double-click action offers Fill first.
+    function test_windowsRows() {
+        const t = make();
+        const rows = [["Drag windows to left or right edge of screen to tile", "windows.tilingEdges"], ["Drag windows to menu bar to fill screen", "windows.tilingMenuBar"], ["Hold Alt key while dragging windows to tile", "windows.tilingOptionDrag"], ["Tiled windows have margins", "windows.tilingMargins"], ["Show layouts when hovering over the green button", "windows.tilingLayouts"], ["Suggest windows to fill the rest of a layout", "windows.tilingSuggestions"], ["Bring tile groups forward together", "windows.tilingGroups"], ["Rebuild the compositor extension after Hyprland updates", "windows.rebuildExtension"]];
+        let above = -1;
+        for (const [name, key] of rows) {
+            const toggle = named(t.page.contentItem, name);
+            verify(toggle, name);
+            const y = toggle.mapToItem(t.page.contentItem, 0, 0).y;
+            verify(y > above, name + " comes after the row above it");
+            above = y;
+            compare(toggle.checked, SettingsContract.ALL_DEFAULTS[key], name);
+            toggle.toggled(!toggle.checked);
+            const e = {};
+            e[key] = !SettingsContract.ALL_DEFAULTS[key];
+            compare(last(t.store), e, name);
+            compare(toggle.checked, !SettingsContract.ALL_DEFAULTS[key], name + " shows the stored value");
+        }
+        const group = find(t.page.contentItem, i => i.caption === "Windows" && i.footnote !== undefined);
+        verify(group);
+        compare(group.footnote, "Needs the Grassfield compositor extension.");
+        const action = named(t.page.contentItem, "Window title bar double-click action");
+        compare(action.model.map(m => m.id), ["fill", "zoom", "minimize", "none"]);
+        compare(action.model.map(m => m.text), ["Fill", "Zoom", "Minimize", "No Action"], "macOS 27's names (parity matrix M40)");
+        action.picked("fill");
+        compare(last(t.store), {"windows.titlebarDoubleClick": "fill"});
+    }
+
+    // M38: the Alt row names the key as the menus do (keyboard.shortcutStyle): its symbol in the macOS style.
+    function test_optionDragLabelFollowsShortcutStyle() {
+        const before = Appearance.shortcutStyle;
+        try {
+            const t = make();
+            Appearance.shortcutStyle = "mac";
+            verify(!named(t.page.contentItem, "Hold Alt key while dragging windows to tile"));
+            const mac = named(t.page.contentItem, "Hold ⌥ key while dragging windows to tile");
+            verify(mac);
+            mac.toggled(false);
+            compare(last(t.store), {"windows.tilingOptionDrag": false});
+            Appearance.shortcutStyle = "pc";
+            verify(named(t.page.contentItem, "Hold Alt key while dragging windows to tile"));
+            verify(!named(t.page.contentItem, "Hold ⌥ key while dragging windows to tile"));
+        } finally {
+            Appearance.shortcutStyle = before;
+        }
+    }
+
+    // Settings' own search (Main.qml's sections) and the shell's Search (Search.qml's pages) find Desktop & Dock for the tiling
+    // words (integrator review of 1c08d6b, MINOR 5): read from the sources, the Desktop & Dock entry of each.
+    function source(path) {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../" + path), false);
+        xhr.send();
+        verify(xhr.responseText.length > 0, path);
+        return xhr.responseText;
+    }
+
+    function test_searchWordsFindTiling() {
+        const settingsLine = source("apps/settings/qml/Main.qml").split("\n").find(l => l.indexOf('{id: "desktop"') >= 0);
+        verify(settingsLine, "Main.qml: the desktop section");
+        const words = /keywords: qsTr\("([^"]*)"\)/.exec(settingsLine)[1].split(" ");
+        for (const w of ["tile", "tiling", "layouts"])
+            verify(words.indexOf(w) >= 0, "Settings' search finds Desktop & Dock for " + w);
+        const searchLine = source("shell/search/Search.qml").split("\n").find(l => l.indexOf('{id: "desktop"') >= 0);
+        verify(searchLine, "Search.qml: the desktop page");
+        for (const w of ["tile", "tiling", "layouts"])
+            verify(searchLine.indexOf('qsTr("' + w + '")') >= 0, "the shell's Search finds Desktop & Dock for " + w);
+    }
+
     function test_showItemsOnDesktop() {
         const t = make();
         const box = named(t.page.contentItem, "Show items on the desktop");

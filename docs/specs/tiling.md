@@ -3,7 +3,8 @@
 Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (PR #28: drags, TL16-TL21); step 3 merged
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
-on its branch (the shared edge, TL30); steps 5 and 6 are not built. Below, "Today" is the state before step 1. A requirement
+merged (PR #42: the shared edge, TL30); step 5 on its branch (Settings > Desktop & Dock > Windows, TL32); step 6 is not
+built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -436,6 +437,17 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`windows.titlebarDoubleClick` = `fill`). Each key is pushed with `config(...)` once the plugin advertises its feature;
   without the plugin the rows show the existing footnote and do nothing. The settings contract (ADR-0020) and the schema
   in `config/schema/` gain the keys in the same commit.
+  As built (step 5, ADR-0036 D36-D39): the Windows group lists the seven switches in this order, then "Rebuild the
+  compositor extension after Hyprland updates", under the footnote "Needs the Grassfield compositor extension."; the Alt
+  row names the key as the menus do (`keyboard.shortcutStyle`: "Hold ⌥ key…" in the macOS style); the double-click
+  choice is Fill, Zoom, Minimize, No Action (macOS 27's names). The shell pushes `tilingEdges`, `tilingMenuBar`, `tilingOptionDrag` and
+  `tilingMargins` with `window-tiling`, `tilingLayouts` with `tile-hover`, `tilingSuggestions` with `tiling-layouts`, and
+  `titlebarDoubleClick` = `fill` only with `tiling-arrange` (`zoom` in its place otherwise, D36). Layouts off: the plugin
+  posts no hover `enter` and the shell ignores one; `tile_popover` (Super+Ctrl+L, the Window menu) still opens the
+  popover with its Layouts section. Suggestions off: the plugin keeps no suggestion after an arrangement and drops the
+  pending one (it does not come back when the switch turns on), the shell asks for none, and one shown closes. Tile groups off: the shell's `groupForward` brings the window
+  alone; the plugin gets no key (it raises a group only on `group_front`), groups still form, and Show Tile Group still
+  brings the group (D37).
 
 ### Full Screen tile (step 6, T4)
 - **TL33** Full Screen › Left of Screen / Right of Screen: a new Desktop right after the current one, the menu bar and the
