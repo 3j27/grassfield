@@ -163,13 +163,52 @@ QtObject {
     // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
     // under `rect` (output px; optional) when the output's luminance grid is known.
     function glassAlpha(glassClass: string, t: real, screenName: string, rect: var): real {
+        const known = backdrops[screenName] ?? null;
+        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
+        return glassAlphaOver(glassClass, t, under ?? known);
+    }
+
+    // The same over a backdrop range the host knows ({lumMin, lumMax}; null = the worst case, black to white).
+    function glassAlphaOver(glassClass: string, t: real, backdrop: var): real {
         const target = glassTargets[glassClass];
         if (target === undefined)
             return tintAlpha(t);
-        const known = backdrops[screenName] ?? null;
-        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
-        const backdrop = under ?? known;
         return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
+    }
+
+    // Adaptive tone of a glass band over a backdrop range the host measured (ADR-0024 point 3, the menu bar: macOS 26's glass
+    // follows what lies behind it, not the system appearance). `darkGlass` is the host's choice of tone (the bar's own: the text
+    // tone with the better worst case over the strip, BarTone): dark glass with light text, or light glass with dark text;
+    // the alpha is the class tint raised to what keeps that text legible over the range in every state of the bar (rest,
+    // the open title's capsule, dimmed). The bar carries primary text and glyphs only, so only the primary text is judged. Returns {dark, alpha, colors}; Reduce Transparency (t <= 0)
+    // and an unknown range keep the appearance's own colours and the standard glass alpha.
+    function glassBand(glassClass: string, t: real, backdrop: var, darkGlass: bool): var {
+        const target = glassTargets[glassClass];
+        if (t <= 0 || !backdrop || target === undefined)
+            return {dark: dark, alpha: glassAlphaOver(glassClass, t, backdrop), colors: colors};
+        const palette = darkGlass ? darkColors : lightColors;
+        // The states the band can show (GlassTint.bandAlpha): at rest, under the open title's capsule at its real fill, dimmed.
+        const alpha = GlassTint.bandAlpha(target, t, Tokens.materialDefaultTransparency, backdrop, palette.materialTint, palette.text, palette.hover, Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor, Tokens.menubarInactiveOpacity, 4.5, 3, Tokens.glassContrastMargin);
+        return {dark: darkGlass, alpha: alpha, colors: palette};
+    }
+
+    // The foreground of the menu bar, {text, hover}: over the band the band's own palette (its tone), or the appearance's when
+    // the band has no strip to adapt to; without a band the bar sits on the wallpaper and follows the wallpaper's tone.
+    function barForeground(showBackground: bool, band: var, darkTone: bool): var {
+        if (!showBackground) {
+            const p = darkTone ? lightColors : darkColors;
+            return {text: p.barText, hover: p.hover};
+        }
+        const c = band ? band.colors : colors;
+        return {text: c.text, hover: c.hover};
+    }
+
+    // The menu bar's band for the strip under it, or null when there is none to judge it on: no range (the artwork, a colour, a
+    // bar that overlaps windows or a full-screen window) or Reduce Transparency (the appearance's own opaque material).
+    function barBand(range: var, darkGlass: bool): var {
+        if (!range || effectiveTransparency <= 0)
+            return null;
+        return glassBand("menu", effectiveTransparency, range, darkGlass);
     }
 
     // Compositor blur follows the transparency (GF-125, docs/specs/ui.md "Material blur"): Hyprland carries one blur size and

@@ -95,6 +95,19 @@ TestCase {
         compare(BarHide.reservesSpace("nonsense"), true);
     }
 
+    // The band is judged on the wallpaper's strip only while that strip is what lies behind it: a bar that reserves space and no
+    // full-screen window. A revealed bar of `always` or `desktop` sits over a maximized window, and a full-screen window is under the
+    // bar then: no strip, the worst case.
+    function test_bandIsJudgedOnTheWallpaperOnlyWhenNothingIsUnderTheBar() {
+        compare(BarHide.bandOnWallpaper("never", false), true);
+        compare(BarHide.bandOnWallpaper("fullscreen", false), true);
+        compare(BarHide.bandOnWallpaper("always", false), false);
+        compare(BarHide.bandOnWallpaper("desktop", false), false);
+        compare(BarHide.bandOnWallpaper("never", true), false);
+        compare(BarHide.bandOnWallpaper("fullscreen", true), false);
+        compare(BarHide.bandOnWallpaper("nonsense", false), true);
+    }
+
     function test_overlayLayerOnlyOverAFullScreenWindow() {
         compare(BarHide.overlayLayer(true), true);
         compare(BarHide.overlayLayer(false), false);
