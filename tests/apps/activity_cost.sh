@@ -12,10 +12,12 @@
 #   Exit 0 every tab within its limit (or SKIP without gcc and g++), 1 a tab over, 2 usage or a refused run.
 #
 # Run as the user the app will run as, never as root: root reads every process's io and descriptors, which is not the
-# user's cost. The limits (AM-P2; ADR-0038, the integrator's decision on pull request #47, 2026-10-29): each tab's limit is
-# 1.3 x A10 reading what the sampler reads (its "step 1" plan), the worse of A10's two runs on this fixture, before and
+# user's cost. The limits (AM-P2; ADR-0038, the integrator's decisions on pull request #47, 2026-10-29): each tab's limit
+# is 1.3 x A10 reading what the sampler reads (its "step 1" plan), the worse of A10's two runs on this fixture, before and
 # after the product's. So a product more than 1.3 x its own plan fails on any machine, and a load change between the runs
-# moves the plan and the product together. The step-0 limits came from A10's step-0 plan (CPU 13.0 x 1.3 = 17 ms on the
+# moves the plan and the product together. Disk's plan is A10's one pass over the same files in the sampler's order
+# ("step 1 Disk, in one pass"): the summed plan, whose parts are each measured alone with warm caches, is below what any
+# reader of those files pays (the product reading them and parsing nothing was 1.25-1.41 x it). Both Disk lines print. The step-0 limits came from A10's step-0 plan (CPU 13.0 x 1.3 = 17 ms on the
 # reference machine), which step 1 changed on purpose (AD32, AD33, the owners' turns); the reference machine's numbers
 # come from the integrator's run at idle.
 set -uo pipefail
@@ -72,6 +74,7 @@ model() { # <run label>: runs A10, prints what it read, keeps each tab's worse s
   for tab in cpu memory energy disk network; do
     name=$(sed 's/^./\U&/' <<<"$tab")
     [[ $tab == cpu ]] && name=CPU
+    [[ $tab == disk ]] && name="Disk, in one pass (the sampler's order)" # the integrator's decision of 2026-10-29
     ms=$(sed -n "s/^    step 1 $name  *\([0-9.]*\) ms.*/\1/p" <<<"$out")
     [[ -n $ms ]] || { echo "FAIL: probe A10 printed no step-1 plan for $tab"; exit 1; }
     if [[ -z ${plan[$tab]:-} ]] || awk -v a="$ms" -v b="${plan[$tab]}" 'BEGIN { exit !(a > b) }'; then
@@ -92,7 +95,9 @@ while read -r line; do
   [[ -n $tab && -n $median && -n ${plan[$tab]:-} ]] || continue
   limit=$(awk -v p="${plan[$tab]}" -v k="$margin" 'BEGIN { printf "%.3f", p * k }')
   ratio=$(awk -v m="$median" -v p="${plan[$tab]}" 'BEGIN { printf "%.2f", m / p }')
-  echo "plan: $tab step 1 ${plan[$tab]} ms (the worse A10 run), limit $limit ms ($margin x)"
+  kind="step 1"
+  [[ $tab == disk ]] && kind="step 1 in one pass"
+  echo "plan: $tab $kind ${plan[$tab]} ms (the worse A10 run), limit $limit ms ($margin x)"
   if awk -v m="$median" -v l="$limit" 'BEGIN { exit !(m <= l) }'; then
     echo "PASS: $tab median $median ms <= $limit ms, $ratio x its plan (AM-P2)"
   else

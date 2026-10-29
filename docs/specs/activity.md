@@ -497,7 +497,9 @@ The reference fixture is A10's: about 600 processes (400 of the user with 4 thre
 another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. Since the integrator's decision on pull request
 #47 (2026-10-29; ADR-0038 "Review history"), each tab's AM-P2 limit is 1.3 × A10 reading what the sampler reads, its
 "step 1" plan: `activity_cost.sh` runs A10 before and after the product on the same fixture and takes the worse run, so a
-product more than 1.3 × its own plan fails on any machine. The reference machine's figures come from the integrator's run
+product more than 1.3 × its own plan fails on any machine. Disk's plan is A10's one pass over the same files in the
+sampler's order (the integrator's second decision of that day): its summed plan, parts measured alone with warm caches,
+is below what any reader of those files pays. The reference machine's figures come from the integrator's run
 at idle (load under 2) before step 2a's merge. Before that decision the limits were A10's step-0 plan, worse of two runs
 plus about 30 %, on the reference machine (i5-10400H, 8 threads, kernel 7.2.5, the owner's live session, outside any
 sandbox; pull request #40, the integrator's comment of 18:59 UTC of 2026-10-28): CPU 17, Memory 25, Energy 40, Disk 17 and
@@ -510,7 +512,7 @@ AD33, the owners' turns), so that plan no longer measured the product. Step 0's 
 | CPU | ≤ 1.3 × the plan | the integrator's idle run (16.92 ms at load 3.9) | ≤ 0.5 % of one core | ≤ 1.5 % |
 | Memory | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Energy | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Disk | ≤ 1.3 × the plan in one pass | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Network | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 
 The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
