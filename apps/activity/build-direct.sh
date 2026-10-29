@@ -48,10 +48,14 @@ case ${1:-} in
       $(pkg-config --libs Qt6Core Qt6Gui Qt6DBus Qt6Test) -lgtest -pthread -o "$out/activity-window-tests$suffix"
     echo "built $out/activity-window-tests$suffix"
     # A-W1: the window with its real backend on a fixture tree, offscreen (its own main). Not built sanitized: the QML
-    # engine's own code is not what it tests.
+    # engine's own code is not what it tests. One Qt private header: the window's exposure, as a compositor's suspended
+    # state sets it.
     if [[ -z $suffix ]]; then
+      qtver=$(pkg-config --modversion Qt6Gui)
       # shellcheck disable=SC2046
       g++ "${cxxflags[@]}" "${qtflags[@]}" "-DACTIVITY_ROOT=\"$root\"" $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Test) \
+        -I"/usr/include/qt6/QtGui/$qtver" -I"/usr/include/qt6/QtGui/$qtver/QtGui" -I"/usr/include/qt6/QtCore/$qtver" \
+        -I"/usr/include/qt6/QtCore/$qtver/QtCore" \
         "${sampler[@]}" "${window[@]}" "${generated[@]}" "$root"/tests/unit/activity/qml/tst_window.cpp \
         $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Test) -lgtest -pthread -o "$out/activity-window-qml-tests"
       echo "built $out/activity-window-qml-tests"

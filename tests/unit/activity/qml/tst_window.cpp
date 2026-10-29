@@ -1,6 +1,7 @@
 // A-W1 (spec "Acceptance criteria"; ADR-0038 step 2a): the window and its real backend on a fixture tree, offscreen. The
 // rows of the tab, the tabs, a header click that sorts, the columns chooser, typing in the search field, the views, Copy as
-// text, no sample while the window is hidden (AM8), and the size it keeps (AM2).
+// text, no sample while the window is hidden, suspended by the compositor or minimized (AM8, AD35), and the size it keeps
+// (AM2).
 #include "../fixture.h"
 #include "activityapp.h"
 #include "iconprovider.h"
@@ -17,6 +18,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtGui/private/qwindow_p.h>
 
 #include <gtest/gtest.h>
 
@@ -103,6 +105,17 @@ template <typename F, typename T>
     if (QTest::qWaitFor([&] { return value() == want; }, ms))
         return ::testing::AssertionSuccess();
     return ::testing::AssertionFailure() << "still " << value() << " after " << ms << " ms, wanted " << want;
+}
+
+// What Qt's Wayland client does when the compositor suspends the window (xdg_toplevel's `suspended` state, which Hyprland
+// 0.56 sets on every window whose workspace is not shown: Grassfield's special:minimized, a Desktop not shown): the window
+// stays visible, isExposed() turns false and an expose event comes (QWaylandXdgSurface::isExposed, then
+// QWaylandWindow::updateExposure and QGuiApplicationPrivate::processExposeEvent). Offscreen windows are always exposed.
+void suspend(QQuickWindow *win, bool suspended)
+{
+    QWindowPrivate::get(win)->exposed = !suspended;
+    QExposeEvent e(suspended ? QRegion() : QRegion(QRect(QPoint(), win->size())));
+    QCoreApplication::sendEvent(win, &e);
 }
 
 struct Window {
@@ -221,6 +234,24 @@ TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)
     w.win->show();
     ASSERT_TRUE(QTest::qWaitForWindowExposed(w.win));
     ASSERT_TRUE(QTest::qWaitFor([&] { return w.backend->processSamples() > before; }, 3000));
+
+    // AD35: suspended by the compositor (minimized, on a Desktop not shown), visible but not exposed: no sample.
+    suspend(w.win, true);
+    QTest::qWait(100);
+    const int suspended = w.backend->processSamples();
+    QTest::qWait(2500);
+    EXPECT_EQ(w.backend->processSamples(), suspended);
+    suspend(w.win, false);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return w.backend->processSamples() > suspended; }, 3000));
+
+    // Minimized as Qt says it (a platform that keeps the state; offscreen does): no sample.
+    w.win->showMinimized();
+    QTest::qWait(100);
+    const int minimized = w.backend->processSamples();
+    QTest::qWait(2500);
+    EXPECT_EQ(w.backend->processSamples(), minimized);
+    w.win->showNormal();
+    ASSERT_TRUE(QTest::qWaitFor([&] { return w.backend->processSamples() > minimized; }, 3000));
 
     // AM2: the size it closes at is the one it opens at.
     w.win->resize(700, 400);

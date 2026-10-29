@@ -554,6 +554,17 @@ Answer: A (see "Answers").
   sample at a time, on a low-priority thread, at the update frequency; the window is shown when it is visible, exposed and
   not minimized. Back on screen the sampler forgets its rate baselines (`Sampler::forgetRates`): the first sample's rates
   show "—", and the next comes one second later rather than a whole interval.
+  Hidden is told by what the compositor sends, not by a Grassfield record (the integrator's review of 983b7de): Hyprland
+  0.56.2 sets xdg_toplevel's `suspended` state on every mapped window whose workspace is not shown
+  (`GlobalWindowController::updateSuspendedStates`, run by every move to a workspace and every workspace change), and Qt's
+  Wayland client (6.11.2, xdg_wm_base version 6) then reports the window not exposed (`QWaylandXdgSurface::isExposed`) and
+  sends an expose event. That covers Grassfield's minimize, whose hidden state is the workspace `special:minimized`
+  (whether the plugin or the shell's fallback moves the window there), and a Desktop not shown, with no request from the
+  app to the shell. Grassfield's own minimize record (the plugin's places, the shell's list) would need a new channel from
+  the app and would miss the other Desktops. Qt's Minimized state stays in the test for the platforms that keep it: on
+  Wayland, which has no minimized state, Qt reverts it at once. A window covered by others is still on a shown workspace and
+  keeps sampling. A-W1 drives Qt's side (an expose event that makes the window unexposed, as Qt's Wayland client sends it);
+  the compositor's side is the nested pass.
 - **AD36. A row's icon from its launch unit's desktop entry, theme names only** (AM10, AM17; step 2a). uwsm names a
   launch's unit after the desktop id it launched (A7), so an own process in such a unit takes that entry's `Icon` when it
   is a theme name, looked up in the icon theme on the window's thread (as Files' theme icons); every other process, and an

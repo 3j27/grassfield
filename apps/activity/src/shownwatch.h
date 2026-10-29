@@ -8,8 +8,10 @@
 
 namespace activity {
 
-// AM8: the window is on screen when it is visible, exposed (a minimized or suspended surface is not) and not minimized; the
-// backend samples only then.
+// AM8, AD35: the window is on screen when it is visible, exposed and not minimized; the backend samples only then. Hidden
+// comes from what the compositor sends: Hyprland suspends every window whose workspace is not shown (xdg_toplevel's
+// `suspended` state; Grassfield's minimize moves the window to special:minimized), and Qt's Wayland client then reports
+// the window not exposed. Qt's Minimized state is for the platforms that keep it: on Wayland Qt reverts it at once.
 class ShownWatch : public QObject
 {
 public:

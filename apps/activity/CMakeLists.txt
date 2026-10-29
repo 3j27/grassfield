@@ -82,7 +82,7 @@ if(GTest_FOUND)
     add_executable(activity-window-qml-tests ../../tests/unit/activity/qml/tst_window.cpp)
     target_include_directories(activity-window-qml-tests PRIVATE ../../tests/unit/activity)
     target_compile_definitions(activity-window-qml-tests PRIVATE ACTIVITY_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
-    target_link_libraries(activity-window-qml-tests PRIVATE grassfield-activity-window Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test
-        GTest::gtest)
+    target_link_libraries(activity-window-qml-tests PRIVATE grassfield-activity-window Qt6::Gui Qt6::GuiPrivate Qt6::Qml
+        Qt6::Quick Qt6::Test GTest::gtest)
     add_test(NAME activity-window-qml-tests COMMAND activity-window-qml-tests)
 endif()
