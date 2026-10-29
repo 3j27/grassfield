@@ -1,15 +1,21 @@
-# ADR-0039: Grassfield identity: wallpapers, brand, lock screen and session transitions
+# ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Proposed (step 0 of the owner's brief "Identité Grassfield", 2026-10-29; documents only, no code). The owner
 questions IQ-W1 to IQ-T4 are open; every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27,
 no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-18), which
-the owner can revisit. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0039
-(0001 to 0038 are on main 11c9e69; the open pull requests #41 and #43 add none)
+the owner can revisit. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
+(0001 to 0038 are on main 11c9e69; 0039 is the design-polish ADR of the open pull request #45; #41, #43 and #44 add none)
 
 This ADR proposes one identity for Grassfield across its wallpapers, its brand (mark, name, accent, About, app icons),
 its lock screen and every session transition. The audit it rests on is `docs/audits/identity-2026-10-29/audit.md`
 (findings W-1 to W-12, B-1 to B-12, L-1 to L-7, T-1 to T-17, with file and line). The mockups are SVG files in
 `docs/audits/identity-2026-10-29/mockups/`, written by `mockups.py` next to them; they are design documents, never
 shipped. Legal points are marked "needs legal review" (master-prompt §14); none is a conclusion.
+
+**Read with ADR-0039 (design polish, pull request #45, same day).** That ADR sets one grammar for materials, controls,
+windows and accessibility settings; this one covers what makes Grassfield recognisable and how it appears. Two questions
+touch each other and are best answered together: its Q4 (one green for "on" in the dark appearance) with IQ-B3 here
+(the accent's name and the second green), and its Q1 (the buttons at the foot of a sheet, the shell's About among them)
+with IQ-B4 here (About This Computer as a small window). Neither ADR changes the other's scope.
 
 ## Context
 
