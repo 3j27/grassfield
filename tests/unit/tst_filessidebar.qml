@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../apps/files/qml"
 
 // Files' sidebar eject: with the toolbar buttons out of the Tab chain, the keyboard reaches Eject through File > Eject (Ctrl+E)
@@ -251,6 +252,18 @@ TestCase {
         compare(fakeTab.navigated, ["grassfield-apps:/"]);
         mouseClick(item, 20, item.height / 2, Qt.RightButton);
         compare(tc.menus.length, 0, "no eject menu on a place that cannot be ejected");
+    }
+
+    // A standard folder whose disk does not answer is listed, dimmed (PlacesModel's "unavailable"; re-review of 24bdf58,
+    // MINOR 4).
+    function test_anUnavailablePlaceIsDimmed() {
+        const listView = findList(sidebar);
+        verify(listView !== null);
+        compare(listView.itemAtIndex(0).opacity, 1);
+        places.setProperty(0, "unavailable", true);
+        tryCompare(listView.itemAtIndex(0), "opacity", Tokens.materialDisabledOpacity);
+        places.setProperty(0, "unavailable", false);
+        tryCompare(listView.itemAtIndex(0), "opacity", 1);
     }
 
     function findList(item: Item): var {
