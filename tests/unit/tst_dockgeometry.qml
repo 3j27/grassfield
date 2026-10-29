@@ -721,4 +721,30 @@ TestCase {
         compare(Geometry.startScreen(["DP-1", "DP-2"], "DP-2", ""), "DP-2");
         compare(Geometry.startScreen(["DP-1", "DP-2"], "HDMI-9", ""), "");
     }
+
+    // Startup with auto-hide on: the machine of a window starts hidden and stays out of sight; one that started shown (the old
+    // initial state) is visible for its whole grace and slides away in front of the user.
+    function test_initialMachineHidesFromTheStart() {
+        const timing = {hideGrace: 450, hideDuration: 250, revealDwell: 120, revealDuration: 200};
+        let m = AutoHide.initial(true);
+        compare(m.state, "hidden");
+        compare(m.visible, 0);
+        let shownMs = 0;
+        for (let t = 0; t < 2000; t += 16) {
+            m = AutoHide.step(m, {}, true, timing, 16);
+            if (m.visible > 0)
+                shownMs += 16;
+        }
+        compare(shownMs, 0, "a hidden start never draws the Dock");
+        let old = AutoHide.create();
+        let oldMs = 0;
+        for (let t = 0; t < 2000; t += 16) {
+            old = AutoHide.step(old, {}, true, timing, 16);
+            if (old.visible > 0)
+                oldMs += 16;
+        }
+        verify(oldMs > 400, "the shown start is what the fix replaces (" + oldMs + " ms)");
+        compare(AutoHide.initial(false).state, "shown");
+        compare(AutoHide.initial(false).visible, 1);
+    }
 }
