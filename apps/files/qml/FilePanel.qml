@@ -44,7 +44,9 @@ Window {
     readonly property bool foldersOnly: PanelLogic.choosesFolders(panel.request)
     // The compact Save panel (Save As and Where) or the whole browser.
     property bool expanded: !panel.saving || panel.memory.expanded === true
-    property int filterIndex: panel.choosingApp ? (panel.recommended.length > 0 || panel.lastChoice !== "" ? 0 : 1) : panel.request.currentFilter
+    // Choose Application starts on Recommended when the frontend gave a candidate or a last choice, else on All (from the
+    // request: candidates an UpdateChoices brings later never flip the pop-up under the user).
+    property int filterIndex: panel.choosingApp ? ((panel.request.applications || []).length > 0 || panel.lastChoice !== "" ? 0 : 1) : panel.request.currentFilter
     // FolderModel.chooser of the listings (the tab reads it).
     readonly property var filter: panel.choosingApp ? PanelLogic.applicationFilter(panel.recommended, panel.lastChoice, panel.filterIndex)
                                                     : PanelLogic.filterFor(panel.request, panel.filterIndex)
@@ -62,7 +64,7 @@ Window {
         return qsTr("Choose an application.");
     }
     // New Folder where a folder is the answer, or the place of a new file.
-    readonly property bool canMakeFolder: panel.kind !== "open" || panel.request.directory === true
+    readonly property bool canMakeFolder: !panel.choosingApp && (panel.kind !== "open" || panel.request.directory === true)
     // The view of this application's panels (the tab reads it when it opens).
     readonly property string viewMode: panel.memory.view ? String(panel.memory.view) : ""
     // The choices' values by id.
@@ -74,7 +76,7 @@ Window {
         return values;
     }
     readonly property string appName: panel.host.appName(panel.request.appId)
-    readonly property string acceptText: panel.request.acceptLabel !== "" ? panel.request.acceptLabel : panel.kind === "open" ? qsTr("Open") : qsTr("Save")
+    readonly property string acceptText: panel.request.acceptLabel !== "" ? panel.request.acceptLabel : panel.kind === "open" || panel.choosingApp ? qsTr("Open") : qsTr("Save")
     readonly property bool acceptEnabled: {
         if (panel.answered)
             return false;
@@ -473,7 +475,7 @@ Window {
     // selected once the Applications listing holds it, as the panel opened on it.
     property bool preselected: false
     function preselect(): void {
-        const m = tab.folder;
+        const m = tab.activeFolder;
         if (panel.preselected || !m || !m.isApplications || m.loading)
             return;
         panel.preselected = true;
@@ -481,7 +483,7 @@ Window {
             m.expect(panel.app.applicationUrl(panel.lastChoice), false);
     }
     Connections {
-        target: panel.choosingApp && !panel.preselected ? tab.folder : null
+        target: panel.choosingApp && !panel.preselected ? tab.activeFolder : null
         function onLoadingChanged(): void {
             panel.preselect();
         }
