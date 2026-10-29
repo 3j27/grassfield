@@ -158,6 +158,22 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   keys (a WARN line for each, two per push); the shell's own gates keep the behaviour right (ADR-0036 D39). The shell now sends `tilingOptionDrag` (with `window-tiling`) and
   `titlebarDoubleClick` = `fill` (only with `tiling-arrange`, `zoom` otherwise). "Bring tile groups forward together" adds
   no key: the plugin raises a group only on `group_front`.
+- Window tiling, step 6a (2026-10-29, additive, ADR-0036 D40-D47, docs/specs/tiling.md TL33): verbs `split(address, side)`
+  and `unsplit(address)`, feature `tiling-split` (advertised with `tiling-arrange` when both registered). `split` (Full
+  Screen › Left or Right of Screen, `side` ∈ left|right) makes a Split View Desktop: a new Desktop with the next free id on
+  the window's output, shown, the window in that half of the whole output (the menu bar, the Dock and the Stages strip are
+  not reserved there; one separator of the tiling margin between the halves), tiled in the `left-right` layout; the
+  `hyprctl grassfield-tiling` reply's `suggestion` then offers the other half with the windows of the Desktop it came from
+  (always, whatever `tilingSuggestions` says); a pick is an `arrange` with `zone` and `with` as in step 4a and joins the
+  window's tile group. No suggestion, or a window left alone once the other left, and it fills the Desktop. `unsplit`
+  (a Split View window's Exit Full Screen) sends that window back to the Desktop it came from at its box from before,
+  shown; the other fills the Split View Desktop alone; one left empty ends, and goes back to the Desktop it came from when
+  it was shown. Refused while the session is locked (`tiling` notice `reason:"locked"`) and for an unknown window, a
+  window that cannot be tiled now, one not on the Desktop its output shows or already on a Split View Desktop, a side
+  other than left or right, a window of no Split View Desktop (`unsplit`) or while the Stages strip shows on that output
+  (`reason:"invalid"`). The reply gains `"splits":[{"workspace":N,"output":"<name>","home":N}]` (always present, empty
+  without a Split View Desktop): the shell lists each right after the Desktop it came from, hides the menu bar and the
+  Dock on it, and sends `unsplit` for the Exit Full Screen of its windows.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -189,7 +205,7 @@ event frames: clock marks monitors name presented refreshHz renders t total unit
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
@@ -200,8 +216,8 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit
 ```
 
 ## Evidence

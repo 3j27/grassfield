@@ -1314,8 +1314,6 @@ namespace gf::tiling {
         return out;
     }
 
-    // gfc1-reply: grassfield-tiling
-    // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
     Area splitArea(const Rect& output, const Grid& grid) {
         // zoneFrame keeps a margin inside the area's outer edges and half a margin each side of an inner one: the area one
         // margin larger on every side puts the outer edges on the output's and leaves one margin between the halves.
@@ -1342,6 +1340,8 @@ namespace gf::tiling {
         return it == splits.end() ? nullptr : &*it;
     }
 
+    // gfc1-reply: grassfield-tiling
+    // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
