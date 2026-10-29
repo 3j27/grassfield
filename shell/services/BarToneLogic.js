@@ -52,6 +52,19 @@ function stripTone(p5, p95, previous, needed, margin) {
     return {tone: tone, white: white, black: black, best: best, assist: best < needed};
 }
 
+// Where the bar's tone of a wallpaper description comes from (WallpaperFeed.display): "strip" for a picture or a video, whose
+// own pixels the helper measured (a video's poster and sampled frames, never the artwork); "none" for a picture or a video
+// without usable statistics (no band, no tone change: macOS keeps the text on its shadow, gate A2); "color" for a plain
+// colour; "art" for the procedural artwork, whose gradient is known.
+function toneSource(desc) {
+    if (!desc || desc.kind === "art" || desc.kind === undefined)
+        return "art";
+    if (desc.kind === "color")
+        return "color";
+    const s = desc.strip;
+    return s && s.all && typeof s.all.p5 === "number" && typeof s.all.p95 === "number" && typeof s.all.mean === "number" ? "strip" : "none";
+}
+
 // Luminance of a vertical two-stop gradient strip: from colour a (top) towards colour b, the strip covering the fraction
 // `reach` (0..1) of the way; a and b are {r, g, b} in 0..1. The mean over the strip is taken at its middle.
 function stripOfGradient(a, b, reach) {

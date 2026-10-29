@@ -87,6 +87,16 @@ Singleton {
         console.info("wallpaper tone=" + r.tone + " worst=" + r.best.toFixed(2) + " assist=" + r.assist + " output=" + output);
     }
 
+    function toneSource(desc: var): string {
+        return Logic.toneSource(desc);
+    }
+
+    // A picture or a video the helper gave no usable strip for: no band (macOS), the tone stays; the text keeps its faint shadow.
+    function reportUnmeasured(output: string): void {
+        setAssist(output, false);
+        console.info("wallpaper tone unmeasured output=" + output);
+    }
+
     // A plain colour wallpaper (`color` source).
     function reportColor(output: string, color: color): void {
         report(output, Logic.luminance(color.r, color.g, color.b));
