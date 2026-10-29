@@ -650,5 +650,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - A Split View Desktop is listed after the Desktop it came from, but Hyprland's next and previous Desktop keys, Ctrl+number
   and the three-finger swipe go by Hyprland's id order (ADR-0036 D41).
 - Without the plugin there is no tiling at all.
+- The popover's rows and its suggestions mark the keyboard-current or hovered item with a neutral fill (the text colour at
+  `material.hoverOpacity`): 1.23:1 at worst against the material (`tests/visual/test_contrast_tokens.py`), under the 3:1 a
+  state indicator should reach, where the menus use the accent. Listed, not asserted, in `tests/visual/contrast-roles.json`;
+  ADR-0039 step 8 moves it to the menus' grammar.
 - Timings not published by Apple or Microsoft (hover delay, preview delay, animation curve) are estimates until measured
   in nested against the owner's material.
