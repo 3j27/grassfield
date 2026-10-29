@@ -326,6 +326,26 @@ void Sampler::readCgroup(int pid, Proc &p, Counters &c)
     p.kindWithWindow = classify(p.cgroup, true, false, true);
     p.sessionUnit = isSessionProcess(p.cgroup);
     p.eligible = efficiencyEligible(p.cgroup);
+    const std::optional<AppUnit> unit = parseAppUnit(unitOf(p.cgroup));
+    p.appId = unit ? unit->name : std::string();
+}
+
+void Sampler::forgetRates()
+{
+    for (auto &[pid, p] : procs_) {
+        p.haveTicks = false;
+        p.haveIo = false;
+        p.readRate = p.writeRate = -1;
+        p.haveCtx = false;
+        p.wakeRate = -1;
+        p.haveGpu = false;
+        p.gpuPercent = -1;
+        p.engineNs.clear();
+        p.enginePercent.clear();
+    }
+    haveCpu_ = false;
+    lastProcessIndex_ = lastCpuIndex_ = UINT64_MAX - 1;
+    lastDiskTime_ = lastNetTime_ = -1;
 }
 
 void Sampler::readThreads(int pid, Proc &p, double now, Counters &c)
@@ -366,6 +386,9 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
     }
     p.sockets.clear();
     p.drmFds.clear();
+    p.drmRead.clear();
+    p.drmKeys.clear();
+    p.drmPicked = false;
     int count = 0;
     char target[512];
     while (dirent *e = readdir(d)) {
@@ -386,6 +409,7 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
         }
     }
     closedir(d);
+    std::sort(p.drmFds.begin(), p.drmFds.end()); // /proc's order; a client's first descriptor is its lowest
     p.openFiles = count;
     p.scanned = true;
 }
@@ -393,23 +417,65 @@ void Sampler::scanDescriptors(int pid, Proc &p, Counters &c)
 void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::string, GpuDevice> &devices,
                       std::unordered_set<std::string> &clientsSeen)
 {
+    // One read per client (AM45). A client can show through several descriptors: Mesa's pipe loader and iris's buffer
+    // manager each duplicate the descriptor they are given, and a duplicate is the same client; each fdinfo read has the
+    // driver go over the client's objects. The first read after a descriptor turn reads every DRM descriptor and keeps
+    // the first of each client; until the next turn only those are read, and one that fails or names another client (its
+    // number closed and reused) brings the full read back at once (the integrator's AM-P2 run of f68789c on the i5). A
+    // client is picked by its identity, engine lines or not: amdgpu writes none for an engine a client has not used yet,
+    // and a client idle at its turn would go unread until the next one (the integrator's review of 983b7de).
+    std::string fbuf;
+    auto readClient = [&](int fd, DrmClient &client, std::string &key) {
+        ++c.fdinfoReads;
+        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true) || !parseDrmFdinfo(fbuf, client))
+            return false;
+        key = client.pdev + '|' + std::to_string(client.clientId);
+        return true;
+    };
+    std::vector<DrmClient> clients;
+    std::vector<std::string> keys;
+    bool picked = p.drmPicked;
+    for (size_t i = 0; picked && i < p.drmRead.size(); ++i) {
+        DrmClient client;
+        std::string key;
+        if (!readClient(p.drmRead[i], client, key) || key != p.drmKeys[i]) {
+            picked = false;
+            clients.clear();
+            keys.clear();
+            break;
+        }
+        clients.push_back(std::move(client));
+        keys.push_back(std::move(key));
+    }
+    if (!picked) {
+        p.drmRead.clear();
+        p.drmKeys.clear();
+        for (int fd : p.drmFds) {
+            DrmClient client;
+            std::string key;
+            if (!readClient(fd, client, key) || std::find(keys.begin(), keys.end(), key) != keys.end())
+                continue; // no client, or the same client through another descriptor
+            p.drmRead.push_back(fd);
+            p.drmKeys.push_back(key);
+            clients.push_back(std::move(client));
+            keys.push_back(std::move(key));
+        }
+        p.drmPicked = true;
+    }
+
     std::map<std::string, uint64_t> nowNs;
     std::map<std::string, double> perEngine; // "<pdev>|<engine>" → this process's share
     uint64_t total = 0;
     bool any = false;
     const double dt = p.haveGpu ? now - p.gpuTime : 0;
-    std::string fbuf;
     std::vector<std::string> pdevs;
-    for (int fd : p.drmFds) {
-        ++c.fdinfoReads;
-        if (!readFile(procPath(pid, "fdinfo") + '/' + std::to_string(fd), fbuf, true))
-            continue;
-        DrmClient client;
-        if (!parseDrmFdinfo(fbuf, client) || client.engineNs.empty())
-            continue;
-        const std::string key = client.pdev + '|' + std::to_string(client.clientId);
+    for (size_t i = 0; i < clients.size(); ++i) {
+        const DrmClient &client = clients[i];
+        const std::string &key = keys[i];
+        if (client.engineNs.empty())
+            continue; // no engine used yet: nothing to show
         if (!clientsSeen.insert(key).second)
-            continue; // the same client through another descriptor (or a process that shares it)
+            continue; // a client this sample already counted in another process (inherited or passed)
         any = true;
         if (std::find(pdevs.begin(), pdevs.end(), client.pdev) == pdevs.end())
             pdevs.push_back(client.pdev);
@@ -501,9 +567,10 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
 
     // The Memory tab's turns hold while it is shown sample after sample; its first sample after another tab, or after a
     // pause longer than two intervals (a hidden window), reads every process's status, so no swap shows older than five
-    // samples (AD32; review of f68789c).
+    // samples (AD32; review of f68789c). The interval is the one set (AM9), not the one measured, which a full read left
+    // at 0 and a pause right after it went unseen (review of 19f5d4c).
     const bool memoryAll = (reads & ReadMemory)
-        && (lastMemoryIndex_ + 1 != index_ || lastMemoryTime_ < 0 || (memoryInterval_ > 0 && now - lastMemoryTime_ > 2 * memoryInterval_));
+        && (lastMemoryIndex_ + 1 != index_ || lastMemoryTime_ < 0 || now - lastMemoryTime_ > 2 * opt_.interval);
 
     if (listed) {
         const uint64_t mark = index_ + 1;
@@ -673,6 +740,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             row.name = p.name;
             if (own) {
                 row.command = p.command;
+                row.appId = p.appId;
                 const bool ownsWindow = !windowOwners_.empty() && windowOwners_.count(pid) != 0;
                 row.kind = ownsWindow ? p.kindWithWindow : p.kindAlone;
                 row.session = p.sessionUnit;
@@ -877,7 +945,6 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
     if (listed)
         lastProcessIndex_ = index_;
     if (listed && (reads & ReadMemory)) {
-        memoryInterval_ = memoryAll ? 0 : now - lastMemoryTime_;
         lastMemoryTime_ = now;
         lastMemoryIndex_ = index_;
     }

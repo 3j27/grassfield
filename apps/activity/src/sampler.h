@@ -54,6 +54,7 @@ struct Options {
     int threadTurns = 5;          // AM23
     int statusTurns = 5;          // AM30, AD32: VmSwap and VmHWM from status, one fifth of the processes per sample
     int descriptorTurns = 10;     // AM43, AM45
+    double interval = 5;          // AM9's Update Frequency in seconds (Normally by default); the window sets it
     // The TCP dump (AM43); tests put a function of their own here (a failed dump, the review of 949fc98).
     bool (*tcpDump)(std::vector<TcpCounters> &out) = dumpTcpSockets;
     // The owner of /proc/<name> under the directory `dir` (fstatat when null); tests give a root-owned directory here.
@@ -94,6 +95,9 @@ struct ProcessRow {
     // No cgroup path: another owner's is never read (AD25), and an action on one of the user's units reads it again at the
     // time of the action (step 4). What the table needs of it is below.
     Kind kind = Kind::Background;
+    // Own processes in a launch's unit (A7): its app, a desktop id without ".desktop" or a command's basename; the window
+    // takes the app's icon from it (AM10, AM17). "" otherwise.
+    std::string appId;
     bool session = false;            // AM54
     bool efficiencyEligible = false; // AM68
     // CPU (AM20 to AM22): ticks since start; the share of one core since the previous sample, -1 at the first.
@@ -219,6 +223,13 @@ public:
     // The pids that own a window (the shell's projection, AM60): their processes are Apps (AM65).
     void setWindowOwners(std::unordered_set<int> pids);
 
+    // AM9's Update Frequency, in seconds: a gap of more than two intervals is a pause (AD32).
+    void setInterval(double seconds) { opt_.interval = seconds; }
+
+    // AM8: the window comes back after a time hidden. No rate is drawn across the gap: the next sample is the new start of
+    // every rate (the processes' CPU, io, wake-ups and GPU; the system's CPU, disks and interfaces), which shows "—".
+    void forgetRates();
+
     size_t keptFiles() const { return kept_; }
 
 private:
@@ -242,6 +253,7 @@ private:
         std::string name, command;
         bool haveCommand = false;
         std::string cgroup; // own processes only (AD25)
+        std::string appId;  // parseAppUnit's name, own processes only
         Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
         bool sessionUnit = false, eligible = false;
         bool haveTicks = false;
@@ -258,6 +270,10 @@ private:
         bool scanned = false;
         int openFiles = -1;
         std::vector<int> drmFds;
+        // One descriptor per client, read between two descriptor turns (AM45), and the client each one gave.
+        std::vector<int> drmRead;
+        std::vector<std::string> drmKeys;
+        bool drmPicked = false;
         std::vector<uint64_t> sockets;
         std::map<std::string, uint64_t> engineNs; // "<pdev>|<client>|<engine>" → ns at the last sample
         double gpuTime = 0;
@@ -305,7 +321,7 @@ private:
     uint64_t lastProcessIndex_ = UINT64_MAX - 1, lastCpuIndex_ = UINT64_MAX - 1;
     // The Memory tab's last samples (AD32): coming back to it after another tab or a pause reads every status once.
     uint64_t lastMemoryIndex_ = UINT64_MAX - 1;
-    double lastMemoryTime_ = -1, memoryInterval_ = 0;
+    double lastMemoryTime_ = -1;
     std::map<std::string, DiskStat> lastDisks_;
     std::map<std::string, NetDev> lastNet_;
     double lastDiskTime_ = -1, lastNetTime_ = -1;

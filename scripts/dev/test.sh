@@ -260,10 +260,14 @@ gtest_suite tests/unit/store "apps/store/build-direct.sh --tests >/dev/null && a
   ".dev/build/store-unit-tests --gtest_brief=1" ".dev/build/store-unit-tests-asan --gtest_brief=1"
 # The activity monitor's sampler (ADR-0038 step 1): the /proc and /sys parsers on fixtures, the owners and kinds, the per-tab
 # reads and their turns, the kept descriptors, the TCP counters through sock_diag (the real kernel, loopback sockets of the
-# test), the names made safe to show. Built twice: plain, then with ASan and UBSan. Other owners through the real kernel:
-# tests/integration/activity_owners.sh; the cost per tab: tests/apps/activity_cost.sh.
+# test), the names made safe to show. Its window's backend (step 2): the values, the columns, the table's views, search,
+# sort and selection, activity.json, and sampling only while the window is shown; the window itself with that backend on
+# a fixture tree, always offscreen (A-W1). Built twice: plain, then with ASan and UBSan (the window's case plain only).
+# Other owners through the real kernel: tests/integration/activity_owners.sh; the cost per tab: tests/apps/activity_cost.sh.
 gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/null && apps/activity/build-direct.sh --tests --asan" \
-  ".dev/build/activity-unit-tests --gtest_brief=1" ".dev/build/activity-unit-tests-asan --gtest_brief=1"
+  ".dev/build/activity-unit-tests --gtest_brief=1" ".dev/build/activity-unit-tests-asan --gtest_brief=1" \
+  ".dev/build/activity-window-tests --gtest_brief=1" ".dev/build/activity-window-tests-asan --gtest_brief=1" \
+  ".dev/build/activity-window-qml-tests --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.

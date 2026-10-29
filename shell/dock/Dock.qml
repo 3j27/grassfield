@@ -350,10 +350,14 @@ Scope {
             root.launchItem(item);
             return;
         }
-        // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
-        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows. The tile group
-        // of the window that ends focused comes forward with it (TL29).
-        const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
+        root.bringForward(item.windows);
+    }
+
+    // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
+    // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows. The tile group
+    // of the window that ends focused comes forward with it (TL29).
+    function bringForward(windows: var): void {
+        const plan = Launch.activationPlan(windows.map(t => Compositor.windowInfo(t)));
         for (const top of plan)
             Compositor.activate(top);
         if (plan.length > 0)
@@ -645,9 +649,23 @@ Scope {
     }
 
     // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold|forceinterrupt>. autohide, magnify, click
-    // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
+    // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert. `reopen`
+    // is no test hook: apps call it.
     IpcHandler {
         target: "dock"
+
+        // A running app launched again asks for its windows (macOS: launching a running app brings it forward, a minimized
+        // window back): what a click on its tile does (bringForward). Called by the app itself, `qs ipc -p <shell> call dock
+        // reopen <desktop id>` (apps/runmode.h shellIpcArgs), when its window is not on screen; xdg-activation alone
+        // switches to another Desktop but leaves a window on special:minimized (ADR-0038 AD34; Activity Monitor). An app
+        // the Dock has no window for is left alone; nothing while the session is locked.
+        function reopen(appId: string): void {
+            if (SessionState.refuses("dock reopen"))
+                return;
+            const windows = DockModel.windowsOf(root.items, appId);
+            if (windows.length > 0)
+                root.bringForward(windows);
+        }
 
         // The kept apps (JSON list) from the live settings: the drag stress test asserts it never changes.
         function pinned(): string {
