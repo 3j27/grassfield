@@ -59,7 +59,7 @@ GU_LOG_MAX=$((8 << 20))
 GU_KEEP=16
 GU_MIN_FREE=$((10 << 30))   # omarchy-update-requires-free-space
 GU_MIN_BATTERY=50           # macOS's rule for an update on battery
-GU_OMARCHY_KEY=40DFB630FF42BCFFB047046CF0134EE680CAC571   # omarchy-update-keyring
+GU_OMARCHY_FPR=40DFB630FF42BCFFB047046CF0134EE680CAC571   # omarchy-update-keyring
 GU_RECORD=usr/share/grassfield/BUILD-DEPS
 # s3.4: the packages Grassfield is built against, and how much of their version must match its record.
 GU_TRACKED=(qt6-base quickshell hyprland aquamarine kcoreaddons)
@@ -192,7 +192,7 @@ while read -r name version; do installed[$name]=$version; done < <(pacman -Q 2>/
 # omarchy-update-keyring's test. When it fails, Omarchy fetches its key from a keyserver and signs it: a trust decision,
 # left to Omarchy's terminal.
 if [[ -n ${installed[omarchy]-} ]]; then
-  if [[ -z ${installed[omarchy-keyring]-} ]] || ! pacman-key --list-keys "$GU_OMARCHY_KEY" >/dev/null 2>&1 9<&-; then
+  if [[ -z ${installed[omarchy-keyring]-} ]] || ! pacman-key --list-keys "$GU_OMARCHY_FPR" >/dev/null 2>&1 9<&-; then
     outcome+=("needs keyring")
     finish 7 "Omarchy's signing key is not in pacman's keyring: Omarchy's terminal update adds it"
   fi
