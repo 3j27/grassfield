@@ -409,7 +409,7 @@ Scope {
     property bool settled: false
     readonly property bool inputsFinal: Geometry.settledOn({
         settings: Settings.loaded,
-        apps: Apps.hiddenReady && DesktopEntries.applications.values.length > 0,
+        apps: Apps.hiddenReady,
         screens: screenNames,
         start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint)
     })
@@ -422,18 +422,26 @@ Scope {
         if (settled)
             return;
         settleTimer.stop();
-        latchStartScreen();
-        // The fallback (no focused output ever reported): the Dock stays on the output it is on, whatever focus does later.
-        if (chosenScreen === "")
-            chosenScreen = dockScreen;
-        rebuild();
-        settled = true;
+        try {
+            latchStartScreen();
+            // The fallback (no focused output ever reported): the Dock stays on the output it is on, whatever focus does later.
+            if (chosenScreen === "")
+                chosenScreen = dockScreen;
+            rebuild();
+        } catch (e) {
+            console.warn("grassfield-shell: Dock first layout failed:", e);
+        } finally {
+            // Whatever happened, the Dock appears. Every window starts from the state it will rest in (hidden when it hides,
+            // shown otherwise): a machine that began shown would slide out in front of the user.
+            windows.instances.forEach(w => w.resetHide());
+            settled = true;
+        }
     }
 
     // Nothing waited for ever: a compositor without focus events, an account without desktop entries.
     Timer {
         id: settleTimer
-        interval: Tokens.dockSettleMax
+        interval: Tokens.dockSettleTimeout
         running: !root.settled
         onTriggered: root.settle()
     }
@@ -1372,7 +1380,12 @@ Scope {
                 Compositor.registerDock(screenName, win);
                 // An output that does not have the Dock starts with it slid out of sight.
                 if (!isDockScreen)
-                    hideMachine = {state: "hidden", visible: 0, timer: 0};
+                    hideMachine = AutoHide.initial(true);
+            }
+
+            // At the first settled layout: the machine starts where it will rest (AutoHide.initial).
+            function resetHide(): void {
+                hideMachine = AutoHide.initial(autohide);
             }
             Component.onDestruction: Compositor.unregisterDock(screenName, win)
 
