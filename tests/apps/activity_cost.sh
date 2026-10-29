@@ -79,9 +79,9 @@ echo "fixture: $processes processes of $threads threads and $fds extra descripto
 echo "machine: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//'), kernel $(uname -r)"
 # A10's step-1 plan of each tab: the worse of its two runs.
 declare -A plan=()
-model() { # <run label>: runs A10, prints what it read, keeps each tab's worse step-1 plan
+model() { # <run label> [poked group]: runs A10, prints what it read, keeps each tab's worse step-1 plan
   local out tab name ms
-  out=$("$probe" measure "$samples") || { echo "FAIL: probe A10 failed"; exit 1; }
+  out=$("$probe" measure "$samples" ${2:-}) || { echo "FAIL: probe A10 failed"; exit 1; }
   echo "probe A10 ($1):"
   grep -E "raised|listed|could not be opened|per tab|^    (CPU|Memory|Disk|Energy|Network|step 1|fdinfo of)" <<<"$out"
   for tab in cpu memory energy disk network; do
@@ -145,10 +145,11 @@ if ((changing > 0)); then
   echo "load average before these measures: $changed_load"
   awk -v a="$changed_load" -v b="$load" 'BEGIN { exit !(a > b) }' && load=$changed_load
   unset 'plan[disk]'
-  model "before the product, the fixture changing"
+  # A10's one pass pokes the group between its rounds as the bench does between its samples: both pay the same machine.
+  model "before the product, the fixture changing" "$group"
   disk=$("$bench" measure --tab disk --samples "$samples" --poke "$group") || { echo "FAIL: the bench failed"; exit 1; }
   echo "$disk"
-  model "after the product, the fixture changing"
+  model "after the product, the fixture changing" "$group"
   judge "disk ($changing % changing)" "$disk" "${plan[disk]}" "$disk_margin" "step 1 in one pass"
 fi
 

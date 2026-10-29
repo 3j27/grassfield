@@ -13,7 +13,7 @@
 //       and io line at each SIGUSR1 (a minor fault and a one-byte read), in one process group whose id goes to FILE: the
 //       fixture where some lines change between two samples (review of PR #53).
 //   activity-sampler-bench measure ... --poke PGID
-//       sends SIGUSR1 to that group after each sample and lets it run 2 ms, outside the sample's measured time.
+//       sends SIGUSR1 to that group after each sample and lets it run 5 ms, outside the sample's measured time.
 //   activity-sampler-bench tcp K          K loopback TCP connections in one process (waits)
 #include "sampler.h"
 
@@ -53,10 +53,16 @@ void *idleThread(void *)
     return nullptr;
 }
 
-// A process of the changing part: at each SIGUSR1 one minor fault (a fresh page touched: stat's minflt) and a one-byte read
-// (io's rchar and syscr), so both its lines differ at the next sample.
+// A process of the changing part: at each SIGUSR1 one minor fault (the next page of a region reserved at start, touched for
+// the first time: stat's minflt) and a one-byte read (io's rchar and syscr), so both its lines differ at the next sample.
+// No page is unmapped at each poke: an munmap of a process with threads sends TLB shootdowns to the other processors, the
+// sampler's among them, which the sample would pay for (its kernel time doubled in the first version).
 [[noreturn]] void changeOnSignal(int zero)
 {
+    constexpr size_t kPage = 4096, kPages = 16384; // 64 MiB of address space, reserved, never all touched by one run
+    auto *region = static_cast<char *>(mmap(nullptr, kPage * kPages, PROT_READ | PROT_WRITE,
+                                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0));
+    size_t next = 0;
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
@@ -66,10 +72,12 @@ void *idleThread(void *)
             continue;
         char byte = 0;
         (void)!read(zero, &byte, 1);
-        void *page = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (page != MAP_FAILED) {
-            static_cast<volatile char *>(page)[0] = 1;
-            munmap(page, 4096);
+        if (region != MAP_FAILED) {
+            if (next == kPages) { // used up (16384 samples): the pages go back once, then fault again
+                madvise(region, kPage * kPages, MADV_DONTNEED);
+                next = 0;
+            }
+            static_cast<volatile char *>(region)[kPage * next++] = 1;
         }
     }
 }
@@ -268,7 +276,7 @@ int main(int argc, char **argv)
             }
             if (poke > 0) { // the changing part of the fixture changes its lines before the next sample
                 kill(-poke, SIGUSR1);
-                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
             if (intervalMs)
                 std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
