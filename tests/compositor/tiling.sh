@@ -325,8 +325,8 @@ alive() { nestctl version -j >/dev/null 2>&1; }
 # ---- gate C1: a window that unmaps (alive) during the plugin's titlebar drag (see the header) ----
 dumps() { coredumpctl --no-legend --no-pager list 2>/dev/null | grep -ci hyprland || true; }
 xdg_addr="" xdg_pid=""
-open_xdg() { # app id: an xdgact window on GF-REF; its address in xdg_addr, its pid in xdg_pid
-  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" "$1" >>"$run/xdgact.out" 2>&1 </dev/null &
+open_xdg() { # app id [min width]: an xdgact window on GF-REF; its address in xdg_addr, its pid in xdg_pid
+  setsid "$root/scripts/dev/isolated.sh" "$root/tests/tools/xdgact/xdgact.sh" "$@" >>"$run/xdgact.out" 2>&1 </dev/null &
   pids+=("$!")
   xdg_addr="" xdg_pid=""
   for _ in $(seq 1 50); do
@@ -1875,6 +1875,102 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       tile_ipc "$addr3" previous
     else
       check "split lock: the xdgact window opened" false
+    fi
+
+    # D57 (integrator nested pass of 1ee992e, MAJOR C): a window whose minimum width is wider than half of the output does not
+    # fit a Split View half: the popover's event says so (the popover greys Left and Right of Screen), split refuses it, the
+    # picker of another Split View does not offer it, and a pick of it there is refused; an ordinary window fits.
+    open_xdg gf-split-wide $((mw / 2 + 200))
+    if [[ -n $xdg_addr ]]; then
+      hover_open_of() { # address jq-condition: tile_popover posts open for that window, the condition holding on its event
+        mark_events
+        nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+        event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\" and $2"
+        local ok=$?
+        say "  event: $last_event"
+        close_shell_popup "split wide"
+        return $ok
+      }
+      check "split wide: its event says it does not fit a half (tileable, splittable false)" hover_open_of "$xdg_addr" '.tileable == true and .splittable == false'
+      check "split wide: an ordinary window fits (splittable true)" hover_open_of "$addr" '.splittable == true'
+      mark_events
+      split_ipc "$xdg_addr" left
+      check "split wide: split is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split wide: $out still shows the Desktop it was on" test "$(shown_desktop)" = "$home"
+      check "split wide: the window stays there" test "$(desktop_of "$xdg_addr")" = "$home"
+      next6=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr" left
+      wide_not_offered() {
+        local sg
+        sg=$(suggestion)
+        say "  suggestion: $sg"
+        jq -e --arg w "${xdg_addr#0x}" --arg b "${addr2#0x}" '(.windows | index($w) == null and index($b) != null)' <<<"$sg" >/dev/null
+      }
+      check "split wide: the picker of another Split View does not offer it" wide_not_offered
+      mark_events
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$xdg_addr\"],\"zone\":1,\"with\":\"$addr\"}"
+      check "split wide: a pick of it into the other half is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split wide: it stays on its Desktop" test "$(desktop_of "$xdg_addr")" = "$home"
+      unsplit_ipc "$addr"
+      check "split wide: Exit Full Screen ends that Split View" split_gone "$next6" "$home"
+      tile_ipc "$addr" previous
+      kill "$xdg_pid" 2>/dev/null
+      sleep 0.5
+    else
+      check "split wide: the xdgact window opened" false
+    fi
+
+    # Integrator nested pass of 1ee992e, with the shell running: a Split View the shell did not start shows its picker
+    # (MAJOR B, D48 amended) with its first window selected, so a first Return picks it (MINOR D), and the window picked has
+    # the keyboard after (MINOR E, D58); the tiling popover opens on a member and its Exit Full Screen runs from the keyboard,
+    # and no overlay stays mapped after it (BLOCKER A).
+    open_kind() { timeout 5 "$root/tests/visual/ipc.sh" menubar openKind 2>>"$log"; }
+    overlay_gone() { ! shell_popup_open; }
+    active_is() { # address
+      local a
+      a=$(nestctl activewindow -j | jq -r '.address')
+      say "  active window: $a (want $1)"
+      [[ $a == "$1" ]]
+    }
+    if kind=$(open_kind) && [[ $kind != refused ]]; then
+      close_shell_popup "split shell"
+      next5=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr3" left
+      first=$(suggestion | jq -r '.windows[0] // empty')
+      say "  first window offered: ${first:-none}"
+      check "split shell: the shell shows the picker of a Split View it did not start" test "$(open_kind)" = "tilingSuggest@$out"
+      check "split shell: its member is not filled meanwhile" half_of tiling-foot3 left
+      keys -k Return
+      sleep 1.5
+      check "split shell: a first Return picks the first window offered" split_members "$next5" "$addr3" "0x$first"
+      check "split shell: the picker closed" test -z "$(open_kind)"
+      sleep 1
+      check "split shell: the window picked has the keyboard" active_is "0x$first"
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
+      sleep 1
+      check "split shell popover: the tiling popover opens on a member" test "$(open_kind)" = "tiling@$out"
+      keys -k Escape
+      sleep 1
+      check "split shell popover: Esc closes it" test -z "$(open_kind)"
+      check "split shell popover: no overlay left mapped" overlay_gone
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
+      sleep 1
+      check "split shell popover: open again" test "$(open_kind)" = "tiling@$out"
+      keys -k Down
+      keys -k Return
+      sleep 1.5
+      check "split shell popover: its Exit Full Screen sends the member back to the Desktop it came from" test "$(desktop_of "$addr3")" = "$home"
+      check "split shell popover: the popover closed" test -z "$(open_kind)"
+      check "split shell popover: no overlay left mapped" overlay_gone
+      check "split shell popover: the other member fills the Split View Desktop" fills_addr "0x$first"
+      unsplit_ipc "0x$first"
+      check "split shell: ended" split_gone "$next5" "$home"
+      tile_ipc "$addr3" previous
+      tile_ipc "0x$first" previous
+      surfaces_state
+    else
+      say "SKIP: split shell cases (no nested shell answers tests/visual/ipc.sh: run them with the shell)"
     fi
   else
     say "SKIP: step 6a cases (the plugin does not advertise tiling-split)"
