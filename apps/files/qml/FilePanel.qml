@@ -13,12 +13,17 @@ import "PanelLogic.js" as PanelLogic
 // - SaveFiles: a folder for several files; the names that exist there are asked about together.
 // Options: the Format pop-up (several filters) and the application's choices (pop-ups and check boxes). Only items on this
 // computer are answered (the interface allows file:// only); a network location is refused with a message.
+// - Choose Application (grassfield-portal's AppChooser, kind "application"; ADR-0035 D-5, step 5b): the macOS panel is an Open
+//   panel in the Applications location; the Enable pop-up shows the applications the frontend recommends for the document
+//   (and its last choice) or all of them, the others dimmed; Open (or a double-click) answers the chosen application.
 Window {
     id: panel
 
     required property var app
-    // FileChooser (apps/portal/src/filechooser.h).
+    // FileChooser (apps/portal/src/filechooser.h): the disk probes and, for an Open or Save panel, the answer.
     required property var host
+    // AppChooser (apps/portal/src/appchooser.h): the answer of a Choose Application panel.
+    property var appHost: null
     // FilePanels.qml.
     required property var manager
     required property int requestId
@@ -30,13 +35,32 @@ Window {
     property var places: ({})
 
     readonly property string kind: String(panel.request.kind)
+    readonly property bool choosingApp: panel.kind === "application"
+    // Choose Application: the frontend's candidates (UpdateChoices changes them) and its last choice, enabled under
+    // "Recommended Applications" (filter 0); "All Applications" (filter 1) enables every one.
+    property var recommended: panel.choosingApp ? (panel.request.applications || []) : []
+    readonly property string lastChoice: panel.choosingApp ? String(panel.request.lastChoice || "") : ""
     readonly property bool saving: panel.kind === "save"
     readonly property bool foldersOnly: PanelLogic.choosesFolders(panel.request)
     // The compact Save panel (Save As and Where) or the whole browser.
     property bool expanded: !panel.saving || panel.memory.expanded === true
-    property int filterIndex: panel.request.currentFilter
+    property int filterIndex: panel.choosingApp ? (panel.recommended.length > 0 || panel.lastChoice !== "" ? 0 : 1) : panel.request.currentFilter
     // FolderModel.chooser of the listings (the tab reads it).
-    readonly property var filter: PanelLogic.filterFor(panel.request, panel.filterIndex)
+    readonly property var filter: panel.choosingApp ? PanelLogic.applicationFilter(panel.recommended, panel.lastChoice, panel.filterIndex)
+                                                    : PanelLogic.filterFor(panel.request, panel.filterIndex)
+    // The entries of the Show, Format or Enable pop-up.
+    readonly property var formatEntries: panel.choosingApp ? [{id: "0", text: qsTr("Recommended Applications")}, {id: "1", text: qsTr("All Applications")}]
+                                                           : (panel.request.filters || []).map((f, i) => ({id: String(i), text: f.name}))
+    // The line over the browser: the application's own title, or what Choose Application opens.
+    readonly property string message: {
+        if (!panel.choosingApp)
+            return String(panel.request.title);
+        if (panel.request.filename)
+            return qsTr("Choose an application to open the document “%1”.").arg(DisplayName.text(String(panel.request.filename)));
+        if (panel.request.uri)
+            return qsTr("Choose an application to open “%1”.").arg(String(panel.request.uri));
+        return qsTr("Choose an application.");
+    }
     // New Folder where a folder is the answer, or the place of a new file.
     readonly property bool canMakeFolder: panel.kind !== "open" || panel.request.directory === true
     // The view of this application's panels (the tab reads it when it opens).
@@ -54,6 +78,9 @@ Window {
     readonly property bool acceptEnabled: {
         if (panel.answered)
             return false;
+        // Choose Application: an application selected (the listing never selects a dimmed one).
+        if (panel.choosingApp)
+            return tab.isApplications && !!tab.activeFolder && tab.activeFolder.selectedCount > 0;
         // The Applications location holds launchers, not files: nothing there to choose or to save into.
         if (tab.isApplications)
             return false;
@@ -78,6 +105,8 @@ Window {
     property real shownAt: 0
     property bool everActive: false
     property bool testAnswered: false
+    // GRASSFIELD_PORTAL_TEST_ANSWER "accept" on a Choose Application panel: waits for the listing's preselected application.
+    property bool testWaiting: false
     readonly property bool sheetShown: goSheet.shown || newFolderSheet.shown || alertSheet.shown || kioSheets.sheetShown
     // The panel's own keys: not under a sheet or a menu, not while held.
     readonly property bool keysLive: !panel.keysHeld && !panel.sheetShown && !menus.visible
@@ -89,7 +118,7 @@ Window {
     // (config/hypr/grassfield/windows.lua, gf-client-chrome-panel).
     property string gfChromeRole: "file-panel"
 
-    title: panel.request.title !== "" ? panel.request.title : panel.kind === "open" ? qsTr("Open") : qsTr("Save")
+    title: panel.choosingApp ? qsTr("Choose Application") : panel.request.title !== "" ? panel.request.title : panel.kind === "open" ? qsTr("Open") : qsTr("Save")
     color: Appearance.colors.windowBackground
     // Modal to the application's window when the application asked for it and gave one (xdg-dialog's modal; with no
     // parent Qt would block nothing anyway).
@@ -103,6 +132,10 @@ Window {
     // Answers ---------------------------------------------------------------------------------------------------------------
 
     function remember(): void {
+        // Choose Application keeps nothing: its place is always Applications, and FileChooser's memory is the Open and Save
+        // panels' of that application.
+        if (panel.choosingApp)
+            return;
         panel.host.remember(panel.request.appId, {
             folder: PanelLogic.isLocal(tab.url) ? String(tab.url) : (panel.memory.folder || ""),
             view: tab.viewMode,
@@ -127,7 +160,18 @@ Window {
             return;
         panel.answered = true;
         panel.remember();
-        panel.host.answer(panel.requestId, 1, {});
+        (panel.choosingApp ? panel.appHost : panel.host).answer(panel.requestId, 1, {});
+    }
+
+    // Choose Application: the selected application, answered by its desktop id.
+    function chooseApplication(): void {
+        const chosen = panel.selection().map(s => panel.app.applicationId(s.url)).filter(id => id !== "");
+        if (panel.answered || chosen.length === 0)
+            return;
+        panel.answered = true;
+        panel.appHost.answer(panel.requestId, 0, {
+            choice: chosen[0]
+        });
     }
 
     // The default button (and Return, and a double-click on a file).
@@ -138,6 +182,8 @@ Window {
             panel.save();
         else if (panel.kind === "saveFiles")
             panel.saveFiles();
+        else if (panel.choosingApp)
+            panel.chooseApplication();
         else
             panel.open();
     }
@@ -307,7 +353,11 @@ Window {
 
     // A double-click on a file: an Open panel chooses it (when it can take it), a Save panel takes its name and saves.
     function fileActivated(model: var, row: int): void {
-        if (panel.saving) {
+        if (panel.choosingApp) {
+            model.select(row, 0);
+            if (model.isSelected(row))
+                panel.pressDefault();
+        } else if (panel.saving) {
             nameField.text = model.nameAt(row);
             panel.pressDefault();
         } else if (panel.kind === "open" && !panel.foldersOnly) {
@@ -393,6 +443,10 @@ Window {
             return;
         panel.testAnswered = true;
         const answer = panel.manager.testAnswer;
+        if (answer === "accept" && panel.choosingApp && !panel.acceptEnabled) {
+            panel.testWaiting = true;
+            return;
+        }
         Qt.callLater(() => {
             if (answer === "accept")
                 panel.pressDefault();
@@ -401,9 +455,36 @@ Window {
         });
     }
 
+    onAcceptEnabledChanged: {
+        if (panel.testWaiting && panel.acceptEnabled) {
+            panel.testWaiting = false;
+            Qt.callLater(panel.pressDefault);
+        }
+    }
+
     Component.onCompleted: {
         if (panel.saving)
             nameField.text = panel.request.currentName;
+        if (panel.choosingApp)
+            Qt.callLater(panel.preselect);
+    }
+
+    // Choose Application: the frontend's last choice for the document (its default application, or the one chosen last) is
+    // selected once the Applications listing holds it, as the panel opened on it.
+    property bool preselected: false
+    function preselect(): void {
+        const m = tab.folder;
+        if (panel.preselected || !m || !m.isApplications || m.loading)
+            return;
+        panel.preselected = true;
+        if (panel.lastChoice !== "")
+            m.expect(panel.app.applicationUrl(panel.lastChoice), false);
+    }
+    Connections {
+        target: panel.choosingApp && !panel.preselected ? tab.folder : null
+        function onLoadingChanged(): void {
+            panel.preselect();
+        }
     }
 
     // Keys (Ctrl stands for Command, as in Files) ----------------------------------------------------------------------------
@@ -532,7 +613,7 @@ Window {
         // The application's title, as NSSavePanel shows its message: one line above everything.
         Text {
             id: titleLine
-            visible: panel.request.title !== ""
+            visible: panel.message !== ""
             width: parent.width
             height: visible ? implicitHeight + 2 * Tokens.spacingSm : 0
             topPadding: Tokens.spacingSm
@@ -542,7 +623,7 @@ Window {
             textFormat: Text.PlainText
             elide: Text.ElideRight
             maximumLineCount: 1
-            text: panel.request.title
+            text: panel.message
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
@@ -792,7 +873,8 @@ Window {
                     app: panel.app
                     win: panel
                     chooser: panel
-                    startUrl: Qt.url(PanelLogic.startFolder(panel.request, panel.memory, panel.places, u => (panel.request.folderKinds || {})[String(u)] === 2))
+                    startUrl: panel.choosingApp ? panel.app.applicationsUrl()
+                                                : Qt.url(PanelLogic.startFolder(panel.request, panel.memory, panel.places, u => (panel.request.folderKinds || {})[String(u)] === 2))
                 }
             }
         }
@@ -811,7 +893,7 @@ Window {
         // Options: the Format pop-up and the application's choices.
         Item {
             id: options
-            readonly property bool formats: (panel.request.filters || []).length > 1
+            readonly property bool formats: panel.choosingApp || (panel.request.filters || []).length > 1
             readonly property bool shown: options.formats || (panel.request.choices || []).length > 0
             anchors.bottom: footer.top
             width: parent.width
@@ -837,15 +919,15 @@ Window {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         textFormat: Text.PlainText
-                        text: panel.kind === "open" ? qsTr("Show:") : qsTr("Format:")
+                        text: panel.choosingApp ? qsTr("Enable:") : panel.kind === "open" ? qsTr("Show:") : qsTr("Format:")
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                     }
 
                     ComboBox {
-                        accessibleName: panel.kind === "open" ? qsTr("Show") : qsTr("Format")
-                        model: (panel.request.filters || []).map((f, i) => ({id: String(i), text: f.name}))
+                        accessibleName: panel.choosingApp ? qsTr("Enable") : panel.kind === "open" ? qsTr("Show") : qsTr("Format")
+                        model: panel.formatEntries
                         value: String(panel.filterIndex)
                         onPicked: id => {
                             const index = parseInt(id);

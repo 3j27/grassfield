@@ -878,6 +878,16 @@ QUrl FilesApp::applicationsUrl() const
     return ApplicationsLogic::locationUrl();
 }
 
+QUrl FilesApp::applicationUrl(const QString &id) const
+{
+    return ApplicationsLogic::entryUrl(id);
+}
+
+QString FilesApp::applicationId(const QUrl &url) const
+{
+    return ApplicationsLogic::entryId(url);
+}
+
 int FilesApp::applicationsCount() const
 {
     return int(m_applicationPaths.size()); // the location lists them (FolderModel::applicationsListed); never walked here

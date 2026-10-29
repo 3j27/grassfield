@@ -293,10 +293,8 @@ FocusScope {
         if (row < 0)
             return;
         // A panel: a folder opens in it, a file is chosen (when the panel can take it); an application is never started
-        // from a panel (the Applications location's items are dimmed there).
+        // from a panel: Choose Application chooses it, any other panel has it dimmed (FilePanel.fileActivated).
         if (root.chooser) {
-            if (model.isApplications)
-                return;
             if (model.isDirAt(row))
                 root.navigate(model.urlAt(row), true);
             else

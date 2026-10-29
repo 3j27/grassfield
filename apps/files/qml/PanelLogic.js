@@ -22,6 +22,23 @@ function filterFor(request, filterIndex) {
     };
 }
 
+// FolderModel.chooser for Choose Application (kind "application"): the Applications location's items it takes, the
+// frontend's candidates and its last choice under "Recommended Applications" (filter 0), every one under "All Applications"
+// (filter 1); one at a time; anything else (a file elsewhere) is dimmed.
+function applicationFilter(recommended, lastChoice, filterIndex) {
+    const ids = (recommended || []).slice();
+    if (lastChoice && ids.indexOf(lastChoice) < 0)
+        ids.push(lastChoice);
+    return {
+        globs: [],
+        mimeTypes: [],
+        foldersOnly: true,
+        single: true,
+        applications: filterIndex === 1 ? [] : ids,
+        allApplications: filterIndex === 1
+    };
+}
+
 function isLocal(url) {
     return String(url).startsWith("file:///");
 }
