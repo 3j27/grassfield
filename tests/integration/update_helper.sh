@@ -279,6 +279,22 @@ quiet pacman-key --delete "$FPR"; run_helper
 expect "Omarchy's key not in pacman's keyring -> exit 7, needs keyring" test "$rc:$(exitfile "$op")" == "7:7|needs keyring|"
 quiet pacman-key --add "$W/omarchy.asc"; quiet pacman-key --lsign-key "$FPR"
 
+say "reads that come back empty are refused (fault injection: a wrapper in place of the real program)"
+# wrap PROGRAM BODY: PROGRAM runs BODY first, then the real program (kept as PROGRAM.real); unwrap PROGRAM puts it back.
+wrap() { mv "/usr/bin/$1" "/usr/bin/$1.real" && printf '#!/bin/bash\n%s\nexec /usr/bin/%s.real "$@"\n' "$2" "$1" >"/usr/bin/$1" && chmod 755 "/usr/bin/$1"; }
+unwrap() { mv -f "/usr/bin/$1.real" "/usr/bin/$1"; }
+publish "${base[@]/qt6-base-6.11.0/qt6-base-6.12.0}"
+wrap pacman '[[ $# == 1 && $1 == -Q ]] && exit 0'
+run_helper
+unwrap pacman
+expect "pacman -Q lists nothing (an incompatible Qt waiting) -> exit 8, qt6-base stays 6.11.0" test "$rc:$(exitfile "$op"):$(ver qt6-base)" == "8:8|:6.11.0-1"
+publish "${base[@]/gu-app-1/gu-app-2}"
+sum=$(syncsum)
+wrap pacman-conf '[[ ${1-} == --repo-list ]] && exit 0'
+run_helper
+unwrap pacman-conf
+expect "pacman-conf lists no repository -> exit 8, not synced, the system's databases untouched, gu-app stays 1" test "$rc:$(exitfile "$op"):$(syncsum):$(ver gu-app)" == "8:8|:$sum:1-1"
+
 say "Omarchy's guard, then an update through the helper"
 quiet pacman -Sy
 LC_ALL=C pacman -Su --noconfirm >"$W/guard.out" 2>&1; rc=$?
@@ -423,6 +439,17 @@ expect "150 done before -> done, restart (the container's kernel rule), gu-app 6
 expect "  omarchy-migrate ran 100 and 300 as carol, without a terminal" bash -c "test \"\$(sort /home/carol/migrations.log | tr '\n' ' ')\" == '100 300 ' && test -f /home/carol/.local/state/omarchy/migrations/300.sh && test \$(stat -c %U /home/carol/migrations.log) == carol"
 as carol flock -x "/run/user/$uid/omarchy-update.lock" sleep 4 & sleep 0.5; runner; wait $!
 expect "Omarchy's update lock held -> done busy" test "$(state)" == "done busy  "
+# Omarchy's reader of the pending migrations gives no answer (another exit code, or exit 0 with no name): Omarchy's
+# terminal, and no helper is started.
+before=$(cat "$D/last")
+wrap omarchy-migrate '[[ ${1-} == --pending ]] && exit 3'
+runner
+unwrap omarchy-migrate
+expect "omarchy-migrate --pending exits 3 -> done terminal, no helper started" test "$(state):$(cat "$D/last")" == "done terminal  :$before"
+wrap omarchy-migrate '[[ ${1-} == --pending ]] && exit 0'
+runner
+unwrap omarchy-migrate
+expect "omarchy-migrate --pending exits 0 with no name -> done terminal, no helper started" test "$(state):$(cat "$D/last")" == "done terminal  :$before"
 # More pending migrations than the helper scans: Omarchy's terminal, and no helper is started.
 seven=("${cur[@]/gu-app-5/gu-app-6}")
 publish "${seven[@]/omarchy-3/omarchy-7}"

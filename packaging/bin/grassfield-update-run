@@ -92,19 +92,32 @@ omarchy_env=(env "${unexported[@]}")
 [[ -n $lc_all_set ]] || omarchy_env+=(-u LC_ALL)
 omarchy_env+=(PATH="$OMARCHY/bin:/usr/bin" OMARCHY_PATH="$OMARCHY")
 [[ -n $lc_all_set ]] && omarchy_env+=(LC_ALL="$lc_all")
-pending_migrations() {
+# Omarchy's own reader of this user's markers. Its contract: exit 0 with the names, exit 1 with nothing when none is
+# pending. Anything else (another code, names with 1, nothing with 0) is no answer: pending_feed=1 (the integrator's
+# re-review of 0294373: an unchecked read fails open).
+pending_out="" pending_feed=0
+read_pending() {
+  local rc
+  pending_out="" pending_feed=0
   [[ -x $OMARCHY/bin/omarchy-migrate ]] || return 0
-  "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" --pending </dev/null 2>/dev/null 9>&- | head -n 65
+  pending_out=$("${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" --pending </dev/null 2>/dev/null 9>&-)
+  rc=$?
+  ((rc == 0)) && [[ -n ${pending_out//[[:space:]]/} ]] && return 0
+  ((rc == 1)) && [[ -z ${pending_out//[[:space:]]/} ]] && { pending_out=""; return 0; }
+  pending_feed=1
 }
 
-# 3. The migrations already pending (names only; the helper scans them). One the helper could not be given (more than its
-# 64 names, or a name it refuses) would run unscanned: then the update is Omarchy's terminal's.
+# 3. The migrations already pending (names only; the helper scans them). One the helper could not be given (no answer from
+# Omarchy's reader, more than its 64 names, or a name it refuses) would run unscanned: then the update is Omarchy's
+# terminal's.
+read_pending
+((pending_feed == 0)) || conclude terminal
 pending=()
 while IFS= read -r name; do
   [[ -z $name ]] && continue
   [[ $name =~ ^[0-9]{1,20}\.sh$ ]] || conclude terminal
   pending+=("$name")
-done < <(pending_migrations)
+done < <(printf '%s\n' "$pending_out")
 ((${#pending[@]} <= 64)) || conclude terminal
 
 # 4. The helper, through pkexec: the shell's polkit agent asks for the password.
@@ -142,7 +155,8 @@ phase=configuring
 write_state
 if [[ -x $OMARCHY/bin/omarchy-migrate ]]; then
   timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
-  [[ -n $(pending_migrations) ]] && deferred+=(migrations)
+  read_pending
+  if ((pending_feed == 1)) || [[ -n $pending_out ]]; then deferred+=(migrations); fi
 fi
 if [[ -x $OMARCHY/bin/omarchy-hook ]]; then
   timeout -k 10 300 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-hook" post-update </dev/null 9>&- || echo "grassfield-update-run: the post-update hook failed"

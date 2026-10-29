@@ -222,11 +222,15 @@ done
 
 declare -A installed=()
 while read -r name version; do installed[$name]=$version; done < <(pacman -Q 2>/dev/null 9<&-)
+# An empty answer would skip the compatibility and key checks: refused (the integrator's re-review of 0294373).
+((${#installed[@]})) || finish 8 "pacman lists no installed package"
 
 # --- The plan, from a copy of the sync databases (s3.2 step 4) ---------------------------------------------------------
 (umask 022 && mkdir -m 0755 -- "$tmpdb" && mkdir -m 0755 -- "$tmpdb/sync") || finish 8 "cannot make $tmpdb"
 ln -s -- "$dbpath/local" "$tmpdb/local" || finish 8 "cannot link the local database"
 mapfile -t repos < <(pacman-conf --repo-list 2>/dev/null 9<&-)
+# None would leave the checked databases unswapped, and the transaction on the system's own: refused.
+((${#repos[@]})) || finish 8 "pacman's configuration names no repository"
 for repo in "${repos[@]}"; do
   [[ $repo =~ ^[A-Za-z0-9._-]+$ ]] || finish 8 "a repository name pacman cannot have: $repo"
   for file in "$dbpath/sync/$repo.db" "$dbpath/sync/$repo.db.sig"; do
@@ -256,6 +260,7 @@ fi
 say "plan: $count packages"
 
 mapfile -t caches < <(pacman-conf CacheDir 9<&-)
+((${#caches[@]})) || finish 8 "pacman's configuration names no cache folder"
 cached() { # package -> the path of its file in pacman's cache, if there
   local file=${url[$1]##*/} cache
   [[ -n $file && $file != .* && $file == "$1"-* ]] || return 1
@@ -343,19 +348,22 @@ pending=("$@")
 if [[ -n ${after[omarchy]-} ]]; then
   download omarchy
   file=$(cached omarchy) || finish 8 "omarchy's package file is not in pacman's cache"
-  # The members wanted, from the package's own list (written to this run's folder, every write checked): a folder the
-  # package lacks is no error. bsdtar's -T reads patterns, so a name is taken only in a charset with no pattern character
-  # (no * ? [ ] \); any other name there fails closed, as a migration omarchy-migrate would run unscanned.
-  bsdtar -tf "$file" 9<&- >"$work/.listing" || finish 8 "cannot read omarchy's package"
+  # The members wanted, from the package's own list, read through a pipe whose status is checked (bsdtar -t exits 0 even
+  # when it cannot write its list), every write of the member file checked: a folder the package lacks is no error.
+  # bsdtar's -T reads patterns, so a name is taken only in a charset with no pattern character (no * ? [ ] \); any other
+  # name there fails closed, as a migration omarchy-migrate would run unscanned.
   : >"$work/.members" || finish 8 "cannot write $work/.members"
-  while IFS= read -r member; do
+  listed=0
+  bsdtar -tf "$file" 9<&- | while IFS= read -r member; do
+    listed=$((listed + 1))
     [[ $member =~ ^(usr/share/omarchy/migrations/|usr/share/omarchy/bin/|usr/bin/omarchy-) ]] || continue
     tail=${member#"${BASH_REMATCH[1]}"}
     [[ -z $tail || $tail == */* ]] && continue   # the folder itself, or deeper
     [[ $member =~ ^[A-Za-z0-9/._+-]+$ ]] ||
       { outcome+=("needs scan"); finish 7 "an Omarchy file name the scan cannot take: nothing was changed"; }
     printf '%s\n' "$member" >>"$work/.members" || finish 8 "cannot write $work/.members"
-  done <"$work/.listing"
+  done
+  ((PIPESTATUS[0] == 0 && listed > 0)) || finish 8 "cannot read omarchy's package"
   if [[ -s $work/.members ]]; then
     bsdtar -xf "$file" -C "$work" --no-same-owner --no-same-permissions -T "$work/.members" 9<&- ||
       finish 8 "cannot read omarchy's package"
