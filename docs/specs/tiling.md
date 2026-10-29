@@ -437,14 +437,15 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`windows.titlebarDoubleClick` = `fill`). Each key is pushed with `config(...)` once the plugin advertises its feature;
   without the plugin the rows show the existing footnote and do nothing. The settings contract (ADR-0020) and the schema
   in `config/schema/` gain the keys in the same commit.
-  As built (step 5, ADR-0036 D36-D38): the Windows group lists the seven switches in this order, then "Rebuild the
-  compositor extension after Hyprland updates", under the footnote "Needs the Grassfield compositor extension."; Fill
-  comes first in the double-click choice. The shell pushes `tilingEdges`, `tilingMenuBar`, `tilingOptionDrag` and
+  As built (step 5, ADR-0036 D36-D39): the Windows group lists the seven switches in this order, then "Rebuild the
+  compositor extension after Hyprland updates", under the footnote "Needs the Grassfield compositor extension."; the Alt
+  row names the key as the menus do (`keyboard.shortcutStyle`: "Hold ⌥ key…" in the macOS style); the double-click
+  choice is Fill, Zoom, Minimize, No Action (macOS 27's names). The shell pushes `tilingEdges`, `tilingMenuBar`, `tilingOptionDrag` and
   `tilingMargins` with `window-tiling`, `tilingLayouts` with `tile-hover`, `tilingSuggestions` with `tiling-layouts`, and
   `titlebarDoubleClick` = `fill` only with `tiling-arrange` (`zoom` in its place otherwise, D36). Layouts off: the plugin
   posts no hover `enter` and the shell ignores one; `tile_popover` (Super+Ctrl+L, the Window menu) still opens the
-  popover with its Layouts section. Suggestions off: the plugin keeps no suggestion after an arrangement (the state reply
-  has none), the shell asks for none, and one shown closes. Tile groups off: the shell's `groupForward` brings the window
+  popover with its Layouts section. Suggestions off: the plugin keeps no suggestion after an arrangement and drops the
+  pending one (it does not come back when the switch turns on), the shell asks for none, and one shown closes. Tile groups off: the shell's `groupForward` brings the window
   alone; the plugin gets no key (it raises a group only on `group_front`), groups still form, and Show Tile Group still
   brings the group (D37).
 

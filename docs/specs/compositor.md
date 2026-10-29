@@ -635,7 +635,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   "tilingMargins", "true" | "false")` once the plugin advertises `window-tiling`; `windows.tilingLayouts` ("Show layouts
   when hovering over the green button": off, the hover tracker posts no `enter`; `tile_popover` still posts `open`) with
   `tile-hover`, and `windows.tilingSuggestions` ("Suggest windows to fill the rest of a layout": off, an arrangement keeps
-  no suggestion and the state reply has none) with `tiling-layouts`; core `tiling::switchOf` maps the keys.
+  no suggestion and the pending one is dropped) with `tiling-layouts`; core `tiling::switchOf` maps the keys.
   `windows.tilingGroups` ("Bring tile groups forward together") is the shell's alone (ADR-0036 D38). Without the plugin
   (C2) the shell shows no tiling items and the keys do nothing; drags move windows as Hyprland does.
 - **FR56** A window's titlebar never goes under the menu bar (macOS; owner report from the 1.0.0-rc1 real session:
