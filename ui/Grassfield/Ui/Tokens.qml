@@ -1255,10 +1255,10 @@ QtObject {
     readonly property real settingsDockSliderTitleBaseline: 22.5
     // macOS 27: the sliders' tracks centred this far under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsDockSliderCenter: 36
-    // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
-    readonly property real settingsDockSliderLabelBaseline: 56.5
     // Least gap between two end labels when a longer language pushes one against the other [ref: ADR-0024 spacing scale]
     readonly property int settingsDockSliderLabelGap: 8
+    // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    readonly property real settingsDockSliderLabelBaseline: 56.5
     // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsDockSizeSliderWidth: 200
     // macOS 27: the Magnification slider from the group's left edge (490); it runs to 10 from the right edge [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
@@ -1835,10 +1835,10 @@ QtObject {
     readonly property int settingsSaverThumbPhotoTilt: 7
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures' white border, a fraction of the picture's height
     readonly property real settingsSaverThumbPhotoBorder: 0.04
-    // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
-    readonly property int settingsChoiceRingWidth: 3
     // Least gap between two choice names when a longer language is wider than the pitch [ref: ADR-0024 spacing scale]
     readonly property int settingsChoiceCaptionGap: 6
+    // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
+    readonly property int settingsChoiceRingWidth: 3
     // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsGlassRowHeight: 232
     // macOS 27: the glass preview's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
