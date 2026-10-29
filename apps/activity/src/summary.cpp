@@ -111,10 +111,11 @@ void Summary::setNetworkMode(const QString &mode)
     rebuild();
 }
 
-void Summary::addSample(const Snapshot &snapshot)
+void Summary::addSample(const Snapshot &snapshot, const QDateTime &now)
 {
     const SystemSnapshot &s = snapshot.system;
     m_system = s;
+    m_now = now;
     m_haveSample = true;
     // AM29: the shares of the whole machine; a sample without its rates is a gap.
     const bool cpu = s.cpuOk && s.userShare >= 0 && s.systemShare >= 0;
@@ -141,7 +142,7 @@ void Summary::addSample(const Snapshot &snapshot)
 void Summary::setBattery(const BatteryState &battery, const QDateTime &now)
 {
     m_battery = battery;
-    m_batteryAt = now;
+    m_now = now;
     rebuild();
 }
 
@@ -229,12 +230,12 @@ void Summary::rebuild()
         } else {
             rows << figure(tr("Time remaining:"), b.timeToEmpty > 0 ? durationText(b.timeToEmpty) : tr("Calculating…"));
         }
-        const qint64 since = b.sourceSince > 0 && m_batteryAt.isValid() ? m_batteryAt.toSecsSinceEpoch() - b.sourceSince : -1;
+        const qint64 since = b.sourceSince > 0 && m_now.isValid() ? m_now.toSecsSinceEpoch() - b.sourceSince : -1;
         rows << figure(onBattery(b.charge) ? tr("Time on battery:") : tr("Time on AC:"), durationText(since));
         blocks << figures(rows);
         // AM39: Battery (Last 12 hours), each value at its time.
         QVariantList values, xs;
-        const qint64 end = m_batteryAt.isValid() ? m_batteryAt.toSecsSinceEpoch() : 0, span = 12 * 3600;
+        const qint64 end = m_now.isValid() ? m_now.toSecsSinceEpoch() : 0, span = 12 * 3600;
         for (const ChargeEntry &e : b.history) {
             const double x = 1.0 - static_cast<double>(end - static_cast<qint64>(e.time)) / static_cast<double>(span);
             if (x < 0 || x > 1)

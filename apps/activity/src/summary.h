@@ -59,8 +59,9 @@ public:
     // AM42, AM44: what the Disk ("io" or "data") and Network ("packets" or "data") graphs show.
     void setDiskMode(const QString &mode);
     void setNetworkMode(const QString &mode);
-    void addSample(const Snapshot &snapshot);
-    // `now`: for the time on battery or on AC, and the battery graph's twelve hours (tests give their own).
+    // `now`: the time the battery's figures and graph count to (the time on battery or on AC, the graph's twelve hours). Each
+    // sample moves it, not only a new battery state, so they go on between two changes (tests give their own).
+    void addSample(const Snapshot &snapshot, const QDateTime &now = QDateTime::currentDateTimeUtc());
     void setBattery(const BatteryState &battery, const QDateTime &now = QDateTime::currentDateTimeUtc());
 
     static QString durationText(qint64 seconds); // "h:mm" (AM39)
@@ -83,7 +84,7 @@ private:
     SystemSnapshot m_system; // the last sample's
     bool m_haveSample = false;
     BatteryState m_battery;
-    QDateTime m_batteryAt;
+    QDateTime m_now; // the last sample's or battery state's
     History m_cpuSystem, m_cpuUser, m_memInUse, m_memLevel, m_energy;
     History m_diskReads, m_diskWrites, m_diskReadBytes, m_diskWriteBytes;
     History m_netPacketsIn, m_netPacketsOut, m_netBytesIn, m_netBytesOut;

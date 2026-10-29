@@ -278,6 +278,17 @@ TEST(Summary, EnergyGraphAndTheBattery)
     ASSERT_EQ(xs.size(), 2);
     EXPECT_DOUBLE_EQ(xs.at(0).toDouble(), 0.5);
     EXPECT_DOUBLE_EQ(xs.at(1).toDouble(), 1.0);
+    // The integrator's review of 91dcb63: UPower says nothing new for ten minutes, the samples go on; the time on battery
+    // counts and the graph slides with them. Six hours later the first entry has slid out.
+    s.addSample(Snapshot{}, now.addSecs(600));
+    EXPECT_EQ(figureOf(s, QStringLiteral("Time on battery:")).value(QStringLiteral("value")).toString(), QStringLiteral("3:17"));
+    g = graphOf(s, QStringLiteral("battery"));
+    const QVariantList slid = g.value(QStringLiteral("series")).toList().at(0).toMap().value(QStringLiteral("xs")).toList();
+    ASSERT_EQ(slid.size(), 2);
+    EXPECT_DOUBLE_EQ(slid.at(0).toDouble(), 0.5 - 600.0 / 43200);
+    EXPECT_DOUBLE_EQ(slid.at(1).toDouble(), 1.0 - 600.0 / 43200);
+    s.addSample(Snapshot{}, now.addSecs(6 * 3600 + 60));
+    EXPECT_EQ(values(graphOf(s, QStringLiteral("battery")), 0), (QList<double>{81.6}));
 
     b.timeToEmpty = 0; // UPower still estimating
     s.setBattery(b, now);
