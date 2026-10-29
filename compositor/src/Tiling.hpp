@@ -132,14 +132,23 @@ namespace gf::tiler {
     // From the plugin's pointer motion listener, before Hyprland applies the motion: one of Hyprland's resizes of a tiled
     // window began (Resizing); one of Hyprland's moves passed the drag threshold on a tiled window (TL16: Moving, its drag
     // ended and begun again from its size from before under the pointer) or goes on (dragMotion: the preview); no drag any
-    // more ends a resize or a preview whose release was not seen.
+    // more ends a resize or a preview whose release was not seen. TL30: a drag of a shared edge's handle follows the
+    // pointer; with no drag at all, the pointer resting on a handle shows its cursor.
     void beforePointerMotion();
 
     // From the plugin's first pointer button listener, after the top clamp's, before Hyprland handles the button: a press
     // records the grip; the release that ends one of Hyprland's moves tiles the place shown (TL16, the top clamp left out),
     // or makes a Moving window Free, once Hyprland ended the drag; the release that ends a resize ends Resizing then; two
     // left clicks on a window's resize border (Hyprland's border or the app's own, its resize begun and ended without
-    // moving) extend its sides (TL20, with Alt the opposite ones) once Hyprland ended the second one.
-    void beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs);
+    // moving) extend its sides (TL20, with Alt the opposite ones) once Hyprland ended the second one. TL30: a plain left press
+    // on a shared edge's handle (two windows of a tile group facing each other across the margin, the middle
+    // tiling.handleLength of what they share; not under the lock, a foreign Exclusive layer or a layer) begins the plugin's
+    // drag of that edge: every window along it is Resizing and follows the pointer, within every window's limits; the release
+    // ends it (Tiled with the new boxes, one `resized` notice). True for that press and its release: the caller cancels them
+    // on the bus (Hyprland's held-button state is left as it was, ADR-0015 P6), and no other listener acts on them.
+    bool beforePointerButton(uint32_t button, bool pressed, uint32_t timeMs);
+
+    // TL30: a drag of a shared edge's handle is in progress (DesktopFocus leaves its press alone).
+    bool edgeOwnsPointer();
 
 } // namespace gf::tiler

@@ -4,9 +4,12 @@
 // m_events.presented, the output's presentation feedback) go into a per-monitor ring of CLOCK_MONOTONIC microseconds,
 // returned by `hyprctl grassfield-frames` (registered in Ipc.cpp; feature "frame-times"). One timestamp per presented
 // frame: no allocation once a monitor's ring exists, nothing else done on the compositor thread. For attribution, also the
-// CPU span of each rendered frame (render.preChecks to RENDER_POST) and the phase marks of the plugin's animations. Off by
-// default: only for kMaxRecordingMs after a start request, never while the session is locked (core/FrameLog.hpp).
+// CPU span of each rendered frame (render.preChecks to RENDER_POST), the phase marks of the plugin's animations, the event
+// loop's stalls (a beat every frames::kBeatUs while recording; a late one shows the loop was held) and the plugin's own work
+// outside a render (the shared edge's drag). Off by default: only for kMaxRecordingMs after a start request, never while the
+// session is locked (core/FrameLog.hpp).
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -30,5 +33,12 @@ namespace gf::frameProbe {
 
     // A phase of one of the plugin's animations ("overview-opening", ...), now. Nothing when the probe is not running.
     void mark(std::string_view what);
+
+    // The probe's clock (CLOCK_MONOTONIC microseconds), for work().
+    uint64_t nowUs();
+
+    // The plugin's own work on the compositor thread outside a render, from `beginUs` (nowUs() at its start) to now: the
+    // shared edge's drag (tiling.md TL30). Recorded only while recording (and never while the session is locked).
+    void work(uint64_t beginUs);
 
 } // namespace gf::frameProbe

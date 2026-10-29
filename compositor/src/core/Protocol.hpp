@@ -118,18 +118,21 @@ namespace gf::gfc {
     // ADR-0036 step 4b (tiling.md TL29): hl.plugin.grassfield.group_front, the tile groups the shell brings forward and lists
     // (from the grassfield-tiling reply). Only together with window-tiling and tiling-arrange.
     inline constexpr std::string_view kFeatureTilingGroups = "tiling-groups";
+    // ADR-0036 step 4c (tiling.md TL30): the shared edge's handle between windows of a tile group (the plugin's own drag; no
+    // verb, no event: the tiling notice says "resized" at its end). Only together with window-tiling and tiling-arrange.
+    inline constexpr std::string_view kFeatureTilingSharedEdge = "tiling-shared-edge";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
     // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
-    // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling) and tiling-groups (only together
-    // with tiling-arrange).
+    // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling), tiling-groups and
+    // tiling-shared-edge (each only together with tiling-arrange).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,
                                            bool frameTimes = false, bool keyboardFocus = false, bool tilingArrange = false, bool tileHover = false,
-                                           bool tilingGroups = false);
+                                           bool tilingGroups = false, bool sharedEdge = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
     // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).
