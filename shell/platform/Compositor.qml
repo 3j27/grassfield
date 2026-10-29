@@ -505,11 +505,13 @@ Singleton {
         root.tilingSendCount++;
     }
 
-    // Window > Move & Resize and the tiling keys (macOS 15+): the plugin places the window (FR49). False without the
-    // capability or for a window Hyprland does not know.
+    // Window > Move & Resize and the tiling keys (macOS 15+): the plugin places the window (FR49). Refused while locked (the
+    // plugin refuses it too); false without the capability or for a window Hyprland does not know.
     readonly property bool canTile: Capabilities.has("window-tiling")
 
     function tile(toplevel: var, place: string): bool {
+        if (SessionState.refuses("windows tile"))
+            return false;
         if (!root.canTile)
             return false;
         return dispatchRequest(Minimized.tileCall(addressOf(toplevel), place));
@@ -585,10 +587,11 @@ Singleton {
         return WindowTiling.splitOfWorkspace(TilingLink.splits, workspaceId);
     }
 
-    // The window is on a Split View Desktop.
+    // The window is a member of a Split View Desktop (one of its two windows, whatever its state; another window there is none,
+    // ADR-0036 D52).
     function inSplit(toplevel: var): bool {
-        const top = hyprlandToplevel(toplevel);
-        return top && top.workspace ? root.splitOf(top.workspace.id) !== null : false;
+        const address = addressOf(toplevel);
+        return address !== "" && WindowTiling.splitOfWindow(TilingLink.splits, address) !== null;
     }
 
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
@@ -626,9 +629,12 @@ Singleton {
         return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel)));
     }
 
-    // D43: the suggestions of a Split View Desktop were dismissed: the window `address` fills it alone. False for a window on
-    // no Split View Desktop.
+    // D43: the picker of a Split View Desktop ended without a second window (services/TilingSuggest): the window `address`
+    // fills it alone. Refused while locked (the picker's end is acted on again at the unlock); false for a window that is no
+    // member of a Split View Desktop.
     function fillAlone(address: string): bool {
+        if (SessionState.refuses("windows fill alone"))
+            return false;
         const toplevel = toplevelByAddress(address);
         if (!toplevel || !root.inSplit(toplevel))
             return false;
@@ -1302,7 +1308,8 @@ Singleton {
             });
         }
         out.sort((a, b) => a.id - b.id);
-        return WindowTiling.desktopOrder(out, TilingLink.splits); // a Split View Desktop after the one it came from (D41)
+        // A Split View Desktop after the one it came from (D41), unnumbered: the Desktops keep their numbers (#48 MINOR 7).
+        return WindowTiling.numberDesktops(WindowTiling.desktopOrder(out, TilingLink.splits), TilingLink.splits);
     }
 
     // Mapped windows of an output on any regular workspace, monitor-relative geometry:

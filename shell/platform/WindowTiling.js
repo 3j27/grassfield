@@ -258,10 +258,11 @@ function parseGroups(text) {
 }
 
 // gfc1-reply: grassfield-tiling
-// The Split View Desktops of the reply of `hyprctl grassfield-tiling` (docs/specs/tiling.md TL33): [{workspace, output, home}]
-// (Hyprland's ids of the Split View Desktop and of the Desktop it came from, its output's name), in the reply's order. An
-// entry without positive whole ids or an output name is left out; null when the reply is malformed (an older plugin's reply,
-// without "splits", lists none).
+// The Split View Desktops of the reply of `hyprctl grassfield-tiling` (docs/specs/tiling.md TL33): [{workspace, output, home,
+// windows, waiting}] (Hyprland's ids of the Split View Desktop and of the Desktop it came from, its output's name, its members
+// lower-case hex without 0x, whether its one member still waits for its second window), in the reply's order. An entry
+// without positive whole ids or an output name is left out, a malformed member too; null when the reply is malformed (an
+// older plugin's reply, without "splits", lists none).
 function parseSplits(text) {
     let msg = null;
     try {
@@ -274,8 +275,10 @@ function parseSplits(text) {
     const out = [];
     for (const d of (Array.isArray(msg.splits) ? msg.splits : [])) {
         const whole = v => finite(v) && Math.floor(v) === v && v > 0;
-        if (d && whole(d.workspace) && whole(d.home) && typeof d.output === "string" && d.output !== "")
-            out.push({workspace: d.workspace, output: d.output, home: d.home});
+        if (!d || !whole(d.workspace) || !whole(d.home) || typeof d.output !== "string" || d.output === "")
+            continue;
+        const windows = (Array.isArray(d.windows) ? d.windows : []).map(hexAddress).filter(a => a !== "");
+        out.push({workspace: d.workspace, output: d.output, home: d.home, windows: windows, waiting: d.waiting === true});
     }
     return out;
 }
@@ -283,6 +286,22 @@ function parseSplits(text) {
 // The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
 function splitOfWorkspace(splits, workspace) {
     return (splits || []).find(d => d.workspace === workspace) || null;
+}
+
+// The Split View Desktop of `splits` window `address` (any address form) is a member of, or null (ADR-0036 D52: another
+// window on that Desktop is none).
+function splitOfWindow(splits, address) {
+    const a = hexAddress(address);
+    return a === "" ? null : (splits || []).find(d => d.windows.indexOf(a) >= 0) || null;
+}
+
+// TL33, ADR-0036 D43 (#48 review, MAJOR 3): the windows to fill their Split View Desktop alone: each the one member of a
+// Desktop of `splits` still waiting for its second window, unless its picker is pending (`pending`: the window the shell
+// waits a suggestion for or shows the suggestions of, "" for none). Its picker dismissed, refused (over the polkit sheet,
+// Search...), timed out or never fetched: it fills, never leaving a half empty.
+function lonelyMembers(splits, pending) {
+    const p = hexAddress(pending);
+    return (splits || []).filter(d => d.waiting && d.windows.length === 1 && d.windows[0] !== p).map(d => d.windows[0]);
 }
 
 // The Desktops `spaces` ([{id, ...}] in id order) as the shell lists them (TL33, ADR-0036 D41): each Split View Desktop of
@@ -312,6 +331,17 @@ function desktopOrder(spaces, splits) {
     for (const s of spaces)
         emit(s);
     return out;
+}
+
+// The Desktops `spaces` (in the order shown) numbered as macOS numbers them (#48 review, MINOR 7): `split` for a Split View
+// Desktop of `splits`, which takes no number (it is named after its apps), `number` the position among the others (1-based,
+// 0 for a Split View Desktop). New objects; `spaces` is left as it is.
+function numberDesktops(spaces, splits) {
+    let n = 0;
+    return spaces.map(s => {
+        const split = splitOfWorkspace(splits, s.id) !== null;
+        return Object.assign({}, s, {split: split, number: split ? 0 : ++n});
+    });
 }
 
 // The members of the tile group of the window `address` (any address form) in `groups` (parseGroups), itself included, in

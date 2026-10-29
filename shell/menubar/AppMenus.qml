@@ -76,7 +76,8 @@ Singleton {
             windowSpaceId: focusedHere ? Compositor.spaceOf(focusedHere) : 0,
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
             hiddenCount: Compositor.hiddenWindows(rev).length,
-            spaces: Compositor.spacesOn(Compositor.focusedScreenName, rev).map(s => ({id: s.id})),
+            // Move to Desktop lists the Desktops, not the Split View Desktops (macOS lists no full-screen space there).
+            spaces: Compositor.spacesOn(Compositor.focusedScreenName, rev).filter(s => !s.split).map(s => ({id: s.id})),
             newSpaceId: Compositor.nextSpaceId(),
             canTile: Compositor.canTile,
             canArrange: Compositor.canArrange,

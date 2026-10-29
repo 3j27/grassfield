@@ -109,10 +109,13 @@ first_decision("shell/platform/Compositor.qml", "groupForward", R, text=composit
 first_decision("shell/platform/Compositor.qml", "groupFront", R, text=compositor, lines=1)
 first_decision("shell/platform/Compositor.qml", "runPendingActivation", R, text=compositor, lines=4)
 # Tiling step 6a (TL33): Full Screen › Left or Right of Screen and a Split View window's Exit Full Screen move windows and
-# show a Desktop; both refuse first (the plugin refuses them while locked too); a dismissed Split View suggestion fills
-# through tile, which refuses.
+# show a Desktop; both refuse first (the plugin refuses them while locked too). A Split View whose picker ended without a
+# second window fills through fillAlone and tile, which both refuse first (integrator review of c7a6b6e, MAJOR 2), and
+# TilingSuggest sends nothing while locked (it acts at the unlock).
 first_decision("shell/platform/Compositor.qml", "split", R, text=compositor, lines=1)
 first_decision("shell/platform/Compositor.qml", "unsplit", R, text=compositor, lines=1)
+first_decision("shell/platform/Compositor.qml", "tile", R, text=compositor, lines=1)
+first_decision("shell/platform/Compositor.qml", "fillAlone", R, text=compositor, lines=1)
 def calls(path, name, pattern, text=None):
     body = function(text if text is not None else read(path), name) if name else (text if text is not None else read(path))
     expect(f"{path}: {name or 'the file'} goes through {pattern}", body is not None and re.search(pattern, code(body)) is not None)
@@ -123,6 +126,7 @@ calls("shell/platform/Compositor.qml", "unminimizeWithGroup", r"groupForward\(ad
 calls("shell/platform/Compositor.qml", "groupForward", r"return groupFront\(address\)", compositor)
 calls("shell/platform/Compositor.qml", "showTileGroup", r"groupFront\(step\.address\)", compositor)
 calls("shell/platform/Compositor.qml", "fillAlone", r"return root\.tile\(toplevel, \"fill\"\)", compositor)
+calls("shell/services/TilingSuggest.qml", "", r"readonly property var lonely: SessionState\.locked \? \[\] : WindowTiling\.lonelyMembers\(")
 calls("shell/platform/Compositor.qml", "runPendingActivation", r"showTileGroup\(p\.toplevel, p\.members\)[\s\S]*activateWithGroup\(p\.toplevel\)", compositor)
 calls("shell/dock/Dock.qml", "", r"Compositor\.groupForward\(Compositor\.addressOf\(plan\[plan\.length - 1\]\)\)")
 calls("shell/dock/Dock.qml", "", r"Compositor\.unminimizeWithGroup\(item\.toplevel\)")
@@ -540,6 +544,9 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows split")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows unsplit")#false' \
   'shell/platform/Compositor.qml#return root.tile(toplevel, "fill");#return dispatchRequest(Minimized.tileCall(address, "fill"));' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows tile")#false' \
+  'shell/platform/Compositor.qml#SessionState.refuses("windows fill alone")#false' \
+  'shell/services/TilingSuggest.qml#readonly property var lonely: SessionState.locked ? [] : #readonly property var lonely: #' \
   'shell/platform/Compositor.qml#if (WindowTiling.membersOf(TilingLink.groups, address).length === 0)#if (false)' \
   'shell/platform/Compositor.qml#function groupFront(address: string): string {\n        if (SessionState.refuses("tile group forward"))#function groupFront(address: string): string {\n        if (false)' \
   'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \

@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.platform
+import "../platform/WindowTiling.js" as WindowTiling
 
 // Shows the tiling suggestions (docs/specs/tiling.md TL28): popup kind "tilingSuggest" over the first empty zone of the layout
 // the window that asked is filling, offering the windows that can take it (platform/TilingLink's suggestion; live thumbnails
@@ -53,15 +54,30 @@ Singleton {
         return sg ? Compositor.pickSuggestion(address, sg.layout, sg.zones[0].zone, sg.address) : false;
     }
 
-    // Esc, or a click outside: the suggestions end for that arrangement. On a Split View Desktop the window then fills it alone
-    // (docs/specs/tiling.md TL33, ADR-0036 D43).
+    // Esc, or a click outside: the suggestions end for that arrangement (on a Split View Desktop the window then fills it
+    // alone: lonely below).
     function dismiss(): void {
-        const sg = TilingLink.suggestion;
         TilingLink.dismiss();
         if (root.shown)
             Popups.close();
-        if (sg)
-            Compositor.fillAlone(sg.address);
+    }
+
+    // TL33, ADR-0036 D43 (#48 review, MAJOR 3): a Split View Desktop never keeps an empty half. Its one member still waiting
+    // for its second window fills it alone as soon as its picker is not pending: dismissed (Esc, a click outside, another
+    // popup in its place), refused (the polkit sheet, Search, a full-attention surface), timed out, or ended by another
+    // change. Not while locked (fillAlone refuses): at the unlock. Each window is sent once while it stays lonely.
+    readonly property string pendingAddress: root.shown && Popups.data.suggestion ? Popups.data.suggestion.address : TilingLink.awaiting && Compositor.suggestionAsked ? Compositor.suggestionAsked.address : ""
+    readonly property var lonely: SessionState.locked ? [] : WindowTiling.lonelyMembers(TilingLink.splits, root.pendingAddress)
+    property var filled: ({})
+
+    onLonelyChanged: {
+        const next = {};
+        for (const address of root.lonely) {
+            next[address] = true;
+            if (root.filled[address] !== true)
+                Compositor.fillAlone(address);
+        }
+        root.filled = next;
     }
 
     Connections {
@@ -78,11 +94,8 @@ Singleton {
         target: Popups
 
         function onKindChanged(): void {
-            if (Popups.kind !== "tilingSuggest" && TilingLink.suggestion !== null) {
-                const sg = TilingLink.suggestion;
+            if (Popups.kind !== "tilingSuggest" && TilingLink.suggestion !== null)
                 TilingLink.dismiss();
-                Compositor.fillAlone(sg.address); // D43: a Split View Desktop without its second window (refused while locked)
-            }
         }
     }
 }

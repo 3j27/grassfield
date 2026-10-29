@@ -24,12 +24,16 @@ Singleton {
     property var splits: []
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
+    // A suggestion asked for is on its way (from the notice of its arrangement until its reply is read or the deadline passes):
+    // a Split View's picker is pending meanwhile (services/TilingSuggest).
+    property bool awaiting: false
     // A fetch was asked while the previous process was still running: start it when that one ends.
     property bool startPending: false
 
     // The suggestion ends (Esc, a click outside, the lock): nothing more is taken for that arrangement.
     function dismiss(): void {
         root.wantedGen = -1;
+        root.awaiting = false;
         root.suggestion = null;
         Compositor.suggestionAsked = null;
     }
@@ -52,10 +56,12 @@ Singleton {
             if (notice.reason === "placed" && asked !== null && Date.now() <= asked.until && Compositor.canLayouts) {
                 // The shown suggestion stays until the reply says what follows (the next zone, or nothing).
                 root.wantedGen = notice.gen;
+                root.awaiting = true;
                 root.fetch();
                 return;
             }
             root.wantedGen = -1;
+            root.awaiting = false;
             root.suggestion = null;
             if (Compositor.canGroups || Compositor.canSplit)
                 root.fetch(); // the groups or the Split View Desktops may have changed
@@ -109,6 +115,7 @@ Singleton {
                 const sg = WindowTiling.parseSuggestion(text);
                 const asked = Compositor.suggestionAsked;
                 root.suggestion = sg !== null && sg.gen === root.wantedGen && asked !== null && sg.address === asked.address ? sg : null;
+                root.awaiting = false; // after the suggestion was shown (or refused): a Split View's picker is that one now
             }
         }
         onRunningChanged: {
@@ -129,6 +136,7 @@ Singleton {
             root.startPending = false;
             stateFetch.running = false;
             root.wantedGen = -1;
+            root.awaiting = false;
             root.suggestion = null;
         }
     }

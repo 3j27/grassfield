@@ -7256,6 +7256,14 @@
         <translation>Bureau %1</translation>
     </message>
     <message>
+        <source>%1 and %2</source>
+        <translation>%1 et %2</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
+    </message>
+    <message>
         <source>%1, minimized</source>
         <translation>%1, réduite</translation>
     </message>
