@@ -2,11 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="fr" sourcelanguage="en">
 <context>
-    <name>AboutPage</name>
-    <message>
-        <source>About</source>
-        <translation>Informations</translation>
-    </message>
+    <name>AboutFacts</name>
     <message>
         <source>%1 (1 thread)</source>
         <translation>%1 (1 processeur logique)</translation>
@@ -18,6 +14,13 @@
     <message>
         <source>%1 GB</source>
         <translation>%1 Go</translation>
+    </message>
+</context>
+<context>
+    <name>AboutPage</name>
+    <message>
+        <source>About</source>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>%1 × %2</source>
@@ -109,7 +112,7 @@
     </message>
 </context>
 <context>
-    <name>AboutPanel</name>
+    <name>AboutWindow</name>
     <message>
         <source>About This Computer</source>
         <translation>À propos de cet ordinateur</translation>
@@ -117,18 +120,6 @@
     <message>
         <source>%1: %2</source>
         <translation>%1&#xa0;: %2</translation>
-    </message>
-    <message>
-        <source>Operating system</source>
-        <translation>Système d’exploitation</translation>
-    </message>
-    <message>
-        <source>Grassfield</source>
-        <translation>Grassfield</translation>
-    </message>
-    <message>
-        <source>Kernel</source>
-        <translation>Noyau</translation>
     </message>
     <message>
         <source>Computer</source>
@@ -147,8 +138,20 @@
         <translation>Graphismes</translation>
     </message>
     <message>
-        <source>OK</source>
-        <translation>OK</translation>
+        <source>Software</source>
+        <translation>Logiciel</translation>
+    </message>
+    <message>
+        <source>Grassfield Desktop %1</source>
+        <translation>Grassfield Desktop %1</translation>
+    </message>
+    <message>
+        <source>More Info…</source>
+        <translation>Plus d’informations…</translation>
+    </message>
+    <message>
+        <source>Built for Omarchy · based on Arch Linux</source>
+        <translation>Conçu pour Omarchy · basé sur Arch Linux</translation>
     </message>
 </context>
 <context>
@@ -11003,21 +11006,6 @@
     <message>
         <source>that device is no longer paired</source>
         <translation>Cet appareil n’est plus associé</translation>
-    </message>
-</context>
-<context>
-    <name>SystemInfo</name>
-    <message>
-        <source>%1 (1 thread)</source>
-        <translation>%1 (1 processeur logique)</translation>
-    </message>
-    <message>
-        <source>%1 (%2 threads)</source>
-        <translation>%1 (%2 processeurs logiques)</translation>
-    </message>
-    <message>
-        <source>%1 GB</source>
-        <translation>%1 Go</translation>
     </message>
 </context>
 <context>

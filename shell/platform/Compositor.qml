@@ -108,6 +108,20 @@ Singleton {
         return data && data.pid ? data.pid : 0;
     }
 
+    // The window of Wayland app id `appClass` whose xdg-toplevel tag (its ADR-0015 role: Hyprland's `xdgTag`) is `tag`, as a
+    // toplevel handle, or null. From Hyprland's window data, which a window's opening has re-read (requestWindowRefresh):
+    // Settings' About This Computer window (role "info", SettingsApp.openAbout).
+    function taggedToplevel(appClass: string, tag: string): var {
+        const tops = root.toplevels ? root.toplevels.values : [];
+        for (let i = 0; i < tops.length; i++) {
+            const top = hyprlandToplevel(tops[i]);
+            const data = top ? top.lastIpcObject : null;
+            if (data && data.class === appClass && data.xdgTag === tag)
+                return tops[i];
+        }
+        return null;
+    }
+
     // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
     // from its events)} (NotResponding).
     function knownWindows(): var {

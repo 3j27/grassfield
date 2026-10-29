@@ -184,91 +184,10 @@ Window {
         system: sys
     }
 
-    // The window's own surface and its secondary text grey (Appearance.windowSurface, Appearance.windowSecondary).
-    Binding {
-        target: Appearance
-        property: "windowSurface"
-        value: true
-    }
-
-    Binding {
-        target: Appearance
-        property: "dark"
-        value: AutoAppearance.isDark(cfg.value("appearance"), root.clock, Tokens.autoAppearanceDarkFromHour, Tokens.autoAppearanceDarkToHour)
-    }
-
-    // Auto appearance follows the local schedule: re-evaluated each minute while it is selected.
-    property date clock: new Date()
-    Timer {
-        interval: Tokens.autoAppearanceRecheckInterval
-        repeat: true
-        running: cfg.value("appearance") === "auto"
-        onTriggered: root.clock = new Date()
-    }
-
-    // App windows are opaque: menus drawn with the shared material must not show what is behind them.
-    Binding {
-        target: Appearance
-        property: "transparency"
-        value: 0
-    }
-
-    Binding {
-        target: Appearance
-        property: "reduceMotion"
-        value: cfg.value("accessibility.reduceMotion")
-    }
-
-    Binding {
-        target: Appearance
-        property: "increaseContrast"
-        value: cfg.value("accessibility.increaseContrast")
-    }
-
-    Binding {
-        target: Appearance
-        property: "textScale"
-        value: cfg.value("accessibility.textSize")
-    }
-
-    Binding {
-        target: Appearance
-        property: "accentSetting"
-        value: cfg.value("accent.color")
-    }
-
-    Binding {
-        target: Appearance
-        property: "highlightSetting"
-        value: cfg.value("accent.highlight")
-    }
-
-    // Menu shortcuts in the device's style (keyboard.shortcutStyle, owner decision 2026-10-26); the device facts are read once.
-    readonly property bool macDevice: MenuShortcut.macDevice(root.backend.readText("/sys/class/dmi/id/sys_vendor").text, root.backend.readText("/proc/bus/input/devices").text)
-
-    Binding {
-        target: Appearance
-        property: "shortcutStyle"
-        value: MenuShortcut.style(cfg.value("keyboard.shortcutStyle"), root.macDevice)
-    }
-
-    // Icon appearance (ADR-0014): the previews and any app icon follow the file live.
-    Binding {
-        target: Appearance
-        property: "iconMode"
-        value: cfg.value("icons.mode")
-    }
-
-    Binding {
-        target: Appearance
-        property: "iconTintSetting"
-        value: cfg.value("icons.tint")
-    }
-
-    Binding {
-        target: Appearance
-        property: "folderColorSetting"
-        value: cfg.value("icons.folderColor")
+    // Appearance from grassfield.json, live (shared with the About This Computer window).
+    SettingsAppearance {
+        backend: root.backend
+        config: cfg
     }
 
     // Back and forward through the panes (the toolbar's capsule): NavHistory.js.
