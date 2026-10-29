@@ -2,7 +2,8 @@
 Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no code in either repository before the opus
 PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. Later questions follow the
 owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD5,
-then SD6 to SD10 with step 2, SD11 to SD17 with step 3a, SD18 and SD19 with step 3b1, SD20 to SD23 with step 3b2), checked
+then SD6 to SD10 with step 2, SD11 to SD17 with step 3a, SD18 and SD19 with step 3b1, SD20 to SD23 with step 3b2, SD25 to
+SD30 with step 3c), checked
 by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
 "Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD5), integrator (merge after the
 opus PASS) · Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs and 0036 tiling are merged)
@@ -225,14 +226,20 @@ Every app in the Store comes from one source, shown on its button row, its produ
 An app that exists in several sources shows the first of: Omarchy setup (it configures what Omarchy configures), Arch or
 `[omarchy]` package, Flathub, AUR. The catalog can pin a source per app.
 
-**Flathub.** Turning it on adds the Flathub remote to the user's installation (`flatpak remote-add --user --if-not-exists`,
-S8). Everything happens in that installation, as the user, without root or terminal: `flatpak install --user
---noninteractive flathub <app-id>`, `flatpak uninstall --user --noninteractive <app-id>` (the app's data in
-`~/.var/app/<app-id>` is kept; the sheet says where), `flatpak update --user --noninteractive <app-id>`. The sheet adds what a
-Flatpak can reach (its `[Context]` from `flatpak remote-info --show-metadata`, in plain words) and the size of the runtimes
-it pulls. Its metadata is Flathub's AppStream in the user's installation, refreshed by `flatpak update --user --appstream` on
-the catalog's schedule (c). Cancelling a Flatpak operation and its effect are NOT VERIFIED (S8 installed no app); step 3
-measures them before any cancel is offered.
+**Flathub.** Turning it on adds the Flathub remote to the user's installation (`flatpak remote-add --user --if-not-exists
+flathub https://dl.flathub.org/repo/flathub.flatpakrepo`, S8, S21: a second, no root) and fetches its AppStream; turned on
+while offline, it is added once the Store is online. Everything happens in that installation, as the user, without root or
+terminal: `flatpak install --user --noninteractive flathub <ref>` (the ref Flathub's AppStream names,
+`app/<id>/<arch>/<branch>`), `flatpak uninstall --user --noninteractive <app-id>` then `--unused` (SD27; the app's data in
+`~/.var/app/<app-id>` is kept, and the sheet says where), `flatpak update --user --noninteractive <app-id>` (step 4). The
+sheet adds what a Flatpak can reach (its `[Context]` and `[Session Bus Policy]` from `flatpak remote-info --show-metadata`,
+in plain words) and flatpak's own plan: every ref it would add, with the most each downloads (SD25). Its metadata is
+Flathub's AppStream in the user's installation (`appstream/flathub/<arch>/active`), refreshed by `flatpak update --user
+--appstream` on the catalog's schedule (c: older than 6 hours at start, and Refresh). Flathub's desktop applications join
+the model while it is on, after the catalog's and Arch's: an app of the same id (or whose Arch id is that id with
+`.desktop`) shows Arch's package. A running install can be stopped (SD26, measured in S25). Installed lists the user's
+Flatpaks (`flatpak list --user --app`), those Flathub's AppStream does not have too ("flatpak:<id>", opened and removed as
+the others).
 
 **What the Store removes (counter-review MAJOR).** "Uninstall…" exists only for an app the user installed: a package
 installed explicitly that owns an application entry (an AUR package needs no entry, b.2) and that b.1's deny list does not
@@ -392,7 +399,10 @@ and the recipes call sudo themselves and write in the user's home, so the helper
 **b.3 Web apps and Flatpaks: the Store's own children, as the user.** `omarchy-webapp-install <name> <url> <icon-file>` (a
 local icon file from the catalog, S9), `omarchy-webapp-remove <name>`, and the `flatpak --user` commands of a. They are
 waited for (exit code), stdin from `/dev/null`, with a 10-minute limit for web apps (SIGTERM, then SIGKILL 5 s later; they
-touch only the user's files) and none for Flatpaks until step 3 has measured an interrupted one.
+touch only the user's files) and none for Flatpaks: a Flatpak install runs as long as its downloads take, the user can stop
+it (SIGTERM, SD26), and it stops with the Store (the child's PDEATHSIG is SIGTERM, which flatpak handles cleanly, S25; never
+SIGKILL, which leaves a staging folder). Success is the exit code 0 and the app listed (`flatpak info --user <id>`), or gone
+for a removal; an operation found in `store.json` at start is judged by that state alone (flatpak deploys the app last).
 
 **b.4 Every path.** The plan check comes first (e.4), one operation at a time, success = exit code 0 and the state, and
 nothing ever signals pacman.
@@ -433,7 +443,7 @@ nothing ever signals pacman.
   | Arch and Omarchy mirrors | one HEAD request for the first package of a plan (e.4) | before an install |
   | Screenshot hosts named by AppStream | the images of one product page | when it opens (ST6), unless turned off |
   | aur.archlinux.org | `info` (RPC v5, at most 50 names a request) for the AUR page opened, for foreign packages' names and for an install's plan (its dependencies, in turn); `search` by name after Return (two characters at least, at most 50 results kept, the most voted first); the PKGBUILD text on "View Build Script" (`/cgit/aur.git/plain/PKGBUILD?h=<package base>`) | only while the AUR is turned on (ST7) |
-  | dl.flathub.org (through `flatpak`) | Flathub's AppStream; Flatpak update checks; the apps and runtimes installed | only while Flathub is turned on |
+  | dl.flathub.org (through `flatpak`) | Flathub's `.flatpakrepo` (the switch); Flathub's AppStream; an app's `remote-info` (its version, sizes and metadata, when its page or sheet opens) and flatpak's own plan; Flatpak update checks (step 4); the apps and runtimes installed | only while Flathub is turned on |
   | the user's browser | homepage, bug tracker | on click |
   | Arch and Omarchy mirrors | packages | by pacman, during an install, not by the Store |
 
@@ -540,7 +550,8 @@ nothing ever signals pacman.
    Space (`Sheet.returnCancels`, as the certificate-override sheet of `system-dialogs.md`).
 8. **Dev sessions (ADR-0019)** never install, uninstall or start Omarchy's commands, pkexec or flatpak operations: the queue
    runs fake programs only (dev plumbing `GRASSFIELD_STORE_INSTALLER` for b.2 and b.3, `GRASSFIELD_STORE_PKEXEC` for b.1;
-   both come with step 3);
+   both come with step 3; for Flathub, the fixture's `bin/flatpak`, step 3c: without a fixture a dev session reads the
+   user's installation but adds nothing to it and runs no flatpak operation);
    catalogs and keys come from fixtures (`GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`,
    `GRASSFIELD_STORE_FIXTURE` for fake pacman, AppStream and flatpak roots; `GRASSFIELD_STORE_AUR_URL`, step 3b2, for a
    folder of the AUR's answers); "Open" follows ADR-0011's dev open policy. The names join ADR-0019's dev plumbing table
@@ -601,8 +612,9 @@ nothing ever signals pacman.
   package's files (`pacman -Qlq`, S10). Several entries: the catalog's choice, else the one AppStream names, else the first;
   none: no "Open", and the product page says the app has no window. **A web app opens with `omarchy-launch-webapp <url>`**
   (Omarchy's own launcher, which scopes the browser itself), never by its entry's file name, which has spaces uwsm refuses
-  (S14). A Flatpak opens with its exported desktop id, or `flatpak run <app-id>` in its own scope when the session does not
-  see the export folder (step 3 checks it).
+  (S14). A Flatpak opens with its exported desktop id (`uwsm-app -- <id>.desktop`) when the session's `XDG_DATA_DIRS` names
+  the user's export folder and the entry is there, else with `uwsm-app -- /usr/bin/flatpak run <app-id>` (S20: a session
+  started before flatpak was installed does not see the exports until the next login).
 
 ### Offline
 - The Store opens with the cached catalog, AppStream (local) and pacman's databases: Discover, Categories, search and product
@@ -806,7 +818,10 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD22 | How much one AUR operation does, its plan and its success (3b2) | one AUR package per operation, the one the user chose; the plan before the sheet: pacman does not resolve the name from the repositories (`pacman -Sp`: a package of that name, a provider of it or a group; else the repositories install it), the AUR knows it, the dependencies the system lacks (`pacman -T`) split into those pacman resolves (checked as any install: `pacman -S --print`, never an upgrade, the first file on the mirror) and those asked of the AUR in turn (at most 25 packages in 6 rounds; one the AUR does not have refuses the plan, one it cannot read marks it incomplete); success by name for what yay builds · several packages per operation · no plan, yay's own prompts | one package, the plan, success by name | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) the sheet lists what the operation adds before anything runs, as for every source; (b) yay's questions never reach the user (`--noconfirm`, Omarchy's own flags), and an AUR package's version is whatever its build makes, unknown before it |
 | SD23 | The script's AUR checks and their exit code (3b2) | `grassfield-store-run` kind `aur`: the add refuses a name pacman resolves from the repositories (the package, a provider, a group); the drop requires a package installed explicitly from outside the repositories, not denied, whose whole `-Rs` plan names no denied package; a refusal is exit 7, nothing run (the Store says "The installation was refused: the system changed since the Store checked it. Try again from its page.", or for a removal "This app can't be uninstalled from the Store.") · the Store's checks only | the script checks again, exit 7 | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) the state can change between the sheet and the terminal (another window, Omarchy's menu); a check under the lock refuses what the plan no longer matches, the same way for every path (b.1's helper checks again too) |
 
-| SD24 to SD27 | (step 3c, the Flathub source) | | | Written with that part: the probes S20 to S26 (`store-probes-4.sh`) measured their facts and cite these numbers |
+| SD24 | (step 3c part 3, "Get Flatpak…") | | | Written with that part: S20 measured the `flatpak` package |
+| SD25 | What a Flatpak's sheet shows before it installs (a: "what a Flatpak can reach … and the size of the runtimes it pulls"; step 3c part 2) | flatpak's own plan, read on a pseudo-terminal of the Store's (flatpak asks only on one) and answered yes for the runtime it requires, no to proceed: every ref it would add (the app, its runtime, their GL, codecs and locale extensions) with the most each downloads, nothing installed (S23); and the app's metadata (`remote-info --show-metadata`: `[Context]`, `[Session Bus Policy]`) in plain words · the app's and its runtime's `remote-info` alone (misses the extensions: about 700 MB of S23's 1.1 GB) · no sizes, the permissions only | flatpak's own plan, and the metadata | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's App Store gives the size before Get, and says what an app may reach before it does; flatpak's own plan is what flatpak then does, not an estimate; (b) the sheet alone, no terminal; a plan flatpak cannot give (another question, which is answered no or 0, no table, 60 s) refuses with flatpak's words |
+| SD26 | Stopping a Flatpak install (a: "measured before a cancel is offered"; S25) | Stop on the ring (its square, as a waiting operation's) and in the queue's menu: SIGTERM to flatpak, which ends in milliseconds and leaves nothing half-installed (what it finished, runtimes, stays for the next install or `--unused`; what it was downloading waits in flatpak's own folder and the next install takes it up, which `store_flatpak.sh` checks; `repair --dry-run` finds nothing); no time limit; the Store's child stops with it (SIGTERM) · no stop · SIGKILL · a time limit | Stop, by SIGTERM | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS stops a download from its ring; (b) one click, and the next Get installs what is missing; nothing to clean. A removal is not stopped (seconds) |
+| SD27 | What uninstalling a Flatpak removes (S26) | the app (with its locale), then `flatpak uninstall --user --noninteractive --unused`: the runtimes no installed app needs (a runtime installed by name stays, S26); its data in `~/.var/app/<id>` stays and the sheet says where · the app alone (gigabytes of runtimes left, which the Store never shows) · its data too | the app, then the unused runtimes; the data stays | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) deleting a macOS app leaves no shared part the user never chose, and keeps its data; (b) nothing left to clean, no command |
 | SD28 | How step 3c (SD11) is delivered | in three parts, each reviewed on its own: 3c part 1, the review notes on grassfield PR #36 (3b2's follow-ups, Arch's app data, the system older than its mirror) and Flathub's groundwork (the probes S20 to S26, the AppStream reader taking Flathub's components); part 2 the Flathub source (its switch, `flatpak --user`, flatpak's own plan, the stop, the uninstall, the runtimes left); part 3 "Get Flatpak…" (the `flatpak` package, which no Omarchy install has, through Omarchy's own `omarchy-pkg-add` in its terminal, pinned) · one PR | three parts | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the integrator asked for the fixes now (the 3c PR opened with them); the Flathub source then rests on measured facts, and the package install, which changes the system, gets a review of its own (e.9); Flathub's switch stays dimmed with SD8's reason meanwhile |
 | SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last completed a sync (the newest database's ctime, S27; amended again after PR #54's merge, which found pacman.log's line counted a failed sync); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
 | SD30 | AUR packages with a name of the deny list (the integrator's note on PR #36: "refuse `grassfield-*`/`omarchy-*` on the AUR path, or label by origin") | refused: every name b.1's deny list names (the system's, Omarchy's prefix and lists, `yay`, Grassfield's prefix, `HoldPkg`), the app's and every package its plan builds from the AUR, in the Store (Get dimmed with the reason, the plan refused) and again in the script (exit 7); Omarchy's lists unread refuse · only `grassfield-*` and `omarchy-*` · labelled by origin, installable | the whole deny list, refused | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) what the Store installs, it can remove again (b.1's list refuses the removal of every such name); an AUR package that takes Omarchy's or Grassfield's name is not theirs, and the user should not have to tell. An AUR app whose name only looks like the system's (`linux-wifi-hotspot`) is refused too, as its removal would be |
@@ -845,6 +860,15 @@ irreversible action on the owner's machine. The integrator checks each row in th
   that moment and its mtime to the mirror's Last-Modified (2026-10-19 and 2026-10-20); the same sync again (not modified)
   and a forced `-Syy` to a mirror that does not exist (exit 1) change neither, while pacman.log has the same "synchronizing
   package lists" line for all three.
+- `tests/integration/store_flatpak.sh` (step 3c part 2; S28): the real flatpak 1.18.4 in a throwaway Arch container, with a
+  local repository standing for Flathub (a runtime with a 20 MB file and an app made with flatpak's own `build-export` and
+  `build-update-repo`, served slowly over http on 127.0.0.1, added as `flathub` to root's own installation; nothing reaches
+  Flathub), driven through the Store's own code: Flathub's AppStream as flatpak copies it, flatpak's own plan on the
+  Store's pseudo-terminal (its table with the escape sequences and the no-break spaces of a real terminal), the app's
+  facts, an install stopped half-way (nothing installed; what it was downloading waits in a staging folder, which the next
+  install takes up), an install, a removal followed by `--unused`. S28: for a remote without a collection id, flatpak
+  1.18.4's `info` and `remote-info` print every field, then abort on an assertion (exit 134), so the Store reads their lines
+  whatever the exit code and asks `list` whether an app is installed.
 - `docs/audits/store-2026-10-27/store-probes-4.sh` (S20 to S26, step 3c) and its outputs `probes-4-output.txt` and
   `probes-4-output-run1.txt` (docker exit 0 both), the same image and Omarchy checkout, Arch's archive at 2026-10-20 and
   Flathub as it was on 2026-10-28: the `flatpak` package owns no application entry and adds its exports to
@@ -927,7 +951,12 @@ irreversible action on the owner's machine. The integrator checks each row in th
     `tests/integration/store_run.sh` (the AUR's refusals); `tests/integration/store_helper.sh` (an AUR package installed
     and removed end to end, with a stand-in yay). grassfield-packages pins and scans the two commands always (SD21) and
     checks a catalog's AUR apps against the AUR.
-  - **3c:** Flathub (its switch, `flatpak --user`, its metadata, the measured cancel).
+  - **3c:** Flathub (its switch, `flatpak --user`, its metadata, the measured cancel). Part 2 (SD25 to SD27):
+    `apps/store/src/flatpak.{h,cpp}` (the user's installation, the plan on a pseudo-terminal, what an app can reach, the
+    progress), the model's Flathub apps, the `flatpak` path of the queue (install, Stop, uninstall then `--unused`,
+    recovery), Open, Installed's Flathub group, the switch, the sheet and the page's facts. Tests: `tst_flatpak.cpp` (a fake
+    flatpak that asks on a terminal only), `tst_storemodel.cpp` Flathub, `tst_operations.cpp` Flatpak*, `tst_storebackend.cpp`
+    Flathub, `tst_storetext.qml`, `tst_storeoperations.qml`, `tst_storemain.qml`.
 - **Step 4:** the Updates page (system updates through ADR-0033's checker and its `otherPackages`, SD3; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
   Store's own (ST8).
 - **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
