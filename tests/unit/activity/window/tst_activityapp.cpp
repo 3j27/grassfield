@@ -231,6 +231,30 @@ TEST(ActivityApp, ColumnsAndSortPerTab)
     EXPECT_EQ(again.view(), "mine");
 }
 
+// AM42, AM44: the pop-ups above the Disk and Network graphs reach the summary and are remembered; anything else is refused.
+TEST(ActivityApp, TheGraphsPopUpsAreRemembered)
+{
+    Fixture f;
+    Isolated iso;
+    {
+        ActivityApp app(fixtureOptions(f), iso.statePath());
+        app.setTab(QStringLiteral("network"));
+        app.setGraphMode(QStringLiteral("network"), QStringLiteral("data"));
+        app.setGraphMode(QStringLiteral("disk"), QStringLiteral("data"));
+        app.setGraphMode(QStringLiteral("disk"), QStringLiteral("packets")); // not a Disk mode
+        app.setGraphMode(QStringLiteral("cpu"), QStringLiteral("data"));     // no pop-up there
+        QString mode;
+        for (const QVariant &b : app.summaryModel().blocks()) {
+            if (b.toMap().value(QStringLiteral("key")).toString() == QLatin1String("network"))
+                mode = b.toMap().value(QStringLiteral("mode")).toString();
+        }
+        EXPECT_EQ(mode, "data");
+    }
+    const ActivityState s = readState(iso.statePath());
+    EXPECT_EQ(s.networkGraph, "data");
+    EXPECT_EQ(s.diskGraph, "data");
+}
+
 TEST(ActivityState, ABrokenFileIsSetAside)
 {
     QTemporaryDir dir;
