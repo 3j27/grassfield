@@ -1051,6 +1051,14 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
+    // A window of a Split View Desktop (tiling.md TL33): a press focuses and raises it only, as in full screen; no double-click
+    // action and no drag (ADR-0036 D46: step 6b swaps the two windows).
+    if (gf::tiler::inSplit(w)) {
+        input.presses.claim(e.button, false);
+        m_clicks.reset();
+        return true;
+    }
+
     // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
     // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, Fill (tiling.md M40), or
     // nothing (the press is then a single press). Otherwise the press starts an interactive move.

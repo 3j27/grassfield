@@ -1316,7 +1316,33 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion) {
+    Area splitArea(const Rect& output, const Grid& grid) {
+        // zoneFrame keeps a margin inside the area's outer edges and half a margin each side of an inner one: the area one
+        // margin larger on every side puts the outer edges on the output's and leaves one margin between the halves.
+        return Area{.box = Rect{output.x - kMargin, output.y - kMargin, output.w + 2 * kMargin, output.h + 2 * kMargin}, .margin = kMargin, .grid = grid};
+    }
+
+    int64_t nextDesktopId(std::span<const int64_t> ids) {
+        int64_t top = 0;
+        for (const auto id : ids)
+            top = std::max(top, id);
+        return top + 1;
+    }
+
+    std::optional<int> splitZone(std::string_view side) {
+        if (side == "left")
+            return 0;
+        if (side == "right")
+            return 1;
+        return std::nullopt;
+    }
+
+    const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace) {
+        const auto it = std::ranges::find(splits, workspace, &SplitDesk::workspace);
+        return it == splits.end() ? nullptr : &*it;
+    }
+
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1342,6 +1368,12 @@ namespace gf::tiling {
                                    num(r->box.x), num(r->box.y), num(r->box.w), num(r->box.h));
             }
             out += "]}";
+        }
+        out += R"(],"splits":[)";
+        for (size_t i = 0; i < splits.size(); ++i) {
+            out += std::format(R"({}{{"workspace":{},"output":")", i == 0 ? "" : ",", splits[i].workspace);
+            out += gf::gfc::jsonEscape(splits[i].output);
+            out += std::format(R"(","home":{}}})", splits[i].home);
         }
         out += "]";
         if (!suggestion) {

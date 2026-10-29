@@ -102,6 +102,22 @@ namespace gf::tiler {
     // change (no notice otherwise).
     void groupFrontRequest(std::string_view address);
 
+    // hl.plugin.grassfield.split(address, side) (tiling.md TL33, ADR-0036 D41-D43): Full Screen › Left or Right of Screen. A new
+    // Desktop with the next free id on the window's output, shown; the window in that half of the whole output (core
+    // splitArea) and the suggestion of the other half from the Desktop it came from (always: the Split View asks for its
+    // second window); nothing to suggest, it fills the Desktop alone. Untrusted: the address is compared with the live windows.
+    // Refused while locked (reason "locked"); for a window that cannot be tiled now, one not on the Desktop its output shows,
+    // one already in a Split View Desktop, a side other than left or right, or while Stages shows its strip (D47): "invalid".
+    void splitRequest(std::string_view address, std::string_view side);
+
+    // hl.plugin.grassfield.unsplit(address) (TL33, D44): Exit Full Screen of a window of a Split View Desktop. It goes back to
+    // its home Desktop at its box from before, shown; the other window fills the Split View Desktop alone, and one left
+    // without a window ends. Refused while locked (reason "locked") and for a window of no Split View Desktop ("invalid").
+    void unsplitRequest(std::string_view address);
+
+    // `w` is on a Split View Desktop: its titlebar drag does nothing (D46; step 6b swaps the two).
+    bool inSplit(const PHLWINDOW& w);
+
     // The plugin's titlebar drag of a tiled window passed the threshold: Moving, with the box from before tiling (the
     // window takes that size under the pointer). nullopt when `w` is not tiled.
     std::optional<CBox> beginMove(const PHLWINDOW& w);

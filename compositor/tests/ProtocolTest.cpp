@@ -287,6 +287,23 @@ TEST(Protocol, TilingSharedEdgeComesWithTilingArrange) {
         << "never without window-tiling";
 }
 
+// ADR-0036 step 6a: tiling-split (the Split View Desktops) comes last, only with window-tiling and tiling-arrange.
+TEST(Protocol, TilingSplitComesWithTilingArrange) {
+    EXPECT_EQ(kFeatureTilingSplit, "tiling-split");
+    EXPECT_EQ(kLuaSplit, "split");
+    EXPECT_EQ(kLuaUnsplit, "unsplit");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge","tiling-split"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-split"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
+        << "never without tiling-arrange";
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "never without window-tiling";
+}
+
 TEST(Protocol, TileHoverComesWithWindowTiling) {
     EXPECT_EQ(kFeatureTileHover, "tile-hover");
     EXPECT_EQ(kLuaTilePopover, "tile_popover");

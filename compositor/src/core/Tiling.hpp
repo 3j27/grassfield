@@ -590,6 +590,33 @@ namespace gf::tiling {
     // event grows with the windows); the state is the reply of `hyprctl grassfield-tiling`.
     std::string noticeJson(uint64_t generation, Reason reason);
 
+    // ---- the Full Screen tile (macOS Split View, docs/specs/tiling.md TL33, step 6a) ----
+
+    // A Split View Desktop: the workspace the plugin made for it, its output, and the Desktop its first window came from (its
+    // home: Exit Full Screen sends a window back there, ADR-0036 D44).
+    struct SplitDesk {
+        int64_t     workspace = 0;
+        std::string output;
+        int64_t     home    = 0;
+        bool        waiting = false; // its second window not chosen yet (the suggestion pending): one window does not fill it
+
+        bool        operator==(const SplitDesk&) const = default;
+    };
+
+    // The area of a Split View Desktop (ADR-0036 D42): the whole output `output` (no menu bar, Dock or Stages strip), its two
+    // halves one tiling margin apart and no margin at the outer edges, whatever the margins switch says; `grid` the output's.
+    Area splitArea(const Rect& output, const Grid& grid);
+
+    // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
+    // the Overview's "+" does (ADR-0036 D41); 1 when there is none.
+    int64_t nextDesktopId(std::span<const int64_t> ids);
+
+    // The zone of the "left-right" layout a side of the Full Screen tile takes: "left" 0, "right" 1; nullopt otherwise.
+    std::optional<int> splitZone(std::string_view side);
+
+    // The Split View Desktop `workspace` is, or nullptr.
+    const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
+
     struct StateOutput {
         std::string                    name;
         Rect                           area; // the work area a placement would use now
@@ -597,7 +624,8 @@ namespace gf::tiling {
         int                            grid        = 1;
         std::vector<const TileRecord*> windows;
     };
-    // The reply of `hyprctl grassfield-tiling`: "suggestion" is null without one.
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr);
+    // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops (TL33), "suggestion" null without one.
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
+                          std::span<const SplitDesk> splits = {});
 
 } // namespace gf::tiling

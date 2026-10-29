@@ -680,7 +680,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"suggestion":null})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -1098,9 +1098,9 @@ TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
     sg.windows    = {0xd1, 0xd2};
     const std::array<StateOutput, 0> none{};
     EXPECT_EQ(stateJson(12, none, &sg),
-              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
               R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
-    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"suggestion":null})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"suggestion":null})");
     // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
     for (uint64_t i = 0; i < 20; ++i)
         sg.windows.push_back(0x100 + i);
@@ -1370,4 +1370,54 @@ TEST(TilingEdge, ADragLandsOnTheGrid) {
     EXPECT_EQ(right[0].second, pair[1].frame) << "the before side is gone: the right window stays in the work area";
     pair[0].limits.minW = 20; // the glue's floor (MIN_WINDOW_SIZE)
     EXPECT_EQ(frameOf(dragEdge(lr[0], pair, -600, Grid{}), 2), (Rect{36, 8, 956, 784})) << "with both, the left window's minimum bounds the edge";
+}
+
+// ---- ADR-0036 step 6a: the Full Screen tile (docs/specs/tiling.md TL33) ----
+
+// D42: the two halves of the whole output, one margin apart, none at the outer edges; on the output's grid.
+TEST(TilingSplit, TheHalvesFillTheOutputWithOneSeparator) {
+    const auto& zones = layoutById("left-right")->zones;
+    const Area  one   = splitArea(Rect{0, 0, 1920, 1080}, Grid{0, 0, 1});
+    EXPECT_EQ(zoneFrame(zones[0], one), (Rect{0, 0, 960 - kMargin / 2, 1080}));
+    EXPECT_EQ(zoneFrame(zones[1], one), (Rect{960 + kMargin / 2, 0, 960 - kMargin / 2, 1080}));
+    // Another output to the right, at scale 1.5 (grid step 2): the same shape on its own origin and grid.
+    const Area right = splitArea(Rect{1920, 0, 1708, 960}, Grid{1920, 0, gridStep(1.5)});
+    const Rect l     = zoneFrame(zones[0], right);
+    const Rect r     = zoneFrame(zones[1], right);
+    EXPECT_EQ(l.x, 1920);
+    EXPECT_EQ(l.y, 0);
+    EXPECT_EQ(l.h, 960);
+    EXPECT_EQ(r.x + r.w, 1920 + 1708);
+    EXPECT_EQ(r.x - (l.x + l.w), kMargin);
+    EXPECT_EQ(std::fmod(l.x + l.w - 1920, 2.0), 0.0) << "the inner edge lies on the grid";
+    // Fill takes the whole output.
+    const Zone full{0, 0, 12, 12};
+    EXPECT_EQ(zoneFrame(full, one), (Rect{0, 0, 1920, 1080}));
+}
+
+TEST(TilingSplit, ANewDesktopTakesTheNextId) {
+    EXPECT_EQ(nextDesktopId(std::vector<int64_t>{}), 1);
+    EXPECT_EQ(nextDesktopId(std::vector<int64_t>{1, 2, 5}), 6);
+    EXPECT_EQ(nextDesktopId(std::vector<int64_t>{3, -98, -1337}), 4) << "special and named workspaces are negative";
+    EXPECT_EQ(nextDesktopId(std::vector<int64_t>{-98}), 1);
+}
+
+TEST(TilingSplit, SidesAndDesktops) {
+    EXPECT_EQ(splitZone("left"), 0);
+    EXPECT_EQ(splitZone("right"), 1);
+    for (const char* bad : {"", "Left", "fill", "top", "left "})
+        EXPECT_FALSE(splitZone(bad).has_value()) << bad;
+    const std::vector<SplitDesk> splits{{.workspace = 7, .output = "GF-REF", .home = 2}, {.workspace = 9, .output = "WAYLAND-1", .home = 4}};
+    ASSERT_NE(splitOf(splits, 9), nullptr);
+    EXPECT_EQ(splitOf(splits, 9)->home, 4);
+    EXPECT_EQ(splitOf(splits, 7)->output, "GF-REF");
+    EXPECT_EQ(splitOf(splits, 2), nullptr);
+    EXPECT_EQ(splitOf({}, 7), nullptr);
+}
+
+TEST(TilingSplit, TheReplyListsTheSplitDesktops) {
+    const std::array<StateOutput, 0>     none{};
+    const std::array<SplitDesk, 2>       splits{SplitDesk{.workspace = 7, .output = "GF-REF", .home = 2}, SplitDesk{.workspace = 9, .output = "A\"B", .home = 4}};
+    EXPECT_EQ(stateJson(5, none, nullptr, splits),
+              R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2},{"workspace":9,"output":"A\"B","home":4}],"suggestion":null})");
 }

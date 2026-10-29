@@ -67,6 +67,9 @@ namespace gf::ipc {
     // With tiling-arrange (tiling-shared-edge: the shared edge's handle, TL30).
     bool sharedEdgeAvailable();
 
+    // Also hl.plugin.grassfield.split and unsplit, with tiling-arrange (tiling-split: the Split View Desktops, TL33).
+    bool tilingSplitAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

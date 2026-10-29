@@ -198,6 +198,10 @@ namespace gf::ipc {
         return tilingArrangeAvailable() && state().luaGroupFrontRegistered;
     }
 
+    bool tilingSplitAvailable() {
+        return tilingArrangeAvailable() && state().luaSplitRegistered && state().luaUnsplitRegistered;
+    }
+
     bool sharedEdgeAvailable() {
         return tilingArrangeAvailable(); // the pointer listeners are the plugin's own (main.cpp), the drag the tile records'
     }
@@ -209,7 +213,7 @@ namespace gf::ipc {
                                                 tilingAvailable(), layerPointer::ready(), state().luaConfigRegistered, chrome::ready(),
                                                 frameProbe::ready() && state().hyprctlFramesCommand != nullptr && state().hyprctlFramesStartCommand != nullptr,
                                                 appmenuAvailable(), tilingArrangeAvailable(), tileHoverAvailable(), tilingGroupsAvailable(),
-                                                sharedEdgeAvailable());
+                                                sharedEdgeAvailable(), tilingSplitAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -601,6 +605,37 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.split(address, side): Full Screen › Left or Right of Screen, a Split View Desktop (tiling.md TL33).
+        // Untrusted: the address is compared with the live windows, the side with "left" and "right".
+        int luaSplit(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            const auto side    = readString<8>(L, 2);
+            guarded("hl.plugin.grassfield.split", [&] {
+                if (!address.ok || !side.ok) {
+                    logRequest(Log::WARN, "split: rejected: invalid arguments");
+                    tiler::splitRequest("", ""); // posts the refusal (reason invalid, or locked)
+                    return;
+                }
+                tiler::splitRequest(address.view(), side.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
+        // hl.plugin.grassfield.unsplit(address): Exit Full Screen of a window of a Split View Desktop (TL33). Untrusted: the
+        // address is compared with the live windows.
+        int luaUnsplit(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            guarded("hl.plugin.grassfield.unsplit", [&] {
+                if (!address.ok) {
+                    logRequest(Log::WARN, "unsplit: rejected: invalid arguments");
+                    tiler::unsplitRequest(""); // posts the refusal (reason invalid, or locked)
+                    return;
+                }
+                tiler::unsplitRequest(address.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
         // hl.plugin.grassfield.appmenu(address): re-posts the appmenu event of a mapped window (the shell calls it
         // after a restart). Untrusted: the address is parsed and compared with the live windows.
         int luaAppmenu(lua_State* L) {
@@ -725,6 +760,8 @@ namespace gf::ipc {
         s.luaTilePopoverRegistered   = addLua(gfc::kLuaTilePopover, luaTilePopover);
         s.luaMoveToRegistered        = addLua(gfc::kLuaMoveTo, luaMoveTo);
         s.luaGroupFrontRegistered    = tiler::ready() && addLua(gfc::kLuaGroupFront, luaGroupFront); // only with the tile records
+        s.luaSplitRegistered         = tiler::ready() && addLua(gfc::kLuaSplit, luaSplit);           // only with the tile records
+        s.luaUnsplitRegistered       = tiler::ready() && addLua(gfc::kLuaUnsplit, luaUnsplit);
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -774,6 +811,8 @@ namespace gf::ipc {
         removeLua(s.luaTilePopoverRegistered, gfc::kLuaTilePopover);
         removeLua(s.luaMoveToRegistered, gfc::kLuaMoveTo);
         removeLua(s.luaGroupFrontRegistered, gfc::kLuaGroupFront);
+        removeLua(s.luaSplitRegistered, gfc::kLuaSplit);
+        removeLua(s.luaUnsplitRegistered, gfc::kLuaUnsplit);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
