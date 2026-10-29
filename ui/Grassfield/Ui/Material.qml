@@ -28,6 +28,9 @@ Item {
     // the text legible over the backdrop the shell knows for this output (Appearance.glassAlpha); "" keeps the one material
     // tint (Appearance.tintAlpha).
     property string glassClass: ""
+    // The luminance range {lumMin, lumMax} behind this surface when its host measured it itself (the menu bar's strip); null: the
+    // output's backdrop (Appearance.glassAlpha).
+    property var backdropOverride: null
     // The output this surface is shown on (the Screen attached property of its window).
     readonly property string screenName: Screen.name
     // Where the surface lies on that output (output px), for the backdrop under it (G-3 per surface, Appearance.glassAlpha):
@@ -60,7 +63,7 @@ Item {
     property real borderOpacity: Appearance.dark ? Math.max(Tokens.materialEdgeOpacityDark, Tokens.materialBorderOpacity) : Tokens.materialBorderOpacity
     property color borderColor: Appearance.dark ? Appearance.colors.shadow : Appearance.colors.materialBorder
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
-    readonly property real baseTintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : (glassClass !== "" ? Appearance.glassAlpha(glassClass, transparency, screenName, glassRect) : Appearance.tintAlpha(transparency))
+    readonly property real baseTintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : (glassClass !== "" ? (backdropOverride ? Appearance.glassAlphaOver(glassClass, transparency, backdropOverride) : Appearance.glassAlpha(glassClass, transparency, screenName, glassRect)) : Appearance.tintAlpha(transparency))
     // Increase Contrast frosts every glass surface (ADR-0024 G-8); Reduce Transparency has already made it opaque.
     readonly property real tintAlpha: Appearance.increaseContrast ? Math.max(Tokens.glassContrastFrost, baseTintAlpha) : baseTintAlpha
     // The host window needs this much room around the shape for the shadow.

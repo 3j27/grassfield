@@ -19,6 +19,9 @@ Singleton {
     // {output name: true} when neither tone reaches 4.5:1 over that output's strip: the bar shows its frosted band there
     // (ADR-0016 section 7, the macOS "show menu bar background" switched on automatically). Only a measured picture can.
     property var assists: ({})
+    // {output name: {lumMin, lumMax}}: the 5th to 95th percentile of the strip under the bar when it was measured (a picture or a
+    // video); the band's glass raises its tint over that range only (Material.backdropOverride).
+    property var ranges: ({})
     // {output name: {white, black}} worst-case contrast of each tone, for the status hook and the journal.
     property var contrasts: ({})
 
@@ -51,7 +54,18 @@ Singleton {
         next[output] = lum;
         luminances = next;
         tones = Logic.update(tones, output, lum, Tokens.menubarToneLightBelow, Tokens.menubarToneDarkAbove);
+        setRange(output, null);
         setAssist(output, false);
+    }
+
+    function rangeOf(output: string): var {
+        return ranges[output] ?? null;
+    }
+
+    function setRange(output: string, range: var): void {
+        const next = Object.assign({}, ranges);
+        next[output] = range;
+        ranges = next;
     }
 
     function setAssist(output: string, on: bool): void {
@@ -84,6 +98,7 @@ Singleton {
         c[output] = {white: r.white, black: r.black};
         contrasts = c;
         setAssist(output, r.assist);
+        setRange(output, {lumMin: strip.all.p5, lumMax: strip.all.p95});
         console.info("wallpaper tone=" + r.tone + " worst=" + r.best.toFixed(2) + " assist=" + r.assist + " output=" + output);
     }
 
@@ -94,6 +109,7 @@ Singleton {
     // A picture or a video the helper gave no usable strip for: no band (macOS), the tone stays; the text keeps its faint shadow.
     function reportUnmeasured(output: string): void {
         setAssist(output, false);
+        setRange(output, null);
         console.info("wallpaper tone unmeasured output=" + output);
     }
 

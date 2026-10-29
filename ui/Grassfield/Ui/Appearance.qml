@@ -163,12 +163,16 @@ QtObject {
     // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
     // under `rect` (output px; optional) when the output's luminance grid is known.
     function glassAlpha(glassClass: string, t: real, screenName: string, rect: var): real {
+        const known = backdrops[screenName] ?? null;
+        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
+        return glassAlphaOver(glassClass, t, under ?? known);
+    }
+
+    // The same over a backdrop range the host knows ({lumMin, lumMax}; the menu bar's strip: BarTone.rangeOf), null = worst case.
+    function glassAlphaOver(glassClass: string, t: real, backdrop: var): real {
         const target = glassTargets[glassClass];
         if (target === undefined)
             return tintAlpha(t);
-        const known = backdrops[screenName] ?? null;
-        const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
-        const backdrop = under ?? known;
         return GlassTint.alpha(target, t, Tokens.materialDefaultTransparency, backdrop, colors.materialTint, [colors.text, colors.textSecondary], colors.fill, Tokens.materialFillOpacity, Tokens.glassContrastMargin);
     }
 

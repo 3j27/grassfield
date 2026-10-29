@@ -47,6 +47,31 @@ TestCase {
         verify(GlassTint.targetAlpha(0.65, d / 2, d) > 0.65 && GlassTint.targetAlpha(0.65, d / 2, d) < 1);
     }
 
+    // The menu bar's band (ADR-0024: the "menu" class, over the strip's own range, MenuBar.qml): at the owner's 0.49 it is near the
+    // class target, not the legacy clamped tint (0.82), and it keeps the text at 4.5:1 over the strip it lies on.
+    function test_menuBarBandIsGlassOverItsStrip() {
+        const strip = {lumMin: 0.0528, lumMax: 0.35}; // the owner's video: the helper's p5 and p95 of the strip
+        Appearance.dark = false;
+        const legacy = Appearance.tintAlpha(0.49);
+        fuzzyCompare(legacy, Tokens.materialTintAlphaClamp, 1e-9);
+        const light49 = Appearance.glassAlphaOver("menu", 0.49, strip);
+        const light25 = Appearance.glassAlphaOver("menu", 0.25, strip);
+        console.info("band alpha light: 0.49 -> " + light49 + ", 0.25 -> " + light25 + " (legacy 0.49 -> " + legacy + ")");
+        verify(light49 < legacy);
+        verify(light49 >= GlassTint.targetAlpha(Tokens.glassMenu, 0.49, Tokens.materialDefaultTransparency));
+        verify(light25 >= light49);
+        verify(floorOf(false, strip.lumMin, strip.lumMax, 4.5 + Tokens.glassContrastMargin) <= light49);
+        Appearance.dark = true;
+        const dark49 = Appearance.glassAlphaOver("menu", 0.49, strip);
+        console.info("band alpha dark: 0.49 -> " + dark49 + ", 0.25 -> " + Appearance.glassAlphaOver("menu", 0.25, strip));
+        verify(dark49 < legacy);
+        verify(floorOf(true, strip.lumMin, strip.lumMax, 4.5 + Tokens.glassContrastMargin) <= dark49);
+        // Reduce Transparency (slider 0) stays opaque.
+        compare(Appearance.glassAlphaOver("menu", 0, strip), 1);
+        // No strip known: the worst case, as for any other glass.
+        compare(Appearance.glassAlphaOver("menu", 0.49, null), Appearance.glassAlpha("menu", 0.49, "nowhere"));
+    }
+
     function test_unknownBackdropTakesTheWorstCase() {
         Appearance.dark = false;
         compare(Appearance.glassAlpha("menu", Tokens.materialDefaultTransparency, "nowhere"), 0.78);

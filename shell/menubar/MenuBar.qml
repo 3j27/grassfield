@@ -803,6 +803,11 @@ Scope {
                 height: parent.height
                 opacity: win.dimOpacity
                 visible: win.showBackground
+                // ADR-0024: the band is glass like the other surfaces (the "menu" class: its target at the slider, raised to keep the
+                // text at 4.5:1 over the wallpaper strip), not the legacy clamped tint; the strip under the bar is what lies behind it.
+                glassClass: "menu"
+                backdropRect: Qt.rect(0, 0, win.width, Tokens.menubarHeight)
+                backdropOverride: BarTone.rangeOf(win.screen.name)
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
                 highlightEnabled: false
