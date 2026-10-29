@@ -86,6 +86,13 @@ const std::vector<View> &views()
     return all;
 }
 
+RowId rowId(const TableRow &row)
+{
+    if (row.kernel)
+        return RowId{};
+    return RowId{row.process.pid, row.process.start};
+}
+
 QString rowKey(const TableRow &row)
 {
     if (row.kernel)
@@ -152,13 +159,25 @@ void ProcessTable::setLocale(const QLocale &locale)
 
 void ProcessTable::setRows(std::vector<TableRow> rows)
 {
+    // The rows shown point into the last sample: it stays alive until the new one's changes are signalled.
+    m_previous = std::move(m_all);
     m_all = std::move(rows);
     rebuild();
+    m_previous = {};
+}
+
+std::vector<TableRow> ProcessTable::shownRows() const
+{
+    std::vector<TableRow> rows;
+    rows.reserve(m_shown.size());
+    for (const TableRow *r : m_shown)
+        rows.push_back(*r);
+    return rows;
 }
 
 int ProcessTable::currentRow() const
 {
-    return m_current.isEmpty() ? -1 : indexOf(m_current);
+    return m_current ? indexOf(*m_current) : -1;
 }
 
 int ProcessTable::rowCount(const QModelIndex &parent) const
@@ -177,7 +196,7 @@ QVariant ProcessTable::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= count())
         return {};
-    const TableRow &row = m_shown[static_cast<size_t>(index.row())];
+    const TableRow &row = *m_shown[static_cast<size_t>(index.row())];
     switch (role) {
     case CellsRole: {
         QStringList cells;
@@ -196,9 +215,9 @@ QVariant ProcessTable::data(const QModelIndex &index, int role) const
     case IconRole:
         return row.icon;
     case SelectedRole:
-        return m_selected.contains(rowKey(row));
+        return m_selected.contains(rowId(row));
     case CurrentRole:
-        return rowKey(row) == m_current;
+        return m_current && rowId(row) == *m_current;
     case KernelRole:
         return row.kernel;
     case OwnRole:
@@ -422,7 +441,7 @@ bool ProcessTable::accepts(const TableRow &row) const
             return false;
         break;
     case View::Selected:
-        if (!m_selectedView.contains(rowKey(row)))
+        if (!m_selectedView.contains(rowId(row)))
             return false;
         break;
     }
@@ -442,10 +461,10 @@ bool ProcessTable::accepts(const TableRow &row) const
     return digits && !row.kernel && QString::number(p.pid).startsWith(m_search);
 }
 
-int ProcessTable::indexOf(const QString &key) const
+int ProcessTable::indexOf(const RowId &id) const
 {
     for (size_t i = 0; i < m_shown.size(); ++i) {
-        if (rowKey(m_shown[i]) == key)
+        if (rowId(*m_shown[i]) == id)
             return static_cast<int>(i);
     }
     return -1;
@@ -454,41 +473,44 @@ int ProcessTable::indexOf(const QString &key) const
 void ProcessTable::rebuild()
 {
     const int before = count();
-    std::vector<TableRow> target;
+    // The target: the rows the view and the search keep, sorted; pointers into the last sample, nothing copied.
+    std::vector<const TableRow *> target;
     target.reserve(m_all.size());
     for (const TableRow &r : m_all) {
         if (accepts(r))
-            target.push_back(r);
+            target.push_back(&r);
     }
-    std::stable_sort(target.begin(), target.end(), [this](const TableRow &a, const TableRow &b) { return less(a, b); });
-    QHash<QString, int> wanted;
+    std::stable_sort(target.begin(), target.end(), [this](const TableRow *a, const TableRow *b) { return less(*a, *b); });
+    QHash<RowId, int> wanted;
     wanted.reserve(static_cast<qsizetype>(target.size()));
     for (size_t i = 0; i < target.size(); ++i)
-        wanted.insert(rowKey(target[i]), static_cast<int>(i));
+        wanted.insert(rowId(*target[i]), static_cast<int>(i));
 
-    // The rows that left: removed from the end, one run at a time.
+    // The rows that left: removed from the end, one run at a time. m_shown still points into the sample before (kept in
+    // m_previous until this returns), so a view that reads the rows while it hears of the change reads them as they were.
     for (int i = count() - 1; i >= 0;) {
-        if (wanted.contains(rowKey(m_shown[static_cast<size_t>(i)]))) {
+        if (wanted.contains(rowId(*m_shown[static_cast<size_t>(i)]))) {
             --i;
             continue;
         }
         const int last = i;
-        while (i >= 0 && !wanted.contains(rowKey(m_shown[static_cast<size_t>(i)])))
+        while (i >= 0 && !wanted.contains(rowId(*m_shown[static_cast<size_t>(i)])))
             --i;
         beginRemoveRows(QModelIndex(), i + 1, last);
         m_shown.erase(m_shown.begin() + (i + 1), m_shown.begin() + (last + 1));
         endRemoveRows();
     }
     // The rows that stay take their new values where they are; the new ones come in at the end.
-    QSet<QString> present;
-    for (TableRow &r : m_shown) {
-        const QString key = rowKey(r);
-        present.insert(key);
-        r = target[static_cast<size_t>(wanted.value(key))];
+    QSet<RowId> present;
+    present.reserve(static_cast<qsizetype>(m_shown.size()));
+    for (const TableRow *&r : m_shown) {
+        const RowId id = rowId(*r);
+        present.insert(id);
+        r = target[static_cast<size_t>(wanted.value(id))];
     }
-    std::vector<TableRow> added;
-    for (const TableRow &r : target) {
-        if (!present.contains(rowKey(r)))
+    std::vector<const TableRow *> added;
+    for (const TableRow *r : target) {
+        if (!present.contains(rowId(*r)))
             added.push_back(r);
     }
     if (!added.empty()) {
@@ -499,14 +521,14 @@ void ProcessTable::rebuild()
     // Then every row moves to its sorted place: a layout change, which keeps the view's scroll position (AM11).
     bool ordered = true;
     for (size_t i = 0; i < m_shown.size() && ordered; ++i)
-        ordered = rowKey(m_shown[i]) == rowKey(target[i]);
+        ordered = m_shown[i] == target[i];
     if (!ordered) {
         emit layoutAboutToBeChanged({}, QAbstractItemModel::VerticalSortHint);
         const QModelIndexList from = persistentIndexList();
         QModelIndexList to;
         to.reserve(from.size());
         for (const QModelIndex &i : from) {
-            const int row = i.row() >= 0 && i.row() < count() ? wanted.value(rowKey(m_shown[static_cast<size_t>(i.row())]), -1) : -1;
+            const int row = i.row() >= 0 && i.row() < count() ? wanted.value(rowId(*m_shown[static_cast<size_t>(i.row())]), -1) : -1;
             to << (row >= 0 ? index(row) : QModelIndex());
         }
         m_shown = std::move(target);
@@ -526,16 +548,17 @@ void ProcessTable::pruneSelection()
 {
     // A process that ended, or that the view or the search no longer shows, leaves the selection: an action never applies to
     // a row the user cannot see (AM11).
-    QSet<QString> shown;
-    for (const TableRow &r : m_shown)
-        shown.insert(rowKey(r));
-    const QSet<QString> was = m_selected;
-    const QString current = m_current;
+    QSet<RowId> shown;
+    shown.reserve(static_cast<qsizetype>(m_shown.size()));
+    for (const TableRow *r : m_shown)
+        shown.insert(rowId(*r));
+    const QSet<RowId> was = m_selected;
+    const std::optional<RowId> current = m_current;
     m_selected.intersect(shown);
-    if (!shown.contains(m_anchor))
-        m_anchor.clear();
-    if (!shown.contains(m_current))
-        m_current.clear();
+    if (m_anchor && !shown.contains(*m_anchor))
+        m_anchor.reset();
+    if (m_current && !shown.contains(*m_current))
+        m_current.reset();
     if (m_selected != was || m_current != current)
         emit selectionChanged();
 }
@@ -545,27 +568,27 @@ void ProcessTable::selectRange(int from, int to)
     m_selected.clear();
     const int lo = std::min(from, to), hi = std::max(from, to);
     for (int i = lo; i <= hi; ++i)
-        m_selected.insert(rowKey(m_shown[static_cast<size_t>(i)]));
+        m_selected.insert(rowId(*m_shown[static_cast<size_t>(i)]));
 }
 
 void ProcessTable::click(int row, int modifiers)
 {
     if (row < 0 || row >= count())
         return;
-    const QString key = rowKey(m_shown[static_cast<size_t>(row)]);
-    if ((modifiers & Qt::ShiftModifier) && !m_anchor.isEmpty()) {
-        selectRange(indexOf(m_anchor), row);
+    const RowId id = rowId(*m_shown[static_cast<size_t>(row)]);
+    if ((modifiers & Qt::ShiftModifier) && m_anchor) {
+        selectRange(indexOf(*m_anchor), row);
     } else if (modifiers & Qt::ControlModifier) {
-        if (m_selected.contains(key))
-            m_selected.remove(key);
+        if (m_selected.contains(id))
+            m_selected.remove(id);
         else
-            m_selected.insert(key);
-        m_anchor = key;
+            m_selected.insert(id);
+        m_anchor = id;
     } else {
-        m_selected = {key};
-        m_anchor = key;
+        m_selected = {id};
+        m_anchor = id;
     }
-    m_current = key;
+    m_current = id;
     emit dataChanged(index(0), index(count() - 1), {SelectedRole, CurrentRole});
     emit selectionChanged();
 }
@@ -576,22 +599,22 @@ void ProcessTable::moveCurrent(int delta, bool extend)
         return;
     const int from = currentRow();
     const int to = std::clamp(from < 0 ? (delta >= 0 ? 0 : count() - 1) : from + delta, 0, count() - 1);
-    const QString key = rowKey(m_shown[static_cast<size_t>(to)]);
-    if (extend && !m_anchor.isEmpty()) {
-        selectRange(indexOf(m_anchor), to);
+    const RowId id = rowId(*m_shown[static_cast<size_t>(to)]);
+    if (extend && m_anchor) {
+        selectRange(indexOf(*m_anchor), to);
     } else {
-        m_selected = {key};
-        m_anchor = key;
+        m_selected = {id};
+        m_anchor = id;
     }
-    m_current = key;
+    m_current = id;
     emit dataChanged(index(0), index(count() - 1), {SelectedRole, CurrentRole});
     emit selectionChanged();
 }
 
 void ProcessTable::selectAll()
 {
-    for (const TableRow &r : m_shown)
-        m_selected.insert(rowKey(r));
+    for (const TableRow *r : m_shown)
+        m_selected.insert(rowId(*r));
     if (!m_shown.empty())
         emit dataChanged(index(0), index(count() - 1), {SelectedRole});
     emit selectionChanged();
@@ -613,12 +636,12 @@ QString ProcessTable::copyText() const
     for (Column c : m_columns)
         header << columnTitle(c, m_swappedMemory);
     lines << header.join(QLatin1Char('\t'));
-    for (const TableRow &r : m_shown) {
-        if (!m_selected.contains(rowKey(r)))
+    for (const TableRow *r : m_shown) {
+        if (!m_selected.contains(rowId(*r)))
             continue;
         QStringList cells;
         for (Column c : m_columns)
-            cells << cellText(r, c);
+            cells << cellText(*r, c);
         lines << cells.join(QLatin1Char('\t'));
     }
     return lines.join(QLatin1Char('\n')) + QLatin1Char('\n');

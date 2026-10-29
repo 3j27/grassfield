@@ -12,6 +12,7 @@
 #include <QSet>
 #include <QString>
 
+#include <optional>
 #include <vector>
 
 namespace activity {
@@ -37,7 +38,20 @@ struct TableRow {
     bool preventingSleep = false; // AM38
 };
 
-// A row's identity across samples: the pid and its start time ("kernel" for the Kernel row).
+// A row's identity across samples: the pid and its start time (pid -1 for the Kernel row). A plain value: the table
+// compares thousands of them at each sample.
+struct RowId {
+    int pid = -1;
+    quint64 start = 0;
+    bool operator==(const RowId &other) const { return pid == other.pid && start == other.start; }
+    bool operator!=(const RowId &other) const { return !(*this == other); }
+};
+inline size_t qHash(const RowId &id, size_t seed = 0)
+{
+    return qHashMulti(seed, id.pid, id.start);
+}
+RowId rowId(const TableRow &row);
+// The identity as text ("<pid>:<start>", "kernel"), for the KeyRole.
 QString rowKey(const TableRow &row);
 
 class ProcessTable : public QAbstractListModel
@@ -78,7 +92,8 @@ public:
     int count() const { return static_cast<int>(m_shown.size()); }
     int selectedCount() const { return static_cast<int>(m_selected.size()); }
     int currentRow() const;
-    const std::vector<TableRow> &shownRows() const { return m_shown; }
+    // The rows shown, in order (a copy, for the tests).
+    std::vector<TableRow> shownRows() const;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -106,7 +121,7 @@ private:
     QString sortText(const TableRow &row, Column column) const;
     void rebuild();
     void pruneSelection();
-    int indexOf(const QString &key) const;
+    int indexOf(const RowId &id) const;
     void selectRange(int from, int to);
 
     std::vector<Column> m_columns;
@@ -116,11 +131,13 @@ private:
     QString m_search;
     bool m_swappedMemory = false;
     QLocale m_locale;
-    std::vector<TableRow> m_all;   // the last sample
-    std::vector<TableRow> m_shown; // what the view and the search keep, sorted
-    QSet<QString> m_selected;
-    QSet<QString> m_selectedView; // Selected Processes: the rows selected when the view was chosen
-    QString m_anchor, m_current;
+    std::vector<TableRow> m_all;      // the last sample
+    std::vector<TableRow> m_previous; // the sample before, alive while a new one's changes are signalled
+    // What the view and the search keep, sorted: rows of m_all (of m_previous while a new sample comes in), never copied.
+    std::vector<const TableRow *> m_shown;
+    QSet<RowId> m_selected;
+    QSet<RowId> m_selectedView; // Selected Processes: the rows selected when the view was chosen
+    std::optional<RowId> m_anchor, m_current;
     QCollator m_collator;
 };
 
