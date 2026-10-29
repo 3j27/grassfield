@@ -257,6 +257,63 @@ function parseGroups(text) {
     return {groupOf: groupOf, members: members};
 }
 
+// gfc1-reply: grassfield-tiling
+// The Split View Desktops of the reply of `hyprctl grassfield-tiling` (docs/specs/tiling.md TL33): [{workspace, output, home}]
+// (Hyprland's ids of the Split View Desktop and of the Desktop it came from, its output's name), in the reply's order. An
+// entry without positive whole ids or an output name is left out; null when the reply is malformed (an older plugin's reply,
+// without "splits", lists none).
+function parseSplits(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling")
+        return null;
+    const out = [];
+    for (const d of (Array.isArray(msg.splits) ? msg.splits : [])) {
+        const whole = v => finite(v) && Math.floor(v) === v && v > 0;
+        if (d && whole(d.workspace) && whole(d.home) && typeof d.output === "string" && d.output !== "")
+            out.push({workspace: d.workspace, output: d.output, home: d.home});
+    }
+    return out;
+}
+
+// The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
+function splitOfWorkspace(splits, workspace) {
+    return (splits || []).find(d => d.workspace === workspace) || null;
+}
+
+// The Desktops `spaces` ([{id, ...}] in id order) as the shell lists them (TL33, ADR-0036 D41): each Split View Desktop of
+// `splits` right after the Desktop it came from (in id order when there are several); one whose home is not among `spaces`
+// stays where its id puts it. Every Desktop is listed once, whatever the reply says (a chain or a loop of homes, which the
+// plugin never makes, keeps id order).
+function desktopOrder(spaces, splits) {
+    const ids = spaces.map(s => s.id);
+    const homeOf = id => {
+        const d = splitOfWorkspace(splits, id);
+        return d && d.home !== id && ids.indexOf(d.home) >= 0 ? d.home : null;
+    };
+    const out = [];
+    const emit = s => {
+        if (out.indexOf(s) >= 0)
+            return;
+        out.push(s);
+        for (const t of spaces) {
+            if (homeOf(t.id) === s.id)
+                emit(t);
+        }
+    };
+    for (const s of spaces) {
+        if (homeOf(s.id) === null)
+            emit(s);
+    }
+    for (const s of spaces)
+        emit(s);
+    return out;
+}
+
 // The members of the tile group of the window `address` (any address form) in `groups` (parseGroups), itself included, in
 // the reply's order; [] for a window in no group or without groups (TL29: only a window in a group sends group_front).
 function membersOf(groups, address) {

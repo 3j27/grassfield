@@ -630,8 +630,20 @@
         <translation>Remplir et disposer</translation>
     </message>
     <message>
+        <source>Left of Screen</source>
+        <translation>À gauche de l’écran</translation>
+    </message>
+    <message>
+        <source>Right of Screen</source>
+        <translation>À droite de l’écran</translation>
+    </message>
+    <message>
         <source>Full Screen</source>
         <translation>Plein écran</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
     </message>
     <message>
         <source>About %1</source>
@@ -732,6 +744,10 @@
     <message>
         <source>Halves</source>
         <translation>Moitiés</translation>
+    </message>
+    <message>
+        <source>Full Screen Tile</source>
+        <translation>Mosaïque plein écran</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -10728,6 +10744,10 @@
     <message>
         <source>%1, zone %2 of %3</source>
         <translation>%1, zone %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Full Screen</source>
+        <translation>Plein écran</translation>
     </message>
 </context>
 <context>

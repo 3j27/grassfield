@@ -143,9 +143,10 @@ Variants {
                 return Tokens.radiusMenu;
             }
 
-            // A menu's open submenu (Move & Resize, an app's own submenus) is blurred too, and its own open submenu.
+            // A menu's open submenu (Move & Resize, an app's own submenus, the tiling popover's Full Screen ›) is blurred too, and
+            // its own open submenu.
             Region {
-                item: (holder.item as PopupMenu)?.submenuItem ?? null
+                item: (holder.item as PopupMenu)?.submenuItem ?? (holder.item as TilingPopover)?.submenuItem ?? null
                 radius: Tokens.radiusMenu
 
                 Region {

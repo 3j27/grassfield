@@ -572,6 +572,69 @@ Singleton {
         return sent;
     }
 
+    // ---- the Full Screen tile (docs/specs/tiling.md TL33, macOS Split View; ADR-0036 D40-D47) ----
+
+    // Full Screen › Left or Right of Screen and Exit Full Screen of a window of a Split View Desktop: the plugin's split and
+    // unsplit. Nothing without the capability, nothing while locked.
+    readonly property bool canSplit: Capabilities.has("tiling-split")
+    // ADR-0036 D47: while Stages shows its strip the plugin refuses Left and Right of Screen; the rows are greyed.
+    readonly property bool splitBlocked: root.stagesAvailable && Settings.windowsStages
+
+    // The Split View Desktop `workspaceId` is (TilingLink.splits, from the plugin's reply), or null.
+    function splitOf(workspaceId: int): var {
+        return WindowTiling.splitOfWorkspace(TilingLink.splits, workspaceId);
+    }
+
+    // The window is on a Split View Desktop.
+    function inSplit(toplevel: var): bool {
+        const top = hyprlandToplevel(toplevel);
+        return top && top.workspace ? root.splitOf(top.workspace.id) !== null : false;
+    }
+
+    // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
+    function splitShown(screenName: string): bool {
+        const mon = monitorByName(screenName);
+        return mon && mon.activeWorkspace ? root.splitOf(mon.activeWorkspace.id) !== null : false;
+    }
+
+    // Left or Right of Screen (D41-D43): the window in that half of a new Split View Desktop, then the suggestions of the other
+    // half (always: the Split View asks for its second window; "Suggest windows to fill the rest of a layout" governs the
+    // layouts only). Refused while locked; false without the capability or for an invalid window or side.
+    function split(toplevel: var, side: string): bool {
+        if (SessionState.refuses("windows split"))
+            return false;
+        if (!root.canSplit)
+            return false;
+        const address = addressOf(toplevel);
+        const call = Minimized.splitCall(address, side);
+        if (call === "")
+            return false;
+        root.suggestionAsked = root.canLayouts ? {address: address, until: Date.now() + WindowTiling.suggestionWaitMs} : null;
+        const sent = dispatchRequest(call);
+        if (!sent)
+            root.suggestionAsked = null;
+        return sent;
+    }
+
+    // Exit Full Screen of a window of a Split View Desktop (D44): back to its Desktop and box; the other window fills alone.
+    // Refused while locked; false without the capability or for an invalid window.
+    function unsplit(toplevel: var): bool {
+        if (SessionState.refuses("windows unsplit"))
+            return false;
+        if (!root.canSplit)
+            return false;
+        return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel)));
+    }
+
+    // D43: the suggestions of a Split View Desktop were dismissed: the window `address` fills it alone. False for a window on
+    // no Split View Desktop.
+    function fillAlone(address: string): bool {
+        const toplevel = toplevelByAddress(address);
+        if (!toplevel || !root.inSplit(toplevel))
+            return false;
+        return root.tile(toplevel, "fill");
+    }
+
     // Tile groups (TL29): a window brought forward from the Dock, its menu, the menu bar's Window menu, the app switcher or
     // the Overview brings its tile group forward; the Dock menu's Show Tile Group; an Overview drop moves the group
     // (TilingLink.groups). Nothing without the capability, nothing while locked.
@@ -1202,7 +1265,7 @@ Singleton {
         return null;
     }
 
-    // Regular workspaces (id > 0) of an output, ordered by id:
+    // Regular workspaces (id > 0) of an output, ordered by id, each Split View Desktop right after the one it came from:
     // [{id, name, active, windowCount, appIds, windows, screenW, screenH}]. `windows` (bottom to top as Hyprland lists them) are the
     // windowsAcross entries of the Space, `screenW` x `screenH` the output size in logical pixels (SpaceGeometry.js): what a desktop miniature needs.
     function spacesOn(screenName: string, revision: int): var {
@@ -1239,7 +1302,7 @@ Singleton {
             });
         }
         out.sort((a, b) => a.id - b.id);
-        return out;
+        return WindowTiling.desktopOrder(out, TilingLink.splits); // a Split View Desktop after the one it came from (D41)
     }
 
     // Mapped windows of an output on any regular workspace, monitor-relative geometry:
@@ -1280,10 +1343,11 @@ Singleton {
     // workspace shown): the window data is re-read (coalesced, event-driven) so fullscreenOn stays right.
     readonly property var fullscreenRefreshEvents: ["workspacev2", "openwindow", "closewindow", "movewindowv2"]
 
-    // True when a window of the output's shown workspace is full screen (Hyprland fullscreen mode 2, not Zoom). The menu
-    // bar sits above it on the overlay layer and auto-hides. Reactive on `revision` (topologyRevision).
+    // True when a window of the output's shown workspace is full screen (Hyprland fullscreen mode 2, not Zoom), or the output
+    // shows a Split View Desktop (TL33). The menu bar sits above it on the overlay layer and auto-hides. Reactive on `revision`
+    // (topologyRevision) and on TilingLink.splits.
     function fullscreenOn(screenName: string, revision: int): bool {
-        return windowsOn(screenName, revision).some(w => w.fullscreen);
+        return windowsOn(screenName, revision).some(w => w.fullscreen) || root.splitShown(screenName);
     }
 
     // Windows on the output's currently shown workspace.

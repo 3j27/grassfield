@@ -1091,8 +1091,9 @@ Scope {
             readonly property bool isDockScreen: screenName !== "" && screenName === root.dockScreen
             // A Dock that moved here comes out of its edge strip: until it has slid in, the machine runs even with auto-hide off.
             property bool revealPending: false
-            // Auto-hide as the machine sees it: the setting, or any output that does not have the Dock (it stays away).
-            readonly property bool autohide: Settings.dockAutohide || !isDockScreen || revealPending
+            // Auto-hide as the machine sees it: the setting, any output that does not have the Dock (it stays away), or an output
+            // that shows a Split View Desktop (docs/specs/tiling.md TL33: the Dock shows when the pointer reaches its edge).
+            readonly property bool autohide: Settings.dockAutohide || !isDockScreen || revealPending || Compositor.splitShown(screenName)
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)

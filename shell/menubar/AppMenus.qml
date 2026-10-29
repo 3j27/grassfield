@@ -71,6 +71,7 @@ Singleton {
             windows: wins.map(t => ({ref: t, title: t.title, focused: t === focusedHere, minimized: Compositor.isMinimized(t)})),
             focusedWindow: focusedHere,
             fullscreen: focusedHere ? focusedHere.fullscreen : false,
+            inSplit: focusedHere ? Compositor.inSplit(focusedHere) : false,
             maximized: focusedHere ? Compositor.isZoomed(focusedHere, rev) : false,
             windowSpaceId: focusedHere ? Compositor.spaceOf(focusedHere) : 0,
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
@@ -79,6 +80,8 @@ Singleton {
             newSpaceId: Compositor.nextSpaceId(),
             canTile: Compositor.canTile,
             canArrange: Compositor.canArrange,
+            canSplit: Compositor.canSplit,
+            splitBlocked: Compositor.splitBlocked,
             outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }
@@ -122,6 +125,12 @@ Singleton {
             break;
         case "fullscreen":
             Compositor.toggleFullscreen(ctx.focusedWindow);
+            break;
+        case "split":
+            Compositor.split(ctx.focusedWindow, item.side);
+            break;
+        case "exitSplit":
+            Compositor.unsplit(ctx.focusedWindow);
             break;
         case "tile":
             Compositor.tile(ctx.focusedWindow, item.place);

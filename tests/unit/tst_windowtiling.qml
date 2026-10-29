@@ -302,4 +302,45 @@ TestCase {
                 JSON.stringify([{op: "activate", address: "a1"}, {op: "restore", address: "b2"}, {op: "focus", address: "a1"}, {op: "groupFront", address: "a1"}]));
         compare(steps("zz", ["a1"], [on("a1", 1, true, false)]), "[]", "an unknown window: nothing");
     }
+
+    // TL33 (step 6a): the Split View Desktops of the reply; an older plugin's reply without "splits" lists none.
+    function test_parseSplitsReadsTheSplitViewDesktops() {
+        const reply = splits => JSON.stringify({v: "gfc/1", type: "tiling", gen: 5, outputs: [], splits: splits, suggestion: null});
+        compare(JSON.stringify(WindowTiling.parseSplits(reply([{workspace: 4, output: "DP-1", home: 1}, {workspace: 5, output: "GF-REF", home: 2}]))),
+                JSON.stringify([{workspace: 4, output: "DP-1", home: 1}, {workspace: 5, output: "GF-REF", home: 2}]));
+        compare(JSON.stringify(WindowTiling.parseSplits(JSON.stringify({v: "gfc/1", type: "tiling", gen: 5, outputs: []}))), "[]", "no splits key: none");
+        compare(JSON.stringify(WindowTiling.parseSplits(reply("x"))), "[]");
+        // Malformed entries are left out, not fatal.
+        const bad = [null, {workspace: 0, output: "DP-1", home: 1}, {workspace: 4.5, output: "DP-1", home: 1}, {workspace: "4", output: "DP-1", home: 1},
+                     {workspace: 4, output: "", home: 1}, {workspace: 4, output: 7, home: 1}, {workspace: 4, output: "DP-1", home: -1},
+                     {workspace: 4, output: "DP-1"}, {workspace: Infinity, output: "DP-1", home: 1}, {workspace: 6, output: "DP-2", home: 3}];
+        compare(JSON.stringify(WindowTiling.parseSplits(reply(bad))), JSON.stringify([{workspace: 6, output: "DP-2", home: 3}]));
+        for (const text of ["", "x", "null", JSON.stringify({v: "gfc/2", type: "tiling", splits: []}), JSON.stringify({v: "gfc/1", type: "stages", splits: []})])
+            compare(WindowTiling.parseSplits(text), null, text);
+    }
+
+    function test_splitOfWorkspaceFindsTheDesktop() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1}, {workspace: 5, output: "GF-REF", home: 2}];
+        compare(WindowTiling.splitOfWorkspace(splits, 5).home, 2);
+        compare(WindowTiling.splitOfWorkspace(splits, 1), null, "a home is no Split View Desktop");
+        compare(WindowTiling.splitOfWorkspace(null, 4), null, "no reply yet");
+        compare(WindowTiling.splitOfWorkspace([], 4), null);
+    }
+
+    // D41: each Split View Desktop right after its home, several in id order; one whose home is gone stays at its id.
+    function test_desktopOrderListsASplitViewDesktopAfterItsHome() {
+        const order = (ids, splits) => WindowTiling.desktopOrder(ids.map(id => ({id: id})), splits).map(s => s.id).join(",");
+        compare(order([1, 2, 3, 4], []), "1,2,3,4");
+        compare(order([1, 2, 3, 4], null), "1,2,3,4");
+        compare(order([1, 2, 3, 4], [{workspace: 4, output: "DP-1", home: 1}]), "1,4,2,3");
+        compare(order([1, 2, 3, 5, 6], [{workspace: 6, output: "DP-1", home: 2}, {workspace: 5, output: "DP-1", home: 2}]), "1,2,5,6,3");
+        compare(order([1, 4, 5], [{workspace: 4, output: "DP-1", home: 2}]), "1,4,5", "its home not listed (another output): where its id puts it");
+        compare(order([1, 2, 3], [{workspace: 2, output: "DP-1", home: 2}]), "1,2,3", "its own home: where its id puts it");
+        compare(order([2, 3, 7], [{workspace: 7, output: "DP-1", home: 3}, {workspace: 3, output: "DP-1", home: 2}]), "2,3,7",
+                "a chain of homes (never sent): every Desktop once");
+        compare(order([1, 3, 7], [{workspace: 7, output: "DP-1", home: 3}, {workspace: 3, output: "DP-1", home: 7}]), "1,3,7",
+                "a loop of homes (never sent): id order");
+        const spaces = [{id: 1, name: "a"}, {id: 4, name: "b"}];
+        verify(WindowTiling.desktopOrder(spaces, [{workspace: 4, output: "DP-1", home: 1}])[1] === spaces[1], "the same objects");
+    }
 }

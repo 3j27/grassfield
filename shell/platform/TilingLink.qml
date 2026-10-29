@@ -8,9 +8,9 @@ import "WindowTiling.js" as WindowTiling
 // arrangement the shell asked (Compositor.suggestionAsked: a layout or an arrangement from the popover, the Window menu or the
 // keys, or a pick of the suggestions), the suggestion of the `hyprctl grassfield-tiling` reply when it fills that window's
 // layout and belongs to that notice; any other change of the tile records ends it (a refusal changes nothing). One fetch at
-// a time; services/TilingSuggest shows the suggestion. The same reply gives the tile groups (TL29): read again after every
-// change of the tile records while the plugin offers tiling-groups. Without tiling-layouts or tiling-groups nothing is
-// ever fetched.
+// a time; services/TilingSuggest shows the suggestion. The same reply gives the tile groups (TL29) and the Split View
+// Desktops (TL33): read again after every change of the tile records while the plugin offers tiling-groups or tiling-split.
+// Without tiling-layouts, tiling-groups or tiling-split nothing is ever fetched.
 Singleton {
     id: root
 
@@ -19,6 +19,9 @@ Singleton {
     // The tile groups of the last reply (WindowTiling.parseGroups: the Dock menu's Show Tile Group, an Overview drop), or
     // null (no reply yet, a malformed one, no tiling-groups).
     property var groups: null
+    // The Split View Desktops of the last reply (WindowTiling.parseSplits: the menu bar and the Dock hide on them, the Desktops
+    // list each after the one it came from); [] without one, a malformed reply or tiling-split.
+    property var splits: []
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
     // A fetch was asked while the previous process was still running: start it when that one ends.
@@ -54,8 +57,8 @@ Singleton {
             }
             root.wantedGen = -1;
             root.suggestion = null;
-            if (Compositor.canGroups)
-                root.fetch(); // the groups may have changed
+            if (Compositor.canGroups || Compositor.canSplit)
+                root.fetch(); // the groups or the Split View Desktops may have changed
         }
 
         function onCanLayoutsChanged(): void {
@@ -74,10 +77,17 @@ Singleton {
             else
                 root.groups = null;
         }
+
+        function onCanSplitChanged(): void {
+            if (Compositor.canSplit)
+                root.fetch();
+            else
+                root.splits = [];
+        }
     }
 
     Component.onCompleted: {
-        if (Compositor.canGroups)
+        if (Compositor.canGroups || Compositor.canSplit)
             root.fetch();
     }
 
@@ -92,6 +102,8 @@ Singleton {
                 fetchDeadline.stop();
                 if (Compositor.canGroups)
                     root.groups = WindowTiling.parseGroups(text);
+                if (Compositor.canSplit)
+                    root.splits = WindowTiling.parseSplits(text) || [];
                 if (root.wantedGen < 0)
                     return; // no suggestion wanted, or it ended meanwhile
                 const sg = WindowTiling.parseSuggestion(text);

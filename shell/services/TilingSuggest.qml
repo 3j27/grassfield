@@ -53,11 +53,15 @@ Singleton {
         return sg ? Compositor.pickSuggestion(address, sg.layout, sg.zones[0].zone, sg.address) : false;
     }
 
-    // Esc, or a click outside: the suggestions end for that arrangement.
+    // Esc, or a click outside: the suggestions end for that arrangement. On a Split View Desktop the window then fills it alone
+    // (docs/specs/tiling.md TL33, ADR-0036 D43).
     function dismiss(): void {
+        const sg = TilingLink.suggestion;
         TilingLink.dismiss();
         if (root.shown)
             Popups.close();
+        if (sg)
+            Compositor.fillAlone(sg.address);
     }
 
     Connections {
@@ -74,8 +78,11 @@ Singleton {
         target: Popups
 
         function onKindChanged(): void {
-            if (Popups.kind !== "tilingSuggest" && TilingLink.suggestion !== null)
+            if (Popups.kind !== "tilingSuggest" && TilingLink.suggestion !== null) {
+                const sg = TilingLink.suggestion;
                 TilingLink.dismiss();
+                Compositor.fillAlone(sg.address); // D43: a Split View Desktop without its second window (refused while locked)
+            }
         }
     }
 }
