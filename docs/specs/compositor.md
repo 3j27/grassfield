@@ -153,18 +153,37 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   window (ADR-0006 amendment 2026-10-24, D-5, macOS model: a static screen owes no frames): from the first frame after the
   request to it + the animation's token duration + one refresh period, or to the Overview's end mark when later
   (`tests/visual/animation-windows.py`); the tail after it is reported, never judged. `tests/visual/frame-attribution.py`
-  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (its frame took more than 0.8
-  period of CPU), `client` (the render began more than 0.5 period after the previous presentation: nothing new to draw
-  until then), `other`.
+  classes each interval over 1.2 periods, in the animation and in the tail: `compositor` (the compositor's own time for its
+  frame was over 0.8 period: the render's CPU plus, before that render, the time the event loop was held or ran the
+  plugin's own work, outside any render), `client` (the render began more than 0.5 period after the previous presentation,
+  the loop free: nothing new to draw until then), `other`. The loop's records (integrator review of a6d04df: a main-loop
+  stall before a render shows only as a late render): while recording, an event-loop timer beats every 1 ms
+  (`frames::kBeatUs`: a hold is recorded at most one beat short, so a 12 ms hold before a 3 ms render still reads over the
+  budget); a beat more than 1 ms late (`kStallUs`, core `stallOf`) records a stall from its due time to the beat, with the CPU time Hyprland's main thread used since the previous beat (`CLOCK_THREAD_CPUTIME_ID`: little CPU is
+  the thread waiting, descheduled under load or blocked; about the stall's length is the compositor working); the plugin
+  records its own work outside a render (the shared edge's drag steps, `frameProbe::work`); both 1024 spans, dropped with
+  the other records. The reply gains `"loop":{"beats":N,"stalls":[[beginUs,lengthUs,cpuUs],...],
+  "work":[[beginUs,lengthUs],...]}` after `marks`; `--gate` fails without beats or without the plugin's work, and with
+  `--baseline` compares the gated scenario's compositor-caused long frames per second, per window it resizes (the drag's
+  own count: the plugin marks each shared-edge drag's end `edge-drag:F/E`, F of the edge's E windows followed it;
+  `--drag-mark`, every drag F = E; `--resizes` for the baseline), with the baseline's (tiling.md TL30: the shared edge against Hyprland's own resize, at most 1.25 times per
+  resized window, and at most 1 ms of the plugin's work per frame). The
+  attribution lists each
+  compositor-caused frame with its render's CPU and the loop's held time before it, split into stalls (with the main
+  thread's CPU share in them) and the plugin's work, and sums them per scenario (integrator nested pass of ce82fd3).
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
 - **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
   state always matches the device and the click after any titlebar gesture reaches the window under the
-  pointer. One exception, P6 (the revealed titlebar of a full-screen window): a press on it and the release of that press
-  are cancelled together; Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it
-  was. Such a press is taken only when no device holds that button already (the bus event names no device). Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  pointer. Two exceptions, P6 (the revealed titlebar of a full-screen window) and the shared edge's handle between two tiled
+  windows of a group (docs/specs/tiling.md TL30; only where Hyprland's pointer-focus hit test finds no window in front of
+  it but the edge's own, no popup: the frontmost window under the pointer gets the click): a press on it and the release
+  of that press are cancelled together;
+  Hyprland returns before its held-button list for a cancelled event, so the pair leaves it as it was. Such a press is
+  taken only when no device holds a button already (the bus event names no device), and a release still owed when the
+  button is pressed again was lost and is forgotten. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
   press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
   a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
   The release of a press that went to a client is never consumed, even over a titlebar.
@@ -981,13 +1000,19 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - APIs used (all read from the 0.56.2 headers): `HyprlandAPI::{addWindowDecoration, removeWindowDecoration,
   addLuaFunction, removeLuaFunction, registerHyprCtlCommand, unregisterHyprCtlCommand, addNotification,
   getHyprlandVersion}`, `Event::bus()->m_events.{window.open, window.floating, window.fullscreen,
-  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled; the deprecated
+  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled but for FR13's two exceptions; the deprecated
   `registerCallbackDynamic` is not used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`,
   `g_pDecorationPositioner`, `g_pHyprRenderer->addPassElement` with `CRectPassElement` /
   `CTexPassElement`, `renderText`, `g_layoutManager->setTargetGeom` (move),
   `Desktop::focusState()->fullWindowFocus`, `Fullscreen::controller()->setFullscreenMode`,
   `Config::Actions::{closeWindow, alterZOrder}`, `Event::bus()->m_events.input.mouse.move`,
   `g_pInputManager->{hasHeldButtons(), m_pointers, getMouseCoordsInternal()}`,
+  `Pointer::Cursor::overrideController->{setOverride, unsetOverride}` (special-action group: the shared edge's cursor,
+  tiling.md TL30), `Desktop::viewState()->hitTest().windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING)` and
+  `CWindow::hasPopupAt` of every visible window, `CWindow::isX11OverrideRedirect` and `getWindowMainSurfaceBox` (what is in
+  front of the shared edge's handle: a popup, an X11 menu), `CWorkspace::isVisible`, `g_pSessionLockManager->m_events.lock` (the lock
+  ends its drag), `MIN_WINDOW_SIZE` (macros.hpp: the tiling minimum's floor), `CEventLoopTimer` (the frame probe's loop
+  beats, FR54),
   `CWindow::{m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration,
   forceRecalcFor}`, `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
   Minimize (M2, also checked in the exported symbol table): `Event::bus()->m_events.{render.preChecks,

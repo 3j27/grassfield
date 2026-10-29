@@ -64,6 +64,9 @@ namespace gf::ipc {
     // Also hl.plugin.grassfield.group_front, with tiling-arrange (tiling-groups: the tile groups, TL29).
     bool tilingGroupsAvailable();
 
+    // With tiling-arrange (tiling-shared-edge: the shared edge's handle, TL30).
+    bool sharedEdgeAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

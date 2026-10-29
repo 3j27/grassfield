@@ -93,6 +93,10 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // RENDER_POST_WINDOWS (after the windows, before the overlay layers: the menu bar stays above it): the revealed
     // titlebars on the monitor being rendered.
     static void drawRevealed();
+    // TL30, TL34: the desktop under `pos` is covered for the plugin's pointer affordances (the zoom light's hover, the
+    // shared-edge handle): the session is locked, a foreign Exclusive layer is mapped, or a Top or Overlay layer (or a layer
+    // popup) is under the point (core hoverCoverEffect is not None). Read only.
+    static bool pointerCovered(const Vector2D& pos);
     // A pointer button, before Hyprland handles it: true when it is a press on a revealed titlebar or the release of such
     // a press, which the caller cancels on the bus (core gf::chrome::CRevealPresses: Hyprland's held-button state is not
     // touched by a cancelled press and its cancelled release). The zoom light leaves full screen, close closes; minimize

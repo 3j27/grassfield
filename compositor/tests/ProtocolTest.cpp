@@ -271,6 +271,22 @@ TEST(Protocol, TilingGroupsComeWithTilingArrange) {
         << "never without window-tiling";
 }
 
+// ADR-0036 step 4c: tiling-shared-edge (the shared edge's handle) comes last, only with window-tiling and tiling-arrange.
+TEST(Protocol, TilingSharedEdgeComesWithTilingArrange) {
+    EXPECT_EQ(kFeatureTilingSharedEdge, "tiling-shared-edge");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-shared-edge"]})")
+        << "without the groups' verb";
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
+        << "never without tiling-arrange";
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "never without window-tiling";
+}
+
 TEST(Protocol, TileHoverComesWithWindowTiling) {
     EXPECT_EQ(kFeatureTileHover, "tile-hover");
     EXPECT_EQ(kLuaTilePopover, "tile_popover");
