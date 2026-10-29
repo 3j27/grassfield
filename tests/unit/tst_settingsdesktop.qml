@@ -174,8 +174,28 @@ TestCase {
         compare(group.footnote, "Needs the Grassfield compositor extension.");
         const action = named(t.page.contentItem, "Window title bar double-click action");
         compare(action.model.map(m => m.id), ["fill", "zoom", "minimize", "none"]);
+        compare(action.model.map(m => m.text), ["Fill", "Zoom", "Minimize", "No Action"], "macOS 27's names (parity matrix M40)");
         action.picked("fill");
         compare(last(t.store), {"windows.titlebarDoubleClick": "fill"});
+    }
+
+    // M38: the Alt row names the key as the menus do (keyboard.shortcutStyle): its symbol in the macOS style.
+    function test_optionDragLabelFollowsShortcutStyle() {
+        const before = Appearance.shortcutStyle;
+        try {
+            const t = make();
+            Appearance.shortcutStyle = "mac";
+            verify(!named(t.page.contentItem, "Hold Alt key while dragging windows to tile"));
+            const mac = named(t.page.contentItem, "Hold ⌥ key while dragging windows to tile");
+            verify(mac);
+            mac.toggled(false);
+            compare(last(t.store), {"windows.tilingOptionDrag": false});
+            Appearance.shortcutStyle = "pc";
+            verify(named(t.page.contentItem, "Hold Alt key while dragging windows to tile"));
+            verify(!named(t.page.contentItem, "Hold ⌥ key while dragging windows to tile"));
+        } finally {
+            Appearance.shortcutStyle = before;
+        }
     }
 
     function test_showItemsOnDesktop() {

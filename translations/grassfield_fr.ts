@@ -3074,6 +3074,10 @@
         <translation>Remplir</translation>
     </message>
     <message>
+        <source>No Action</source>
+        <translation>Aucune action</translation>
+    </message>
+    <message>
         <source>Minimize windows into application icon</source>
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
     </message>
@@ -3128,10 +3132,6 @@
     <message>
         <source>Minimize</source>
         <translation>Réduire</translation>
-    </message>
-    <message>
-        <source>Do Nothing</source>
-        <translation>Ne rien faire</translation>
     </message>
     <message>
         <source>Drag windows to menu bar to fill screen</source>
@@ -3204,6 +3204,10 @@
     <message>
         <source>Hold Alt key while dragging windows to tile</source>
         <translation>Maintenir la touche Alt enfoncée en faisant glisser les fenêtres pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>Hold ⌥ key while dragging windows to tile</source>
+        <translation>Maintenir la touche ⌥ enfoncée en faisant glisser les fenêtres pour les disposer en mosaïque</translation>
     </message>
     <message>
         <source>Show layouts when hovering over the green button</source>
@@ -5751,10 +5755,6 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
-        <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
-    </message>
-    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -5821,6 +5821,10 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+    </message>
+    <message>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins</source>
+        <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre mosaïque disposer dispositions suggestions marges</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -8352,6 +8356,18 @@
     <message>
         <source>screen corners</source>
         <translation>coins de l’écran</translation>
+    </message>
+    <message>
+        <source>tile</source>
+        <translation>mosaïque</translation>
+    </message>
+    <message>
+        <source>tiling</source>
+        <translation>disposer</translation>
+    </message>
+    <message>
+        <source>layouts</source>
+        <translation>dispositions</translation>
     </message>
     <message>
         <source>Menu Bar</source>

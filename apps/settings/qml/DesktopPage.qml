@@ -146,7 +146,7 @@ SettingsPage {
                 inline: true
                 accessibleName: qsTr("Window title bar double-click action")
                 // Fill (TL32): the window takes the whole usable area of its display, tiled (TL12).
-                model: [{id: "fill", text: qsTr("Fill")}, {id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("Do Nothing")}]
+                model: [{id: "fill", text: qsTr("Fill")}, {id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("No Action")}]
                 value: root.store.value("windows.titlebarDoubleClick")
                 onPicked: id => root.store.set("windows.titlebarDoubleClick", id)
             }
@@ -309,10 +309,13 @@ SettingsPage {
             }
         }
 
+        // The key as the menus name it (keyboard.shortcutStyle, owner decision 2026-10-26): its symbol in the macOS style,
+        // the PC key's name otherwise (parity matrix M38).
         SettingsRow {
-            title: qsTr("Hold Alt key while dragging windows to tile")
+            id: optionDragRow
+            title: Appearance.shortcutStyle === "mac" ? qsTr("Hold ⌥ key while dragging windows to tile") : qsTr("Hold Alt key while dragging windows to tile")
             Toggle {
-                accessibleName: qsTr("Hold Alt key while dragging windows to tile")
+                accessibleName: optionDragRow.title
                 checked: root.store.value("windows.tilingOptionDrag")
                 onToggled: c => root.store.set("windows.tilingOptionDrag", c)
             }

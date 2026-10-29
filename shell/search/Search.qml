@@ -100,7 +100,7 @@ Scope {
         {id: "appearance", title: qsTr("Appearance"), keywords: [qsTr("dark"), qsTr("light"), qsTr("auto"), qsTr("theme"), qsTr("accent"), qsTr("transparency"), qsTr("icons")]},
         {id: "wallpaper", title: qsTr("Wallpaper"), keywords: [qsTr("background"), qsTr("picture"), qsTr("shuffle")]},
         {id: "accessibility", title: qsTr("Accessibility"), keywords: [qsTr("pointer"), qsTr("cursor"), qsTr("contrast"), qsTr("reduce motion"), qsTr("text size")]},
-        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("screen corners")]},
+        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("screen corners"), qsTr("tile"), qsTr("tiling"), qsTr("layouts")]},
         {id: "menubar", title: qsTr("Menu Bar"), keywords: [qsTr("clock"), qsTr("menu bar background"), qsTr("status items"), qsTr("hide menu bar"), qsTr("battery percentage")]},
         {id: "search", title: qsTr("Search"), keywords: [qsTr("search results"), qsTr("search history")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
