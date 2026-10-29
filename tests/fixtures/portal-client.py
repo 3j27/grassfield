@@ -16,6 +16,7 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
                                                reply, {"response": n, "results": {...}}, or {"error": name}
 """
 import json
+import os
 import sys
 
 import gi
@@ -83,9 +84,11 @@ def choose(conn, method, given, seconds):
 
 
 def impl(conn, method, given, seconds):
+    # A handle of its own per call (the process id and the time): two panels can be open at once.
+    handle = "/org/freedesktop/portal/desktop/request/1_1/impl%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
     try:
         reply = conn.call_sync("org.freedesktop.impl.portal.desktop.grassfield", PATH, "org.freedesktop.impl.portal.FileChooser", method,
-                               GLib.Variant("(osssa{sv})", ("/org/freedesktop/portal/desktop/request/1_1/impl", "org.example.App", "",
+                               GLib.Variant("(osssa{sv})", (handle, "org.example.App", "",
                                                             "Test " + method, chooser_options(given))),
                                GLib.VariantType("(ua{sv})"), Gio.DBusCallFlags.NONE, int(float(seconds) * 1000), None)
         code, results = reply.unpack()

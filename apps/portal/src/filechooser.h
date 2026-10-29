@@ -9,6 +9,7 @@
 #pragma once
 
 #include "chooserlogic.h"
+#include "diskprobe.h"
 
 #include <QDBusAbstractAdaptor>
 #include <QDBusConnection>
@@ -47,9 +48,11 @@ public:
         int maxPending = 16;
         // The per-application memory of the panels (null: none).
         PanelState *state = nullptr;
-        // How long the panels wait on the disk (probe): a path that has not answered by then is "not responding".
+        // How long the panels wait on the disk (probe, DiskProbe): no answer for probeDeadlineMs, or probeTotalMs in all,
+        // and a path not answered is "not responding".
         int probeDeadlineMs = 1000;
-        // What a local path names, read on a probe thread (empty: pathKindOf; the tests give a slow one).
+        int probeTotalMs = 5000;
+        // What a local path names, read on a probe thread (empty: DiskProbe::kindOf; the tests give a slow one).
         std::function<int(const QString &path)> statPath;
     };
 
@@ -80,21 +83,11 @@ public:
     // The panels' memory of an application: {folder, view, expanded} ("" fields when nothing is kept).
     Q_INVOKABLE QVariantMap memory(const QString &appId) const;
     Q_INVOKABLE void remember(const QString &appId, const QVariantMap &entry);
-    // The panels' questions to the disk, never asked on the GUI thread (FC7; integrator review of bd78424, MAJOR 1): a hung
-    // mount (an NFS or SMB share gone, a sleeping disk) must not stall this panel, another application's panel or the 3-s
-    // forward, which all run on that thread. What each URL names is answered by probed(token, {url: kind}): kNotResponding
-    // for a path not answered, -1 for anything but a local file URL, else pathKindOf's. One job per call: its paths are read
-    // in order on one thread of their own (SaveFiles' 4096 names too, re-review of 6b26afc), each answer posted as it comes;
-    // the call is answered once every path has answered, or once no answer has come for probeDeadlineMs (a share that is slow
-    // but answering is waited for, a stuck one is not). A path another job is reading is not read again. At most
-    // kMaxProbeJobs jobs at once, a stuck one counting while its read hangs: beyond, a new call's paths are not responding at
-    // once, so stuck reads cannot pile up threads. Returns the token.
+    // The panels' questions to the disk, never asked on the GUI thread (FC7; integrator review of bd78424, MAJOR 1): what each
+    // URL names, answered by probed(token, {url: kind}) as DiskProbe answers its paths: kNotResponding for a path that has
+    // not answered, -1 for anything but a local file URL, else DiskProbe::kindOf's. Returns the token.
     Q_INVOKABLE int probe(const QStringList &urls);
-    // What a local path names now: 0 nothing, 1 a file (anything but a folder, a dangling symbolic link too), 2 a folder.
-    // It reads the disk: never on the GUI thread (probe).
-    static int pathKindOf(const QString &path);
-    static constexpr int kNotResponding = -2;
-    static constexpr int kMaxProbeJobs = 16;
+    static constexpr int kNotResponding = DiskProbe::kNotResponding;
     // The application's name as its desktop entry gives it in the UI language, "" when the frontend could not name it or it
     // has no entry.
     Q_INVOKABLE QString appName(const QString &appId) const;
@@ -119,16 +112,13 @@ signals:
 
 private:
     struct Request;
-    struct Probe;
-    struct ProbeShared;
     void finish(int id, uint response, const QVariantMap &results);
-    int startProbe(const QStringList &urls, std::function<void(int token, const QVariantMap &kinds)> done);
-    void probeAnswered(const QString &path, int kind);
-    void checkProbe(int token);
-    void finishProbe(int token);
-    QVariantMap placeUrls() const;
     void forward(int id);
     void closeForwarded(int id, int tries);
+    // Asks the disk about `urls` (file URLs as given); done({url: kind}) when DiskProbe answers, never from inside the call.
+    // Returns DiskProbe's token.
+    int askDisk(const QStringList &urls, std::function<void(const QVariantMap &kinds)> done);
+    QVariantMap placeUrls() const;
     void armIdle();
 
     QDBusConnection m_bus;
@@ -138,12 +128,8 @@ private:
     int m_nextId = 1;
     QHash<int, std::shared_ptr<Request>> m_requests;
     QTimer m_idle;
-    int m_nextProbe = 1;
-    QHash<int, std::shared_ptr<Probe>> m_probes;
-    // Paths a job reads or will read, and the probes waiting on each; the jobs whose thread runs.
-    QHash<QString, QList<int>> m_reading;
-    int m_jobs = 0;
-    std::shared_ptr<ProbeShared> m_shared;
+    DiskProbe m_disk;
+    QHash<int, std::function<void(const QHash<QString, int> &)>> m_diskAsked;
 };
 
 // org.freedesktop.impl.portal.Request at a request's handle: Close() ends it (the application went away or cancelled).

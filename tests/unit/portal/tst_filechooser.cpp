@@ -115,7 +115,7 @@ int slowStat(const QString &path)
         QThread::msleep(kSlowishMs);
         return 2;
     }
-    return FileChooser::pathKindOf(path);
+    return DiskProbe::kindOf(path);
 }
 
 // The waits of the fixture's backend: the deadline far above a loaded machine's latency between the call and opened(), the
@@ -290,16 +290,19 @@ TEST_F(FileChooserTest, CancelAndCloseEndTheRequest)
     auto cancelled = call(QStringLiteral("SaveFile"), QStringLiteral("/r/1"), {{QStringLiteral("current_name"), QStringLiteral("a.txt")}});
     auto closedByApp = call(QStringLiteral("SaveFiles"), QStringLiteral("/r/2"), {{QStringLiteral("files"), QVariant::fromValue(QByteArrayList{"a.txt"})}});
     ASSERT_TRUE(waitFor([&] { return opened.size() == 2; }));
-    EXPECT_EQ(opened.at(0).second.value("currentName").toString(), QStringLiteral("a.txt"));
-    EXPECT_EQ(opened.at(1).second.value("files").toStringList(), QStringList{QStringLiteral("a.txt")});
-    chooser->answer(opened.at(0).first, 1);
+    // Each panel opens once its own folders are probed: in either order.
+    const auto& save = opened.at(0).second.value("kind").toString() == QLatin1String("save") ? opened.at(0) : opened.at(1);
+    const auto& saveFiles = &save == &opened.at(0) ? opened.at(1) : opened.at(0);
+    EXPECT_EQ(save.second.value("currentName").toString(), QStringLiteral("a.txt"));
+    EXPECT_EQ(saveFiles.second.value("files").toStringList(), QStringList{QStringLiteral("a.txt")});
+    chooser->answer(save.first, 1);
     closeRequest(QStringLiteral("/r/2"));
     ASSERT_TRUE(waitFor([&] { return cancelled->done && closedByApp->done; }));
     EXPECT_EQ(cancelled->response, 1u);
     EXPECT_EQ(closedByApp->response, 2u);
     EXPECT_EQ(closed.size(), 2);
     // An answer after the end changes nothing.
-    chooser->answer(opened.at(1).first, 0, {{QStringLiteral("uris"), QVariantList{QStringLiteral("file:///tmp/a.txt")}}});
+    chooser->answer(saveFiles.first, 0, {{QStringLiteral("uris"), QVariantList{QStringLiteral("file:///tmp/a.txt")}}});
     EXPECT_EQ(chooser->pending(), 0);
 }
 
@@ -458,25 +461,19 @@ TEST_F(FileChooserTest, AHungFolderStallsNoOtherRequest)
     ASSERT_TRUE(waitFor([&] { return slow->done && quick->done; }));
 }
 
-// Beyond kMaxProbeJobs jobs whose read hangs, a new call's paths are not responding at once: stuck reads cannot pile up
-// threads (one job per call).
-TEST_F(FileChooserTest, StuckJobsAreBounded)
+// The folders a panel may start in are three calls at once (re-review of 65311e0, MAJOR 1): a hung remembered folder never
+// hides the application's healthy folder, and the panel opens once the remembered one has had its deadline.
+TEST_F(FileChooserTest, AHungRememberedFolderHidesNotTheApplicationsFolder)
 {
-    const int readsBefore = kSlowReads;
-    QSignalSpy probed(chooser.get(), &FileChooser::probed);
-    for (int i = 0; i < FileChooser::kMaxProbeJobs; ++i)
-        chooser->probe({QStringLiteral("file:///slowmnt/bounded-%1").arg(i)});
-    QDir().mkpath(dir.filePath(QStringLiteral("healthy")));
-    const QString healthy = QUrl::fromLocalFile(dir.filePath(QStringLiteral("healthy"))).toString();
-    const int last = chooser->probe({QStringLiteral("file:///slowmnt/bounded-more"), healthy});
-    ASSERT_TRUE(waitFor([&] { return probed.size() == FileChooser::kMaxProbeJobs + 1; }, kSlowMs));
-    for (const QList<QVariant> &answer : std::as_const(probed)) {
-        if (answer.at(0).toInt() != last)
-            continue;
-        EXPECT_EQ(answer.at(1).toMap().value(QStringLiteral("file:///slowmnt/bounded-more")).toInt(), FileChooser::kNotResponding);
-        EXPECT_EQ(answer.at(1).toMap().value(healthy).toInt(), FileChooser::kNotResponding) << "no thread left for it";
-    }
-    EXPECT_EQ(kSlowReads - readsBefore, FileChooser::kMaxProbeJobs);
+    chooser->setUiLoader([] { return true; });
+    chooser->remember(QStringLiteral("org.example.App"), {{QStringLiteral("folder"), QStringLiteral("file:///slowmnt/remembered")}});
+    auto reply = call(QStringLiteral("OpenFile"), QStringLiteral("/r/m1"), {{QStringLiteral("current_folder"), QByteArray("/tmp\0", 5)}});
+    ASSERT_TRUE(waitFor([&] { return !opened.isEmpty(); }, kSlowMs));
+    const QVariantMap kinds = opened.first().second.value("folderKinds").toMap();
+    EXPECT_EQ(kinds.value("file:///tmp").toInt(), 2) << "the application's folder answered";
+    EXPECT_EQ(kinds.value("file:///slowmnt/remembered").toInt(), FileChooser::kNotResponding);
+    chooser->answer(opened.first().first, 1);
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
 }
 
 // SaveFiles' names, as many as a panel takes, are one job: 17 names (past the job bound) and 4096 (the interface's bound)
@@ -578,25 +575,6 @@ TEST_F(FileChooserTest, AForwardedRequestGetsNoPanel)
     QDBusConnection::disconnectFromBus(QStringLiteral("early"));
 }
 
-// What a local path names (integrator review of bd78424, MINOR 3): a dangling symbolic link is a file (saving over it asks
-// first), a link to a folder is a folder.
-TEST(PathKind, FilesFoldersAndLinks)
-{
-    QTemporaryDir dir;
-    ASSERT_TRUE(dir.isValid());
-    QFile file(dir.filePath(QStringLiteral("file")));
-    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-    file.close();
-    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("folder")));
-    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("missing")), dir.filePath(QStringLiteral("dangling"))));
-    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("folder")), dir.filePath(QStringLiteral("to-folder"))));
-    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("file"))), 1);
-    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("folder"))), 2);
-    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("dangling"))), 1);
-    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("to-folder"))), 2);
-    EXPECT_EQ(FileChooser::pathKindOf(dir.filePath(QStringLiteral("missing"))), 0);
-}
-
 TEST_F(FileChooserTest, GtkMissingEndsTheRequestWithAnError)
 {
     chooser->setUiLoader([] { return false; });
@@ -662,6 +640,9 @@ TEST(FileChooserIds, APanelCountsAsTheApplicationsWindow)
 int main(int argc, char **argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // No input method: a desktop's (QT_IM_MODULE=fcitx) loads a plugin that leaks at exit, which the sanitized run reports
+    // as a failure (re-review of 65311e0, MINOR 4); the tests type nothing.
+    qunsetenv("QT_IM_MODULE");
     QGuiApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);
     // A private bus for the whole run (never the user's).

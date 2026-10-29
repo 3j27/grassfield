@@ -11,7 +11,6 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QMutex>
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -19,7 +18,6 @@
 #include <QWindow>
 
 #include <limits>
-#include <thread>
 #include <utility>
 
 namespace grassfield::portal {
@@ -46,30 +44,16 @@ struct FileChooser::Request {
     std::unique_ptr<RequestObject> object;
 };
 
-// What the probe threads share with the FileChooser: a thread posts its answer only while the FileChooser lives (the mutex
-// orders that against its destructor); a thread stuck on a hung mount outlives it harmlessly.
-struct FileChooser::ProbeShared {
-    QMutex mutex;
-    FileChooser *receiver = nullptr;
-};
-
-// One probe call: the kind of each URL given (kNotResponding until its path answers), the URLs of each path, and how long
-// since the last answer.
-struct FileChooser::Probe {
-    QVariantMap kinds;
-    QHash<QString, QStringList> urlsOf;
-    int waiting = 0;
-    QElapsedTimer quiet;
-    std::function<void(int, const QVariantMap &)> done;
-};
-
 FileChooser::FileChooser(const QDBusConnection &bus, const Options &options, QObject *parent)
     : QObject(parent)
     , m_bus(bus)
     , m_options(options)
-    , m_shared(std::make_shared<ProbeShared>())
+    , m_disk(DiskProbe::Options{options.probeDeadlineMs, options.probeTotalMs, options.statPath})
 {
-    m_shared->receiver = this;
+    connect(&m_disk, &DiskProbe::answered, this, [this](int token, const QHash<QString, int> &kinds) {
+        if (const auto done = m_diskAsked.take(token))
+            done(kinds);
+    });
     chooser::registerTypes();
     m_idle.setSingleShot(true);
     m_idle.setInterval(m_options.idleQuitMs);
@@ -79,10 +63,6 @@ FileChooser::FileChooser(const QDBusConnection &bus, const Options &options, QOb
 
 FileChooser::~FileChooser()
 {
-    {
-        const QMutexLocker lock(&m_shared->mutex);
-        m_shared->receiver = nullptr;
-    }
     // A process that goes with requests in flight answers them: the frontend never waits on a backend that left.
     const QList<int> ids = m_requests.keys();
     for (int id : ids)
@@ -146,30 +126,44 @@ void FileChooser::handle(chooser::Kind kind, const QDBusObjectPath &handle, cons
         forward(id);
     });
     r->deadline.start();
-    // The folders the panel may start in are asked about off the GUI thread first (FC7): one that does not answer in time
-    // is passed over, as one that does not exist is.
+    // The folders the panel may start in are asked about off the GUI thread first (FC7): the application's, the remembered
+    // one and the places, three calls at once, so that none, hung, keeps the others from answering (re-review of 65311e0,
+    // MAJOR 1). One that does not answer in time is passed over, as one that does not exist is.
     QVariantMap qml = chooser::toQml(parsed);
     const QVariantMap places = placeUrls();
-    // One job reads them in this order: the places (under the home folder) first, the application's folder last, so a
-    // folder of the application's on a hung mount holds up none of the others.
-    QStringList folders;
+    QStringList placeList;
     for (const char *place : {"home", "documents", "desktop", "downloads"})
-        folders << places.value(QLatin1String(place)).toString();
-    folders << memory(parsed.appId).value(QStringLiteral("folder")).toString() << qml.value(QStringLiteral("currentFolder")).toString();
-    folders.removeAll(QString());
-    startProbe(folders, [this, id, qml, places](int, const QVariantMap &kinds) mutable {
+        placeList << places.value(QLatin1String(place)).toString();
+    placeList.removeAll(QString());
+    struct Gathered {
+        int waiting = 0;
+        QVariantMap kinds;
+    };
+    auto gathered = std::make_shared<Gathered>();
+    const auto gather = [this, id, qml, places, gathered](const QVariantMap &kinds) mutable {
+        gathered->kinds.insert(kinds);
+        if (--gathered->waiting > 0)
+            return;
         const auto shown = m_requests.value(id);
         if (!shown || shown->state != Request::State::Making)
             return;
         QVariantMap answered;
         for (auto it = places.cbegin(); it != places.cend(); ++it) {
-            const bool folder = kinds.value(it.value().toString()).toInt() == 2 || it.key() == QLatin1String("home");
+            const bool folder = gathered->kinds.value(it.value().toString()).toInt() == 2 || it.key() == QLatin1String("home");
             answered.insert(it.key(), folder ? it.value() : QString());
         }
         qml.insert(QStringLiteral("places"), answered);
-        qml.insert(QStringLiteral("folderKinds"), kinds);
+        qml.insert(QStringLiteral("folderKinds"), gathered->kinds);
         emit opened(id, qml);
-    });
+    };
+    QList<QStringList> calls{QStringList{qml.value(QStringLiteral("currentFolder")).toString()},
+                             QStringList{memory(parsed.appId).value(QStringLiteral("folder")).toString()}, placeList};
+    for (QStringList &urls : calls)
+        urls.removeAll(QString());
+    calls.removeAll(QStringList());
+    gathered->waiting = int(calls.size());
+    for (const QStringList &urls : std::as_const(calls))
+        askDisk(urls, gather);
 }
 
 void FileChooser::present(int id, QObject *object)
@@ -300,113 +294,35 @@ QVariantMap FileChooser::placeUrls() const
             {QStringLiteral("downloads"), folder(QStandardPaths::DownloadLocation)}};
 }
 
-int FileChooser::pathKindOf(const QString &path)
+int FileChooser::askDisk(const QStringList &urls, std::function<void(const QVariantMap &)> done)
 {
-    const QFileInfo info(path);
-    if (!info.exists() && !info.isSymLink())
-        return 0;
-    return info.isDir() ? 2 : 1;
+    // Tolerant, as the panels' answers: QML prints a URL with its spaces as they are.
+    QVariantMap kinds;
+    QHash<QString, QStringList> urlsOf;
+    for (const QString &text : urls) {
+        const QUrl url(text);
+        const QString path = url.isLocalFile() ? QDir::cleanPath(url.toLocalFile()) : QString();
+        if (!url.isValid() || !url.host().isEmpty() || url.hasQuery() || url.hasFragment() || !path.startsWith(u'/')) {
+            kinds.insert(text, -1);
+            continue;
+        }
+        urlsOf[path].append(text);
+    }
+    const int token = m_disk.probe(urlsOf.keys());
+    m_diskAsked.insert(token, [kinds, urlsOf, done = std::move(done)](const QHash<QString, int> &answered) mutable {
+        for (auto it = urlsOf.cbegin(); it != urlsOf.cend(); ++it)
+            for (const QString &url : it.value())
+                kinds.insert(url, answered.value(it.key(), kNotResponding));
+        done(kinds);
+    });
+    return token;
 }
 
 int FileChooser::probe(const QStringList &urls)
 {
-    return startProbe(urls, [this](int token, const QVariantMap &kinds) { emit probed(token, kinds); });
-}
-
-int FileChooser::startProbe(const QStringList &urls, std::function<void(int, const QVariantMap &)> done)
-{
-    const int token = m_nextProbe++;
-    auto p = std::make_shared<Probe>();
-    p->done = std::move(done);
-    // Every job's thread is busy (reads that hang): this call's new paths are not responding.
-    const bool canRead = m_jobs < kMaxProbeJobs;
-    QStringList toRead;
-    for (const QString &text : urls) {
-        if (p->kinds.contains(text))
-            continue;
-        // Tolerant, as the panels' answers: QML prints a URL with its spaces as they are.
-        const QUrl url(text);
-        const QString path = url.isLocalFile() ? QDir::cleanPath(url.toLocalFile()) : QString();
-        if (!url.isValid() || !url.host().isEmpty() || url.hasQuery() || url.hasFragment() || !path.startsWith(u'/')) {
-            p->kinds.insert(text, -1);
-            continue;
-        }
-        p->kinds.insert(text, kNotResponding);
-        const bool first = !p->urlsOf.contains(path);
-        p->urlsOf[path].append(text);
-        if (!first)
-            continue;
-        auto reading = m_reading.find(path);
-        if (reading == m_reading.end()) {
-            if (!canRead)
-                continue;
-            reading = m_reading.insert(path, {});
-            toRead << path;
-        }
-        reading->append(token);
-        ++p->waiting;
-    }
-    if (!toRead.isEmpty()) {
-        ++m_jobs;
-        std::thread([shared = m_shared, toRead, stat = m_options.statPath] {
-            for (const QString &path : toRead) {
-                const int kind = stat ? stat(path) : pathKindOf(path);
-                const QMutexLocker lock(&shared->mutex);
-                if (FileChooser *receiver = shared->receiver)
-                    QMetaObject::invokeMethod(receiver, [receiver, path, kind] { receiver->probeAnswered(path, kind); }, Qt::QueuedConnection);
-            }
-            const QMutexLocker lock(&shared->mutex);
-            if (FileChooser *receiver = shared->receiver)
-                QMetaObject::invokeMethod(receiver, [receiver] { --receiver->m_jobs; }, Qt::QueuedConnection);
-        }).detach();
-    }
-    m_probes.insert(token, p);
-    p->quiet.start();
-    // Always answered later, never from inside probe(): QML connects to probed before it can arrive.
-    QTimer::singleShot(p->waiting == 0 ? 0 : m_options.probeDeadlineMs, this, [this, token] { checkProbe(token); });
-    return token;
-}
-
-void FileChooser::probeAnswered(const QString &path, int kind)
-{
-    const QList<int> tokens = m_reading.take(path);
-    for (int token : tokens) {
-        const auto p = m_probes.value(token);
-        if (!p)
-            continue;
-        for (const QString &url : p->urlsOf.value(path))
-            p->kinds.insert(url, kind);
-        p->quiet.restart();
-        if (--p->waiting == 0)
-            finishProbe(token);
-    }
-}
-
-// The deadline counts from the last answer: a job still answering is waited for, one silent for probeDeadlineMs is stuck.
-void FileChooser::checkProbe(int token)
-{
-    const auto p = m_probes.value(token);
-    if (!p)
-        return;
-    const qint64 silent = p->quiet.elapsed();
-    if (p->waiting > 0 && silent < m_options.probeDeadlineMs) {
-        QTimer::singleShot(int(m_options.probeDeadlineMs - silent), this, [this, token] { checkProbe(token); });
-        return;
-    }
-    finishProbe(token);
-}
-
-void FileChooser::finishProbe(int token)
-{
-    const auto p = m_probes.take(token);
-    if (!p)
-        return;
-    for (auto it = p->urlsOf.cbegin(); it != p->urlsOf.cend(); ++it) {
-        const auto reading = m_reading.find(it.key());
-        if (reading != m_reading.end())
-            reading->removeAll(token);
-    }
-    p->done(token, p->kinds);
+    auto token = std::make_shared<int>(0);
+    *token = askDisk(urls, [this, token](const QVariantMap &kinds) { emit probed(*token, kinds); });
+    return *token;
 }
 
 QString FileChooser::appName(const QString &appId) const
