@@ -308,6 +308,12 @@ if want logic; then
   python3 -I tests/ci/run_mode.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/run_mode.py "$rc" PASS
+  # A Quickshell Socket's error handler acts only after the signal (the Quickshell 0.3.2 crash loop): the rule on samples;
+  # the tree is checked by `just check-shell`.
+  rc=0
+  python3 -I tests/ci/socket_errors.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/socket_errors.py "$rc" PASS
   # The generated GTK themes (ADR-0035 D-8): 36, each importing GTK's own theme, no colour function, the pairs' contrast. Their
   # rendering under Xvfb is tests/integration/gtk_themes.sh.
   rc=0
