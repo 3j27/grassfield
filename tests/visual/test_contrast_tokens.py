@@ -726,6 +726,14 @@ class WindowSurfacePairs(unittest.TestCase):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
 
+    def test_permission_alert_symbol_on_the_window(self):
+        # grassfield-portal's permission alert (apps/files/qml/AccessAlert.qml): the frontend's symbolic icon, for an application
+        # without an icon of its own, in the text colour on the opaque window (a graphic, 3:1). The theme's own grey was 1.2:1 on
+        # the dark window (integrator nested pass of PR #49 on 1745c0c, MINOR 3).
+        for ap in APPEARANCES:
+            r = wcag(self.tok.color("colors", ap, "text"), self.window(ap))
+            self.assertGreaterEqual(r, 3.0, "the alert's symbol in the %s appearance: %.2f:1" % (ap, r))
+
     def test_sound_table_rows(self):
         # Settings > Sound's device table: the text on a striped row, on the column header and on the grey selection (the table
         # without the focus), all over a Settings group; the empty-table note in the window grey on the group.

@@ -155,6 +155,125 @@
     </message>
 </context>
 <context>
+    <name>AccessAlert</name>
+    <message>
+        <source>Don&apos;t Allow</source>
+        <translation>Ne pas autoriser</translation>
+    </message>
+    <message>
+        <source>Allow</source>
+        <translation>Autoriser</translation>
+    </message>
+    <message>
+        <source>Click the alert before you answer it.</source>
+        <translation>Cliquez dans l’alerte avant d’y répondre.</translation>
+    </message>
+    <message>
+        <source>Allow Apps to Use the Camera?</source>
+        <translation>Autoriser les applications à utiliser la caméra&#xa0;?</translation>
+    </message>
+    <message>
+        <source>An app wants to access the camera</source>
+        <translation>Une application souhaite accéder à la caméra</translation>
+    </message>
+    <message>
+        <source>This permission can be changed at any time from the privacy settings</source>
+        <translation>Vous pouvez modifier cette autorisation à tout moment dans les réglages de confidentialité</translation>
+    </message>
+    <message>
+        <source>Allow Apps to Access Your Location?</source>
+        <translation>Autoriser les applications à accéder à votre position&#xa0;?</translation>
+    </message>
+    <message>
+        <source>An app wants to use your location</source>
+        <translation>Une application souhaite utiliser votre position</translation>
+    </message>
+    <message>
+        <source>Location access can be changed at any time from the privacy settings</source>
+        <translation>Vous pouvez modifier l’accès à votre position à tout moment dans les réglages de confidentialité</translation>
+    </message>
+    <message>
+        <source>Allow Apps to Take Screenshots?</source>
+        <translation>Autoriser les applications à faire des captures d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Allow to Take a Screenshot?</source>
+        <translation>Autoriser une capture d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>An app wants to take screenshots at any time</source>
+        <translation>Une application souhaite faire des captures d’écran à tout moment</translation>
+    </message>
+    <message>
+        <source>An app wants to take a screenshot</source>
+        <translation>Une application souhaite faire une capture d’écran</translation>
+    </message>
+    <message>
+        <source>Allow Apps to Set Backgrounds?</source>
+        <translation>Autoriser les applications à changer le fond d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>An app wants to change the background image</source>
+        <translation>Une application souhaite changer le fond d’écran</translation>
+    </message>
+    <message>
+        <source>The ‘run in background’ permission can be changed at any time from the app settings</source>
+        <translation>Vous pouvez modifier l’autorisation «&#xa0;exécution en arrière-plan&#xa0;» à tout moment dans les réglages de l’application</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Use the Camera?</source>
+        <translation>Autoriser %1 à utiliser la caméra&#xa0;?</translation>
+    </message>
+    <message>
+        <source>%1 wants to access the camera</source>
+        <translation>%1 souhaite accéder à la caméra</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Access Your Location?</source>
+        <translation>Autoriser %1 à accéder à votre position&#xa0;?</translation>
+    </message>
+    <message>
+        <source>%1 wants to use your location</source>
+        <translation>%1 souhaite utiliser votre position</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Take Screenshots?</source>
+        <translation>Autoriser %1 à faire des captures d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Take a Screenshot?</source>
+        <translation>Autoriser %1 à faire une capture d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>%1 wants to take screenshots at any time</source>
+        <translation>%1 souhaite faire des captures d’écran à tout moment</translation>
+    </message>
+    <message>
+        <source>%1 wants to take a screenshot</source>
+        <translation>%1 souhaite faire une capture d’écran</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Set Backgrounds?</source>
+        <translation>Autoriser %1 à changer le fond d’écran&#xa0;?</translation>
+    </message>
+    <message>
+        <source>%1 wants to change the background image</source>
+        <translation>%1 souhaite changer le fond d’écran</translation>
+    </message>
+    <message>
+        <source>Allow %1 to Run in the Background?</source>
+        <translation>Autoriser %1 à s’exécuter en arrière-plan&#xa0;?</translation>
+    </message>
+    <message>
+        <source>%1 wants to be started automatically and run in the background</source>
+        <translation>%1 souhaite s’ouvrir automatiquement et s’exécuter en arrière-plan</translation>
+    </message>
+    <message>
+        <source>%1 wants to run in the background</source>
+        <translation>%1 souhaite s’exécuter en arrière-plan</translation>
+    </message>
+</context>
+<context>
     <name>AccessibilityDisplayPage</name>
     <message>
         <source>White</source>
@@ -4042,6 +4161,10 @@
     <message>
         <source>Replacing them will overwrite their current contents.</source>
         <translation>Les remplacer écrasera leur contenu actuel.</translation>
+    </message>
+    <message>
+        <source>Replacing it will overwrite its current contents.</source>
+        <translation>Le remplacer écrasera son contenu actuel.</translation>
     </message>
     <message>
         <source>“%1” isn’t responding.</source>

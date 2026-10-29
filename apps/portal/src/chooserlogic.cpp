@@ -92,43 +92,6 @@ T fromVariant(const QVariant &value)
     return value.value<T>();
 }
 
-// A string an application gave, as the panel shows it (spec common rule 5): one line, plain, capped. Control characters
-// become spaces; the bidi embedding, override and isolate controls go (they could make "fdp.exe" read "exe.pdf").
-QString oneLine(const QString &text)
-{
-    QString out;
-    out.reserve(qMin(text.size(), qsizetype(kMaxTextLength)));
-    for (const QChar c : text) {
-        if (out.size() >= kMaxTextLength)
-            break;
-        const char16_t u = c.unicode();
-        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069))
-            continue;
-        out.append(c.category() == QChar::Other_Control || u == 0x2028 || u == 0x2029 ? QChar(u' ') : c);
-    }
-    return out.simplified();
-}
-
-// GTK's mnemonic marker ("_Open" is "Open"; "__" is "_"): the labels GTK applications pass for the default button and the
-// choices. Grassfield's buttons show no mnemonics (macOS has none).
-QString withoutMnemonic(const QString &label)
-{
-    QString out;
-    out.reserve(label.size());
-    for (qsizetype i = 0; i < label.size(); ++i) {
-        if (label.at(i) == u'_') {
-            if (i + 1 < label.size() && label.at(i + 1) == u'_')
-                out.append(u'_');
-            else
-                continue;
-            ++i;
-            continue;
-        }
-        out.append(label.at(i));
-    }
-    return out;
-}
-
 // A bytestring path (ay, NUL-terminated by the interface) as an absolute local path, "" when it is not one.
 QString pathFromBytes(const QVariant &value)
 {
@@ -176,6 +139,112 @@ QString localPath(const QString &uri)
 }
 
 } // namespace
+
+// A string an application gave, as the panel shows it (spec common rule 5): one line, plain, capped. Control characters
+// become spaces; the bidi embedding, override and isolate controls go (they could make "fdp.exe" read "exe.pdf").
+QString oneLine(const QString &text)
+{
+    QString out;
+    out.reserve(qMin(text.size(), qsizetype(kMaxTextLength)));
+    for (const QChar c : text) {
+        if (out.size() >= kMaxTextLength)
+            break;
+        const char16_t u = c.unicode();
+        if ((u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069))
+            continue;
+        out.append(c.category() == QChar::Other_Control || u == 0x2028 || u == 0x2029 ? QChar(u' ') : c);
+    }
+    return out.simplified();
+}
+
+// GTK's mnemonic marker ("_Open" is "Open"; "__" is "_"): the labels GTK applications pass for the default button and the
+// choices. Grassfield's buttons show no mnemonics (macOS has none).
+QString withoutMnemonic(const QString &label)
+{
+    QString out;
+    out.reserve(label.size());
+    for (qsizetype i = 0; i < label.size(); ++i) {
+        if (label.at(i) == u'_') {
+            if (i + 1 < label.size() && label.at(i + 1) == u'_')
+                out.append(u'_');
+            else
+                continue;
+            ++i;
+            continue;
+        }
+        out.append(label.at(i));
+    }
+    return out;
+}
+
+QList<Choice> parseChoices(const QVariant &given)
+{
+    // A pop-up when it has options (its initial value one of them, else the first), a check box without. Ids are returned
+    // exactly as given (an id or an option id longer than the bound is no choice, never a truncated one).
+    QList<Choice> out;
+    QSet<QString> ids;
+    const auto choices = fromVariant<QList<Choice>>(given);
+    for (const Choice &choice : choices) {
+        if (out.size() >= kMaxChoices)
+            break;
+        if (choice.id.isEmpty() || choice.id.size() > kMaxTextLength || ids.contains(choice.id))
+            continue;
+        Choice c;
+        c.id = choice.id;
+        c.label = oneLine(withoutMnemonic(choice.label));
+        QSet<QString> optionIds;
+        for (const Pair &o : choice.options) {
+            if (c.options.size() >= kMaxChoiceOptions)
+                break;
+            if (o.first.isEmpty() || o.first.size() > kMaxTextLength || optionIds.contains(o.first))
+                continue;
+            optionIds.insert(o.first);
+            c.options.append(Pair{o.first, oneLine(withoutMnemonic(o.second))});
+        }
+        if (c.options.isEmpty())
+            c.initial = choice.initial == QLatin1String("true") ? QStringLiteral("true") : QStringLiteral("false");
+        else
+            c.initial = optionIds.contains(choice.initial) ? choice.initial : c.options.first().first;
+        ids.insert(c.id);
+        out.append(c);
+    }
+    return out;
+}
+
+QVariantList choicesToQml(const QList<Choice> &choices)
+{
+    QVariantList out;
+    for (const Choice &c : choices) {
+        QVariantList options;
+        for (const Pair &o : c.options)
+            options.append(QVariantMap{{QStringLiteral("id"), o.first}, {QStringLiteral("label"), o.second}});
+        out.append(QVariantMap{{QStringLiteral("id"), c.id}, {QStringLiteral("label"), c.label}, {QStringLiteral("options"), options},
+                               {QStringLiteral("initial"), c.initial}});
+    }
+    return out;
+}
+
+QList<Pair> answerChoices(const QList<Choice> &choices, const QVariantList &answer)
+{
+    // Every choice asked, with the window's value when it is one the choice allows, else its initial value.
+    QHash<QString, QString> chosen;
+    for (const QVariant &v : answer) {
+        const QVariantMap m = v.toMap();
+        chosen.insert(m.value(QStringLiteral("id")).toString(), m.value(QStringLiteral("value")).toString());
+    }
+    QList<Pair> out;
+    for (const Choice &c : choices) {
+        QString value = chosen.value(c.id, c.initial);
+        bool allowed = false;
+        if (c.options.isEmpty())
+            allowed = value == QLatin1String("true") || value == QLatin1String("false");
+        else
+            for (const Pair &o : c.options)
+                allowed = allowed || o.first == value;
+        out.append(Pair{c.id, allowed ? value : c.initial});
+    }
+    return out;
+}
 
 void registerTypes()
 {
@@ -227,34 +296,7 @@ Request parse(Kind kind, const QString &appId, const QString &parentWindow, cons
             r.currentFilter = 0;
     }
 
-    // Choices: a pop-up when it has options (its initial value one of them, else the first), a check box without. Ids are
-    // returned exactly as given (an id or an option id longer than the bound is no choice, never a truncated one).
-    QSet<QString> ids;
-    const auto choices = fromVariant<QList<Choice>>(options.value(QStringLiteral("choices")));
-    for (const Choice &given : choices) {
-        if (r.choices.size() >= kMaxChoices)
-            break;
-        if (given.id.isEmpty() || given.id.size() > kMaxTextLength || ids.contains(given.id))
-            continue;
-        Choice c;
-        c.id = given.id;
-        c.label = oneLine(withoutMnemonic(given.label));
-        QSet<QString> optionIds;
-        for (const Pair &o : given.options) {
-            if (c.options.size() >= kMaxChoiceOptions)
-                break;
-            if (o.first.isEmpty() || o.first.size() > kMaxTextLength || optionIds.contains(o.first))
-                continue;
-            optionIds.insert(o.first);
-            c.options.append(Pair{o.first, oneLine(withoutMnemonic(o.second))});
-        }
-        if (c.options.isEmpty())
-            c.initial = given.initial == QLatin1String("true") ? QStringLiteral("true") : QStringLiteral("false");
-        else
-            c.initial = optionIds.contains(given.initial) ? given.initial : c.options.first().first;
-        ids.insert(c.id);
-        r.choices.append(c);
-    }
+    r.choices = parseChoices(options.value(QStringLiteral("choices")));
 
     r.currentFolder = pathFromBytes(options.value(QStringLiteral("current_folder")));
     if (kind == Kind::Save) {
@@ -307,14 +349,7 @@ QVariantMap toQml(const Request &r)
             (rule.type == 0 ? globs : mimes).append(rule.pattern);
         filters.append(QVariantMap{{QStringLiteral("name"), oneLine(f.name)}, {QStringLiteral("globs"), globs}, {QStringLiteral("mimeTypes"), mimes}});
     }
-    QVariantList choices;
-    for (const Choice &c : r.choices) {
-        QVariantList options;
-        for (const Pair &o : c.options)
-            options.append(QVariantMap{{QStringLiteral("id"), o.first}, {QStringLiteral("label"), o.second}});
-        choices.append(QVariantMap{{QStringLiteral("id"), c.id}, {QStringLiteral("label"), c.label}, {QStringLiteral("options"), options},
-                                   {QStringLiteral("initial"), c.initial}});
-    }
+    const QVariantList choices = choicesToQml(r.choices);
     static const char *const kinds[] = {"open", "save", "saveFiles"};
     return {
         {QStringLiteral("kind"), QString::fromLatin1(kinds[int(r.kind)])},
@@ -375,22 +410,7 @@ Results results(const Request &r, const QVariantMap &answer)
     out.map.insert(QStringLiteral("writable"), true);
 
     // Every choice of the request, with the panel's value when it is one the choice allows, else its initial value.
-    QHash<QString, QString> chosen;
-    for (const QVariant &v : answer.value(QStringLiteral("choices")).toList()) {
-        const QVariantMap m = v.toMap();
-        chosen.insert(m.value(QStringLiteral("id")).toString(), m.value(QStringLiteral("value")).toString());
-    }
-    QList<Pair> choices;
-    for (const Choice &c : r.choices) {
-        QString value = chosen.value(c.id, c.initial);
-        bool allowed = false;
-        if (c.options.isEmpty())
-            allowed = value == QLatin1String("true") || value == QLatin1String("false");
-        else
-            for (const Pair &o : c.options)
-                allowed = allowed || o.first == value;
-        choices.append(Pair{c.id, allowed ? value : c.initial});
-    }
+    const QList<Pair> choices = answerChoices(r.choices, answer.value(QStringLiteral("choices")).toList());
     if (!choices.isEmpty())
         out.map.insert(QStringLiteral("choices"), QVariant::fromValue(choices));
 

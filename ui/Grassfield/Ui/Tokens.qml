@@ -694,6 +694,8 @@ QtObject {
     readonly property int panelSheetFooterHeight: 64
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertWidth: 260
+    // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
+    readonly property int panelAlertArmMs: 500
 
     // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63
@@ -1253,6 +1255,8 @@ QtObject {
     readonly property real settingsDockSliderTitleBaseline: 22.5
     // macOS 27: the sliders' tracks centred this far under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int settingsDockSliderCenter: 36
+    // Least gap between two end labels when a longer language pushes one against the other; small enough that English keeps the measured places at the real 220 wide [ref: ADR-0024 spacing scale, spacingXs]
+    readonly property int settingsDockSliderLabelGap: 4
     // macOS 27: the end labels (Small, Large, Off), their baseline under the group's top [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property real settingsDockSliderLabelBaseline: 56.5
     // macOS 27: the Size slider (262-462) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
@@ -1847,6 +1851,8 @@ QtObject {
     readonly property int settingsSaverThumbPhotoTilt: 7
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the slideshow's pictures' white border, a fraction of the picture's height
     readonly property real settingsSaverThumbPhotoBorder: 0.04
+    // Least gap between two choice names when a longer language is wider than the pitch [ref: ADR-0024 spacing scale, spacingXs]
+    readonly property int settingsChoiceCaptionGap: 4
     // macOS 27: the accent ring of a chosen thumbnail, icon style or colour swatch [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsChoiceRingWidth: 3
     // macOS 27: the glass row (preview and slider), below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
@@ -1913,6 +1919,8 @@ QtObject {
     readonly property real settingsIconStylePitch: 51.5
     // macOS 27: the last sample icon's centre from the group's right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property real settingsIconStyleInset: 27.5
+    // The icon styles on their own line under the title (when they do not fit beside it): their top below the row's, the title's baseline (23) plus spacingMd [ref: ADR-0024 spacing scale]
+    readonly property int settingsIconStyleStackedTop: 35
     // macOS 27: an icon style's name, its baseline below the icon [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsIconStyleCaptionBaseline: 15
     // macOS 27: the Folder color row, below its separator [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]

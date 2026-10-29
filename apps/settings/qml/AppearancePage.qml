@@ -67,7 +67,11 @@ SettingsPage {
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
+        // Where the title ends (its right edge), for content that must not reach it.
+        readonly property real titleRight: titleText.x + titleText.width
+
         Text {
+            id: titleText
             textFormat: Text.PlainText
             x: Tokens.settingsRowInset
             y: tall.contentY + Tokens.settingsHeaderRowTitleBaseline - baselineOffset
@@ -149,13 +153,20 @@ SettingsPage {
 
     SettingsGroup {
         TallRow {
+            id: iconRow
             title: qsTr("Icon style")
-            rowHeight: Tokens.settingsIconStyleRowHeight
+            // macOS: a choice row never overlaps its title. When the choices do not fit beside it they go on their own line
+            // under it (and the names wrap under their pictures when even that is tight).
+            readonly property real rightMargin: Tokens.settingsIconStyleInset - Tokens.settingsIconStyleSize / 2 - iconPicker.ringPad
+            readonly property bool stacked: iconRow.width - iconRow.rightMargin - iconPicker.naturalWidth < iconRow.titleRight + Tokens.spacingMd
+            rowHeight: iconRow.stacked ? Tokens.settingsIconStyleStackedTop - iconPicker.ringPad + iconPicker.implicitHeight + Tokens.spacingSm : Tokens.settingsIconStyleRowHeight
 
             ChoicePicker {
-                anchors.right: parent.right
-                anchors.rightMargin: Tokens.settingsIconStyleInset - Tokens.settingsIconStyleSize / 2 - ringPad
-                y: parent.contentY + Tokens.settingsIconStyleTop - ringPad
+                id: iconPicker
+                // Stacked: the first name's left edge (it may reach past its picture) at the row's inset.
+                x: iconRow.stacked ? Tokens.settingsRowInset - ringPad + Math.max(0, (captionWidth - pictureWidth) / 2) : iconRow.width - iconRow.rightMargin - implicitWidth
+                maxWidth: iconRow.stacked ? iconRow.width - 2 * Tokens.settingsRowInset : 0
+                y: parent.contentY + (iconRow.stacked ? Tokens.settingsIconStyleStackedTop : Tokens.settingsIconStyleTop) - ringPad
                 accessibleName: qsTr("Icon style")
                 model: [{id: "default", text: qsTr("Default")}, {id: "dark", text: qsTr("Dark")}, {id: "clear", text: qsTr("Clear")}, {id: "tinted", text: qsTr("Tinted")}]
                 value: root.iconMode

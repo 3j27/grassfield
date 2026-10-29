@@ -36,9 +36,11 @@
 using namespace grassfield::portal;
 using namespace grassfield::portal::chooser;
 
+// The private bus of the whole run (main below); tst_access.cpp's tests use it too.
+QString g_address;
+
 namespace {
 
-QString g_address;
 constexpr auto kService = "org.freedesktop.impl.portal.desktop.grassfield";
 constexpr auto kFakeGtk = "org.test.fakegtk";
 
