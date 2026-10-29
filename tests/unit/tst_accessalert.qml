@@ -250,6 +250,24 @@ TestCase {
         compare(fakeHost.answers[0].grant, true);
     }
 
+    // A held alert left for a moment and back keeps its hold: only a click in it ends it (integrator re-review of 1745c0c,
+    // mutant N5).
+    function test_a_held_alert_left_briefly_keeps_its_hold(): void {
+        const alert = test.openAlert({}, {shownAt: 1});
+        verify(alert.keysHeld);
+        alert.inactiveSince = Date.now();
+        alert.becameActive();
+        verify(alert.keysHeld, "still held after a short time away");
+        tryVerify(() => alert.armed, 2000);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        wait(50);
+        compare(fakeHost.answers.length, 0, "Return and Space answer nothing");
+        mouseClick(alert.contentItem, 10, 10);
+        verify(!alert.keysHeld, "the click ended the hold");
+        compare(fakeHost.answers.length, 0, "and answered nothing");
+    }
+
     // The click that ends the hold only ends it, even on Allow (review of step 5a, M1: behind the lock, the first click after
     // the unlock went on to the button under it).
     function test_the_click_that_ends_the_hold_is_no_answer(): void {
