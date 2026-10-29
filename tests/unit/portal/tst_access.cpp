@@ -368,6 +368,25 @@ TEST_F(AccessTest, AnAlertWithoutAFrameInTimeGoesToGtk)
     EXPECT_TRUE(closed.contains(opened.first().first)) << "its alert goes";
 }
 
+// Once the call has gone to x-d-p-gtk, a late answer of the alert (its window was still there) is ignored: the application
+// gets x-d-p-gtk's answer (integrator review of e24ea5c, NIT 2).
+TEST_F(AccessTest, AnAnswerAfterTheForwardIsIgnored)
+{
+    access->setUiLoader([] { return true; });
+    gtk.hold = true;
+    auto reply = call(QStringLiteral("/r/l1"), {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    ASSERT_TRUE(waitFor([&] { return gtk.held.type() == QDBusMessage::MethodCallMessage; }, 3 * kDeadlineMs));
+    access->answer(opened.first().first, true);
+    QTest::qWait(200);
+    EXPECT_FALSE(reply->done) << "the alert answered after the forward: response " << reply->response;
+    gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(1u), QVariantMap()}));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_FALSE(reply->error);
+    EXPECT_EQ(reply->response, 1u) << "x-d-p-gtk's answer";
+    EXPECT_EQ(access->pending(), 0);
+}
+
 // At most maxPending requests at once, one request per handle: the others end at once, with an error (no answer).
 TEST_F(AccessTest, RequestsAreBounded)
 {
