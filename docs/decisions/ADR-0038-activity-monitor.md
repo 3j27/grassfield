@@ -230,7 +230,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   reference machine's figures from its run at idle). **Disk's plan is A10's one pass** over the same files in the
   sampler's order (`step 1 Disk, in one pass`; the integrator's second decision, the same day): the summed plan adds parts
   each measured alone with warm caches, and no reader of those files meets it (the product reading them and parsing
-  nothing was 1.25–1.41 × it here, the whole product within 0–10 % of that and about 1.17 × the one pass). CPU, Memory,
+  nothing was 1.25–1.41 × it here, the whole product within 0–10 % of that and about 1.17 × the one pass). Since step 2b
+  **Disk's margin is 1.15**, not 1.3, and a run started at a load average of 2 or more does not count (the integrator's
+  decision after #47's merge): a `stat` or `io` line identical to the process's last one is not parsed again. CPU, Memory,
   Energy and Network keep the summed plan (1.06–1.20 × on the reference machine). Until then the limits were A10's step-0 plan there plus about 30 %:
   CPU 17, Memory 25, Disk 17, Energy 40 and Network 45 ms (pull request #40), and before that, from the cloud machine,
   6, 10, 7, 13 and 7 ms. The whole app's CPU with the window visible on a tab: ≤ 0.5 % of one core at Normally (5
@@ -550,13 +552,16 @@ Answer: A (see "Answers").
   again too (review of f68789c); an action reads its process's identity again anyway (AD30).
 - **AD34. One instance, on the session bus** (AM1; step 2a). The running app owns `org.grassfield.Activity`
   (`org.grassfield.Activity.Dev` in a dev session, which shares the owner's bus); a second launch calls its `Activate`
-  with its own xdg-activation token, if it has one, and leaves. The window comes forward with that token (Qt's Wayland
+  with its own xdg-activation token, if it has one, and leaves. The running app takes the name before its window loads and
+  answers from its event loop, after the load: a second launch waits for that answer up to 25 s and leaves whatever comes
+  back, and runs only when the name has no owner (step 2b; a 2 s wait opened a second window while the first was starting,
+  review of #47). The window comes forward with that token (Qt's Wayland
   window takes `XDG_ACTIVATION_TOKEN` for its next activation request); without one the compositor decides. No Grassfield
   app had one: the spec's "the mechanism Settings and the Store use" was the Dock's activation plan, which a launch from
   Apps or a key does not go through, and a monitor running twice would sample twice. Launched again while its window is
   off screen (minimized, or on another Desktop: the compositor suspends it, AD35), the app also asks the shell's Dock to
   bring it back, `qs ipc -p <shell> call dock reopen org.grassfield.Activity` (apps/runmode.h `shellIpcArgs`, as Settings'
-  `update check`): the Dock does what a click on its tile does (`Launch.activationPlan`: everything minimized, the most
+  `update check`; the call is killed after 5 s, `kShellIpcMs`, as Settings' are): the Dock does what a click on its tile does (`Launch.activationPlan`: everything minimized, the most
   recent window comes back), the path the Dock uses for a minimized window. xdg-activation alone switches Desktops but
   leaves a window on `special:minimized`, which the shell hides again as soon as an activation shows it (the integrator's
   nested pass of 983b7de; macOS: launching a running app brings its window back). The action is in the IPC table
@@ -770,3 +775,11 @@ Desktop, and resumes on restore; WAYLAND_DEBUG shows one more toplevel state (`s
 | Check of f2ff9a0, MAJOR: a second launch toggles the maximized state (`setWindowStates(... & ~Minimized)` made Qt send `unset_maximized`, which Hyprland toggles) | `activateWindow` leaves the states alone and clears only a Minimized state Qt still holds; A-W1 counts the platform's state requests during a second launch, normal and maximized: none (the old code asked once each time and fails it) |
 | Check of f2ff9a0: Disk 1.23–1.28 × its step-1 plan on the i5; cut it to about 1.15 × | callgrind: of the Disk tab's user-mode instructions, `parseStat` 56 %, `parseIo` 20 %, the loop 9 %. The product with that work taken out (its loop reading the same files, parsing and building nothing) costs 2.26–2.29 ms here against a summed plan of 1.62–1.83 ms (1.25–1.41 ×) and A10's one pass 1.93–2.16 ms; the whole product 2.27–2.53 ms. The parsing and the rows are 0–10 % of the sample: no cut there reaches 1.15 × the summed plan, which the reads alone exceed. Put to the integrator again, with the reads-only floor |
 | **Integrator's decision on Disk's reference** (after the reads-only floor) | AM-P2: Disk's limit is 1.3 × A10's one-pass Disk line, the other tabs keep the summed step-1 plan. `activity_cost.sh` takes Disk's plan from the one-pass line (the worse of A10's runs before and after the product) and prints both Disk lines; here Disk 1.19 × its one pass (1.97 against 1.66 ms). A cheaper way to read the same files is for 2b |
+
+**Step 2b, from main b345334: the integrator's closing comment on pull request #47 (2026-10-29).**
+| Note | Answer |
+|---|---|
+| Blocking: Disk at most 1.15 × its one-pass line, measured at a load under 2 | a `stat` or `io` line identical to the process's last one is not parsed again (most processes are idle between two samples), and `parseStat` clears the code addresses it does not read; the parsers copy only the bytes they read, the name's end is looked for near its start, and the sweep for ended processes runs only when one ended. callgrind, the Disk tab on A10's fixture: 2.86 M to 0.61 M instructions a sample. `activity_cost.sh` gates Disk at 1.15 × its one pass and does not count a run started at a load average of 2 or more; here (load 0.7–0.9) Disk 1.00–1.08 × its one pass, main 1.13–1.19 × |
+| `main.cpp` takes the bus name before `engine.load`, and a second launch waits 2 s at most: two windows | AD34: `claimOrHandOver` takes the name, or calls the running app's `Activate` with the token and waits up to 25 s; it leaves on the answer and on any error but "no owner", and runs only when the name has none (`ALaunchTakesTheNameOrHandsItsTokenOverAndLeaves`, on a private bus) |
+| `activityapp.cpp`: `startDetached` without a timeout | `runWithTimeout`, killed after `kShellIpcMs` (5 s) as in Settings (`AShellCallIsKilledAfterItsTime`) |
+| `DockModel.js`: `isFilesId` compares with case, the comment says without | `windowsOf` compares the normalized ids (`tst_dockmodel.qml`, `ORG.grassfield.files.desktop`) |

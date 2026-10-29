@@ -499,7 +499,8 @@ another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. Since
 "step 1" plan: `activity_cost.sh` runs A10 before and after the product on the same fixture and takes the worse run, so a
 product more than 1.3 × its own plan fails on any machine. Disk's plan is A10's one pass over the same files in the
 sampler's order (the integrator's second decision of that day): its summed plan, parts measured alone with warm caches,
-is below what any reader of those files pays. The reference machine's figures come from the integrator's run
+is below what any reader of those files pays. Since step 2b Disk's margin is 1.15 (the integrator's decision after #47's
+merge) and a run started at a load average of 2 or more does not count. The reference machine's figures come from the integrator's run
 at idle (load under 2) before step 2a's merge. Before that decision the limits were A10's step-0 plan, worse of two runs
 plus about 30 %, on the reference machine (i5-10400H, 8 threads, kernel 7.2.5, the owner's live session, outside any
 sandbox; pull request #40, the integrator's comment of 18:59 UTC of 2026-10-28): CPU 17, Memory 25, Energy 40, Disk 17 and
@@ -512,7 +513,7 @@ AD33, the owners' turns), so that plan no longer measured the product. Step 0's 
 | CPU | ≤ 1.3 × the plan | the integrator's idle run (16.92 ms at load 3.9) | ≤ 0.5 % of one core | ≤ 1.5 % |
 | Memory | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Energy | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 1.3 × the plan in one pass | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Disk | ≤ 1.15 × the plan in one pass (step 2b) | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Network | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 
 The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
@@ -528,8 +529,9 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   open and re-read with `pread` while their process lives (`stat`; `statm` and `status` on the Memory tab; `io` of the
   user's processes on the Disk and Energy tabs); the app raises its soft `RLIMIT_NOFILE` at start to the hard limit, at most
   16 384 (the session's soft limit is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is
-  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). The limit is 1.3 × the tab's step-1
-  plan (the table above): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
+  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). A `stat` or `io` line identical to the
+  process's last one is not parsed again (step 2b). The limit is 1.3 × the tab's step-1 plan, 1.15 × on Disk (the table
+  above): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
   each tab's plan, limit and ratio, and fails a tab over its limit; the bench prints each sample's user and kernel time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
