@@ -78,6 +78,7 @@ TEST(ProcParse, PciIdsNameAGpu)
     EXPECT_EQ(gpuModelName(lookupPciIds(ids, 0x8086, 0x9bc4)), "Intel UHD Graphics");
     // A device id of another vendor, a subsystem line and a class line are not the device.
     EXPECT_EQ(lookupPciIds(ids, 0x10de, 0x73ff).device, "");
+    EXPECT_EQ(lookupPciIds(ids, 0x1002, 0x2504).device, ""); // the vendor's devices end at the next vendor (review of 91dcb63)
     EXPECT_EQ(lookupPciIds(ids, 0x1002, 0x0e3b).device, "");
     EXPECT_EQ(lookupPciIds(ids, 0x8086, 0x0000).device, "");
     EXPECT_EQ(lookupPciIds(ids, 0x1234, 0x9bc4).vendor, "");

@@ -283,6 +283,12 @@ TEST(ProcessTable, CollapsedStaysCollapsedAcrossSamples)
     f.table.setRows({child(1, 0, "systemd", 0.1, 1)});
     f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(70, 1, "Hyprland", 9, 40), child(80, 70, "foot", 2, 50)});
     EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
+    // A collapsed row missing from a sample is forgotten then, not kept for ever (review of 91dcb63): the same process
+    // back in a later sample is open.
+    f.table.setExpanded(1, false);
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1)});
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(70, 1, "Hyprland", 9, 40), child(80, 70, "foot", 2, 50)});
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
 }
 
 // AM14: in the tree, a row that matches keeps every row above it; the others go.
