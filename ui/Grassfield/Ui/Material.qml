@@ -28,6 +28,8 @@ Item {
     // the text legible over the backdrop the shell knows for this output (Appearance.glassAlpha); "" keeps the one material
     // tint (Appearance.tintAlpha).
     property string glassClass: ""
+    // The tint colour (a host that adapts its tone to the backdrop sets it: the menu bar's band, Appearance.glassBand).
+    property color tintColor: Appearance.colors.materialTint
     // The output this surface is shown on (the Screen attached property of its window).
     readonly property string screenName: Screen.name
     // Where the surface lies on that output (output px), for the backdrop under it (G-3 per surface, Appearance.glassAlpha):
@@ -126,7 +128,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        color: Appearance.withAlpha(Appearance.colors.materialTint, root.tintAlpha)
+        color: Appearance.withAlpha(root.tintColor, root.tintAlpha)
     }
 
     // Inner specular rim: one device pixel inside the edge, half strength all round and full strength along the straight

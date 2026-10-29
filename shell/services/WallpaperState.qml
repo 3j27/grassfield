@@ -63,6 +63,20 @@ Singleton {
             statusTimer.start();
     }
 
+    // {output name: true} for the outputs whose menu bar band is on because of the wallpaper under it.
+    function barAssists(): var {
+        return BarTone.forcedOutputs();
+    }
+
+    Connections {
+        target: BarTone
+
+        function onAssistsChanged(): void {
+            if (!statusTimer.running)
+                statusTimer.start();
+        }
+    }
+
     function reportOnline(info: var): void {
         online = info;
         if (!statusTimer.running)
@@ -197,7 +211,8 @@ Singleton {
     Timer {
         id: statusTimer
         interval: Tokens.wallpaperStateWriteMs
-        onTriggered: statusWriter.setText(JSON.stringify({outputs: root.outputs, online: root.online}, null, 2) + "\n")
+        // `bar`: {output: true} where the menu bar shows its band because of the wallpaper (BarTone.assists, ADR-0016 D1): Settings > Menu Bar says so.
+        onTriggered: statusWriter.setText(JSON.stringify({outputs: root.outputs, online: root.online, bar: root.barAssists()}, null, 2) + "\n")
     }
 
     Timer {
