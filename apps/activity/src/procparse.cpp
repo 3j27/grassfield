@@ -113,6 +113,34 @@ bool statNumber(const char *&p, const char *end, T &out)
     return true;
 }
 
+// statNumber on a NUL-terminated text: the field ends at a space, a newline or the NUL, and no byte needs a bound check.
+template <typename T>
+bool fieldNumber(const char *&p, T &out)
+{
+    bool negative = false;
+    if (*p == '-') {
+        negative = true;
+        ++p;
+    }
+    const char *start = p;
+    uint64_t v = 0;
+    for (unsigned d; (d = static_cast<unsigned>(static_cast<unsigned char>(*p)) - '0') < 10; ++p)
+        v = v * 10 + d;
+    const bool digitsOnly = p != start && (*p == ' ' || *p == '\n' || *p == '\0');
+    while (*p != ' ' && *p != '\n' && *p != '\0')
+        ++p;
+    if (!digitsOnly || (negative && !std::is_signed_v<T>))
+        return false;
+    out = negative ? static_cast<T>(-static_cast<int64_t>(v)) : static_cast<T>(v);
+    return true;
+}
+
+inline void skipField(const char *&p)
+{
+    while (*p != ' ' && *p != '\n' && *p != '\0')
+        ++p;
+}
+
 } // namespace
 
 bool parseStat(std::string_view text, StatFields &out, bool codeAddresses)
@@ -122,50 +150,50 @@ bool parseStat(std::string_view text, StatFields &out, bool codeAddresses)
         return false;
     // The name ends at the line's last ')': what follows is numbers and a state letter, so that ')' lies within the name's
     // 64 bytes at most (a workqueue thread's name passes 15). Looked for there first, in the whole line otherwise.
-    size_t close = text.substr(0, std::min(text.size(), open + 66)).rfind(')');
-    if (close == std::string_view::npos)
-        close = text.rfind(')');
+    const void *last = memrchr(text.data(), ')', std::min(text.size(), open + 66));
+    size_t close = last ? static_cast<size_t>(static_cast<const char *>(last) - text.data()) : text.rfind(')');
     if (close == std::string_view::npos || close < open)
         return false;
     if (!toNumber(trim(text.substr(0, open)), out.pid))
         return false;
     out.comm.assign(text.data() + open + 1, close - open - 1);
     // Fields from 3 on, after the closing parenthesis; field n is word n-3 of the rest. One pass, nothing allocated: every
-    // process's stat is parsed at every sample (AM-P2, review of 949fc98).
-    const char *p = text.data() + close + 1;
-    const char *const end = text.data() + text.size();
+    // process's stat is parsed at every sample (AM-P2, review of 949fc98). The pass runs on a NUL-terminated copy of the
+    // rest, so no byte needs a bound check (2b, the Disk tab's cost: this parse was over half its own instructions); the
+    // fields read end well within its first 600 bytes.
+    char copy[1024];
+    const size_t n = std::min(text.size() - close - 1, sizeof copy - 1);
+    std::memcpy(copy, text.data() + close + 1, n);
+    copy[n] = '\0';
+    const char *p = copy;
     bool ok = true;
     int i = 0;
     const int fields = codeAddresses ? 25 : 22;
     for (; i < fields; ++i) {
-        while (p < end && *p == ' ')
+        while (*p == ' ')
             ++p;
-        if (p >= end || *p == '\n')
+        if (*p == '\0' || *p == '\n')
             break;
         switch (i) { // the fields the sampler uses, read as they pass; the others skipped byte by byte
         case 0:
             out.state = *p;
-            while (p < end && *p != ' ' && *p != '\n')
-                ++p;
+            skipField(p);
             break;
-        case 1: ok = statNumber(p, end, out.ppid) && ok; break;
-        case 2: ok = statNumber(p, end, out.pgrp) && ok; break;
-        case 6: ok = statNumber(p, end, out.flags) && ok; break;
-        case 7: ok = statNumber(p, end, out.minflt) && ok; break;
-        case 9: ok = statNumber(p, end, out.majflt) && ok; break;
-        case 11: ok = statNumber(p, end, out.utime) && ok; break;
-        case 12: ok = statNumber(p, end, out.stime) && ok; break;
-        case 16: ok = statNumber(p, end, out.nice) && ok; break;
-        case 17: ok = statNumber(p, end, out.numThreads) && ok; break;
-        case 19: ok = statNumber(p, end, out.starttime) && ok; break;
-        case 20: ok = statNumber(p, end, out.vsize) && ok; break;
-        case 21: ok = statNumber(p, end, out.rssPages) && ok; break;
-        case 23: statNumber(p, end, out.startCode); break; // fields 26 and 27: 0 where the reader may not trace the process
-        case 24: statNumber(p, end, out.endCode); break;
-        default:
-            while (p < end && *p != ' ' && *p != '\n')
-                ++p;
-            break;
+        case 1: ok = fieldNumber(p, out.ppid) && ok; break;
+        case 2: ok = fieldNumber(p, out.pgrp) && ok; break;
+        case 6: ok = fieldNumber(p, out.flags) && ok; break;
+        case 7: ok = fieldNumber(p, out.minflt) && ok; break;
+        case 9: ok = fieldNumber(p, out.majflt) && ok; break;
+        case 11: ok = fieldNumber(p, out.utime) && ok; break;
+        case 12: ok = fieldNumber(p, out.stime) && ok; break;
+        case 16: ok = fieldNumber(p, out.nice) && ok; break;
+        case 17: ok = fieldNumber(p, out.numThreads) && ok; break;
+        case 19: ok = fieldNumber(p, out.starttime) && ok; break;
+        case 20: ok = fieldNumber(p, out.vsize) && ok; break;
+        case 21: ok = fieldNumber(p, out.rssPages) && ok; break;
+        case 23: fieldNumber(p, out.startCode); break; // fields 26 and 27: 0 where the reader may not trace the process
+        case 24: fieldNumber(p, out.endCode); break;
+        default: skipField(p); break;
         }
     }
     return ok && i >= 22;
@@ -289,44 +317,62 @@ bool parseStatm(std::string_view text, Statm &out)
 
 bool parseIo(std::string_view text, IoFields &out)
 {
-    // One pass, the key told by its length and first letter: the Disk and Energy tabs read this file of every own process
-    // at every sample (review of f68789c).
-    const char *p = text.data();
-    const char *const end = p + text.size();
+    // One pass, the key told by its length: the Disk and Energy tabs read this file of every own process at every sample
+    // (review of f68789c). The pass runs on a NUL-terminated copy (the file is about 150 bytes), as parseStat's (2b).
+    char copy[512];
+    const size_t n = std::min(text.size(), sizeof copy - 1);
+    std::memcpy(copy, text.data(), n);
+    copy[n] = '\0';
+    const char *p = copy;
     unsigned seen = 0; // one bit per byte field: both are needed, each once (mutant R13 of the review of 19f5d4c)
-    while (p < end) {
+    while (*p != '\0') {
         const char *key = p;
-        while (p < end && *p != ':' && *p != '\n')
+        while (*p != ':' && *p != '\n' && *p != '\0')
             ++p;
-        if (p < end && *p == ':') {
-            const std::string_view k(key, static_cast<size_t>(p - key));
+        if (*p == ':') {
+            const size_t length = static_cast<size_t>(p - key);
             ++p;
-            while (p < end && (*p == ' ' || *p == '\t'))
+            while (*p == ' ' || *p == '\t')
                 ++p;
             uint64_t v = 0;
-            if (statNumber(p, end, v)) {
-                if (k == "read_bytes") {
-                    out.readBytes = v;
-                    seen |= 1u;
-                } else if (k == "write_bytes") {
-                    out.writeBytes = v;
-                    seen |= 2u;
-                } else if (k == "rchar") {
-                    out.rchar = v;
-                } else if (k == "wchar") {
-                    out.wchar = v;
-                } else if (k == "syscr") {
-                    out.syscr = v;
-                } else if (k == "syscw") {
-                    out.syscw = v;
-                } else if (k == "cancelled_write_bytes") {
-                    out.cancelledWriteBytes = v;
+            if (fieldNumber(p, v)) {
+                const auto is = [&](const char *name) { return std::memcmp(key, name, length) == 0; };
+                switch (length) {
+                case 5:
+                    if (is("rchar"))
+                        out.rchar = v;
+                    else if (is("wchar"))
+                        out.wchar = v;
+                    else if (is("syscr"))
+                        out.syscr = v;
+                    else if (is("syscw"))
+                        out.syscw = v;
+                    break;
+                case 10:
+                    if (is("read_bytes")) {
+                        out.readBytes = v;
+                        seen |= 1u;
+                    }
+                    break;
+                case 11:
+                    if (is("write_bytes")) {
+                        out.writeBytes = v;
+                        seen |= 2u;
+                    }
+                    break;
+                case 21:
+                    if (is("cancelled_write_bytes"))
+                        out.cancelledWriteBytes = v;
+                    break;
+                default:
+                    break;
                 }
             }
         }
-        while (p < end && *p != '\n')
+        while (*p != '\n' && *p != '\0')
             ++p;
-        ++p;
+        if (*p == '\n')
+            ++p;
     }
     return seen == 3u;
 }

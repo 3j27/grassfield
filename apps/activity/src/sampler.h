@@ -237,32 +237,35 @@ private:
         uint64_t sent = 0, received = 0, segsOut = 0, segsIn = 0;
     };
     struct Proc {
+        // Read or written at every sample, first: they share a few cache lines (the Disk tab's cost, 2b).
         uint64_t start = 0;
         uint64_t seen = 0; // index_ + 1 of the last sample that listed it
         uint64_t turn = 0; // its place in the turns (AM23, AM43): given in order of arrival, so every turn is as full
         int statFd = -1, statusFd = -1, ioFd = -1, statmFd = -1;
-        bool haveSwap = false;                // status read for the Memory tab (AD32): its last VmSwap and VmHWM
-        uint64_t vmSwapKb = 0, vmHwmKb = 0;
+        uint32_t uid = 0;
+        uint32_t dirUid = 0;   // the /proc/<pid> directory's owner, read again in its turn and after an exec
         bool kthread = false;
         bool uidKnown = false;
-        uint32_t uid = 0;
-        std::string comm, exe; // stat's name and the exe link at the last identification
-        uint64_t startCode = 0, endCode = 0; // stat's code addresses: a change is an exec (review of 949fc98)
-        uint32_t dirUid = 0;   // the /proc/<pid> directory's owner, read again in its turn and after an exec
-        int cgroupTurns = 0;   // descriptor turns that read its unit again
-        std::string name, command;
-        bool haveCommand = false;
-        std::string cgroup; // own processes only (AD25)
-        std::string appId;  // parseAppUnit's name, own processes only
-        Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
-        bool sessionUnit = false, eligible = false;
         bool haveTicks = false;
+        bool haveIo = false;
+        bool haveSwap = false;                // status read for the Memory tab (AD32): its last VmSwap and VmHWM
+        bool sessionUnit = false, eligible = false;
+        bool haveCommand = false;
+        Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
+        uint64_t startCode = 0, endCode = 0; // stat's code addresses: a change is an exec (review of 949fc98)
         uint64_t ticks = 0;
         double ticksTime = 0;
-        bool haveIo = false;
         uint64_t ioRead = 0, ioWrite = 0;
         double ioTime = 0;
         double readRate = -1, writeRate = -1;
+        std::string comm, name; // stat's name at the last identification; the name shown
+        // The rest: read in turns, on some tabs, or once.
+        uint64_t vmSwapKb = 0, vmHwmKb = 0;
+        std::string exe; // the exe link at the last identification
+        int cgroupTurns = 0;   // descriptor turns that read its unit again
+        std::string command;
+        std::string cgroup; // own processes only (AD25)
+        std::string appId;  // parseAppUnit's name, own processes only
         bool haveCtx = false;
         uint64_t ctx = 0;
         double ctxTime = 0;

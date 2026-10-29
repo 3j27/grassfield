@@ -584,6 +584,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
         double kernelPercent = 0;
         bool kernelKnown = false;
 
+        size_t seenCount = 0; // the processes this sample listed: when they are all of procs_, none ended
         for (const int pid : listing_) {
             auto [it, fresh] = procs_.try_emplace(pid);
             Proc &p = it->second;
@@ -660,6 +661,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             }
             const uint32_t dirUid = p.dirUid;
             p.seen = mark;
+            ++seenCount;
             p.start = st.starttime;
             const uint64_t ticks = st.utime + st.stime;
             double percent = -1;
@@ -849,14 +851,17 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
         }
         s.kernel.cpuPercent = kernelKnown ? kernelPercent : -1;
 
-        // Processes that ended: their kept descriptors close.
-        for (auto it = procs_.begin(); it != procs_.end();) {
-            if (it->second.seen == mark) {
-                ++it;
-                continue;
+        // Processes that ended: their kept descriptors close. Swept only when some did: the sweep touches every process's
+        // entry again (2b, the Disk tab's cost).
+        if (seenCount != procs_.size()) {
+            for (auto it = procs_.begin(); it != procs_.end();) {
+                if (it->second.seen == mark) {
+                    ++it;
+                    continue;
+                }
+                closeProc(it->second);
+                it = procs_.erase(it);
             }
-            closeProc(it->second);
-            it = procs_.erase(it);
         }
 
         if (reads & ReadSockets) {
