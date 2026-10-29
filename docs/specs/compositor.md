@@ -633,7 +633,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `hl.plugin.grassfield.unsplit(address)` sends a member back to the Desktop it came from, into its tile there when its zone
   is free (both refused while locked); the plugin keeps each Split View Desktop's members (whatever their state), fills the
   one left, ends one without a member (at the unlock when locked), and refuses the tiling of a member; the zoom light of a
-  member leaves the Split View. Untrusted: fixed-size strings, the address
+  member leaves the Split View, and a member's lights are those of full screen (its minimize light grey and inert, ADR-0036
+  D56). `split` and a pick into a Split View's other half refuse a window whose minimum size does not fit that half; the
+  `tile-hover` event says it (`splittable`, D57). Untrusted: fixed-size strings, the address
   compared with live windows, the place and the side from fixed lists, the output name checked and compared with the live
   outputs.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag

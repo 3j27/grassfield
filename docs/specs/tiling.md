@@ -485,7 +485,16 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   unlock, when the plugin does it itself; a fill the shell sent and the plugin refused as locked is sent again (D55,
   integrator re-review of e5bd9d2). A Split View Desktop follows its workspace to another output when its output goes
   away. The Overview names it after its apps and gives it no number, the Desktops keep theirs, and the Window menu's Move to
-  Desktop lists the Desktops only (D53). Step 6b: the separator's
+  Desktop lists the Desktops only (D53). After the integrator's nested pass of 1ee992e (D48 amended, D56-D58): the
+  popover opens on a member and offers its Exit Full Screen (it closed itself as it opened, leaving the overlay mapped
+  with no popup; a popup's close made while it opens now waits for the end of that open, and the popover compares its
+  window's state with the one it opened in). A Split View the shell did not start shows its picker too (D48 amended). A
+  member is not minimized: its yellow light is grey, as in full screen, the Window menu greys Minimize and Super+M does
+  nothing (D56). A window whose minimum size does not fit half of its output is refused up front: Left and Right of Screen
+  greyed in the popover (`splittable`), `split` and a pick into the other half refused, and that half's picker offers only
+  windows that fit (D57). The picker opens with its first window selected (Return takes it), and the window picked has the
+  keyboard once the suggestions close (D58). A lone member's fill waits for the end of the event that made it lonely, so
+  the shell's own lock, which closes the picker just before its lock state changes, sends it at the unlock. Step 6b: the separator's
   double-click reset, the drag that swaps the two, the titles hidden and revealed at the top, the Split View rows (Replace
   Tiled Window, Move Window to Desktop, Make Window Full Screen), the Desktop's name in the Overview.
 
