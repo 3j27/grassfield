@@ -747,7 +747,7 @@ PciNames lookupPciIds(std::string_view pciIds, int vendor, int device)
                 out.vendor = std::string(name);
                 inVendor = true;
             }
-        } else if (inVendor && line.size() > 1 && line[1] != '\t' && pciLine(line.substr(1), name) == device) {
+        } else if (inVendor && pciLine(line.substr(1), name) == device) { // a subsystem line's second tab is no id
             out.device = std::string(name);
             break;
         }

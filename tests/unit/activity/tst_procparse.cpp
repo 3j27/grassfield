@@ -141,6 +141,27 @@ TEST(ProcParse, Io)
     EXPECT_FALSE(parseIo("read_bytes: 4096\nread_bytes: 4096\n", io));
 }
 
+// Review of PR #53: a real io file is about 200 bytes with large counters; the last field is read whole.
+TEST(ProcParse, IoOfABusyProcess)
+{
+    IoFields io;
+    ASSERT_TRUE(parseIo("rchar: 123456789012345678\nwchar: 223456789012345678\nsyscr: 323456789012345\nsyscw: 423456789012345\n"
+                        "read_bytes: 523456789012345678\nwrite_bytes: 623456789012345678\ncancelled_write_bytes: 723456789012\n",
+                        io));
+    EXPECT_EQ(io.readBytes, 523456789012345678u);
+    EXPECT_EQ(io.writeBytes, 623456789012345678u);
+}
+
+// Review of PR #53: a line that ends at its last field is read up to there, whatever an earlier, longer line left behind.
+TEST(ProcParse, StatEndsWhereItsTextEnds)
+{
+    StatFields st;
+    ASSERT_TRUE(parseStat("7 (x) S 1 7 7 0 -1 0 0 0 0 0 1 1 0 0 20 0 1 0 5 1 1 0 4096 8192999 0 0 0 0 0 0 0 0 0 0 17\n", st, true));
+    EXPECT_EQ(st.endCode, 8192999u);
+    ASSERT_TRUE(parseStat("7 (x) S 1 7 7 0 -1 0 0 0 0 0 1 1 0 0 20 0 1 0 5 1 1 0 4096 8192", st, true));
+    EXPECT_EQ(st.endCode, 8192u);
+}
+
 TEST(ProcParse, CgroupV2AndCmdline)
 {
     EXPECT_EQ(parseCgroupV2("0::/user.slice/user-1000.slice/user@1000.service/app.slice/x.service\n"),
