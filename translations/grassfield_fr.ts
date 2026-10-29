@@ -6340,6 +6340,10 @@
         <translation>Jamais</translation>
     </message>
     <message>
+        <source>The wallpaper is too busy under the menu bar for its text to be read, so a background is shown.</source>
+        <translation>Le fond d’écran est trop chargé sous la barre des menus pour que son texte reste lisible : un arrière-plan est donc affiché.</translation>
+    </message>
+    <message>
         <source>Show menu bar background</source>
         <translation>Afficher l’arrière-plan de la barre des menus</translation>
     </message>

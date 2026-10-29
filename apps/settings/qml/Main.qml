@@ -992,6 +992,7 @@ Window {
         MenuBarPage {
             store: cfg
             hasBattery: root.hasBattery
+            backend: root.backend
             onClockOptionsRequested: clockSheet.open()
             onBatteryOptionsRequested: batteryOptionsSheet.open()
         }

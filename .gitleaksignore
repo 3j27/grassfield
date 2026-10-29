@@ -26,6 +26,6 @@ f8a6b65e19a295fc2b5f0b97dafa8d6ffceac7e8:tests/unit/tst_settingsprivacy.qml:gene
 bcb8a5b65f5c48797b47f709444104e14fef314e:docs/audits/store-2026-10-27/probes-4-output-run1.txt:generic-api-key:26
 bcb8a5b65f5c48797b47f709444104e14fef314e:docs/audits/store-2026-10-27/probes-4-output.txt:generic-api-key:26
 #
-# Omarchy's public signing-key fingerprint (as in Omarchy's own omarchy-update-keyring) in grassfield-update-helper of
-# Software Update step 3; the variable is now named GU_OMARCHY_FPR, which the generic-api-key rule does not match.
+# Omarchy's public package-signing key fingerprint again, held as GU_OMARCHY_KEY in the first commit of the Software
+# Update step 3 helper (PR #44); a060504 renamed it out of the rule's reach. Not a secret.
 422cacc480f5d5ca26facdcf518f0e334866f361:packaging/pacman/grassfield-update-helper:generic-api-key:62

@@ -174,3 +174,33 @@ function alpha(target, t, defaultT, backdrop, tint, texts, fill, fillAlpha, marg
                         : floorAlpha(tint, texts, fill, fillAlpha, 0, 1, 4.5);
     return Math.max(floor, targetAlpha(target, t, defaultT));
 }
+
+// The tint of the menu bar's band over a strip whose luminance range is known (ADR-0024 point 3): the class tint raised to the
+// smallest alpha that keeps the bar's text legible in every state the band can show, over each end of the range (and the colours
+// that bound it, backdropsOf): at rest (4.5:1 plus `margin`), under the open title's capsule (`hover` at `capsuleAlpha`, the
+// real fill of BarButton: 4.5:1 plus `margin`), and dimmed on a display that is not the active one (band and text both at
+// `dim` opacity: `dimNeed`, the 3:1 of the glyph rule). Never below the class target; opaque at slider 0.
+function bandAlpha(target, t, defaultT, range, tint, text, hover, capsuleAlpha, dim, need, dimNeed, margin) {
+    if (t <= 0)
+        return 1;
+    const floor = targetAlpha(target, t, defaultT);
+    const tc = channels(tint);
+    const ink = channels(text);
+    const cap = channels(hover);
+    const backs = backdropsOf(range.lumMin).concat(backdropsOf(range.lumMax));
+    for (let i = Math.max(0, Math.floor(floor * 100 - 1e-9)); i <= 100; i++) {
+        const a = i / 100;
+        if (a < floor - 1e-9)
+            continue;
+        let ok = true;
+        for (let b = 0; b < backs.length && ok; b++) {
+            const base = over(tc, a, backs[b]);
+            ok = ratio(ink, base) >= need + margin && ratio(ink, over(cap, capsuleAlpha, base)) >= need + margin;
+            const dimBase = over(tc, a * dim, backs[b]);
+            ok = ok && ratio(over(ink, dim, dimBase), dimBase) >= dimNeed;
+        }
+        if (ok)
+            return a;
+    }
+    return 1;
+}
