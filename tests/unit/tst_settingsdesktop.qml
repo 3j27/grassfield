@@ -198,6 +198,28 @@ TestCase {
         }
     }
 
+    // Settings' own search (Main.qml's sections) and the shell's Search (Search.qml's pages) find Desktop & Dock for the tiling
+    // words (integrator review of 1c08d6b, MINOR 5): read from the sources, the Desktop & Dock entry of each.
+    function source(path) {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../" + path), false);
+        xhr.send();
+        verify(xhr.responseText.length > 0, path);
+        return xhr.responseText;
+    }
+
+    function test_searchWordsFindTiling() {
+        const settingsLine = source("apps/settings/qml/Main.qml").split("\n").find(l => l.indexOf('{id: "desktop"') >= 0);
+        verify(settingsLine, "Main.qml: the desktop section");
+        const words = /keywords: qsTr\("([^"]*)"\)/.exec(settingsLine)[1].split(" ");
+        for (const w of ["tile", "tiling", "layouts"])
+            verify(words.indexOf(w) >= 0, "Settings' search finds Desktop & Dock for " + w);
+        const searchLine = source("shell/search/Search.qml").split("\n").find(l => l.indexOf('{id: "desktop"') >= 0);
+        verify(searchLine, "Search.qml: the desktop page");
+        for (const w of ["tile", "tiling", "layouts"])
+            verify(searchLine.indexOf('qsTr("' + w + '")') >= 0, "the shell's Search finds Desktop & Dock for " + w);
+    }
+
     function test_showItemsOnDesktop() {
         const t = make();
         const box = named(t.page.contentItem, "Show items on the desktop");

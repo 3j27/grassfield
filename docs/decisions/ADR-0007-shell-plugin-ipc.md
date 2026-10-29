@@ -155,7 +155,7 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `tile-hover` `enter`, `tile_popover` still posts `open`; the shell sends it with `tile-hover`) and `tilingSuggestions` ∈
   true|false (true at load; false: an `arrange` keeps no suggestion, the pending one is dropped, and the `hyprctl
   grassfield-tiling` reply has `"suggestion":null`; sent with `tiling-layouts`). A plugin built before step 5 rejects both
-  keys (one WARN line per push); the shell's own gates keep the behaviour right (ADR-0036 D39). The shell now sends `tilingOptionDrag` (with `window-tiling`) and
+  keys (a WARN line for each, two per push); the shell's own gates keep the behaviour right (ADR-0036 D39). The shell now sends `tilingOptionDrag` (with `window-tiling`) and
   `titlebarDoubleClick` = `fill` (only with `tiling-arrange`, `zoom` otherwise). "Bring tile groups forward together" adds
   no key: the plugin raises a group only on `group_front`.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
