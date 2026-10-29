@@ -75,7 +75,7 @@ incompatible combination; no infinite loop, memory leak or hang lasts.
 | Overlap | This ADR | The other |
 |---|---|---|
 | The red "lock screen died" screen's delay during a shell restart | names it; step 1's nested pass records what is drawn, nothing more | ADR-0040 IQ-T5 (owner question) |
-| A separate security process (lock, polkit, idle, sleep inhibitor) | step 1 builds it (the owner's SQ-1 B, 2026-10-29): ADR-0041 carries the S1-S5 plan in the integrator's order (the process and its unit first, then the lock, polkit, idle and the inhibitor one per step, safe mode last), each S-step under the opus security review; ADR-0010 is amended to say so | ADR-0010 "Separate security process", amended 2026-10-29 |
+| A separate security process (lock, polkit, idle, sleep inhibitor) | step 1 builds it (the owner's SQ-1 B, 2026-10-29): ADR-0041 carries the S1-S4 plan in the integrator's order (the process and its unit first, then the lock with idle and the sleep inhibitor, then polkit, safe mode last), each S-step under the opus security review; ADR-0010 is amended to say so | ADR-0010 "Separate security process", amended 2026-10-29 |
 | The compatibility check, the `[grassfield]` repository, the rc-channel watch job | SQ-3 revisits one rejected option (versioned bounds) with a new shape; the check U27, the a2 "Turn Off" path and the watch job stay as they are | ADR-0033 s3.4, a2, f |
 | The compositor extension's ABI, rebuild and degraded mode | the ABI rule, the user-only rebuild and the degraded mode unchanged; step 2d reverses one line of ADR-0009's amendment ("With the toggle off the notice gives the command"): the notice gives one action, the toggle stays off by default, and 2d amends ADR-0009 explicitly (review of 5a20d19); SQ-6 adds one rule for the login after a compositor crash | ADR-0009 and its amendment |
 | The session configuration under a package upgrade | step 2 adds one guard to the shell's explicit reloads; the watcher stays off | ADR-0001 amendment 2026-10-29 |
@@ -112,7 +112,7 @@ only the owner can check (L2); "Review" names the required reviewer.
 Goal: a UI that crashes in a loop, at any pace, stops looping within minutes; the lock, the polkit agent, idle and the
 sleep inhibitor keep running whatever the UI does; the session stays locked if it was; safe mode is "the UI unit
 failed, the security process is up", with a way out (Try Again, Log Out), never a lock-out. Rewritten after the owner's
-answers of 2026-10-29 (SQ-1 B: ADR-0010's separate security process now, S1-S5; SQ-2 A): the first version built a safe
+answers of 2026-10-29 (SQ-1 B: ADR-0010's separate security process now, S1-S4; SQ-2 A): the first version built a safe
 configuration of the one shell process. Order and rules set by the integrator under the owner's rule: 1a ships first and
 unchanged (independent, it stops a slow loop today); then the security process, its unit first with nothing moved yet
 (S1), then everything that locks together (S2: the lock, idle and the sleep inhibitor, with every `Lock.lock` caller
@@ -131,9 +131,9 @@ down, how sleep behaves) is written in the table at the end of this step.
   (`Type=oneshot`, a POSIX sh script, standard tools only), which records each failure's monotonic time in
   `$XDG_RUNTIME_DIR/grassfield/shell-failures` (0600), prunes the window and, at the threshold, cancels the pending restart
   (`systemctl --user stop grassfield-shell.service`, which a unit in auto-restart accepts) and writes the safe-mode state
-  file the security process reads from S5 on. A logout does not count: the script applies the same "compositor gone"
+  file the security process reads from S4 on. A logout does not count: the script applies the same "compositor gone"
   test as the sleep-lock gate (`packaging/systemd/sleep-lock-gate`), so the 255 exit of every logout (GF-081) never
-  counts as a failure. `OnFailure=omarchy-sleep-lock.service` stays, unchanged. Before S5 ships, what the user sees at
+  counts as a failure. `OnFailure=omarchy-sleep-lock.service` stays, unchanged. Before S4 ships, what the user sees at
   the threshold is what the start limit gives today, reached now for a slow loop too: the UI stays stopped (no bars,
   the windows over the ground colour), the compositor keeps a lock if there was one (fail closed, out of reach from the
   session: a TTY or the power button are the exits, as today), Omarchy's sleep lock stays armed and its stand-in tries
@@ -440,7 +440,7 @@ Goal: no input a process reads from the system, a file or another process can cr
 | SQ-6 the extension after a compositor crash | « La couper si elle est en cause » | **A** (recommended) |
 
 Integrator decisions under the owner's rule that come with SQ-1 B (the closest to macOS, no technical step for the end
-user): step 1 is rewritten around ADR-0010's S1-S5, each S-step its own pull request under the opus security review,
+user): step 1 is rewritten around ADR-0010's plan as S1-S4, each S-step its own pull request under the opus security review,
 every intermediate state keeping "failures stay locked"; the order is 1a first (independent, it stops a slow loop today),
 then the security process (its unit first with nothing moved yet, then the lock with idle and the sleep inhibitor
 together and every `Lock.lock` caller switched in the same step, then the polkit agent: the review of f018b42 merged
@@ -514,7 +514,7 @@ session whatever its cause; the question is the next login.
 - **SD-4.** Safe mode never unlocks by itself, never approves, never sleeps unlocked; its menu offers Try Again, Log Out,
   Restart and Shut Down and nothing else; its sentence is "Grassfield is running in safe mode: its desktop stopped
   working and was turned off." (French in the same pull request). Under SQ-1 B its bar is drawn by the security process
-  (step 1, S5), with `Grassfield.Ui` only.
+  (step 1, S4), with `Grassfield.Ui` only.
 - **SD-5.** The chaos and endurance tests run in nested sessions only; the owner's real session gets a read-only check
   list per step (`docs/audits/stability-2026-10-29/owner-checks.sh` from step 7 on), never a driven test. The owner's own
   checks listed per step (step 1's kill of the shell, run by the owner's hand on the owner's machine) are owner-run
@@ -536,7 +536,7 @@ session whatever its cause; the question is the next login.
   language.
 - `grassfield-shell.service`'s start limit, `OnFailure=` list and the sleep-lock gate change under the security review;
   `tests/security/sleep_lock_units.sh` and `unit_restart_limits.sh` grow with them.
-- ADR-0010's direction (a separate security process) becomes the decision: step 1 carries its S1-S5; ADR-0010 is amended
+- ADR-0010's direction (a separate security process) becomes the decision: step 1 carries its plan as S1-S4; ADR-0010 is amended
   on 2026-10-29 to say so.
 - ADR-0033 gains, if SQ-3 chooses A, an amendment that records the hold next to s3.4 and extends f's watch job.
 - Known limits written into the specs: a Quickshell bug that takes the security process down in a loop (SQ-1 B); a compositor crash
