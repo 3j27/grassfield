@@ -280,6 +280,10 @@ if [[ -x $store ]]; then
   perm=$(permission desktop-used-apps text/plain)
   desc="8 ... and counts the choice in its permission store [$perm]"
   check test "$(value '[v[0] for v in d.get("permissions", {}).values()]' <<<"$perm")" = '["org.example.GfOpenB"]'
+  # The same process then serves an Open panel: one panels root for both interfaces (made by the first of them).
+  out=$(choose OpenFile "{\"directory\": true}" 20)
+  desc="8 ... then an Open panel in the same process answers too [$out; starts $(starts)]"
+  check test "$(value 'd.get("response")' <<<"$out") $(starts)" = "0 1"
   stop_bus
   openwith openwith-cancel
   scenario openwith-cancel cancel || exit 1

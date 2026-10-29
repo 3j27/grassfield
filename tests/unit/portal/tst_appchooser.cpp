@@ -148,24 +148,25 @@ protected:
 
 } // namespace
 
-// What the panel is given: desktop ids only (A-OW1: never a path, a ".desktop" name or anything a desktop file id cannot be),
-// each once and at most kMaxApplications; the last choice, the content type and the document's name checked; the Open panel's
-// own keys present and empty (FilePanel reads them).
+// What the panel is given: desktop ids only (A-OW1: never a path, a ".desktop" name, a hidden name or a control character;
+// spaces, '+' and any letter are a name's), each once and at most kMaxApplications from a bounded look; the last choice, the
+// document's name and the URI checked; the Open panel's own keys present and empty (FilePanel reads them).
 TEST(AppChooserToQml, ChecksWhatTheFrontendGives)
 {
     const QVariantMap request = AppChooser::toQml(
         QStringLiteral("org.example.Writer"), QStringLiteral("wayland:abc"),
         {QStringLiteral("org.gnome.TextEditor"), QStringLiteral("../../bin/sh"), QStringLiteral("kate.desktop"), QString(),
-         QStringLiteral("org.gnome.TextEditor"), QStringLiteral("kde4-kwrite"), QStringLiteral("-x")},
+         QStringLiteral("org.gnome.TextEditor"), QStringLiteral("kde4-kwrite"), QStringLiteral(".hidden"), QStringLiteral("bad\nname"),
+         QStringLiteral("wine-Programs-Notepad++"), QStringLiteral("Some Game")},
         {{QStringLiteral("last_choice"), QStringLiteral("org.kde.kate")},
-         {QStringLiteral("content_type"), QStringLiteral("text/plain")},
          {QStringLiteral("filename"), QStringLiteral("notes.txt")},
          {QStringLiteral("uri"), QStringLiteral("file:///home/u/notes.txt")},
          {QStringLiteral("modal"), false}});
     EXPECT_EQ(request.value("kind").toString(), QStringLiteral("application"));
-    EXPECT_EQ(request.value("applications").toStringList(), (QStringList{QStringLiteral("org.gnome.TextEditor"), QStringLiteral("kde4-kwrite")}));
+    EXPECT_EQ(request.value("applications").toStringList(),
+              (QStringList{QStringLiteral("org.gnome.TextEditor"), QStringLiteral("kde4-kwrite"), QStringLiteral("wine-Programs-Notepad++"),
+                           QStringLiteral("Some Game")}));
     EXPECT_EQ(request.value("lastChoice").toString(), QStringLiteral("org.kde.kate"));
-    EXPECT_EQ(request.value("contentType").toString(), QStringLiteral("text/plain"));
     EXPECT_EQ(request.value("filename").toString(), QStringLiteral("notes.txt"));
     EXPECT_EQ(request.value("uri").toString(), QStringLiteral("file:///home/u/notes.txt"));
     EXPECT_FALSE(request.value("modal").toBool());
@@ -177,19 +178,27 @@ TEST(AppChooserToQml, ChecksWhatTheFrontendGives)
 
     const QVariantMap wrong = AppChooser::toQml({}, QStringLiteral("x11:1"), {},
                                                 {{QStringLiteral("last_choice"), QStringLiteral("../x")},
-                                                 {QStringLiteral("content_type"), QStringLiteral("text plain")},
                                                  {QStringLiteral("filename"), QStringLiteral("../etc/passwd")},
+                                                 {QStringLiteral("uri"), QStringLiteral("magnet:?a\nb")},
                                                  {QStringLiteral("modal"), QStringLiteral("no")}});
     EXPECT_EQ(wrong.value("lastChoice").toString(), QString());
-    EXPECT_EQ(wrong.value("contentType").toString(), QString());
     EXPECT_EQ(wrong.value("filename").toString(), QString()) << "a name, never a path";
+    EXPECT_EQ(wrong.value("uri").toString(), QStringLiteral("magnet:?a b")) << "one line";
     EXPECT_TRUE(wrong.value("modal").toBool()) << "modal unless the frontend says otherwise with a boolean";
     EXPECT_FALSE(wrong.value("parented").toBool());
+    for (const char *name : {".", ".."})
+        EXPECT_EQ(AppChooser::toQml({}, {}, {}, {{QStringLiteral("filename"), QString::fromLatin1(name)}}).value("filename").toString(), QString()) << name;
+    EXPECT_FALSE(AppChooser::toQml({}, QStringLiteral("wayland:"), {}, {}).value("parented").toBool()) << "a handle needs its id";
+    EXPECT_FALSE(AppChooser::isDesktopId(QString(250, u'a'))) << "255 bytes with \".desktop\"";
 
     QStringList many;
     for (int i = 0; i < AppChooser::kMaxApplications + 10; ++i)
         many << QStringLiteral("app%1").arg(i);
     EXPECT_EQ(AppChooser::toQml({}, {}, many, {}).value("applications").toStringList().size(), AppChooser::kMaxApplications);
+    // A bounded look: an id after 4 * kMaxApplications entries is never read, whatever came before it.
+    QStringList junk(4 * AppChooser::kMaxApplications, QStringLiteral("a/b"));
+    junk << QStringLiteral("org.example.Late");
+    EXPECT_TRUE(AppChooser::toQml({}, {}, junk, {}).value("applications").toStringList().isEmpty());
 }
 
 // The panel's choice reaches the frontend with the activation token the call came with.
@@ -214,13 +223,14 @@ TEST_F(AppChooserTest, TheChoiceGoesBack)
 TEST_F(AppChooserTest, AnyApplicationCanBeChosen)
 {
     chooser->setUiLoader([] { return true; });
-    auto reply = call(QStringLiteral("/r/a2"), {QStringLiteral("org.gnome.TextEditor")}, {});
+    auto reply = call(QStringLiteral("/r/a2"), {QStringLiteral("org.gnome.TextEditor")},
+                      {{QStringLiteral("activation_token"), QString(1025, u't')}});
     ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
     chooser->answer(opened.first().first, 0, {{QStringLiteral("choice"), QStringLiteral("org.example.Other")}});
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_EQ(reply->response, 0u);
     EXPECT_EQ(reply->results.value("choice").toString(), QStringLiteral("org.example.Other"));
-    EXPECT_FALSE(reply->results.contains("activation_token")) << "none given, none back";
+    EXPECT_FALSE(reply->results.contains("activation_token")) << "a token over 1024 characters is none";
 }
 
 // Cancel is response 1; a choice that is no desktop id ends the request with response 2, never a launch of it.

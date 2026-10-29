@@ -24,6 +24,9 @@ TestCase {
             "smb://server/share": [["remote.txt", false]]
         })
 
+    // The Applications listing still loading when the panel opens (the real one lists on a thread): the test ends it.
+    property bool slowApplications: false
+
     // The tree's entries for a folder URL in either form QML prints it (a typed url parameter prints "My%20Documents", a
     // url from Qt.url() "My Documents").
     function entries(folder: string): var {
@@ -83,6 +86,8 @@ TestCase {
                 return globs.length > 0 && !globs.some(g => name.toLowerCase().endsWith(g.substring(1).toLowerCase()));
             }
             function relist(): void {
+                if (test.slowApplications && String(listing.url).startsWith("grassfield-apps:"))
+                    listing.loading = true;
                 const keep = listing.selectedUrls().map(String);
                 listing.clear();
                 const entries = test.entries(String(listing.url)) || [];
@@ -323,6 +328,16 @@ TestCase {
         property var slow: []
         property int nextToken: 1
         signal probed(int token, var kinds)
+        // FilePanels.qml's side of FileChooser.
+        signal opened(int id, var request)
+        signal closed(int id)
+        function memory(appId: string): var {
+            return {};
+        }
+        function present(id: int, window: var): void {
+        }
+        function fail(id: int): void {
+        }
         function answer(id: int, response: int, map: var): void {
             fakeHost.answers = fakeHost.answers.concat([{id: id, response: response, map: map}]);
         }
@@ -357,6 +372,14 @@ TestCase {
     QtObject {
         id: fakeAppHost
         property var answers: []
+        // FilePanels.qml's side of AppChooser.
+        signal opened(int id, var request)
+        signal closed(int id)
+        signal applicationsChanged(int id, var applications)
+        function present(id: int, window: var): void {
+        }
+        function fail(id: int): void {
+        }
         function answer(id: int, response: int, map: var): void {
             fakeAppHost.answers = fakeAppHost.answers.concat([{id: id, response: response, map: map}]);
         }
@@ -372,6 +395,11 @@ TestCase {
         }
         function dragEnded(dropped: bool): void {
         }
+    }
+
+    Component {
+        id: panelsComponent
+        FilePanels {}
     }
 
     Component {
@@ -439,6 +467,7 @@ TestCase {
     // Every test starts with a disk that answers (a test that fails half-way must not leave a folder hung for the next).
     function cleanup(): void {
         fakeManager.testAnswer = "";
+        test.slowApplications = false;
         fakeHost.slow = [];
     }
 
@@ -930,6 +959,8 @@ TestCase {
         compare(panel.message, "Choose an application to open the document “notes.txt”.");
         compare(panel.filterIndex, 0, "Recommended Applications");
         compare(panel.formatEntries.length, 2, "the Enable pop-up");
+        compare(panel.acceptText, "Open", "Open, never Save (review of step 5b, M1)");
+        verify(!panel.canMakeFolder, "no New Folder in Choose Application");
         const m = tab.folder;
         verify(!m.get(test.rowOf(m, "org.gnome.TextEditor")).dimmed, "a candidate");
         verify(!m.get(test.rowOf(m, "org.kde.kate")).dimmed, "the last choice");
@@ -990,6 +1021,55 @@ TestCase {
         compare(fakeAppHost.answers.length, 1);
         compare(fakeAppHost.answers[0].response, 1);
         compare(fakeHost.answers.length, 0);
+    }
+
+    // M2 of the review of step 5b: in a Save panel, an application of the Applications location is left alone; its name never
+    // replaces the one typed.
+    function test_an_application_never_names_a_saved_file(): void {
+        const panel = test.openPanel({kind: "save", currentName: "Q3 report.odt", currentFolder: "file:///home/u/Documents"}, {memory: {expanded: true}});
+        const tab = test.findTab(panel.contentItem);
+        tab.navigate(Qt.url("grassfield-apps:/"), true);
+        verify(tab.isApplications);
+        tab.activate(test.rowOf(tab.folder, "Text Editor"), tab.folder, 0);
+        compare(test.findField(panel.contentItem).text, "Q3 report.odt");
+        compare(fakeHost.answers.length, 0);
+        compare(fakeApp.launched.length, 0);
+    }
+
+    // The Applications listing loads after the panel opened (the real FolderModel lists on a thread): the last choice is
+    // selected when it ends (review of step 5b, m7 a).
+    function test_the_last_choice_once_the_listing_has_loaded(): void {
+        test.slowApplications = true;
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        wait(50);
+        compare(tab.folder.expected.length, 0, "nothing selected while it loads");
+        tab.folder.loading = false;
+        tryVerify(() => tab.folder.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000);
+    }
+
+    // FilePanels.qml with both hosts: their request ids are their own (FileChooser's 1 and AppChooser's 1 are two panels);
+    // UpdateChoices reaches the right panel; a Close of one leaves the other (review of step 5b, m7 b and c).
+    function test_panels_of_both_hosts(): void {
+        const manager = createTemporaryObject(panelsComponent, test, {app: fakeApp, host: fakeHost, appHost: fakeAppHost});
+        verify(manager !== null, "FilePanels");
+        fakeHost.opened(1, test.request({currentFolder: "file:///home/u/Documents", places: test.places,
+                                         folderKinds: {"file:///home/u/Documents": 2}}));
+        fakeAppHost.opened(1, test.request(test.appRequest({})));
+        const files = manager.panels[manager.key(1, false)];
+        const apps = manager.panels[manager.key(1, true)];
+        verify(files !== undefined && apps !== undefined && files !== apps, "two panels");
+        compare(files.kind, "open");
+        compare(apps.kind, "application");
+        fakeAppHost.applicationsChanged(1, ["org.example.Other"]);
+        compare(apps.recommended, ["org.example.Other"]);
+        compare(files.recommended, []);
+        fakeAppHost.closed(1);
+        verify(manager.panels[manager.key(1, true)] === undefined);
+        verify(manager.panels[manager.key(1, false)] === files, "FileChooser's request 1 keeps its panel");
+        fakeHost.closed(1);
+        compare(Object.keys(manager.panels).length, 0);
     }
 
     // The integration test's "accept": a Choose Application panel answers once an application is selected (the listing's
