@@ -34,6 +34,7 @@ TestCase {
             busy: false
             tag: ""
             tagColor: -1
+            unavailable: false
         }
 
         ListElement {
@@ -47,6 +48,7 @@ TestCase {
             busy: false
             tag: ""
             tagColor: -1
+            unavailable: false
         }
 
         ListElement {
@@ -60,6 +62,7 @@ TestCase {
             busy: true
             tag: ""
             tagColor: -1
+            unavailable: false
         }
 
         // Last here so the rows above keep their numbers (first in the real sidebar).
@@ -74,6 +77,7 @@ TestCase {
             busy: false
             tag: ""
             tagColor: -1
+            unavailable: false
         }
 
         ListElement {
@@ -87,6 +91,7 @@ TestCase {
             busy: false
             tag: ""
             tagColor: -1
+            unavailable: false
         }
 
         function rowForUrl(url): int {

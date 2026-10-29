@@ -1,6 +1,10 @@
 #pragma once
 
+#include "diskprobe.h"
+
 #include <QAbstractListModel>
+#include <QHash>
+#include <QSet>
 #include <QList>
 #include <QStringList>
 #include <QUrl>
@@ -10,7 +14,10 @@ class KCoreDirLister;
 // Sidebar entries: Favorites (Home, Applications, the standard user folders that exist), Locations (the system volume and
 // Solid storage volumes, Network only when a KIO smb/sftp worker is installed, Trash) and Tags (the tags in use,
 // FilesApp: colour tags first; a tag entry has no URL of its own, the sidebar searches it in the shown folder).
-// Mount and eject go through Solid::StorageAccess (udisks2 + polkit); nothing is mounted by hand.
+// Mount and eject go through Solid::StorageAccess (udisks2 + polkit); nothing is mounted by hand. Whether each standard
+// folder exists is asked off the GUI thread (DiskProbe, ADR-0035 4b-18): the list comes at once, a folder that is not there
+// leaves it when the disk answers, and one that does not answer is listed dimmed ("unavailable"), as the Finder shows a
+// server that went away; Files and grassfield-portal's panels never wait on a hung mount for their sidebar.
 class PlacesModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -31,10 +38,13 @@ public:
         // Tag entries: the stored tag and its palette index (-1 for a tag without a colour).
         TagRole,
         TagColorRole,
+        // A standard folder whose disk does not answer (a hung mount): listed, dimmed.
+        UnavailableRole,
     };
     Q_ENUM(Roles)
 
-    explicit PlacesModel(QObject *parent = nullptr);
+    // `disk`: how the standard folders are asked about (the tests give a slow disk).
+    explicit PlacesModel(QObject *parent = nullptr, const DiskProbe::Options &disk = {});
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -71,9 +81,13 @@ private:
         bool busy = false;
         QString tag;
         int tagColor = -1;
+        bool unavailable = false;
     };
 
+    // The list again, then the standard folders asked about.
     void rebuild();
+    // The list from what is known of the standard folders (no disk read).
+    void relist();
     void setBusy(const QString &udi, bool busy);
     QList<Place> devicePlaces();
 
@@ -81,4 +95,8 @@ private:
     QStringList m_tags;
     KCoreDirLister *m_trashLister = nullptr;
     bool m_trashEmpty = true;
+    DiskProbe m_disk;
+    // What the disk last said of each standard folder (DiskProbe kinds); a folder not asked yet is listed.
+    QHash<QString, int> m_folderKinds;
+    QSet<int> m_folderTokens;
 };

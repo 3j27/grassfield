@@ -24,6 +24,7 @@ add_library(grassfield-files-core STATIC
     ${GF_FILES_SRC}/filesapp.cpp ${GF_FILES_SRC}/filesapp.h
     ${GF_FILES_SRC}/foldermodel.cpp ${GF_FILES_SRC}/foldermodel.h
     ${GF_FILES_SRC}/placesmodel.cpp ${GF_FILES_SRC}/placesmodel.h
+    ${GF_FILES_SRC}/diskprobe.cpp ${GF_FILES_SRC}/diskprobe.h
     ${GF_FILES_SRC}/imageproviders.cpp ${GF_FILES_SRC}/imageproviders.h
     ${GF_FILES_SRC}/filelogic.cpp ${GF_FILES_SRC}/filelogic.h
     ${GF_FILES_SRC}/launchguard.cpp ${GF_FILES_SRC}/launchguard.h

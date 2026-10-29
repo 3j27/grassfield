@@ -42,9 +42,22 @@ Solid::StorageDrive *driveOf(const Solid::Device &device)
 }
 } // namespace
 
-PlacesModel::PlacesModel(QObject *parent)
+PlacesModel::PlacesModel(QObject *parent, const DiskProbe::Options &disk)
     : QAbstractListModel(parent)
+    , m_disk(disk)
 {
+    connect(&m_disk, &DiskProbe::answered, this, [this](int token, const QHash<QString, int> &kinds) {
+        if (!m_folderTokens.remove(token))
+            return;
+        bool changed = false;
+        for (auto it = kinds.cbegin(); it != kinds.cend(); ++it) {
+            if (m_folderKinds.value(it.key(), 2) != it.value())
+                changed = true;
+            m_folderKinds.insert(it.key(), it.value());
+        }
+        if (changed)
+            relist();
+    });
     rebuild();
     auto *notifier = Solid::DeviceNotifier::instance();
     connect(notifier, &Solid::DeviceNotifier::deviceAdded, this, &PlacesModel::rebuild);
@@ -83,6 +96,23 @@ bool PlacesModel::networkAvailable() const
 
 void PlacesModel::rebuild()
 {
+    relist();
+    QStringList folders;
+    for (const Place &p : std::as_const(m_places))
+        if (p.kind == QLatin1String("folder"))
+            folders << p.url.toLocalFile();
+    // The standard folders the list may not show (one answered missing before) are asked again too. One call each: a hung
+    // one keeps no other from its answer.
+    for (auto it = m_folderKinds.cbegin(); it != m_folderKinds.cend(); ++it)
+        if (!folders.contains(it.key()))
+            folders << it.key();
+    m_folderTokens.clear();
+    for (const QString &folder : std::as_const(folders))
+        m_folderTokens.insert(m_disk.probe({folder}));
+}
+
+void PlacesModel::relist()
+{
     QList<Place> places;
     const QString home = QDir::homePath();
     // Recents first, under no heading (macOS 27 Finder; decision F-5).
@@ -118,9 +148,13 @@ void PlacesModel::rebuild()
             apps.kind = QStringLiteral("applications");
             places.append(apps);
         }
-        const QString path = QStandardPaths::writableLocation(s.location);
-        // Only folders that exist; xdg-user-dirs maps missing ones to $HOME, which is listed once.
-        if (path.isEmpty() || !QDir(path).exists() || (s.location != QStandardPaths::HomeLocation && QDir(path) == QDir(home)))
+        const QString path = QDir::cleanPath(QStandardPaths::writableLocation(s.location));
+        // Only folders that exist (the disk's answer; a folder not asked yet is listed); xdg-user-dirs maps missing ones to
+        // $HOME, which is listed once (compared as paths: the disk is not read on this thread).
+        if (path.isEmpty() || path == QLatin1String(".") || (s.location != QStandardPaths::HomeLocation && path == QDir::cleanPath(home)))
+            continue;
+        const int kind = m_folderKinds.value(path, 2);
+        if (kind == 0 || kind == 1)
             continue;
         Place p;
         p.section = QStringLiteral("favorites");
@@ -128,6 +162,7 @@ void PlacesModel::rebuild()
         p.url = QUrl::fromLocalFile(path);
         p.iconName = s.icon;
         p.kind = QStringLiteral("folder");
+        p.unavailable = kind == DiskProbe::kNotResponding;
         places.append(p);
     }
 
@@ -237,6 +272,8 @@ QVariant PlacesModel::data(const QModelIndex &index, int role) const
         return p.tag;
     case TagColorRole:
         return p.tagColor;
+    case UnavailableRole:
+        return p.unavailable;
     }
     return {};
 }
@@ -246,7 +283,7 @@ QHash<int, QByteArray> PlacesModel::roleNames() const
     return {{SectionRole, "section"}, {NameRole, "name"},       {UrlRole, "url"},
             {IconNameRole, "iconName"}, {KindRole, "kind"},     {UdiRole, "udi"},
             {MountedRole, "mounted"},   {EjectableRole, "ejectable"}, {BusyRole, "busy"},
-            {TagRole, "tag"},           {TagColorRole, "tagColor"}};
+            {TagRole, "tag"},           {TagColorRole, "tagColor"},   {UnavailableRole, "unavailable"}};
 }
 
 void PlacesModel::setTags(const QStringList &tags)
@@ -254,7 +291,7 @@ void PlacesModel::setTags(const QStringList &tags)
     if (tags == m_tags)
         return;
     m_tags = tags;
-    rebuild();
+    relist();
 }
 
 int PlacesModel::rowForUrl(const QUrl &url) const

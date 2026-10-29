@@ -218,6 +218,9 @@ FocusScope {
         required property bool busy
         required property string tag
         required property int tagColor
+        // A standard folder whose disk does not answer (PlacesModel): listed, dimmed, as the Finder shows a server that went
+        // away.
+        required property bool unavailable
 
         readonly property bool current: entry.index === root.currentRow
         readonly property bool keyed: list.activeFocus && entry.index === root.keyRow
@@ -225,6 +228,7 @@ FocusScope {
 
         width: ListView.view.width
         height: Tokens.filesSidebarItemHeight
+        opacity: entry.unavailable ? Tokens.materialDisabledOpacity : 1
         Accessible.role: Accessible.ListItem
         Accessible.name: DisplayName.text(entry.name)
         Accessible.selectable: true

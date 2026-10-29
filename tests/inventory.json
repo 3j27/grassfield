@@ -214,6 +214,7 @@
  {"path": "tests/unit/files/tst_kioprompts.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_kiodialogs.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_folderchooser.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_diskprobe.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_menushortcuts.cpp", "layer": "logic"},
  {"path": "tests/unit/menu-bridge/tst_menubridge.cpp", "layer": "logic"},
  {"path": "tests/unit/menu-bridge/tst_screensaver.cpp", "layer": "logic"},

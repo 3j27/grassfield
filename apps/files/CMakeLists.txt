@@ -36,7 +36,7 @@ if(GTest_FOUND)
     # Grassfield's KIO dialogs (ADR-0035 D-12 a) and the panels' listings (FolderModel.chooser, D-4): real KIO jobs and
     # listings against the Files library; its own main (a scratch home, offscreen).
     add_executable(files-kio-tests ../../tests/unit/files/tst_kioprompts.cpp ../../tests/unit/files/tst_kiodialogs.cpp
-        ../../tests/unit/files/tst_folderchooser.cpp)
+        ../../tests/unit/files/tst_folderchooser.cpp ../../tests/unit/files/tst_diskprobe.cpp)
     target_compile_definitions(files-kio-tests PRIVATE FILES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(files-kio-tests PRIVATE grassfield-files-core GTest::gtest)
     add_test(NAME files-kio-tests COMMAND files-kio-tests)
