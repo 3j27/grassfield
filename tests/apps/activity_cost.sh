@@ -12,9 +12,10 @@
 #     --changing P (default 10; 0 skips it): then Disk is measured again on the same fixture where P % of the processes
 #     change their stat and io lines between two samples (the bench pokes them outside the measured time), against A10's
 #     one pass on that fixture, at the same 1.15 margin: an idle fixture favours the sampler's unchanged-line cache
-#     (review of PR #53).
-#   Exit 0 every tab within its limit (or SKIP without gcc and g++), 1 a tab over, 2 usage or a refused run (also a run
-#   started at a load average of 2 or more: its numbers print and do not count).
+#     (review of PR #53). The run fails if the fixture did not change: fewer stat or io lines parsed a sample than 90 % of
+#     its changing processes.
+#   Exit 0 every tab within its limit (or SKIP without gcc and g++), 1 a tab over or a fixture that did not change, 2 usage
+#   or a refused run (also a run started at a load average of 2 or more: its numbers print and do not count).
 #
 # Run as the user the app will run as, never as root: root reads every process's io and descriptors, which is not the
 # user's cost. The limits (AM-P2; ADR-0038, the integrator's decisions on pull request #47, 2026-10-29): each tab's limit
@@ -151,6 +152,16 @@ if ((changing > 0)); then
   echo "$disk"
   model "after the product, the fixture changing" "$group"
   judge "disk ($changing % changing)" "$disk" "${plan[disk]}" "$disk_margin" "step 1 in one pass"
+  # The fixture really changed (the review of 91dcb63: with transparent huge pages its stat lines seldom did): at each
+  # sample the bench parsed again the stat and io lines of at least 90 % of its changing processes.
+  changers=$(((processes + every - 1) / every))
+  read -r parsed_stat parsed_io < <(sed -n 's/.*lines parsed a sample: stat \([0-9.]*\) io \([0-9.]*\).*/\1 \2/p' <<<"$disk")
+  if awk -v s="${parsed_stat:-0}" -v i="${parsed_io:-0}" -v c="$changers" 'BEGIN { exit !(s >= 0.9 * c && i >= 0.9 * c) }'; then
+    verdicts+=("PASS: the fixture changed: stat ${parsed_stat} and io ${parsed_io} lines parsed a sample, $changers processes changing")
+  else
+    verdicts+=("FAIL: the fixture did not change: stat ${parsed_stat:-?} and io ${parsed_io:-?} lines parsed a sample, under 90 % of its $changers changing processes")
+    status=1
+  fi
 fi
 
 printf '%s\n' "${verdicts[@]}"

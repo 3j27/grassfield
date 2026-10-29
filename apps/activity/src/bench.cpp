@@ -56,12 +56,16 @@ void *idleThread(void *)
 // A process of the changing part: at each SIGUSR1 one minor fault (the next page of a region reserved at start, touched for
 // the first time: stat's minflt) and a one-byte read (io's rchar and syscr), so both its lines differ at the next sample.
 // No page is unmapped at each poke: an munmap of a process with threads sends TLB shootdowns to the other processors, the
-// sampler's among them, which the sample would pay for (its kernel time doubled in the first version).
+// sampler's among them, which the sample would pay for (its kernel time doubled in the first version). The region has no
+// transparent huge pages: with THP "always", the first touch faulted in 2 MiB and the next 511 pages faulted no more, so the
+// stat line seldom changed (the integrator's review of 91dcb63; activity_cost.sh now checks the lines parsed).
 [[noreturn]] void changeOnSignal(int zero)
 {
     constexpr size_t kPage = 4096, kPages = 16384; // 64 MiB of address space, reserved, never all touched by one run
     auto *region = static_cast<char *>(mmap(nullptr, kPage * kPages, PROT_READ | PROT_WRITE,
                                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0));
+    if (region != MAP_FAILED)
+        madvise(region, kPage * kPages, MADV_NOHUGEPAGE);
     size_t next = 0;
     sigset_t set;
     sigemptyset(&set);
