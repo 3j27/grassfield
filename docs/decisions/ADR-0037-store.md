@@ -383,7 +383,9 @@ and the recipes call sudo themselves and write in the user's home, so the helper
   what yay would install; the Store's plan asks the same), "not there" being pacman's whole line `error: target not
   found: <name>`, never a longer name's; a removal only of packages installed explicitly (`-Qqe`) from outside the
   repositories (`-Qqm`) and whose whole `pacman -Rs --print` plan names no denied package (read one name a line, never
-  as words or patterns). No application entry is needed: the user installed it from
+  as words or patterns). The script checks the names it is given; the packages yay builds as their dependencies are
+  checked by the Store's plan before the terminal opens (each denied name refused, SD30), not again there: the script has
+  no copy of the AUR's answer, and yay builds what each PKGBUILD asks, which the user accepted with the warning. No application entry is needed: the user installed it from
   the AUR. Success is exit 0 and every planned package present by name (an AUR package's version is whatever its build
   makes; the repositories' packages at their planned versions), or, for a removal, every planned package gone.
 
@@ -497,11 +499,15 @@ nothing ever signals pacman.
      S1 shows no recipe or helper of Omarchy's runs `-y`, and grassfield-packages' CI refuses a catalog that names a recipe
      whose text has `-Sy`, `-Syu` or `yay -Sy` (g);
    - `pacman -S --print` must resolve and must not upgrade an installed package (S4);
-   - the system no older than its mirror (S5; the integrator's note on PR #36; SD29): Software Update's last answer
-     (`software-update.json`: available, with other packages or Omarchy to update) given after the newest sync database
-     was written means the mirror has moved on since the databases were synced, and refuses before anything downloads;
-     then every file of the plan (at most 64) is asked with a HEAD request, and one the mirror no longer has (404, 410)
-     refuses too; after the fact, an install pacman ended because the mirror answered 404, 410 or more than the allowed
+   - the system no older than its mirror (S5; the integrator's notes on PR #36 and the review of ff2fd83; SD29):
+     Software Update's last successful answer (`software-update.json` as the shell writes it: up-to-date, available or
+     not-set-up, the three states that list the system's updates, or after a failed check the success the shell keeps as
+     `previous`) that counts other updates or an Omarchy release, given after pacman last synced the databases (the last
+     "synchronizing package lists" of pacman.log, else the newest database's date, which pacman sets to the mirror's
+     Last-Modified), means the mirror has moved on (its checker compares what is installed with a fresh copy of the
+     mirror's databases) and refuses before anything downloads, AUR installs included; then every file of the plan (256
+     at most), the AUR's repository dependencies included, is asked with a HEAD request, all at once within 20 s, and one
+     the mirror no longer has (404, 410) refuses too; after the fact, an install pacman ended because the mirror answered 404, 410 or more than the allowed
      size for a package or its `.sig` ends "outdated". Each says "Your system needs to be updated before you can install
      apps." with one action, Update Now… (Software Update, SD14), and the app is offered again after the update; the
      mirror's and pacman's words go to the log, never to the sheet. The Store never syncs the databases alone (a partial
@@ -801,7 +807,7 @@ irreversible action on the owner's machine. The integrator checks each row in th
 
 | SD24 to SD27 | (step 3c, the Flathub source) | | | Written with that part: the probes S20 to S26 (`store-probes-4.sh`) measured their facts and cite these numbers |
 | SD28 | How step 3c (SD11) is delivered | in three parts, each reviewed on its own: 3c part 1, the review notes on grassfield PR #36 (3b2's follow-ups, Arch's app data, the system older than its mirror) and Flathub's groundwork (the probes S20 to S26, the AppStream reader taking Flathub's components); part 2 the Flathub source (its switch, `flatpak --user`, flatpak's own plan, the stop, the uninstall, the runtimes left); part 3 "Get Flatpak…" (the `flatpak` package, which no Omarchy install has, through Omarchy's own `omarchy-pkg-add` in its terminal, pinned) · one PR | three parts | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: the integrator asked for the fixes now (the 3c PR opened with them); the Flathub source then rests on measured facts, and the package install, which changes the system, gets a review of its own (e.9); Flathub's switch stays dimmed with SD8's reason meanwhile |
-| SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule") | Software Update's own answer: its last check (`software-update.json`) found updates after the newest sync database was written, then a HEAD of each file of the plan; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week) · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033), and an age says nothing of the mirror (a week-old database on a quiet mirror installs fine); its answer is the mirror's own. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
+| SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last synced (pacman.log's last sync, else the database's date); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
 | SD30 | AUR packages with a name of the deny list (the integrator's note on PR #36: "refuse `grassfield-*`/`omarchy-*` on the AUR path, or label by origin") | refused: every name b.1's deny list names (the system's, Omarchy's prefix and lists, `yay`, Grassfield's prefix, `HoldPkg`), the app's and every package its plan builds from the AUR, in the Store (Get dimmed with the reason, the plan refused) and again in the script (exit 7); Omarchy's lists unread refuse · only `grassfield-*` and `omarchy-*` · labelled by origin, installable | the whole deny list, refused | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) what the Store installs, it can remove again (b.1's list refuses the removal of every such name); an AUR package that takes Omarchy's or Grassfield's name is not theirs, and the user should not have to tell. An AUR app whose name only looks like the system's (`linux-wifi-hotspot`) is refused too, as its removal would be |
 
 ## Amendments made in this PR (other documents)
@@ -1113,3 +1119,20 @@ same PR after it (2026-10-28 20:50, 2026-10-29 00:42 and 00:56). Each and what c
   Update Now… to Software Update and no raw output, never a refresh of the databases alone (e.4, SD29; `tst_plancheck`
   and `tst_storebackend` SystemOlderThanTheMirror with a fake mirror answering 404 and a database older than Software
   Update's check, `tst_operations` for pacman's 404 after the fact, `tst_storeoperations` for the words).
+
+Integrator review of step 3c part 1 (grassfield PR #54 at ff2fd83, independent opus security review; 2026-10-29): FAIL,
+one MAJOR; no widening of the root surface. Each finding and what changed:
+- MAJOR: the system-older check read only the `available` state, which the checker writes only for a Grassfield or
+  Omarchy release: Arch's updates alone answer up-to-date, Grassfield's repository off not-set-up (the owner's machine:
+  384 other updates and Omarchy 4.0.6, so the check never fired). It now reads any of the three states that carry the
+  counts, and a failed check's `previous`; AUR installs get it too, and their repository dependencies the HEADs (e.4,
+  SD29 amended). Tested on fixtures the real checker writes (`tests/fixtures/store/software-update/`, made by
+  `docs/audits/store-2026-10-27/tools/make-software-update-fixtures.sh`).
+- MINOR: the last sync was the newest database's mtime, which pacman sets to the mirror's Last-Modified (a sync on 10-29
+  left a database dated 10-16, so an older answer kept refusing): pacman.log's last "synchronizing package lists" now,
+  the mtime only without it.
+- MINOR: up to 64 HEADs one after another, each on a new connection: now every file (256 at most) at once on one
+  connection pool, within 20 s for the whole set, the rest dropped once one is gone (fetch.h headStatuses).
+- NITs: the helper condition of the "outdated" outcome has its test (a web app's failure with pacman's words stays
+  "failed"); the probe outputs' trailing spaces removed; the French sheet text reworded and the new texts' apostrophes
+  typographic; b.2 says the script checks the names it is given and the Store's plan the dependencies yay builds.

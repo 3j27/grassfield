@@ -126,8 +126,9 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   - `pacman -Qu` lists a package not marked "[ignored]" (the last system update did not finish, S12) → "Finish the system
     update first" (« Terminez d'abord la mise à jour du système ») with "Update Now…" (« Mettre à jour maintenant… »),
     which opens Software Update;
-  - the system older than its mirror (ADR-0037 e.4, SD29: Software Update's last check found updates after the newest sync
-    database was written; or a file of the plan the mirror no longer has, asked with a HEAD before anything downloads), a
+  - the system older than its mirror (ADR-0037 e.4, SD29: Software Update's last successful check, whatever its state,
+    found other updates or an Omarchy release after pacman last synced the databases; or a file of the plan the mirror no
+    longer has, every file asked with a HEAD at once before anything downloads, AUR installs included), a
     plan that upgrades an installed package, or an unresolvable plan → "Update your system first" (« Mettez d'abord le
     système à jour »): "Your system needs to be updated before you can install apps. Software Update brings it up to date;
     then get the app again." with "Update Now…". An install pacman ended because the mirror answered 404, 410 or too
@@ -314,7 +315,7 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | Case | Behaviour |
 |---|---|
 | A plan that upgrades an installed package or cannot be resolved (database newer than the system, S4) | sheet: "Update your system first", "Your system needs to be updated before you can install apps. …", "Update Now…"; nothing runs |
-| The system older than its mirror: Software Update's last check found updates after the newest sync database, or a file of the plan the mirror no longer has (HEAD 404/410; S5; SD29) | same sheet, before anything downloads; the mirror's answer in the log only |
+| The system older than its mirror: Software Update's last successful check (up-to-date, available or not-set-up) found other updates or an Omarchy release after pacman last synced, or a file of the plan the mirror no longer has (HEAD 404/410; S5; SD29) | same sheet, before anything downloads; the mirror's answer in the log only |
 | An install pacman ended on the mirror's 404, 410 or oversized answer for a package or its `.sig` | "Your system needs to be updated before you can install apps." with "Update Now…" (notice and page), no Try Again, no Details…; pacman's output in the log |
 | `pacman -Qu` lists packages not "[ignored]" (the last system update did not finish, S12) | "Finish the system update first", "Open Software Update"; nothing installs from a repository, the AUR or a setup |
 | `db.lck` present, or Omarchy's update running (S11) | "Another installation or an update is running"; nothing queued |
