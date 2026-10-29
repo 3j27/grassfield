@@ -31,6 +31,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | Files QSettings | config | Files / Files, Preview | n/a | stays |
 | `software-update.json` (ADR-0033) | state | shell / Settings | 1 | none (versioned from the start) |
 | `checkup-db/`, `health-db/`, `checkup.lock` (ADR-0033) | cache (`$XDG_CACHE_HOME/grassfield`) | the update checker (`checkupdates`, the `[grassfield]`-only sync, its lock) / the checker | n/a (pacman databases, a lock file) | none (regenerable; the `[grassfield]` files are deleted when the channel's Server changes, a stale `db.lck` under the checker's lock) |
+| `software-update-run.json`, `software-update-run.log` (ADR-0033 "Step 3") | runtime (`$XDG_RUNTIME_DIR/grassfield`, tmpfs; 0700, files 0600) | `grassfield-update-run` / Settings | 1 (the JSON; the log is plain text) | none (versioned from the start; the last Update Now run, its state by rename; gone at log out) |
 | `pre-refresh-pacman.d/50-grassfield` (ADR-0033) | Omarchy's user hooks (`~/.config/omarchy/hooks/`) | `grassfield-channel-set` / Omarchy's `omarchy-hook` | n/a (a symbolic link to a packaged file) | stays (removed by `grassfield-channel-set off`) |
 | `wallpaper-state.json` | config (`WallpaperState.qml:43`, `backend.cpp:105`) | shell / Settings | none | state, v1 |
 | `pointer-theme.json` | config (`shell.qml:151`) | shell (`PointerTheme.qml:254`) / Settings (`PointerThemeStatus.qml:16`) | none | state, v1 |
@@ -139,4 +140,6 @@ key (decision 1).
 System files outside the user's home are not user files and are not in the table: `/etc/pacman.d/grassfield.conf` and the
 two `[grassfield]` lines at the end of `/etc/pacman.conf`. Only `grassfield-channel-helper` (through pkexec) and
 `grassfield-channel-scriptlet` (from pacman's scriptlets) write them, and no package owns them (ADR-0033 a, c). The keyring's
-files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package.
+files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package. Step 3 (owner decision SU-M1)
+adds the runner's runtime row above; the root helper's status files in `/run/grassfield-update/` (root, 0755) are system
+files, as the Store's `/run/grassfield-store/` are, and `/usr/share/grassfield/BUILD-DEPS` belongs to grassfield-desktop.
