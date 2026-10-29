@@ -83,6 +83,43 @@ TestCase {
         compare(Minimized.configCall("tilingGroups", "true"), "", "Bring tile groups forward together is the shell's alone");
     }
 
+    // What the shell pushes (integrator review of 1c08d6b, S5-S7): each switch once the plugin advertises its feature, with
+    // the value of its own Settings property; Fill only with the plugin's arrangements (ADR-0036 D36).
+    function test_tilingConfigPairs() {
+        const settings = {windowsTilingEdges: true, windowsTilingMenuBar: false, windowsTilingOptionDrag: false, windowsTilingMargins: true,
+            windowsTilingLayouts: false, windowsTilingSuggestions: true, windowsTilingGroups: false};
+        const all = () => true;
+        compare(Minimized.tilingConfigPairs(settings, all), [["tilingEdges", "true"], ["tilingMenuBar", "false"], ["tilingOptionDrag", "false"],
+            ["tilingMargins", "true"], ["tilingLayouts", "false"], ["tilingSuggestions", "true"]]);
+        const only = list => feature => list.indexOf(feature) >= 0;
+        compare(Minimized.tilingConfigPairs(settings, only([])), []);
+        compare(Minimized.tilingConfigPairs(settings, only(["window-tiling"])).map(p => p[0]), ["tilingEdges", "tilingMenuBar", "tilingOptionDrag", "tilingMargins"]);
+        compare(Minimized.tilingConfigPairs(settings, only(["tile-hover"])), [["tilingLayouts", "false"]]);
+        compare(Minimized.tilingConfigPairs(settings, only(["tiling-layouts"])), [["tilingSuggestions", "true"]]);
+        compare(Minimized.tilingConfigPairs(settings, only(["tiling-groups", "tiling-arrange", "tiling-shared-edge"])), [], "no key rides on these");
+        // Each value is its own switch's: every one flipped alone changes only its pair.
+        for (const sw of Minimized.tilingSwitches) {
+            const flipped = Object.assign({}, settings);
+            flipped[sw.setting] = !settings[sw.setting];
+            const pairs = Minimized.tilingConfigPairs(flipped, all);
+            for (const [key, value] of pairs)
+                compare(value, (key === sw.key ? !settings[sw.setting] : settings[Minimized.tilingSwitches.find(s => s.key === key).setting]) ? "true" : "false", sw.key + " flipped: " + key);
+        }
+        compare(Minimized.tilingConfigPairs({}, all).map(p => p[1]), ["false", "false", "false", "false", "false", "false"], "a missing property is off, never true");
+        for (const [key, value] of Minimized.tilingConfigPairs(settings, all))
+            verify(Minimized.configCall(key, value) !== "", key + " is in the allowlist");
+    }
+
+    function test_doubleClickAction() {
+        compare(Minimized.doubleClickAction("fill", true), "fill");
+        compare(Minimized.doubleClickAction("fill", false), "zoom", "without the plugin's arrangements Fill zooms");
+        compare(Minimized.doubleClickAction("fill", undefined), "zoom");
+        for (const action of ["zoom", "minimize", "none"]) {
+            compare(Minimized.doubleClickAction(action, true), action);
+            compare(Minimized.doubleClickAction(action, false), action);
+        }
+    }
+
     // Stages from Settings (owner decision D-4, audit ARCH-05): the flag key and the verb the strip uses.
     function test_stagesFlagAndVerb() {
         compare(Minimized.configCall("stagesEnabled", "true"),

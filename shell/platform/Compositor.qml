@@ -315,32 +315,16 @@ Singleton {
     // Settings the titlebars honor; pushed after the capabilities handshake (and again on each
     // capabilities event, e.g. a reloaded plugin) and whenever they change. Fill (TL32) needs the plugin's arrangements
     // (feature "tiling-arrange"): without them the double-click zooms, the macOS default (ADR-0036 D36).
-    readonly property string titlebarDoubleClick: Settings.titlebarDoubleClick === "fill" && !Capabilities.has("tiling-arrange") ? "zoom" : Settings.titlebarDoubleClick
+    readonly property string titlebarDoubleClick: Minimized.doubleClickAction(Settings.titlebarDoubleClick, Capabilities.has("tiling-arrange"))
     // The minimize animation (Settings dock.minimizeEffect); Reduce Motion replaces it with a quick fade in place, as
     // macOS does. Without the plugin the fallback minimize has no animation at all.
     readonly property string minimizeEffect: Settings.reduceMotion ? "fade" : Settings.dockMinimizeEffect
     // Window tiling (Desktop & Dock > Windows, docs/specs/tiling.md TL32; Settings windows.tiling*): the plugin tiles
-    // titlebar drags at the edges, corners and menu bar, with Alt anywhere, with or without margins (feature
-    // "window-tiling"); it posts the green button's hover (feature "tile-hover") and keeps the suggestion after an
-    // arrangement (feature "tiling-layouts") only while the switch is on. Each key goes once the plugin advertises its
-    // feature. "Bring tile groups forward together" is the shell's alone (groupForward): the plugin raises a group only when
-    // asked (ADR-0036 D38).
-    readonly property var tilingConfig: ({
-            tilingEdges: Settings.windowsTilingEdges ? "true" : "false",
-            tilingMenuBar: Settings.windowsTilingMenuBar ? "true" : "false",
-            tilingOptionDrag: Settings.windowsTilingOptionDrag ? "true" : "false",
-            tilingMargins: Settings.windowsTilingMargins ? "true" : "false",
-            tilingLayouts: Settings.windowsTilingLayouts ? "true" : "false",
-            tilingSuggestions: Settings.windowsTilingSuggestions ? "true" : "false"
-        })
-    readonly property var tilingConfigFeature: ({
-            tilingEdges: "window-tiling",
-            tilingMenuBar: "window-tiling",
-            tilingOptionDrag: "window-tiling",
-            tilingMargins: "window-tiling",
-            tilingLayouts: "tile-hover",
-            tilingSuggestions: "tiling-layouts"
-        })
+    // titlebar drags at the edges, corners and menu bar, with Alt anywhere, with or without margins; it posts the green
+    // button's hover and keeps the suggestion after an arrangement only while the switch is on (Minimized.tilingSwitches).
+    // Every switch's value: a change pushes them again (the capabilities events push on their own). "Bring tile groups
+    // forward together" is the shell's alone (groupForward): the plugin raises a group only when asked (ADR-0036 D38).
+    readonly property var tilingConfig: Minimized.tilingConfigPairs(Settings, () => true)
     // "Suggest windows to fill the rest of a layout" (TL32): TilingLink drops a suggestion shown when it turns off.
     readonly property bool suggestionsOn: Settings.windowsTilingSuggestions
 
@@ -495,6 +479,11 @@ Singleton {
         return dispatchRequest(Minimized.stagesCall(request));
     }
 
+    // The tiling switches the plugin is sent now: those whose feature it advertises (the tiling-switches harness reads it).
+    function tilingPushes(): var {
+        return Minimized.tilingConfigPairs(Settings, feature => Capabilities.has(feature));
+    }
+
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
@@ -502,10 +491,8 @@ Singleton {
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
         if (Capabilities.has("appearance") && dispatchRequest(Minimized.configCall("appearance", root.chromeAppearance)))
             console.info("grassfield: compositor setting appearance =", root.chromeAppearance);
-        for (const key of Object.keys(root.tilingConfig)) {
-            if (Capabilities.has(root.tilingConfigFeature[key]))
-                dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));
-        }
+        for (const [key, value] of root.tilingPushes())
+            dispatchRequest(Minimized.configCall(key, value));
     }
 
     // Window > Move & Resize and the tiling keys (macOS 15+): the plugin places the window (FR49). False without the
@@ -584,23 +571,28 @@ Singleton {
     // their stacking order, then the window when it is on screen (the plugin's group_front). Sent after the window's
     // activation or restore, through the dispatch channel; the plugin's result does not depend on which reaches it first
     // (a window on a special workspace is not raised, its restore raises it). Only for a window in a group of the last
-    // reply (WindowTiling.membersOf); refused while locked (the plugin refuses too).
-    function groupForward(address: string): bool {
+    // reply (WindowTiling.membersOf); refused while locked (the plugin refuses too). What happened, for the tiling-switches
+    // harness: "locked", "off" ("Bring tile groups forward together" is off, TL32: the window comes forward alone), or
+    // groupFront's answer.
+    function groupForward(address: string): string {
         if (SessionState.refuses("tile group forward"))
-            return false;
+            return "locked";
         if (!Settings.windowsTilingGroups)
-            return false; // "Bring tile groups forward together" off (TL32): the window comes forward alone
+            return "off";
         return groupFront(address);
     }
 
     // group_front for a window in a group of the last reply, never while locked: the activation paths through groupForward
-    // (the switch), Show Tile Group directly (the user asked for the group, whatever the switch; ADR-0036 D37).
-    function groupFront(address: string): bool {
+    // (the switch), Show Tile Group directly (the user asked for the group, whatever the switch; ADR-0036 D37). "locked",
+    // "unavailable" (no tiling-groups), "no group", "sent" or "failed" (the dispatch refused the call).
+    function groupFront(address: string): string {
         if (SessionState.refuses("tile group forward"))
-            return false;
-        if (!root.canGroups || WindowTiling.membersOf(TilingLink.groups, address).length === 0)
-            return false;
-        return dispatchRequest(Minimized.groupFrontCall(address));
+            return "locked";
+        if (!root.canGroups)
+            return "unavailable";
+        if (WindowTiling.membersOf(TilingLink.groups, address).length === 0)
+            return "no group";
+        return dispatchRequest(Minimized.groupFrontCall(address)) ? "sent" : "failed";
     }
 
     // Activate (activate) a window, its tile group coming forward with it.

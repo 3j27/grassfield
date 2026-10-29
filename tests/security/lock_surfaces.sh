@@ -531,8 +531,8 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/services/TilingHover.qml#SessionState.refuses("tiling popover")#false' \
   'shell/services/TilingSuggest.qml#SessionState.refuses("tiling suggestions")#false' \
   'shell/platform/Compositor.qml#SessionState.refuses("tile group forward")#false' \
-  'shell/platform/Compositor.qml# || WindowTiling.membersOf(TilingLink.groups, address).length === 0)#)' \
-  'shell/platform/Compositor.qml#function groupFront(address: string): bool {\n        if (SessionState.refuses("tile group forward"))#function groupFront(address: string): bool {\n        if (false)' \
+  'shell/platform/Compositor.qml#if (WindowTiling.membersOf(TilingLink.groups, address).length === 0)#if (false)' \
+  'shell/platform/Compositor.qml#function groupFront(address: string): string {\n        if (SessionState.refuses("tile group forward"))#function groupFront(address: string): string {\n        if (false)' \
   'shell/platform/Compositor.qml#if (!p || SessionState.refuses("menu activation"))#if (!p)' \
   'shell/overview/Overview.qml#if (target.kind === "window" && !locked)#if (target.kind === "window")' \
   'shell/overview/Overview.qml#        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);\n        // A window chosen brings its tile group forward (TL29), sent after its focus request as from the other entry points.\n        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);#        if (target.kind === "window" && !locked)\n            Compositor.groupForward(target.address);\n        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);' \
