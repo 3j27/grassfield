@@ -26,7 +26,7 @@ if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; the
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
   exit 1
 fi
-pkgrel=${GRASSFIELD_PKGREL:-8}
+pkgrel=${GRASSFIELD_PKGREL:-9}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
