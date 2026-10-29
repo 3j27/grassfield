@@ -114,12 +114,18 @@ sleep inhibitor keep running whatever the UI does; the session stays locked if i
 failed, the security process is up", with a way out (Try Again, Log Out), never a lock-out. Rewritten after the owner's
 answers of 2026-10-29 (SQ-1 B: ADR-0010's separate security process now, S1-S5; SQ-2 A): the first version built a safe
 configuration of the one shell process. Order and rules set by the integrator under the owner's rule: 1a ships first and
-unchanged (independent, it stops a slow loop today); then the security process, its unit first with nothing moved yet,
-then the lock, polkit, idle and the inhibitor one per step; safe mode is the last step; the UI keeps refusing while
-locked from state it receives and treats "no state yet" or "stale" as locked (a missed push fails closed, never open:
-ADR-0010's risk 2); the second Qt Quick process's memory and start time are measured at S1 against the budgets; IQ-T5
-(the compositor's lockdead delay, ADR-0040) still applies to a crash of the security process itself. Each part is its own
-pull request under the opus security review (R12), and every intermediate state keeps "failures stay locked".
+unchanged (independent, it stops a slow loop today); then the security process, its unit first with nothing moved yet
+(S1), then everything that locks together (S2: the lock, idle and the sleep inhibitor, with every `Lock.lock` caller
+switched in the same step; the integrator's review of f018b42 found that moving the lock alone would leave the UI's
+inhibitor and idle unable to lock while the security process restarts), then the polkit agent (S3); safe mode is the
+last step (S4). The UI keeps refusing while locked from state it receives, and a missed push can never fail it open
+(ADR-0010's risk 2; review of f018b42): the heartbeat carries the state and a sequence number, and `SessionState.locked`
+is the pushed state OR the compositor's own lock signal (hyprland-lock-notify-v1, which `shell/services/Clipboard.qml:28`
+already ORs in) OR "no state yet" OR a stale heartbeat OR a security unit that is not active and running. The second Qt
+Quick process's memory and start time are measured at S1 against the budgets; IQ-T5 (the compositor's lockdead delay,
+ADR-0040) still applies to a crash of the security process itself. Each part is its own pull request under the opus
+security review (R12), and the invariant of every intermediate state (which process locks, what happens when either is
+down, how sleep behaves) is written in the table at the end of this step.
 - **1a. The loop detector** (SQ-2 A: 3 failures within 10 minutes; systemd's start limit raised to 10 starts in 5 minutes
   as the backstop). `grassfield-shell.service` gains a second `OnFailure=` unit, `grassfield-shell-failed.service`
   (`Type=oneshot`, a POSIX sh script, standard tools only), which records each failure's monotonic time in
@@ -153,36 +159,41 @@ pull request under the opus security review (R12), and every intermediate state 
   the session to a usable menu bar and dock stays ≤ 2 s). Tests: `tests/security/shell_unit_env.sh` and
   `session_services.sh` for the unit; `ipc_inventory.sh` for the new target; `import_graph.py` for the import freedom;
   `scripts/gates/rss.sh --nested` with both processes. Review: opus security.
-- **S2. The lock moves.** `Lock`, `LockView`, the crash-recovery marker and the stranded-lock takeover run in the security
-  process; the IPC targets `lock lock`, `lock lid` and `lock status` answer on the security instance
-  (`qs ipc -p /usr/share/grassfield/security`), and every caller switches in the same pull request: the key bindings
-  (`config/hypr/grassfield/bindings.lua`), `grassfield-lid`, the `omarchy-shell` stand-in, the screen corners, the apps'
-  `shellIpcArgs()` callers of `lock`, and the tests. The UI reads `lock state` (`locked`|`unlocked` only) at start and
-  receives a push on every transition plus a heartbeat; "no state yet", a stale heartbeat or a security process that is
-  not active/running read as **locked** for every UI refusal (GF-116, "Show previews: When Unlocked", Overview, Switcher,
-  the Dock's reopen): fail closed, the integrator's rule. The compositor keeps the lock across any crash of either
-  process; the security process's own crash shows the compositor's lockdead screen until its restart (IQ-T5 decides the
-  delay); its own loop ends at its start limit with the compositor's lock in place (the known limit, as today). Proof:
-  ADR-0010's crash-injection test moved here: a crash signal to the UI process while locked leaves the lock surface in
-  place (no lockdead screen) and nothing typed reaches a window; while unlocked, the lock is still reachable; a crash of
-  the security process while locked keeps `LOCK` on every monitor until its restart takes the lock back. Tests: L1-L5
-  against the security process (`reload_locked.sh` every step, `l2_wrong_password.sh`, `lock_privacy.sh`,
-  `lock_surfaces.sh`, `lock_monitor_model.sh`, `marker_read`, `reload_order`); a UI-side test that every refusal reads
-  locked on no state, a stale heartbeat and a stopped security unit (mutants on each). Owner, real session: DT-01 and
-  DT-21 re-run (kill the UI while locked, kill the security process while locked). Review: opus security.
+- **S2. Everything that locks moves together: the lock, idle and the sleep inhibitor.** `Lock`, `LockView`, the
+  crash-recovery marker, the stranded-lock takeover, `Idle` (dim, lock, display off) and `SleepInhibitor` with its
+  `PrepareForSleep` watcher run in the security process. The IPC targets `lock lock`, `lock lid` and `lock status`
+  answer on the security instance (`qs ipc -p /usr/share/grassfield/security`), and every caller of `Lock.lock` or of
+  the targets switches in the same pull request: in-process callers become IPC callers (`shell/overlay/SystemMenu.qml:72`,
+  `shell/services/SessionState.qml:21` `requestLock`, `shell/shell.qml:88`, `shell/services/Popups.qml`,
+  `shell/services/TilingSuggest.qml`), and the external ones change their path (the key bindings in
+  `config/hypr/grassfield/bindings.lua`, `grassfield-lid`, the `omarchy-shell` stand-in, the screen corners, the apps'
+  `shellIpcArgs()` callers of `lock`, the tests); `Idle.qml:142` and `SleepInhibitor.qml:72, :84` stay in-process because
+  they move with the lock (review of f018b42). In the same step `OnFailure=omarchy-sleep-lock.service` moves to
+  `grassfield-security.service` (the shell's unit keeps `Restart=always` and 1a's detector, and loses that `OnFailure=`:
+  it no longer holds an inhibitor), the sleep-lock gate is keyed on the security unit (`active`/`running` of
+  `grassfield-security.service` alone: the UI's state is no longer part of the sleep question), and the stand-in's
+  `lock lock` starts the security unit when it is not running. The UI reads `lock state` at start and receives a push on
+  every transition; the heartbeat (every 2 s) carries the state and a sequence number, so a lost push is corrected by
+  the next heartbeat; `SessionState.locked` is the pushed state OR the compositor's lock signal (hyprland-lock-notify-v1)
+  OR no state yet OR a stale heartbeat (no beat for 5 s) OR a security unit that is not active and running: every UI
+  refusal (GF-116, "Show previews: When Unlocked", Overview, Switcher, the Dock's reopen) reads locked in each of these
+  cases, fail closed. The idle and sleep notices go through the notification server's D-Bus interface (journal only
+  while the UI is down). Proof: ADR-0010's crash-injection test moved here: a crash signal to the UI process while
+  locked leaves the lock surface in place (no lockdead screen) and nothing typed reaches a window; while unlocked, the
+  idle lock still fires and a sleep still locks first; a crash of the security process while locked keeps `LOCK` on
+  every monitor until its restart takes the lock back, and a sleep requested while it restarts is delayed by Omarchy's
+  unit until the restarted process reports `secure`. Tests: L1-L5 against the security process (`reload_locked.sh`
+  every step, `l2_wrong_password.sh`, `lock_privacy.sh`, `lock_surfaces.sh`, `lock_monitor_model.sh`, `marker_read`,
+  `reload_order`); `sleep_lock_units.sh` for the gate and the stand-in keyed on the security unit, `tst_idlemodel`,
+  `lid.sh`, `screensaver_inhibit.sh`; a UI-side test that every refusal reads locked on no state, a stale heartbeat, a
+  lost push with the compositor's signal set, and a stopped security unit (mutants on each); a scan that no `Lock.lock`
+  caller is left in the UI tree (`ipc_inventory.sh`). Owner, real session: DT-01 and DT-21 re-run (kill the UI while
+  locked, kill the security process while locked), L3 (lock before sleep) and the lid. Review: opus security.
 - **S3. The polkit agent moves.** `AuthAgent` and its dialog run in the security process, drawn with `Grassfield.Ui`
   only; exactly one agent in the session (L5: registration, action id and program shown, cancel works, never
   auto-approves); the UI's `polkit status` dev hook moves with it. Tests: `authagent_flows.sh`, `tst_authdialog*`,
   `mutate_authdialog.sh` against the security process. Review: opus security.
-- **S4. Idle and the sleep inhibitor move.** `Idle` (dim, lock, display off), `SleepInhibitor` and the `PrepareForSleep`
-  watcher run in the security process; `OnFailure=omarchy-sleep-lock.service` moves to `grassfield-security.service` and
-  the sleep-lock gate is keyed on it (`active`/`running` of the security unit; the shell's unit keeps `Restart=always`
-  and 1a's detector, and loses its `OnFailure=` to the sleep lock, since it no longer holds an inhibitor); the stand-in's
-  `lock lock` starts the security unit when it is not running. The idle and sleep notices go through the notification
-  server's D-Bus interface (journal only while the UI is down). Tests: `sleep_lock_units.sh` for every state of both
-  units, `tst_idlemodel`, `lid.sh`, `screensaver_inhibit.sh`. Owner, real session: L3 (lock before sleep) and the lid.
-  Review: opus security.
-- **S5. Safe mode, last.** When 1a's state file says the UI is stopped for a loop, the security process maps one layer
+- **S4. Safe mode, last.** When 1a's state file says the UI is stopped for a loop, the security process maps one layer
   surface: the Grassfield mark, the sentence "Grassfield is running in safe mode: its desktop stopped working and was
   turned off." and the Grassfield menu with Try Again…, Log Out…, Restart…, Shut Down… (the existing session-end path),
   drawn with `Grassfield.Ui` only, under the lock surface when locked. Try Again starts `grassfield-shell.service` and
@@ -192,6 +203,17 @@ pull request under the opus security review (R12), and every intermediate state 
   at the first attempt, Try Again restoring the desktop; captures (en, fr, light, dark). Tests: the safe-mode surface
   offscreen (`tests/security/safe_mode.d/`), `reload_locked.sh` gains `safe-mode`, `ipc_inventory.sh` for its actions.
   Owner, real session: the 1a kills, then safe mode, the password, Try Again. Review: opus security.
+- The invariant of each state (review of f018b42: which process locks, what happens when either is down, how sleep
+  behaves). "Down" means not active/running: restarting, failed, or stopped at its limit.
+
+  | From | Who locks | The UI process down | The security process down | Sleep |
+  |---|---|---|---|---|
+  | today, and after 1a | the UI (`grassfield-shell`) | the compositor keeps an existing lock (lockdead screen, IQ-T5); no idle lock and no inhibitor until the restart or the stop; after 1a's stop, the compositor's lock stays and the session is out of reach from itself | n/a | the UI's inhibitor while it runs; Omarchy's sleep lock (armed by `OnFailure=`, the gate skips it only while the UI runs) asks the stand-in, which starts the UI and asks it to lock; a sleep that cannot lock in logind's window is the known limit |
+  | S1 | the UI, unchanged | unchanged | nothing: the security process hosts nothing yet | unchanged |
+  | S2 | the security process, and only it: every lock request goes to it over IPC | the lock, idle and the inhibitor keep running; the UI's refusals read locked from the compositor's signal, the pushed state or the absence of a state; nothing about the lock changes | the compositor keeps an existing lock (lockdead screen, IQ-T5); no idle lock and no inhibitor until its restart (1 s) or its stop at the limit; the UI's refusals read locked (the unit is not active/running); Omarchy's sleep lock is armed by the security unit's `OnFailure=` | the security process's inhibitor while it runs; the gate skips Omarchy's unit only while the security unit is active/running; Omarchy's stand-in starts the security unit and asks it to lock; the same known limit when it cannot start in logind's window |
+  | S3 | the security process | as S2; an authorization asked while the security process restarts fails, as it does today while the UI restarts | as S2, plus no polkit agent until the restart | as S2 |
+  | S4 | the security process | as S2; after 1a's stop the safe-mode bar appears under the lock surface | as S2; the safe-mode bar is gone with it | as S2 |
+
 - Known limits (written in the spec): a Quickshell bug that takes the security process down in a loop leaves the
   compositor's lock in place and the session out of reach from itself (the TTY or the power button); a second Qt Quick
   process costs memory (measured at S1, the budget recorded in `docs/testing/gates.md`); until S4 ships, a crash of the
@@ -387,7 +409,7 @@ Goal: no input a process reads from the system, a file or another process can cr
 ### Delivery order and what each step waits for
 | Step | Waits for | Pull requests |
 |---|---|---|
-| 1 | answered (SQ-1 B, SQ-2 A): 1a now; S1 after the merge of step 0; then S2, S3, S4, S5 in that order | 1a; S1; S2; S3; S4; S5 |
+| 1 | answered (SQ-1 B, SQ-2 A): 1a now; S1 after the merge of step 0; then S2, S3, S4 in that order | 1a; S1; S2; S3; S4 |
 | 2 | SQ-3 and the repository's publication (2a); 2b, 2c and 2d can start now | 2a; 2b; 2c; 2d |
 | 3 | step 1 for the loop rows; the rest now | 1 |
 | 4 | nothing | 1 or 2 (the fix of a found leak apart) |
@@ -410,7 +432,7 @@ Goal: no input a process reads from the system, a file or another process can cr
 ## Owner decisions (2026-10-29, asked by the integrator; recorded from PR #50)
 | Question | The owner's choice | Option |
 |---|---|---|
-| SQ-1 safe mode | « Processus sécurité séparé » | **B**: ADR-0010's separate security process now (S1-S5); safe mode is "the UI unit failed, the security process is up" |
+| SQ-1 safe mode | « Processus sécurité séparé » | **B**: ADR-0010's separate security process now: the lock, polkit, idle and the sleep inhibitor always run apart from the UI; safe mode is "the UI unit failed, the security process is up" (S1-S4 after the review of f018b42: everything that locks moves together at S2) |
 | SQ-2 the loop detector | « 3 plantages en 10 min » | **A** (recommended) |
 | SQ-3 an untested toolkit | « Détecter maintenant, bloquer plus tard » | **B now, A after the `[grassfield]` repository is published** (recommended) |
 | SQ-4 crash reports | « Afficher le rapport » | **A** (recommended) |
@@ -420,9 +442,11 @@ Goal: no input a process reads from the system, a file or another process can cr
 Integrator decisions under the owner's rule that come with SQ-1 B (the closest to macOS, no technical step for the end
 user): step 1 is rewritten around ADR-0010's S1-S5, each S-step its own pull request under the opus security review,
 every intermediate state keeping "failures stay locked"; the order is 1a first (independent, it stops a slow loop today),
-then the security process (its unit first with nothing moved yet, then the lock, polkit, idle and the inhibitor, one per
-step), safe mode last; the UI keeps refusing while locked from state it receives and treats "no state yet" or "stale" as
-locked; the second Qt Quick process's memory and start time are measured at S1 and recorded against the budgets; IQ-T5
+then the security process (its unit first with nothing moved yet, then the lock with idle and the sleep inhibitor
+together and every `Lock.lock` caller switched in the same step, then the polkit agent: the review of f018b42 merged
+the idle step into the lock's, since a lock moved alone left the UI's inhibitor unable to lock while the security
+process restarts), safe mode last; the UI keeps refusing while locked from state it receives and treats "no state yet",
+a stale heartbeat, a stopped security unit or the compositor's own lock signal as locked; the second Qt Quick process's memory and start time are measured at S1 and recorded against the budgets; IQ-T5
 (ADR-0040) still applies to a crash of the security process itself; ADR-0010 is amended to carry the decision.
 
 ## Owner questions
@@ -571,3 +595,14 @@ session whatever its cause; the question is the next login.
   the lock, polkit, idle and the inhibitor one per step, safe mode last; the UI fails closed on missing or stale state;
   memory and start time measured at S1; IQ-T5 applies to the security process); the delivery table, the R5 table, SD-4
   and the consequences follow; ADR-0010 amended. Next: step 1a, then S1.
+- **Integrator's re-review of f018b42 (opus): FAIL, one MAJOR in the step-1 plan (two states that could fail open), one
+  NIT.** (a) A lost "locked" push with heartbeats still arriving left the UI's refusals open: the heartbeat now carries
+  the state and a sequence number, and `SessionState.locked` is the pushed state OR the compositor's own lock signal
+  (hyprland-lock-notify-v1, as `Clipboard.qml:28` already does) OR no state OR a stale heartbeat OR a security unit
+  that is not active/running. (b) Between the lock's move and the inhibitor's, the UI's `Idle.qml:142` and
+  `SleepInhibitor.qml:72, :84` (and `SystemMenu.qml:72`, `SessionState.requestLock`) still called `Lock.lock` in
+  process, `OnFailure=` and the gate stayed keyed on the UI, so a sleep with the security process down went unlocked:
+  idle and the inhibitor now move with the lock at S2 and every `Lock.lock` caller switches in that step; `OnFailure=`,
+  the gate and the stand-in key on the security unit from S2; the invariant of every state is a table at the end of
+  step 1. S-steps renumbered S1-S4 (safe mode S4); ADR-0010's amendment and STATE follow. NIT: the SQ-1 row now carries
+  the whole sentence.
