@@ -2,7 +2,8 @@
 Status: Proposed (step 0 of the owner's brief « Stabilité », 2026-10-29; documents only, no code). Six owner questions are
 open (SQ-1 to SQ-6); every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no technical
 step for the end user") and is listed in "Decisions taken under the owner's rule" (SD-1 to SD-8), which the owner can
-revisit. · Date: 2026-10-29 · Decider: owner (SQ), integrator (merge; SD under the rule) · Number: 0041 (0040 is the
+revisit. Revised after the integrator's opus review of 2c0bd74 (FAIL: one MAJOR, eight MINORs, three NITs), answered in
+"Review history"; each changed place says "review of 2c0bd74". · Date: 2026-10-29 · Decider: owner (SQ), integrator (merge; SD under the rule) · Number: 0041 (0040 is the
 identity ADR on main b345334; the open pull requests #48 and #49 add none)
 
 This ADR proposes the "Stability" work: what happens when a process of the Grassfield session crashes, hangs, loops or
@@ -41,7 +42,8 @@ incompatible combination; no infinite loop, memory leak or hang lasts.
 
 ### What the audit found (the short version)
 1. **The crash loop is not handled** (P-2a). `grassfield-shell.service` restarts after 1 s and stops only after 10 starts
-   in 30 s; the arithmetic trips the limit only for a shell that dies within 2.3 s of each start. The 2026-10-29 loop
+   in 30 s; the arithmetic trips the limit only for a shell that dies within 2.0 s of each start (the eleventh start is
+   the refused one). The 2026-10-29 loop
    (a crash 5 s after every start) restarted for ever; the owner's recovery was a snapshot. While it loops, a locked
    session stays locked (the compositor keeps the lock; only a PAM success unlocks: fail closed) but cannot be unlocked
    either: the password field exists for a few seconds per cycle. Unlocked, the desktop blinks out every cycle, the polkit
@@ -49,8 +51,9 @@ incompatible combination; no infinite loop, memory leak or hang lasts.
    sleep). Nothing tells the user what is happening. There is no safe mode.
 2. **An update is checked on one path only** (U-1, section 2 of the audit). Update Now refuses an untested Qt, Quickshell,
    Hyprland, aquamarine or KF6 (ADR-0033 s3.4). `omarchy update` and `pacman -Syu` have only pacman's rules:
-   `conflicts=('quickshell=0.3.2')`, found after the incident. Files, Settings, Store, Preview and Activity Monitor link
-   Qt's private API; the shell runs on whatever Quickshell is installed at its next start.
+   `conflicts=('quickshell=0.3.2')`, found after the incident. Files, Settings, Store, Preview, Activity Monitor and the
+   portal link Qt's private API, Quickshell itself imports 61 private Qt symbols (review of 2c0bd74), and the shell runs
+   on whatever Quickshell is installed at its next start.
 3. **Every other process has a policy, some fail silently** (P-4 to P-13): the bridge backs off and degrades to T0 menus
    after 5 crashes an hour, for the session; the portals are re-activated by D-Bus; crash-watch, battery-watch and
    automount give up after 5 failures in 2 minutes with nothing said; apps crash alone and get "quit unexpectedly" with
@@ -128,6 +131,13 @@ and the user gets a working lock screen, a working polkit agent and a way out (T
   path (`-p /usr/share/grassfield/shell`) means `lock lock`, `lock lid`, the `omarchy-shell` stand-in and the key
   bindings reach the safe shell unchanged. The sleep-lock gate skips Omarchy's unit while **either** unit is
   active/running; the stand-in starts the safe unit when the failures file is at its threshold, the full one otherwise.
+  The safe unit's own policy (review of 2c0bd74, finding 8): `Restart=always`, `RestartSec=1`, `StartLimitIntervalSec=300`,
+  `StartLimitBurst=5` (a safe shell that loops stops after its fifth start in five minutes: the compositor's lock then
+  holds, the known limit below), `OnFailure=omarchy-sleep-lock.service` (every failure of the safe shell arms Omarchy's
+  sleep lock, as the full shell's does; no `OnFailure=` back to the detector, so a failing safe shell never re-enters safe
+  mode), `Conflicts=grassfield-shell.service`, `PartOf=` and `Requisite=graphical-session.target`,
+  `ConditionEnvironment=GRASSFIELD_SESSION=1`, and the same `UnsetEnvironment=`, `MemoryHigh=`, `MemoryMax=` and
+  `CPUQuota=` lines as the full unit; `tests/shell/unit_restart_limits.sh` checks both units.
 - Known limit (written in the spec): a Quickshell bug that crashes the safe shell too leaves the compositor's lock in
   place (fail closed) and the session out of reach from itself; the only exits are a TTY or the power button, as today.
   The separate security process (ADR-0010 S1-S5) would narrow this further; it stays the direction.
@@ -148,43 +158,66 @@ and the user gets a working lock screen, a working polkit agent and a way out (T
   Again restores the desktop (`scripts/gates/r1-restart.sh --journal` then has its first real restarts, gate R1).
 - Review: opus security (R12), then the integrator's counter-review; two pull requests if 1a merges before 1b is agreed.
 
-### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (a root hook)
+### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
 of the session, never in a terminal.
-- **2a. The hold** (SQ-3; the owner decides its shape). With option A: a new split package `grassfield-hold`
-  (`packaging/arch/PKGBUILD`), installed by default with the desktop, whose only content is `depends` on the toolkit
-  versions `BUILD-DEPS` records: `quickshell=<exact>`, `qt6-base` and `kcoreaddons` at their major.minor upper bound,
-  never `hyprland` (ADR-0009 stands). pacman then refuses any transaction that moves them, on every path, until the
-  `[grassfield]` repository ships the build made against the new toolkit, which joins the same transaction (ADR-0033 f's
-  watch job, extended from Hyprland's ABI to Qt, Quickshell and KF6 on Omarchy's rc mirror). Software Update gains
-  "Allow system updates Grassfield hasn't tested…" (the polkit action of `grassfield-channel-helper`, verb `unhold`:
-  `pacman -R grassfield-hold`), the non-technical exit, and says plainly when the hold is what refuses an update.
-- **2b. The post-transaction marker.** An alpm hook (`/usr/share/libalpm/hooks/90-grassfield-toolkit.hook`,
-  `PostTransaction`, targets `usr/bin/qs`, `usr/lib/libQt6Core.so*`, `usr/include/hyprland/src/version.h`,
-  `usr/share/grassfield/VERSION`) runs `/usr/lib/grassfield/grassfield-toolkit-changed` as root, which writes one file,
-  `/run/grassfield/toolkit-changed` (the packages that moved and their versions), and nothing else: never a compile, a
-  restart, a reload or a user file. The shell watches it and posts "Log out to finish updating" (the family of
+- **2a. The hold** (SQ-3; the owner decides its shape, and it ships only once the `[grassfield]` repository is published,
+  ADR-0033 h: before that there is no build to wait for and a hold would refuse every system update with no end; review
+  of 2c0bd74, MAJOR 1). With option A: two split packages in `packaging/arch/PKGBUILD`. `grassfield-hold` holds nothing but
+  `depends` on the toolkit `BUILD-DEPS` records: `quickshell=<that exact version>`, `qt6-base>=<major.minor>` and
+  `qt6-base<<the next minor>`; never `hyprland` (ADR-0009: degraded mode and the rebuild) and never `kcoreaddons` (KF6
+  releases monthly with a public ABI; a bound would refuse every release for nothing). `grassfield-unhold` is its empty
+  twin: `provides=(grassfield-hold)`, `conflicts=(grassfield-hold)`, no bound. `grassfield-desktop` depends on
+  `grassfield-hold`: a fresh install and the next `-Syu` of an existing system both pull the real hold (pacman resolves a
+  dependency by its literal package name before it asks about providers), and the twin satisfies the same dependency
+  without the bounds, so neither can be removed by mistake and both are reachable. "Allow system updates Grassfield
+  hasn't tested…" in Software Update runs a new verb of `grassfield-channel-helper` behind its polkit action, `unhold`:
+  one root transaction, `pacman -S --noconfirm --ask 4 grassfield-unhold` (`--ask` is pacman's bitmask that answers its
+  conflict question, so the twin replaces the hold in one step; if pacman 7 no longer keeps it, `pacman -Rdd
+  grassfield-hold` followed by `pacman -S grassfield-unhold` is the fallback: step 2a's first container test decides),
+  and `hold` runs the reverse ("Hold untested system updates again"). pacman then refuses, on every path, any
+  transaction that moves `quickshell` or `qt6-base` past the bounds, until the repository ships the build made against
+  the new toolkit, which joins the same transaction (ADR-0033 f's watch job, extended from Hyprland's ABI to Qt and
+  Quickshell on Omarchy's rc mirror). What the user sees when it refuses: on Update Now, the helper's plan step fails
+  before any change and the pane says "This update needs a newer version of Grassfield, which isn't available yet."
+  (U27's sentence, now also raised by a hold), with "Allow…" one click away; on `omarchy update` in a terminal, pacman's
+  own error names `grassfield-hold` and the bound and Omarchy's script reports a failed update, and the session's next
+  scheduled check (ADR-0033 d) raises the same notice with the same action.
+- **2b. Detection as the user, on every path.** Nothing runs as root: ADR-0009's amendment says "Nothing in the amended
+  design runs as root after the package is installed" (`docs/decisions/ADR-0009-plugin-distribution.md:112`), and the
+  first version of this step planned a root alpm hook against it (review of 2c0bd74, finding 6). Instead the shell's
+  update checker (ADR-0033 d, already a one-shot child of the shell as the user) watches `/var/lib/pacman/local` (its
+  modification time moves at every transaction; readable by every user) and, when it moved, compares `pacman -Q` of the
+  tracked packages with `/usr/share/grassfield/BUILD-DEPS`; a difference posts "Log out to finish updating" (the family of
   `shell/shell.qml:267-279`; today only the install scriptlet prints it, to a terminal), Settings' Software Update pane
-  shows the same with "Log Out…", and the compositor rebuild's opt-in path uses it at the next login. The shell's explicit
-  reloads of the session configuration (`SessionConfig.qml`, `Displays.qml`) wait while `/var/lib/pacman/db.lck` exists,
-  bounded, so a display trial never reloads a half-written tree (I-2's residual).
+  shows the same with "Log Out…", and the compositor rebuild's opt-in path reads the same comparison at the next login.
+  The shell's explicit reloads of the session configuration (`SessionConfig.qml`, `Displays.qml`) wait while
+  `/var/lib/pacman/db.lck` exists, bounded, so a display trial never reloads a half-written tree (I-2's residual).
 - **2c. The rc-channel gate** (T-5, T-10). `just release-check` and CI gain a container run of the headless suites, the
   QML lint against the rc channel's Quickshell `qmltypes` and the plugin build against the rc Hyprland headers (the
   existing C3), so an incompatibility is known one Omarchy cycle before stable; the result feeds the watch job's build.
-- Proof: `tests/integration/update_helper.sh`'s container with a hold installed: an update that moves Quickshell is
+- **2d. The extension notice without a command** (review of 2c0bd74, finding 9). `windows.rebuildExtension` is off by
+  default, so two of the degraded notices name `grassfield-compositor-rebuild` as a command to type (`shell/shell.qml:270,
+  276`), against SP-6. The notice gains one action, "Update Extension", which runs what the opt-in runs
+  (`grassfield-compositor-rebuild --session`, as the user, in the background) and then says "log out and back in"; the
+  setting keeps its default. Until 2d ships, this is a known limit under SP-6.
+- Proof: `tests/integration/update_helper.sh`'s container with the hold pair installed: an update that moves Quickshell is
   refused by pacman on `pacman -Syu`, on `omarchy update`'s command and on Update Now (the pane's sentence), nothing
   installed; the same transaction with the matching `grassfield-desktop` in a test repository goes through; "Allow…"
-  removes the hold through polkit and the update goes through; the hook writes the marker and the shell's notice
-  appears (offscreen harness).
-- Tests: the container cases above; `tests/shell/session_services.sh` for the hook file and the marker's reader;
-  `tst_softwareupdate.qml` for the pane's sentences; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the
-  s3.4 table name the same packages.
-- Integrator, nested: the notice on a fake marker; the reload guard with a fake `db.lck` during a display trial.
+  swaps the hold for its twin through polkit (`--ask 4`, or the `-Rdd` fallback) and the update goes through; "Hold
+  again" swaps them back; the checker's comparison on a fake `/var/lib/pacman/local` and `BUILD-DEPS` posts the notice
+  (offscreen harness); the extension notice's action runs the rebuild (nested).
+- Tests: the container cases above; `tests/shell/session_services.sh` for the checker's reader; `tst_softwareupdate.qml`
+  for the pane's sentences; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the s3.4 table name the same
+  packages; `tests/shell/compositor_rebuild.sh` for the notice's action.
+- Integrator, nested: the notice on a fake `/var/lib/pacman/local`; the reload guard with a fake `db.lck` during a display
+  trial; "Update Extension" from the notice.
 - Owner, real session: the next Omarchy toolkit move: Update Now says "needs a newer version of Grassfield" (today's
   L2 item of ADR-0033) and `omarchy update` is refused by pacman with the hold's name; after the matching build is
   published both go through, then "Log out to finish updating" appears once.
-- Review: opus security for the root hook and the helper verb (both run as root; the same rules as
-  `grassfield-channel-helper`); the integrator for the rest.
+- Review: opus security for the helper's two verbs (root through polkit, the same rules as `grassfield-channel-helper`);
+  the integrator for the rest; two pull requests at least (2b and 2d need no owner answer, 2a waits for SQ-3 and the
+  repository).
 
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
@@ -253,8 +286,10 @@ Goal: no input a process reads from the system, a file or another process can cr
 ### Step 6: hang detection, and the extension after a compositor crash (T-6, M-8, M-10) — SQ-5, SQ-6
 - **6a. The liveness probe** (SQ-5, option A): `grassfield-shell-watchdog.timer` and its `.service` (`Type=oneshot`,
   every 30 s): `qs ipc -p /usr/share/grassfield/shell call capabilities status` with a 5 s `timeout`; three misses in
-  a row (a state file in the runtime directory) → `systemctl --user restart grassfield-shell.service`, which step 1's
-  detector counts as a failure (a hang that repeats ends in safe mode too). Hyprland's ANR pings xdg toplevels only;
+  a row (a state file in the runtime directory) → `systemctl --user kill --signal=SIGKILL grassfield-shell.service`: the
+  main process dies by a signal, so the unit fails, `Restart=always` brings it back, `OnFailure=` runs and step 1's
+  detector counts it (a hang that repeats ends in safe mode too). A plain `systemctl restart` is a stop, which never
+  fails the unit and would never reach safe mode (review of 2c0bd74, finding 3). Hyprland's ANR pings xdg toplevels only;
   the shell's surfaces are layer surfaces and get no ping: nothing else can see a frozen shell. The probe reads, never
   unlocks; a restart while locked keeps the compositor's lock (L1).
 - **6b. The extension after a crash** (SQ-6, option A): `compositor.lua` reads, at the first parse, whether a Hyprland
@@ -302,7 +337,7 @@ Goal: no input a process reads from the system, a file or another process can cr
 | Step | Waits for | Pull requests |
 |---|---|---|
 | 1 | SQ-1, SQ-2 | 1a then 1b (or one) |
-| 2 | SQ-3 (2a); 2b and 2c can start now | 2a, 2b, 2c |
+| 2 | SQ-3 and the repository's publication (2a); 2b, 2c and 2d can start now | 2a; 2b; 2c; 2d |
 | 3 | step 1 for the loop rows; the rest now | 1 |
 | 4 | nothing | 1 or 2 (the fix of a found leak apart) |
 | 5 | nothing | 1 or 2 |
@@ -315,8 +350,8 @@ Goal: no input a process reads from the system, a file or another process can cr
 |---|---|---|---|
 | `grassfield-shell-failed.service` | a `Type=oneshot` user unit, a POSIX sh script | systemd counts starts, not failures, and cannot see a lifetime; nothing but the `OnFailure=` path sees each failure as it happens; it runs for a moment, never a daemon | step 1a (SQ-2 sets its numbers) |
 | `grassfield-shell-safe.service` | a user unit, the same `qs` binary and tree | the brief's safe mode; the same process image, another root; no new program | SQ-1 |
-| `grassfield-hold` | a split package with `depends` only | the only mechanism pacman offers that refuses on every path and can be removed without editing a file; no code, no service | SQ-3 |
-| `90-grassfield-toolkit.hook` and `grassfield-toolkit-changed` | an alpm hook and a root script that writes one file | the only way to learn, on every path, that the toolkit moved under the session; it never compiles, restarts or reloads | step 2b (opus review) |
+| `grassfield-hold` and `grassfield-unhold` | two split packages with `depends`, `provides` and `conflicts` only | the only mechanism pacman offers that refuses on every path and can be undone in one transaction; no code, no service; shipped only once the `[grassfield]` repository is published | SQ-3 |
+| the checker's toolkit comparison | no new unit: a read-only step of the shell's existing update checker, as the user | learns on every path that the toolkit moved under the session, with nothing run as root (ADR-0009:112; review of 2c0bd74 dropped the alpm hook of the first version) | step 2b |
 | `grassfield-shell-watchdog.timer` | a user timer and a `Type=oneshot` unit | a frozen shell is otherwise invisible; a timer runs no daemon; Quickshell offers no `sd_notify` watchdog (NOT VERIFIED: the step checks `qs --help`) | SQ-5 |
 | `tests/fuzz/` | test code, no runtime dependency | ASan/UBSan builds exist; the mutator is in-tree | step 5 |
 | No new runtime dependency | — | every program named above is in the session's `depends` already (`systemd`, `pacman`, `polkit`, `coreutils`, `jq` through the stand-in's existing use) | — |
@@ -331,27 +366,30 @@ security modules under R12; the compositor keeps the lock in every option (SP-1)
 | B. ADR-0010's separate security process now (S1-S5): the lock, polkit, idle and sleep inhibitor always run apart from the UI; safe mode is "the UI unit failed, the security process is up" | the macOS model (loginwindow apart from the Dock): no lock restart on any UI crash, no red screen ever, the crash loop never touches the lock | ADR-0010 rated it not low-risk: the IPC contract moves, the lock state must cross processes (a missed push fails the UI's refusals open), `LockView` still imports UI, a second Qt Quick process's memory is unmeasured; five reviewed steps before any safe mode exists |
 | C. No safe mode: raise the start limit so a slow loop stops; the compositor keeps the lock (red screen), Omarchy's sleep-lock covers sleep; the user logs out from a TTY | nothing to build beyond 1a | the brief is not met; a locked session cannot be unlocked by the user: a lock-out that needs a technical step |
 
-**SQ-2. When the loop detector trips** (step 1a). Today: 10 starts in 30 s, which a crash slower than 2.3 s per cycle
+**SQ-2. When the loop detector trips** (step 1a). Today: 10 starts in 30 s, which a crash slower than 2.0 s per cycle
 never reaches (audit 1.2).
 | Option | For | Against |
 |---|---|---|
 | **A. A failure counter in the `OnFailure=` path: 3 failures within 10 minutes enter safe mode; systemd's start limit raised to 10 starts in 5 minutes as the backstop (recommended)** | counts failures, not starts: a deliberate `systemctl --user restart` never counts; catches a 5 s loop in about 20 s and a 3-minute loop in under 10 minutes; a single crash a day never trips | one more small unit (justified above); two numbers to document |
 | B. systemd's start limit alone, raised to 10 starts in 5 minutes; safe mode at the limit | one mechanism, systemd's own | a 25 s loop takes 4.5 minutes to stop, a 40 s loop never; manual restarts count toward it; the limit counts starts of the safe unit too unless split |
-| C. Keep 10 in 30 s; safe mode at the limit | nothing changes for fast loops | every loop slower than 2.3 s per cycle, the 2026-10-29 one included, goes on for ever |
+| C. Keep 10 in 30 s; safe mode at the limit | nothing changes for fast loops | every loop slower than 2.0 s per cycle, the 2026-10-29 one included, goes on for ever |
 
 **SQ-3. How an untested toolkit is kept out of the session** (step 2a; it revisits ADR-0033 s3.4's rejection of
 versioned bounds with a removable shape). "Never" is only reachable with a pacman-level refusal; its price is the lag
-between Omarchy moving and Grassfield publishing.
+between Omarchy moving and Grassfield publishing. Rewritten after the review of 2c0bd74 (MAJOR 1): each option is now
+mechanically possible, and a hold before the `[grassfield]` repository publishes (ADR-0033 h) would refuse every system
+update with no end, so A waits for the publication and B is the floor under it. The reviewer recommends B now and A after
+the publication; so does this ADR.
 | Option | For | Against |
 |---|---|---|
-| **A. A hold package (`grassfield-hold`: `quickshell=<exact>`, `qt6-base` and `kcoreaddons` at major.minor; never `hyprland`), installed by default, removable from Software Update through polkit ("Allow system updates Grassfield hasn't tested…"); the `[grassfield]` watch job builds against Omarchy's rc channel ahead of stable (recommended)** | literally never an incompatible combination, on every path, transactionally (nothing half-installed); the matching Grassfield build joins the same transaction; a non-technical exit; the 2026-10-29 incident becomes a refused update | while Grassfield lags, every system update, Arch's security fixes included, is refused on every path; `omarchy update` in a terminal shows pacman's dependency error (Update Now says it plainly); one more package; depends on the watch job being run (ADR-0033 f, disabled while nothing is published) |
-| B. Today's model plus detection: the check on Update Now only (U27), `conflicts` on versions found bad after the fact, the post-transaction marker and "Log out to finish updating" (step 2b) | never blocks a security fix; no new package | the incident happens again on the terminal path: it detects, it does not prevent; the user learns after the reboot, from a crash-looping shell (safe mode then catches it) |
+| **B. Now, and the floor under A: detection on every path. The user-side comparison with `BUILD-DEPS` (step 2b) says "Log out to finish updating" after any transaction that moved the toolkit; Update Now keeps the U27 check; `conflicts` on versions found bad after the fact; no hold before the repository exists (recommended now)** | never blocks a security fix; nothing runs as root; no new package; ships without an owner answer | it detects, it does not prevent: on the terminal path the incident can happen again, and the user learns after the reboot, from a crash-looping shell (safe mode then catches it: step 1) |
+| **A. Once the repository is published: the hold pair. `grassfield-hold` (`quickshell` at the exact built version, `qt6-base` at its major.minor; never `hyprland`, never `kcoreaddons`), which `grassfield-desktop` depends on, and its empty twin `grassfield-unhold` (`provides` the same name, `conflicts` with it, no bound); "Allow system updates Grassfield hasn't tested…" swaps them in one root transaction through the channel helper's polkit action, "Hold again" swaps them back; the watch job builds against Omarchy's rc channel ahead of stable (recommended after the publication)** | literally never an incompatible combination, on every path, transactionally (nothing half-installed); the matching Grassfield build joins the same transaction; a non-technical exit and return; the 2026-10-29 incident becomes a refused update with the session's own sentence | while Grassfield lags, every system update, Arch's security fixes included, is refused on every path; `omarchy update` in a terminal shows pacman's dependency error (the session's notice says it plainly); two more packages; depends on the watch job being run (ADR-0033 f, disabled while nothing is published) |
 | C. `IgnorePkg` lines for the toolkit written by the channel helper | refuses the toolkit only, the rest of the update goes through | a partial upgrade: Arch does not support it (Qt modules and KF6 libraries move together; a mismatch breaks every Qt app, not only Grassfield's); `omarchy update` prints warnings; rejected unless the owner wants it anyway |
 
 **SQ-4. Crash reports** (step 8). macOS keeps them locally and asks before sending any; Grassfield sends nothing.
 | Option | For | Against |
 |---|---|---|
-| **A. The notice gains "Show Report": the local report (text, never the core) opens in a Grassfield window with Copy; nothing is sent (recommended)** | the macOS "Report…" without the sending; the user can paste it into an issue by hand; small (the watcher already has the dump id) | one more window to review (untrusted text, plain format) |
+| **A. The notice gains "Show Report": the local report (text, never the core) opens in a Grassfield window with Copy; nothing is sent; the notice's body no longer names `coredumpctl list` (the reviewer's note on 2c0bd74) (recommended)** | the macOS "Report…" without the sending; the user can paste it into an issue by hand; small (the watcher already has the dump id); no command in the user's face | one more window to review (untrusted text, plain format) |
 | B. A crash reporter window like macOS's (Ignore, Report, Reopen) instead of the notice | the exact model | a window that steals attention for every crash, where macOS users expect it but the brief asked for notices; more UI, same data |
 | C. Today: the notice with Reopen, `coredumpctl list` named in its body | nothing to build | the body names a command (a technical step, SP-6) |
 
@@ -359,7 +397,7 @@ between Omarchy moving and Grassfield publishing.
 compositor usable.
 | Option | For | Against |
 |---|---|---|
-| **A. A liveness probe: a user timer every 30 s asks the shell over IPC with a 5 s timeout; three misses restart it (the lock kept by the compositor), counted by the loop detector (recommended)** | the only observer that is not the shell; no daemon (a timer); 100 s worst case before a frozen desktop comes back | a false restart if the shell is busy for 15 s (a huge Overview under load): the restart is harmless while unlocked, and a red screen while locked (IQ-T5); one more unit |
+| **A. A liveness probe: a user timer every 30 s asks the shell over IPC with a 5 s timeout; three misses kill it with SIGKILL through systemd, so the unit fails and restarts (the lock kept by the compositor), counted by the loop detector: a hang that repeats ends in safe mode (recommended)** | the only observer that is not the shell; no daemon (a timer); 100 s worst case before a frozen desktop comes back | a false restart if the shell is busy for 15 s (a huge Overview under load): the restart is harmless while unlocked, and a red screen while locked (IQ-T5); one more unit |
 | B. The compositor extension pings the shell and restarts it | no timer | nested-only by rule (R13), must degrade: no detection without the extension; a restart from inside the compositor is the wrong place for a security decision |
 | C. None | nothing to build | a frozen shell stays frozen until the user logs out from a TTY |
 
@@ -369,7 +407,7 @@ session whatever its cause; the question is the next login.
 |---|---|---|
 | **A. When the latest Hyprland crash report, newer than the last login, names `grassfield-compositor`, the next login loads no extension and says so once, with "Turn On Again" in Settings (recommended)** | the macOS model for a faulty extension; a repeated compositor crash never repeats; the user keeps a working desktop (degraded mode, C2) | a crash the plugin only witnessed (its frames in a stack it did not cause) also turns it off for one login; reading the report's shape depends on Hyprland (data, re-verified per version) |
 | B. Always load it (today) | nothing changes; the C1-C3 gates are the defence | a plugin crash that repeats at every login ends every session until the user finds the setting |
-| C. Turn it off after any compositor crash, named or not | simplest rule | most compositor crashes are not the plugin's (the audit counted 7 nested Hyprland dumps, 0 real-session ones, none attributed); the user loses titlebars and minimize for no reason |
+| C. Turn it off after any compositor crash, named or not | simplest rule | most compositor crashes are not the plugin's (`docs/audits/final-1.0/09-reliability-audit.md:36`: 7 Hyprland dumps since 2026-10-20, all from nested sessions, 0 in a real session, none attributed); the user loses titlebars and minimize for no reason |
 
 ## Decisions taken under the owner's rule (2026-10-28: the closest to macOS 27, no technical step for the end user)
 - **SD-1.** Crash reports stay on the machine; nothing is ever sent, with or without SQ-4. The watcher keeps
@@ -382,17 +420,21 @@ session whatever its cause; the question is the next login.
   Restart and Shut Down and nothing else; its sentence is "Grassfield is running in safe mode: its desktop stopped
   working and was turned off." (French in the same pull request).
 - **SD-5.** The chaos and endurance tests run in nested sessions only; the owner's real session gets a read-only check
-  list per step (`docs/audits/stability-2026-10-29/owner-checks.sh` from step 7 on), never a driven test.
-- **SD-6.** The post-transaction hook writes one file and does nothing else as root; every repair runs as the user, at
-  the next login or at the user's click (ADR-0009's amendment: "nothing is ever compiled as root or by a pacman hook").
+  list per step (`docs/audits/stability-2026-10-29/owner-checks.sh` from step 7 on), never a driven test. The owner's own
+  checks listed per step (step 1's kill of the shell, run by the owner's hand on the owner's machine) are owner-run
+  checks, not driven tests (review of 2c0bd74).
+- **SD-6.** Nothing of this ADR runs as root after the package is installed, as ADR-0009's amendment says ("Nothing in the
+  amended design runs as root after the package is installed", `docs/decisions/ADR-0009-plugin-distribution.md:112`): the
+  toolkit change is detected as the user (2b), every repair runs as the user at the next login or at the user's click,
+  and the only root code stays the existing polkit helpers (2a's two verbs), each under the opus review.
 - **SD-7.** The plan's order is the user's exposure: the loop and the lock first, the update second, the proofs third.
   A step's pull request may land before an earlier step's when it waits on an owner answer.
 - **SD-8.** Every step adds its regression test to `tests/inventory.json` under its layer; a nested-only proof is
   marked `runner: bare` and recorded in `docs/testing/gates.md` with its date and commit (gates R1, L1, C2, P2, Q3).
 
 ## Consequences
-- The session gains at most two small user units and one timer, one split package and one alpm hook, all listed above;
-  no daemon, no new dependency, no new language.
+- The session gains at most two small user units and one timer, and two split packages once the repository is published,
+  all listed above; no alpm hook, no daemon, no new dependency, no new language.
 - `grassfield-shell.service`'s start limit, `OnFailure=` list and the sleep-lock gate change under the security review;
   `tests/security/sleep_lock_units.sh` and `unit_restart_limits.sh` grow with them.
 - The direction of ADR-0010 (a separate security process) is unchanged; step 1's safe root is reusable as its S2.
@@ -408,4 +450,30 @@ session whatever its cause; the question is the next login.
 - No graphical session, no Quickshell, no Hyprland here: every runtime statement above is NOT VERIFIED.
 
 ## Review history
-- None yet (step 0 awaits the integrator's opus review).
+- **Integrator's opus review of 2c0bd74 (PR #50): FAIL, one MAJOR, eight MINORs, three NITs.** Holds: nothing unlocks or
+  weakens the lock trio, IQ-T5 referenced only, nothing sent off the machine, the new units justified, owner-checks.sh
+  read-only; its items 1, 2 and 5 run on the owner's machine (x-d-p-gtk 25.5 s, `GTK_USE_PORTAL=1` in the user manager,
+  no drop-in: I-4's hypothesis holds; `hyprctl` not run, the owner's Hyprland is off-limits). Answered in the commits that
+  follow 2c0bd74:
+  - MAJOR 1, SQ-3's premise (a hold the desktop depends on cannot be removed with `-R`; one it does not depend on is never
+    installed; a `kcoreaddons` bound refuses every monthly KF6; a hold before the repository publishes blocks every update
+    with no end): SQ-3 rewritten with the hold pair (`grassfield-hold` / `grassfield-unhold`, `provides` + `conflicts`,
+    swapped by the channel helper), `kcoreaddons` dropped, the hold tied to the publication, B recommended now and A after
+    it, what the user sees on each path written (step 2a, audit 2.3).
+  - MINOR 2, the start-limit arithmetic (the eleventh start is refused, L ≤ 2.0 s): audit 1.2 and its spot check, this
+    ADR's finding 1 and SQ-2, STATE.
+  - MINOR 3, a probe using `systemctl restart` never reaches safe mode: the probe kills with SIGKILL through systemd
+    (step 6a, SQ-5 A).
+  - MINOR 4, the Qt private-API risk (the portal links `GuiPrivate` through `files-core.cmake:48`; Quickshell imports 61
+    private symbols): audit 2.2's Qt row and this ADR's finding 2.
+  - MINOR 5, the bridge has systemd's default start limit (5 in 10 s): audit P-4.
+  - MINOR 6, step 2b's root hook against ADR-0009:112 ("Nothing in the amended design runs as root after the package is
+    installed"): the hook is gone; detection runs as the user in the shell's checker (step 2b, SD-6, the R5 table).
+  - MINOR 7, "7 nested Hyprland dumps" sourced (`09-reliability-audit.md:36`) in SQ-6 C.
+  - MINOR 8, the safe unit's `Restart=`, `OnFailure=` and start limit specified (step 1b).
+  - MINOR 9, the extension notices name a command while `windows.rebuildExtension` is off: step 2d plans the notice's
+    action; a known limit under SP-6 until then.
+  - NITs: SD-5 and step 1's owner check agree (owner-run checks, not driven tests); STATE's note on #48/#49 says their
+    keys (112 and 111 zeros) and that there is no collision; owner-checks.sh prints its "(none)" fallback.
+  - The reviewer's opinions on the questions are recorded next to each (SQ-1 A once finding 8 is fixed, SQ-2 A, SQ-3 B now
+    and A after the publication, SQ-4 A without `coredumpctl list` in the notice, SQ-5 A once finding 3 is fixed, SQ-6 A).
