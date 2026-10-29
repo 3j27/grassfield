@@ -227,7 +227,7 @@ down, how sleep behaves) is written in the table at the end of this step.
   (`Type=oneshot`, hardened like the session services, `RuntimeDirectory=grassfield` kept): started by `OnFailure=` of
   `grassfield-shell.service` next to Omarchy's sleep lock after every failure; keeps the monotonic time of each failure of
   the last 10 minutes in `$XDG_RUNTIME_DIR/grassfield/shell-failures` (0600) and at the third cancels the pending restart
-  (`systemctl --user stop grassfield-shell.service`) and writes `shell-safe-mode` (the state S5 reads); a logout counts
+  (`systemctl --user stop grassfield-shell.service`) and writes `shell-safe-mode` (the state S4 reads); a logout counts
   nothing; what it cannot do (no runtime directory, no clock, an unwritable ledger) is logged and counts nothing, so a
   counter that cannot count never stops the shell. Its one state change is the stop; nothing unlocks, starts or signals.
 - `packaging/systemd/session-gone`: the "compositor certainly gone" test extracted from the sleep-lock gate and shared

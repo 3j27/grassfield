@@ -246,9 +246,9 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   `OnFailure=` after every failure next to Omarchy's sleep lock, counts the failures of the last 10 minutes
   (`$XDG_RUNTIME_DIR/grassfield/shell-failures`) and at the third cancels the pending restart (`systemctl --user stop`)
   and writes `$XDG_RUNTIME_DIR/grassfield/shell-safe-mode`, the state the security process of ADR-0041 step 1 reads from
-  S5 on; a logout counts nothing (`session-gone`, the test the gate uses); a counter that cannot count (no runtime
+  S4 on; a logout counts nothing (`session-gone`, the test the gate uses); a counter that cannot count (no runtime
   directory, no clock, an unwritable ledger) counts nothing and the restarts go on. The stop never unlocks: the
-  compositor keeps the lock (below, "Lock survival"), and until S5 ships a stopped UI is what the start limit gave: locked
+  compositor keeps the lock (below, "Lock survival"), and until S4 ships a stopped UI is what the start limit gave: locked
   and out of reach from the session, Omarchy's sleep lock armed, its stand-in trying the shell once more at sleep time.
   Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
   model: a 10 s loop must end), `tests/security/sleep_lock_units.sh`. A stop through systemd is never restarted (systemd

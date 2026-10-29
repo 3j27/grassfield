@@ -12,7 +12,7 @@
 # $XDG_RUNTIME_DIR/grassfield/shell-failures (0600; the runtime directory is the unit's RuntimeDirectory=) and, at the
 # COUNT-th failure within the window, cancels the pending restart (`systemctl --user stop grassfield-shell.service`, which a
 # unit waiting in auto-restart accepts) and writes $XDG_RUNTIME_DIR/grassfield/shell-safe-mode, the state the security
-# process reads from step S5 on (ADR-0041 step 1: "the UI unit failed, the security process is up"). Until S5 ships, the
+# process reads from step S4 on (ADR-0041 step 1: "the UI unit failed, the security process is up"). Until S4 ships, the
 # stop gives what the start limit gives today, reached now for a slow loop too: the UI stays stopped, the compositor keeps a
 # lock if there was one (ext-session-lock: fail closed, docs/specs/security.md "Lock survival"), Omarchy's sleep lock stays
 # armed by the other OnFailure= unit, and its `omarchy-shell` stand-in tries the shell once more at sleep time.
