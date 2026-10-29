@@ -115,6 +115,9 @@ T.Control {
         height: root.trackHeight
         radius: height / 2
         color: root.knobless ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.quicksettingsSliderTrackOpacityDark) : Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        // Increase Contrast outlines the track, as the other controls.
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         Rectangle {
             // At the start the knob covers the fill; its round end would show a sliver of it (macOS 27 Magnification Off: none).
@@ -155,7 +158,7 @@ T.Control {
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
-        border.width: 1
+        border.width: Tokens.controlBorderWidth
         border.color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
 
         FocusRing {
