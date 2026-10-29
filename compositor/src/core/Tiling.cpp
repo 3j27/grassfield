@@ -1357,6 +1357,15 @@ namespace gf::tiling {
         return d && d->members.size() == 2 && std::ranges::find(d->members, edge.after.front()) != d->members.end() ? d : nullptr;
     }
 
+    std::optional<int> splitDropZone(const Rect& left, const Rect& right, int ownZone, double x, double y) {
+        if (ownZone != 0 && ownZone != 1)
+            return std::nullopt;
+        const Rect& other = ownZone == 0 ? right : left;
+        if (x < other.x || x >= other.x + other.w || y < other.y || y >= other.y + other.h)
+            return std::nullopt;
+        return ownZone == 0 ? 1 : 0;
+    }
+
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
         return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
     }

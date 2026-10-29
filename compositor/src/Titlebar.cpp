@@ -81,6 +81,7 @@ namespace {
         CBox                      pressBox; // the same, never changed by an un-zoom or un-tile (a drop on the Stages strip gives it back)
         bool                      plainPress = false; // pressed on a window that was neither zoomed nor tiled
         bool                      unmovable  = false; // the window closed or unmapped during the drag (logged once, gate C1)
+        bool                      member     = false; // a Split View member (TL33, step 6b): swapped or back in its half at the end
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -313,8 +314,9 @@ namespace {
         CBox box = grab.startBox;
         box.translate(pointer - grab.pressPos);
         // TL19: away from a tiling place the window snaps to the outputs' edges and to the other windows as Hyprland's own
-        // move does (the public CLayoutManager::performSnap with the general:snap values), so every drag behaves alike.
-        if (!gf::tiler::snapFor(w, pointer) && snapEnabled()) {
+        // move does (the public CLayoutManager::performSnap with the general:snap values), so every drag behaves alike. A Split
+        // View member does not snap: it lands in a half at the release.
+        if (!grab.member && !gf::tiler::snapFor(w, pointer) && snapEnabled()) {
             Vector2D pos  = box.pos();
             Vector2D size = box.size();
             g_layoutManager->performSnap(pos, size, target, MBIND_MOVE, -1, grab.startBox.size());
@@ -1063,11 +1065,26 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
-    // A window of a Split View Desktop (tiling.md TL33): a press focuses and raises it only, as in full screen; no double-click
-    // action and no drag (ADR-0036 D46: step 6b swaps the two windows).
+    // A window of a Split View Desktop (tiling.md TL33): no double-click action. Its titlebar drag moves it at its size, and
+    // its release over the other half swaps the two windows, anywhere else puts it back in its half (step 6b, ADR-0036 D59).
+    // In full screen or zoomed a press focuses and raises it only.
     if (gf::tiler::inSplit(w)) {
-        input.presses.claim(e.button, false);
         m_clicks.reset();
+        const auto target = w->layoutTarget();
+        if (!target || fullscreenMode(w) != Fullscreen::FSMODE_NONE) {
+            input.presses.claim(e.button, false);
+            return true;
+        }
+        input.grab          = {};
+        input.grab.deco     = this;
+        input.grab.dragging = true;
+        input.grab.member   = true;
+        input.grab.window   = w;
+        input.grab.pressPos = coords;
+        input.grab.startBox = target->position();
+        input.grab.pressBox = input.grab.startBox;
+        input.grab.devices  = pointerDevices();
+        input.presses.claim(e.button, true);
         return true;
     }
 
@@ -1151,9 +1168,14 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
                 gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
                 if (input.grab.dragging)
                     gf::tiler::dragDone(); // no preview, no tile
-                gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
-                if (input.grab.moved)
-                    gf::tiler::followOutput(input.grab.window.lock());
+                if (input.grab.member) {
+                    if (input.grab.moved)
+                        gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
+                } else {
+                    gf::tiler::endMove(input.grab.window.lock()); // a tiled window dragged away is Free
+                    if (input.grab.moved)
+                        gf::tiler::followOutput(input.grab.window.lock());
+                }
                 input.grab = {};
             }
             return;
@@ -1174,6 +1196,14 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
             updateMove(grab); // final position at the release point (none for a click)
+        // A Split View member (TL33, step 6b): over the other half the two swap halves, anywhere else it goes back in its half;
+        // it never takes another output's Desktop nor a tiling place.
+        if (grab.member) {
+            gf::tiler::dragDone();
+            if (grab.moved && g_pInputManager)
+                gf::tiler::memberDrop(grab.window.lock(), g_pInputManager->getMouseCoordsInternal());
+            return;
+        }
         // Released over the place shown (after the preview delay, TL17): the window takes it (FR47); the preview goes.
         // Released elsewhere, or before the place showed, a tiled window dragged away is Free (tiling.md TL10).
         const auto snap = grab.dragging && grab.moved ? gf::tiler::previewOf(grab.window.lock()) : std::nullopt;
@@ -1222,9 +1252,14 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
             gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
             if (input.grab.dragging)
                 gf::tiler::dragDone();
-            gf::tiler::endMove(input.grab.window.lock());
-            if (input.grab.moved)
-                gf::tiler::followOutput(input.grab.window.lock());
+            if (input.grab.member) {
+                if (input.grab.moved)
+                    gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // back in its half
+            } else {
+                gf::tiler::endMove(input.grab.window.lock());
+                if (input.grab.moved)
+                    gf::tiler::followOutput(input.grab.window.lock());
+            }
             input.grab = {};
             return;
         }
@@ -1253,7 +1288,10 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
         auto& input        = pointerInput();
         if (input.grab.dragging)
             gf::tiler::dragDone();
-        gf::tiler::endMove(input.grab.window.lock());
+        if (input.grab.member && input.grab.moved)
+            gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt); // a Split View member: back in its half
+        else
+            gf::tiler::endMove(input.grab.window.lock());
         input.grab         = {};
         input.hovered      = nullptr;
         input.activeWindow = {};

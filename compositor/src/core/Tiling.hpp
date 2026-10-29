@@ -632,6 +632,11 @@ namespace gf::tiling {
     // or nullptr (an edge of an ordinary tile group).
     const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge);
 
+    // Step 6b (TL33): a Split View member's titlebar drag released at (x, y), the member in zone `ownZone` (0 left, 1 right) of
+    // the halves `left` and `right` (frames): the other zone when the point lies in the other half (the two members swap
+    // halves, macOS), else nullopt (it goes back to its own half).
+    std::optional<int> splitDropZone(const Rect& left, const Rect& right, int ownZone, double x, double y);
+
     // Keeps the members of `d` still on its workspace (`on`: the windows there now, in any state), in their order. True when
     // one left.
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on);

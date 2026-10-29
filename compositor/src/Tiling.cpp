@@ -2094,6 +2094,48 @@ namespace gf::tiler {
         return w && tiling::splitOfWindow(st().splits, idOf(w)) != nullptr;
     }
 
+    void memberDrop(const PHLWINDOW& w, std::optional<Vector2D> at) {
+        auto& s = st();
+        if (!s.ready || !w || !g_layoutManager)
+            return;
+        const auto* d = tiling::splitOfWindow(s.splits, idOf(w));
+        if (!d || !w->m_workspace || w->m_workspace->m_id != d->workspace)
+            return; // it left the Split View meanwhile (splitCheck)
+        catchUp();
+        const auto* r = s.book.find(idOf(w));
+        if (!r)
+            return;
+        const auto       m       = splitMonitor(*d);
+        const uint64_t   otherId = d->members.size() == 2 ? (d->members[0] == idOf(w) ? d->members[1] : d->members[0]) : 0;
+        const auto*      ro      = otherId ? s.book.find(otherId) : nullptr;
+        const auto       ow      = otherId ? windowById(otherId) : nullptr;
+        const auto*      layout  = tiling::layoutById("left-right");
+        std::optional<int> zone;
+        if (at && m && ro && ow && layout && !gf::deferredFocus::sessionLocked() && r->state == tiling::TileState::Tiled && ro->state == tiling::TileState::Tiled &&
+            r->where.layout == layout->id && ro->where.layout == layout->id && ow->m_workspace == w->m_workspace)
+            zone = tiling::splitDropZone(splitHalf(m, 0), splitHalf(m, 1), r->where.zone, at->x, at->y);
+        if (!zone) {
+            applySurface(w, toCBox(r->box)); // back in its half
+            return;
+        }
+        // The two swap halves (macOS): each takes the other's zone, fitted together on the whole output (TL8), in its group.
+        const std::array<PHLWINDOW, 2> windows{w, ow};
+        const std::array<int, 2>       zones{*zone, r->where.zone};
+        const std::array<uint64_t, 2>  groups{r->group, ro->group};
+        const auto frames = fitted({layout->zones[static_cast<size_t>(zones[0])], layout->zones[static_cast<size_t>(zones[1])]}, {windows[0], windows[1]},
+                                   areaFor(m, d->workspace));
+        for (size_t i = 0; i < windows.size(); ++i) {
+            const CBox current = windows[i]->layoutTarget()->position();
+            const auto band    = gf::chrome::bandOf(windows[i]);
+            const CBox surface = toCBox(tiling::surfaceOf(frames[i], band));
+            applySurface(windows[i], surface);
+            s.book.placed(idOf(windows[i]), toRect(current), toRect(surface), band,
+                          tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zones[i]}, m->m_name, d->workspace, groups[i]);
+        }
+        logRequest(Log::DEBUG, "split: {:x} dropped on the other half of Desktop {}: the two windows swapped halves", idOf(w), d->workspace);
+        notify(tiling::Reason::Placed);
+    }
+
     bool leaveSplit(const PHLWINDOW& w) {
         if (!inSplit(w) || gf::deferredFocus::sessionLocked())
             return false;

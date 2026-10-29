@@ -1718,6 +1718,14 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         '$a.layout == "left-right" and $a.zone == 0 and $b.layout == "left-right" and $b.zone == 1 and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
     }
     check "split pick: one tile group (the shared edge resizes both)" split_pair
+    split_pair_swapped() { # the first window in zone 1, the second in zone 0, one group (step 6b's swap)
+      local a b
+      a=$(record_of "$addr")
+      b=$(record_of "$addr2")
+      say "  first: $a; second: $b"
+      jq -e -n --argjson a "$a" --argjson b "$b" \
+        '$a.layout == "left-right" and $a.zone == 1 and $b.layout == "left-right" and $b.zone == 0 and $a.state == "tiled" and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
+    }
     check "split pick: the reply lists both members" split_members "$next" "$addr" "$addr2"
     # Step 6b (TL33): the separator (the shared edge between the two members) dragged 80 px, then double-clicked: both back
     # to equal halves, still members.
@@ -1781,10 +1789,25 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     tile_ipc "$addr" right
     check "split keys: tiling a member is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
     check "split keys: it keeps its half" half_of tiling-foot left
-    # D46: a titlebar drag of a Split View window moves nothing (step 6b swaps the two).
+    # Step 6b (D59): a member's titlebar drag released in its own half puts it back there; released over the other half, the
+    # two swap halves (macOS), still members of one group; dragged back over the other half, they swap again.
     if read -r gx gy < <(grip_of "$addr"); then
       pointer abs "$gx" "$gy" sleep 200 down drag $((gx + 120)) $((gy + 80)) sleep 300 up sleep 600
-      check "split titlebar: a drag moves nothing" half_of tiling-foot left
+      check "split titlebar: released in its own half, back in it" half_of tiling-foot left
+      check "split titlebar: the other member did not move" half_of tiling-foot2 right
+      mark_events
+      pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 up sleep 800
+      check "split swap: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
+      check "split swap: the dragged window takes the right half" half_of tiling-foot right
+      check "split swap: the other window takes the left half" half_of tiling-foot2 left
+      check "split swap: both still members" split_members "$next" "$addr" "$addr2"
+      check "split swap: still one tile group" split_pair_swapped
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
+      fi
+      check "split swap back: the first window in the left half again" half_of tiling-foot left
+      check "split swap back: the second in the right half again" half_of tiling-foot2 right
+      check "split swap back: zones as at the pick" split_pair
     else
       check "split titlebar: the first window's grip found" false
     fi
