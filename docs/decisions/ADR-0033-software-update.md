@@ -867,7 +867,12 @@ Nothing changes on the system before step 7. Steps 1-6 decide, and every refusal
    - **No here-string or here-document** in the helper or the runner: bash writes a large one to a file in `/tmp`, and an
      unwritable or full `/tmp` would make a list read empty, so a scan would find nothing and the update would go on (the
      integrator's re-review of 1ce7c37, MAJOR). Lists go through pipes or files in the run's own folder, every write
-     checked; a plan with text but no package read is refused, never "up to date".
+     checked; a plan with text but no package read is refused, never "up to date". The package's listing is read through
+     a pipe whose status is checked (bsdtar -t exits 0 even when it cannot write its list).
+   - **No read that comes back empty passes** (the re-review of 0294373): an empty `pacman -Q` (it would skip the
+     compatibility and key checks), an empty `pacman-conf --repo-list` (the checked databases would never be swapped in)
+     or `CacheDir` are refused (exit 8); in the runner, Omarchy's `omarchy-migrate --pending` must answer by its contract
+     (exit 0 with names, exit 1 with none), anything else sends the update to the terminal path.
 6. **The checks**, in this order: the compatibility check (s3.4); Omarchy's signing key in pacman's keyring and
    `omarchy-keyring` installed (`omarchy-update-keyring`'s test; when it fails, its bootstrap is a trust decision, s3.6:
    after the compatibility check, so an update it refuses is said so, never sent to the terminal); the migrations that
@@ -1056,6 +1061,13 @@ so that release goes to the terminal; a package update without an Omarchy releas
   Omarchy package set), a nested shot. They are the integrator's nested pass and L2 (spec A15).
 
 ## Review history
+Software Update step 3 (PR #44), the integrator's re-review of 1ce7c37..0294373 (independent opus): **PASS**, with two
+fail-open guards asked before the merge, answered in the next commits: an empty `pacman -Q` and an empty
+`pacman-conf --repo-list` are refused (exit 8), and the runner's `omarchy-migrate --pending` must answer by its contract;
+fault-injection cases for each (a wrapper in place of the real program). The nit (bsdtar -t exits 0 when it cannot write)
+is answered by reading the listing through a pipe whose status is checked. The survivor M34 (a stale lock looked at once)
+depends on timing and stays untested.
+
 Software Update step 3 (PR #44), the integrator's re-review of a060504..1ce7c37 (independent opus): the first round's MAJOR
 and minors confirmed fixed (30 mutants, 30 killed); FAIL on one new MAJOR, answered in the next commits:
 - **MAJOR**, the scan failed open when `/tmp` could not be written: the member list came from a here-string, which bash
