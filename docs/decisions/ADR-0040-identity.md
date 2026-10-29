@@ -1,9 +1,10 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
-Status: Proposed (step 0 of the owner's brief "Identité Grassfield", 2026-10-29; documents only, no code). The owner
-questions IQ-W1 to IQ-T4 are open; every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27,
-no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-18), which
-the owner can revisit. · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
-(0001 to 0038 are on main 11c9e69; 0039 is the design-polish ADR of the open pull request #45; #41, #43 and #44 add none)
+Status: Proposed (step 0 of the owner's brief "Identité Grassfield", 2026-10-29; documents only, no code). Twelve owner
+questions are open (IQ-W1 to IQ-W4, IQ-B1 to IQ-B3, IQ-B5, IQ-L1, IQ-T2, IQ-T4, IQ-T5); every other choice follows the
+owner's rule of 2026-10-28 ("the closest to macOS 27, no technical step for the end user") and is listed in "Decisions
+taken under the owner's rule" (ID-1 to ID-21), which the owner can revisit. Revised after the integrator's opus review of
+b44d17e (FAIL: two MAJORs, five MINORs), answered in "Review history"; each changed place says "review of b44d17e". · Date: 2026-10-29 · Decider: owner (IQ), integrator (merge; ID under the rule) · Number: 0040
+(0039 is the design-polish ADR, pull request #45, merged as e03c859; the open pull requests #47 and #48 add none)
 
 This ADR proposes one identity for Grassfield across its wallpapers, its brand (mark, name, accent, About, app icons),
 its lock screen and every session transition. The audit it rests on is `docs/audits/identity-2026-10-29/audit.md`
@@ -11,11 +12,12 @@ its lock screen and every session transition. The audit it rests on is `docs/aud
 `docs/audits/identity-2026-10-29/mockups/`, written by `mockups.py` next to them; they are design documents, never
 shipped. Legal points are marked "needs legal review" (master-prompt §14); none is a conclusion.
 
-**Read with ADR-0039 (design polish, pull request #45, same day).** That ADR sets one grammar for materials, controls,
-windows and accessibility settings; this one covers what makes Grassfield recognisable and how it appears. Two questions
-touch each other and are best answered together: its Q4 (one green for "on" in the dark appearance) with IQ-B3 here
-(the accent's name and the second green), and its Q1 (the buttons at the foot of a sheet, the shell's About among them)
-with IQ-B4 here (About This Computer as a small window). Neither ADR changes the other's scope.
+**Read with ADR-0039 (design polish, merged as e03c859, the owner's answers of 2026-10-29 recorded there).** That ADR
+sets one grammar for materials, controls, windows and accessibility settings; this one covers what makes Grassfield
+recognisable and how it appears. The nine places where they meet have one owner each: the table "Coordination with
+ADR-0039" below repeats ADR-0039's own, unchanged. ADR-0039 merged first, so this ADR is the one that follows it: its
+D-Q4 (switches and slider fills on the selection fill, as macOS 27) and D-Q1 (sheet buttons measured on macOS 27) hold,
+and IQ-B3 here changes the palette only, not which controls read it.
 
 ## Context
 
@@ -54,8 +56,9 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
   (B-11).
 - **Lock.** Sound layout and contrast (L-1, L-2, L-5); hard cuts in and out, a black first frame, and an avatar and name
   that can change after the lock shows (L-3, L-4).
-- **Transitions.** No ground colour, no "ready" gate, no single entrance: `#1C1C1E`, then the bars alone, then the
-  artwork, then the picture (T-1 to T-8); idle and display-off paths undim or light the desktop for a moment (T-10 to
+- **Transitions.** No ground colour and no single entrance: `#1C1C1E`, then the menu bar alone, then the artwork,
+  then the picture (T-1 to T-8; since main 8b5efac, "startup-settle", the Dock and the desktop icons already wait until
+  they are final and appear once, which removes T-7 and the Dock's part of T-3, T-4 and T-6); idle and display-off paths undim or light the desktop for a moment (T-10 to
   T-12); the lock clock can jump after a wake (T-14); a shell restart replays the whole start and, when locked, shows the
   compositor's red screen (T-15); the session ends with layers vanishing one by one (T-16).
 - Storyboards of today and of the proposal: `mockups/t1-transitions.svg`.
@@ -71,7 +74,7 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
   wallpaper's prepared still decoded, the bar tone known, the Dock's items and the icons' positions loaded. Nothing
   shows a default and then corrects itself (ID-3 to ID-6).
 - **P-3 One entrance.** At session start the wallpaper comes first, out of the ground; then the menu bar, the Dock and
-  the desktop icons appear together, once (IQ-T1). Nothing slides away right after appearing.
+  the desktop icons appear together, once (ID-20). Nothing slides away right after appearing.
 - **P-4 Continuity across the lock.** The lock shows the desktop's own picture. Windows go at once (the protocol leaves
   no choice), the picture stays, the scrim and text fade in; on unlock they fade out while the session is still locked,
   then it is released (IQ-T2, IQ-W4).
@@ -99,11 +102,13 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
   two-slot model (one fixed `wallpaper.crossfadeMs`), the bar tone switching at the crossfade's midpoint from the
   palette; Reduce Motion cuts (ID-14). Settings shows each artwork as one tile in the current appearance, with
   "Automatic / Light / Dark" for the chosen one (macOS's pop-up for its dynamic wallpapers, ASSUMPTION). Settings >
-  Appearance draws the real dark variant instead of darkening the art (W-3).
-- **Videos (IQ-W3, recommended A).** No video file ships. The user's own videos stay as built (ADR-0016 W7). The
-  default artwork gets an optional **moving** variant drawn live (clouds drift, the light changes slowly), off by
-  default, under the video pause policy (idle, battery, full screen, lock, Reduce Motion, the Reduced profile), and
-  offered as a screen saver kind. It is built only after P1 and P3 are measured on the owner's hardware.
+  Appearance draws the real dark variant instead of darkening the art (W-3). The lock also draws the artwork: it keeps
+  today's drawing, through a fixed variant, until step 4a changes it under the security review (review of b44d17e).
+- **Videos (IQ-W3, recommended B for 1.0; review of b44d17e).** No video file ships and nothing moves in 1.0: a new
+  feature during the release candidate is not worth its risk. The user's own videos stay as built (ADR-0016 W7). After
+  1.0, option A: the default artwork gets an optional **moving** variant drawn live (clouds drift, the light changes
+  slowly), off by default, under the video pause policy (idle, battery, full screen, lock, Reduce Motion, the Reduced
+  profile), also a screen saver kind, built only after P1 and P3 are measured on the owner's hardware.
 - **First frame (ID-3).** The wallpaper window shows the **last applied wallpaper's prepared still** from the cache as
   its first frame, with the bar tone from its stored statistics, and maps only then (bounded by
   `wallpaper.firstShowTimeoutMs`, after which the artwork). When the feed's result is the same file, nothing fades.
@@ -114,11 +119,11 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
   the artworks' tones come from their palettes.
 
 ### 3. Brand
-- **The mark (IQ-B1, recommended B; the file is not touched).** Proposed rules for any option: clear space of a
-  quarter of the mark's height on every side; 14 px minimum; never stretched, rotated, outlined, given a gradient or a
-  shadow, or redrawn; only the file's path is used, at run time. Places under B: the menu bar's system button
-  (monochrome, the bar's text colour), About This Computer and Settings > General > About (the Grassfield green), the
-  Search result for About; shell dialogs show their subject's symbol instead of the mark. Mockup: `mockups/b1-logo-use.svg`.
+- **The mark (IQ-B1, recommended B; the file is not touched).** Where it appears, in what colour, and the rules of its
+  use (clear space, smallest size, what is never done to it) are the owner's to set, so all three are in IQ-B1 (review
+  of b44d17e). Places under B: the menu bar's system button (monochrome, the bar's text colour), About This Computer and
+  Settings > General > About (the Grassfield green), the Search result for About; shell dialogs show their subject's
+  symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
 - **The name (ID-12, IQ-B2).** "Grassfield" names the product in running UI ("Grassfield menu", "Grassfield
   Settings"); "Grassfield Desktop" where the product and its version are stated (About, the session's comment);
   "Grassfield OS" only from M6 (§14). App names keep the owner's decisions (L1, ADR-0038 AQ1). The greeter's "Grassfield
@@ -127,17 +132,23 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
 - **The accent (IQ-B3, recommended A).** The default is named "Grassfield" (a green swatch first in the row, in place
   of the Multicolour wheel), the pickable Green moves to a value clearly apart from the brand green with its own 4.5:1
   text, and the brand green is the existing default-accent tokens (`color.light.accent` `#26763F`, `color.dark.accent`
-  `#4FB36B`; no new brand token). Settings > About's tile uses it (ID-11). Mockup: `mockups/b2-accent.svg`.
-- **About This Computer (IQ-B4, recommended A).** Computer first, as macOS 27 and as Settings > About already do: the
+  `#4FB36B`; no new brand token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
+  tiles (the sidebar's Battery and Motion, `apps/settings/qml/Main.qml:27, 32`; rows of Accessibility, Menu Bar, Software
+  Update and Storage): moving it moves them (review of b44d17e). Mockup: `mockups/b2-accent.svg`.
+- **About This Computer (ID-19, the macOS model; review of b44d17e).** Computer first, as macOS 27 and as Settings >
+  About already do: the
   Grassfield-drawn picture of the computer (`DevicePicture`, by chassis), its model name, processor, memory, graphics,
   then "Grassfield Desktop 1.0" with the mark in the brand green, "More Info…" (opens Settings > General > About) and
   "Built for Omarchy · based on Arch Linux" (§14 wording). Mockup: `mockups/b3-about.svg`.
-- **App icons (IQ-B5, recommended B).** Grassfield's own apps carry Grassfield's own icons, on one grammar: one tile
-  (104 on the 128 grid, radius 23.4, which is ADR-0014's plate radius 0.225), a top-to-bottom gradient and a light inner
-  rim, one drawing in the brand palette inside 72 % of the tile (so ADR-0014's Dark, Clear and Tinted plates take it),
-  no text. Files keeps its folder on a tile (so the app no longer looks like a folder on the desktop); Settings,
-  Preview and Store keep their drawings; Activity Monitor and the Dock's Apps tile get new ones. Under B the
-  `org.grassfield.*` aliases to the pack go. Mockup: `mockups/b4-app-icons.svg`.
+- **App icons (IQ-B5, recommended C; review of b44d17e).** Grassfield's own icons where the pack has no system app
+  of that role: Store, Activity Monitor and the Dock's Apps tile; Files, Settings and Preview keep the pack's drawings,
+  as the owner ruled on 2026-10-23. The own icons follow one grammar: one tile (104 on the 128 grid, radius 23.4, which
+  is ADR-0014's plate radius 0.225), a top-to-bottom gradient and a light inner rim, one drawing in the brand palette
+  inside 72 % of the tile (so ADR-0014's Dark, Clear and Tinted plates take it), no text. Activity Monitor is a gauge on
+  a light tile and the Apps tile three fanned cards, drawn away from macOS's own Activity Monitor (a dark screen with a
+  green graph) and Apps (a grid of coloured squares) icons; whether they are far enough is the owner's legal call
+  (E39). Option B (every Grassfield app, the `org.grassfield.*` aliases removed) stays open to the owner. Mockup:
+  `mockups/b4-app-icons.svg`.
 - **Boot and login (IQ-L1, recommended A).** Omarchy's path stays (Limine, the disk password, SDDM autologin); a
   greeter of our own is a non-goal and R12 forbids writing one. Grassfield's identity starts at the ground colour.
 
@@ -154,7 +165,7 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
 - **Motion (IQ-T2, recommended A).** Lock: engaged at once; inside the surface, scrim and text fade in over
   `lock.fadeInMs` 200 (from the idle dim's level when the lock follows it, ID-8). Unlock: after PAM success a new
   machine state `releasing` fades text and scrim out over `lock.fadeOutMs` 200 and only then sets `locked = false`.
-  Reduce Motion: cuts.
+  Reduce Motion: cuts. The fades take ADR-0039's `motion.*` role where one fits (its Q6), else these tokens.
 - **Unchanged.** The layout and its tokens, the field, the shake, the messages, the reserved hint line (L-5), one surface
   per output, gate L4 (no window or notification content).
 - **Invariants for the reviewer.** Engaging the lock never waits for the still, the avatar, the name, the settings or a
@@ -170,18 +181,18 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
 | Transition | Today (audit) | Proposed | Where; step |
 |---|---|---|---|
 | Boot to session | Omarchy's boot, disk password, autologin; Hyprland `#1C1C1E` (T-1) | unchanged up to the session (IQ-L1 A); the session's Hyprland background is the default artwork's ground; the shell sets the current ground at start and on change (ID-2) | `config/hypr/grassfield/looknfeel.lua`, shell; step 3 |
-| Login to desktop, desktop loading | `#1C1C1E`, bars alone, the artwork fading in, then the picture and a bar tone switch; defaults before the settings; auto-hidden bars slide away (T-2 to T-8) | ground; the wallpaper's cached still (ID-3); once the settings are read (ID-5) and every surface has its final content, menu bar, Dock and desktop icons in one 250 ms fade (IQ-T1 A); auto-hidden bars start hidden (ID-6); P5 counts the wallpaper | `shell/desktop`, `shell/menubar`, `shell/dock`, `shell.qml`, `windows.lua`; steps 3 and 6 |
-| Lock | black first frame [inference], blurred artwork, no fade (L-3, W-9) | same picture, windows go, scrim and text fade in (IQ-T2 A, IQ-W4 A) | `shell/security/lock`; step 4 |
-| Unlock | hard cut to another picture (L-3) | fade out while locked, then release | step 4 |
+| Login to desktop, desktop loading | `#1C1C1E`, the menu bar alone, the artwork fading in, then the picture and a bar tone switch; the menu bar from the defaults before the settings; an auto-hidden menu bar slides away (T-2 to T-8; the Dock and the desktop icons already appear once, final, since 8b5efac) | ground; the wallpaper's cached still (ID-3); once the settings are read (ID-5) and every surface has its final content, menu bar, Dock and desktop icons in one 250 ms fade (ID-20), the Dock's own one-frame reveal joining it; the menu bar's auto-hide starts at rest as the Dock's does (ID-6); P5 counts the wallpaper | `shell/desktop`, `shell/menubar`, `shell/dock`, `shell.qml`, `windows.lua`; steps 3 and 6 |
+| Lock | black first frame [inference], blurred artwork, no fade (L-3, W-9) | same picture, windows go, scrim and text fade in (IQ-T2 A, IQ-W4 A) | `shell/security/lock`; steps 4a and 4b |
+| Unlock | hard cut to another picture (L-3) | fade out while locked, then release | step 4b |
 | Idle dim, then lock | the dim drops before the lock is up [inference] (T-10) | the dim stays until the lock holds; the lock's content starts at the dim's level (ID-8) | `shell/security/idle`; step 5 |
 | Displays off, then lock | the displays light up to draw the lock (T-11) | lock just before the displays go off (IQ-T4 A) | `shell/security/idle`, Settings > Lock Screen; step 5 |
 | Screen saver, then lock | the saver goes before the lock is up [inference] (T-12) | the saver stays until the lock holds (ID-8) | `shell/saver`; step 5 |
 | Sleep | locked before sleep when confirmed; exceptions show the desktop on wake (T-13) | unchanged path; the exceptions stay a documented limit (the budget is the system's) | — |
-| Wake | the clock may show the sleep time, then jump (T-14) | clock refreshed on resume before the first frame (ID-7); the lock's picture and name already final | step 4 |
-| Shell restart | bars vanish, windows over `#1C1C1E`, the whole start again; red screen when locked (T-15) | windows over the ground; the cached still and the single entrance; the red screen delayed past a normal restart (ID-9) | steps 3, 5, 6 |
-| Log out, restart, shut down | no countdown; layers vanish one by one (T-16) | 60 s countdown (IQ-T3 A); after the windows close, one fade of the whole screen to the ground then black, then the session ends (ID-10) | `shell/overlay/SystemMenu.qml`, `packaging/bin/grassfield-session-end`; step 7 |
-| Output added or removed | black lock surface [inference] (L-6) | the new output's wallpaper and lock surfaces start at the ground and show its still (ID-15) | steps 3, 4 |
-| Appearance switch | the wallpaper does not change (W-3) | crossfade between the artwork's variants; tone at the midpoint (ID-14) | step 2b |
+| Wake | the clock may show the sleep time, then jump (T-14) | clock refreshed on resume before the first frame (ID-7); the lock's picture and name already final | step 4a |
+| Shell restart | bars vanish, windows over `#1C1C1E`, the whole start again; red screen when locked (T-15) | windows over the ground; the cached still and the single entrance; the red screen delayed past a normal restart only if the owner agrees (IQ-T5) | steps 3, 5, 6 |
+| Log out, restart, shut down | no countdown; layers vanish one by one (T-16) | 60 s countdown (ID-21); after the windows close, one fade of the whole screen to the ground then black, then the session ends (ID-10) | `shell/overlay/SystemMenu.qml`, `packaging/bin/grassfield-session-end`; step 7 |
+| Output added or removed | black lock surface [inference] (L-6) | the new output's wallpaper and lock surfaces start at the ground and show its still (ID-15) | step 3 (the wallpaper), step 4a (the lock surface) |
+| Appearance switch | the wallpaper does not change (W-3) | crossfade between the artwork's variants; tone at the midpoint (ID-14) | step 2 |
 | Wallpaper change | crossfade (ADR-0016) | unchanged | — |
 
 ### 6. Tokens and contract (proposed; every value an estimate until F1 and P3)
@@ -190,7 +201,7 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
 | `artwork.<name>.<variant>.<role>` | the palettes of `mockups.py` (`PAL`, `meadow`, `rows`, `ridgeline`) | ID-1; `evening` keeps today's values (`GrassfieldArtwork.qml:12-21`) |
 | `session.settingsWaitMs` | 500 | ID-5 |
 | `session.revealTimeoutMs` | 1500 | the latch's bound (P-6) |
-| `session.revealMs` | 250 | IQ-T1 A (ASSUMPTION for macOS) |
+| `session.revealMs` | 250 | ID-20 (ASSUMPTION for macOS); an ADR-0039 `motion.*` role where one fits |
 | `session.exitFadeMs`, `session.exitWaitMs` | 400, 1000 | ID-10 |
 | `wallpaper.firstShowTimeoutMs` | 1500 | ID-3 |
 | `lock.fadeInMs`, `lock.fadeOutMs` | 200, 200 | IQ-T2 A |
@@ -229,11 +240,11 @@ with IQ-B4 here (About This Computer as a small window). Neither ADR changes the
 | B. Only the Grassfield pair and the colours | least work, one strong image | little choice before the user brings pictures |
 | C. A and photographs (commissioned, or CC0 / CC BY from Wikimedia Commons) as image files | macOS-like richness | a licence and provenance per file, 3-6 MB per 5K picture, the helper's parse path, possible resemblance with well-known OS photos |
 
-**IQ-W3. Videos.**
+**IQ-W3. Videos** (recommendation changed by the review of b44d17e).
 | Option | For | Against |
 |---|---|---|
-| **A. No video file; an optional moving variant of the default drawn live, off by default, with the video pause rules; also a screen saver kind (recommended)** | no package weight, no codec, no new licence; motion in the brand scene; pauses like a video | GPU work while visible (the Dock and popups re-blur every frame, as with any video): built only after P1 and P3 on the owner's hardware |
-| B. No motion in 1.0 | nothing to measure | no answer to macOS's video wallpapers but "add your own" |
+| A. No video file; an optional moving variant of the default drawn live, off by default, with the video pause rules; also a screen saver kind | no package weight, no codec, no new licence; motion in the brand scene; pauses like a video | a new feature during the release candidate; GPU work while visible (the Dock and popups re-blur every frame, as with any video), so P1 and P3 first |
+| **B. No motion in 1.0; A after 1.0 (recommended)** | nothing new to stabilise before 1.0; nothing to measure now | no answer to macOS's video wallpapers in 1.0 but "add your own" |
 | C. Pre-rendered H.264 loops of the artwork | hardware decode, same path as user videos | 20-60 MB per loop, a build-time renderer, FFmpeg (G9) in the shell by default |
 
 **IQ-W4. The lock screen's backdrop** (ADR-0016 Q4 was settled on 2026-10-20 as its recommended option, a sharp still
@@ -245,7 +256,12 @@ the identity is designed). Mockup `l1-lock.svg`.
 | B. Sharp, with today's flat 0.6 scrim (ADR-0016 Q4 as settled) | simplest; A2 already computed | the picture reads dim and grey |
 | C. Blurred, flat scrim (today's look with the user's wallpaper) | calm; hides busy pictures | blur cost per output; less continuity with the desktop |
 
-**IQ-B1. Where and in what colour the mark appears** (the mark itself is not changed). Mockup `b1-logo-use.svg`.
+**IQ-B1. The mark: where it appears, in what colour, and the rules of its use** (the mark itself is not changed; the
+rules are the owner's to set, review of b44d17e). Mockup `b1-logo-use.svg`.
+- Rules proposed with every option (the owner may change any of them): clear space of a quarter of the mark's height on
+  every side; 14 px smallest; never stretched, rotated, outlined, given a gradient or a shadow, or redrawn; only the
+  file's own path, at run time.
+
 | Option | For | Against |
 |---|---|---|
 | A. As today: monochrome everywhere, also as the default glyph of shell dialogs | no change | the mark stands for "a dialog" (restart, notices); no brand moment |
@@ -259,27 +275,22 @@ the identity is designed). Mockup `l1-lock.svg`.
 | B. A fixed lockup: the mark and "Grassfield" in Inter Display Semibold (mockup) | cheap and consistent | not distinctive (a common font); its rights status is the owner's to set; needs legal review (OFL font in a logo) |
 | C. A designer-made wordmark, with ADR-0014's planned icon redraw | distinctive, protectable | cost and time; after 1.0 |
 
-**IQ-B3. The default accent's name and the second green.** Mockup `b2-accent.svg`.
+**IQ-B3. The default accent's name and the second green** (asked with ADR-0039's Q4, already answered as D-Q4: the
+switches and slider fills move to the selection fill; IQ-B3 changes the palette, not which controls read it). Mockup
+`b2-accent.svg`.
 | Option | For | Against |
 |---|---|---|
-| **A. The default is named "Grassfield" (a green swatch); the pickable Green moves away from the brand green (recommended)** | the brand colour is named; no two near greens | departs from macOS's "Multicolour"; users who chose Green see it change |
+| **A. The default is named "Grassfield" (a green swatch); the pickable Green moves away from the brand green (recommended)** | the brand colour is named; no two near greens | departs from macOS's "Multicolour"; users who chose Green see it change; **the Settings tiles drawn in that Green change with it** (the sidebar's Battery and Motion, `Main.qml:27, 32`; rows of Accessibility, Menu Bar, Software Update and Storage) |
 | B. Keep "Multicolour" and both greens | macOS's model and name | "Multicolour" means one green here; two greens read alike |
-| C. Keep "Multicolour", drop the pickable Green | no near-duplicate | seven colours; users of Green move to the default |
-
-**IQ-B4. About This Computer.** Mockup `b3-about.svg`.
-| Option | For | Against |
-|---|---|---|
-| **A. Computer first (macOS 27): picture, model, hardware, then "Grassfield Desktop 1.0" with the mark, More Info… (recommended)** | matches Settings > About and macOS; the brand once, quietly | a small window instead of a sheet (shell/overlay work) |
-| B. Brand first: the mark large, "Grassfield Desktop", the version, then the computer | a strong brand moment | unlike macOS 27 and unlike Settings > About |
-| C. Today's sheet of rows | no work | no picture and no mark |
+| C. Keep "Multicolour", drop the pickable Green | no near-duplicate | seven colours; users of Green move to the default; the Settings tiles in Green need another colour |
 
 **IQ-B5. The icons of Grassfield's own apps** (the owner decided on 2026-10-23 that system apps take the pack's icons;
-this asks whether Grassfield's own apps are the exception). Mockup `b4-app-icons.svg`.
+recommendation changed by the review of b44d17e). Mockup `b4-app-icons.svg`.
 | Option | For | Against |
 |---|---|---|
-| A. As today: the pack for Files, Settings, Preview; own icons for Store and Activity Monitor | one look with the pack | the brand is absent from most of its own apps; inconsistent (Store own, the rest the pack) |
-| **B. Grassfield's own icons on one grammar for every Grassfield app; the `org.grassfield.*` aliases go (recommended)** | the apps carry the brand; less resemblance with Apple's icons for our own apps; the tile matches the pack's plate | our drawings sit beside the pack's richer ones until a designer redraw; partly reverses the 2026-10-23 decision |
-| C. Own icons only where the pack has no twin (Store, Activity Monitor, the Apps tile) | a compromise | two looks among Grassfield's own apps |
+| A. As today: the pack for Files, Settings and Preview, Store's own icon, Activity Monitor and the Apps tile from the pack | one look with the pack | Grassfield-only apps carry no brand; Store differs from the rest |
+| B. Grassfield's own icons on one grammar for every Grassfield app; the `org.grassfield.*` aliases go | the apps carry the brand; Grassfield's drawings instead of the macOS look-alike pack for its own apps | reverses the 2026-10-23 rule for three apps; our drawings sit beside the pack's richer ones until a designer redraw |
+| **C. Own icons, on one grammar, only where the pack has no system app of that role: Store, Activity Monitor, the Apps tile; the pack for Files, Settings, Preview (recommended)** | keeps the owner's rule of 2026-10-23; the brand appears on the apps only Grassfield has | two looks among Grassfield's own apps; the two new drawings need the owner's legal call (E39) |
 
 **IQ-L1. From power-on to the desktop.**
 | Option | For | Against |
@@ -288,25 +299,11 @@ this asks whether Grassfield's own apps are the exception). Mockup `b4-app-icons
 | B. A Grassfield SDDM theme in the lock screen's layout, for machines without autologin (own ADR, opus security review, SDDM's own PAM service) | a macOS-like login window | a non-goal today ("allowed later"); SDDM runs as its own user (no access to the user's wallpaper: the default artwork only); owner-only tests |
 | C. B and a Plymouth theme with the mark for boot and the disk password | identity from power-on | initramfs and boot configuration (root, owner-run, M6 territory); a broken theme can hide the disk prompt |
 
-**IQ-T1. Session start.**
-| Option | For | Against |
-|---|---|---|
-| **A. The wallpaper first, then menu bar, Dock and desktop icons together in one 250 ms fade once all are ready (at most 1.5 s) (recommended)** | one entrance; nothing corrects itself afterwards (macOS order, ASSUMPTION) | the bars come a few hundred ms later than today's instant map (P5 counts it) |
-| B. Everything at once without a fade, when ready | fastest feel | a hard cut from the ground to the full desktop |
-| C. A splash (the mark on the ground) until ready, then the reveal | identity at start | not macOS; one more surface; a splash that lingers when something is slow |
-
 **IQ-T2. Lock and unlock motion.** Mockups `l1-lock.svg`, `t1-transitions.svg`.
 | Option | For | Against |
 |---|---|---|
 | **A. Lock at once, then scrim and text fade in (200 ms); unlock: fade out while still locked (200 ms), then release (recommended)** | continuity; the release still follows PAM, any failure stays locked | unlock 200 ms longer; a new lock-machine state; security review |
 | B. No motion (today) | nothing to review | hard cuts both ways |
-
-**IQ-T3. Log out, restart, shut down.**
-| Option | For | Against |
-|---|---|---|
-| **A. macOS: the confirmation counts down 60 s and proceeds by itself; after the windows close, one fade to the ground then black (400 ms) (recommended)** | macOS behaviour; no layer vanishes one by one | proceeding alone can surprise (macOS does the same); new strings (en, fr) |
-| B. Today's confirmation, plus the fade | smaller change | not macOS |
-| C. No confirmation from the menu, the fade only | fastest | a misclick ends the session (the apps still get to ask) |
 
 **IQ-T4. When the displays turn off before the lock.**
 | Option | For | Against |
@@ -315,29 +312,39 @@ this asks whether Grassfield's own apps are the exception). Mockup `b4-app-icons
 | B. Today: lock after N minutes of inactivity; the displays light up to draw it | no change | a lit flash with the default settings on battery (off at 2 min, lock at 5) |
 | C. Keep the inactivity model, turn the displays off only once locked | no flash, no new setting | on battery by default the screen stays lit 5 min instead of 2; "Turn display off after" is no longer honoured |
 
+**IQ-T5. The compositor's red "lock screen died" screen during a shell restart** (was ID-9; it reverses a security
+choice, H10, so it is the owner's: review of b44d17e). Hyprland 0.56.2 has `misc:lockdead_screen_delay` (the
+integrator's check). The session stays locked by the compositor either way (`allow_session_lock_restore`); only what is
+drawn while the shell restarts changes.
+| Option | For | Against |
+|---|---|---|
+| **A. Delay it past a normal restart (the shell is back in about 1-2 s): the screen stays black meanwhile; a shell that does not come back still shows the red screen after the delay (recommended)** | no red flash on a crash-and-restart that recovers by itself | the user learns later that the lock died; the nested pass must show only black during the delay |
+| B. Keep it at once (H10 as decided) | the failure is visible at once | a red screen on every locked restart, even one that recovers within a second |
+
 **Not a design question (needs legal review).** STATE records that the owner did the "Grassfield" trademark check
 (2026-10-18); the legal dossier says no clearance search was made and the owner decided "no logo clearance"
 (2026-10-27) (B-5). Which record is right is the owner's to say; this ADR changes neither.
 
 ## Decisions taken under the owner's rule (2026-10-28: the closest to macOS 27, no technical step for the end user)
 - **ID-1** The artwork palettes become tokens (`artwork.*`, section 6) with source notes; the written exception in
-  `GrassfieldArtwork.qml:5-7` goes, so the "tokens only" rule has no exception left in the wallpaper.
+  `GrassfieldArtwork.qml:5-7` goes, so the "tokens only" rule has no exception left in the wallpaper. ADR-0039's step 2
+  allowlists those colours until then.
 - **ID-2** One ground colour (P-1). The session's Hyprland `background_color` is the default artwork's ground; the shell
   sets the current one at start and on change through the session's own compositor path (mechanism VERIFY on 0.56.2;
-  fallback: the static default). The wallpaper window's colour, the lock surface's colour and the exit cover use it.
+  fallback: the static default). The wallpaper window's colour (step 3) and the exit cover (step 7) use it; the lock
+  surface's colour is the security module's and comes with step 4a (review of b44d17e).
 - **ID-3** The wallpaper's first frame is the cached still of the last applied wallpaper, with its tone (section 2).
 - **ID-4** The wallpaper layer gets `no_anim` like the bars; every entrance animation belongs to the shell (one owner of
   motion), so the compositor never fades a layer in under the shell's own fade.
-- **ID-5** No surface is shown before the settings are read (`Settings.loaded`), bounded by `session.settingsWaitMs`.
-- **ID-6** Auto-hidden menu bar and Dock start hidden at session start (macOS, ASSUMPTION), instead of showing and
-  sliding away.
+- **ID-5** No surface is shown before the settings are read (`Settings.loaded`), bounded by `session.settingsWaitMs`;
+  the Dock already waits for them (8b5efac), the menu bar and the wallpaper follow.
+- **ID-6** The menu bar's auto-hide starts at rest at session start, as the Dock's has since 8b5efac (macOS, ASSUMPTION),
+  instead of showing and sliding away.
 - **ID-7** The lock prepares everything ahead (section 4): the still per output, the avatar, the full name, the surface
   colour, and the clock refresh on resume.
 - **ID-8** The idle dim and the screen saver stay until the lock holds; the lock's content starts at the dim's level.
   The lock request itself is not delayed; when it fails, the dim lifts and the failure is logged as today.
-- **ID-9** Hyprland's red "lock screen died" screen (kept on purpose, H10) is delayed past a normal shell restart with
-  `misc:lockdead_screen_delay` (VERIFY the option and its default on 0.56.2); the session stays locked by the compositor
-  meanwhile (`allow_session_lock_restore`), so only what is drawn changes.
+- **ID-9** Moved to the owner as IQ-T5 (review of b44d17e).
 - **ID-10** The exit cover: `grassfield-session-end` asks the shell for one full-screen fade to the ground then black
   (`session.exitFadeMs`) after the windows have closed, and waits at most `session.exitWaitMs`.
 - **ID-11** Settings > About's Grassfield tile uses the brand green, not the pickable Green (B-8).
@@ -346,28 +353,61 @@ this asks whether Grassfield's own apps are the exception). Mockup `b4-app-icons
   reserved, the owner's mark): done in this pull request (B-2).
 - **ID-14** An appearance switch crossfades between the artwork's variants (two-slot model, one fixed length); the tone
   switches at the midpoint; Reduce Motion cuts.
-- **ID-15** A hotplugged output's wallpaper and lock surfaces start at the ground and show its still.
+- **ID-15** A hotplugged output's wallpaper surface (step 3) and lock surface (step 4a, security review) start at the
+  ground and show its still.
 - **ID-16** The measurement of section 7 lands with step 3 and grows with each step.
 - **ID-17** The legal dossier's identity entries are brought up to date as each step lands (E12, E32, E33 now; E2,
   E26, E28 and section 4, stale in passing, at the next legal pass).
 - **ID-18** Artwork names avoid the names of macOS wallpapers ("Ridgeline", not "Horizon"; checked from memory only,
   ASSUMPTION: the side-by-side legal check before release covers names and pictures).
+- **ID-19** (was IQ-B4; review of b44d17e) About This Computer is computer first, as macOS 27's About This Mac: the
+  computer's picture and model name, then the hardware rows, then the product line with the mark and More Info…, which
+  opens Settings > General > About. macOS reason: About This Mac leads with the Mac, and the system's name and version
+  are one line under it. Options weighed: brand first (unlike macOS 27 and unlike Settings > About), today's sheet (no
+  picture, no mark). It becomes a small window; ADR-0039's steps 4 and 10 then no longer touch it.
+- **ID-20** (was IQ-T1) Session start: the wallpaper first, then menu bar, Dock and desktop icons together in one fade
+  (`session.revealMs`) once all are final, bounded by `session.revealTimeoutMs`. macOS reason: at login the desktop
+  picture is there first and the menu bar and Dock come in once (ASSUMPTION; no capture). Weighed: no fade (a hard cut
+  from the ground), a splash (not macOS).
+- **ID-21** (was IQ-T3) Log out, restart and shut down confirm with macOS's 60-second countdown that proceeds by itself
+  ("… automatically in 60 seconds", ASSUMPTION from memory), then the exit cover (ID-10). macOS reason: the same dialog
+  and countdown on a Mac. Weighed: today's confirmation with the fade only (not macOS), no confirmation (a misclick ends
+  the session).
 
-## Delivery plan (one pull request per step towards main)
+## Coordination with ADR-0039 (design polish)
+The owners are those of ADR-0039's own table ("Coordination with the identity lane"), unchanged. ADR-0039 merged first;
+this ADR follows it, and any later pull request of either lane that meets one of these rebases on the other.
+
+| Overlap | Owner | The other lane |
+|---|---|---|
+| The greens: ADR-0039 Q4 and its step 11 ↔ IQ-B3 | ADR-0040: the accent palette (`color.accent*`, the default's name and swatch) | ADR-0039: which controls read the accent and which the selection fill |
+| About: ADR-0039 steps 4 and 10 ↔ ID-19; IQ-B1's dialog glyphs | ADR-0040: About This Computer's form, the glyphs of `NoticeDialog` and `ConfirmDialog` | ADR-0039: `Dialog`'s and `Sheet`'s grammar (radius, buttons, blur radius) |
+| `looknfeel.lua`, `windows.lua`, `Compositor.qml`: ADR-0039 steps 6 and 20 ↔ ID-2, ID-4, IQ-T5 | ADR-0040: the ground colour, the first frame and the transitions | ADR-0039: the window border colour per appearance and the compositor's animation curves |
+| Motion tokens: ADR-0039 Q6 ↔ the session and lock fades | ADR-0039: `motion.*` | ADR-0040: `session.*` and `lock.*` fades, naming a `motion` role where one fits |
+| `shell/saver` | ADR-0040: the saver's transitions (ID-8) | ADR-0039 step 5: its slide crossfade under Reduce Motion |
+| Settings' Appearance and Wallpaper pages | ADR-0040: the wallpaper page and the accent row | ADR-0039: the shared controls and the glass preview (its step 15) |
+| `GrassfieldArtwork.qml`'s colours | ADR-0040 (ID-1) | ADR-0039 step 2 drops them from its allowlist when ID-1 lands |
+| The Dock's and menu bar's auto-hide: ADR-0039 step 25 ↔ step 6 here | ADR-0040: the reveal at login | ADR-0039: Reduce Motion and the easing of auto-hide |
+| `tests/visual/test_contrast_tokens.py`, `contrast-roles.json` | ADR-0039: the role table's repair (its step 0b) | ADR-0040: the roles of its own surfaces (the lock's scrim bands) |
+
+## Delivery plan (one pull request per step towards main; split by the review of b44d17e)
 | Step | Content | Blocked by | Review |
 |---|---|---|---|
 | 0 | This ADR, the audit, the mockups, E39, STATE | — | integrator |
-| 1 | Brand without blocked areas: About This Computer (IQ-B4), Settings > About tile (ID-11), the accent's name and the second green (IQ-B3), dialogs' symbols (IQ-B1) | the owner's answers; coordinate the accent with the Appearance.qml branch | reviewer |
-| 2a | Artworks: one component, `artwork.*` tokens, Settings > Wallpaper "Grassfield" section and its Automatic/Light/Dark choice, Settings > Appearance thumbnail, A2 runs (IQ-W1, IQ-W2) | the owner's answers | reviewer; F1 shots |
-| 2b | The desktop follows the appearance (ID-14) | `shell/desktop` merged | reviewer |
-| 3 | First frame from the cache, ground colour, wallpaper `no_anim`, hotplug, the measurement (ID-2 to ID-4, ID-15, ID-16) | `shell/desktop` merged | reviewer |
-| 4 | Lock: still (ADR-0016 W8), preload, scrim (IQ-W4), fades and `releasing` (IQ-T2), avatar and name once, clock on resume (ID-7) | steps 3; `shell/desktop` merged (LockView imports `qs.desktop`) | **opus security review**, L1 to L5 |
-| 5 | Idle, saver and display-off order (ID-8, IQ-T4), the red-screen delay (ID-9) | step 4 | **opus security review** |
-| 6 | Session entrance: the ready latch, menu bar, Dock and icons together (IQ-T1), auto-hide start (ID-6), settings first (ID-5), P5 with the wallpaper | `shell/menubar`, `shell/dock`, `shell/desktop`, Appearance.qml merged | reviewer; P5 owner logins |
-| 7 | Exit: countdown (IQ-T3), the exit cover (ID-10) | — | reviewer |
-| 8 | App icons (IQ-B5): the family in `branding/icons/apps`, the aliases | `apps/files`, `apps/store`, `apps/activity` merged | reviewer; legal row |
-| 9 | Moving variant (IQ-W3) | P1 and P3 measured | reviewer |
-| later | IQ-L1 B or C (own ADR), a designer wordmark (IQ-B2 C) | owner | security review for B |
+| 1a | `DevicePicture` moves from the Settings app into `Grassfield.Ui` (so the shell can draw it), the Settings pages unchanged | — | reviewer; `ui_api.py` and `docs/specs/ui-api.md` |
+| 1b | About This Computer as a small window, computer first (ID-19) | step 1a | reviewer |
+| 1c | The accent's name and the second green (IQ-B3) with the Settings tiles, the About tile (ID-11) | the owner's answer; with ADR-0039 step 11 | reviewer; A2 |
+| 1d | The mark's places and the dialogs' symbols (IQ-B1) | the owner's answer | reviewer |
+| 2 | Artworks: one component, `artwork.*` tokens, the Settings > Wallpaper "Grassfield" section and its Automatic/Light/Dark choice, the Settings > Appearance thumbnail, A2 runs, the desktop following the appearance (ID-1, ID-14; IQ-W1, IQ-W2). The lock keeps drawing today's artwork, through a fixed variant, until step 4a (its drawing changes only under the security review) | `shell/desktop` merged (today `WallpaperArt.qml` passes no parameter, so the desktop cannot show the choice before) | reviewer; F1 shots |
+| 3 | The wallpaper's first frame from the cache, the ground on Hyprland and the wallpaper window, wallpaper `no_anim`, a hotplugged output's wallpaper, the measurement (ID-2 to ID-4, ID-15's wallpaper part, ID-16). Nothing in `shell/security` | `shell/desktop` merged | reviewer |
+| 4a | Lock, the still and the data: the user's wallpaper (ADR-0016 W8), the preloaded still, the scrim (IQ-W4), the surface colour on the ground and on a hotplugged output (ID-2, ID-15), avatar and name once, the clock on resume (ID-7) | step 3; `shell/desktop` merged (LockView imports `qs.desktop`) | **opus security review**, L1 to L5 |
+| 4b | Lock, the motion: the fades and the `releasing` state (IQ-T2) | step 4a | **opus security review**, L1 to L5 |
+| 5 | Idle, saver and display-off order (ID-8, IQ-T4); the red-screen delay if the owner agrees (IQ-T5) | step 4b | **opus security review** |
+| 6 | Session entrance: the ready latch, menu bar, Dock and icons together (ID-20), the menu bar's auto-hide at rest (ID-6), settings first (ID-5), P5 with the wallpaper | `shell/menubar`, `shell/dock`, `shell/desktop`, Appearance.qml merged | reviewer; P5 owner logins |
+| 7 | Exit: the countdown (ID-21), the exit cover (ID-10) | — | reviewer |
+| 8 | App icons (IQ-B5): the family in `branding/icons/apps`, the aliases if B | `apps/store`, `apps/activity` merged (and `apps/files` under B) | reviewer; legal row |
+| after 1.0 | The moving variant (IQ-W3 A), once P1 and P3 are measured | the owner | reviewer |
+| later | IQ-L1 B or C (own ADR), a designer wordmark (IQ-B2 C) | the owner | security review for B |
 
 ## Not verified, assumptions, unknowns
 - **NOT VERIFIED:** every proposal's rendering in Grassfield (no nested session in this container); the mockups were
@@ -377,36 +417,65 @@ this asks whether Grassfield's own apps are the exception). Mockup `b4-app-icons
   then the menu bar and Dock; auto-hidden bars start hidden; the restart, shut down and log out confirmations count
   down 60 s; Settings offers "Automatic / Light / Dark" for dynamic wallpapers; the lock fades in and out. The owner's
   references have no capture of any of these (`docs/testing/f1-reference-gaps.md:317-321`).
-- **VERIFY on Hyprland 0.56.2:** `misc:lockdead_screen_delay` (ID-9); changing `background_color` at run time (ID-2);
-  whether a session lock is confirmed while the displays are off (IQ-T4 A with a delay).
+- **VERIFY on Hyprland 0.56.2:** changing `background_color` at run time (ID-2); whether a session lock is confirmed
+  while the displays are off (IQ-T4 A with a delay). `misc:lockdead_screen_delay` exists (the integrator's check, review
+  of b44d17e); what it draws during the delay is checked in the nested pass if the owner chooses IQ-T5 A.
 - **UNKNOWN:** the look of Omarchy's boot and disk-password screens on the owner's machine (not readable here).
 
 ## Alternatives rejected
-- A cover window that hides the desktop until everything is ready: a splash under another name (IQ-T1 C), not macOS.
+- A cover window that hides the desktop until everything is ready: a splash under another name, not macOS (ID-20).
 - A blurred snapshot of the desktop on the lock: window content on the lock breaks gate L4.
 - Fading the desktop out before engaging the lock: delays the lock (P-5).
 - Shipping photographs that resemble Apple's wallpapers, or any Apple asset: §14.
 - Recolouring the mark in its file or drawing variants of it: the mark is the owner's; colour is applied at run time
   only, as IQ-B1 decides.
 - A new "brand" colour token beside the default accent: the default accent tokens already are the brand green (R5).
+- The first drawings of Activity Monitor (a dark tile with a green line graph) and of the Apps tile (a three-by-three
+  grid of coloured squares): too close to macOS's own icons for those apps (review of b44d17e); redrawn as a gauge and
+  as fanned cards.
 
 ## Legal
 - New entry E39 in `docs/legal/visual-review.md`: the mockups (made here, CC-BY-SA-4.0; the existing app icons embedded
   from `branding/icons/apps`, CC-BY-SA-4.0; the mark embedded unchanged, all rights reserved). E12, E32 and E33 carry an
   "Update 2026-10-29" pointing here.
 - The proposed artworks inherit E32's flag (`distinct`, side-by-side check before release); names included (ID-18).
-- The lock and About layouts stay `close` (E2, E12); the app-icon family lowers resemblance for Grassfield's own apps
-  (IQ-B5 B); a lockup in Inter (IQ-B2 B) and the trademark records (B-5) need legal review.
+- The lock and About layouts stay `close` (E2, E12). The proposed Activity Monitor and Apps tile drawings are flagged
+  for the owner's legal call: they were redrawn away from macOS's icons for those apps, and no claim is made that they
+  are far enough. A lockup in Inter (IQ-B2 B) and the trademark records (B-5) need legal review.
 
 ## Evidence
 - The audit's spot checks 1 to 13 (`docs/audits/identity-2026-10-29/audit.md`, section 5), each with its command and
-  exit status, on main 11c9e69.
+  exit status, on main 11c9e69, and the re-check on main e03c859 (its section "After main e03c859").
 - `python3 -I docs/audits/identity-2026-10-29/mockups.py` → exit 0, eight SVG files; `xmllint --noout` on them → exit 0;
-  each rendered with Playwright Chromium in the container (scratch PNGs, not committed) and inspected.
+  `git diff --check origin/main...HEAD` → exit 0; each SVG rendered with Playwright Chromium in the container (scratch
+  PNGs, not committed) and inspected.
+
+## Review history
+- **Opus review of b44d17e (integrator, 2026-10-29): FAIL, two MAJORs, five MINORs.** 18 claims checked, all exact.
+  - MAJOR 1, step 3 changed the lock surface under a normal review (ID-2, ID-15): the lock surface's colour and a
+    hotplugged output's lock surface move to step 4a, under the opus security review; step 3 touches nothing in
+    `shell/security`.
+  - MAJOR 2, the proposed Activity Monitor and Apps tile icons looked like macOS's: both redrawn (a gauge on a light
+    tile; three fanned cards), the "less resemblance" claim removed, E39 flags them for the owner's legal call.
+  - MINOR 3, trailing spaces in `b4-app-icons.svg`: `mockups.py` now strips the embedded icons' whitespace and every
+    line it writes; `git diff --check` exits 0.
+  - MINOR 4, step 2a could not show the artwork choice before `shell/desktop` merges, and the lock draws the artwork:
+    step 2 now waits for that merge and keeps the lock's drawing unchanged until step 4a.
+  - MINOR 5, IQ-B3 omitted the Settings tiles in the pickable Green: named in section 3 and in the question.
+  - MINOR 6, ID-9 reversed H10: now the owner question IQ-T5.
+  - MINOR 7, steps 1 and 4 too big: step 1 split into 1a (`DevicePicture` into `Grassfield.Ui`) to 1d, step 4 into 4a
+    (the still and the data) and 4b (the fades and `releasing`).
+  - Questions: IQ-W3 now recommends B for 1.0; IQ-B1 carries the mark's rules; IQ-B3 names the tiles and goes with
+    ADR-0039's Q4 (answered as D-Q4); IQ-B5 now recommends C, the closest to the owner's rule of 2026-10-23; IQ-B4,
+    IQ-T1 and IQ-T3 are decided under the macOS model (ID-19 to ID-21); IQ-T5 added.
+  - Overlaps with ADR-0039: the section "Coordination with ADR-0039", one owner per overlap, as ADR-0039 lists them.
+  - Main e03c859 merged in: the startup-settle fix (8b5efac) already makes the Dock and the desktop icons appear once;
+    the audit records it, and ID-5 and ID-6 now cover the menu bar and the wallpaper only.
 
 ## Consequences
-- Answers to IQ-W1 to IQ-T4 decide steps 1 to 9; until then nothing is built.
-- ADR-0016 is extended, not replaced: its §6 (the lock still) is step 4 here; its §10 P5 promise is kept by ID-3.
-- ADR-0014 and ADR-0017: IQ-B5 B removes the aliases for `org.grassfield.*` only; the pack stays for every other app.
-- ADR-0020 gains rows for the new keys and the wallpaper state when steps 2a, 3 and 5 write them.
-- Security: steps 4 and 5 are security-module changes (R12), each with an opus security review.
+- The owner's answers to the twelve open questions decide steps 1c to 8; steps 1a and 1b can start now.
+- ADR-0016 is extended, not replaced: its §6 (the lock still) is step 4a here; its §10 P5 promise is kept by ID-3.
+- ADR-0014 and ADR-0017: under IQ-B5 C the pack keeps Files, Settings and Preview; own icons for Store, Activity
+  Monitor and the Apps tile; under B the aliases for `org.grassfield.*` go.
+- ADR-0020 gains rows for the new keys and the wallpaper state when steps 2, 3 and 5 write them.
+- Security: steps 4a, 4b and 5 are security-module changes (R12), each with an opus security review.
