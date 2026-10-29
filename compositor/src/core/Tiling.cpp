@@ -1340,6 +1340,23 @@ namespace gf::tiling {
         return it == splits.end() ? nullptr : &*it;
     }
 
+    const SplitDesk* splitOfWindow(std::span<const SplitDesk> splits, uint64_t id) {
+        const auto it = std::ranges::find_if(splits, [id](const SplitDesk& d) { return std::ranges::find(d.members, id) != d.members.end(); });
+        return it == splits.end() ? nullptr : &*it;
+    }
+
+    bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
+        return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
+    }
+
+    SplitStep splitStep(size_t members, bool picking) {
+        if (members == 0)
+            return SplitStep::End;
+        if (members == 1 && !picking)
+            return SplitStep::Fill;
+        return SplitStep::Keep;
+    }
+
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
@@ -1373,7 +1390,10 @@ namespace gf::tiling {
         for (size_t i = 0; i < splits.size(); ++i) {
             out += std::format(R"({}{{"workspace":{},"output":")", i == 0 ? "" : ",", splits[i].workspace);
             out += gf::gfc::jsonEscape(splits[i].output);
-            out += std::format(R"(","home":{}}})", splits[i].home);
+            out += std::format(R"(","home":{},"windows":[)", splits[i].home);
+            for (size_t j = 0; j < splits[i].members.size(); ++j)
+                out += std::format(R"({}"{:x}")", j == 0 ? "" : ",", splits[i].members[j]);
+            out += std::format(R"(],"waiting":{}}})", splits[i].waiting);
         }
         out += "]";
         if (!suggestion) {

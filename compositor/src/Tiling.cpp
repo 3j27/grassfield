@@ -46,6 +46,8 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -152,6 +154,7 @@ namespace gf::tiler {
             SP<CEventLoopTimer>               edgeTimer;       // the frames that waited for the next refresh (code of this library: removed in stop())
             SEdgeScene                        edgeHoverScene;  // the edges hover looks up, kept while what they derive from holds
             std::vector<tiling::SplitDesk>    splits;          // TL33: the Split View Desktops the plugin made
+            std::unordered_map<uint64_t, tiling::TileRecord> splitHomes; // TL33: a member's tile on its home Desktop before its split
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -365,7 +368,7 @@ namespace gf::tiler {
         // Split View Desktop (TL33, D42: `workspace`, else the one `m` shows) the whole output with its separator.
         tiling::Area areaFor(const PHLMONITOR& m, std::optional<int64_t> workspace = std::nullopt) {
             const int64_t shown = workspace ? *workspace : (m->m_activeWorkspace ? m->m_activeWorkspace->m_id : 0);
-            if (const auto* split = tiling::splitOf(st().splits, shown); split && split->output == m->m_name) {
+            if (tiling::splitOf(st().splits, shown)) { // on whichever output it is now (an output unplugged moves it)
                 const CBox whole = m->logicalBox();
                 return tiling::splitArea(toRect(whole), tiling::Grid{.originX = whole.x, .originY = whole.y, .step = tiling::gridStep(m->m_scale)});
             }
@@ -447,11 +450,17 @@ namespace gf::tiler {
             return fitted({layout->zones[static_cast<size_t>(where.zone)]}, {w}, area).front();
         }
 
-        // Posts the `tiling` notice when the records changed since the latest one; refusals and the unload always post.
-        void notify(tiling::Reason reason) {
+        void scheduleAfter();
+
+        // Posts the `tiling` notice when the records changed since the latest one; refusals, the unload and `force` (the Split
+        // View Desktops changed, TL33) always post. A Split View Desktop waiting for its second window is checked again after
+        // a change: the suggestion of its picker is over once the records changed (splitCheck).
+        void notify(tiling::Reason reason, bool force = false) {
             auto&      s      = st();
             const auto gen    = s.book.generation();
-            const bool always = reason == tiling::Reason::Invalid || reason == tiling::Reason::Locked || reason == tiling::Reason::Unavailable;
+            const bool always = force || reason == tiling::Reason::Invalid || reason == tiling::Reason::Locked || reason == tiling::Reason::Unavailable;
+            if (std::ranges::any_of(s.splits, &tiling::SplitDesk::waiting) && gen != s.posted)
+                scheduleAfter();
             if (!always && gen == s.posted)
                 return;
             s.posted = gen;
@@ -824,6 +833,11 @@ namespace gf::tiler {
                     dragDone();
                 return;
             }
+            if (tiling::splitOfWindow(s.splits, idOf(w))) {
+                if (s.drag.hyprland)
+                    dragDone(); // TL33: a Split View window shows no place; its release puts it back in its half (finishMove)
+                return;
+            }
             const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
             if (const auto r = s.book.find(idOf(w)); r && r->state == tiling::TileState::Tiled) {
                 const Vector2D grip = s.press.value_or(pointer);
@@ -853,6 +867,13 @@ namespace gf::tiler {
             }
             if (rel.snap && gf::deferredFocus::sessionLocked()) {
                 endMove(w); // nothing tiles behind the lock screen (TL34, behind Hyprland's own refusal of drags then)
+                return;
+            }
+            if (const auto* d = tiling::splitOfWindow(s.splits, idOf(w))) {
+                // TL33, D46: a Split View window does not leave its half by one of Hyprland's moves (Super+drag): back in it at
+                // the release, unless the move took it to another output's Desktop (it left the Split View: splitCheck).
+                if (const auto r = s.book.find(idOf(w)); r && w->m_workspace && w->m_workspace->m_id == d->workspace)
+                    applySurface(w, toCBox(r->box));
                 return;
             }
             if (rel.snap) {
@@ -888,8 +909,9 @@ namespace gf::tiler {
         void extendSides(const SExtend& e) {
             auto&      s = st();
             const auto w = e.window.lock();
-            if (!w || e.sides == 0 || !placeable(w) || !g_layoutManager || hyprlandDragging() || gf::deferredFocus::sessionLocked())
-                return; // locked: nothing tiles behind the lock screen (TL34)
+            if (!w || e.sides == 0 || !placeable(w) || !g_layoutManager || hyprlandDragging() || gf::deferredFocus::sessionLocked() ||
+                tiling::splitOfWindow(s.splits, idOf(w)))
+                return; // locked: nothing tiles behind the lock screen (TL34); a Split View window keeps its half (TL33)
             const auto m = monitorOf(w);
             if (!m || showsSpecial(m))
                 return;
@@ -923,13 +945,29 @@ namespace gf::tiler {
             }
         }
 
+        // The output a Split View Desktop is on now (Hyprland moves its workspace when its output goes away), else the one it
+        // was made on.
+        PHLMONITOR splitMonitor(const tiling::SplitDesk& d) {
+            const auto ws = State::workspaceState() ? State::workspaceState()->query().id(d.workspace).run() : nullptr;
+            if (ws && ws->m_monitor)
+                return ws->m_monitor.lock();
+            return monitorByName(d.output);
+        }
+
+        // The suggestion of the Split View that window `id` started is still pending (published, nothing changed since): its
+        // picker may still give it its second window.
+        bool picking(uint64_t id) {
+            const auto& s = st();
+            return s.suggestion && s.suggestion->asker == id && s.suggestion->generation == s.book.generation();
+        }
+
         // D43: the one window left on the Split View Desktop `d` takes all of it, unless it already does.
         void splitFill(const PHLWINDOW& w, const tiling::SplitDesk& d) {
             auto&      s = st();
-            const auto m = monitorByName(d.output);
+            const auto m = splitMonitor(d);
             const auto r = s.book.find(idOf(w));
-            if (!m || !tiling::movable(factsOf(w)) || (r && r->where.place == tiling::Place::Fill && r->workspace == d.workspace))
-                return;
+            if (!m || !tiling::movable(factsOf(w)) || fullscreenNow(w) || (r && r->where.place == tiling::Place::Fill && r->workspace == d.workspace))
+                return; // full screen or zoomed: its record is Suspended, and comes back filling (TL12)
             const auto target  = w->layoutTarget();
             const CBox current = target->position();
             const auto band    = gf::chrome::bandOf(w);
@@ -941,34 +979,61 @@ namespace gf::tiler {
             notify(tiling::Reason::Placed);
         }
 
-        // TL33, D43: a Split View Desktop keeps its two windows; one left fills it alone (not while its second window is
-        // being chosen); none left ends it, and its output goes back to the home Desktop when it showed it.
+        // TL33, D43, D50, D52: a Split View Desktop keeps its two members, whatever their state (an app's own full screen, a
+        // zoom: still members); a member closed, minimized or moved to another Desktop leaves it; one left fills it alone (not
+        // while its second window is being chosen, nor once that choice is over without one: then it fills too); none left
+        // ends it, and its output goes back to the home Desktop when it showed it (not while the session is locked: at the
+        // unlock). Another window on that workspace is no member and changes nothing. Posts the notice when a Desktop ended or
+        // its members changed, also without a tile record changing (the shell reads `splits`).
         void splitCheck() {
             auto& s = st();
             if (s.splits.empty() || !Desktop::windowState() || !State::workspaceState())
                 return;
+            bool                           changed = false;
             std::vector<tiling::SplitDesk> ended;
             for (auto& d : s.splits) {
-                const auto             ws = State::workspaceState()->query().id(d.workspace).run();
-                std::vector<PHLWINDOW> on;
+                const auto            ws = State::workspaceState()->query().id(d.workspace).run();
+                std::vector<uint64_t> on;
                 if (ws) {
                     for (const auto& w : Desktop::windowState()->windows()) {
-                        if (w && w->m_isMapped && !w->isHidden() && w->m_workspace == ws && tileableKind(w))
-                            on.push_back(w);
+                        if (w && w->m_isMapped && w->m_workspace == ws)
+                            on.push_back(idOf(w));
                     }
                 }
-                if (on.size() >= 2)
-                    d.waiting = false;
-                else if (on.size() == 1 && !d.waiting)
-                    splitFill(on.front(), d);
-                else if (on.empty())
-                    ended.push_back(d);
+                changed |= tiling::pruneMembers(d, on);
+                if (ws && ws->m_monitor && ws->m_monitor->m_name != d.output) {
+                    d.output = ws->m_monitor->m_name; // an output unplugged: Hyprland moved the Desktop (MINOR 9 of #48)
+                    changed  = true;
+                }
+                const bool wasWaiting = d.waiting;
+                if (d.members.size() != 1 || !picking(d.members.front()))
+                    d.waiting = false; // two members, or the picker's suggestion is over (dismissed, superseded): no more waiting
+                changed |= wasWaiting != d.waiting;
+                switch (tiling::splitStep(d.members.size(), d.waiting)) {
+                    case tiling::SplitStep::Keep: break;
+                    case tiling::SplitStep::Fill:
+                        if (const auto w = windowById(d.members.front()))
+                            splitFill(w, d);
+                        break;
+                    case tiling::SplitStep::End:
+                        if (!gf::deferredFocus::sessionLocked())
+                            ended.push_back(d);
+                        break;
+                }
             }
             for (const auto& d : ended) {
                 std::erase(s.splits, d);
-                logRequest(Log::DEBUG, "split: Desktop {} has no window left: it ends", d.workspace);
-                const auto m = monitorByName(d.output);
+                changed = true;
+                logRequest(Log::DEBUG, "split: Desktop {} has no window of its own left: it ends", d.workspace);
+                const auto m = splitMonitor(d);
                 if (!m || !m->m_activeWorkspace || m->m_activeWorkspace->m_id != d.workspace)
+                    continue;
+                bool empty = true; // another window there keeps the Desktop shown, an ordinary one now (D52)
+                for (const auto& w : Desktop::windowState()->windows()) {
+                    if (w && w->m_isMapped && w->m_workspace && w->m_workspace->m_id == d.workspace)
+                        empty = false;
+                }
+                if (!empty)
                     continue;
                 auto home = State::workspaceState()->query().id(d.home).run();
                 if (!home)
@@ -978,8 +1043,9 @@ namespace gf::tiler {
                 if (const auto result = Config::Actions::changeWorkspace(home); !result)
                     logRequest(Log::WARN, "split: going back to Desktop {} failed: {}", d.home, result.error().message);
             }
-            if (!ended.empty())
-                notify(tiling::Reason::Forgotten);
+            std::erase_if(s.splitHomes, [&s](const auto& kv) { return !tiling::splitOfWindow(s.splits, kv.first); });
+            if (changed)
+                notify(tiling::Reason::Forgotten, true);
         }
 
         void afterEvents() {
@@ -1409,6 +1475,8 @@ namespace gf::tiler {
         s.edgeReleaseOwed = false;
         s.edgeCursor      = false;
         s.edgeHoverScene  = {};
+        s.splits.clear(); // TL33: a Split View Desktop of a previous load is an ordinary Desktop now
+        s.splitHomes.clear();
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
             return false;
         auto& ev = bus->m_events;
@@ -1418,8 +1486,16 @@ namespace gf::tiler {
         l.push_back(ev.window.moveToWorkspace.listen(
             [](const PHLWINDOW& w, const PHLWORKSPACE& ws) { gf::guarded("tiling window.moveToWorkspace", [&] { onMoveToWorkspace(w, ws); }); }));
         l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& m) { gf::guarded("tiling monitor.removed", [&] { onMonitorRemoved(m); }); }));
-        if (g_pSessionLockManager)
+        if (g_pSessionLockManager) {
             l.push_back(g_pSessionLockManager->m_events.lock.listen([] { gf::guarded("tiling session lock", [] { edgeLocked(); }); }));
+            // TL33: a Split View Desktop emptied while locked ends at the unlock (no Desktop switch behind the lock screen).
+            l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
+                gf::guarded("tiling session unlock", [] {
+                    if (!st().splits.empty())
+                        scheduleAfter();
+                });
+            }));
+        }
         s.ready = true;
         return true;
     }
@@ -1547,7 +1623,8 @@ namespace gf::tiler {
         const auto target  = w->layoutTarget();
         const CBox current = target->position();
         const auto band    = gf::chrome::bandOf(w);
-        const CBox surface = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m), m->m_name, w->m_workspace->m_id), band));
+        const auto onDesktop = monitorOf(w) == m ? std::optional<int64_t>{w->m_workspace->m_id} : std::nullopt; // its own Desktop's area, shown or not
+        const CBox surface   = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m, onDesktop), m->m_name, w->m_workspace->m_id), band));
         g_layoutManager->setTargetGeom(surface, target);
         followOutput(w); // tiled on another output (a drag's release there, tile() after a drag over): that output's Desktop
         const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
@@ -1704,7 +1781,7 @@ namespace gf::tiler {
         }
         if (placeName == "previous") {
             auto&      s      = st();
-            const auto r      = placeable(window) && g_layoutManager ? s.book.find(address) : nullptr;
+            const auto r      = placeable(window) && g_layoutManager && !tiling::splitOfWindow(s.splits, address) ? s.book.find(address) : nullptr;
             const auto before = r ? s.book.takeBefore(address) : std::nullopt;
             if (!before) {
                 logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", address);
@@ -1717,6 +1794,13 @@ namespace gf::tiler {
         const auto place = tiling::parsePlace(placeName);
         if (!place) {
             logRequest(Log::WARN, "tile: rejected: unknown place");
+            return;
+        }
+        // TL33: a Split View window is placed by its Desktop (a tiling key would take it out of its half); only the Fill of
+        // the one left alone, which the shell sends when its picker ended without a second window (D43).
+        if (const auto* d = tiling::splitOfWindow(st().splits, address); d && !(*place == tiling::Place::Fill && d->members.size() == 1)) {
+            logRequest(Log::WARN, "tile {:x}: rejected: a window of a Split View Desktop", address);
+            notify(tiling::Reason::Invalid);
             return;
         }
         if (!tile(window, *place))
@@ -1805,12 +1889,28 @@ namespace gf::tiler {
             return;
         }
         const int64_t home    = w->m_workspace->m_id;
+        const auto    homeWs  = w->m_workspace;
         const auto    target  = w->layoutTarget();
         const CBox    current = target->position();
-        s.splits.push_back(tiling::SplitDesk{.workspace = id, .output = m->m_name, .home = home, .waiting = true});
+        // Its tile on that Desktop, if any, comes back with Exit Full Screen (macOS restores the window's frame; #48 MINOR 8).
+        // Kept before the move, which gives the record the new Desktop.
+        if (const auto* before = s.book.find(idOf(w)); before && before->state == tiling::TileState::Tiled)
+            s.splitHomes[idOf(w)] = *before;
+        s.splits.push_back(tiling::SplitDesk{.workspace = id, .output = m->m_name, .home = home, .members = {idOf(w)}, .waiting = true});
         const auto moved = Config::Actions::moveToWorkspace(desk, false, w); // the output shows the new Desktop
         if (!moved || w->m_workspace != desk || m->m_activeWorkspace != desk) {
             std::erase_if(s.splits, [id](const tiling::SplitDesk& d) { return d.workspace == id; });
+            s.splitHomes.erase(idOf(w));
+            // A refusal changes nothing (ADR-0007): back on its Desktop, which its output shows (#48 review, MINOR 9).
+            if (w->m_workspace == desk) {
+                if (const auto back = Config::Actions::moveToWorkspace(homeWs, true, w); !back)
+                    logRequest(Log::WARN, "split: back to Desktop {} failed: {}", home, back.error().message);
+                applySurface(w, current);
+            }
+            if (m->m_activeWorkspace != homeWs) {
+                if (const auto shown = Config::Actions::changeWorkspace(homeWs); !shown)
+                    logRequest(Log::WARN, "split: showing Desktop {} again failed: {}", home, shown.error().message);
+            }
             refuse(moved ? std::string{"the window did not reach the new Desktop"} : std::format("the move failed: {}", moved.error().message));
             return;
         }
@@ -1834,56 +1934,79 @@ namespace gf::tiler {
         notify(tiling::Reason::Placed);
     }
 
+    namespace {
+        // D44: `w`, a member of `desk`, back on its home Desktop, shown: in its tile there from before the split when that
+        // zone is still free (MINOR 8 of #48), else at its box from before tiling; the other member fills the Split View
+        // Desktop alone, and one left without a member ends. An empty string, or why not.
+        std::string unsplitWindow(const PHLWINDOW& w) {
+            auto&      s     = st();
+            const auto split = tiling::splitOfWindow(s.splits, idOf(w));
+            if (!split || !g_layoutManager || !State::workspaceState())
+                return "the window is no member of a Split View Desktop";
+            if (!tiling::movable(factsOf(w)))
+                return "the window closed or unmapped (gate C1)";
+            const tiling::SplitDesk desk = *split;
+            const auto              m    = splitMonitor(desk) ? splitMonitor(desk) : monitorOf(w);
+            auto                    home = State::workspaceState()->query().id(desk.home).run();
+            if (!home && m)
+                home = State::workspaceState()->create(desk.home, m->m_id); // Hyprland ended it when it emptied
+            if (!home || home->m_isSpecialWorkspace)
+                return "its Desktop could not be made again";
+            catchUp();
+            const auto*        r      = s.book.find(idOf(w));
+            const tiling::Rect before = r ? r->before : toRect(w->layoutTarget()->position());
+            std::optional<tiling::TileRecord> homeTile;
+            if (const auto it = s.splitHomes.find(idOf(w)); it != s.splitHomes.end()) {
+                const auto& t = it->second;
+                if (s.book.zoneFree(tiling::frameOf(t.box, t.band), t.output, desk.home, idOf(w)))
+                    homeTile = t;
+            }
+            if (const auto moved = Config::Actions::moveToWorkspace(home, false, w); !moved || w->m_workspace != home)
+                return moved ? std::string{"the window did not reach its Desktop"} : std::format("the move failed: {}", moved.error().message);
+            if (s.book.find(idOf(w)))
+                s.book.forget(idOf(w));
+            s.splitHomes.erase(idOf(w));
+            if (homeTile) {
+                applySurface(w, toCBox(homeTile->box));
+                // Its group again when another window still holds it (the shared edge, Show Tile Group); else none.
+                const bool groupLives = homeTile->group != 0 && std::ranges::any_of(s.book.records(), [&](const tiling::TileRecord& o) { return o.group == homeTile->group; });
+                s.book.placed(idOf(w), homeTile->before, homeTile->box, homeTile->band, homeTile->where, homeTile->output, desk.home, groupLives ? homeTile->group : 0);
+            } else
+                applySurface(w, beforeBox(w, before));
+            if (const auto d = std::ranges::find(s.splits, desk.workspace, &tiling::SplitDesk::workspace); d != s.splits.end())
+                std::erase(d->members, idOf(w));
+            logRequest(Log::DEBUG, "unsplit {:x}: back on Desktop {}{}", idOf(w), desk.home, homeTile ? ", in its tile" : "");
+            settleSplit(desk.workspace);
+            splitCheck();
+            notify(homeTile ? tiling::Reason::Placed : tiling::Reason::Forgotten, true);
+            return {};
+        }
+    } // namespace
+
     void unsplitRequest(std::string_view addressText) {
-        auto& s = st();
         if (gf::deferredFocus::sessionLocked()) {
             logRequest(Log::INFO, "unsplit: refused: the session is locked");
             notify(tiling::Reason::Locked);
             return;
         }
-        const auto refuse = [](std::string_view why) {
-            logRequest(Log::WARN, "unsplit: rejected: {}", why);
-            notify(tiling::Reason::Invalid);
-        };
         const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
         const auto     w       = address != 0 ? windowById(address) : nullptr;
-        const auto*    split   = w && w->m_workspace ? tiling::splitOf(s.splits, w->m_workspace->m_id) : nullptr;
-        if (!split || !g_layoutManager || !State::workspaceState()) {
-            refuse("the window is on no Split View Desktop");
-            return;
+        if (const auto why = w ? unsplitWindow(w) : std::string{"no such window"}; !why.empty()) {
+            logRequest(Log::WARN, "unsplit: rejected: {}", why);
+            notify(tiling::Reason::Invalid);
         }
-        if (!tiling::movable(factsOf(w))) {
-            refuse("the window closed or unmapped (gate C1)");
-            return;
-        }
-        const tiling::SplitDesk desk = *split;
-        const auto              m    = monitorByName(desk.output) ? monitorByName(desk.output) : monitorOf(w);
-        auto                    home = State::workspaceState()->query().id(desk.home).run();
-        if (!home && m)
-            home = State::workspaceState()->create(desk.home, m->m_id); // Hyprland ended it when it emptied
-        if (!home || home->m_isSpecialWorkspace) {
-            refuse("its Desktop could not be made again");
-            return;
-        }
-        catchUp();
-        // D44: back to its Desktop at its box from before, shown; the other window stays, filling the Split View Desktop.
-        const auto*        r      = s.book.find(idOf(w));
-        const tiling::Rect before = r ? r->before : toRect(w->layoutTarget()->position());
-        if (const auto moved = Config::Actions::moveToWorkspace(home, false, w); !moved || w->m_workspace != home) {
-            refuse(moved ? std::string{"the window did not reach its Desktop"} : std::format("the move failed: {}", moved.error().message));
-            return;
-        }
-        if (s.book.find(idOf(w)))
-            s.book.forget(idOf(w));
-        applySurface(w, beforeBox(w, before));
-        logRequest(Log::DEBUG, "unsplit {:x}: back on Desktop {}", idOf(w), desk.home);
-        settleSplit(desk.workspace);
-        splitCheck();
-        notify(tiling::Reason::Forgotten);
     }
 
     bool inSplit(const PHLWINDOW& w) {
-        return w && w->m_workspace && tiling::splitOf(st().splits, w->m_workspace->m_id) != nullptr;
+        return w && tiling::splitOfWindow(st().splits, idOf(w)) != nullptr;
+    }
+
+    bool leaveSplit(const PHLWINDOW& w) {
+        if (!inSplit(w) || gf::deferredFocus::sessionLocked())
+            return false;
+        if (const auto why = unsplitWindow(w); !why.empty())
+            logRequest(Log::WARN, "split: the green button of {:x}: {}", idOf(w), why);
+        return true;
     }
 
     void arrangeRequest(std::string_view json) {
@@ -1920,6 +2043,10 @@ namespace gf::tiler {
             const auto w = windowById(address);
             if (!w) {
                 refuse("a window is not a live tileable window (tiling.md TL9)");
+                return;
+            }
+            if (tiling::splitOfWindow(s.splits, address)) {
+                refuse("a window of a Split View Desktop is placed by its Desktop (tiling.md TL33)");
                 return;
             }
             windows.push_back(w);
@@ -2031,7 +2158,20 @@ namespace gf::tiler {
             s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zoneIndex[i]},
                           m->m_name, workspace->m_id, group);
         }
-        settleSplit(workspace->m_id); // TL33: the Split View Desktop's second window chosen
+        // TL33: a pick into the other half of a Split View Desktop makes that window its second member (the two are one tile
+        // group: the shared edge resizes both).
+        if (request->with) {
+            const auto d = std::ranges::find_if(s.splits, [&](const tiling::SplitDesk& x) {
+                return x.workspace == workspace->m_id && std::ranges::find(x.members, *request->with) != x.members.end();
+            });
+            if (d != s.splits.end()) {
+                for (const auto& w : windows) {
+                    if (std::ranges::find(d->members, idOf(w)) == d->members.end())
+                        d->members.push_back(idOf(w));
+                }
+                d->waiting = false;
+            }
+        }
         // TL28: the zones left empty in that layout, offered to the shell in the state reply until the next change (none while
         // "Suggest windows to fill the rest of a layout" is off, TL32).
         s.suggestion = state().tilingSuggestions ? suggestionFor(request->with ? *request->with : idOf(windows.front()), m) : std::nullopt;

@@ -1416,8 +1416,38 @@ TEST(TilingSplit, SidesAndDesktops) {
 }
 
 TEST(TilingSplit, TheReplyListsTheSplitDesktops) {
-    const std::array<StateOutput, 0>     none{};
-    const std::array<SplitDesk, 2>       splits{SplitDesk{.workspace = 7, .output = "GF-REF", .home = 2}, SplitDesk{.workspace = 9, .output = "A\"B", .home = 4}};
+    const std::array<StateOutput, 0> none{};
+    const std::array<SplitDesk, 2>   splits{SplitDesk{.workspace = 7, .output = "GF-REF", .home = 2, .members = {0xa1, 0xb2}},
+                                          SplitDesk{.workspace = 9, .output = "A\"B", .home = 4, .members = {0xc3}, .waiting = true}};
     EXPECT_EQ(stateJson(5, none, nullptr, splits),
-              R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2},{"workspace":9,"output":"A\"B","home":4}],"suggestion":null})");
+              R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2,"windows":["a1","b2"],"waiting":false},)"
+              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"suggestion":null})");
+}
+
+// TL33, ADR-0036 D50, D52: the members are the Split View's two windows, whatever their state; a window that left its
+// workspace is no member any more; another window there never was one.
+TEST(TilingSplit, MembersFollowTheirWorkspace) {
+    std::vector<SplitDesk> splits{{.workspace = 7, .output = "GF-REF", .home = 2, .members = {0xa1, 0xb2}}, {.workspace = 9, .output = "GF-REF", .home = 2, .members = {0xc3}}};
+    ASSERT_NE(splitOfWindow(splits, 0xb2), nullptr);
+    EXPECT_EQ(splitOfWindow(splits, 0xb2)->workspace, 7);
+    EXPECT_EQ(splitOfWindow(splits, 0xc3)->workspace, 9);
+    EXPECT_EQ(splitOfWindow(splits, 0xd4), nullptr) << "a third window on the Desktop is no member";
+    EXPECT_EQ(splitOfWindow({}, 0xa1), nullptr);
+    EXPECT_FALSE(pruneMembers(splits[0], std::vector<uint64_t>{0xd4, 0xb2, 0xa1})) << "both still there, a third one too";
+    EXPECT_EQ(splits[0].members, (std::vector<uint64_t>{0xa1, 0xb2})) << "the order kept";
+    EXPECT_TRUE(pruneMembers(splits[0], std::vector<uint64_t>{0xb2, 0xd4}));
+    EXPECT_EQ(splits[0].members, (std::vector<uint64_t>{0xb2}));
+    EXPECT_TRUE(pruneMembers(splits[0], std::vector<uint64_t>{}));
+    EXPECT_TRUE(splits[0].members.empty());
+}
+
+// D43: two members stay; one fills alone unless it is still choosing its second window; none ends the Desktop.
+TEST(TilingSplit, OneMemberFillsNoneEnds) {
+    EXPECT_EQ(splitStep(2, false), SplitStep::Keep);
+    EXPECT_EQ(splitStep(2, true), SplitStep::Keep);
+    EXPECT_EQ(splitStep(1, false), SplitStep::Fill);
+    EXPECT_EQ(splitStep(1, true), SplitStep::Keep) << "its picker is still pending";
+    EXPECT_EQ(splitStep(0, false), SplitStep::End);
+    EXPECT_EQ(splitStep(0, true), SplitStep::End);
+    EXPECT_EQ(splitStep(3, false), SplitStep::Keep);
 }

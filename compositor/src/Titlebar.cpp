@@ -217,6 +217,12 @@ namespace {
     // The zoom light (ADR-0015 P6, REQ-ADR0002-6): zoom (maximized) and back; with Alt held, true full screen (the shell
     // hides the menu bar as in any full screen); a window in full screen leaves it.
     void zoomLight(const PHLWINDOW& w) {
+        // A window of a Split View Desktop leaves it, with or without Alt (macOS: its green button exits full screen; tiling.md
+        // TL33, ADR-0036 D49): back on its Desktop as an ordinary window, the other filling the Split View Desktop.
+        if (gf::tiler::leaveSplit(w)) {
+            gf::logRequest(Log::DEBUG, "titlebar zoom of a Split View window -> back to its Desktop");
+            return;
+        }
         auto& fs = Fullscreen::controller();
         if (!fs)
             return;

@@ -171,9 +171,14 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   it was shown. Refused while the session is locked (`tiling` notice `reason:"locked"`) and for an unknown window, a
   window that cannot be tiled now, one not on the Desktop its output shows or already on a Split View Desktop, a side
   other than left or right, a window of no Split View Desktop (`unsplit`) or while the Stages strip shows on that output
-  (`reason:"invalid"`). The reply gains `"splits":[{"workspace":N,"output":"<name>","home":N}]` (always present, empty
-  without a Split View Desktop): the shell lists each right after the Desktop it came from, hides the menu bar and the
-  Dock on it, and sends `unsplit` for the Exit Full Screen of its windows.
+  (`reason:"invalid"`). The reply gains `"splits":[{"workspace":N,"output":"<name>","home":N,"windows":["<hex>",…],
+  "waiting":bool}]` (always present, empty without a Split View Desktop): its members (the window it was made for and the
+  one picked, whatever their state; another window on that Desktop is none) and whether its one member still waits for
+  its second window. The shell lists each right after the Desktop it came from, unnumbered, hides the menu bar and the Dock
+  on it, sends `unsplit` for the Exit Full Screen of a member, and `tile(address, "fill")` for a member still waiting once
+  its picker is no longer pending (dismissed, refused, timed out). `tile` (except that Fill of a lone member) and
+  `arrange` refuse a member (`reason:"invalid"`), and `tile(…, "previous")` does nothing for one: its Desktop places it
+  (integrator review of c7a6b6e).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -205,7 +210,7 @@ event frames: clock marks monitors name presented refreshHz renders t total unit
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid
