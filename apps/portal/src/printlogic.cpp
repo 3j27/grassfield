@@ -311,7 +311,7 @@ bool toGtk(const Choices &c, QVariantMap *settings, QVariantMap *pageSetup)
     s.insert(QStringLiteral("duplex"), duplex);
     s.insert(QStringLiteral("use-color"), c.color ? QStringLiteral("true") : QStringLiteral("false"));
     if (toFile) {
-        s.insert(QStringLiteral("output-uri"), c.outputUri);
+        s.insert(QStringLiteral("output-uri"), QString::fromLatin1(kPdfOutputUri));
         s.insert(QStringLiteral("output-file-format"), QStringLiteral("pdf"));
     }
 
@@ -341,7 +341,8 @@ QList<QPair<QString, QString>> cupsOptions(const Choices &c, const Capabilities 
         out.append({QStringLiteral("multiple-document-handling"),
                     c.collate ? QStringLiteral("separate-documents-collated-copies") : QStringLiteral("separate-documents-uncollated-copies")});
     }
-    if (!c.media.name.isEmpty())
+    const bool listed = std::any_of(caps.media.cbegin(), caps.media.cend(), [&c](const Media &m) { return m.name == c.media.name; });
+    if (!c.media.name.isEmpty() && (listed || (caps.media.isEmpty() && validMediaName(c.media.name))))
         out.append({QStringLiteral("media"), c.media.name});
     if (caps.twoSided) {
         const QString sides = c.duplex == QLatin1String("horizontal") ? QStringLiteral("two-sided-long-edge")
@@ -482,6 +483,35 @@ QVariantMap prepareOptions(const QVariantMap &options)
         {QStringLiteral("hasSelection"), options.value(QStringLiteral("has_selected_pages")).toBool()},
         {QStringLiteral("formats"), formats},
     };
+}
+
+bool validMediaName(const QString &name)
+{
+    // Anchored at the very end (\z): "$" would also let a final newline through.
+    static const QRegularExpression pwg(QRegularExpression::anchoredPattern(QStringLiteral("[a-z0-9][a-z0-9_.-]{0,63}")));
+    return pwg.match(name).hasMatch();
+}
+
+QString documentFormat(const QByteArray &head)
+{
+    if (head.startsWith("%PDF-"))
+        return QStringLiteral("application/pdf");
+    if (head.startsWith("%!"))
+        return QStringLiteral("application/postscript");
+    return {};
+}
+
+QByteArray jobName(const QString &title)
+{
+    QByteArray name = title.toUtf8();
+    if (name.size() <= 255)
+        return name;
+    qsizetype cut = 255;
+    // Back to the first byte of the character the cut falls in (continuation bytes are 10xxxxxx).
+    while (cut > 0 && (uchar(name.at(cut)) & 0xC0) == 0x80)
+        --cut;
+    name.truncate(cut);
+    return name;
 }
 
 QString localPdfPath(const QString &uri)

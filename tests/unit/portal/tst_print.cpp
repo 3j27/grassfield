@@ -18,6 +18,7 @@
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -26,6 +27,7 @@
 #include <cups/cups.h>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -195,6 +197,8 @@ struct Reply {
     bool error = false;
     uint response = 99;
     QVariantMap results;
+    // The sheet's answer was refused (savedAs).
+    bool refused = false;
 };
 
 QVariantMap mapOf(const QVariant &v)
@@ -335,6 +339,50 @@ protected:
         EXPECT_TRUE(printer->answer(last.id, 0, choices));
         EXPECT_TRUE(waitFor([&] { return reply->done; }));
         return reply;
+    }
+
+    // Save as PDF… on sheet `id`, the Save panel (the fake) answering `path`: true once the sheet has its file.
+    bool choosePdf(int id, const QString &path)
+    {
+        bool picked = false;
+        const auto connection = QObject::connect(printer.get(), &Print::pdfChosen, printer.get(), [&picked, id](int which, const QString &) {
+            picked = picked || which == id;
+        });
+        const qsizetype calls = saveFile->calls.size();
+        printer->savePdf(id, QStringLiteral("Report"), QStringLiteral("Save as PDF"));
+        const bool asked = waitFor([&] { return saveFile->calls.size() > calls; });
+        if (asked)
+            backendBus->send(saveFile->held.createReply(QVariantList{
+                QVariant::fromValue(0u), QVariantMap{{QStringLiteral("uris"), QStringList{QUrl::fromLocalFile(path).toString()}}}}));
+        const bool ok = asked && waitFor([&] { return picked; });
+        QObject::disconnect(connection);
+        return ok;
+    }
+
+    // PreparePrint answered with Save as PDF to `path` as the Save panel chose it, the sheet answering `answered` (the same file
+    // unless given).
+    std::shared_ptr<Reply> savedAs(const QString &handle, const QString &path, const QString &answered = {})
+    {
+        const qsizetype before = chosen.size();
+        auto reply = prepare(handle, {}, {}, {});
+        EXPECT_TRUE(waitFor([&] { return chosen.size() > before; }));
+        if (chosen.size() <= before)
+            return reply;
+        const int id = chosen.last().id;
+        EXPECT_TRUE(choosePdf(id, path));
+        QVariantMap choices = chosen.last().choices;
+        choices.insert(QStringLiteral("outputUri"), QUrl::fromLocalFile(answered.isEmpty() ? path : answered).toString());
+        if (!printer->answer(id, 0, choices)) {
+            reply->refused = true;
+            printer->answer(id, 1);
+        }
+        EXPECT_TRUE(waitFor([&] { return reply->done; }));
+        return reply;
+    }
+
+    std::shared_ptr<Reply> printWith(const QString &handle, const std::shared_ptr<Reply> &prepared, const QByteArray &document)
+    {
+        return printDocument(handle, document, {{QStringLiteral("token"), QVariant::fromValue(prepared->results.value("token").toUInt())}});
     }
 
     struct Listed {
@@ -514,43 +562,104 @@ TEST_F(PrintTest, ATokenIsItsApplicationsAndExpires)
     EXPECT_EQ(system.jobs.size(), 1);
 }
 
-// PR3: Save as PDF writes the document GTK made to the file chosen, only a PDF, and never half of one; an application that cannot
-// make a PDF gets no Save as PDF.
+// PR3: Save as PDF writes the document GTK made to the file chosen in the Save panel, and only there (integrator security review
+// of step 6a): only a PDF, never half of one; never through a link (a link put at the name since the choice is replaced, its target
+// untouched; a folder replaced by a link since the choice fails the write; a folder that was a link when chosen, as a user's
+// Documents on another disk, is written through); the application gets no path back; an answer for any other file, or with no
+// Save panel answer, is refused; an application that cannot make a PDF gets no Save as PDF.
 TEST_F(PrintTest, SaveAsPdfWritesTheFileChosen)
 {
+    // No window is presented here: the deadline that would send the sheet to x-d-p-gtk is moved out of the way.
+    make([](Print::Options &o) { o.uiDeadlineMs = 60000; });
     const QString target = dir.filePath(QStringLiteral("Report.pdf"));
-    auto reply = preparedAnswer(kHandle, {{QStringLiteral("outputUri"), QUrl::fromLocalFile(target).toString()}});
+    auto reply = savedAs(kHandle, target);
     ASSERT_EQ(reply->response, 0u);
     const QVariantMap settings = mapOf(reply->results.value("settings"));
-    EXPECT_EQ(settings.value("output-uri").toString(), QUrl::fromLocalFile(target).toString());
+    EXPECT_EQ(settings.value("output-uri").toString(), QStringLiteral("file:///dev/null")) << "never the user's path";
     EXPECT_EQ(settings.value("output-file-format").toString(), QStringLiteral("pdf"));
     EXPECT_FALSE(settings.contains("printer"));
-    const uint token = reply->results.value("token").toUInt();
-    auto job = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/pdf"), "%PDF-1.7 the report",
-                             {{QStringLiteral("token"), QVariant::fromValue(token)}});
+    auto job = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/pdf"), reply, "%PDF-1.7 the report");
     ASSERT_TRUE(waitFor([&] { return job->done; }));
     EXPECT_EQ(job->response, 0u);
     QFile written(target);
     ASSERT_TRUE(written.open(QIODevice::ReadOnly));
     EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 the report"));
+    written.close();
     EXPECT_TRUE(system.jobs.isEmpty()) << "nothing printed";
 
     // Not a PDF: nothing written, the file there stays.
-    auto second = preparedAnswer(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/second"),
-                                 {{QStringLiteral("outputUri"), QUrl::fromLocalFile(target).toString()}});
-    auto bad = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/bad"), "%!PS-Adobe-3.0",
-                             {{QStringLiteral("token"), QVariant::fromValue(second->results.value("token").toUInt())}});
+    auto second = savedAs(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/second"), target);
+    auto bad = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/bad"), second, "%!PS-Adobe-3.0");
     ASSERT_TRUE(waitFor([&] { return bad->done; }));
     EXPECT_EQ(bad->response, 2u);
-    ASSERT_TRUE(written.seek(0));
+    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
     EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 the report"));
+    written.close();
 
-    // An application that makes PostScript only: no Save as PDF answer.
+    // Only the file the Save panel answered.
+    auto other = savedAs(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/other"), target, dir.filePath(QStringLiteral("Other.pdf")));
+    EXPECT_TRUE(other->refused) << "another file than the Save panel's";
+    EXPECT_EQ(other->response, 1u);
     const qsizetype before = chosen.size();
-    auto ps = prepare(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/ps"), {}, {},
-                      {{QStringLiteral("supported_output_file_formats"), QStringList{QStringLiteral("ps")}}});
+    auto unasked = prepare(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/unasked"), {}, {}, {});
     ASSERT_TRUE(waitFor([&] { return chosen.size() > before; }));
     QVariantMap choices = chosen.last().choices;
+    choices.insert(QStringLiteral("outputUri"), QUrl::fromLocalFile(target).toString());
+    EXPECT_FALSE(printer->answer(chosen.last().id, 0, choices)) << "no Save panel answer";
+    EXPECT_TRUE(printer->answer(chosen.last().id, 1));
+
+    // A link put at the name after the choice (an application that can write in the folder): the file takes the link's place,
+    // what it pointed to is untouched.
+    QTemporaryDir elsewhere;
+    ASSERT_TRUE(elsewhere.isValid());
+    const QString secret = elsewhere.filePath(QStringLiteral("bashrc"));
+    QFile secretFile(secret);
+    ASSERT_TRUE(secretFile.open(QIODevice::WriteOnly));
+    secretFile.write("keep");
+    secretFile.close();
+    const QString linked = dir.filePath(QStringLiteral("Linked.pdf"));
+    auto planted = savedAs(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/planted"), linked);
+    ASSERT_EQ(planted->response, 0u);
+    ASSERT_TRUE(QFile::link(secret, linked));
+    auto through = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/through"), planted, "%PDF-1.7\necho owned");
+    ASSERT_TRUE(waitFor([&] { return through->done; }));
+    EXPECT_EQ(through->response, 0u);
+    ASSERT_TRUE(secretFile.open(QIODevice::ReadOnly));
+    EXPECT_EQ(secretFile.readAll(), QByteArray("keep")) << "the link's target is untouched";
+    secretFile.close();
+    EXPECT_FALSE(QFileInfo(linked).isSymLink()) << "the link replaced by the file";
+    QFile replaced(linked);
+    ASSERT_TRUE(replaced.open(QIODevice::ReadOnly));
+    EXPECT_EQ(replaced.readAll(), QByteArray("%PDF-1.7\necho owned"));
+
+    // The folder replaced by a link after the choice: nothing written anywhere.
+    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("Sub")));
+    auto moved = savedAs(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/moved"), dir.filePath(QStringLiteral("Sub/Out.pdf")));
+    ASSERT_EQ(moved->response, 0u);
+    ASSERT_TRUE(QDir(dir.path()).rename(QStringLiteral("Sub"), QStringLiteral("Sub.old")));
+    ASSERT_TRUE(QFile::link(elsewhere.path(), dir.filePath(QStringLiteral("Sub"))));
+    auto refused = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/refused"), moved, "%PDF-1.7 elsewhere");
+    ASSERT_TRUE(waitFor([&] { return refused->done; }));
+    EXPECT_EQ(refused->response, 2u);
+    EXPECT_EQ(QDir(elsewhere.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("bashrc")}) << "nothing through the link";
+    EXPECT_TRUE(QDir(dir.filePath(QStringLiteral("Sub.old"))).isEmpty());
+
+    // A folder that is a link when the user chooses it (Documents on another disk): written in the folder it leads to.
+    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("Disk")));
+    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("Disk")), dir.filePath(QStringLiteral("Documents"))));
+    auto documents = savedAs(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/documents"), dir.filePath(QStringLiteral("Documents/Mine.pdf")));
+    ASSERT_EQ(documents->response, 0u);
+    auto mine = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/mine"), documents, "%PDF-1.7 mine");
+    ASSERT_TRUE(waitFor([&] { return mine->done; }));
+    EXPECT_EQ(mine->response, 0u);
+    EXPECT_TRUE(QFileInfo(dir.filePath(QStringLiteral("Disk/Mine.pdf"))).isFile());
+
+    // An application that makes PostScript only: no Save as PDF answer.
+    const qsizetype count = chosen.size();
+    auto ps = prepare(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/ps"), {}, {},
+                      {{QStringLiteral("supported_output_file_formats"), QStringList{QStringLiteral("ps")}}});
+    ASSERT_TRUE(waitFor([&] { return chosen.size() > count; }));
+    choices = chosen.last().choices;
     choices.insert(QStringLiteral("outputUri"), QUrl::fromLocalFile(target).toString());
     EXPECT_FALSE(printer->answer(chosen.last().id, 0, choices));
     EXPECT_FALSE(ps->done) << "the sheet stays";
@@ -595,8 +704,7 @@ TEST_F(PrintTest, SaveAsPdfAsksTheSavePanel)
     choices.insert(QStringLiteral("outputUri"), target);
     ASSERT_TRUE(printer->answer(id, 0, choices));
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
-    EXPECT_EQ(mapOf(reply->results.value("settings")).value("output-uri").toString(),
-              QUrl::fromLocalFile(dir.filePath(QStringLiteral("Quarterly Report.pdf"))).toString(QUrl::FullyEncoded));
+    EXPECT_EQ(mapOf(reply->results.value("settings")).value("output-uri").toString(), QStringLiteral("file:///dev/null"));
 
     // A Save panel open when the application closes the request goes with it.
     auto second = prepare(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/second"), {}, {}, {});
@@ -654,6 +762,8 @@ TEST_F(PrintTest, NoPrinter)
     EXPECT_FALSE(printer->answer(opened.first().first, 0, other)) << "a printer the sheet never chose";
     other.insert(QStringLiteral("printer"), QString());
     other.insert(QStringLiteral("outputUri"), QUrl::fromLocalFile(dir.filePath(QStringLiteral("a.pdf"))).toString());
+    EXPECT_FALSE(printer->answer(opened.first().first, 0, other)) << "no file chosen in the Save panel";
+    ASSERT_TRUE(choosePdf(opened.first().first, dir.filePath(QStringLiteral("a.pdf"))));
     EXPECT_TRUE(printer->answer(opened.first().first, 0, other));
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_EQ(reply->response, 0u);
@@ -748,12 +858,16 @@ TEST_F(PrintTest, CloseTakesTheSheetAway)
     EXPECT_NE(reply->response, 0u);
 }
 
-// Save as PDF's writer: a PDF read to its end whatever the pieces it comes in, written through a temporary file; anything that
-// is not a PDF, or a source that stops, writes nothing and leaves the file there as it was.
-TEST(WritePdf, OnlyAWholePdfIsWritten)
+// Save as PDF's writer: a PDF read to its end whatever the pieces it comes in, written through a temporary file renamed over the
+// name; anything that is not a PDF (fewer than five bytes of "%PDF-" too), a source that stops, a document over the limit, or a
+// last step that fails writes nothing, leaves the file there as it was and no temporary file. Never through a link: a link at the
+// name is replaced (its target untouched), a link in the folder's path fails (integrator security review of step 6a, MAJOR 1). A
+// file there keeps its permissions.
+TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
 {
     QTemporaryDir dir;
     ASSERT_TRUE(dir.isValid());
+    const QString folder = dir.path();
     const QString target = dir.filePath(QStringLiteral("out.pdf"));
     const auto pipeOf = [](const QList<QByteArray> &pieces, bool close) {
         int ends[2];
@@ -764,33 +878,86 @@ TEST(WritePdf, OnlyAWholePdfIsWritten)
             ::close(ends[1]);
         return std::make_pair(ends[0], ends[1]);
     };
+    const auto source = [&](const QList<QByteArray> &pieces) { return pipeOf(pieces, true).first; };
+    const auto contents = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray("(none)");
+    };
+    const auto leftovers = [](const QString &path) {
+        return QDir(path).entryList({QStringLiteral(".grassfield-print-*")}, QDir::Files | QDir::Hidden);
+    };
     // The header in two pieces (fewer than five bytes first): nothing of it lost.
-    auto [whole, wholeWriter] = pipeOf({QByteArray("%P"), QByteArray("DF-1.7 body")}, true);
-    Q_UNUSED(wholeWriter)
-    EXPECT_EQ(writePdf(whole, target, 2000), QString());
-    QFile written(target);
-    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
-    EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 body"));
-    written.close();
-
-    auto [ps, psWriter] = pipeOf({QByteArray("%!PS-Adobe-3.0")}, true);
-    Q_UNUSED(psWriter)
-    EXPECT_EQ(writePdf(ps, target, 2000), QStringLiteral("the document is not a PDF"));
-    auto [shortOne, shortWriter] = pipeOf({QByteArray("%PD")}, true);
-    Q_UNUSED(shortWriter)
-    EXPECT_EQ(writePdf(shortOne, target, 2000), QStringLiteral("the document is not a PDF"));
+    EXPECT_EQ(writePdf(source({QByteArray("%P"), QByteArray("DF-1.7 body")}), folder, QStringLiteral("out.pdf"), 2000), QString());
+    EXPECT_EQ(contents(target), QByteArray("%PDF-1.7 body"));
+    // Exactly the five bytes of the header: a PDF; four of them: not one.
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF-")}), folder, QStringLiteral("five.pdf"), 2000), QString());
+    EXPECT_EQ(contents(dir.filePath(QStringLiteral("five.pdf"))), QByteArray("%PDF-"));
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF")}), folder, QStringLiteral("out.pdf"), 2000), QStringLiteral("the document is not a PDF"));
+    EXPECT_EQ(writePdf(source({QByteArray("%!PS-Adobe-3.0")}), folder, QStringLiteral("out.pdf"), 2000), QStringLiteral("the document is not a PDF"));
+    EXPECT_EQ(writePdf(source({QByteArray("%PD")}), folder, QStringLiteral("out.pdf"), 2000), QStringLiteral("the document is not a PDF"));
     // A source that stops halfway: no half document.
     auto [silent, silentWriter] = pipeOf({QByteArray("%PDF-1.7 half")}, false);
-    EXPECT_EQ(writePdf(silent, target, 200), QStringLiteral("the document stopped coming"));
+    EXPECT_EQ(writePdf(silent, folder, QStringLiteral("out.pdf"), 200), QStringLiteral("the document stopped coming"));
     ::close(silentWriter);
-    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
-    EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 body")) << "the file there is untouched";
-    written.close();
-    // A folder that cannot be written.
-    auto [blocked, blockedWriter] = pipeOf({QByteArray("%PDF-1.7")}, true);
-    Q_UNUSED(blockedWriter)
-    EXPECT_TRUE(writePdf(blocked, dir.filePath(QStringLiteral("missing/out.pdf")), 2000).startsWith(QStringLiteral("cannot write")));
-    EXPECT_EQ(QDir(dir.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("out.pdf")}) << "no temporary file left";
+    // Over the limit: nothing.
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF-1.7 "), QByteArray(64, 'x')}), folder, QStringLiteral("out.pdf"), 2000, 32),
+              QStringLiteral("the document is too large"));
+    EXPECT_EQ(contents(target), QByteArray("%PDF-1.7 body")) << "the file there is untouched";
+    // A folder that is not there.
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), dir.filePath(QStringLiteral("missing")), QStringLiteral("out.pdf"), 2000)
+                    .startsWith(QStringLiteral("cannot open the folder")));
+    // The last step failing (the name is a folder): nothing replaced, no temporary file.
+    ASSERT_TRUE(QDir(folder).mkdir(QStringLiteral("taken.pdf")));
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), folder, QStringLiteral("taken.pdf"), 2000).startsWith(QStringLiteral("cannot write")));
+    EXPECT_TRUE(QFileInfo(dir.filePath(QStringLiteral("taken.pdf"))).isDir());
+    EXPECT_EQ(leftovers(folder), QStringList()) << "no temporary file left";
+
+    // A link at the name: replaced by the file, what it pointed to untouched.
+    QTemporaryDir elsewhere;
+    ASSERT_TRUE(elsewhere.isValid());
+    const QString secret = elsewhere.filePath(QStringLiteral("bashrc"));
+    {
+        QFile f(secret);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("keep");
+    }
+    ASSERT_TRUE(QFile::link(secret, dir.filePath(QStringLiteral("link.pdf"))));
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF-1.7\necho owned")}), folder, QStringLiteral("link.pdf"), 2000), QString());
+    EXPECT_EQ(contents(secret), QByteArray("keep"));
+    EXPECT_FALSE(QFileInfo(dir.filePath(QStringLiteral("link.pdf"))).isSymLink());
+    EXPECT_EQ(contents(dir.filePath(QStringLiteral("link.pdf"))), QByteArray("%PDF-1.7\necho owned"));
+    // A link in the folder's path (the folder itself, or one above it): refused, nothing written where it leads.
+    ASSERT_TRUE(QFile::link(elsewhere.path(), dir.filePath(QStringLiteral("swapped"))));
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), dir.filePath(QStringLiteral("swapped")), QStringLiteral("x.pdf"), 2000)
+                    .endsWith(QStringLiteral("changed since it was chosen")));
+    ASSERT_TRUE(QDir(elsewhere.path()).mkdir(QStringLiteral("inner")));
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), dir.filePath(QStringLiteral("swapped/inner")), QStringLiteral("x.pdf"), 2000)
+                    .endsWith(QStringLiteral("changed since it was chosen")));
+    EXPECT_EQ(QDir(elsewhere.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("bashrc")});
+    EXPECT_TRUE(QDir(elsewhere.filePath(QStringLiteral("inner"))).isEmpty());
+    // Not a file name.
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), folder, QStringLiteral("a/b.pdf"), 2000).startsWith(QStringLiteral("cannot write")));
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), folder, QStringLiteral(".."), 2000).startsWith(QStringLiteral("cannot write")));
+
+    // Over the limit past the first read (a document longer than one read: the limit holds on every piece).
+    QFile big(elsewhere.filePath(QStringLiteral("big.pdf")));
+    ASSERT_TRUE(big.open(QIODevice::WriteOnly));
+    big.write("%PDF-1.7 ");
+    big.write(QByteArray(100000, 'x'));
+    big.close();
+    const int bigFd = ::open(QFile::encodeName(big.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(bigFd, 0);
+    EXPECT_EQ(writePdf(bigFd, folder, QStringLiteral("big.pdf"), 2000, 70000), QStringLiteral("the document is too large"));
+    EXPECT_FALSE(QFileInfo::exists(dir.filePath(QStringLiteral("big.pdf"))));
+    EXPECT_EQ(leftovers(folder), QStringList());
+
+    // A file there keeps its permissions.
+    ASSERT_EQ(::chmod(QFile::encodeName(target).constData(), 0600), 0);
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF-1.7 again")}), folder, QStringLiteral("out.pdf"), 2000), QString());
+    struct stat st;
+    ASSERT_EQ(::stat(QFile::encodeName(target).constData(), &st), 0);
+    EXPECT_EQ(st.st_mode & 0777, 0600u);
+    EXPECT_EQ(leftovers(folder), QStringList());
 }
 
 // The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
@@ -903,6 +1070,46 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
     EXPECT_EQ(keyword("print-color-mode"), QStringLiteral("monochrome"));
     EXPECT_EQ(keyword("media"), QStringLiteral("iso_a5_148x210mm"));
     ippDelete(response);
+
+    // Only a PDF or PostScript is sent: a printer language (PJL here) is refused before any job is made.
+    QFile raw(dir.filePath(QStringLiteral("raw.prn")));
+    ASSERT_TRUE(raw.open(QIODevice::WriteOnly));
+    raw.write("\x1b%-12345X@PJL ENTER LANGUAGE=PCL\n");
+    raw.close();
+    const int rawFd = ::open(QFile::encodeName(raw.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(rawFd, 0);
+    sent = false;
+    system.submit(queue, QStringLiteral("raw"), {}, rawFd, &context, [&](const QString &why) {
+        error = why;
+        sent = true;
+    });
+    ASSERT_TRUE(wait([&] { return sent; }));
+    EXPECT_EQ(error, QStringLiteral("the document is neither a PDF nor PostScript"));
+    jobs = nullptr;
+    const int after = cupsGetJobs2(CUPS_HTTP_DEFAULT, &jobs, queue.toUtf8().constData(), 0, CUPS_WHICHJOBS_ALL);
+    cupsFreeJobs(after, jobs);
+    EXPECT_EQ(after, count) << "no job made";
+
+    // A document over the limit: the job is cancelled, short (within the first read) or long.
+    CupsPrintSystem::Limits small;
+    small.maxDocumentBytes = 40;
+    CupsPrintSystem limited(small, nullptr);
+    for (const qsizetype size : {qsizetype(60), qsizetype(200000)}) {
+        QFile over(dir.filePath(QStringLiteral("over.pdf")));
+        ASSERT_TRUE(over.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        over.write("%PDF-1.4\n");
+        over.write(QByteArray(size, ' '));
+        over.close();
+        const int overFd = ::open(QFile::encodeName(over.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+        ASSERT_GE(overFd, 0);
+        sent = false;
+        limited.submit(queue, QStringLiteral("over"), {}, overFd, &context, [&](const QString &why) {
+            error = why;
+            sent = true;
+        });
+        ASSERT_TRUE(wait([&] { return sent; }));
+        EXPECT_EQ(error, QStringLiteral("the document is too large")) << size;
+    }
 
     // A printer CUPS does not know: refused, the document closed.
     const int other = ::open(QFile::encodeName(document.fileName()).constData(), O_RDONLY | O_CLOEXEC);

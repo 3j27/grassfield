@@ -116,12 +116,20 @@ private:
         bool reading = false;
         print::Capabilities capabilities;
         print::Choices choices;
+        // The file the Save panel last answered: its URI as given, its folder with the links resolved then, its name. Save as
+        // PDF writes only there (integrator security review of step 6a, NIT).
+        QString pdfUri;
+        QString pdfFolder;
+        QString pdfName;
     };
     struct Ticket {
         QString appId;
         QString printer;
         print::Capabilities capabilities;
         print::Choices choices;
+        // Save as PDF's file (Pending's), empty to print.
+        QString pdfFolder;
+        QString pdfName;
         QElapsedTimer age;
     };
     // A new token for `ticket`: random, not 0, not one in use.

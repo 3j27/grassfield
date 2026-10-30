@@ -1,18 +1,23 @@
 #include "printsystem.h"
 
 #include <QDeadlineTimer>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
-#include <QSaveFile>
+#include <QRandomGenerator>
 #include <QThread>
 #include <QTimer>
 
 #include <cups/cups.h>
 
+#include <fcntl.h>
 #include <poll.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <cerrno>
+#include <cstring>
 
 namespace grassfield::portal {
 
@@ -84,6 +89,111 @@ Media mediaOf(http_t *http, cups_dest_t *dest, cups_dinfo_t *info, cups_size_t &
     m.leftMm = size.left / 100.0;
     m.rightMm = size.right / 100.0;
     return m;
+}
+
+// Reads what `fd` has next into `into` (at most `size` bytes): the count, 0 at its end, -1 (and `error` set) when it is silent
+// for idleMs, fails, or `cancel` is set.
+ssize_t readSome(int fd, char *into, size_t size, int idleMs, const int *cancel, QString *error)
+{
+    for (;;) {
+        if (cancel && *cancel) {
+            *error = QStringLiteral("cancelled");
+            return -1;
+        }
+        pollfd p{fd, POLLIN, 0};
+        const int ready = ::poll(&p, 1, idleMs);
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready <= 0) {
+            *error = QStringLiteral("the document stopped coming");
+            return -1;
+        }
+        const ssize_t n = ::read(fd, into, size);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0) {
+            *error = QStringLiteral("cannot read the document");
+            return -1;
+        }
+        return n;
+    }
+}
+
+// The document's first bytes, until there are enough to tell its type (five) or it ends.
+QByteArray readHead(int fd, int idleMs, const int *cancel, QString *error)
+{
+    QByteArray head;
+    char buffer[65536];
+    while (head.size() < 5) {
+        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, cancel, error);
+        if (n <= 0)
+            break;
+        head.append(buffer, qsizetype(n));
+    }
+    return head;
+}
+
+bool writeAll(int fd, const char *data, size_t size)
+{
+    while (size > 0) {
+        const ssize_t n = ::write(fd, data, size);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            return false;
+        data += n;
+        size -= size_t(n);
+    }
+    return true;
+}
+
+QString errnoText(int error)
+{
+    return QString::fromLocal8Bit(std::strerror(error));
+}
+
+// The folder at `path` (absolute, its links resolved when the user chose it) opened one folder at a time from "/", never
+// following a link: a link put since then in place of the folder or of one above it fails the open (ELOOP, ENOTDIR) instead of
+// leading the file elsewhere (integrator security review of step 6a, MAJOR 1). -1 and `error` set when it cannot be opened.
+int openFolder(const QString &path, QString *error)
+{
+    const QByteArray encoded = QFile::encodeName(path);
+    if (!encoded.startsWith('/')) {
+        *error = QStringLiteral("the folder “%1” is not an absolute path").arg(path);
+        return -1;
+    }
+    QList<QByteArray> parts = encoded.split('/');
+    parts.removeAll(QByteArray());
+    int dir = ::open("/", O_PATH | O_DIRECTORY | O_CLOEXEC);
+    if (dir < 0) {
+        *error = QStringLiteral("cannot open the folder “/”: %1").arg(errnoText(errno));
+        return -1;
+    }
+    for (qsizetype i = 0; i < parts.size(); ++i) {
+        if (parts.at(i) == "." || parts.at(i) == "..") {
+            ::close(dir);
+            *error = QStringLiteral("the folder “%1” is not a plain path").arg(path);
+            return -1;
+        }
+        // The folders on the way only as places (O_PATH: no read permission needed); the last one open to be synced.
+        const int flags = (i + 1 == parts.size() ? O_RDONLY : O_PATH) | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC;
+        const int next = ::openat(dir, parts.at(i).constData(), flags);
+        const int saved = errno;
+        ::close(dir);
+        if (next < 0) {
+            *error = saved == ELOOP || saved == ENOTDIR ? QStringLiteral("the folder “%1” changed since it was chosen").arg(path)
+                                                         : QStringLiteral("cannot open the folder “%1”: %2").arg(path, errnoText(saved));
+            return -1;
+        }
+        struct stat st;
+        if (::fstat(next, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            ::close(next);
+            *error = QStringLiteral("the folder “%1” changed since it was chosen").arg(path);
+            return -1;
+        }
+        dir = next;
+    }
+    return dir;
 }
 
 } // namespace
@@ -267,6 +377,19 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
         0,
         [printer, title, options, fd, limits](Call &call) {
             const auto fail = [&call](const QString &why) { call.error = why; };
+            // Only a PDF or PostScript reaches the printer, sent as what it is (never CUPS_FORMAT_AUTO, which takes raw printer
+            // languages too; integrator security review of step 6a, MINOR 2).
+            QString headError;
+            const QByteArray head = readHead(fd, limits.idleMs, &call.cancel, &headError);
+            const QByteArray format = print::documentFormat(head).toLatin1();
+            if (!headError.isEmpty() || format.isEmpty()) {
+                ::close(fd);
+                return fail(!headError.isEmpty() ? headError : QStringLiteral("the document is neither a PDF nor PostScript"));
+            }
+            if (head.size() > limits.maxDocumentBytes) {
+                ::close(fd);
+                return fail(QStringLiteral("the document is too large"));
+            }
             cups_dest_t *dest = findDestination(printer, limits.connectMs / 2, &call.cancel);
             if (!dest) {
                 ::close(fd);
@@ -290,16 +413,19 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
             cups_option_t *cupsOptions = nullptr;
             for (const auto &o : options)
                 numOptions = cupsAddOption(o.first.toUtf8().constData(), o.second.toUtf8().constData(), numOptions, &cupsOptions);
-            const QByteArray name = title.left(255).toUtf8();
+            const QByteArray name = print::jobName(title);
             int job = 0;
             const ipp_status_t created = cupsCreateDestJob(http, dest, info, &job, name.constData(), numOptions, cupsOptions);
             cupsFreeOptions(numOptions, cupsOptions);
             bool sent = false;
             if (created <= IPP_STATUS_OK_CONFLICTING && job > 0
-                && cupsStartDestDocument(http, dest, info, job, name.constData(), CUPS_FORMAT_AUTO, 0, nullptr, 1) == HTTP_STATUS_CONTINUE) {
+                && cupsStartDestDocument(http, dest, info, job, name.constData(), format.constData(), 0, nullptr, 1) == HTTP_STATUS_CONTINUE) {
                 char buffer[65536];
                 bool reading = true;
-                while (reading && !call.cancel) {
+                qint64 total = head.size();
+                if (cupsWriteRequestData(http, head.constData(), size_t(head.size())) != HTTP_STATUS_CONTINUE)
+                    call.error = QStringLiteral("the printer stopped taking the document");
+                while (reading && !call.cancel && call.error.isEmpty()) {
                     pollfd p{fd, POLLIN, 0};
                     const int ready = ::poll(&p, 1, limits.idleMs);
                     if (ready < 0 && errno == EINTR)
@@ -317,6 +443,11 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
                     }
                     if (n == 0) {
                         reading = false;
+                        break;
+                    }
+                    total += n;
+                    if (total > limits.maxDocumentBytes) {
+                        call.error = QStringLiteral("the document is too large");
                         break;
                     }
                     if (cupsWriteRequestData(http, buffer, size_t(n)) != HTTP_STATUS_CONTINUE) {
@@ -345,61 +476,73 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
         [] {});
 }
 
-QString writePdf(int fd, const QString &path, int idleMs)
+QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes)
 {
-    QSaveFile out(path);
+    const QString target = QDir(folder).filePath(name);
     QString error;
-    // The first bytes, until there are enough to tell a PDF ("%PDF-"); then everything goes straight to the file.
-    QByteArray head;
-    char buffer[65536];
-    for (;;) {
-        pollfd p{fd, POLLIN, 0};
-        const int ready = ::poll(&p, 1, idleMs);
-        if (ready < 0 && errno == EINTR)
-            continue;
-        if (ready <= 0) {
-            error = QStringLiteral("the document stopped coming");
-            break;
-        }
-        const ssize_t n = ::read(fd, buffer, sizeof buffer);
-        if (n < 0 && errno == EINTR)
-            continue;
-        if (n < 0) {
-            error = QStringLiteral("cannot read the document");
-            break;
-        }
-        if (n == 0)
-            break;
-        if (!out.isOpen()) {
-            head.append(buffer, qsizetype(n));
-            if (head.size() < 5)
-                continue;
-            if (!head.startsWith("%PDF-")) {
-                error = QStringLiteral("the document is not a PDF");
-                break;
-            }
-            if (!out.open(QIODevice::WriteOnly) || out.write(head) != head.size()) {
-                error = QStringLiteral("cannot write “%1”: %2").arg(path, out.errorString());
-                break;
-            }
-            continue;
-        }
-        if (out.write(buffer, qint64(n)) != qint64(n)) {
-            error = QStringLiteral("cannot write “%1”: %2").arg(path, out.errorString());
-            break;
-        }
-    }
-    ::close(fd);
-    if (error.isEmpty() && !out.isOpen())
+    // Only a PDF: nothing is made in the folder before its first bytes say so.
+    QByteArray head = readHead(fd, idleMs, nullptr, &error);
+    if (error.isEmpty() && !head.startsWith("%PDF-"))
         error = QStringLiteral("the document is not a PDF");
-    if (!error.isEmpty()) {
-        if (out.isOpen())
-            out.cancelWriting();
+    const QByteArray file = QFile::encodeName(name);
+    if (error.isEmpty() && (file.isEmpty() || file.contains('/') || file == "." || file == ".."))
+        error = QStringLiteral("cannot write “%1”: not a file name").arg(target);
+    const int dir = error.isEmpty() ? openFolder(folder, &error) : -1;
+    if (dir < 0) {
+        ::close(fd);
         return error;
     }
-    if (!out.commit())
-        return QStringLiteral("cannot write “%1”: %2").arg(path, out.errorString());
-    return {};
+    // A temporary file of its own in the folder, made here (O_EXCL) and never through a link (O_NOFOLLOW).
+    QByteArray temporary;
+    int out = -1;
+    for (int tries = 0; tries < 8 && out < 0; ++tries) {
+        temporary = ".grassfield-print-" + QByteArray::number(QRandomGenerator::system()->generate64(), 16) + ".part";
+        out = ::openat(dir, temporary.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+        if (out < 0 && errno != EEXIST)
+            break;
+    }
+    if (out < 0) {
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+        ::close(dir);
+        ::close(fd);
+        return error;
+    }
+    // A PDF there already keeps its permissions (read off the file itself, never off what a link points to).
+    struct stat existing;
+    if (::fstatat(dir, file.constData(), &existing, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(existing.st_mode))
+        ::fchmod(out, existing.st_mode & 0777);
+    qint64 total = head.size();
+    if (total > maxBytes)
+        error = QStringLiteral("the document is too large");
+    else if (!writeAll(out, head.constData(), size_t(head.size())))
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+    char buffer[65536];
+    while (error.isEmpty()) {
+        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, nullptr, &error);
+        if (n <= 0)
+            break;
+        total += n;
+        if (total > maxBytes) {
+            error = QStringLiteral("the document is too large");
+            break;
+        }
+        if (!writeAll(out, buffer, size_t(n)))
+            error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+    }
+    ::close(fd);
+    if (error.isEmpty() && ::fsync(out) != 0)
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+    if (::close(out) != 0 && error.isEmpty())
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+    // The rename puts the file in the name's place: a link there is replaced, never followed.
+    if (error.isEmpty() && ::renameat(dir, temporary.constData(), dir, file.constData()) != 0)
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+    if (error.isEmpty())
+        ::fsync(dir);
+    else
+        ::unlinkat(dir, temporary.constData(), 0);
+    ::close(dir);
+    return error;
 }
 
 } // namespace grassfield::portal

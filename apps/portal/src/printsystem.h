@@ -58,6 +58,8 @@ public:
         // Reaching a printer to send a job, and any wait while sending it (the document, the printer's answers).
         int connectMs = 10000;
         int idleMs = 30000;
+        // The largest document a job takes.
+        qint64 maxDocumentBytes = print::kMaxDocumentBytes;
     };
 
     explicit CupsPrintSystem(QObject *parent = nullptr);
@@ -80,9 +82,12 @@ private:
     QList<std::shared_ptr<Call>> m_calls;
 };
 
-// Writes what `fd` holds (taken: closed when done) to `path` (Save as PDF): only a PDF ("%PDF-" first), through a temporary
-// file renamed over the target at the end (never half a document); a source silent for idleMs fails. "" on success, else why.
-// Blocking: run it off the GUI thread.
-QString writePdf(int fd, const QString &path, int idleMs);
+// Writes what `fd` holds (taken: closed when done) as `name` in `folder` (Save as PDF): only a PDF ("%PDF-" first), at most
+// maxBytes. `folder` is the folder as the Save panel's answer named it, its links resolved then; it is opened from "/" one folder
+// at a time without following a link, the document goes to a temporary file made there (O_EXCL, O_NOFOLLOW), synced, then renamed
+// over `name`: a link put at the name is replaced, never followed, and a link put in place of a folder fails the write (integrator
+// security review of step 6a, MAJOR 1). Never half a document; a source silent for idleMs fails; a regular file there keeps its
+// permissions. "" on success, else why. Blocking: run it off the GUI thread.
+QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes = print::kMaxDocumentBytes);
 
 } // namespace grassfield::portal

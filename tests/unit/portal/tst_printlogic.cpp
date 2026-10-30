@@ -226,10 +226,10 @@ TEST(PrintLogic, TheAnswerHasGtksKeysAndTypes)
     EXPECT_EQ(back.duplex, QStringLiteral("horizontal"));
     EXPECT_FALSE(back.color);
 
-    // Save as PDF: the file and its format, no printer.
+    // Save as PDF: a file and its format, no printer; never the user's path (GTK only reads that the key is there).
     c.outputUri = QStringLiteral("file:///home/u/Documents/Report.pdf");
     ASSERT_TRUE(toGtk(c, &settings, &pageSetup));
-    EXPECT_EQ(settings.value(QStringLiteral("output-uri")), QStringLiteral("file:///home/u/Documents/Report.pdf"));
+    EXPECT_EQ(settings.value(QStringLiteral("output-uri")), QStringLiteral("file:///dev/null"));
     EXPECT_EQ(settings.value(QStringLiteral("output-file-format")), QStringLiteral("pdf"));
     EXPECT_FALSE(settings.contains(QStringLiteral("printer")));
 
@@ -274,9 +274,52 @@ TEST(PrintLogic, TheJobGetsCopiesPaperSidesAndColourNeverPagesScaleOrOrientation
     EXPECT_EQ(cupsOptions(c, mono), (Options{{QStringLiteral("copies"), QStringLiteral("10")},
                                              {QStringLiteral("multiple-document-handling"), QStringLiteral("separate-documents-uncollated-copies")},
                                              {QStringLiteral("media"), QStringLiteral("iso_a4_210x297mm")}}));
+    // The paper goes only as one the printer lists; a printer that listed none (it did not answer) gets it only as a PWG name,
+    // never the application's text as it came (a comma would give CUPS several values).
+    c.copies = 1;
+    c.media = Media{QStringLiteral("iso_a3_297x420mm"), QStringLiteral("A3"), 297, 420};
+    EXPECT_EQ(cupsOptions(c, mono), Options{}) << "not one of the printer's";
+    Capabilities unknown;
+    EXPECT_EQ(cupsOptions(c, unknown), (Options{{QStringLiteral("media"), QStringLiteral("iso_a3_297x420mm")}}));
+    c.media.name = QStringLiteral("iso_a4_210x297mm,na_letter_8.5x11in");
+    EXPECT_EQ(cupsOptions(c, unknown), Options{});
+    c.media.name = QStringLiteral("A4 sides=two-sided-long-edge");
+    EXPECT_EQ(cupsOptions(c, unknown), Options{});
     // Save as PDF prints nothing.
+    c.media = kA4;
     c.outputUri = QStringLiteral("file:///tmp/a.pdf");
     EXPECT_TRUE(cupsOptions(c, office()).isEmpty());
+}
+
+// What reaches CUPS besides the options: a PWG paper name, the document's type off its first bytes (only PDF and PostScript),
+// the job's name within IPP's 255 bytes, on a character's boundary.
+TEST(PrintLogic, WhatReachesCups)
+{
+    for (const char *good : {"iso_a4_210x297mm", "na_letter_8.5x11in", "om_small-photo_100x150mm", "custom_1x2mm"})
+        EXPECT_TRUE(validMediaName(QString::fromLatin1(good))) << good;
+    for (const char *bad : {"", "A4", "iso_a4,na_letter", "iso a4", "_a4", "iso_a4\n", "iso_a4;x", "\u00e9"})
+        EXPECT_FALSE(validMediaName(QString::fromUtf8(bad))) << bad;
+    EXPECT_FALSE(validMediaName(QString(65, QLatin1Char('a'))));
+    EXPECT_TRUE(validMediaName(QString(64, QLatin1Char('a'))));
+
+    EXPECT_EQ(documentFormat("%PDF-1.7 body"), QStringLiteral("application/pdf"));
+    EXPECT_EQ(documentFormat("%PDF-"), QStringLiteral("application/pdf"));
+    EXPECT_EQ(documentFormat("%!PS-Adobe-3.0"), QStringLiteral("application/postscript"));
+    EXPECT_EQ(documentFormat("%PDF"), QString()) << "not five bytes of a PDF";
+    EXPECT_EQ(documentFormat("\x1b%-12345X@PJL ENTER LANGUAGE=PCL"), QString()) << "a printer language";
+    EXPECT_EQ(documentFormat(""), QString());
+    EXPECT_EQ(documentFormat("GIF89a"), QString());
+
+    EXPECT_EQ(jobName(QStringLiteral("Quarterly Report")), QByteArray("Quarterly Report"));
+    EXPECT_EQ(jobName(QString(255, QLatin1Char('a'))).size(), 255);
+    EXPECT_EQ(jobName(QString(300, QLatin1Char('a'))).size(), 255);
+    // "é" is two bytes in UTF-8: 127 of them are 254 bytes, the 128th would end at byte 256.
+    const QByteArray accents = jobName(QString(200, QChar(0x00e9)));
+    EXPECT_EQ(accents.size(), 254);
+    EXPECT_EQ(QString::fromUtf8(accents), QString(127, QChar(0x00e9))) << "no half character";
+    const QByteArray emoji = jobName(QStringLiteral("a") + QString::fromUtf8("\xf0\x9f\x93\x84").repeated(100));
+    EXPECT_EQ(emoji.size(), 253) << "a + 63 four-byte characters";
+    EXPECT_TRUE(QString::fromUtf8(emoji).toUtf8() == emoji);
 }
 
 TEST(PrintLogic, TheSheetsChoicesAreCheckedOnTheWayBack)

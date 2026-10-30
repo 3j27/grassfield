@@ -7,6 +7,7 @@
 #include <QDBusConnection>
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
+#include <QFileInfo>
 #include <QRandomGenerator>
 #include <QCoreApplication>
 #include <QThread>
@@ -72,6 +73,7 @@ Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &opt
 
 Print::~Print()
 {
+    // Save as PDF's writers and folder lookups.
     for (QThread *writer : findChildren<QThread *>(Qt::FindDirectChildrenOnly)) {
         if (!writer->wait(3500))
             writer->setParent(nullptr); // never destroyed while it runs
@@ -225,8 +227,8 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
     }
     print::Choices c = print::fromQml(choices, it->choices);
     if (!c.outputUri.isEmpty()) {
-        // Save as PDF: only when the application can make a PDF; no printer.
-        if (!it->canSavePdf)
+        // Save as PDF: only when the application can make a PDF, and only to the file the Save panel answered; no printer.
+        if (!it->canSavePdf || it->pdfName.isEmpty() || print::localPdfPath(c.outputUri) != print::localPdfPath(it->pdfUri))
             return false;
         c.printer.clear();
     } else if (c.printer.isEmpty() || c.printer != it->printer || it->reading) {
@@ -241,6 +243,10 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
     t.printer = c.printer;
     t.capabilities = it->capabilities;
     t.choices = c;
+    if (!c.outputUri.isEmpty()) {
+        t.pdfFolder = it->pdfFolder;
+        t.pdfName = it->pdfName;
+    }
     const uint token = issue(t);
     finish(id, 0, {{QStringLiteral("settings"), settings}, {QStringLiteral("page-setup"), pageSetup}, {QStringLiteral("token"), QVariant::fromValue(token)}});
     return true;
@@ -266,6 +272,9 @@ void Print::savePdf(int id, const QString &name, const QString &title)
         emit pdfCancelled(id);
         return;
     }
+    it->pdfUri.clear();
+    it->pdfFolder.clear();
+    it->pdfName.clear();
     QString file = plainName(name);
     if (file.isEmpty())
         file = QStringLiteral("Document");
@@ -288,17 +297,40 @@ void Print::savePdf(int id, const QString &name, const QString &title)
         if (!m_pending.contains(id) || !isOpen(id))
             return;
         const QDBusMessage reply = w->reply();
-        QString uri;
+        QString uri, path;
         if (reply.type() == QDBusMessage::ReplyMessage && reply.signature() == QLatin1String("ua{sv}")
             && reply.arguments().at(0).toUInt() == 0) {
             const QStringList uris = mapOf(reply.arguments().at(1)).value(QStringLiteral("uris")).toStringList();
-            if (uris.size() == 1 && !print::localPdfPath(uris.first()).isEmpty())
+            path = uris.size() == 1 ? print::localPdfPath(uris.first()) : QString();
+            if (!path.isEmpty())
                 uri = uris.first();
         }
-        if (uri.isEmpty())
+        if (uri.isEmpty()) {
             emit pdfCancelled(id);
-        else
+            return;
+        }
+        // The folder as the user chose it, its links resolved now (off this thread: a folder on a mount that hangs never holds
+        // the panels): the file is written there or nowhere (writePdf; integrator security review of step 6a, MAJOR 1).
+        auto folder = std::make_shared<QString>();
+        const QString parent = QFileInfo(path).absolutePath();
+        QThread *resolver = QThread::create([parent, folder] { *folder = QFileInfo(parent).canonicalFilePath(); });
+        resolver->setParent(this);
+        connect(resolver, &QThread::finished, this, [this, id, uri, path, folder, resolver] {
+            resolver->deleteLater();
+            const auto p = m_pending.find(id);
+            // Gone meanwhile, or another Save panel opened since: no answer of this one's.
+            if (p == m_pending.end() || !isOpen(id) || m_saving.contains(id))
+                return;
+            if (folder->isEmpty()) {
+                emit pdfCancelled(id);
+                return;
+            }
+            p->pdfUri = uri;
+            p->pdfFolder = *folder;
+            p->pdfName = QFileInfo(path).fileName();
             emit pdfChosen(id, uri);
+        });
+        resolver->start();
     });
 }
 
@@ -367,15 +399,15 @@ void Print::handlePrint(const QDBusObjectPath &handle, const QString &appId, con
 void Print::printWithTicket(int id, const Ticket &ticket, const QString &title, int fd)
 {
     if (!ticket.choices.outputUri.isEmpty()) {
-        const QString path = print::localPdfPath(ticket.choices.outputUri);
-        if (path.isEmpty()) {
+        if (ticket.pdfFolder.isEmpty() || ticket.pdfName.isEmpty()) {
             ::close(fd);
             finish(id, 2, {});
             return;
         }
         auto error = std::make_shared<QString>();
         const int idle = m_options.fileIdleMs;
-        QThread *writer = QThread::create([fd, path, idle, error] { *error = writePdf(fd, path, idle); });
+        const QString folder = ticket.pdfFolder, file = ticket.pdfName;
+        QThread *writer = QThread::create([fd, folder, file, idle, error] { *error = writePdf(fd, folder, file, idle); });
         writer->setParent(this);
         connect(writer, &QThread::finished, this, [this, id, writer, error] {
             writer->deleteLater();

@@ -101,6 +101,15 @@ constexpr int kMinScale = 1;
 constexpr int kMaxScale = 1000;
 // A page number the sheet takes (a document of more pages than this is not printed in pieces by number).
 constexpr int kMaxPage = 100000;
+// The largest document an application may send, to the printer or to Save as PDF's file (2 GiB; a book of photographs stays far
+// below it): more ends the job, so an application cannot fill the disk through the portal (integrator security review of step
+// 6a, NIT).
+constexpr qint64 kMaxDocumentBytes = qint64(2) << 30;
+// What the application gets as its settings' output-uri for Save as PDF: never the user's path (integrator security review of
+// step 6a, MINOR 3). GTK reads only whether the key is there (GTK 4: a file, so it makes the pages per sheet itself) and puts its
+// own temporary file in its place before it renders (GTK 4.24 and 3.24 gtkprintoperation-portal.c); the backend writes the
+// file chosen in the Save panel.
+constexpr auto kPdfOutputUri = "file:///dev/null";
 
 // "1-3, 5" (1-based, as typed) as 0-based ranges in order, merged where they touch; false (and `out` untouched) for anything
 // else: an empty text, a page 0, a range that runs backwards, more than 64 ranges, a page over kMaxPage.
@@ -129,8 +138,18 @@ Choices initialChoices(const QString &printer, const Capabilities &capabilities,
 bool toGtk(const Choices &choices, QVariantMap *settings, QVariantMap *pageSetup);
 
 // The CUPS options of the job (name, value): copies, collation, paper, two sides, colour; never pages, scale or orientation
-// (GTK applied them, see above). Empty for Save as PDF.
+// (GTK applied them, see above). Empty for Save as PDF. The paper goes only as one the printer lists, or, when it lists none, as
+// a PWG name (validMediaName): never the application's text as it came.
 QList<QPair<QString, QString>> cupsOptions(const Choices &choices, const Capabilities &capabilities);
+// A PWG 5101.1 media name as CUPS takes it ("iso_a4_210x297mm", "na_letter_8.5x11in"): lowercase letters, digits, "_", "." and
+// "-", at most 64 characters; never a comma (CUPS would read several values) or anything else.
+bool validMediaName(const QString &name);
+// The document's type from its first bytes (at least five, or all there are): "application/pdf" for "%PDF-",
+// "application/postscript" for "%!", else "" (raw printer languages and anything else are not sent: integrator security review
+// of step 6a, MINOR 2).
+QString documentFormat(const QByteArray &head);
+// The job's name as IPP takes it: UTF-8, at most 255 bytes, cut on a character's boundary.
+QByteArray jobName(const QString &title);
 
 // The choices as the QML reads and writes them (a map of the fields above, media as {name, displayName, widthMm, heightMm,
 // ...}), and back; fromQml keeps `base` for what the map lacks and clamps what is out of range.
