@@ -16,6 +16,10 @@
 //                                    the dev plumbing reads them; for a removal Omarchy's lists, the deny list and the whole
 //                                    plan), then omarchy-pkg-aur-add or omarchy-pkg-drop through Omarchy's terminal launcher and
 //                                    grassfield-store-run
+//   store_e2e flatpak-get <pins-file>
+//                                    Get Flatpak… (step 3c part 3, SD24): the flatpak package's plan checked as a setup's (the
+//                                    pins of omarchy-pkg-add and omarchy-pkg-missing), then omarchy-pkg-add flatpak through
+//                                    Omarchy's terminal launcher and grassfield-store-run
 //   store_e2e recover                what store.json's record says against the system (SR20)
 #include "aur.h"
 #include "operations.h"
@@ -283,6 +287,32 @@ int main(int argc, char **argv)
         r.plan = planned;
         r.recipe = check.recipe;
         r.args = {name};
+        r.pins = check.pins;
+        return run(ops, r, tools.updateLock);
+    }
+    if (command == QLatin1String("flatpak-get") && args.size() == 2) {
+        SetupCheck check;
+        check.root = omarchy;
+        check.recipe = kFlatpakAdd;
+        QFile pins(args.at(1));
+        if (!pins.open(QIODevice::ReadOnly))
+            return 2;
+        for (const QByteArray &line : pins.readAll().split('\n')) {
+            if (line.indexOf("  ") == 64)
+                check.pins.append({QString::fromUtf8(line.mid(66)), QString::fromLatin1(line.left(64))});
+        }
+        const InstallPlan plan = checkSetupInstall({kFlatpakPackage}, check, tools, true, false);
+        say(QStringLiteral("plan=%1 packages=%2 detail=%3").arg(refusalName(plan.refusal), names(plan.packages), plan.detail));
+        if (plan.refusal != Refusal::None)
+            return 0;
+        r.kind = QStringLiteral("install");
+        r.path = QStringLiteral("terminal");
+        r.app = QStringLiteral("store:flatpak");
+        r.name = QStringLiteral("Flatpak");
+        r.packages = {kFlatpakPackage};
+        r.plan = plan.packages;
+        r.recipe = kFlatpakAdd;
+        r.args = {kFlatpakPackage};
         r.pins = check.pins;
         return run(ops, r, tools.updateLock);
     }

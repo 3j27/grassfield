@@ -117,7 +117,10 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     const bool setupOk = isRecipe(r.recipe) && isRecipeArgs(r.args)
         && r.recipe.startsWith(install ? QLatin1String("omarchy-install-") : QLatin1String("omarchy-remove-"));
     const bool aurOk = r.recipe == (install ? kAurAdd : kAurDrop) && isAurNames(r.args);
-    const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk);
+    // Get Flatpak… (SD24): omarchy-pkg-add flatpak, an install of the flatpak package and nothing else.
+    const bool flatpakGetOk = install && r.recipe == kFlatpakAdd && r.args == QStringList{kFlatpakPackage}
+        && r.packages == QStringList{kFlatpakPackage};
+    const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk || flatpakGetOk);
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
     // An install takes Flathub's ref, a removal the app id (b.3).
     const bool flatpakOk = r.path == QLatin1String("flatpak") && (install ? isFlatpakAppRef(r.flatpak) : isFlatpakId(r.flatpak));
@@ -153,6 +156,8 @@ QString terminalKind(const QString &recipe, const QStringList &args)
         return QStringLiteral("setup");
     if ((recipe == kAurAdd || recipe == kAurDrop) && isAurNames(args))
         return QStringLiteral("aur");
+    if (recipe == kFlatpakAdd && args == QStringList{kFlatpakPackage})
+        return QStringLiteral("flatpak");
     return {};
 }
 
