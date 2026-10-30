@@ -291,6 +291,8 @@ TestCase {
         const gf = row(t.page, "Grassfield 1.0.1");
         verify(gf);
         compare(gf.subtitle, "Installed: 1.0.0");
+        // The mark's tile in the brand green, as General > About's (ADR-0040 ID-11; review of 5391761).
+        compare(gf.tileColor, "grassfield");
         const info = [];
         t.page.infoRequested.connect(topic => info.push(topic));
         shown(gf, i => i.text === "More Info…" && i.activated !== undefined).activated();
