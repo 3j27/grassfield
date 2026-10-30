@@ -4,7 +4,8 @@ import Grassfield.Ui
 import "Preferences.js" as Preferences
 
 // The Store's settings (Ctrl+,; spec SR27, SR28): the optional sources (both off until turned on, owner ST2) and the
-// screenshots' switch (owner ST6, on), written to grassfield.json's "store" keys (SD20; Flathub's comes with step 3c);
+// screenshots' switch (owner ST6, on), written to grassfield.json's "store" keys (SD20; turning Flathub on adds it to the
+// user's own Flatpak installation, step 3c);
 // the catalog in use and why one is not; Arch's app data; what the Store fetches and from where, in plain words; Refresh.
 Window {
     id: root
@@ -111,6 +112,15 @@ Window {
                     title: qsTr("Flathub")
                     detail: qsTr("Apps from Flathub, installed in your own folder, without administrator rights.")
                     checked: root.sources.flathub
+                    settable: true
+                    onToggled: on => root.setPreference("store.sources.flathub", on)
+                }
+
+                // Turned on while Flathub could not be added (offline, or Flathub unreachable): it is, once it can be.
+                SettingsLine {
+                    visible: root.sources.flatpak && root.sources.flathub && !root.sources.flathubReady && !root.backend.refreshing
+                    text: root.sources.flathubProblem === "dev" ? qsTr("dev: not applied")
+                                                                : qsTr("Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again.")
                 }
 
                 SettingsLine {
@@ -184,6 +194,12 @@ Window {
                     text: qsTr("From the AUR (aur.archlinux.org), while it is on: what you search for after Return, the pages you open, the names of the packages installed from outside the repositories, and a build script when you ask to see it.")
                 }
 
+                // flatpak itself fetches Flathub's data (its own requests, as the user).
+                SettingsLine {
+                    visible: root.sources.flatpak
+                    text: qsTr("From Flathub (dl.flathub.org, through flatpak), while it is on: its app data, when the Store opens at most every 6 hours and on Refresh; an app's details when its page or install sheet opens; and the apps you install.")
+                }
+
                 SettingsLine {
                     text: root.sources.aur
                           ? qsTr("Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. What you search for stays on this computer until you press Return, which sends it to the AUR.")
@@ -196,10 +212,6 @@ Window {
                 text: qsTr("This setting could not be saved (%1).").arg(root.saveError)
             }
 
-            SettingsLine {
-                visible: root.sources.flatpak
-                text: qsTr("Turning Flathub on comes in a later version.")
-            }
         }
     }
 

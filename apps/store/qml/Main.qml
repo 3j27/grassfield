@@ -589,7 +589,7 @@ Window {
             trailing: Row {
                 spacing: Tokens.spacingXs
 
-                // The queue (SR18): what runs and what waits; a waiting operation can leave it.
+                // The queue (SR18): what runs and what waits; a waiting operation can leave it, a running Flatpak install stop.
                 ToolButton {
                     id: queueButton
                     visible: root.backend.operations.length > 0
@@ -601,6 +601,8 @@ Window {
                             items.push({id: "", text: (op.name || op.app) + " — " + Store.operationText(op), enabled: false});
                             if (op.state === "waiting")
                                 items.push({id: op.id, text: op.kind === "remove" ? qsTr("Don't Uninstall “%1”").arg(op.name) : qsTr("Don't Install “%1”").arg(op.name)});
+                            else if (op.stoppable)
+                                items.push({id: "stop:" + op.id, text: qsTr("Stop Installing “%1”").arg(op.name)});
                         }
                         queueMenu.items = items;
                         queueMenu.focusBack = queueButton;
@@ -732,7 +734,9 @@ Window {
         id: queueMenu
         accessibleName: qsTr("Installations")
         onChosen: id => {
-            if (id !== "")
+            if (id.startsWith("stop:"))
+                root.backend.stopOperation(id.slice(5)); // a Flatpak install that runs (SD26)
+            else if (id !== "")
                 root.backend.removeWaiting(id);
         }
     }

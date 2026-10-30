@@ -7,7 +7,11 @@
 //     every one of its packages; AUR and Flathub entries only while their source is on (owner ST2);
 //   - an AppStream component is offered alone only when it is a desktop application whose package is in a repository the
 //     Store offers (SD1: the Store installs from the repositories only apps it can remove again), and our catalog does not
-//     list its id (an entry hidden because its pinned source lacks the package stays hidden).
+//     list its id (an entry hidden because its pinned source lacks the package stays hidden);
+//   - while Flathub is on (step 3c), a desktop application of Flathub's AppStream (the user's installation's copy) is offered
+//     when neither our catalog nor Arch's AppStream has its id (an app in several sources shows the first of: setup,
+//     repository, Flathub, AUR; ADR-0037 a); a catalog entry of source flatpak takes its Flathub data, and is hidden when
+//     Flathub has no such app.
 #pragma once
 
 #include "appstream.h"
@@ -34,6 +38,9 @@ struct StoreApp {
     QString license;
     QString homepage;
     QString desktopId;
+    QString flatpakRef;    // Flatpak: app/<id>/<arch>/<branch>, as Flathub's AppStream names it
+    QString runtime;       // Flatpak: the runtime that ref needs, <id>/<arch>/<branch>
+    bool verified = false; // Flatpak: Flathub's verified-developer flag
     QString icon;          // a local file, or "" (the generic glyph)
     QStringList screenshots;
     QStringList categories; // our catalog's category ids
@@ -41,7 +48,8 @@ struct StoreApp {
     bool installed = false;
     bool inCatalog = false;
     bool hasAppStream = false;
-    int component = -1;                // its AppStream component: an index into ModelInputs::appstream, -1 for none
+    // Its AppStream component: an index into ModelInputs::appstream, or ModelInputs::flathub for a Flatpak; -1 for none.
+    int component = -1;
     const CatalogApp *entry = nullptr; // the catalog entry, when there is one (owned by the Catalog)
 };
 
@@ -53,6 +61,9 @@ struct ModelInputs {
     QSet<QString> foreign; // the packages installed from outside the repositories (an AUR app is installed when there)
     bool aurOn = false;
     bool flathubOn = false;
+    QList<AppStreamComponent> flathub; // Flathub's AppStream (its components with a Flatpak bundle)
+    QString flathubRoot;               // its folder: icons/<width>x<height>/<file>
+    QSet<QString> flatpaks;            // the apps of the user's installation (flatpak list --user --app)
     // The cached file of a catalog icon, "" when it is not cached (catalogstore.h).
     std::function<QString(const CatalogIcon &)> catalogIcon;
 };

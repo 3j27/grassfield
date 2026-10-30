@@ -47,6 +47,7 @@ struct AppStreamComponent {
     // runtime that bundle names ("org.gnome.Platform/x86_64/50"), and Flathub's verified-developer flag (its custom key
     // flathub::verification::verified). A component with a Flatpak bundle needs no pkgname.
     QString flatpak;
+    QString flatpakRef; // the bundle's whole ref: app/<id>/<arch>/<branch>
     QString runtime;
     bool verified = false;
 };

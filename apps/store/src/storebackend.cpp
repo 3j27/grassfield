@@ -65,20 +65,6 @@ QByteArray readSmall(const QString &path, qint64 max)
     return f.read(max);
 }
 
-// The last `max` bytes of a file that only grows (pacman.log), from the start of a line.
-QByteArray readTail(const QString &path, qint64 max)
-{
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly))
-        return {};
-    if (f.size() > max && !f.seek(f.size() - max))
-        return {};
-    QByteArray tail = f.read(max);
-    if (f.size() > max)
-        tail.remove(0, tail.indexOf('\n') + 1);
-    return tail;
-}
-
 QString dataHome()
 {
     const QString xdg = qEnvironmentVariable("XDG_DATA_HOME");
@@ -230,7 +216,16 @@ struct JobInput {
     bool fetchAppData = false;
     bool online = true;
     bool aur = false; // the AUR source is on: the catalog's AUR apps are offered
+    bool flathub = false;      // the Flathub source is on: Flathub is added to the user's installation, its apps offered
+    bool fetchFlathub = false; // and its AppStream fetched again
 };
+
+// Flathub's AppStream in the user's installation is older than the catalog's 6 hours (or not there).
+bool flathubStale()
+{
+    const QFileInfo f(env::flathubAppStream(flatpakArch()) + QStringLiteral("/appstream.xml.gz"));
+    return !f.exists() || f.lastModified().secsTo(QDateTime::currentDateTime()) > kStaleHours * 3600;
+}
 
 std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::atomic_bool &cancel)
 {
@@ -350,12 +345,44 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
 
     snap->webApps = readWebApps();
 
+    // Flathub (step 3c): added to the user's installation when its switch is turned on (S21), its AppStream fetched again
+    // on the catalog's schedule; a dev session changes the user's installation only through the fixture's fake flatpak.
+    if (in.flathub && !env::flatpak().isEmpty()) {
+        FlatpakTools flatpak;
+        flatpak.flatpak = env::flatpak();
+        flatpak.env = flatpakEnvironment();
+        snap->flathubAdded = flathubAdded(flatpak);
+        const bool mayWrite = !apps::runmode::dev() || !env::fixture().isEmpty();
+        if (!mayWrite && !snap->flathubAdded) {
+            snap->flathubProblem = QStringLiteral("dev");
+        } else if (mayWrite && in.online && (!snap->flathubAdded || in.fetchFlathub) && !cancel) {
+            const QString problem = snap->flathubAdded ? refreshFlathubAppStream(flatpak) : addFlathub(flatpak);
+            if (!snap->flathubAdded)
+                snap->flathubAdded = flathubAdded(flatpak);
+            if (!problem.isEmpty()) {
+                snap->flathubProblem = QStringLiteral("added");
+                qInfo("grassfield-store: Flathub: %s", qPrintable(problem));
+            }
+        } else if (!snap->flathubAdded) {
+            snap->flathubProblem = QStringLiteral("added"); // offline: added once online
+        }
+        if (snap->flathubAdded) {
+            snap->flathub = readFlathubAppStream(env::flathubAppStream(flatpakArch()));
+            if (const auto installed = listFlatpakApps(flatpak))
+                snap->flatpaks = *installed;
+        }
+    }
+
     ModelInputs model;
     model.catalog = snap->catalog ? &*snap->catalog : &snap->fallback;
     model.appstream = snap->appstream.components;
     model.appstreamRoot = snap->appstream.root;
     model.sync = snap->sync;
     model.aurOn = in.aur;
+    model.flathubOn = in.flathub && snap->flathubAdded;
+    model.flathub = snap->flathub.components;
+    model.flathubRoot = snap->flathub.root;
+    model.flatpaks = snap->flatpaks;
     model.foreign = snap->foreign;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
@@ -481,6 +508,10 @@ StoreBackend::StoreBackend(QObject *parent)
             return fake.isEmpty() ? QStringList() : QStringList{fake, command} + args;
         return QStringList{env::omarchyCommand(command)} + args;
     };
+    ops.flatpak = env::flatpak();
+    if (apps::runmode::dev() && env::fixture().isEmpty())
+        ops.flatpak.clear(); // a dev session runs no real flatpak operation (SR30)
+    ops.flatpakEnv = flatpakEnvironment();
     m_operations = std::make_unique<Operations>(ops);
     connect(m_operations.get(), &Operations::changed, this, &StoreBackend::operationsChanged);
     connect(m_operations.get(), &Operations::finished, this, [this](const QString &app) {
@@ -600,9 +631,11 @@ void StoreBackend::readNetwork()
             m_metered = metered;
             *m_screenshotGate = screenshotsAllowed();
             emit networkChanged();
+            // Flathub turned on while offline is added now; its AppStream is fetched again when stale.
+            const bool flathub = m_flathub && (!m_snapshot || !m_snapshot->flathubAdded || flathubStale());
             if (cameOnline && m_snapshot && !m_metered
-                && ((m_snapshot->catalogConfigured && catalogStale()) || m_snapshot->appstream.origin == AppStreamData::Origin::None))
-                run(Job{m_snapshot->catalogConfigured && catalogStale(), false, true});
+                && ((m_snapshot->catalogConfigured && catalogStale()) || m_snapshot->appstream.origin == AppStreamData::Origin::None || flathub))
+                run(Job{m_snapshot->catalogConfigured && catalogStale(), false, true, flathub});
             askAurForForeign(); // what waited for an unmetered connection (it asks nothing otherwise)
         }
     };
@@ -628,7 +661,7 @@ void StoreBackend::start()
 
 void StoreBackend::refresh()
 {
-    run(Job{true, true, true});
+    run(Job{true, true, true, true});
 }
 
 void StoreBackend::run(Job job)
@@ -639,18 +672,20 @@ void StoreBackend::run(Job job)
             job.fetchCatalog = job.fetchCatalog || m_pendingJob->fetchCatalog;
             job.forced = job.forced || m_pendingJob->forced;
             job.fetchAppData = job.fetchAppData || m_pendingJob->fetchAppData;
+            job.fetchFlathub = job.fetchFlathub || m_pendingJob->fetchFlathub;
         }
         m_pendingJob = job;
         return;
     }
     m_jobRunning = true;
-    const bool fetching = job.fetchCatalog || job.fetchAppData;
+    const bool fetching = job.fetchCatalog || job.fetchAppData || job.fetchFlathub;
     if (fetching != m_refreshing) {
         m_refreshing = fetching;
         emit loadingChanged();
     }
     // SR26: never on a metered connection unless asked (Ctrl+R), never offline.
-    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online, m_aur};
+    JobInput in{job.fetchCatalog && (job.forced || !m_metered), job.fetchAppData && (job.forced || !m_metered), m_online, m_aur,
+                m_flathub, job.fetchFlathub && (job.forced || !m_metered)};
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     m_pool.start([this, in, cancel] {
         std::shared_ptr<const Snapshot> snapshot = buildSnapshot(in, *cancel);
@@ -679,11 +714,13 @@ void StoreBackend::apply(std::shared_ptr<const Snapshot> snapshot)
         m_pendingJob.reset();
         run(next);
     } else if (first) {
-        // After the first load: the catalog when its copy is stale, Arch's AppStream when none is installed or fetched.
+        // After the first load: the catalog when its copy is stale, Arch's AppStream when none is installed or fetched,
+        // Flathub's when it is on and its copy is stale.
         const bool catalog = m_snapshot->catalogConfigured && catalogStale();
         const bool appData = m_snapshot->appstream.origin != AppStreamData::Origin::Installed;
-        if ((catalog || appData) && m_online)
-            run(Job{catalog, false, appData});
+        const bool flathub = m_flathub && m_snapshot->flathubAdded && flathubStale();
+        if ((catalog || appData || flathub) && m_online)
+            run(Job{catalog, false, appData, flathub});
     }
 }
 
@@ -731,7 +768,9 @@ QVariantMap StoreBackend::sources() const
 {
     return {{QStringLiteral("aur"), m_aur},
             {QStringLiteral("flathub"), m_flathub},
-            {QStringLiteral("flatpak"), !QStandardPaths::findExecutable(QStringLiteral("flatpak")).isEmpty()},
+            {QStringLiteral("flatpak"), !env::flatpak().isEmpty()},
+            {QStringLiteral("flathubReady"), m_flathub && m_snapshot && m_snapshot->flathubAdded},
+            {QStringLiteral("flathubProblem"), m_flathub && m_snapshot ? m_snapshot->flathubProblem : QString()},
             {QStringLiteral("screenshots"), m_screenshots}};
 }
 
@@ -832,8 +871,9 @@ QVariantMap StoreBackend::app(const QString &id) const
     const StoreApp *a = storeApp(id);
     if (!m_snapshot || !a)
         return {};
-    const AppStreamComponent *c = a->component >= 0 && a->component < m_snapshot->appstream.components.size()
-        ? &m_snapshot->appstream.components.at(a->component) : nullptr;
+    const QList<AppStreamComponent> &components = a->source == CatalogSource::Kind::Flatpak ? m_snapshot->flathub.components
+                                                                                            : m_snapshot->appstream.components;
+    const AppStreamComponent *c = a->component >= 0 && a->component < components.size() ? &components.at(a->component) : nullptr;
     QVariantMap out = view::detail(*a, c, m_snapshot->categories(), m_language, m_formats);
     // The AUR's facts (SR11): those of its info answer once asked (requestAur), a search's until then.
     if (a->source == CatalogSource::Kind::Aur) {
@@ -867,7 +907,7 @@ QVariantList StoreBackend::installed() const
     if (!m_snapshot)
         return out;
     const Snapshot &s = *m_snapshot;
-    QVariantList arch, omarchy, setups, webApps, foreign;
+    QVariantList arch, omarchy, setups, webApps, foreign, flatpaks;
     QSet<QString> catalogWebUrls;
     for (const StoreApp &a : s.apps) {
         if (!a.installed)
@@ -881,6 +921,28 @@ QVariantList StoreBackend::installed() const
         else if (a.source == CatalogSource::Kind::WebApp && a.entry) {
             webApps.append(m);
             catalogWebUrls.insert(a.entry->source.url);
+        } else if (a.source == CatalogSource::Kind::Flatpak) {
+            flatpaks.append(m);
+        }
+    }
+    // The user's Flatpaks Flathub's AppStream does not have (another remote's, or gone from Flathub): opened, removed.
+    if (m_flathub) {
+        QStringList others;
+        for (const QString &app : s.flatpaks) {
+            if (!s.index.contains(app))
+                others.append(app);
+        }
+        others.sort();
+        for (const QString &app : others) {
+            flatpaks.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("flatpak:") + app},
+                                        {QStringLiteral("name"), app},
+                                        {QStringLiteral("flatpakId"), app},
+                                        {QStringLiteral("summary"), QString()},
+                                        {QStringLiteral("icon"), QString()},
+                                        {QStringLiteral("kind"), QStringLiteral("flatpak")},
+                                        {QStringLiteral("installed"), true},
+                                        {QStringLiteral("launcher"), true},
+                                        {QStringLiteral("page"), false}});
         }
     }
     for (const view::WebAppEntry &w : s.webApps) {
@@ -931,7 +993,8 @@ QVariantList StoreBackend::installed() const
     };
     for (auto [group, list] : {std::pair{QStringLiteral("arch"), &arch}, std::pair{QStringLiteral("omarchy"), &omarchy},
                                std::pair{QStringLiteral("setup"), &setups}, std::pair{QStringLiteral("webapp"), &webApps},
-                               std::pair{QStringLiteral("aur"), &aur}, std::pair{QStringLiteral("foreign"), &foreign}}) {
+                               std::pair{QStringLiteral("flatpak"), &flatpaks}, std::pair{QStringLiteral("aur"), &aur},
+                               std::pair{QStringLiteral("foreign"), &foreign}}) {
         if (list->isEmpty())
             continue;
         byName(*list);
@@ -978,8 +1041,9 @@ QVariantMap StoreBackend::results() const
                                          {QStringLiteral("total"), it->total},
                                          {QStringLiteral("details"), it->details},
                                          // "aur" for the AUR's commands: their messages say so (Store.js).
-                                         {QStringLiteral("source"), it->record.recipe == kAurAdd || it->record.recipe == kAurDrop
-                                                                        ? QStringLiteral("aur") : QString()}});
+                                         {QStringLiteral("source"), it->record.recipe == kAurAdd || it->record.recipe == kAurDrop ? QStringLiteral("aur")
+                                                                    : it->record.path == QLatin1String("flatpak")              ? QStringLiteral("flatpak")
+                                                                                                                                : QString()}});
     }
     return out;
 }
@@ -1061,10 +1125,41 @@ QString StoreBackend::getBlock(const StoreApp &a) const
         if (const QString block = aurBlock(kAurAdd); !block.isEmpty())
             return block;
         break;
-    default:
-        return QStringLiteral("source"); // Flathub installs with step 3c
+    case CatalogSource::Kind::Flatpak:
+        if (const QString block = flatpakBlock(); !block.isEmpty())
+            return block;
+        if (!isFlatpakAppRef(a.flatpakRef))
+            return QStringLiteral("source");
+        break;
     }
     return m_online ? QString() : QStringLiteral("offline");
+}
+
+QString StoreBackend::flatpakBlock() const
+{
+    if (env::flatpak().isEmpty())
+        return QStringLiteral("noFlatpak");
+    if (apps::runmode::dev() && env::fixture().isEmpty())
+        return QStringLiteral("dev");
+    if (!m_flathub)
+        return QStringLiteral("flathubOff");
+    return {};
+}
+
+FlatpakTools StoreBackend::flatpakTools() const
+{
+    FlatpakTools tools;
+    tools.flatpak = env::flatpak();
+    tools.env = flatpakEnvironment();
+    return tools;
+}
+
+QString StoreBackend::otherFlatpak(const QString &id) const
+{
+    if (!m_snapshot || !m_flathub || !id.startsWith(QLatin1String("flatpak:")))
+        return {};
+    const QString app = id.mid(8);
+    return m_snapshot->flatpaks.contains(app) && !m_snapshot->index.contains(app) ? app : QString();
 }
 
 QString StoreBackend::terminalBlock() const
@@ -1317,6 +1412,8 @@ QString StoreBackend::uninstallBlock(const StoreApp &a) const
             return QStringLiteral("listsMissing");
         return aurBlock(kAurDrop);
     }
+    if (a.source == CatalogSource::Kind::Flatpak)
+        return flatpakBlock(); // the user's own installation: whatever the Store installed there, it removes
     if (a.source != CatalogSource::Kind::Repo || !m_snapshot)
         return QStringLiteral("source");
     RemovalFacts facts;
@@ -1359,6 +1456,10 @@ QVariantMap StoreBackend::actions(const QString &id) const
         return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
                 {QStringLiteral("uninstall"), can ? QString() : (apps::runmode::dev() ? QStringLiteral("dev") : QStringLiteral("missing"))}};
     }
+    if (!otherFlatpak(id).isEmpty()) {
+        return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
+                {QStringLiteral("uninstall"), flatpakBlock()}};
+    }
     const StoreApp *a = storeApp(id);
     if (!a)
         return {{QStringLiteral("installed"), false}, {QStringLiteral("launcher"), false},
@@ -1381,7 +1482,7 @@ PlanTools StoreBackend::planTools() const
     tools.heads = [dev](const QList<QUrl> &urls) { return headStatuses(urls, kFetchMs, kHeadsMs, dev); };
     // Software Update's answer against pacman's last sync (ADR-0037 e.4, SD29): the system first.
     tools.behind = databasesBehind(readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024),
-                                   lastSync(readTail(env::pacmanLog(), 1024 * 1024), newestSync(env::syncDir())));
+                                   lastSync(env::syncDir()));
     return tools;
 }
 
@@ -1437,6 +1538,18 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                                     : QVariantMap{{QStringLiteral("refusal"), QStringLiteral("unavailable")}});
         return;
     }
+    if (const QString other = otherFlatpak(id); !other.isEmpty()) {
+        // A Flatpak of the user's installation Flathub's AppStream does not have: removed as the others (SD27).
+        if (kind != QLatin1String("remove") || !flatpakBlock().isEmpty()) {
+            emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), flatpakBlock()}});
+            return;
+        }
+        RemovePlan p;
+        p.packages = {PlannedPackage{other, {}, kFlathubRemote, -1, {}}};
+        m_removePlans.insert(id, p);
+        emit planReady(id, kind, {{QStringLiteral("refusal"), QString()}, {QStringLiteral("packages"), packageList(p.packages, m_formats)}});
+        return;
+    }
     const StoreApp *a = storeApp(id);
     const bool install = kind == QLatin1String("install");
     if (!a || (!install && kind != QLatin1String("remove"))) {
@@ -1452,6 +1565,43 @@ void StoreBackend::plan(const QString &id, const QString &kind)
         // The sheet alone (owner, ST3): nothing pacman plans; a launcher and its icon, in the user's own files.
         emit planReady(id, kind, {{QStringLiteral("refusal"), block == QLatin1String("offline") ? QStringLiteral("offline") : QString()},
                                   {QStringLiteral("packages"), QVariantList()}});
+        return;
+    }
+    if (a->source == CatalogSource::Kind::Flatpak) {
+        if (!install) {
+            // The app goes, its data in ~/.var/app/<id> stays, and so do runtimes another app needs (SD27): nothing to ask.
+            RemovePlan p;
+            p.packages = {PlannedPackage{flatpakRefId(a->flatpakRef), {}, kFlathubRemote, -1, {}}};
+            m_removePlans.insert(id, p);
+            emit planReady(id, kind, {{QStringLiteral("refusal"), QString()}, {QStringLiteral("packages"), packageList(p.packages, m_formats)}});
+            return;
+        }
+        // flatpak's own plan on a pseudo-terminal, and what the app's metadata grants it (SD25), on a worker.
+        const FlatpakTools tools = flatpakTools();
+        const QString ref = a->flatpakRef;
+        const bool online = m_online;
+        const QLocale locale = m_formats;
+        const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+        m_pool.start([this, id, kind, ref, tools, online, locale, cancel] {
+            const InstallPlan p = checkFlatpakInstall(ref, tools, online);
+            const QVariantMap out{{QStringLiteral("refusal"), refusalName(p.refusal)},
+                                  {QStringLiteral("packages"), packageList(p.packages, locale)},
+                                  {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
+                                  {QStringLiteral("installed"), QString()},
+                                  {QStringLiteral("access"), p.access},
+                                  {QStringLiteral("detail"), p.detail}};
+            if (p.refusal != Refusal::None)
+                qInfo("grassfield-store: %s: flatpak's plan: %s", qPrintable(id), qPrintable(p.detail));
+            if (*cancel)
+                return;
+            QMetaObject::invokeMethod(this, [this, id, kind, out, p] {
+                if (p.refusal == Refusal::None)
+                    m_installPlans.insert(id, p);
+                else
+                    m_installPlans.remove(id);
+                emit planReady(id, kind, out);
+            }, Qt::QueuedConnection);
+        });
         return;
     }
     const PlanTools tools = planTools();
@@ -1543,6 +1693,11 @@ bool StoreBackend::install(const QString &id)
             r.args = a->entry->source.args;
             r.pins = check.pins;
             r.plan = it->packages;
+        } else if (a->source == CatalogSource::Kind::Flatpak) {
+            // flatpak installs what its own plan showed (b.3): the app's ref and what it needs.
+            r.path = QStringLiteral("flatpak");
+            r.flatpak = a->flatpakRef;
+            r.plan = it->packages;
         } else if (a->source == CatalogSource::Kind::Aur) {
             // yay builds the AUR's (whatever version its build makes: none asked) and pacman adds the repositories'.
             const SetupCheck check = aurCheck(kAurAdd);
@@ -1580,6 +1735,20 @@ bool StoreBackend::uninstall(const QString &id)
         r.name = w->name;
         r.webName = w->file;
         r.webUrl = w->url;
+        m_operations->enqueue(r);
+        return true;
+    }
+    if (const QString other = otherFlatpak(id); !other.isEmpty()) {
+        if (m_operations->queued(id) || !flatpakBlock().isEmpty() || !m_removePlans.contains(id))
+            return false;
+        OperationRecord r;
+        r.id = newOperationId();
+        r.kind = QStringLiteral("remove");
+        r.path = QStringLiteral("flatpak");
+        r.app = id;
+        r.name = other;
+        r.flatpak = other;
+        r.plan = m_removePlans.take(id).packages;
         m_operations->enqueue(r);
         return true;
     }
@@ -1621,6 +1790,9 @@ bool StoreBackend::uninstall(const QString &id)
             r.recipe = kAurDrop;
             r.args = {a->package};
             r.pins = check.pins;
+        } else if (a->source == CatalogSource::Kind::Flatpak) {
+            r.path = QStringLiteral("flatpak");
+            r.flatpak = flatpakRefId(a->flatpakRef);
         } else {
             r.path = QStringLiteral("helper");
             r.packages = {a->package};
@@ -1637,6 +1809,46 @@ bool StoreBackend::removeWaiting(const QString &operationId)
     return m_operations->removeWaiting(operationId);
 }
 
+bool StoreBackend::stopOperation(const QString &operationId)
+{
+    return m_operations->stop(operationId);
+}
+
+void StoreBackend::requestFlatpakInfo(const QString &id)
+{
+    const StoreApp *a = storeApp(id);
+    const QString other = otherFlatpak(id);
+    if ((!a || a->source != CatalogSource::Kind::Flatpak) && other.isEmpty())
+        return;
+    const bool installed = !other.isEmpty() || a->installed;
+    // Before an install Flathub answers (online only); after it, the user's installation does.
+    if (!installed && !m_online) {
+        emit flatpakInfo(id, {});
+        return;
+    }
+    const FlatpakTools tools = flatpakTools();
+    if (tools.flatpak.isEmpty())
+        return;
+    const QString target = !other.isEmpty() ? other : installed ? flatpakRefId(a->flatpakRef) : a->flatpakRef;
+    const QLocale locale = m_formats;
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, id, target, installed, tools, locale, cancel] {
+        const std::optional<FlatpakFacts> facts = flatpakFacts(tools, target, installed);
+        if (*cancel)
+            return;
+        QVariantMap out;
+        if (facts) {
+            out = {{QStringLiteral("version"), facts->version},
+                   {QStringLiteral("license"), facts->license},
+                   {QStringLiteral("download"), view::sizeText(facts->download, locale)},
+                   {QStringLiteral("installed"), view::sizeText(facts->installed, locale)}};
+            if (facts->access) // unread: the page says nothing rather than "only its own window and files"
+                out.insert(QStringLiteral("access"), *facts->access);
+        }
+        QMetaObject::invokeMethod(this, [this, id, out] { emit flatpakInfo(id, out); }, Qt::QueuedConnection);
+    });
+}
+
 void StoreBackend::dismiss(const QString &id)
 {
     m_operations->dismiss(id);
@@ -1646,10 +1858,25 @@ bool StoreBackend::open(const QString &id)
 {
     const StoreApp *a = storeApp(id);
     const auto other = otherWebApp(id);
-    if (!other && (!a || !a->installed))
+    const QString otherApp = otherFlatpak(id);
+    if (!other && otherApp.isEmpty() && (!a || !a->installed))
         return false;
     QStringList argv;
-    if (other) {
+    if (!otherApp.isEmpty() || a->source == CatalogSource::Kind::Flatpak) {
+        // Its exported entry when the session sees flatpak's export folder (from the login after flatpak's own install,
+        // S20); else `flatpak run <app id>`, in its own scope as well (ADR-0037 f).
+        const QString appId = otherApp.isEmpty() ? flatpakRefId(a->flatpakRef) : otherApp;
+        const QString desktop = otherApp.isEmpty() ? a->desktopId : otherApp + QStringLiteral(".desktop");
+        const QString exports = env::flatpakExports();
+        const QStringList dirs = qEnvironmentVariable("XDG_DATA_DIRS").split(QLatin1Char(':'));
+        const bool seen = dirs.contains(exports) || dirs.contains(exports + QLatin1Char('/'));
+        if (!isFlatpakId(appId))
+            return false;
+        if (seen && isDesktopId(desktop) && QFileInfo::exists(exports + QStringLiteral("/applications/") + desktop))
+            argv = {QStringLiteral("uwsm-app"), QStringLiteral("--"), desktop};
+        else
+            argv = {QStringLiteral("uwsm-app"), QStringLiteral("--"), QStringLiteral("/usr/bin/flatpak"), QStringLiteral("run"), appId};
+    } else if (other) {
         argv = {QStringLiteral("omarchy-launch-webapp"), other->url};
     } else if (a->source == CatalogSource::Kind::WebApp) {
         // Omarchy's own launcher, which scopes the browser itself (S14: the entry's file name has spaces uwsm refuses).

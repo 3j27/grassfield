@@ -3,7 +3,8 @@ Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the fi
 (the read-only backend) is merged; step 2 (the UI, read only: SR1 to SR13 shown, buttons disabled, Installed, the Updates
 list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
 (`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3 (3a repository packages and web apps,
-3b1 Omarchy's setups, merged; 3b2 the AUR, built: `docs/audits/store-2026-10-27/step3b2.md`; 3c Flathub to come). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+3b1 Omarchy's setups, and 3b2 the AUR, merged; 3c Flathub: part 1 merged, part 2, the Flathub source, built
+(`docs/audits/store-2026-10-27/step3c.md`), part 3 "Get Flatpak…" to come). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -90,7 +91,9 @@ Product page (step 2)
   Licence, Homepage and Bug tracker (buttons that open the browser on click, https only). For an Omarchy setup: "What this
   setup changes" (our catalog's text) and the recipe's name. For the AUR: Maintainer (or "Orphaned"), Votes, Popularity, Last
   updated, "Flagged out of date" when so, and "View Build Script" (the PKGBUILD as plain text in a sheet, fetched on click).
-  For a Flatpak: the app id, the runtime, "Can access" (its permissions in plain words: files, devices, network) and
+  For a Flatpak: the app id, the runtime, "Can access" (every grant of its metadata in plain words, a bus name or a grant
+  the Store does not know named as flatpak writes it; "Only its own window and files" only when nothing more is granted,
+  nothing when its metadata could not be read; ADR-0037 SD25) and
   Flathub's verified-developer flag when its AppStream carries one.
 - SR12. An app with several launchers names the one "Open" uses; an app with none (a command-line tool) says so and has no
   "Open".
@@ -100,15 +103,18 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   « Mettre à jour » for a Flatpak with an update; never for a repository or AUR app); a progress
   ring while its operation runs or waits in the queue ("Waiting" « En attente »); "Installed" (« Installée ») when installed
   without a launcher. Disabled with a tooltip when offline, while an update or another package manager runs, or when the source
-  is turned off; until step 3c, a Flatpak's Get stays disabled with SD8's tooltip (ADR-0037 SD11); a setup's, and an AUR
+  is turned off; a Flatpak's while Flathub is off ("Turn on Flathub in the Store's settings to install from it.") or the
+  `flatpak` package is missing ("Flathub needs the flatpak package."); a setup's, and an AUR
   app's, while the installed Omarchy differs from the catalog's pins or the catalog does not pin the AUR's two commands,
   with that reason (ADR-0037 g, SD19, SD21); an AUR app's while the AUR is off ("Turn on the AUR in the Store's settings
   to install from it.") or when a repository has its name ("A repository has this package: the Store installs it from
   there, from its own page."); an AUR app whose name the deny list names ("The system, Omarchy or Grassfield uses this
   name, so the Store doesn't build it from the AUR." « Le système, Omarchy ou Grassfield utilise ce nom : le Store ne le
   compile pas depuis l'AUR. »; ADR-0037 SD30), or while Omarchy's package lists cannot be read ("Omarchy's package lists
-  can't be read, so the Store installs nothing from the AUR."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one, else turning;
-  a square in it while the operation waits in the queue, which takes it out.
+  can't be read, so the Store installs nothing from the AUR."). The ring is the operation's (macOS 27's download ring): its count from pacman's log once there is one (a Flatpak's,
+  flatpak's "Installing <ref>" lines against its plan), else turning; a square in it while the operation waits in the
+  queue, which takes it out, or while a Flatpak install runs, which stops it ("Stop installing …" « Arrêter l’installation
+  de … », ADR-0037 SD26: SIGTERM; what flatpak finished stays; nothing is said).
 - SR14. "Get" opens the confirmation sheet; its default button is "Install" (« Installer »). For the AUR the button is
   "Install from the AUR" (« Installer depuis l'AUR ») and the default is Cancel: Return and Esc close the sheet, the
   install takes a click or Tab and Space (common rule 3: the build runs the package's script before any password; the
@@ -127,7 +133,8 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
     update first" (« Terminez d'abord la mise à jour du système ») with "Update Now…" (« Mettre à jour maintenant… »),
     which opens Software Update;
   - the system older than its mirror (ADR-0037 e.4, SD29: Software Update's last successful check, whatever its state,
-    found other updates or an Omarchy release after pacman last synced the databases; or a file of the plan the mirror no
+    found other updates or an Omarchy release after pacman last completed a sync of the databases, one that wrote a
+    database (S27); or a file of the plan the mirror no
     longer has, every file asked with a HEAD at once before anything downloads, AUR installs included), a
     plan that upgrades an installed package, or an unresolvable plan → "Update your system first" (« Mettez d'abord le
     système à jour »): "Your system needs to be updated before you can install apps. Software Update brings it up to date;
@@ -250,9 +257,12 @@ Catalog and network (step 1)
 
 Settings window (Ctrl+, ; step 2 reads, step 3 writes)
 - SR28. "Sources": switches for the optional sources, both off until turned on, each with one line saying what it means: AUR;
-  Flathub, shown only when the `flatpak` package is installed (otherwise the line "Flathub needs the flatpak package" with a
-  link to its product page); turning Flathub on adds the Flathub remote to the user's installation
-  (`flatpak remote-add --user --if-not-exists`).
+  Flathub, shown only when the `flatpak` package is installed (otherwise the line "Flathub needs the flatpak package"; its
+  "Get Flatpak…" is step 3c part 3); turning Flathub on adds the Flathub remote to the user's installation
+  (`flatpak remote-add --user --if-not-exists`) and fetches its AppStream; while it could not be added (offline, Flathub
+  unreachable) the line "Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again."
+  (« Flathub n’a pas pu être joint. Le Store l’ajoute dès que vous êtes en ligne ; Actualiser réessaie. »). "What the
+  Store Fetches" says what flatpak fetches from Flathub while it is on.
   "Screenshots": the ST6 switch. "Catalog": the channel and the date of the catalog in use, "Refresh". Stored in
   `grassfield.json` (`store.sources.aur`, `store.sources.flathub`, `store.screenshots`), written by the Store with the
   settings contract's rules as Settings writes its own keys, until the shell is the single writer (ADR-0020 item 4,
@@ -269,9 +279,10 @@ Offline
 
 Dev sessions (ADR-0019)
 - SR30. No real operation, ever: no pkexec, no Omarchy terminal, no flatpak operation; the queue runs fake programs only
-  (`GRASSFIELD_STORE_PKEXEC` for the helper's path, `GRASSFIELD_STORE_INSTALLER` for the others); catalogs, keyrings and
-  package roots from fixtures (`GRASSFIELD_STORE_CATALOG_URL`, `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`); without
-  them the buttons show "dev: not applied".
+  (`GRASSFIELD_STORE_PKEXEC` for the helper's path, `GRASSFIELD_STORE_INSTALLER` for the others, the fixture's `bin/flatpak`
+  for Flathub's); catalogs, keyrings and package roots from fixtures (`GRASSFIELD_STORE_CATALOG_URL`,
+  `GRASSFIELD_STORE_KEYRING`, `GRASSFIELD_STORE_FIXTURE`); without them the buttons show "dev: not applied", and Flathub is
+  read but never added to the user's installation.
 
 ## Keyboard
 | Keys | Action |
@@ -315,7 +326,7 @@ because the app menu is the shell's (ADR-0037 SD6); without a global menu bar th
 | Case | Behaviour |
 |---|---|
 | A plan that upgrades an installed package or cannot be resolved (database newer than the system, S4) | sheet: "Update your system first", "Your system needs to be updated before you can install apps. …", "Update Now…"; nothing runs |
-| The system older than its mirror: Software Update's last successful check (up-to-date, available or not-set-up) found other updates or an Omarchy release after pacman last synced, or a file of the plan the mirror no longer has (HEAD 404/410; S5; SD29) | same sheet, before anything downloads; the mirror's answer in the log only |
+| The system older than its mirror: Software Update's last successful check (up-to-date, available or not-set-up) found other updates or an Omarchy release after pacman last completed a sync (S27), or a file of the plan the mirror no longer has (HEAD 404/410; S5; SD29) | same sheet, before anything downloads; the mirror's answer in the log only |
 | An install pacman ended on the mirror's 404, 410 or oversized answer for a package or its `.sig` | "Your system needs to be updated before you can install apps." with "Update Now…" (notice and page), no Try Again, no Details…; pacman's output in the log |
 | `pacman -Qu` lists packages not "[ignored]" (the last system update did not finish, S12) | "Finish the system update first", "Open Software Update"; nothing installs from a repository, the AUR or a setup |
 | `db.lck` present, or Omarchy's update running (S11) | "Another installation or an update is running"; nothing queued |
@@ -438,8 +449,10 @@ installed on Omarchy), Omarchy 4.0.4's commands, `pacman` 7.1, `yay` (Omarchy's,
 - Omarchy's recipes are Omarchy's: their effects are those of the installed Omarchy release; our catalog's text describes the
   release it was written against (4.0.4), and CI checks the names, not the behaviour.
 - A replayed old catalog is refused only once a newer one has been seen on that machine.
-- Flatpaks are not updated by `omarchy update` (the Store updates them) and have no Dock badge (ST8); cancelling a Flatpak
-  operation is offered only once step 3 has measured what it leaves.
+- Flatpaks are not updated by `omarchy update` (the Store updates them, step 4) and have no Dock badge (ST8). A Flatpak install
+  can be stopped (what flatpak finished, runtimes, stays for the next install or the next removal's `--unused`); a removal
+  cannot. A Flathub app whose Arch id differs from Flathub's (`firefox.desktop`, `org.mozilla.firefox`) shows once per
+  source.
 - Screenshots come from third-party hosts (ST6). Apps without metadata show their publisher's icon from our catalog (ST10;
   needs legal review).
 - Visual parity of the product page, search, Categories and Updates rests on the guide and the macOS 27 Settings panes: no

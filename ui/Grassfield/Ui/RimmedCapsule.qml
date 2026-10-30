@@ -13,8 +13,10 @@ Rectangle {
 
     radius: height / 2
     color: Appearance.withAlpha(Appearance.colors.text, root.fillOpacity)
-    border.width: root.hairline
-    border.color: Appearance.withAlpha(Appearance.colors.shadow, Appearance.dark ? Tokens.settingsRimOpacityDark : Tokens.settingsRimOpacity)
+    // Increase Contrast: the control outline of every shared control instead of the faint rim.
+    border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : root.hairline
+    border.color: Appearance.increaseContrast ? Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+        : Appearance.withAlpha(Appearance.colors.shadow, Appearance.dark ? Tokens.settingsRimOpacityDark : Tokens.settingsRimOpacity)
 
     Rectangle {
         anchors.fill: parent
