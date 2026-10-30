@@ -24,6 +24,8 @@ SH
 cat >"$tmp/bin/systemctl" <<'SH'
 #!/bin/sh
 echo "systemctl $*" >>"$FAKE_LOG"
+[ "${FAKE_STOP_FAILS:-0}" = 1 ] && exit 1
+exit 0
 SH
 chmod +x "$tmp/lib/grassfield-shell-failed" "$tmp/lib/session-gone" "$tmp/bin/systemctl"
 run() { # <now> [VAR=value...] -> exit code in $rc, stderr in $err; the ledger lives in $tmp/run/grassfield
@@ -32,6 +34,11 @@ run() { # <now> [VAR=value...] -> exit code in $rc, stderr in $err; the ledger l
   shift
   err=$(env -i PATH="$tmp/bin:/usr/bin:/bin" XDG_RUNTIME_DIR="$tmp/run" FAKE_LOG="$tmp/log" GRASSFIELD_SHELL_FAIL_NOW="$now" "$@" \
     sh "$tmp/lib/grassfield-shell-failed" 2>&1 >/dev/null) || rc=$?
+  return 0
+}
+run_real() { # no clock given: the script reads /proc/uptime itself
+  local rc=0
+  err=$(env -i PATH="$tmp/bin:/usr/bin:/bin" XDG_RUNTIME_DIR="$tmp/run" FAKE_LOG="$tmp/log" sh "$tmp/lib/grassfield-shell-failed" 2>&1 >/dev/null) || rc=$?
   return 0
 }
 ledger() { cat "$tmp/run/grassfield/shell-failures" 2>/dev/null | tr '\n' ' '; }
@@ -58,6 +65,30 @@ desc="a failure 700 s after the first forgets it (window 600 s): two in the ledg
 check test "$(ledger)" = "300 700 " -a "$(stops)" = 0
 run 800; desc="the next one is the third within the window: the stop"
 check test "$(ledger)" = "300 700 800 " -a "$(stops)" = 1
+fresh
+run 0; run 300; run 600
+desc="the window is inclusive: failures at 0, 300 and 600 s are three within 600 s, the stop"
+check test "$(ledger)" = "0 300 600 " -a "$(stops)" = 1
+fresh
+run 0; run 300; run 601
+desc="one second past the window the first failure is forgotten: no stop"
+check test "$(ledger)" = "300 601 " -a "$(stops)" = 0
+fresh
+before=$(cut -d' ' -f1 /proc/uptime); before=${before%%.*}
+run_real
+after=$(cut -d' ' -f1 /proc/uptime); after=${after%%.*}
+got=$(ledger); got=${got% }
+desc="without a clock given the script reads /proc/uptime itself (the ledger holds the uptime in whole seconds)"
+check bash -c '[[ $1 =~ ^[0-9]+$ ]] && (( $1 >= $2 && $1 <= $3 ))' _ "$got" "$before" "$after"
+fresh
+run 1; run 2; run 3 FAKE_STOP_FAILS=1
+desc="a stop that fails is said in the journal (the restarts go on), the state file is still written"
+check bash -c '[[ $1 == *"the stop of its unit failed"* ]]' _ "$err"
+check test -e "$tmp/run/grassfield/shell-safe-mode"
+fresh
+run 1; run 2; run 3
+desc="the journal line that says the restarts stopped comes after the stop succeeded"
+check bash -c '[[ $1 == *"restarts stopped"* ]]' _ "$err"
 # 3. A logout counts nothing.
 fresh
 run 1000; run 1005
@@ -104,6 +135,14 @@ desc="grassfield-shell.service names the counter in OnFailure= next to Omarchy's
 check bash -c 'grep -qx "OnFailure=omarchy-sleep-lock.service grassfield-shell-failed.service" "$1" && grep -qx "StartLimitIntervalSec=300" "$1" && grep -qx "StartLimitBurst=10" "$1" && grep -qx "Restart=always" "$1"' _ "$root/packaging/systemd/grassfield-shell.service"
 desc="the counter's unit is a oneshot of the Grassfield session only, hardened, with the shared runtime directory"
 check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-shell-failed" "$1" && grep -qx "RuntimeDirectory=grassfield" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "PrivateNetwork=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "CapabilityBoundingSet=" "$1" && ! grep -q "^Restart=" "$1"' _ "$u"
+desc="the unit clears the script's three test variables, so the session never honours them (opus review of b1d826b, finding 3)"
+check grep -qx "UnsetEnvironment=GRASSFIELD_SHELL_FAIL_WINDOW GRASSFIELD_SHELL_FAIL_COUNT GRASSFIELD_SHELL_FAIL_NOW" "$u"
+desc="the shell unit keeps systemd's RestartMode=normal (a RestartMode=direct would skip 'failed' and OnFailure= would never run)"
+check bash -c '! grep -q "^RestartMode=" "$1" || grep -qx "RestartMode=normal" "$1"' _ "$root/packaging/systemd/grassfield-shell.service"
+desc="the counter is reachable only through OnFailure= of the shell: no [Install] section, not in the autostart, named by no other unit or drop-in"
+check bash -c '! grep -q "^\[Install\]" "$1" && ! grep -q "WantedBy=\|RequiredBy=" "$1" && ! grep -q "shell-failed" "$2" && [ "$(grep -l "grassfield-shell-failed" "$3"/systemd/*.service "$3"/systemd/*.d/* 2>/dev/null | grep -v "grassfield-shell-failed.service$" | tr "\n" " ")" = "$3/systemd/grassfield-shell.service " ]' _ "$u" "$root/config/hypr/grassfield/autostart.lua" "$root/packaging"
+desc="the sandbox keeps what the stop needs (AF_UNIX for the manager's private socket) and pins ProtectHome=read-only (opus review U6)"
+check bash -c 'grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "ProtectHome=read-only" "$1" && grep -q "block that request" "$1"' _ "$u"
 desc="the PKGBUILD installs the unit, the script (from packaging/bin) and session-gone next to it"
 check bash -c 'grep -q "for unit in .*shell-failed" "$1" && grep -q "packaging/bin\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/\"" "$1" && grep -q "packaging/systemd/session-gone\" \"\$pkgdir/usr/lib/grassfield/session-gone\"" "$1"' _ "$root/packaging/arch/PKGBUILD"
 desc="the script asks session-gone next to itself and never calls start, reset-failed, kill, unlock or qs"

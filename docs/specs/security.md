@@ -248,9 +248,13 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   and writes `$XDG_RUNTIME_DIR/grassfield/shell-safe-mode`, the state the security process of ADR-0041 step 1 reads from
   S4 on; a logout counts nothing (`session-gone`, the test the gate uses); a counter that cannot count (no runtime
   directory, no clock, an unwritable ledger) counts nothing and the restarts go on. The stop never unlocks: the
-  compositor keeps the lock (below, "Lock survival"), and until S4 ships a stopped UI is what the start limit gave: locked
-  and out of reach from the session, Omarchy's sleep lock armed, its stand-in trying the shell once more at sleep time.
-  Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
+  compositor keeps the lock (below, "Lock survival"), and until S4 ships a stopped UI is what the start limit gave. Locked:
+  the session stays locked and out of reach from itself (a lid close or a sleep brings the shell back through the
+  stand-in, which asks it to lock; otherwise a TTY). Unlocked: no idle lock, and the lock key does nothing (SUPER+CTRL+Q
+  is `qs ipc` to the shell, `config/hypr/grassfield/bindings.lua:148`); only a sleep or the lid locks, because Omarchy's
+  sleep lock stays armed and its stand-in, like `grassfield-lid`'s fallback, starts the shell again and asks it to lock.
+  Acceptable until S4 (the old start limit gave the same state; opus security review of b1d826b), written here so that
+  nobody takes a stopped shell for a locked one. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
   model: a 10 s loop must end), `tests/security/sleep_lock_units.sh`. A stop through systemd is never restarted (systemd
   semantics): logout stops `graphical-session.target`,
   which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,

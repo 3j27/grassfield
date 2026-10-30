@@ -24,9 +24,10 @@
 # Nothing here unlocks, starts or signals a process: the one state change is the stop of the shell unit, and the
 # compositor keeps the session locked across it.
 #
-# Environment, for tests only (the unit's environment is the user manager's, which no other user can set):
-#   GRASSFIELD_SHELL_FAIL_WINDOW  seconds of the window (default 600), GRASSFIELD_SHELL_FAIL_COUNT the threshold (default 3),
-#   GRASSFIELD_SHELL_FAIL_NOW     the monotonic time to use instead of /proc/uptime.
+# Environment, for tests only, which run a scratch copy of this script: GRASSFIELD_SHELL_FAIL_WINDOW (seconds of the
+# window, default 600), GRASSFIELD_SHELL_FAIL_COUNT (the threshold, default 3), GRASSFIELD_SHELL_FAIL_NOW (the monotonic
+# time to use instead of /proc/uptime). The unit clears all three (UnsetEnvironment=), so in the session they are never
+# read: nothing in the user manager's environment can lower the threshold (opus security review of b1d826b).
 set -u
 me=grassfield-shell-failed
 say() { echo "$me: $*" >&2; }
@@ -76,8 +77,12 @@ say "failure $count of $count_max within ${window} s"
 if [ "$count" -lt "$count_max" ]; then
   exit 0
 fi
-# 4. The loop ends: the state file first (written whole, then renamed), then the stop. The session stays locked if it was.
+# 4. The loop ends: the state file first (written whole, then renamed), then the stop, then the journal line with the
+# stop's result (a stop that failed is said as well). The session stays locked if it was.
 printf 'loop %s %s\n' "$now" "$count" >"$dir/shell-safe-mode.new" && mv -f "$dir/shell-safe-mode.new" "$dir/shell-safe-mode"
-say "grassfield-shell failed $count times within ${window} s: its restarts stop (safe mode); the compositor keeps any lock"
-systemctl --user stop grassfield-shell.service
+if systemctl --user stop grassfield-shell.service; then
+  say "grassfield-shell failed $count times within ${window} s: its restarts stopped (safe mode state written); the compositor keeps any lock"
+else
+  say "grassfield-shell failed $count times within ${window} s, but the stop of its unit failed (exit $?): the restarts go on"
+fi
 exit 0

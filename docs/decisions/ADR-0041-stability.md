@@ -136,14 +136,19 @@ down, how sleep behaves) is written in the table at the end of this step.
   counts as a failure. `OnFailure=omarchy-sleep-lock.service` stays, unchanged. Before S4 ships, what the user sees at
   the threshold is what the start limit gives today, reached now for a slow loop too: the UI stays stopped (no bars,
   the windows over the ground colour), the compositor keeps a lock if there was one (fail closed, out of reach from the
-  session: a TTY or the power button are the exits, as today), Omarchy's sleep lock stays armed and its stand-in tries
-  the shell once more at sleep time (`reset-failed` + start). Proof: a nested run where the shell is killed with SIGSEGV
+  session), Omarchy's sleep lock stays armed and its stand-in tries the shell once more at sleep time (`reset-failed` +
+  start). Unlocked, there is no idle lock and the lock key does nothing (it is `qs ipc` to the shell,
+  `bindings.lua:148`): only a sleep or the lid locks, each bringing the shell back through the stand-in; the other exit is
+  a TTY (opus security review of b1d826b; `docs/specs/security.md` "Lock coverage" says so). Proof: a nested run where the shell is killed with SIGSEGV
   every 5 s while locked: Hyprland reports `LOCK` on every monitor throughout, nothing typed reaches a probe window, the
   restarts stop after the third failure; the same unlocked; a logout during the window does not count. Tests:
   `tests/shell/unit_restart_limits.sh` gains the lifetime model (it must fail on today's unit, then pass); a logic test
   of the detector on a fake `systemctl` and a fake runtime directory (`tests/shell/shell_failures.sh`);
-  `tests/security/sleep_lock_units.sh` for the gate with the stopped unit; `tests/security/reload_locked.sh` gains the
-  `crash-loop` step (nested, bare). Owner, real session: `kill -SEGV $(systemctl --user show -p MainPID --value
+  `tests/security/sleep_lock_units.sh` for the gate with the stopped unit; the unit-level loop itself (three failures,
+  the stop, the state file) under a throwaway systemd user manager in a container, with S1 (the nested dev session runs
+  the shell through `scripts/dev/shell-run.sh`, not through the unit, so `reload_locked.sh` cannot produce a unit loop;
+  the first version of this step planned a `crash-loop` step there: deferred to that container harness, opus review of
+  b1d826b, finding 2). Owner, real session: `kill -SEGV $(systemctl --user show -p MainPID --value
   grassfield-shell.service)` three times within ten minutes while locked: the session stays locked and the restarts stop
   (`scripts/gates/r1-restart.sh --journal` then has its first real restarts, gate R1). Review: opus security (R12).
 - **S1. The security process and its unit, nothing moved yet.** `shell/security/` is made free of UI imports (ADR-0010 S1:
@@ -196,8 +201,10 @@ down, how sleep behaves) is written in the table at the end of this step.
 - **S4. Safe mode, last.** When 1a's state file says the UI is stopped for a loop, the security process maps one layer
   surface: the Grassfield mark, the sentence "Grassfield is running in safe mode: its desktop stopped working and was
   turned off." and the Grassfield menu with Try Again…, Log Out…, Restart…, Shut Down… (the existing session-end path),
-  drawn with `Grassfield.Ui` only, under the lock surface when locked. Try Again starts `grassfield-shell.service` and
-  empties the failures file; a second loop returns here. Nothing else: no Dock, desktop, Search, notification server or
+  drawn with `Grassfield.Ui` only, under the lock surface when locked, and only once it has checked that the shell unit
+  is really stopped (`systemctl --user show -p ActiveState`): a stale `shell-safe-mode` from an earlier loop, with the
+  shell brought back by the stand-in or by hand, shows nothing (opus review of b1d826b). Try Again starts
+  `grassfield-shell.service`, empties the failures file and removes `shell-safe-mode`; a second loop returns here. Nothing else: no Dock, desktop, Search, notification server or
   request socket to the plugin (the 2026-10-29 crash lived in those sockets, I-1, which the security process never
   opens). Proof: the 1a nested run, now ending with the safe-mode bar after the third failure, the password unlocking
   at the first attempt, Try Again restoring the desktop; captures (en, fr, light, dark). Tests: the safe-mode surface
@@ -235,13 +242,13 @@ down, how sleep behaves) is written in the table at the end of this step.
   both). The gate's decisions are unchanged (`tests/security/sleep_lock_units.sh` 0 FAIL).
 - `grassfield-shell.service`: `StartLimitIntervalSec=300`, `StartLimitBurst=10` (SQ-2 A's backstop: a loop faster than one
   crash every 29 s ends at the limit), `OnFailure=omarchy-sleep-lock.service grassfield-shell-failed.service`.
-- Tests: `tests/shell/shell_failures.sh` (logic, 21 cases with stubs: the three failures, the window, the logout, a garbage
+- Tests: `tests/shell/shell_failures.sh` (logic, 31 cases with stubs: the three failures, the window, the logout, a garbage
   or symlinked ledger, no runtime directory, an unreadable clock, the test variables, the static wiring; three mutants
   each change the decisions); `tests/shell/unit_restart_limits.sh` gains the lifetime model
   (`unit_restart_limits.py`: a loop of one crash every 10 s must end, by the limit or by the counter; the shell's first
   unit fails it, the unit with the counter passes, a limit a 10 s loop reaches passes); `sleep_lock_units.sh` and
   `shell_unit.sh` updated for the two `OnFailure=` units and session-gone. Inventory 571.
-- Evidence (this container, no systemd user session): `shell_failures.sh` exit 0 (24 PASS: 21 cases, 3 mutants), `unit_restart_limits.sh` exit 0
+- Evidence (this container, no systemd user session): `shell_failures.sh` exit 0 (34 PASS: 31 cases, 3 mutants), `unit_restart_limits.sh` exit 0
   (and the model rejects the old unit from git: exit 1), `sleep_lock_units.sh` exit 0, `shell_unit.sh` exit 0
   (`systemd-analyze verify` NOT VERIFIED here: no runtime directory; its "environment refuses" patterns gain that message),
   `python3 -I tests/ci/inventory.py` ok. NOT VERIFIED: the unit wiring under a real user manager (the integrator's
@@ -249,7 +256,20 @@ down, how sleep behaves) is written in the table at the end of this step.
   ten minutes while locked: the session stays locked, the restarts stop, `shell-safe-mode` exists; then
   `systemctl --user start grassfield-shell.service` brings the shell back, and `scripts/gates/r1-restart.sh --journal` reads
   the first real restarts).
-- Review: opus security (R12: the counter stops the process that holds the lock; the compositor keeps it).
+- Review: opus security (R12: the counter stops the process that holds the lock; the compositor keeps it). Verdict on
+  b1d826b: PASS (nothing can unlock; the stop reaches a unit waiting to restart, so no process gets a signal, and a shell
+  already restarted gets SIGTERM, which DT-21 covers; the gate unchanged; 30 mutants, 22 killed by behaviour), with
+  fixes before the merge, answered in the commit that follows: the stopped-but-unlocked state written in the security
+  spec (no idle lock, the lock key inert, the lid or a sleep brings the shell back), the deferred nested loop proof
+  named (the container harness of S1), the unit clears the script's test variables (`UnsetEnvironment=`), the
+  sandbox's comment and pin (`ProtectHome=read-only`, AF_UNIX for the manager's socket), the stop's result logged
+  after the stop, S4 checks the unit is really stopped before it shows safe mode, and the tests for the real clock,
+  `RestartMode=normal`, the exact 600 s boundary, the counter reachable through `OnFailure=` only, a failed stop.
+  NOT VERIFIED by the reviewer either (no spare user manager): the owner's L2 list below.
+- Owner, real session (L2, from the review of b1d826b): (1) the counter's unit reaches the manager with
+  `systemctl --user stop`; (2) `OnFailure=` fires on every crash under systemd 261; (3) three crashes within 10 minutes
+  while locked: the session stays locked, the restarts stop, `$XDG_RUNTIME_DIR/grassfield/shell-safe-mode` exists;
+  (4) the same while unlocked, then the lid brings the shell back; (5) a logout counts nothing.
 
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words

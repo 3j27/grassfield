@@ -14,13 +14,21 @@ Type=oneshot
 Slice=session.slice
 ExecStart=/usr/lib/grassfield/grassfield-shell-failed
 TimeoutStartSec=20
+# The script's test variables (the window, the threshold, the clock) are honoured only by the tests, which set them on a
+# scratch copy: the unit clears them, so nothing in the user manager's environment can make the first crash stop the shell
+# (opus security review of b1d826b, finding 3). systemd applies UnsetEnvironment= last, over the manager's environment.
+UnsetEnvironment=GRASSFIELD_SHELL_FAIL_WINDOW GRASSFIELD_SHELL_FAIL_COUNT GRASSFIELD_SHELL_FAIL_NOW
 # The ledger and the safe-mode state live in $XDG_RUNTIME_DIR/grassfield (0700, shared with the menu bridge, kept when
 # this unit ends).
 RuntimeDirectory=grassfield
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 UMask=0077
-# Hardening: it reads a few files, writes two in its runtime directory and asks the user manager to stop one unit.
+# Hardening: it reads a few files, writes two in its runtime directory and asks the user manager to stop one unit. None of
+# these options can block that request: `systemctl --user stop` talks to the user manager over its private AF_UNIX socket
+# ($XDG_RUNTIME_DIR/systemd/private; AF_UNIX stays allowed, /run stays readable under ProtectSystem=strict) and needs
+# nothing under /home, so ProtectHome= could even be `yes`; read-only is kept so a future reader of a user file still
+# works and the setting is pinned by tests/shell/shell_failures.sh (opus security review of b1d826b, U6).
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
