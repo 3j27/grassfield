@@ -54,7 +54,7 @@ WidgetBase {
 
                 x: face.width / 2 - width / 2
                 y: Tokens.spacingXs
-                width: major ? 2 : 1
+                width: major ? Tokens.widgetAnalogTickWidth : 1
                 height: major ? Tokens.spacingSm : Tokens.spacingXs
                 color: major ? Appearance.colors.text : Appearance.colors.textSecondary
                 antialiasing: true
