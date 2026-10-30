@@ -180,9 +180,10 @@ parent and the look (A-FC2, A-FC3 nested, A-FC5) are the integrator's nested pas
 
 ### Functional requirements
 - OW1 `ChooseApplication(handle, app_id, parent_window, choices, options{last_choice, modal, content_type, uri, filename,
-  activation_token})`: list the `choices` (desktop ids) with icon and name, `last_choice` selected; "All Applications" adds
-  every app that can open the type (DesktopEntries); a search field filters; "Always Open With" maps to the frontend's
-  `always` handling; `UpdateChoices` refreshes the list live; returns `choice` and `activation_token`.
+  activation_token})`: list the `choices` (desktop ids) with icon and name, `last_choice` selected; "All Applications" enables
+  every application (DesktopEntries); a search field filters; "Always Open With" is not offered (ADR-0035 5b-3: the interface
+  has no key for it; the frontend stops asking after the same choice three times); `UpdateChoices` refreshes the list live;
+  returns `choice` and `activation_token`.
 - AC1 `AccessDialog(handle, app_id, parent_window, title, subtitle, body, options{deny_label, grant_label, icon, choices})`:
   the alert with the app's icon (from `app_id`) and its name as the frontend's title gives it ("Allow Example to Use the
   Camera?"; "Allow Apps to …" when it cannot name it), title/subtitle/body as given (plain text, capped), the labels given (else "Don't Allow"/"Allow"), `choices` as radio groups or check boxes; returns response
@@ -223,6 +224,20 @@ Built in step 5a (`grassfield-portal`'s Access, `apps/files/qml/AccessAlert.qml`
 - Evidence: `tests/unit/portal/tst_access.cpp`, `tests/unit/tst_accessalert.qml`, and `tests/integration/portal_filechooser.sh`
   scenario 7: the camera asked through the real frontend on a private bus, the alert's answer back to the application and
   kept by the frontend's permission store ("yes" or "no"); A-AC1 in a nested session and A-AC2 are the integrator's.
+
+Built in step 5b (`grassfield-portal`'s AppChooser, Choose Application in `apps/files/qml/FilePanel.qml`; the decisions are
+ADR-0035 5b-1 to 5b-7):
+- OW1 as the macOS panel: the Open panel in the Applications location, titled "Choose Application", the document named over the
+  browser ("Choose an application to open the document “notes.txt”."); the Enable pop-up's "Recommended Applications" (the
+  frontend's candidates and its last choice) and "All Applications" (every one), the others dimmed; the last choice selected
+  once listed; Open, Return or a double-click answers the application's desktop id, Cancel or Esc answers 1; UpdateChoices
+  changes the candidates of the open panel; the search field and the views are the Open panel's. No "Always Open With" box
+  (5b-3).
+- A-OW1: `tests/unit/portal/tst_appchooser.cpp` (every option in, the answer and its token out, a desktop id that is not one
+  never listed or answered), and `tests/integration/portal_filechooser.sh` scenario 8 through the real frontend's OpenFile: the
+  panel answers the type's default application, the frontend starts it with the document and counts the choice; Cancel starts
+  nothing.
+- Not yet: Files' own Open With > Other… and KIO's "no application" notice as this panel (step 5c, 5b-7).
 
 ## 3. Screen-sharing picker (P10; ADR-0035 D-6)
 

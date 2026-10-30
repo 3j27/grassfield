@@ -56,6 +56,9 @@ T.Switch {
             y: inset
             x: inset + root.visualPosition * (root.width - width - 2 * inset)
             color: Appearance.colors.knob
+            // Increase Contrast outlines the knob too: white on a light track is 1.57:1 without it.
+            border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
             Behavior on x {
                 enabled: !root.pressed

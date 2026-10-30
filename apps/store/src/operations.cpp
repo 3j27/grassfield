@@ -1,6 +1,7 @@
 #include "operations.h"
 
 #include "childprocess.h"
+#include "flatpak.h"
 #include "statefile.h"
 
 #include <QDir>
@@ -17,6 +18,7 @@
 #include <csignal>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 namespace grassfield::store {
@@ -77,6 +79,7 @@ QJsonObject OperationRecord::toJson() const
             {QStringLiteral("args"), QJsonArray::fromStringList(args)},
             {QStringLiteral("webName"), webName},
             {QStringLiteral("webUrl"), webUrl},
+            {QStringLiteral("flatpak"), flatpak},
             {QStringLiteral("startedAt"), startedAt.toUTC().toString(Qt::ISODate)}};
 }
 
@@ -94,7 +97,8 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
         PlannedPackage p;
         p.name = v.toObject().value(QStringLiteral("name")).toString();
         p.version = v.toObject().value(QStringLiteral("version")).toString().left(128);
-        if (!isName(p.name))
+        // A Flatpak's plan names refs' ids (org.gnome.Platform), the others packages.
+        if (!(r.path == QLatin1String("flatpak") ? isFlatpakId(p.name) : isName(p.name)))
             return std::nullopt;
         r.plan.append(p);
     }
@@ -103,6 +107,7 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
         r.args.append(v.toString());
     r.webName = o.value(QStringLiteral("webName")).toString();
     r.webUrl = o.value(QStringLiteral("webUrl")).toString();
+    r.flatpak = o.value(QStringLiteral("flatpak")).toString();
     r.startedAt = QDateTime::fromString(o.value(QStringLiteral("startedAt")).toString(), Qt::ISODate);
     const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove");
     const bool namesOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
@@ -114,7 +119,9 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     const bool aurOk = r.recipe == (install ? kAurAdd : kAurDrop) && isAurNames(r.args);
     const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk);
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
-    if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk))
+    // An install takes Flathub's ref, a removal the app id (b.3).
+    const bool flatpakOk = r.path == QLatin1String("flatpak") && (install ? isFlatpakAppRef(r.flatpak) : isFlatpakId(r.flatpak));
+    if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk || flatpakOk))
         return std::nullopt;
     return r;
 }
@@ -283,6 +290,19 @@ void Operations::dismiss(const QString &app)
         emit changed();
 }
 
+bool Operations::stop(const QString &id)
+{
+    if (!m_current || m_current->record.id != id || m_current->record.path != QLatin1String("flatpak")
+        || m_current->record.kind != QLatin1String("install") || m_current->state != State::Running || !m_process || m_stopping)
+        return false;
+    m_stopping = true;
+    // SIGTERM: flatpak ends at once; what it finished stays, what it was downloading waits in its own folder for the next
+    // install, which takes it up (S25, store_flatpak.sh).
+    m_process->terminate();
+    emit changed();
+    return true;
+}
+
 bool Operations::queued(const QString &app) const
 {
     if (m_current && m_current->record.app == app)
@@ -312,7 +332,9 @@ QVariantList Operations::list() const
                                {QStringLiteral("state"), QString::fromLatin1(states[int(i.state)])},
                                {QStringLiteral("blocked"), i.blocked},
                                {QStringLiteral("done"), i.done},
-                               {QStringLiteral("total"), int(i.record.plan.size())}});
+                               {QStringLiteral("total"), int(i.record.plan.size())},
+                               {QStringLiteral("stoppable"), i.record.path == QLatin1String("flatpak") && i.record.kind == QLatin1String("install")
+                                                                 && i.state == State::Running && !m_stopping}});
     }
     return out;
 }
@@ -373,13 +395,23 @@ void Operations::startNext()
     m_current->record.startedAt = QDateTime::currentDateTimeUtc();
     m_output.clear();
     m_followOnly = false;
+    m_stopping = false;
+    m_firstExit.reset();
+    m_flatpakOutput.clear();
     writeRecord(m_current->record);
-    if (helper)
+    if (helper) {
         startHelper(*m_current);
-    else if (terminal)
+    } else if (terminal) {
         startTerminal(*m_current);
-    else
+    } else if (m_current->record.path == QLatin1String("flatpak")) {
+        m_current->state = State::Running;
+        const OperationRecord &r = m_current->record;
+        startFlatpak(r.kind == QLatin1String("install")
+                         ? QStringList{QStringLiteral("install"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), kFlathubRemote, r.flatpak}
+                         : QStringList{QStringLiteral("uninstall"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--"), r.flatpak});
+    } else {
         startWebApp(*m_current);
+    }
     emit changed();
 }
 
@@ -440,6 +472,54 @@ void Operations::startWebApp(Item &item)
     m_runningSince = QDateTime::currentDateTimeUtc();
     p->start();
     m_poll.start();
+}
+
+void Operations::startFlatpak(const QStringList &args)
+{
+    if (m_config.flatpak.isEmpty()) {
+        conclude(std::nullopt, QStringLiteral("flatpak is not there"));
+        return;
+    }
+    auto *p = new QProcess(this);
+    m_process = p;
+    p->setProgram(m_config.flatpak);
+    p->setArguments(args);
+    QProcessEnvironment env;
+    env.insert(QStringLiteral("PATH"), QStringLiteral("/usr/bin:/bin"));
+    env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    for (const QString &key : m_config.flatpakEnv.keys())
+        env.insert(key, m_config.flatpakEnv.value(key));
+    p->setProcessEnvironment(env);
+    p->setStandardInputFile(QProcess::nullDevice());
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    // Its own group (no terminal's signal reaches it), and it stops with the Store: SIGTERM, which flatpak handles cleanly
+    // (S25), where the SIGKILL QProcess would send leaves a staging folder.
+    p->setChildProcessModifier([] {
+        ::setpgid(0, 0);
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+    });
+    const bool install = m_current && m_current->record.kind == QLatin1String("install");
+    connect(p, &QProcess::readyReadStandardOutput, this, [this, p, install] {
+        const QByteArray out = p->readAllStandardOutput();
+        if (m_output.size() < kMaxDetails)
+            m_output += out.left(kMaxDetails - m_output.size());
+        if (m_flatpakOutput.size() < 1024 * 1024)
+            m_flatpakOutput += out;
+        if (m_current && !m_firstExit) {
+            const int done = qMin(flatpakSteps(m_flatpakOutput, install), int(m_current->record.plan.size()));
+            if (done != m_current->done) {
+                m_current->done = done;
+                emit changed();
+            }
+        }
+    });
+    connect(p, &QProcess::finished, this, &Operations::processEnded);
+    connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart && m_process == p)
+            conclude(std::nullopt, p->errorString());
+    });
+    m_runningSince = QDateTime::currentDateTimeUtc();
+    p->start();
 }
 
 void Operations::startTerminal(Item &item)
@@ -579,6 +659,8 @@ void Operations::poll()
         pollTerminal(item, elapsed);
         return;
     }
+    if (item.record.path == QLatin1String("flatpak"))
+        return; // waited for, with no limit (b.3, SD26)
     if (item.record.path == QLatin1String("webapp")) {
         // Past its limit: SIGTERM to its group, SIGKILL 5 s later (it touches only the user's files).
         if (m_process && m_process->processId() > 0 && elapsed > m_config.webAppMs) {
@@ -639,6 +721,20 @@ void Operations::processEnded(int exitCode, QProcess::ExitStatus status)
         if (const auto fileCode = helperExitCode(m_config.statusDir, m_current->record.id))
             code = fileCode;
     }
+    if (m_current && m_current->record.path == QLatin1String("flatpak")) {
+        if (m_firstExit) {
+            code = m_firstExit; // `--unused` ran after the removal: the removal's own code is the operation's
+        } else if (m_current->record.kind == QLatin1String("remove") && code == 0) {
+            // The app is gone: the runtimes no other app needs go too (SD27; a runtime installed by name stays, S26).
+            m_firstExit = code;
+            m_process->disconnect(this);
+            m_process->deleteLater();
+            m_process.clear();
+            m_output += "\n";
+            startFlatpak({QStringLiteral("uninstall"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--unused")});
+            return;
+        }
+    }
     conclude(code, QString());
 }
 
@@ -652,9 +748,18 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
     QPointer<Operations> self(this);
     const QString pacman = m_config.pacman;
     const QString applications = m_config.applications;
-    QThreadPool::globalInstance()->start([self, record, pacman, applications, then] {
+    FlatpakTools flatpak;
+    flatpak.flatpak = m_config.flatpak;
+    flatpak.env = m_config.flatpakEnv;
+    QThreadPool::globalInstance()->start([self, record, pacman, applications, flatpak, then] {
         int present = 0, total = 0;
-        if (record.path == QLatin1String("helper") || record.path == QLatin1String("terminal")) {
+        if (record.path == QLatin1String("flatpak")) {
+            // The app in the user's installation after an install, gone after a removal (flatpak info --user).
+            total = 1;
+            const QString id = record.kind == QLatin1String("install") ? flatpakRefId(record.flatpak) : record.flatpak;
+            const bool there = !flatpak.flatpak.isEmpty() && flatpakInstalled(flatpak, id);
+            present = record.kind == QLatin1String("install") ? there : !there;
+        } else if (record.path == QLatin1String("helper") || record.path == QLatin1String("terminal")) {
             QStringList names;
             for (const PlannedPackage &p : record.plan)
                 names.append(p.name);
@@ -711,7 +816,8 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
     m_current->state = State::Checking;
     emit changed();
     const OperationRecord record = m_current->record;
-    readState(record, [this, record, exitCode, lostTrack, didNotOpen](int present, int total) {
+    const bool stopped = m_stopping;
+    readState(record, [this, record, exitCode, lostTrack, didNotOpen, stopped](int present, int total) {
         releaseUpdateLock();
         Result result;
         result.app = record.app;
@@ -725,11 +831,20 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
             details = log.isEmpty() ? details : (details.isEmpty() ? log : log + QLatin1Char('\n') + details);
         }
         result.details = details.right(kMaxDetails);
-        const Outcome outcome = judge(exitCode, present, total);
+        // A Flatpak found installed with no exit code (the Store ended meanwhile, and flatpak with it): flatpak deploys the app
+        // last and lists only what it deployed, so it is done.
+        const bool flatpak = record.path == QLatin1String("flatpak");
+        const Outcome outcome = flatpak && !exitCode && total > 0 && present == total ? Outcome::Done : judge(exitCode, present, total);
         if (outcome == Outcome::Done) {
             result.outcome.clear();
         } else if (lostTrack) {
             result.outcome = QStringLiteral("lostTrack");
+        } else if (flatpak) {
+            // Stopped by the user: what it finished stays (runtimes), nothing is half-installed; nothing to say but that. Else
+            // flatpak's own failure (its words in Details), or no exit code and nothing there.
+            result.outcome = stopped && present == 0 ? QStringLiteral("stopped")
+                : exitCode && *exitCode != 0       ? QStringLiteral("failed")
+                                                   : QStringLiteral("notFinished");
         } else if (didNotOpen && present == 0) {
             result.outcome = QStringLiteral("terminalDidNotOpen");
         } else if (exitCode && present == 0 && record.path == QLatin1String("terminal")) {
@@ -804,6 +919,8 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
         clearRecord();
         m_current.reset();
         m_concluding = false;
+        m_stopping = false;
+        m_firstExit.reset();
         emit changed();
         emit finished(record.app);
         if (m_queue.isEmpty())

@@ -115,9 +115,6 @@ T.Control {
         height: root.trackHeight
         radius: height / 2
         color: root.knobless ? (Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.quicksettingsSliderTrackOpacityDark) : Appearance.withAlpha(Appearance.colors.shadow, Tokens.quicksettingsSliderTrackOpacity)) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        // Increase Contrast outlines the track, as the other controls.
-        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
-        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         Rectangle {
             // At the start the knob covers the fill; its round end would show a sliver of it (macOS 27 Magnification Off: none).
@@ -126,6 +123,17 @@ T.Control {
             height: parent.height
             radius: height / 2
             color: root.knobless ? Appearance.colors.knob : root.fillColor
+        }
+
+        // Increase Contrast outlines the track, as the other controls: drawn after the fill, which would cover an outline of the
+        // track itself (a knobless slider at its end shows no track at all).
+        Rectangle {
+            visible: Appearance.increaseContrast
+            anchors.fill: parent
+            radius: parent.radius
+            color: "transparent"
+            border.width: Tokens.controlBorderWidth
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         }
 
         FocusRing {

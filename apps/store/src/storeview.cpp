@@ -167,7 +167,9 @@ QVariantMap summary(const StoreApp &app, const QString &language)
             {QStringLiteral("kind"), sourceKind(app.source)},
             {QStringLiteral("repo"), app.repo},
             {QStringLiteral("installed"), app.installed},
-            {QStringLiteral("launcher"), !app.desktopId.isEmpty()}};
+            {QStringLiteral("launcher"), !app.desktopId.isEmpty()},
+            // A Flatpak's app id (its data folder's name, ~/.var/app/<id>): its ref's second part.
+            {QStringLiteral("flatpakId"), app.source == CatalogSource::Kind::Flatpak ? app.flatpakRef.section(QLatin1Char('/'), 1, 1) : QString()}};
 }
 
 QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, const QList<CatalogCategory> &categories,
@@ -246,9 +248,16 @@ QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, con
             flatpakId = s.flatpakId;
         }
     }
+    if (app.source == CatalogSource::Kind::Flatpak && flatpakId.isEmpty())
+        flatpakId = out.value(QStringLiteral("flatpakId")).toString(); // a Flathub app our catalog does not list: its ref's
     out.insert(QStringLiteral("setup"), setup);
     out.insert(QStringLiteral("webUrl"), webUrl);
     out.insert(QStringLiteral("flatpakId"), flatpakId);
+    // A Flatpak's facts (SR11): its runtime as <id> <branch>, and Flathub's verified-developer flag.
+    out.insert(QStringLiteral("runtime"), app.runtime.isEmpty() ? QString()
+                                                                 : app.runtime.section(QLatin1Char('/'), 0, 0) + QLatin1Char(' ')
+                                                                       + app.runtime.section(QLatin1Char('/'), 2, 2));
+    out.insert(QStringLiteral("verified"), app.verified);
     return out;
 }
 

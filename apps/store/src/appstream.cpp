@@ -361,6 +361,7 @@ QList<AppStreamComponent> parseAppStream(const QByteArray &bytes)
                 const QStringList ref = xml.readElementText().trimmed().split(QLatin1Char('/'));
                 if (flatpak && c.flatpak.isEmpty() && ref.size() == 4 && ref.at(0) == QLatin1String("app") && isFlatpakId(ref.at(1))) {
                     c.flatpak = ref.at(1);
+                    c.flatpakRef = ref.join(QLatin1Char('/'));
                     c.runtime = isFlatpakRuntime(runtime) ? runtime : QString();
                 }
             } else if (name == u"custom") {

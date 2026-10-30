@@ -8,9 +8,20 @@
 #include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkProxy>
+#include <QProcess>
+#include <QScopeGuard>
+#include <QSslCertificate>
+#include <QSslConfiguration>
+#include <QSslKey>
+#include <QSslServer>
+#include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include <gtest/gtest.h>
+
+#include <memory>
 
 using namespace grassfield::store;
 
@@ -86,6 +97,113 @@ TEST(Fetch, RealHttpsServer)
     EXPECT_EQ(headStatuses({QUrl(base + QStringLiteral("/hang"))}, 10000, 1500), QList<int>{0});
     EXPECT_LT(clock.elapsed(), 4000);
     EXPECT_EQ(headStatuses({QUrl(base + QStringLiteral("/to-http"))}, 10000, 5000), QList<int>{-1}) << "a redirect to http";
+}
+
+namespace {
+
+// An https server of the test's own on 127.0.0.1, answering HEADs: /slow/* 200 after a second, /gone 404 at once, /hang
+// never.
+class HeadServer : public QObject
+{
+public:
+    bool listen(const QSslCertificate &certificate, const QSslKey &key)
+    {
+        QSslConfiguration config = QSslConfiguration::defaultConfiguration();
+        config.setLocalCertificate(certificate);
+        config.setPrivateKey(key);
+        m_server.setSslConfiguration(config);
+        connect(&m_server, &QTcpServer::pendingConnectionAvailable, this, [this] {
+            while (QTcpSocket *socket = m_server.nextPendingConnection())
+                serve(socket);
+        });
+        return m_server.listen(QHostAddress::LocalHost);
+    }
+    QUrl url(const QByteArray &path) const
+    {
+        return QUrl(QStringLiteral("https://127.0.0.1:%1%2").arg(m_server.serverPort()).arg(QString::fromLatin1(path)));
+    }
+
+private:
+    static void serve(QTcpSocket *socket)
+    {
+        auto buffer = std::make_shared<QByteArray>();
+        connect(socket, &QTcpSocket::readyRead, socket, [socket, buffer] {
+            *buffer += socket->readAll();
+            for (qsizetype end = buffer->indexOf("\r\n\r\n"); end >= 0; end = buffer->indexOf("\r\n\r\n")) {
+                const QByteArray path = buffer->left(buffer->indexOf("\r\n")).split(' ').value(1);
+                buffer->remove(0, end + 4);
+                if (path == "/gone") {
+                    socket->write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+                } else if (path.startsWith("/slow/")) {
+                    auto *later = new QTimer(socket); // gone with the socket
+                    later->setSingleShot(true);
+                    connect(later, &QTimer::timeout, socket, [socket] { socket->write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"); });
+                    later->start(1000);
+                }
+            }
+        });
+    }
+    QSslServer m_server;
+};
+
+} // namespace
+
+// A plan's HEADs against that server (the integrator's merge note on PR #54: the set's deadline and its early stop were
+// held only by the container of store_catalog.sh). Its certificate is a throwaway one openssl makes here, trusted for this
+// test only.
+TEST(Fetch, HeadStatusesAgainstALocalServer)
+{
+    storetest::ensureApp();
+    const QString openssl = QStandardPaths::findExecutable(QStringLiteral("openssl"));
+    if (openssl.isEmpty())
+        GTEST_SKIP() << "no openssl to make the throwaway certificate";
+    QTemporaryDir dir;
+    QProcess make;
+    make.start(openssl, {QStringLiteral("req"), QStringLiteral("-x509"), QStringLiteral("-newkey"), QStringLiteral("ec"),
+                         QStringLiteral("-pkeyopt"), QStringLiteral("ec_paramgen_curve:prime256v1"), QStringLiteral("-nodes"),
+                         QStringLiteral("-days"), QStringLiteral("1"), QStringLiteral("-subj"), QStringLiteral("/CN=127.0.0.1"),
+                         QStringLiteral("-addext"), QStringLiteral("subjectAltName=IP:127.0.0.1"), QStringLiteral("-keyout"),
+                         dir.filePath(QStringLiteral("key.pem")), QStringLiteral("-out"), dir.filePath(QStringLiteral("cert.pem"))});
+    ASSERT_TRUE(make.waitForFinished(30000) && make.exitStatus() == QProcess::NormalExit && make.exitCode() == 0)
+        << make.readAllStandardError().toStdString();
+    const QList<QSslCertificate> certificate = QSslCertificate::fromPath(dir.filePath(QStringLiteral("cert.pem")));
+    ASSERT_EQ(certificate.size(), 1);
+    QFile keyFile(dir.filePath(QStringLiteral("key.pem")));
+    ASSERT_TRUE(keyFile.open(QIODevice::ReadOnly));
+    const QSslKey key(&keyFile, QSsl::Ec);
+    ASSERT_FALSE(key.isNull());
+    // The Store's requests take the default configuration: the certificate is trusted there, no proxy, until the test ends.
+    const QSslConfiguration saved = QSslConfiguration::defaultConfiguration();
+    QSslConfiguration trusting = saved;
+    trusting.addCaCertificate(certificate.first());
+    QSslConfiguration::setDefaultConfiguration(trusting);
+    // Never QNetworkProxy::applicationProxy(): it asks the system's proxy (libproxy 0.5.12 leaks under LSan when one is set).
+    const bool systemProxy = QNetworkProxyFactory::usesSystemConfiguration();
+    QNetworkProxy::setApplicationProxy(QNetworkProxy::NoProxy);
+    const auto restore = qScopeGuard([&saved, systemProxy] {
+        QSslConfiguration::setDefaultConfiguration(saved);
+        QNetworkProxy::setApplicationProxy(QNetworkProxy());
+        QNetworkProxyFactory::setUseSystemConfiguration(systemProxy);
+    });
+    HeadServer server;
+    ASSERT_TRUE(server.listen(certificate.first(), key));
+
+    // Twelve files that each take a second, asked at once: well under twelve seconds.
+    QList<QUrl> slow;
+    for (int i = 0; i < 12; ++i)
+        slow.append(server.url("/slow/" + QByteArray::number(i)));
+    QElapsedTimer clock;
+    clock.start();
+    EXPECT_EQ(headStatuses(slow, 10000, 20000), QList<int>(12, 200));
+    EXPECT_LT(clock.elapsed(), 6000);
+    // One gone: the set stops there, and the file still on its way is dropped (0) before its answer.
+    EXPECT_EQ(headStatuses({server.url("/slow/a"), server.url("/gone")}, 10000, 20000), (QList<int>{0, 404}));
+    EXPECT_EQ(headStatuses({server.url("/gone"), server.url("/slow/b")}, 10000, 20000), (QList<int>{404, 0}));
+    // Never answered: 0 at the set's deadline, long before each request's own timeout.
+    clock.restart();
+    EXPECT_EQ(headStatuses({server.url("/hang"), server.url("/hang")}, 10000, 1500), (QList<int>{0, 0}));
+    EXPECT_GE(clock.elapsed(), 1400);
+    EXPECT_LT(clock.elapsed(), 4000);
 }
 
 // A plan's HEADs through dev plumbing (file://): a file there answers 200, a missing one 404 and drops the rest; file://

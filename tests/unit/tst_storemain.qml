@@ -235,6 +235,56 @@ TestCase {
         sheet.close();
     }
 
+    // A Flatpak's page (SR11): its app id, runtime and Flathub's verified flag at once, then what flatpak says (its version,
+    // sizes and what it can reach).
+    function test_flatpakProductPage() {
+        const t = make({startPage: "app:org.example.Notes"});
+        tryVerify(() => t.win.pageKind === "app");
+        verify(t.backend.calls.indexOf("flatpakInfo:org.example.Notes") >= 0);
+        verify(t.backend.calls.indexOf("info:paint") < 0, "no pacman -Si for a Flatpak");
+        const value = label => (findAll(t.win.page, i => i.label === label)[0] || {value: undefined}).value;
+        compare(value("Source"), "Flathub");
+        compare(value("App ID"), "org.example.Notes");
+        compare(value("Runtime"), "org.gnome.Platform 50");
+        compare(value("Verified Developer"), "Verified by Flathub");
+        compare(value("Can Access"), undefined, "not before flatpak answered");
+        t.backend.flatpakInfo("org.example.Other", {version: "9", access: ["outside"]});
+        compare(value("Can Access"), undefined, "another app's answer");
+        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", download: "1.5 MB", installed: "4.0 MB", license: "MIT", access: ["network"]});
+        compare(value("Can Access"), "The internet");
+        compare(value("Version"), "1.2");
+        compare(value("Download Size"), "1.5 MB");
+        compare(value("Installed Size"), "4.0 MB");
+        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", access: []});
+        compare(value("Can Access"), "Only its own window and files");
+    }
+
+    // Flathub's switch (SD20, step 3c): shown with flatpak, written to grassfield.json; while it could not be added, it
+    // says so.
+    function test_flathubSwitch() {
+        const t = make();
+        t.backend.sources = {aur: false, flathub: false, flatpak: true, flathubReady: false, flathubProblem: "", screenshots: true};
+        t.win.openSettings();
+        tryVerify(() => t.win.settingsWindow && t.win.settingsWindow.visible);
+        const sw = t.win.settingsWindow;
+        const toggle = find(sw.contentItem, i => i.title === "Flathub" && i.checked !== undefined && i.visible);
+        verify(toggle, "the switch, with flatpak there");
+        verify(toggle.settable);
+        toggle.toggled(true);
+        compare(JSON.parse(t.backend.written).store, {sources: {flathub: true}});
+        const shown = text => find(sw.contentItem, i => i.text === text && i.visible) !== null;
+        verify(shown("From Flathub (dl.flathub.org, through flatpak), while it is on: its app data, when the Store opens at most every 6 hours and on Refresh; "
+                     + "an app's details when its page or install sheet opens; and the apps you install."));
+        t.backend.sources = {aur: false, flathub: true, flatpak: true, flathubReady: false, flathubProblem: "added", screenshots: true};
+        verify(shown("Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again."));
+        t.backend.sources = {aur: false, flathub: true, flatpak: true, flathubReady: true, flathubProblem: "", screenshots: true};
+        verify(!shown("Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again."));
+        t.backend.sources = {aur: false, flathub: false, flatpak: false, screenshots: true};
+        verify(shown("Flathub needs the flatpak package."));
+        verify(!find(sw.contentItem, i => i.title === "Flathub" && i.checked !== undefined && i.visible));
+        sw.close();
+    }
+
     // --page and the pages it names.
     function test_openPage() {
         const t = make({startPage: "category:graphics"});

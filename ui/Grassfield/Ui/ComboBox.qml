@@ -33,9 +33,10 @@ T.ComboBox {
     currentIndex: root.valueIndex
     displayText: root.valueIndex >= 0 ? (root.model)[root.valueIndex].text : ""
     // Wide enough for the longest choice (a long translation is never cut to "Si la place le pe…").
-    // Whole pixels, so that the disc and the next control in a row stay on the pixel grid.
-    implicitWidth: Math.ceil(root.inline ? widest + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
-        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm))
+    // Whole device pixels, so that the disc and the next control in a row stay on the pixel grid (a 3.5-pt inset stays 3.5 at 2x).
+    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
+    implicitWidth: Math.ceil((root.inline ? widest + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
+        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)) * root.pixelRatio) / root.pixelRatio
     property real widest: 0
     function measureItems(): void {
         let w = 0;
@@ -137,8 +138,8 @@ T.ComboBox {
     }
 
     indicator: Item {
-        // Whole pixels: the measured inset (3.5) would put the disc's edges between two pixels at scale 1.
-        x: Math.round(root.inline ? root.width - width - Tokens.settingsPopupInset : root.width - width - Tokens.spacingSm)
+        // Whole device pixels: the measured inset (3.5) would put the disc's edges between two pixels at scale 1.
+        x: Math.round((root.inline ? root.width - width - Tokens.settingsPopupInset : root.width - width - Tokens.spacingSm) * root.pixelRatio) / root.pixelRatio
         y: (root.height - height) / 2
         width: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuIconSize
         height: width

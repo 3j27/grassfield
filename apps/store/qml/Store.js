@@ -79,6 +79,10 @@ function getBlockText(reason, kind) {
         return qsTr("Omarchy's package lists can't be read, so the Store installs nothing from the AUR.");
     case "repository":
         return qsTr("A repository has this package: the Store installs it from there, from its own page.");
+    case "flathubOff":
+        return qsTr("Turn on Flathub in the Store's settings to install from it.");
+    case "noFlatpak":
+        return qsTr("Flathub needs the flatpak package.");
     case "source":
         return qsTr("Installing apps from this source comes in a later version of the Store.");
     }
@@ -127,7 +131,8 @@ function operationText(op) {
     return removing ? qsTr("Uninstalling…") : qsTr("Installing…");
 }
 
-// How the last operation of an app ended, in one line (SR19, SR20); "" when there is nothing to say (done, or cancelled).
+// How the last operation of an app ended, in one line (SR19, SR20); "" when there is nothing to say (done, cancelled, or a
+// Flatpak install the user stopped: "stopped").
 function resultText(result) {
     if (!result)
         return "";
@@ -206,8 +211,65 @@ function uninstallReasonText(reason, kind) {
         return omarchyChangedText("aur");
     case "aurOff":
         return qsTr("Turn on the AUR in the Store's settings to uninstall it from the Store.");
+    case "flathubOff":
+        return qsTr("Turn on Flathub in the Store's settings to uninstall it from the Store.");
+    case "noFlatpak":
+        return qsTr("Flathub needs the flatpak package.");
     }
     return "";
+}
+
+// What a Flatpak can reach beyond its own window and folder (SR11, SD25), from its metadata (flatpak.h flatpakAccess),
+// each in plain words: a class, "sessionService:<name>", "systemService:<name>", "other:<flatpak's words>",
+// "more:<count>". A key this window does not know is said as it is, never left out. [] when it reaches nothing more.
+function accessWords(keys) {
+    const words = {
+        "network": qsTr("The internet"),
+        "allFiles": qsTr("All your files"),
+        "home": qsTr("Your home folder"),
+        "folders": qsTr("Some of your folders"),
+        "devices": qsTr("Devices such as cameras, USB drives and game controllers"),
+        "input": qsTr("Game controllers and other input devices"),
+        "usb": qsTr("USB devices"),
+        "kvm": qsTr("Virtual machines, through KVM"),
+        "audio": qsTr("Your speakers and microphone"),
+        "x11": qsTr("The X11 display, where it can see what other X11 apps show and what you type in them"),
+        "sharedMemory": qsTr("Memory your other programs share"),
+        "printers": qsTr("Your printers"),
+        "ssh": qsTr("Your SSH keys, through the SSH agent"),
+        "gpg": qsTr("Your GnuPG keys, through the GnuPG agent"),
+        "smartCards": qsTr("Smart cards"),
+        "bus": qsTr("Every service of your session"),
+        "systemBus": qsTr("Every service of the system"),
+        "bluetooth": qsTr("Bluetooth"),
+        "canbus": qsTr("CAN bus devices"),
+        "devel": qsTr("Developer features that can trace programs"),
+        "multiarch": qsTr("32-bit programs"),
+        "outside": qsTr("Programs outside its sandbox")
+    };
+    return Array.from(keys || [], k => {
+        const key = String(k);
+        if (words[key] !== undefined)
+            return words[key];
+        const colon = key.indexOf(":");
+        const kind = colon < 0 ? "" : key.slice(0, colon), value = key.slice(colon + 1);
+        if (kind === "sessionService")
+            return qsTr("The session service “%1”").arg(value);
+        if (kind === "systemService")
+            return qsTr("The system service “%1”").arg(value);
+        if (kind === "more")
+            return qsTr("%1 more").arg(value);
+        return qsTr("A permission the Store can't describe: %1").arg(kind === "other" ? value : key);
+    });
+}
+
+// The same in one line: "Can access" (SR11); "Only its own window and files" when it reaches nothing more; "" when
+// what it can reach could not be read (nothing said rather than too little).
+function accessText(keys) {
+    if (keys === undefined || keys === null)
+        return "";
+    const words = accessWords(keys);
+    return words.length === 0 ? qsTr("Only its own window and files") : words.join(", ");
 }
 
 function buttonText(state) {
@@ -277,6 +339,8 @@ function groupTitle(group) {
         return qsTr("Web Apps");
     case "aur":
         return qsTr("AUR");
+    case "flatpak":
+        return qsTr("Flathub");
     case "foreign":
         return qsTr("Not from a Repository");
     }

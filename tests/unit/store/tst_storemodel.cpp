@@ -91,7 +91,7 @@ TEST(StoreModel, WhatIsHidden)
     EXPECT_FALSE(m.find(QStringLiteral("org.example.Cli")));   // not a desktop application (SD1)
     const Model on(true, true);
     EXPECT_TRUE(on.find(QStringLiteral("aur-game")));
-    EXPECT_TRUE(on.find(QStringLiteral("org.example.Flat")));
+    EXPECT_FALSE(on.find(QStringLiteral("org.example.Flat"))) << "Flathub is on but has no such app (StoreModel.Flathub)";
 
     // pacman's database without gimp in [extra], nor steam: the catalog entries go with them.
     const Model bare(false, false, {{QStringLiteral("testing"), QStringLiteral("gimp"), QStringLiteral("3-1"), false},
@@ -187,4 +187,97 @@ TEST(StoreModel, Categories)
         games.append(m.apps.at(i).id);
     games.sort();
     EXPECT_EQ(games, (QStringList{QStringLiteral("aur-game"), QStringLiteral("com.valvesoftware.Steam.desktop")}));
+}
+
+// Flathub (step 3c): its desktop applications while it is on, after the catalog's and Arch's (an app in several sources
+// shows the first of setup, repository, Flathub, AUR), with Flathub's ref, runtime, verified flag and icon; the catalog's
+// entry of source flatpak takes Flathub's data.
+TEST(StoreModel, Flathub)
+{
+    Catalog catalog = *parseCatalog(storetest::readFixture(QStringLiteral("catalog-good.json")), QStringLiteral("stable")).catalog;
+    QTemporaryDir root;
+    QDir().mkpath(root.filePath(QStringLiteral("icons/128x128")));
+    storetest::writeFile(root.filePath(QStringLiteral("icons/128x128/org.example.Notes.png")), "png");
+    QList<AppStreamComponent> flathub = parseAppStream(storetest::readFixture(QStringLiteral("appstream-flathub.xml")));
+    const auto add = [&flathub](const char *id) {
+        AppStreamComponent c;
+        c.id = QLatin1String(id);
+        c.type = QStringLiteral("desktop-application");
+        c.flatpak = c.id;
+        c.flatpakRef = QStringLiteral("app/%1/x86_64/stable").arg(c.id);
+        c.name.en = QStringLiteral("Flathub's ") + c.id;
+        flathub.append(c);
+    };
+    add("org.example.Flat");              // the catalog's entry of source flatpak
+    add("com.valvesoftware.Steam");       // Arch names it com.valvesoftware.Steam.desktop: the same app
+    ModelInputs in;
+    in.catalog = &catalog;
+    in.appstream = parseAppStream(storetest::readFixture(QStringLiteral("appstream-extra.xml")));
+    in.sync = {{QStringLiteral("extra"), QStringLiteral("paint"), QStringLiteral("1-1"), false},
+               {QStringLiteral("multilib"), QStringLiteral("steam"), QStringLiteral("1.0-1"), false}};
+    in.flathubOn = true;
+    in.flathub = flathub;
+    in.flathubRoot = root.path();
+    in.flatpaks = {QStringLiteral("org.example.Notes")};
+    const QList<StoreApp> apps = buildModel(in);
+    const auto find = [&apps](const char *id) -> const StoreApp * {
+        for (const StoreApp &a : apps) {
+            if (a.id == QLatin1String(id))
+                return &a;
+        }
+        return nullptr;
+    };
+
+    const StoreApp *notes = find("org.example.Notes");
+    ASSERT_TRUE(notes);
+    EXPECT_EQ(notes->source, CatalogSource::Kind::Flatpak);
+    EXPECT_TRUE(notes->installed) << "flatpak list --user --app has it";
+    EXPECT_FALSE(notes->inCatalog);
+    EXPECT_EQ(notes->flatpakRef, QStringLiteral("app/org.example.Notes/x86_64/stable"));
+    EXPECT_EQ(notes->runtime, QStringLiteral("org.gnome.Platform/x86_64/50"));
+    EXPECT_TRUE(notes->verified);
+    EXPECT_EQ(notes->desktopId, QStringLiteral("org.example.Notes.desktop"));
+    EXPECT_EQ(notes->icon, root.filePath(QStringLiteral("icons/128x128/org.example.Notes.png")));
+    EXPECT_EQ(notes->name.pick(QStringLiteral("fr")), QStringLiteral("Notes d'exemple"));
+    EXPECT_EQ(notes->license, QStringLiteral("GPL-3.0-or-later"));
+    ASSERT_GE(notes->component, 0);
+    EXPECT_EQ(in.flathub.at(notes->component).id, QStringLiteral("org.example.Notes"));
+
+    // Arch's package first: the same id, and Arch's ".desktop" spelling of it.
+    const StoreApp *paint = find("org.example.Paint");
+    ASSERT_TRUE(paint);
+    EXPECT_EQ(paint->source, CatalogSource::Kind::Repo);
+    EXPECT_FALSE(find("com.valvesoftware.Steam"));
+    // A runtime, an id that is not a Flatpak id, another kind of bundle: not offered.
+    EXPECT_FALSE(find("org.example.Platform"));
+    EXPECT_FALSE(find("notanid"));
+    EXPECT_FALSE(find("org.example.Packaged"));
+
+    // Our entry of source flatpak: our name, Flathub's ref; not installed; listed once.
+    const StoreApp *flat = find("org.example.Flat");
+    ASSERT_TRUE(flat);
+    EXPECT_TRUE(flat->inCatalog);
+    EXPECT_EQ(flat->name.en, QStringLiteral("Flat"));
+    EXPECT_EQ(flat->flatpakRef, QStringLiteral("app/org.example.Flat/x86_64/stable"));
+    EXPECT_EQ(flat->desktopId, QStringLiteral("org.example.Flat.desktop"));
+    EXPECT_FALSE(flat->installed);
+    EXPECT_EQ(std::count_if(apps.cbegin(), apps.cend(), [](const StoreApp &a) { return a.id == QLatin1String("org.example.Flat"); }), 1);
+
+    // Flathub off: none of them.
+    in.flathubOn = false;
+    const QList<StoreApp> off = buildModel(in);
+    EXPECT_TRUE(std::none_of(off.cbegin(), off.cend(), [](const StoreApp &a) { return a.source == CatalogSource::Kind::Flatpak; }));
+
+    // A ref whose branch is not one (".."), or a ref of another app: neither listed nor offered to Get, ours hidden too.
+    in.flathubOn = true;
+    for (AppStreamComponent &c : in.flathub) {
+        if (c.flatpak == QLatin1String("org.example.Flat"))
+            c.flatpakRef = QStringLiteral("app/org.example.Flat/x86_64/..");
+        if (c.flatpak == QLatin1String("org.example.Notes"))
+            c.flatpakRef = QStringLiteral("app/org.example.Other/x86_64/stable");
+    }
+    const QList<StoreApp> bad = buildModel(in);
+    EXPECT_TRUE(std::none_of(bad.cbegin(), bad.cend(), [](const StoreApp &a) {
+        return a.id == QLatin1String("org.example.Flat") || a.id == QLatin1String("org.example.Notes") || a.id == QLatin1String("org.example.Other");
+    }));
 }

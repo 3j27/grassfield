@@ -19,6 +19,14 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
     portal-client.py access OPTIONS SECONDS    org.freedesktop.impl.portal.Access's AccessDialog made to grassfield-portal
                                                directly, as the frontend makes it (OPTIONS: icon, deny_label, grant_label,
                                                choices, modal); its reply, as for impl
+    portal-client.py open-file PATH SECONDS    org.freedesktop.portal.OpenURI's OpenFile (the file passed as a descriptor, as an
+                                               application does: OpenURI refuses file URIs) with "ask" (the frontend asks the
+                                               AppChooser backend whatever it would pick itself): the Response, as for choose
+    portal-client.py apps CHOICES OPTIONS SECONDS
+                                               org.freedesktop.impl.portal.AppChooser's ChooseApplication made to
+                                               grassfield-portal directly, as the frontend makes it (CHOICES a JSON list of desktop
+                                               ids; OPTIONS: last_choice, filename, uri, modal, activation_token, strings or a
+                                               boolean); its reply, as for impl
     portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
                                                Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
@@ -134,6 +142,20 @@ def camera(conn, seconds):
                                                       None, Gio.DBusCallFlags.NONE, 10000, None), seconds)
 
 
+def open_file(conn, path, seconds):
+    token = "gffile%d" % (GLib.get_monotonic_time() % 1000000)
+    sender = conn.get_unique_name()[1:].replace(".", "_")
+    request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+    options = {"handle_token": GLib.Variant("s", token), "ask": GLib.Variant("b", True)}
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    fds = Gio.UnixFDList.new()
+    index = fds.append(fd)
+    os.close(fd)
+    response_of(conn, request, lambda: conn.call_with_unix_fd_list_sync(DEST, PATH, "org.freedesktop.portal.OpenURI", "OpenFile",
+                                                                        GLib.Variant("(sha{sv})", ("", index, options)),
+                                                                        None, Gio.DBusCallFlags.NONE, 10000, fds, None), seconds)
+
+
 def access(conn, given, seconds):
     handle = "/org/freedesktop/portal/desktop/request/1_1/access%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
     options = {}
@@ -147,6 +169,19 @@ def access(conn, given, seconds):
                                GLib.Variant("(osssssa{sv})", (handle, "org.example.App", "", "Allow Example to Use the Camera?",
                                                                "Example wants to access the camera",
                                                                "This permission can be changed at any time from the privacy settings", options)),
+                               GLib.VariantType("(ua{sv})"), Gio.DBusCallFlags.NONE, int(float(seconds) * 1000), None)
+        code, results = reply.unpack()
+        print(json.dumps({"response": code, "results": plain(results)}))
+    except GLib.Error as error:
+        print(json.dumps({"error": Gio.DBusError.get_remote_error(error) or error.message}))
+
+
+def apps(conn, choices, given, seconds):
+    handle = "/org/freedesktop/portal/desktop/request/1_1/apps%d_%d" % (os.getpid(), GLib.get_monotonic_time() % 1000000)
+    options = {k: GLib.Variant("b" if isinstance(v, bool) else "s", v) for k, v in given.items()}
+    try:
+        reply = conn.call_sync("org.freedesktop.impl.portal.desktop.grassfield", PATH, "org.freedesktop.impl.portal.AppChooser",
+                               "ChooseApplication", GLib.Variant("(ossasa{sv})", (handle, "org.example.Writer", "", choices, options)),
                                GLib.VariantType("(ua{sv})"), Gio.DBusCallFlags.NONE, int(float(seconds) * 1000), None)
         code, results = reply.unpack()
         print(json.dumps({"response": code, "results": plain(results)}))
@@ -178,6 +213,12 @@ def main():
         return
     if command == "access":
         access(conn, json.loads(sys.argv[2]), sys.argv[3])
+        return
+    if command == "open-file":
+        open_file(conn, sys.argv[2], sys.argv[3])
+        return
+    if command == "apps":
+        apps(conn, json.loads(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4])
         return
     if command == "permission":
         permission(conn, sys.argv[2], sys.argv[3])
