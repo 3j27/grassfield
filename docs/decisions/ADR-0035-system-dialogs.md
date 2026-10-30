@@ -613,16 +613,16 @@ answer reaches the application and the frontend's permission store keeps "yes" o
 **Delivered in step 5b (Open With).** `apps/portal/src/appchooser.{h,cpp}`: the backend interface (`ChooseApplication`: the
 frontend's candidates kept as desktop ids only (a name: no '/', no control character, not hidden; spaces and '+' are a name's),
 each once, at most 512 from a bounded look; its last choice, the document's name and the URI checked; the activation token given
-back with the choice; `UpdateChoices` to the open panel, or on to x-d-p-gtk for a forwarded request) on RequestHost
-(`requestId(handle)` added), on the same exported object as FileChooser and Access; `main.cpp` makes the panels' root once for
-FileChooser and AppChooser. The panel is FilePanel.qml in a Choose Application mode (kind `application`), made by
-FilePanels.qml; FolderModel's chooser takes `applications` (desktop ids) and `allApplications` for the Applications location;
-FilesApp gives `applicationUrl`/`applicationId`. Packaging: `grassfield.portal` lists AppChooser, the session's
-`hyprland-portals.conf` routes `AppChooser=grassfield;gtk`. Tests: `tests/unit/portal/tst_appchooser.cpp`,
+back with the choice; `UpdateChoices` from the request's caller only, to the open panel, or on to x-d-p-gtk for a forwarded
+request, the last one following the request when the panel does not draw in time; x-d-p-gtk's choice relayed only when it is a
+desktop id) on RequestHost (`requestId(handle)` added), on the same exported object as FileChooser and Access; `main.cpp` makes
+the panels' root once for FileChooser and AppChooser. The panel is FilePanel.qml in a Choose Application mode (kind
+`application`), made by FilePanels.qml; FolderModel's chooser takes `applications` (desktop ids) and `allApplications` for the
+Applications location; FilesApp gives `applicationUrl`/`applicationId`. Packaging: `grassfield.portal` lists AppChooser, the
+session's `hyprland-portals.conf` routes `AppChooser=grassfield;gtk`. Tests: `tests/unit/portal/tst_appchooser.cpp`,
 `tests/unit/files/tst_folderchooser.cpp`, `tests/unit/tst_filepanel.qml`, `tests/integration/portal_filechooser.sh` scenario 8
 (a document opened through the real frontend's OpenFile: the panel answers, the frontend starts the chosen application with the
 document and counts the choice).
-
 
 **Decisions of step 5b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
 - **5b-1. The panel.** Options: (a) a list of applications in a window of its own (x-d-p-gtk's); (b) the Open panel in the
