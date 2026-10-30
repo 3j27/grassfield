@@ -788,6 +788,20 @@ class WindowSurfacePairs(unittest.TestCase):
                 r = wcag(self.tok.color("colors", ap, name), group)
                 self.assertGreaterEqual(r, 3.0, "%s on a Settings group, %s: %.2f:1" % (name, ap, r))
 
+    def test_activity_graph_colours(self):
+        # Activity Monitor's summary (spec AM7): each graph colour is a graphic, 3:1 or more against the graph's fill (the group
+        # fill) and the window around it, in both appearances.
+        names = ("activityGraphSystem", "activityGraphUser", "activityGraphRead", "activityGraphWrite", "activityGraphIn",
+                 "activityGraphOut", "activityGraphBattery", "activityPressureGreen", "activityPressureYellow", "activityPressureRed")
+        for ap in APPEARANCES:
+            for bg_name in ("groupFill", "windowBackground"):
+                bg = self.tok.color("colors", ap, bg_name)
+                for name in names:
+                    r = wcag(self.tok.color("colors", ap, name), bg)
+                    self.assertGreaterEqual(r, 3.0, "%s on %s, %s: %.2f:1" % (name, bg_name, ap, r))
+        # Negative control: the light appearance's text-free yellow of Files' tags is below 3:1 on the light group fill.
+        self.assertLess(wcag(hex_rgb(self.tok.path("files.tagYellow")), self.tok.color("colors", "light", "groupFill")), 3.0)
+
     def test_dark_settings_groups_stay_visible_against_the_window(self):
         win = self.window("dark")
         group = self.tok.color("colors", "dark", "groupFill")

@@ -539,6 +539,10 @@
         <source>Network</source>
         <translation>Réseau</translation>
     </message>
+    <message>
+        <source>GPU %1</source>
+        <translation>GPU %1</translation>
+    </message>
 </context>
 <context>
     <name>ActivityColumn</name>
@@ -732,6 +736,10 @@
         <translation>Tous les processus</translation>
     </message>
     <message>
+        <source>All Processes, Hierarchically</source>
+        <translation>Tous les processus, hiérarchiquement</translation>
+    </message>
+    <message>
         <source>My Processes</source>
         <translation>Mes processus</translation>
     </message>
@@ -758,6 +766,10 @@
     <message>
         <source>Selected Processes</source>
         <translation>Processus sélectionnés</translation>
+    </message>
+    <message>
+        <source>Processes, by GPU</source>
+        <translation>Processus, par GPU</translation>
     </message>
 </context>
 <context>
@@ -6764,6 +6776,10 @@
         <translation>Rechercher des processus</translation>
     </message>
     <message>
+        <source>UDP traffic, such as some video, is counted only in the totals below.</source>
+        <translation>Le trafic UDP, comme certaines vidéos, n’est compté que dans les totaux ci-dessous.</translation>
+    </message>
+    <message>
         <source>Choose the resource the table shows</source>
         <translation>Choisir la ressource affichée dans le tableau</translation>
     </message>
@@ -11024,6 +11040,13 @@
     </message>
 </context>
 <context>
+    <name>Summary</name>
+    <message>
+        <source>Graph</source>
+        <translation>Graphique</translation>
+    </message>
+</context>
+<context>
     <name>SwitcherWindow</name>
     <message>
         <source>Application Switcher</source>
@@ -12460,6 +12483,185 @@
     <message>
         <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
         <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
+    </message>
+</context>
+<context>
+    <name>activity::Summary</name>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>System:</source>
+        <translation>Système&#xa0;:</translation>
+    </message>
+    <message>
+        <source>User:</source>
+        <translation>Utilisateur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Idle:</source>
+        <translation>Inactif&#xa0;:</translation>
+    </message>
+    <message>
+        <source>CPU Load</source>
+        <translation>Charge du processeur</translation>
+    </message>
+    <message>
+        <source>Threads:</source>
+        <translation>Fils d’exécution&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Processes:</source>
+        <translation>Processus&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Memory Pressure</source>
+        <translation>Pression de la mémoire</translation>
+    </message>
+    <message>
+        <source>Physical Memory:</source>
+        <translation>Mémoire physique&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Memory Used:</source>
+        <translation>Mémoire utilisée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Cached Files:</source>
+        <translation>Fichiers en cache&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Swap Used:</source>
+        <translation>Swap utilisé&#xa0;:</translation>
+    </message>
+    <message>
+        <source>App Memory:</source>
+        <translation>Mémoire des apps&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Wired Memory:</source>
+        <translation>Mémoire résidente&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Compressed:</source>
+        <translation>Compressée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Energy Impact</source>
+        <translation>Impact énergétique</translation>
+    </message>
+    <message>
+        <source>Remaining charge:</source>
+        <translation>Charge restante&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Battery Is Charged</source>
+        <translation>Batterie chargée</translation>
+    </message>
+    <message>
+        <source>Time until full:</source>
+        <translation>Charge complète dans&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Calculating…</source>
+        <translation>Calcul en cours…</translation>
+    </message>
+    <message>
+        <source>Time remaining:</source>
+        <translation>Temps restant&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Time on battery:</source>
+        <translation>Temps sur batterie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Time on AC:</source>
+        <translation>Temps sur secteur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Battery (Last 12 hours)</source>
+        <translation>Batterie (12 dernières heures)</translation>
+    </message>
+    <message>
+        <source>Reads in:</source>
+        <translation>Lectures&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Writes out:</source>
+        <translation>Écritures&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Reads in/sec:</source>
+        <translation>Lectures/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Writes out/sec:</source>
+        <translation>Écritures/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Reads and Writes</source>
+        <translation>Lectures et écritures</translation>
+    </message>
+    <message>
+        <source>Data</source>
+        <translation>Données</translation>
+    </message>
+    <message>
+        <source>IO</source>
+        <translation>E/S</translation>
+    </message>
+    <message>
+        <source>Data read:</source>
+        <translation>Données lues&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data written:</source>
+        <translation>Données écrites&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data read/sec:</source>
+        <translation>Données lues/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data written/sec:</source>
+        <translation>Données écrites/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Packets in:</source>
+        <translation>Paquets entrants&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Packets out:</source>
+        <translation>Paquets sortants&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Packets in/sec:</source>
+        <translation>Paquets entrants/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Packets out/sec:</source>
+        <translation>Paquets sortants/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Packets</source>
+        <translation>Paquets</translation>
+    </message>
+    <message>
+        <source>Data received:</source>
+        <translation>Données reçues&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data sent:</source>
+        <translation>Données envoyées&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data received/sec:</source>
+        <translation>Données reçues/s&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Data sent/sec:</source>
+        <translation>Données envoyées/s&#xa0;:</translation>
     </message>
 </context>
 <context>

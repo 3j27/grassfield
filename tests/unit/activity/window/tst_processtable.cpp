@@ -213,3 +213,148 @@ TEST(ProcessTable, NeverResetsAndKeepsPersistentIndexes)
     EXPECT_EQ(b.row(), 0);
     EXPECT_EQ(resets.count(), 0);
 }
+
+namespace {
+
+TableRow child(int pid, int ppid, const char *name, double cpu, uint64_t start = 10)
+{
+    TableRow r = proc(pid, name, cpu, true, start);
+    r.process.ppid = ppid;
+    return r;
+}
+
+QList<int> depths(const ProcessTable &t)
+{
+    QList<int> list;
+    for (int i = 0; i < t.count(); ++i)
+        list << t.data(t.index(i), ProcessTable::DepthRole).toInt();
+    return list;
+}
+
+TableRow gpuClient(int pid, const char *name, double cpu, std::vector<std::string> pdevs)
+{
+    TableRow r = proc(pid, name, cpu);
+    r.process.gpuDevices = std::move(pdevs);
+    r.process.hasGpu = true;
+    return r;
+}
+
+} // namespace
+
+// AM13: a tree by parent pid, each level sorted; the Kernel row and a row whose parent is not listed are roots; a parent
+// younger than its child (its pid was reused) is not its parent.
+TEST(ProcessTable, HierarchicallyIsATreeSortedByLevel)
+{
+    Fixture f;
+    f.table.setView(View::Tree);
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(50, 1, "sshd", 0.5), child(60, 50, "bash", 3, 20),
+                     child(70, 1, "Hyprland", 9), child(80, 70, "foot", 2, 30), child(90, 999, "orphan", 1),
+                     child(100, 60, "reused", 7, 5), kernelRow(4)});
+    EXPECT_EQ(names(f.table), (QStringList{"reused", "Kernel", "orphan", "systemd", "Hyprland", "foot", "sshd", "bash"}));
+    EXPECT_EQ(depths(f.table), (QList<int>{0, 0, 0, 0, 1, 2, 1, 2}));
+    EXPECT_TRUE(f.table.data(f.table.index(3), ProcessTable::ExpandableRole).toBool());  // systemd
+    EXPECT_FALSE(f.table.data(f.table.index(5), ProcessTable::ExpandableRole).toBool()); // foot
+    EXPECT_FALSE(f.table.data(f.table.index(3), ProcessTable::GroupRole).toBool());
+    EXPECT_EQ(f.table.shownRows().size(), 8u);
+}
+
+// AM13: a collapsed row hides its children, and stays collapsed across samples while its process lives; the selection of a
+// hidden row goes (AM11).
+TEST(ProcessTable, CollapsedStaysCollapsedAcrossSamples)
+{
+    Fixture f;
+    f.table.setView(View::Tree);
+    const std::vector<TableRow> sample{child(1, 0, "systemd", 0.1, 1), child(70, 1, "Hyprland", 9), child(80, 70, "foot", 2, 30)};
+    f.table.setRows(sample);
+    f.table.click(2, Qt::NoModifier); // foot
+    EXPECT_EQ(f.table.selectedCount(), 1);
+    f.table.setExpanded(1, false); // Hyprland
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland"}));
+    EXPECT_FALSE(f.table.data(f.table.index(1), ProcessTable::ExpandedRole).toBool());
+    EXPECT_EQ(f.table.selectedCount(), 0);
+    f.table.setRows(sample); // the next sample
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland"}));
+    f.table.toggleExpanded(1);
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
+    f.table.setExpanded(2, false); // foot has no children: nothing to collapse
+    EXPECT_EQ(f.table.count(), 3);
+    // Hyprland's process ends and another takes its pid: the new one is not collapsed.
+    f.table.setExpanded(1, false);
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1)});
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(70, 1, "Hyprland", 9, 40), child(80, 70, "foot", 2, 50)});
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
+    // A collapsed row missing from a sample is forgotten then, not kept for ever (review of 91dcb63): the same process
+    // back in a later sample is open.
+    f.table.setExpanded(1, false);
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1)});
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(70, 1, "Hyprland", 9, 40), child(80, 70, "foot", 2, 50)});
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
+}
+
+// AM14: in the tree, a row that matches keeps every row above it; the others go.
+TEST(ProcessTable, HierarchicallySearchKeepsTheRowsAbove)
+{
+    Fixture f;
+    f.table.setView(View::Tree);
+    f.table.setRows({child(1, 0, "systemd", 0.1, 1), child(50, 1, "sshd", 0.5), child(60, 50, "bash", 3, 20),
+                     child(70, 1, "Hyprland", 9), child(80, 70, "foot", 2, 30)});
+    f.table.setSearch(QStringLiteral("foo"));
+    EXPECT_EQ(names(f.table), (QStringList{"systemd", "Hyprland", "foot"}));
+    EXPECT_EQ(depths(f.table), (QList<int>{0, 1, 2}));
+}
+
+// Two rows that name each other as parent (read in a race) are still listed, once each.
+TEST(ProcessTable, HierarchicallyListsEveryRowOnce)
+{
+    Fixture f;
+    f.table.setView(View::Tree);
+    f.table.setRows({child(10, 20, "a", 1, 5), child(20, 10, "b", 2, 5), child(30, 0, "c", 3, 1)});
+    QStringList shown = names(f.table);
+    shown.sort();
+    EXPECT_EQ(shown, (QStringList{"a", "b", "c"}));
+}
+
+// AM49: a header per GPU with its client processes, sorted; a process of two GPUs is under both, selected and copied once;
+// a header is never selected and the keyboard passes over it; a GPU without a matching process goes (AM14).
+TEST(ProcessTable, ByGpuGroupsTheClientsUnderTheirGpu)
+{
+    Fixture f;
+    f.table.setView(View::ByGpu);
+    f.table.setGpuNames({{QStringLiteral("0000:00:02.0"), QStringLiteral("Intel UHD Graphics")}});
+    f.table.setRows({gpuClient(10, "game", 40, {"0000:00:02.0"}), gpuClient(20, "Hyprland", 5, {"0000:00:02.0", "0000:03:00.0"}),
+                     proc(30, "no-gpu", 90), gpuClient(40, "encoder", 10, {"0000:03:00.0"}), kernelRow(1)});
+    EXPECT_EQ(names(f.table), (QStringList{"Intel UHD Graphics", "game", "Hyprland", "0000:03:00.0", "encoder", "Hyprland"}));
+    EXPECT_EQ(depths(f.table), (QList<int>{0, 1, 1, 0, 1, 1}));
+    EXPECT_TRUE(f.table.data(f.table.index(0), ProcessTable::GroupRole).toBool());
+    EXPECT_EQ(f.table.data(f.table.index(0), ProcessTable::CellsRole).toStringList(), (QStringList{"Intel UHD Graphics", "", "", ""}));
+    EXPECT_EQ(f.table.data(f.table.index(0), ProcessTable::PidRole).toInt(), -1);
+
+    f.table.click(0, Qt::NoModifier); // a header
+    EXPECT_EQ(f.table.selectedCount(), 0);
+    f.table.click(2, Qt::NoModifier); // Hyprland under the first GPU
+    EXPECT_TRUE(f.table.data(f.table.index(5), ProcessTable::SelectedRole).toBool()); // and under the second
+    f.table.moveCurrent(1, false);                                                     // passes over the second header
+    EXPECT_EQ(f.table.currentRow(), 4);
+    f.table.moveCurrent(-1, false);
+    EXPECT_EQ(f.table.currentRow(), 2);
+    f.table.selectAll();
+    EXPECT_EQ(f.table.selectedCount(), 3);
+    EXPECT_EQ(f.table.copyText().count(QLatin1Char('\n')), 4); // the headers' line and three processes
+
+    f.table.setExpanded(0, false); // the first GPU collapsed, kept across samples
+    f.table.setRows({gpuClient(10, "game", 40, {"0000:00:02.0"}), gpuClient(40, "encoder", 10, {"0000:03:00.0"})});
+    EXPECT_EQ(names(f.table), (QStringList{"Intel UHD Graphics", "0000:03:00.0", "encoder"}));
+    f.table.setSearch(QStringLiteral("enc"));
+    EXPECT_EQ(names(f.table), (QStringList{"0000:03:00.0", "encoder"}));
+}
+
+TEST(ProcessTable, TheGpuViewsReadTheGpus)
+{
+    EXPECT_EQ(readsForView(View::ByGpu), static_cast<unsigned>(ReadDescriptors | ReadGpu));
+    EXPECT_EQ(readsForView(View::Gpu), static_cast<unsigned>(ReadDescriptors | ReadGpu));
+    EXPECT_EQ(readsForView(View::Tree), 0u);
+    EXPECT_EQ(viewTitle(View::Tree), QStringLiteral("All Processes, Hierarchically"));
+    EXPECT_EQ(viewTitle(View::ByGpu), QStringLiteral("Processes, by GPU"));
+    EXPECT_EQ(views().at(1), View::Tree);
+    EXPECT_EQ(views().back(), View::ByGpu);
+}
