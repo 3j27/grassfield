@@ -372,6 +372,7 @@
  {"path": "tests/shell/stack_watch.sh", "layer": "headless"},
  {"path": "tests/shell/stack_helper.sh", "layer": "headless"},
  {"path": "tests/shell/stack_label_wrap.sh", "layer": "data"},
+ {"path": "tests/shell/widgets_translate_guard.sh", "layer": "data"},
  {"path": "tests/shell/clipboard_helper.sh", "layer": "headless"},
  {"path": "tests/shell/clipboard_settings.sh", "layer": "headless"},
  {"path": "tests/shell/dock_name_order.sh", "layer": "headless"},

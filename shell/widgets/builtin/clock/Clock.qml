@@ -10,8 +10,9 @@ WidgetBase {
 
     readonly property bool analog: !isSmall
     readonly property date now: FixedTime.date(clock.date)
+    // qsTranslate with this file's context, not qsTr (see Registry.qml: qsTr stayed English in the first moments of a French session).
     readonly property string timeText: Qt.locale().toString(now, Qt.locale().timeFormat(Locale.ShortFormat))
-    readonly property string dateText: Qt.locale().toString(now, qsTr("dddd, MMMM d"))
+    readonly property string dateText: Qt.locale().toString(now, qsTranslate("Clock", "dddd, MMMM d"))
 
     WallClock {
         id: clock
@@ -21,7 +22,7 @@ WidgetBase {
     }
 
     Accessible.role: Accessible.StaticText
-    Accessible.name: qsTr("Clock, %1, %2").arg(timeText).arg(dateText)
+    Accessible.name: qsTranslate("Clock", "Clock, %1, %2").arg(timeText).arg(dateText)
 
     // Analog face.
     Item {
@@ -144,7 +145,7 @@ WidgetBase {
 
         WidgetLabel {
             width: parent.width
-            text: root.isSmall ? Qt.locale().toString(root.now, qsTr("MMMM d")) : root.dateText
+            text: root.isSmall ? Qt.locale().toString(root.now, qsTranslate("Clock", "MMMM d")) : root.dateText
             color: Appearance.colors.textSecondary
             horizontalAlignment: root.isLarge ? Text.AlignHCenter : Text.AlignLeft
         }
