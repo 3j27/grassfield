@@ -676,6 +676,8 @@ TEST_F(PrintTest, AnotherPrinterKeepsTheChoicesItTakes)
     choices.insert(QStringLiteral("duplex"), QStringLiteral("vertical"));
     choices.insert(QStringLiteral("pages"), QStringLiteral("ranges"));
     choices.insert(QStringLiteral("ranges"), QStringLiteral("2-"));
+    choices.insert(QStringLiteral("orientation"), QStringLiteral("landscape"));
+    choices.insert(QStringLiteral("scale"), 80);
     const int id = chosen.first().id;
     printer->choosePrinter(id, QStringLiteral("Mono"), choices);
     // Its options are being read: no answer prints on it yet.
@@ -690,6 +692,8 @@ TEST_F(PrintTest, AnotherPrinterKeepsTheChoicesItTakes)
     EXPECT_EQ(mono.value("duplex").toString(), QStringLiteral("simplex"));
     EXPECT_FALSE(mono.value("color").toBool());
     EXPECT_EQ(mono.value("ranges").toString(), QStringLiteral("2-")) << "pages being typed stay as typed";
+    EXPECT_EQ(mono.value("orientation").toString(), QStringLiteral("landscape")) << "the rest carried though the pages do not read yet";
+    EXPECT_EQ(mono.value("scale").toInt(), 80);
     EXPECT_EQ(printer->tidyRanges(QStringLiteral("2-")), QString());
     EXPECT_EQ(printer->tidyRanges(QStringLiteral("5, 1-2")), QStringLiteral("1-2, 5"));
     QVariantMap answerChoices = mono;
