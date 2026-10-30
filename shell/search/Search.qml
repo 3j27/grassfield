@@ -105,7 +105,7 @@ Scope {
         {id: "search", title: qsTr("Search"), keywords: [qsTr("search results"), qsTr("search history")]},
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
         {id: "focus", title: qsTr("Focus"), keywords: [qsTr("do not disturb"), qsTr("silence")]},
-        {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
+        {id: "lock", title: qsTr("Lock Screen", "Settings page"), keywords: [qsTr("idle"), qsTr("password")]},
         {id: "privacy", title: qsTr("Privacy & Security"), keywords: [qsTr("permissions"), qsTr("location"), qsTr("camera"), qsTr("screen sharing")]},
         {id: "mouse", title: qsTr("Mouse"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling")]},
         {id: "trackpad", title: qsTr("Trackpad"), keywords: [qsTr("touchpad"), qsTr("tracking speed"), qsTr("tap to click"), qsTr("gestures")]},
@@ -294,8 +294,8 @@ Scope {
         }
         const q = query.trim();
         // Each kind of result only when Settings > Search shows it.
-        const calc = showCalculator && q !== "" ? Calc.answer(q) : null;
-        const unit = showConversions && q !== "" ? Units.answer(q) : null;
+        const calc = showCalculator && q !== "" ? Calc.answer(q, Qt.locale()) : null;
+        const unit = showConversions && q !== "" ? Units.answer(q, Qt.locale()) : null;
         const lq = Ranking.norm(q);
 
         let apps = showApps && q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
@@ -309,6 +309,10 @@ Scope {
             cmds.sort((a, b) => b.score - a.score);
         }
         let pages = showSettings && q !== "" ? SettingsPages.match(settingsPageList, q) : [];
+        // A command and a Settings page that read the same are one row, the command (the action wins; the page is one click
+        // away in Settings). In French the page is "Écran verrouillé" and the command "Verrouiller l’écran": both stay.
+        const commandTitles = new Set(cmds.map(c => Ranking.norm(c.cmd.title)));
+        pages = pages.filter(p => !commandTitles.has(Ranking.norm(p.page.title)));
         const seen = {};
         let docs = [];
         for (const p of showDocuments ? fileHits : []) {

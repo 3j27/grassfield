@@ -9240,6 +9240,11 @@
         <translation>mot de passe</translation>
     </message>
     <message>
+        <source>Lock Screen</source>
+        <comment>Settings page</comment>
+        <translation>Écran verrouillé</translation>
+    </message>
+    <message>
         <source>Privacy &amp; Security</source>
         <translation>Confidentialité et sécurité</translation>
     </message>
