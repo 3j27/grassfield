@@ -17,7 +17,9 @@ Une silhouette ascendante et des courbes superposées évoquent l’élan et les
 
 **Zone de protection proposée :** garder autour du symbole un espace libre au moins égal à 20 % de sa hauteur. Pour une signature, appliquer cette même marge autour de l’ensemble. Ne pas déformer, incliner, encadrer, ajouter d’ombre, de contour ou de dégradé au symbole. Sur photo, placer le logo dans une zone calme offrant un contraste suffisant ; sinon utiliser une surface unie.
 
-**Tailles :** pour la communication, commencer à 32 px de hauteur pour le symbole et 200 px de largeur pour la signature horizontale. Ce sont des repères provisoires : le détail du bas peut disparaître aux petites tailles. Vérifier sur écran et en impression ; pour la barre système à 16–24 px, préparer une version optiquement simplifiée après validation du dessin. Ne pas réduire le PNG au lieu de partir du SVG.
+**Tailles :** pour la communication, commencer à 32 px de hauteur pour le symbole et 200 px de largeur pour la signature horizontale. Ce sont des repères provisoires : le détail du bas peut disparaître aux petites tailles. Vérifier sur écran et en impression. Ne pas réduire le PNG au lieu de partir du SVG.
+
+**Version optique (16–24 px) :** l’interface utilise deux fichiers sur la grille de 24 unités. `branding/icons/symbolic/grassfield-logo-full.svg` est le symbole complet, inchangé, pour 32 px et plus (les dialogues d’alerte du système, 48 px). `branding/icons/symbolic/grassfield-logo.svg` est sa version optique pour 16–24 px (barre de menus, fenêtre « À propos », réglages, recherche) : mêmes lames montantes sur la même base arrondie, avec moins d’espaces blancs et des espaces plus larges. La fente fine entre la grande lame et la lame de droite se referme en V là où elle deviendrait floue, l’encoche de gauche est plus ouverte, la base garde son contour en vague sans la fente intérieure, et un seul espace d’environ 1,4 px à 16 px sépare les lames de la base. Le dessin du symbole complet ne change pas. Cette version optique suit le statut du symbole : son adoption finale et sa validation juridique restent au propriétaire.
 
 ## Couleurs
 
