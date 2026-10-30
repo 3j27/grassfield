@@ -66,12 +66,18 @@ FlatpakPrompt flatpakPrompt(const QStringList &lines);
 // home, folders (any other path), devices (all), input, usb (devices=usb, or [USB Devices] it may list), kvm, audio
 // (the sound server: speakers and microphone), x11, sharedMemory (shared=ipc, devices=shm), printers (cups), ssh
 // (ssh-auth), gpg (gpg-agent), smartCards (pcsc), bus (the whole session bus), systemBus, bluetooth, canbus, devel,
-// multiarch, outside (it may start programs outside its sandbox: the whole session bus, or org.freedesktop.Flatpak,
-// org.freedesktop.systemd1 or the permission store, by name or a wildcard). Then "sessionService:<name>" and
-// "systemService:<name>" for each bus name it may talk to or own, sorted (on the session bus, not the harmless ones:
-// notifications, tray, menus, screen saver, accessibility, file manager, the portals, media-player names and its own),
-// and "other:<text>" for each grant the Store does not know, as flatpak writes it. At most 30 lines: the last is then
-// "more:<count>". nullopt when it is not an app's metadata (no [Application] name): unknown, never "nothing".
+// multiarch, login (it can write where programs start at the next login: autostart, systemd user units, Hyprland's,
+// uwsm's and Omarchy's configuration, environment.d, the shells' start files, ~/.local/bin), outside (it may start
+// programs outside its sandbox: anything in the runtime folder but the sound server's and its own, the system's /run but
+// removable media, flatpak's own folder, the session's D-Bus services or the launcher's entries written or a folder above
+// them, the whole session bus, or org.freedesktop.Flatpak, org.freedesktop.systemd1 or the permission store, by name or a
+// wildcard ("X.*" is X and below), or as its own id or above it). Each list is read as flatpak reads it: the key file's
+// escapes, then a filesystems entry's own ("\x" is x, ":" its mode), its path normalised. Then "sessionService:<name>"
+// and "systemService:<name>" for each bus name it may talk to or own, sorted (on the session bus, not the harmless ones:
+// notifications, tray, menus, screen saver, accessibility, file manager and the portals to talk to, media-player names
+// and its own to own too), and "other:<text>" for each grant the Store does not know, as flatpak writes it. At most 30
+// lines: the last is then "more:<count>". nullopt when it is not an app's metadata (no [Application] name) or holds a
+// value flatpak cannot interpret: unknown, never "nothing".
 std::optional<QStringList> flatpakAccess(const QByteArray &metadata);
 
 // What `remote-info` (before an install) or `info --user` (after) says of an app, for the Information list (SR11).

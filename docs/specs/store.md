@@ -4,7 +4,7 @@ Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the fi
 list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
 (`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3 (3a repository packages and web apps,
 3b1 Omarchy's setups, and 3b2 the AUR, merged; 3c Flathub: part 1 merged, part 2, the Flathub source, built
-(`docs/audits/store-2026-10-27/step3c.md`), part 3 "Get Flatpak…" to come). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+(`docs/audits/store-2026-10-27/step3c.md`), part 3 "Get Flatpak…" built). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -257,8 +257,14 @@ Catalog and network (step 1)
 
 Settings window (Ctrl+, ; step 2 reads, step 3 writes)
 - SR28. "Sources": switches for the optional sources, both off until turned on, each with one line saying what it means: AUR;
-  Flathub, shown only when the `flatpak` package is installed (otherwise the line "Flathub needs the flatpak package"; its
-  "Get Flatpak…" is step 3c part 3); turning Flathub on adds the Flathub remote to the user's installation
+  Flathub, shown only when the `flatpak` package is installed. Without it, the line "Flathub needs Flatpak, which installs
+  its apps in your own folder." and "Get Flatpak…" (ADR-0037 SD24): its sheet, over the settings window, says what Flatpak
+  is, that Omarchy installs it in a Terminal window that asks for the password, and that the apps reach the launcher after
+  the next login, then pacman's plan; Install runs Omarchy's `omarchy-pkg-add flatpak` in its terminal (b.2), the line says
+  so while it runs and how it ended when it did not install it; dimmed, with why, while the catalog does not pin the
+  command or Omarchy differs from its pins; "Flathub needs the flatpak package." without Omarchy's terminal. With Flathub
+  on and before the next login, "The apps you get from Flathub show in your app launcher after you log in again." Turning
+  Flathub on adds the Flathub remote to the user's installation
   (`flatpak remote-add --user --if-not-exists`) and fetches its AppStream; while it could not be added (offline, Flathub
   unreachable) the line "Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again."
   (« Flathub n’a pas pu être joint. Le Store l’ajoute dès que vous êtes en ligne ; Actualiser réessaie. »). "What the
