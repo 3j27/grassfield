@@ -197,7 +197,7 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 name: row.modelData.icon
                 size: Tokens.storeSidebarIconSize
-                color: Appearance.colors.accent
+                color: Appearance.colors.accentInk
             }
 
             Text {

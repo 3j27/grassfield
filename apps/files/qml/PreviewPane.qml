@@ -313,7 +313,7 @@ Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.showMore ? qsTr("Show Less") : qsTr("Show More")
-                    color: Appearance.colors.accent
+                    color: Appearance.colors.accentInk
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     Accessible.role: Accessible.Button

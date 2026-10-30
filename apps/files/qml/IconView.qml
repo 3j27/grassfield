@@ -428,7 +428,7 @@ FocusScope {
                             anchors.verticalCenter: header.verticalCenter
                             visible: section.overflows || section.full
                             text: section.full ? qsTr("Show Less") : qsTr("Show All")
-                            color: Appearance.colors.accent
+                            color: Appearance.colors.accentInk
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
                             Accessible.role: Accessible.Button

@@ -127,6 +127,13 @@ QtObject {
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
     })
 
+    // color roles, accentInkLight appearance
+    readonly property var colorAccentInkLight: ({
+        pink: "#BD2F6C",  // the lightest shade of the light pink accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        yellow: "#816500",  // the lightest shade of the light yellow accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        green: "#467427"  // the lightest shade of the light green accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+    })
+
     // color roles, selectionDark appearance
     readonly property var colorSelectionDark: ({
         multicolor: "#2E8049",  // dark-appearance selection fill, multicolor: the Grassfield green: the owner's pick #2E8049 (white 4.88:1; lot 1 used the light accent #26763F) [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]

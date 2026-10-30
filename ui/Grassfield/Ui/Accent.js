@@ -17,23 +17,31 @@ function normalize(setting) {
     return validName(setting) ? setting : "multicolor";
 }
 
-// {accent, accentText} for a setting in the dark or the light appearance, or null when the palette's own roles apply
-// (multicolor, or anything invalid: a hand-edited value reads as the default).
+// {accent, accentText, accentInk} for a setting in the dark or the light appearance, or null when the palette's own roles
+// apply (multicolor, or anything invalid: a hand-edited value reads as the default). accentInk: the colour of text and glyphs
+// drawn in the accent colour (a link-like label, a checkmark, a sidebar glyph); the accent itself, or in the light appearance
+// the darker shade a light accent has in `color.accentInkLight` (yellow, green, pink: 4.5:1 on an app window, as macOS draws
+// a light accent's text darker; the integrator's review of 5391761, ADR-0040 step 1c).
 function resolve(setting, dark, tokens) {
     const name = normalize(setting);
     if (name === "multicolor")
         return null;
     const group = dark ? tokens.colorAccentDark : tokens.colorAccentLight;
-    return {accent: group[name], accentText: group[name + "Text"]};
+    const ink = dark ? undefined : (tokens.colorAccentInkLight || {})[name];
+    return {accent: group[name], accentText: group[name + "Text"], accentInk: ink || group[name]};
 }
 
-// A copy of palette `base` with the accent applied. The highlight colour (text selection, Automatic) is the accent.
+// A copy of palette `base` with the accent applied (`accentInk` the palette's own accent for the default). The highlight
+// colour (text selection, Automatic) is the accent.
 function apply(base, setting, dark, tokens) {
     const c = Object.assign({}, base);
     const a = resolve(setting, dark, tokens);
     if (a) {
         c.accent = a.accent;
         c.accentText = a.accentText;
+        c.accentInk = a.accentInk;
+    } else {
+        c.accentInk = c.accent;
     }
     return c;
 }
