@@ -1,14 +1,19 @@
 // Mutation fuzzing of every core parser that reads text another process of the user can send (ADR-0041 step 5, T-1):
 // the gfc/1 request readers (overview, overview_focus, stages, arrange), the config key/value readers, the window address
-// and D-Bus address validators, the JSON reader, and the two text sanitisers whose output goes into events. Each parser is
-// fed a corpus of valid requests, mutated in the tree (byte flips, token insertion, number extremes, invalid UTF-8, nesting,
-// growth past the payload cap, splices of two entries), for GF_FUZZ_ITERATIONS rounds (default 2000) from GF_FUZZ_SEED
-// (default 1): the same seed gives the same inputs, so a finding reproduces. Properties: no crash (the ASan/UBSan build of
-// compositor/build-direct.sh tests-asan runs this file too), a bounded time per call (a reader that explodes on nesting or
-// length is as harmful as a crash inside the compositor), the same answer when the same text is read twice, and, for an
-// accepted input, every invariant the header promises (caps, distinctness, ranges, grammar). No libFuzzer, no dependency.
+// and D-Bus address validators, the JSON reader, the two text sanitisers whose output goes into events, and the name
+// readers (a layer namespace, a Split View side, an xdg interface name). Each parser is fed a corpus of valid requests,
+// mutated in the tree (byte flips, token insertion, number extremes, invalid UTF-8, nesting, growth past the payload cap,
+// splices of two entries), for GF_FUZZ_ITERATIONS rounds (default 2000) from GF_FUZZ_SEED (default 1): the same seed
+// gives the same inputs, so a finding reproduces. Properties: no crash (the ASan/UBSan build of
+// compositor/build-direct.sh tests-asan runs this file too), a bounded CPU time per call (a reader that explodes on
+// nesting or length is as harmful as a crash inside the compositor), the same answer when the same text is read twice,
+// and, for an accepted input, every invariant the header promises (caps, distinctness, ranges, grammar). No libFuzzer,
+// no dependency.
 #include "core/Appmenu.hpp"
+#include "core/ClientChrome.hpp"
+#include "core/DesktopFocus.hpp"
 #include "core/Json.hpp"
+#include "core/LayerPointer.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
@@ -19,12 +24,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <string>
 #include <string_view>
@@ -202,10 +208,29 @@ namespace {
         return out;
     }
 
-    // Bounds a reader must keep per call, generous for an -O0 sanitized build on a loaded machine: a reader that takes
-    // longer on one input has a complexity problem (deep nesting, quadratic copies), which is the finding.
-    constexpr double kMaxCallMs = 50.0;
-    constexpr double kMaxMeanUs = 2000.0;
+    // Bounds a reader must keep per call, in CPU time of this thread (a loaded machine stretches the wall clock, not the
+    // work; the integrator's review of 265e6c7, minor 6), wider under the sanitizers (an -O0 ASan build does the same
+    // work several times slower): a reader that takes longer on one input has a complexity problem (deep nesting,
+    // quadratic copies), which is the finding.
+#if defined(__SANITIZE_ADDRESS__)
+    constexpr bool kSanitized = true;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)
+    constexpr bool kSanitized = true;
+#else
+    constexpr bool kSanitized = false;
+#endif
+#else
+    constexpr bool kSanitized = false;
+#endif
+    constexpr double kMaxCallMs = kSanitized ? 200.0 : 50.0;
+    constexpr double kMaxMeanUs = kSanitized ? 8000.0 : 2000.0;
+
+    double cpuUs() {
+        timespec ts{};
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+        return static_cast<double>(ts.tv_sec) * 1e6 + static_cast<double>(ts.tv_nsec) / 1e3;
+    }
 
     struct Stats {
         uint64_t accepted = 0, rejected = 0;
@@ -214,19 +239,27 @@ namespace {
     };
 
     // Runs `check(input)` for every mutated input; `check` returns true when the parser accepted it and must assert its
-    // own invariants. The corpus itself is read first (every seed must be accepted: a broken corpus proves nothing).
-    void fuzz(const char* name, const std::vector<std::string>& corpus, size_t cap, const std::function<bool(const std::string&)>& check) {
+    // own invariants. The corpus itself is read first (every seed must be accepted: a broken corpus proves nothing). A
+    // `tweak` is a parser-specific operation the generic ones seldom reach: one input in eight is a corpus entry with the
+    // tweak alone (an operation that must land on a valid request to matter), and one mutated input in four gets it too.
+    void fuzz(const char* name, const std::vector<std::string>& corpus, size_t cap, const std::function<bool(const std::string&)>& check,
+              const std::function<void(std::string&, Rng&)>& tweak = {}) {
         Mutator mutator(seed() ^ std::hash<std::string_view>{}(name), cap * 2 + 64);
         for (const std::string& c : corpus)
             EXPECT_TRUE(check(c)) << name << ": the corpus entry is not accepted: " << printable(c);
         Stats st;
         const uint64_t n = iterations();
         for (uint64_t i = 0; i < n; ++i) {
-            const std::string input = mutator.mutate(corpus[mutator.rng.below(corpus.size())], corpus);
-            st.maxLen               = std::max(st.maxLen, input.size());
-            const auto t0           = std::chrono::steady_clock::now();
-            const bool ok           = check(input);
-            const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+            std::string  input = corpus[mutator.rng.below(corpus.size())];
+            const size_t roll  = tweak ? mutator.rng.below(8) : 1;
+            if (roll != 0)
+                input = mutator.mutate(input, corpus);
+            if (tweak && (roll == 0 || mutator.rng.below(4) == 0))
+                tweak(input, mutator.rng);
+            st.maxLen       = std::max(st.maxLen, input.size());
+            const double t0 = cpuUs();
+            const bool   ok = check(input);
+            const double us = cpuUs() - t0;
             st.totalUs += us;
             st.maxCallUs = std::max(st.maxCallUs, us);
             ok ? ++st.accepted : ++st.rejected;
@@ -428,6 +461,27 @@ TEST(ParserFuzz, ArrangeRequest) {
         }
         EXPECT_TRUE(a->output.empty() || outputNameOk(a->output)) << printable(in);
         return true;
+    }, [](std::string& s, Rng& rng) {
+        // One window of the "windows" array repeated inside it: the generic operations seldom make two windows equal, so
+        // the parser without its "a window is given twice" check survived 2000 iterations (killed at 8312; the
+        // integrator's review of 265e6c7).
+        const size_t key = s.find("\"windows\"");
+        const size_t open = key == std::string::npos ? key : s.find('[', key);
+        const size_t close = open == std::string::npos ? open : s.find(']', open);
+        if (close == std::string::npos)
+            return;
+        std::vector<std::pair<size_t, size_t>> quoted; // [begin, end) of every "..." element between the brackets
+        for (size_t q = s.find('"', open); q != std::string::npos && q < close;) {
+            const size_t e = s.find('"', q + 1);
+            if (e == std::string::npos || e > close)
+                break;
+            quoted.emplace_back(q, e + 1);
+            q = s.find('"', e + 1);
+        }
+        if (quoted.empty())
+            return;
+        const auto [b, e] = quoted[rng.below(quoted.size())];
+        s.insert(e, "," + s.substr(b, e - b));
     });
 }
 
@@ -606,5 +660,65 @@ TEST(ParserFuzz, LuaDispatchRequest) {
         const std::string out = gf::gfc::luaDispatchRequest(in);
         EXPECT_NE(out.find(gf::gfc::kLuaNamespace), std::string::npos) << printable(in);
         return true;
+    });
+}
+
+// ---- names: a layer namespace, a Split View side, an xdg interface name --------------------------------------------
+
+TEST(ParserFuzz, LayerNamespace) {
+    using gf::desktopfocus::SurfaceKind;
+    const std::vector<std::string> corpus = {"grassfield-desktop-icons", "grassfield-menubar", "grassfield-overlay", "grassfield-x"};
+    fuzz("layer.namespace", corpus, 256, [](const std::string& in) {
+        const bool ours = gf::layerpointer::isGrassfieldNamespace(in);
+        EXPECT_EQ(ours, gf::layerpointer::isGrassfieldNamespace(in));
+        EXPECT_EQ(ours, in.size() > gf::layerpointer::kNamespacePrefix.size() && in.starts_with(gf::layerpointer::kNamespacePrefix)) << printable(in);
+        for (const bool popup : {false, true}) {
+            const SurfaceKind kind = gf::desktopfocus::classifyLayer(in, popup);
+            EXPECT_EQ(kind, gf::desktopfocus::classifyLayer(in, popup));
+            if (in == gf::desktopfocus::kDesktopNamespace) {
+                EXPECT_EQ(kind, popup ? SurfaceKind::DesktopPopup : SurfaceKind::Desktop);
+            } else if (in.starts_with(gf::desktopfocus::kShellNamespacePrefix)) {
+                EXPECT_EQ(kind, SurfaceKind::ShellLayer) << printable(in);
+            } else {
+                EXPECT_EQ(kind, SurfaceKind::OtherLayer) << printable(in);
+            }
+            // A layer the pointer refresh follows is never another client's for the focus policy.
+            if (ours) {
+                EXPECT_NE(kind, SurfaceKind::OtherLayer) << printable(in);
+            }
+        }
+        return ours;
+    });
+}
+
+TEST(ParserFuzz, SplitSide) {
+    const std::vector<std::string> corpus = {"left", "right"};
+    fuzz("tiling.splitZone", corpus, 64, [](const std::string& in) {
+        const std::optional<int> zone = gf::tiling::splitZone(in);
+        EXPECT_EQ(zone, gf::tiling::splitZone(in));
+        if (in == "left") {
+            EXPECT_EQ(zone, 0);
+        } else if (in == "right") {
+            EXPECT_EQ(zone, 1);
+        } else {
+            EXPECT_FALSE(zone.has_value()) << printable(in);
+        }
+        return zone.has_value();
+    });
+}
+
+TEST(ParserFuzz, CapabilityCandidate) {
+    const std::vector<std::string> corpus = {"xdg_toplevel"};
+    fuzz("chrome.capabilityCandidate", corpus, 128, [](const std::string& in) {
+        bool any = false;
+        for (const int version : {std::numeric_limits<int>::min(), -1, 0, 4, 5, 6, std::numeric_limits<int>::max()}) {
+            for (const bool data : {false, true}) {
+                const bool candidate = gf::chrome::capabilityCandidate(in, version, data);
+                EXPECT_EQ(candidate, in == "xdg_toplevel" && version >= static_cast<int>(gf::chrome::kWmCapabilitiesSince) && data)
+                    << printable(in) << " v" << version << (data ? " with" : " without") << " user data";
+                any = any || candidate;
+            }
+        }
+        return any;
     });
 }
