@@ -90,6 +90,13 @@ ShellRoot {
         Osd.hide();
         InputSource.feed("garbage");
         check("a malformed event shows nothing", !Osd.shown);
+        // A virtual keyboard with its own keymap is reported with the layout "error": never shown, the layout name is kept.
+        InputSource.feed("wtype,error");
+        check("a virtual keyboard's error shows nothing", !Osd.shown);
+        InputSource.feed("kbd0,English (US)");
+        Osd.hide();
+        InputSource.feed("wtype,error");
+        check("a virtual keyboard's error is not the layout", InputSource.layoutName === "English (US)" && !Osd.shown);
 
         // Capture defect 4: the machine's real backlights never draw the OSD in a dev session (armed, loaded, the value moves).
         Osd.hide();

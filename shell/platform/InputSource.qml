@@ -23,6 +23,9 @@ QtObject {
             return;
         const next = Logic.step(memory, event);
         memory = next.state;
+        // A keyboard without layout names (a virtual one with its own keymap) is not an input source: nothing changes.
+        if (!Logic.named(event.layout))
+            return;
         layoutName = event.layout;
         if (next.show)
             layoutChanged(event.layout);
