@@ -3,7 +3,8 @@
 compositor hands them must never crash them, hang them or make them act outside their contract.
 
   python3 -I tests/fuzz/fuzz_helpers.py ROOT TMP [scenario...]      (run by tests/fuzz/helpers_fuzz.sh)
-  GF_FUZZ_ITERATIONS (default 1500; scenarios that start a process run a fifth of it), GF_FUZZ_SEED (default 1)
+  GF_FUZZ_ITERATIONS (default 1500; scenarios that start a process run a fifth of it), GF_FUZZ_SEED (default 1),
+  GF_FUZZ_TRACE=1 prints the whole traceback of a finding
 
 Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names the seed and the iteration):
   crash-watch     packaging/bin/grassfield-crash-watch: journal entries (the four real fixtures mutated: field types,
@@ -27,7 +28,14 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
                   systemctl answering "failed". Contract: it skips Omarchy's sleep lock (exit 1) only when the session's
                   socket or its instance directory is certainly absent (an absolute, well-formed path whose parent is
                   searchable and which does not exist, not even as a dangling link); anything else runs it.
-Standard library only.
+  update-check    packaging/bin/grassfield-update-check with stub children (nothing runs): checkupdates' and pacman -Q's
+                  output, vercmp's answer, the failures and last-success files, the release notes document, pacman.conf
+                  and the repository file. Contract: nothing raises (parse_notes raises ValueError or UnicodeDecodeError
+                  only, which its caller catches); the state is one of the documented ones; the other updates are
+                  counted as listed, sorted, without Grassfield's or Omarchy's packages; every time is None or ISO 8601;
+                  the output line stays under the 256 KiB cap and is JSON; the failures file holds a plausible time
+                  afterwards; a release of the notes has a well-formed version, date and plain-text notes.
+Standard library only; the same seed mutates the same inputs (a scenario's seed is a crc32 of its name, never hash()).
 """
 import importlib.machinery
 import importlib.util
@@ -39,8 +47,14 @@ import re
 import subprocess
 import sys
 import traceback
+import zlib
 
 sys.dont_write_bytecode = True
+# Nothing here may reach the owner's session: the runner (helpers_fuzz.sh) starts this program without these, as
+# scripts/dev/isolated.sh does, and a direct run drops them too (the integrator's review of 265e6c7, minor 5). The
+# session-end scenario also replaces its module's run() before any window is closed.
+for _name in ("HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS"):
+    os.environ.pop(_name, None)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mutate import Mutator  # noqa: E402
 
@@ -70,7 +84,9 @@ def printable(data, n=160):
 class Scenario:
     def __init__(self, name, iterations):
         self.name, self.iterations, self.findings, self.accepted, self.rejected = name, iterations, 0, 0, 0
-        self.mutator = Mutator(SEED ^ (hash(name) & 0xFFFFFFFF))
+        # A stable per-scenario seed: hash() of a str is randomised per process, and python3 -I ignores PYTHONHASHSEED, so
+        # two runs of one seed gave different inputs (the integrator's review of 265e6c7, major 2).
+        self.mutator = Mutator(SEED ^ zlib.crc32(name.encode("utf-8")))
         self.i = 0
 
     def finding(self, what, data=""):
@@ -87,6 +103,8 @@ class Scenario:
                 ok = body(self.i)
             except Exception:
                 self.finding("exception", traceback.format_exc().strip().splitlines()[-1])
+                if os.environ.get("GF_FUZZ_TRACE") and self.findings <= 8:
+                    traceback.print_exc()
                 ok = False
             if ok:
                 self.accepted += 1
@@ -327,18 +345,36 @@ def anr_dialog():
 def lock_status():
     sc = Scenario("lock-status", SUB_ITER)
     text = open(ROOT + "/packaging/shims/omarchy-shell", encoding="utf-8").read()
-    jqf = re.search(r"jq -e '([^']*)'", text).group(1)
+    jqf = re.search(r"jq -e -s '([^']*)'", text).group(1)
+    jq = ["jq", "-e", "-s", jqf]
     locked = [{"name": "DP-1", "solitaryBlockedBy": ["LOCK"]}, {"name": "eDP-1", "solitaryBlockedBy": ["LOCK", "FULLSCREEN"]}]
     corpus = [json.dumps(locked).encode(), json.dumps(locked[:1]).encode(), b"[]", json.dumps([{"name": "DP-1", "solitaryBlockedBy": []}]).encode(),
               json.dumps([{"name": "DP-1", "solitaryBlockedBy": "UNLOCKED"}]).encode(), json.dumps({"a": locked[0]}).encode()]
 
+    def depth(value, d=0):
+        if isinstance(value, list):
+            return max([depth(x, d + 1) for x in value] + [d + 1])
+        if isinstance(value, dict):
+            return max([depth(x, d + 1) for x in value.values()] + [d + 1])
+        return d
+
     def oracle(raw):
-        # jq reads bytes that are not UTF-8 with replacement characters, as the oracle does here: a garbled key name is not a
-        # monitor without LOCK (the structure decides, never the bytes of a name).
+        """True: must be secure; False: must not be; None: either (a locked shape jq may refuse to read: fail closed is
+        right, and so is secure). jq reads bytes that are not UTF-8 with replacement characters, as the oracle does here: a
+        garbled key name is not a monitor without LOCK (the structure decides, never the bytes of a name). One JSON value
+        only (a second one raises here as jq -s counts it). jq and Python differ on a lone surrogate escape such as backslash-u-d800
+        (jq 1.7 and 1.8 refuse it, Python reads it: a false finding at 10 000 iterations, the integrator's review of
+        265e6c7, minor 3), on nesting (jq stops at 256 levels, Python near 1000) and on a leading byte order mark (jq skips
+        it)."""
+        text = raw.decode("utf-8", "replace")
+        if text.startswith("\ufeff"):
+            text = text[1:]
         try:
-            doc = json.loads(raw.decode("utf-8", "replace"))
+            doc = json.loads(text)
         except ValueError:
             return False
+        except RecursionError:
+            return None
         if not isinstance(doc, list) or not doc:
             return False
         for mon in doc:
@@ -347,21 +383,30 @@ def lock_status():
             sb = mon.get("solitaryBlockedBy")
             if not isinstance(sb, list) or "LOCK" not in sb:
                 return False
-        return True
+        try:
+            json.dumps(doc, ensure_ascii=False).encode("utf-8")
+        except UnicodeEncodeError:
+            return None
+        return None if depth(doc) > 200 else True
 
     for raw in corpus:
-        r = subprocess.run(["jq", "-e", jqf], input=raw, capture_output=True, timeout=20)
+        r = subprocess.run(jq, input=raw, capture_output=True, timeout=20)
         if (r.returncode == 0) != oracle(raw):
             sc.finding("the corpus itself is read against the contract", raw)
+    for raw in (b'[{"solitaryBlockedBy":["WINDOWED"]}] [{"solitaryBlockedBy":["LOCK"]}]', b'4294967296[{"solitaryBlockedBy":["LOCK"]}]',
+                b'[{"solitaryBlockedBy":["LOCK"]}] 1', b"", b" \n"):
+        if subprocess.run(jq, input=raw, capture_output=True, timeout=20).returncode == 0 or oracle(raw) is not False:
+            sc.finding("several JSON values, or none, read as secure", raw)
 
     def body(i):
         mut = sc.mutator
         raw = mut.mutate(mut.rng.pick(corpus), corpus, 65536)
-        r = subprocess.run(["jq", "-e", jqf], input=raw, capture_output=True, timeout=20)
+        r = subprocess.run(jq, input=raw, capture_output=True, timeout=20)
         secure = r.returncode == 0
-        if secure and not oracle(raw):
-            sc.finding("secure without LOCK on every monitor of a list of objects", raw)
-        if not secure and oracle(raw):
+        verdict = oracle(raw)
+        if secure and verdict is False:
+            sc.finding("secure without exactly one list of objects each listing LOCK", raw)
+        if not secure and verdict is True:
             sc.finding("not secure although every monitor lists LOCK", raw)
         return secure
 
@@ -433,8 +478,178 @@ def sleep_lock_gate():
     sc.run(body)
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+def update_check():
+    sc = Scenario("update-check", ITER)
+    m = load(ROOT + "/packaging/bin/grassfield-update-check", "updatecheck")
+    cache = os.path.join(TMP, "update-cache")
+    health = os.path.join(cache, "health-db")
+    os.makedirs(health, exist_ok=True)
+    now = 1800000000.0
+    gap = m.BLOCKING_GAP
+
+    def version_key(v):
+        return [int(x) for x in re.findall(r"[0-9]+", v)]
+
+    class Stub:
+        """The checker's children: every program answers from the table (vercmp compares digit runs; pacman -Q answers
+        for the packages of `installed`, with their line mutated when `installed_text` is set), nothing runs."""
+
+        def __init__(self):
+            self.answers = {}
+            self.installed = {"grassfield-desktop": "0.4.0-1", "omarchy": "4.1.0-1"}
+            self.installed_text = None
+
+        def run(self, argv, env=None, timeout=None):
+            if argv[0] == "vercmp" and "vercmp" not in self.answers:
+                a, b = version_key(argv[1]), version_key(argv[2])
+                return 0, "%d\n" % ((a > b) - (a < b)), ""
+            if argv[0] == "pacman" and argv[1] == "-Q":
+                if argv[2] not in self.installed:
+                    return 1, "", "error: package '%s' was not found\n" % argv[2]
+                return 0, self.installed_text or "%s %s\n" % (argv[2], self.installed[argv[2]]), ""
+            return self.answers.get(argv[0], (1, "", ""))
+
+        def stop(self):
+            pass
+
+    updates = "linux 6.18.1-1 -> 6.18.2-1\ngrassfield-desktop 0.4.0-1 -> 0.5.0-1\nomarchy 4.1.0-1 -> 4.2.0-1\nfoot 1.21.0-1 -> 1.22.0-1\n"
+    upd_corpus = [updates, "", "grassfield-desktop 0.4.0-1 -> 0.5.0-1\n", ":: checking\nlinux 6.18.1-1 -> 6.18.2-1\n"]
+    installed_corpus = ["grassfield-desktop 0.4.0-1\n", "", "error: package 'x' was not found\n"]
+    notes = {"version": 1, "channel": "stable", "releases": [
+        {"version": "0.5.0-1", "date": "2026-10-20", "notes": {"en": "Stability.\nFixes.", "fr": "Stabilit\u00e9."}},
+        {"version": "0.4.1-1", "date": "2026-10-01", "notes": {"en": "Fixes."}}]}
+    notes_corpus = [json.dumps(notes).encode(), json.dumps({"version": 1, "releases": []}).encode()]
+    fail_corpus = [b'{"first": 1799999000}', b'{"first": 1700000000}', b'{"first": 1e999}', b'{"first": "x"}', b"", b"[]", b'{"first": true}']
+    succ_corpus = [b"1799990000\n", b"", b"x", b"1e999", b"-5"]
+    conf_corpus = ["[options]\nHoldPkg = pacman\n[core]\nInclude = /etc/pacman.d/mirrorlist\n[grassfield]\nInclude = /etc/pacman.d/grassfield.conf\n",
+                   "# Grassfield\nServer = https://repo.example/stable/$arch\nServer = https://mirror.example/stable/$arch # mirror\n",
+                   "Server=https://repo.example/beta/$arch\n", ""]
+    base = "https://repo.example"
+    word = re.compile(r"^\S+$")
+    iso = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+    states = {"available", "up-to-date", "not-set-up", "failed"}
+
+    def checker(stub, offline=False):
+        return m.Checker(cache, offline, now, stub)
+
+    def emitted(result):
+        out = io.StringIO()
+        saved = sys.stdout
+        try:
+            sys.stdout = out
+            m.emit(result)
+        finally:
+            sys.stdout = saved
+        line = out.getvalue()
+        assert line.endswith("\n") and line.count("\n") == 1 and len(line.encode("utf-8")) <= m.OUTPUT_CAP, len(line)
+        return json.loads(line)
+
+    def check_updates(r, omarchy):
+        assert r["state"] in states, r["state"]
+        packages = r.get("otherPackages", [])
+        assert isinstance(r["others"], int) and r["others"] == len(packages), (r["others"], len(packages))
+        names = [p["name"] for p in packages]
+        assert names == sorted(names) and len(set(names)) == len(names), names
+        for p in packages:
+            assert set(p) == {"name", "installed", "available"} and all(isinstance(p[k], str) and word.match(p[k]) for k in p), p
+            assert not p["name"].startswith("grassfield-") and p["name"] != omarchy, p
+        for side in ("grassfield", "omarchy"):
+            for k in ("installed", "available"):
+                assert r[side][k] is None or (isinstance(r[side][k], str) and word.match(r[side][k])), r[side]
+        assert r["lastSuccessAt"] is None or iso.match(r["lastSuccessAt"]), r["lastSuccessAt"]
+        assert r["grassfield"]["notes"] == [] and r["grassfield"]["notesError"] in (None, "unavailable")
+        emitted(r)
+
+    def check_failed(c, r):
+        assert r["state"] in ("failed", "blocking"), r["state"]
+        assert r["retryAt"] is None or iso.match(r["retryAt"]), r["retryAt"]
+        assert r["episode"] is None or (isinstance(r["episode"], int) and 0 <= r["episode"] <= now), r["episode"]
+        assert r["lastSuccessAt"] is None or iso.match(r["lastSuccessAt"]), r["lastSuccessAt"]
+        if r["error"] != "offline":  # offline, the episode is not counted and the file is left alone
+            kept = json.loads(m.read_text(c.path("failures")))["first"]
+            assert isinstance(kept, (int, float)) and not isinstance(kept, bool) and c.plausible(int(kept)) is not None, kept
+        emitted(r)
+
+    def check_notes(out):
+        assert isinstance(out, list) and len(out) <= m.NOTES_MAX, out
+        versions = [r["version"] for r in out]
+        assert len(set(versions)) == len(versions) and versions == sorted(versions, key=version_key, reverse=True), versions
+        for r in out:
+            assert set(r) == {"version", "date", "notes"} and m.VERSION.fullmatch(r["version"]) and m.DATE.fullmatch(r["date"]), r
+            assert set(r["notes"]) in ({"en"}, {"en", "fr"}), r["notes"]
+            for text in r["notes"].values():
+                assert isinstance(text, str) and len(text) <= m.NOTE_CHARS and not m.UNSAFE.search(text), text
+
+    # The corpus itself: a success reads the three updates, an old failure is blocking, the notes are read, the file is read.
+    stub = Stub()
+    stub.answers = {"checkupdates": (0, updates, "")}
+    r = checker(stub).system_updates(None, {"grassfield-desktop", "grassfield-keyring"})
+    if r["state"] != "available" or r["others"] != 2 or r["grassfield"]["available"] != "0.5.0-1" or r["omarchy"]["available"] != "4.2.0-1":
+        sc.finding("the corpus itself is not read as the contract says", r)
+    c = checker(stub)
+    c.health_error = ""
+    m.write_text(c.path("failures"), '{"first": 1700000000}')
+    if c.health_failed()["state"] != "blocking":
+        sc.finding("the corpus itself: an old failure is not blocking", c.result)
+    c = checker(stub)
+    c.result["channel"] = "stable"
+    if [x["version"] for x in c.parse_notes(notes_corpus[0], "0.4.0-1", "0.5.0-1")] != ["0.5.0-1", "0.4.1-1"]:
+        sc.finding("the corpus itself: the notes are not read", notes_corpus[0])
+    if m.servers(conf_corpus[1]) != ["https://repo.example/stable/$arch", "https://mirror.example/stable/$arch"] or m.sections(conf_corpus[0]) != 1 \
+            or m.channel_of(m.servers(conf_corpus[1])[0], base) != "stable":
+        sc.finding("the corpus itself: the configuration is not read", conf_corpus)
+
+    def body(i):
+        mut = sc.mutator
+        stub = Stub()
+        if i % 4 == 0:
+            stub.answers = {"checkupdates": (mut.rng.pick([0, 2, 1]), mut.text(mut.rng.pick(upd_corpus), upd_corpus, 65536), "")}
+            if mut.rng.below(4) == 0:
+                stub.installed_text = mut.text(mut.rng.pick(installed_corpus), installed_corpus, 4096)
+            if mut.rng.below(4) == 0:
+                stub.installed["omarchy-dev"] = "4.1.0-1"
+            c = checker(stub, mut.rng.coin())
+            r = c.system_updates(mut.rng.pick([None, "not-set-up"]), set(mut.rng.pick([["grassfield-desktop", "grassfield-keyring"], []])))
+            # Omarchy's package is omarchy-dev when that one is installed (the two conflict: a real checkupdates never lists
+            # the other one too); the stub's installed set says which name the result must not count among the others.
+            check_updates(r, "omarchy-dev" if "omarchy-dev" in stub.installed else "omarchy")
+            return r["state"] == "available"
+        if i % 4 == 1:
+            c = checker(stub, mut.rng.below(4) == 0)
+            with open(c.path("failures"), "wb") as f:
+                f.write(mut.mutate(mut.rng.pick(fail_corpus), fail_corpus, 65536))
+            with open(c.path("last-success"), "wb") as f:
+                f.write(mut.mutate(mut.rng.pick(succ_corpus), succ_corpus, 65536))
+            c.health_error = "x"
+            r = c.health_failed()
+            check_failed(c, r)
+            return r["state"] == "blocking"
+        if i % 4 == 2:
+            if mut.rng.below(4) == 0:
+                stub.answers["vercmp"] = (0, mut.text(mut.rng.pick(["1", "0", "-1", "x"]), [], 64), "")
+            c = checker(stub)
+            c.result["channel"] = mut.rng.pick(["stable", "beta", "custom", None])
+            raw = mut.mutate(mut.rng.pick(notes_corpus), notes_corpus, m.NOTES_CAP + 64)
+            try:
+                out = c.parse_notes(raw, mut.rng.pick(["0.4.0-1", None, "0.5.0-1"]), mut.rng.pick(["0.5.0-1", "0.4.1-2"]))
+            except (ValueError, UnicodeDecodeError):
+                return False
+            check_notes(out)
+            return bool(out)
+        text = mut.text(mut.rng.pick(conf_corpus), conf_corpus, 65536)
+        listed = m.servers(text)
+        assert isinstance(listed, list) and all(isinstance(s, str) and "\n" not in s for s in listed), listed
+        count = m.sections(text)
+        assert isinstance(count, int) and count >= 0, count
+        assert m.channel_of(listed[0] if listed else "", mut.rng.pick([base, "", "file:///srv/repo"])) in ("stable", "beta", "custom")
+        return bool(listed)
+
+    sc.run(body)
+
+
 SCENARIOS = [("crash-watch", crash_watch), ("session-end", session_end), ("battery-watch", battery_watch), ("anr-dialog", anr_dialog),
-             ("lock-status", lock_status), ("sleep-lock-gate", sleep_lock_gate)]
+             ("lock-status", lock_status), ("sleep-lock-gate", sleep_lock_gate), ("update-check", update_check)]
 for name, fn in SCENARIOS:
     if want(name):
         if name == "lock-status" and not any(os.access(os.path.join(d, "jq"), os.X_OK) for d in os.environ.get("PATH", "").split(":")):
