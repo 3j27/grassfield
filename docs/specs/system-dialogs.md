@@ -667,19 +667,24 @@ The last-used printer and settings are remembered per app.
   one copy: GTK 3 would render the copies itself) and page setup (doubles, no PPD name), and a token good once, for its
   application, for five minutes, that keeps the backend running while it lives (6-4, 6-5).
 - PR2 with a token done: the job, named after the application, carries the copies, collation, paper, two sides and colour,
-  never the pages, scale or orientation GTK already applied (6-4); a job the printer refuses is response 2. Without a token:
-  x-d-p-gtk's dialog (6b).
+  never the pages, scale or orientation GTK already applied (6-4); only a PDF or PostScript, sent as such, at most 2 GiB; a
+  job the printer refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
 - PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
-  only a PDF is written, through a temporary file; Cancel there brings the sheet back, under the application's id.
+  Cancel there brings the sheet back, under the application's id. Only a PDF, at most 2 GiB, is written, only where the Save
+  panel answered (its folder resolved then), never through a link: the folder opened with `O_NOFOLLOW` all the way from "/", a
+  temporary file made there with `O_EXCL | O_NOFOLLOW`, synced and renamed over the name (6-3). The application never gets the
+  path (its `output-uri` is `file:///dev/null`).
 - PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
   as PDF kept.
 - PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
   a job's connection 10 s and 30 s without progress, from its first request) and libcups' cancel flag; a sheet that cannot show sends the call to
   x-d-p-gtk (RequestHost).
-- A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options),
-  `tests/unit/portal/tst_print.cpp` (the D-Bus interface with fakes: tokens, Save as PDF, no printer, another printer, the
-  forward), `tests/integration/print_cups.sh` (libcups against a scratch cupsd: printers, options, a job with its options kept on
-  it). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9 (the real frontend, the sheet's test answer, the
+- A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options; what reaches
+  CUPS: PWG paper names, the document's type, the job's name), `tests/unit/portal/tst_print.cpp` (the D-Bus interface with
+  fakes: tokens, Save as PDF through the Save panel and never through a link, no printer, another printer, the forward; the
+  writer: links at the name and in the folder's path, a failed last step, the size limit, permissions kept),
+  `tests/integration/print_cups.sh` (libcups against a scratch cupsd: printers, options, a job with its options kept on it, a
+  printer language refused before any job). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9 (the real frontend, the sheet's test answer, the
   job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
 - `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
 
