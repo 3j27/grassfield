@@ -86,7 +86,9 @@ class FolderModel : public QSortFilterProxyModel
     // Files the panel cannot take (a folder panel: every file; else those its filter, FileLogic::passesFilter, refuses) are
     // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
     // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file), except
-    // in Choose Application: `applications` (desktop ids) names the ones it takes, `allApplications` takes every one.
+    // in Choose Application: `applications` (desktop ids) names the ones it takes, `allApplications` takes every one, and
+    // `listed` (desktop ids) the ones the location lists there even when the Apps grid hides them (NoDisplay=true: the
+    // candidates the Open With submenu shows).
     Q_PROPERTY(QVariantMap chooser READ chooser WRITE setChooser NOTIFY chooserChanged)
     // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
     Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
@@ -413,4 +415,6 @@ private:
     // desktop ids), or every one.
     QSet<QString> m_chooserApplications;
     bool m_chooserAllApplications = false;
+    // ...and the ones it lists although the Apps grid hides them (ApplicationsLogic::Environment::alsoListed).
+    QSet<QString> m_chooserListed;
 };

@@ -113,6 +113,42 @@ TEST(ApplicationChooser, TheTypesApplicationsWithoutFiles)
     EXPECT_EQ(ApplicationChooser::defaultApplication(QString()), QString());
 }
 
+// The type's default application with NoDisplay=true (Omarchy: image/png=imv.desktop, and imv is NoDisplay) is a candidate
+// and the default, as the Open With submenu (FilesApp::applicationsFor) lists it: the panel is given what the submenu shows
+// (its listing then lists it: FolderChooserApplications.ChooseApplicationListsTheCandidatesTheGridHides).
+TEST(ApplicationChooser, ADefaultTheGridHidesIsTheSubmenusToo)
+{
+    installApplications();
+    const QString hidden = QStringLiteral("org.example.GfChooseHiddenViewer");
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    {
+        QFile entry(dir + QLatin1Char('/') + hidden + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write("[Desktop Entry]\nType=Application\nName=Hidden Viewer\nExec=true %f\nMimeType=image/png;\nNoDisplay=true\n");
+    }
+    {
+        QFile mimeapps(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/mimeapps.list"));
+        ASSERT_TRUE(mimeapps.open(QIODevice::WriteOnly));
+        mimeapps.write(QStringLiteral("[Default Applications]\ntext/plain=%1.desktop;\nimage/png=%2.desktop;\n").arg(kB, hidden).toUtf8());
+    }
+    QDeadlineTimer deadline(15000);
+    while (ApplicationChooser::defaultApplication(QStringLiteral("image/png")) != hidden && !deadline.hasExpired()) {
+        QEventLoop loop;
+        QTimer::singleShot(200, &loop, &QEventLoop::quit);
+        loop.exec();
+        KSycoca::self()->ensureCacheValid();
+    }
+    EXPECT_EQ(ApplicationChooser::defaultApplication(QStringLiteral("image/png")), hidden);
+    EXPECT_TRUE(ApplicationChooser::candidates(QStringLiteral("image/png")).contains(hidden));
+    FilesApp files(QList<QUrl>{});
+    bool inSubmenu = false;
+    const QVariantList submenu = files.applicationsFor({QUrl::fromLocalFile(QDir::tempPath() + QStringLiteral("/picture.png"))});
+    for (const QVariant &v : submenu)
+        inSubmenu = inSubmenu || v.toMap().value(QStringLiteral("id")).toString() == hidden + QStringLiteral(".desktop");
+    EXPECT_TRUE(inSubmenu) << "the Open With submenu lists it";
+    QFile::remove(dir + QLatin1Char('/') + hidden + QStringLiteral(".desktop"));
+}
+
 TEST(ApplicationChooser, TheAnswerComesAfterThePanelWent)
 {
     installApplications();

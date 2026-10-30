@@ -1163,6 +1163,14 @@ void FolderModel::setChooser(const QVariantMap &chooser)
     const QStringList applications = chooser.value(QStringLiteral("applications")).toStringList();
     m_chooserApplications = QSet<QString>(applications.cbegin(), applications.cend());
     m_chooserAllApplications = chooser.value(QStringLiteral("allApplications")).toBool();
+    const QStringList listed = chooser.value(QStringLiteral("listed")).toStringList();
+    const QSet<QString> nextListed(listed.cbegin(), listed.cend());
+    if (nextListed != m_chooserListed) {
+        m_chooserListed = nextListed;
+        // The Applications location lists them too (a listing made before the panel named them is made again).
+        if (isApplications())
+            loadApplications();
+    }
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {DimmedRole});
     // What the panel can no longer take leaves the selection.
@@ -1569,7 +1577,9 @@ void FolderModel::loadApplications()
         emit loadingChanged();
     }
     QPointer<FolderModel> self(this);
-    ApplicationsLogic::startListing(ApplicationsLogic::processEnvironment(), [self, generation](const QList<ApplicationsLogic::Entry> &entries) {
+    ApplicationsLogic::Environment env = ApplicationsLogic::processEnvironment();
+    env.alsoListed = m_chooserListed;
+    ApplicationsLogic::startListing(env, [self, generation](const QList<ApplicationsLogic::Entry> &entries) {
         if (self && generation == self->m_appsGeneration && self->isApplications())
             self->applyApplications(entries);
     });
