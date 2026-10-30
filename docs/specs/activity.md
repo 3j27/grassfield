@@ -264,13 +264,16 @@ items (Settings does it); a background collector; any network access.
   of two GPUs is under both, selected and copied once; a GPU without a process the search keeps is not listed. This view
   and GPU Processes read the GPU clients on every tab.
 
-### Quit, Force Quit, signals (step 2c; Quit of windowed processes through the shell at step 3)
+### Quit, Force Quit, signals (step 2c, built: ADR-0038 AD42 to AD44, `docs/audits/activity-2026-10-28/step2c.md`; Quit of windowed processes through the shell at step 3)
 - **AM50** Actions (Quit, Force Quit, Send Signal, Efficiency Mode) apply to own processes only: with another owner's row
   or the Kernel row in the selection they are disabled, the tooltip saying "You can only quit your own processes." (no
   administrator path, AQ4). Otherwise the Stop button, View > Quit Process (Ctrl+Alt+Q) and the row's context menu open the
   sheet "Are you sure you want
   to quit this process?" (several rows: "Are you sure you want to quit these %n processes?"), buttons Cancel, Force Quit,
-  Quit; Quit is the default (Return), Esc cancels.
+  Quit; Quit is the default (Return), Esc cancels. Step 2c: the Stop button and the action menu share one glass capsule
+  of the toolbar (macOS 27); the action menu and the context menu hold Quit Process, Send Signal to Process… and Copy
+  (Inspect Process at 2d, Efficiency Mode at step 4); a right click selects the row under the pointer first; the sheet
+  names one process as "“%1” (PID %2)".
 - **AM51** Before the sheet shows, the app opens `/proc/<pid>` as a directory descriptor (`O_DIRECTORY`) for each selected
   row, reads `stat` through it with `openat` and compares the start time with the row's; a row whose read fails (the process
   ended) or whose start time differs is dropped (none left: no sheet). The signal of AM52, AM53 or AM55 is sent with
@@ -289,15 +292,19 @@ items (Settings does it); a background collector; any network access.
   session too). Quit, Force Quit and Send Signal first show a second sheet "Quitting “%1” may end your session or stop part
   of it." (for a signal: "Sending a signal to “%1” may end your session or stop part of it."), buttons Cancel (the default)
   and Continue (destructive). The app refuses to signal itself from the table (its own row's Quit closes its window
-  instead).
+  instead). Step 2c: the warning comes when the action is chosen, before the quit sheet or Send Signal's sheet (AD44).
 - **AM55** View > Send Signal to Process… (one row): a sheet with a pop-up of Hangup (SIGHUP), Interrupt (SIGINT), Quit
   (SIGQUIT), Abort (SIGABRT), Kill (SIGKILL), Alarm (SIGALRM), Terminate (SIGTERM), User Defined 1 (SIGUSR1), User Defined 2
   (SIGUSR2), Stop (SIGSTOP), Continue (SIGCONT); Cancel and Send; the descriptor path of AM51. For a session process AM54's
   second sheet comes before the signal, and Stop is not in the pop-up at all: a stopped compositor or shell freezes the
-  screen and the lock before sleep (review of e3882de). Stop is not offered for the app itself either.
-- **AM56** Dev guard (ADR-0019): in a dev session AM52 to AM55 and AM68 act only on processes descending from the nested
-  compositor (its pid from the dev state) or named by a test fixture; any other is refused with one "dev guard" journal line
-  and the sheet says "Development session: only the nested session's processes can be quit."
+  screen and the lock before sleep (review of e3882de). Stop is not offered for the app itself either. Step 2c: the sheet
+  "Choose a signal to send to “%1” (PID %2).", Terminate chosen first; an error shows "The signal couldn't be sent.".
+- **AM56** Dev guard (ADR-0019): in a dev session AM52 to AM55 and AM68 act only on a process a dev root names or one of
+  its descendants; any other is refused with one "dev guard" journal line and the sheet says "Development session: only the
+  nested session's processes can be quit." A root is a pid record of `scripts/dev/pidfile.sh` (the pid in a file, its
+  start time in `<file>.start`) named by the dev plumbing variable `GRASSFIELD_ACTIVITY_DEV_ROOTS` (paths separated by
+  ':'); none named, every action is refused. Step 2c (AD42): the nested compositor is not a root, since an app it or the
+  nested shell starts is detached and so descends from neither (a test fixture names its own record).
 
 ### Inspect (step 2d)
 - **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
@@ -469,13 +476,13 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-S3 | AM33's levels at each threshold; AM32's sum; AM34's naming | `tst_memory.cpp` | L0 |
 | A-S4 | AM54's and AM65's classification of fixture cgroup paths: a uwsm scope and a uwsm service in `app-graphical.slice` (Apps), `session.slice`, `session-graphical.slice`, `init.scope`, `wayland-session-bindpid@1234.service` in `background.slice` and a login `session-3.scope` (Session), `app.slice` services (Background); unit names from a desktop id and from a command with `\x2d` escapes, unescaped and matched (AD20) | `tst_units.cpp` (step 1; named `tst_kinds.cpp` before) | L0 |
 | A-S5 | sock_diag parsing and socket-to-process matching (captured netlink replies) | `tst_netdiag.cpp` | L0 |
-| A-S6 | AM51's path: `stat` read through the `/proc/<pid>` descriptor; a child that ended and was reaped between the check and the send is never signalled (ESRCH), even when a new process has taken its pid (a pid-reuse fixture); a start-time mismatch drops the row | `tst_signals.cpp` | L0 |
+| A-S6 | AM51's path: `stat` read through the `/proc/<pid>` descriptor; a child that ended and was reaped between the check and the send is never signalled (ESRCH), even when a new process has taken its pid (a pid-reuse fixture); a start-time mismatch drops the row | `tst_signals.cpp` (step 2c: the pid taken again in a user and pid namespace of the test's own, skipped with the reason where the kernel refuses it; AM56's roots), `tests/unit/activity/window/tst_actions.cpp` (the actions' rules) | L0 |
 | A-S7 | projection and Dock tile file validation (sizes, versions, kinds, ranges, a stale writer by pid or by start time); the runtime folder of two displays (a nested display's files never read by the other) | `tst_activityfiles.cpp` (app) and `tests/unit/tst_docktilegraph.qml` (shell) | L0 |
 | A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_textclean.cpp` and `tst_sampler.cpp` (step 1; named `tst_names.cpp` before) | L0 |
 | A-S9 | AM23's and AM43's turns: one fifth of the threads and one tenth of the descriptor lists per sample, a new process at once, every process covered within five and ten samples | `tst_sampler.cpp` | L0 |
 | A-S10 | after the review of 949fc98: a name and a command line follow an exec (by `stat`'s name, and by the code addresses with the same name); a title over argv[0], a login shell and a symbolic link named as AM17 says; the owner read on arrival, exec and turn only; the turns as full whatever the pids; the Memory tab on `statm` with `status` in turns; a failed TCP dump and a failed listing change nothing | `tst_sampler.cpp`, `tst_procparse.cpp` | L0 |
 | A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen; no sample while hidden; the size kept | `tests/unit/activity/qml/tst_window.cpp` (the real backend on a fixture tree, offscreen; step 2a), `tests/unit/tst_activitymain.qml` (a fake backend), `tests/unit/activity/window/` (the backend's logic) | L1 |
-| A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop | `tests/apps/activity_actions.sh` | L1 |
+| A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop; the dev guard refuses a process outside its roots | `tests/apps/activity_actions.sh` (the window-qml cases `ActivityActions.*` on the real /proc; step 2c) and `tests/unit/tst_activitymain.qml` (the sheets on a fake backend) | L1 |
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
 | A-I1 | `ipc_inventory.sh` lists `activity quit` and finds its caller: its real-session caller scan (today `config/hypr/grassfield/`, `packaging/bin/`, `packaging/shims/`, `packaging/session-bin/` and the screen corners, `ipc_inventory.sh:850`) is extended to the apps' sources that build `shellIpcArgs()` calls (review of e3882de) | `tests/security/ipc_inventory.sh` | L0 |
