@@ -1522,10 +1522,19 @@ Singleton {
     onFocusedToplevelChanged: {
         if (focusedToplevel)
             recency.set(focusedToplevel, Date.now());
-        // The window in front before a quick look (see frontToplevel).
-        if (!quickLookFocused)
+        noteRegularFocus();
+    }
+
+    // The window in front before a quick look (see frontToplevel). Focus passes through "no window" between two windows, so that
+    // is not remembered; a window's app id can arrive after it takes the focus, so one without an id yet is not remembered
+    // either (it could be the quick look itself) and the id's arrival is looked at too. The quick look test reads the id
+    // directly: the quickLookFocused binding may not have caught up yet when this runs.
+    function noteRegularFocus(): void {
+        if (focusedToplevel && focusedToplevel.appId !== "" && !QuickLook.isQuickLook(focusedToplevel.appId))
             regularToplevel = focusedToplevel;
     }
+
+    onFocusedAppIdChanged: noteRegularFocus()
 
     // Window to raise when an app is clicked: the most recently focused one.
     function mostRecent(list: var): var {

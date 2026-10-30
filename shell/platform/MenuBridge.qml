@@ -243,9 +243,10 @@ Singleton {
     function updateFocus(): void {
         let address = focusedAddress();
         if (address !== "") {
-            if (QuickLook.isQuickLook(appIdAt(address)))
+            const appId = appIdAt(address);
+            if (QuickLook.isQuickLook(appId))
                 address = root.regularWindow;
-            else
+            else if (appId !== "")
                 root.regularWindow = address;
         }
         // A shell popup (menus) takes the keyboard: the bar keeps showing the app's menus meanwhile.
