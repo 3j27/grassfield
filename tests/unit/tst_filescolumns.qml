@@ -203,4 +203,38 @@ TestCase {
         fakeTab.app.columnPreview = false;
         listing.select(-1, 0);
     }
+
+    // The strip of columns.
+    function strip(): var {
+        const stack = [columns];
+        while (stack.length) {
+            const it = stack.pop();
+            if (it.contentX !== undefined && it.contentWidth !== undefined)
+                return it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        return null;
+    }
+
+    // In a view narrower than its columns, the preview column that a file selection opens is scrolled into view (Finder; the
+    // nested pass of 2026-10-31 found it past the right edge: selecting a file keeps the location, so nothing scrolled).
+    function test_thePreviewColumnIsScrolledIntoView() {
+        tryVerify(() => rowNamed("photo.png") !== null, 2000, "the column is listed");
+        const flick = strip();
+        verify(flick !== null);
+        const wide = columns.width;
+        columns.anchors.fill = undefined;
+        columns.width = 300;
+        fakeTab.app.columnPreview = true;
+        const photo = rowNamed("photo.png");
+        mouseClick(photo, 40, photo.height / 2, Qt.LeftButton);
+        verify(columns.previewInfo !== null);
+        tryVerify(() => flick.contentWidth > flick.width, 2000, "the preview column widens the strip past the view");
+        tryVerify(() => flick.contentX === flick.contentWidth - flick.width, 2000, "scrolled to its end: contentX " + flick.contentX + " of " + (flick.contentWidth - flick.width));
+        fakeTab.app.columnPreview = false;
+        columns.activeModel.select(-1, 0);
+        columns.width = wide;
+        columns.anchors.fill = test;
+    }
 }
