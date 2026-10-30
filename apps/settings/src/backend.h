@@ -109,7 +109,9 @@ public:
     // Atomic replace (QSaveFile); creates the directory. Returns "" on success, else an error message.
     Q_INVOKABLE QString writeText(const QString &path, const QString &text) const;
     // Run one of the read-only queries of systemguard.h::isReadOnlyQuery synchronously (no shell, 3 s timeout, C locale).
-    // Returns stdout, "" on any failure and for any command outside that list, in dev and real sessions alike.
+    // Returns stdout, "" on any failure and for any command outside that list, in dev and real sessions alike. No page calls
+    // it since the review of ce69dc6 (About's lspci and pacman -Q are queries: nothing waits on the GUI thread);
+    // tests/shell/settings_system_guard.sh still holds its allow-list.
     Q_INVOKABLE QString run(const QStringList &argv) const;
     // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev
@@ -118,6 +120,10 @@ public:
     // command still running under the same tag is not started again and its one answer comes under that tag (Storage's counts,
     // which a page shown again asks for while they run).
     Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000, bool shared = false);
+    // query() held to systemguard.h::isReadOnlyQuery in every session, as run() is: About's lspci and pacman -Q (the re-review
+    // of c6cf328 kept that backstop when they left run() for the GUI thread's sake). Anything else is refused (logged,
+    // finished(tag, false)).
+    Q_INVOKABLE void readOnlyQuery(const QStringList &argv, const QString &tag, int timeoutMs = 5000, bool shared = false);
     // State-changing action (Wi-Fi, Bluetooth, volume). Only nmcli, bluetoothctl and wpctl run. In a dev session
     // nothing runs: one "dev guard: <what> suppressed" line is logged, suppressed(what) is emitted, false returned.
     // Otherwise finished(tag, ok, stdout) follows the command and true is returned when it started. An action that may wait

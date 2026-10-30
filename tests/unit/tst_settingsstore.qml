@@ -416,6 +416,19 @@ TestCase {
         compare(SysInfo.osLabel(""), "");
         compare(SysInfo.cpu("processor\t: 0\nmodel name\t: AMD  Ryzen 7\nprocessor\t: 1\nmodel name\t: AMD Ryzen 7\n"), {model: "AMD Ryzen 7", threads: 2});
         compare(SysInfo.cpu(""), {model: "", threads: 0});
+        // About This Computer's processor name on one line (integrator nested pass of 85c2c10).
+        compare(SysInfo.cpuShortName("11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz"), "Intel Core i7-1165G7");
+        compare(SysInfo.cpuShortName("13th Gen Intel(R) Core(TM) i5-1340P"), "Intel Core i5-1340P");
+        compare(SysInfo.cpuShortName("Intel(R) Core(TM) i7-8550U CPU @ 1.80GHz"), "Intel Core i7-8550U");
+        compare(SysInfo.cpuShortName("Intel(R) Core(TM) Ultra 7 155H"), "Intel Core Ultra 7 155H");
+        compare(SysInfo.cpuShortName("Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz"), "Intel Xeon E5-2680 v4");
+        compare(SysInfo.cpuShortName("AMD Ryzen 7 5800H with Radeon Graphics"), "AMD Ryzen 7 5800H");
+        compare(SysInfo.cpuShortName("AMD Ryzen 7 PRO 7840U w/ Radeon 780M Graphics"), "AMD Ryzen 7 PRO 7840U");
+        compare(SysInfo.cpuShortName("AMD Ryzen 9 7950X 16-Core Processor"), "AMD Ryzen 9 7950X");
+        compare(SysInfo.cpuShortName("AMD Phenom(tm) II X4 965 Processor"), "AMD Phenom II X4 965");
+        compare(SysInfo.cpuShortName("AMD Ryzen 7 7840U"), "AMD Ryzen 7 7840U", "nothing to drop");
+        compare(SysInfo.cpuShortName("  AMD   Ryzen 7  "), "AMD Ryzen 7");
+        compare(SysInfo.cpuShortName("CPU"), "CPU", "nothing would be left: the model name");
         compare(SysInfo.memoryBytes("MemTotal:       16384000 kB\nMemFree: 1 kB\n"), 16384000 * 1024);
         compare(SysInfo.memoryBytes(""), 0);
         // The About page formats the bytes with the UI locale: localized digits and binary unit names.

@@ -318,6 +318,29 @@ function fitsHalf(unfit, address) {
     return a === "" || (unfit || []).indexOf(a) < 0;
 }
 
+// gfc1-reply: grassfield-tiling
+// The windows of fixed size of the reply of `hyprctl grassfield-tiling` (minimum = maximum: their zoom light is disabled, and
+// the Window menu greys their Zoom, Enter Full Screen and tiling items; ADR-0040 step 1b), lower-case hex without 0x, a
+// malformed one left out; null when the reply is malformed (an older plugin's reply, without "fixed", lists none).
+function parseFixed(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling")
+        return null;
+    return (Array.isArray(msg.fixed) ? msg.fixed : []).map(hexAddress).filter(a => a !== "");
+}
+
+// Window `address` (any address form) is of fixed size: it is among `fixed` (parseFixed; null or [] when not known: it is
+// not, and the plugin still opens nothing from its zoom light).
+function isFixed(fixed, address) {
+    const a = hexAddress(address);
+    return a !== "" && (fixed || []).indexOf(a) >= 0;
+}
+
 // The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
 function splitOfWorkspace(splits, workspace) {
     return (splits || []).find(d => d.workspace === workspace) || null;
