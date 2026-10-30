@@ -7,13 +7,14 @@
 #      the pane shows the attribution (Title, Author, Source, Licence, Last updated).
 #   3. The desktop menu offers About This Wallpaper and opens the same attribution.
 #   4. Nothing cached and no connection: the artwork, and the pane says "Waiting for a connection".
-# The controls of Settings are found by their accessible role and name (tests/visual/a11y-find.py, AT-SPI on the nested
-# private bus), never by a screen point: the fixed point of the Online tile landed on "Add Video…" once the Videos grid came in
+# The controls of Settings are found by their accessible role and name (tests/visual/a11y-lib.sh and a11y-find.py: AT-SPI
+# on the nested private bus), never by a screen point: the fixed point of the Online tile landed on "Add Video…" once the Videos grid came in
 # above it (1fc836b). The shell fetches with the dev helper .dev/build/grassfield-wallpaper (WallpaperConfig.toolPath), which
 # is built here when it is missing or older than its sources (apps/wallpaper-tool/build-direct.sh).
 # Usage (bare command): tests/visual/wallpaper-online-ui.sh      Captures: $VS_SHOTS/wallpaper-online-ui-*.<lang>.png
 source "$(dirname "$0")/lib.sh"
 source "$(dirname "$0")/online-lib.sh"
+source "$(dirname "$0")/a11y-lib.sh"
 
 fail=0
 check() {
@@ -31,16 +32,13 @@ if [[ ! -x $tool || -n $(find "$VS_ROOT/apps/wallpaper-tool" -newer "$tool" -typ
 fi
 [[ -x $tool ]] || { echo "FAIL: the wallpaper helper $tool is missing (apps/wallpaper-tool/build-direct.sh)"; exit 1; }
 
-# a11y PID ROLE NAME-REGEX [--press]: the showing control of Settings (process PID) with that role and name (one JSON line).
-a11y() {
-  local pid=$1 role=$2 name=$3
-  shift 3
-  env DBUS_SESSION_BUS_ADDRESS="$(<"$VS_DEV/bus.address")" python3 -I "$VS_HERE/a11y-find.py" --pid "$pid" --role "$role" --name "$name" "$@"
-}
 settings_pid() { "$VS_ROOT/scripts/nestctl" clients -j | jq -r '[.[] | select(.class == "org.grassfield.Settings")][0].pid // empty'; }
 
 online_start
 vs_session "$VS_LANG"
+# The accessibility bus of the private bus (a11y-lib.sh), ended with the fixture server.
+trap 'a11y_stop; online_stop' EXIT
+a11y_start || { echo "FAIL: no accessibility bus on the nested private bus (see $VS_STATE/a11y-launcher.log)"; exit 1; }
 vs_reset
 cfg=$VS_DEV/config/grassfield.json
 rm -rf "$VS_DEV/cache/wallpapers/online"
@@ -68,9 +66,9 @@ pid=$(settings_pid)
 # --- 1. the disclosure: the Online grid's Wikimedia Commons tile (its accessible name is the provider's full name, in
 # either language), chosen through its own action (WallpaperGrid's Accessible.onPressAction, what a click runs).
 use_name='^(Use Picture of the Day|Utiliser l’image du jour)$'
-if tile=$(a11y "$pid" "radio button" 'Wikimedia Commons' --press); then
+if tile=$(a11y_find "$pid" "radio button" 'Wikimedia Commons' --press); then
   echo "wallpaper-online-ui: chose the tile $tile"
-  check "the disclosure opens: its Use Picture of the Day button is shown" a11y "$pid" "(push )?button" "$use_name" --wait 5
+  check "the disclosure opens: its Use Picture of the Day button is shown" a11y_find "$pid" "(push )?button" "$use_name" --wait 5
 else
   check "the Online grid's Wikimedia Commons tile is found (accessible radio button)" false
 fi
@@ -79,7 +77,7 @@ vs_capture wallpaper-online-ui-1-disclosure
 check "choosing the tile alone changes nothing (source=$(jq -r '.wallpaper.source // "unset"' "$cfg" 2>/dev/null || echo unset), requests $(online_requests))" bash -c "[[ \$(jq -r '.wallpaper.source // \"unset\"' '$cfg' 2>/dev/null || echo unset) != online ]] && [[ $(online_requests) == 0 ]]"
 
 # --- 2. Use Picture of the Day (the disclosure's button, found by its name)
-check "Use Picture of the Day is pressed" a11y "$pid" "(push )?button" "$use_name" --press --wait 5
+check "Use Picture of the Day is pressed" a11y_find "$pid" "(push )?button" "$use_name" --press --wait 5
 vs_sleep 2
 check "the choice is written (source=$(jq -r '.wallpaper.source' "$cfg" 2>/dev/null) provider=$(jq -r '.wallpaper.online.provider' "$cfg" 2>/dev/null))" test "$(jq -r '[.wallpaper.source, .wallpaper.online.provider] | join(",")' "$cfg" 2>/dev/null)" = "online,commons"
 wait_ready || { echo "FAIL: the online picture never became ready"; fail=1; }

@@ -23,6 +23,7 @@
 "ignore": [
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
+ {"path": "tests/visual/a11y-lib.sh", "reason": "helper sourced by visual scripts: an AT-SPI bus on the nested private bus and a11y_find"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
  {"path": "tests/integration/portal-bus.sh", "reason": "helper sourced by portal_settings.sh and portal_filechooser.sh (the private bus)"},
  {"path": "tests/visual/fringe-count.sh", "reason": "measuring tool for captures (colour fringes of text), used by hand in the grayscale-text proof"},
