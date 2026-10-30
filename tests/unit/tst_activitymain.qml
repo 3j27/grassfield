@@ -3,9 +3,11 @@ import QtTest
 import Grassfield.Ui
 import "activity"
 
-// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a and 2b) with a fake backend: the title with
+// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a to 2c) with a fake backend: the title with
 // the view as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the
-// keyboard and the accessible names, the summary's figures and graphs, the Disk pop-up and the Network tab's line. The backend's own logic has its gtest cases (tests/unit/activity/window).
+// keyboard and the accessible names, the summary's figures and graphs, the Disk pop-up and the Network tab's line, the
+// Stop button, the action and context menus and the sheets of Quit, Force Quit and Send Signal. The backend's own logic
+// has its gtest cases (tests/unit/activity/window).
 TestCase {
     id: testCase
     name: "ActivityMain"
@@ -231,4 +233,167 @@ TestCase {
         verify(t.backend.calls.indexOf("copy") >= 0);
     }
 
+    // ---- Step 2c: Quit, Force Quit and Send Signal (AM50 to AM56) -----------------------------------------------------
+    function buttons(sheet) {
+        return findAll(sheet, i => i.text !== undefined && i.clicked !== undefined && i.visible && i.width > 0);
+    }
+    function buttonNamed(sheet, text) {
+        return buttons(sheet).find(b => b.text === text);
+    }
+    function calls(t) {
+        return t.backend.calls.filter(c => !c.startsWith("saveSize"));
+    }
+
+    // AM50: the Stop button follows the selection; its tooltip says why it is off.
+    function test_stopButtonFollowsTheSelection() {
+        const t = make();
+        verify(!t.win.stopButton.enabled);
+        t.backend.actions.refusal = "You can only quit your own processes.";
+        const tip = findAll(t.win.contentItem, i => i.objectName === "toolbarTip")[0];
+        mouseMove(t.win.stopButton, t.win.stopButton.width / 2, t.win.stopButton.height / 2);
+        tryCompare(tip, "text", "You can only quit your own processes.");
+        t.backend.actions.canQuit = true;
+        t.backend.actions.refusal = "";
+        verify(t.win.stopButton.enabled);
+        compare(tip.text, "Quit the selected processes");
+        // A disabled Stop opens nothing (View > Quit Process's key too).
+        t.backend.actions.canQuit = false;
+        keyClick(Qt.Key_Q, Qt.ControlModifier | Qt.AltModifier);
+        verify(!t.win.sheets.shown);
+        compare(calls(t).filter(c => c.startsWith("prepare")).length, 0);
+    }
+
+    // AM50, AM52: the sheet's title and buttons; Quit is the default (Return); the sheet closes and lets its processes go.
+    function test_quitSheet() {
+        const t = make();
+        t.backend.actions.canQuit = true;
+        mouseClick(t.win.stopButton);
+        const sheet = t.win.sheets.quitSheet;
+        verify(sheet.shown);
+        compare(sheet.title, "Are you sure you want to quit this process?");
+        compare(sheet.message, "“foot” (PID 2001)");
+        verify(buttonNamed(sheet, "Force Quit") && buttonNamed(sheet, "Cancel") && buttonNamed(sheet, "Quit"));
+        keyClick(Qt.Key_Return);
+        verify(!sheet.shown);
+        compare(calls(t), ["prepare:quit", "quit", "release"]);
+        // Several processes; Force Quit; Esc cancels.
+        t.backend.actions.sheet = Object.assign({}, t.backend.actions.sheet, {count: 3});
+        keyClick(Qt.Key_Q, Qt.ControlModifier | Qt.AltModifier);
+        compare(sheet.title, "Are you sure you want to quit these 3 processes?");
+        compare(sheet.message, "");
+        mouseClick(buttonNamed(sheet, "Force Quit"));
+        verify(!sheet.shown);
+        compare(calls(t).slice(3), ["prepare:quit", "forceQuit", "release"]);
+        keyClick(Qt.Key_Q, Qt.ControlModifier | Qt.AltModifier);
+        keyClick(Qt.Key_Escape);
+        verify(!sheet.shown);
+        compare(calls(t).slice(6), ["prepare:quit", "release"]);
+    }
+
+    // AM52, AM53: Quit that cannot be done safely leaves Force Quit alone, which Return does not trigger; an error stays shown.
+    function test_quitUnsafeLeavesForceQuit() {
+        const t = make();
+        t.backend.actions.canQuit = true;
+        t.backend.actions.quitResult = {done: false, unsafe: true, error: "The process couldn't be quit safely."};
+        mouseClick(t.win.stopButton);
+        const sheet = t.win.sheets.quitSheet;
+        keyClick(Qt.Key_Return);
+        verify(sheet.shown);
+        compare(sheet.errorText, "The process couldn't be quit safely.");
+        compare(buttons(sheet).map(b => b.text).filter(x => x === "Quit").length, 0);
+        verify(buttonNamed(sheet, "Force Quit") && buttonNamed(sheet, "Cancel"));
+        keyClick(Qt.Key_Return); // cancels: a forced quit is never the default
+        verify(!sheet.shown);
+        compare(calls(t).indexOf("forceQuit"), -1);
+        // Again, and Force Quit fails: its message is shown, the sheet stays.
+        t.backend.actions.forceQuitResult = {done: false, unsafe: false, error: "The process couldn't be quit."};
+        mouseClick(t.win.stopButton);
+        keyClick(Qt.Key_Return);
+        mouseClick(buttonNamed(sheet, "Force Quit"));
+        verify(sheet.shown);
+        compare(sheet.errorText, "The process couldn't be quit.");
+        verify(calls(t).indexOf("forceQuit") >= 0);
+        keyClick(Qt.Key_Escape);
+    }
+
+    // AM54: a session process gets the warning first; Cancel (the default) stops there, Continue shows the action's sheet.
+    function test_sessionProcessWarnsFirst() {
+        const t = make();
+        t.backend.actions.canQuit = true;
+        t.backend.actions.canSignal = true;
+        t.backend.actions.sheet = Object.assign({}, t.backend.actions.sheet, {name: "Hyprland", session: "Hyprland"});
+        mouseClick(t.win.stopButton);
+        const warning = t.win.sheets.sessionSheet;
+        verify(warning.shown);
+        verify(!t.win.sheets.quitSheet.shown);
+        compare(warning.title, "Quitting “Hyprland” may end your session or stop part of it.");
+        keyClick(Qt.Key_Return);
+        verify(!warning.shown);
+        verify(!t.win.sheets.quitSheet.shown);
+        compare(calls(t), ["prepare:quit", "release"]);
+        mouseClick(t.win.stopButton);
+        mouseClick(buttonNamed(warning, "Continue"));
+        verify(t.win.sheets.quitSheet.shown);
+        keyClick(Qt.Key_Escape);
+        // Send Signal's warning, then its sheet.
+        t.win.sheets.openSignal();
+        compare(warning.title, "Sending a signal to “Hyprland” may end your session or stop part of it.");
+        mouseClick(buttonNamed(warning, "Continue"));
+        verify(t.win.sheets.signalSheet.shown);
+        keyClick(Qt.Key_Escape);
+    }
+
+    // AM55: from the action menu; Terminate first chosen; the signal picked is sent; the app itself is refused.
+    function test_sendSignal() {
+        const t = make();
+        t.backend.actions.canQuit = true;
+        t.backend.actions.canSignal = true;
+        t.backend.table.selectedCount = 1;
+        mouseClick(t.win.moreButton);
+        verify(t.win.actionMenu.opened);
+        compare(t.win.actionMenu.items.filter(i => !i.separator).map(i => i.text), ["Quit Process", "Send Signal to Process…", "Copy"]);
+        compare(t.win.actionMenu.items[0].shortcut, "Ctrl+Alt+Q");
+        t.win.actionMenu.chosen("signal");
+        t.win.actionMenu.close();
+        const sheet = t.win.sheets.signalSheet;
+        tryVerify(() => sheet.shown);
+        compare(sheet.title, "Choose a signal to send to “foot” (PID 2001).");
+        compare(t.win.sheets.signalPicker.displayText, "Terminate (SIGTERM)");
+        compare(t.win.sheets.signalPicker.model.length, 11);
+        t.win.sheets.signalPicker.picked("10");
+        compare(t.win.sheets.signalPicker.displayText, "User Defined 1 (SIGUSR1)");
+        mouseClick(buttonNamed(sheet, "Send"));
+        verify(!sheet.shown);
+        compare(calls(t), ["prepare:signal", "send:10", "release"]);
+        // The app's own row: refused before anything is sent.
+        t.backend.actions.sheet = Object.assign({}, t.backend.actions.sheet, {self: true});
+        t.win.sheets.openSignal();
+        compare(sheet.errorText, "This app can't send a signal to itself.");
+        verify(!buttonNamed(sheet, "Send").enabled);
+        keyClick(Qt.Key_Return);
+        verify(sheet.shown);
+        keyClick(Qt.Key_Escape);
+        verify(!sheet.shown);
+        compare(calls(t).filter(c => c.startsWith("send")).length, 1);
+        compare(calls(t)[calls(t).length - 1], "release", "Cancel lets the sheet's processes go (review of 1153365)");
+    }
+
+    // AM50: a row's context menu selects the row under the pointer, then shows the action menu there.
+    function test_rowContextMenu() {
+        const t = make();
+        const rows = findAll(t.win.contentItem, i => i.Accessible && i.Accessible.role === Accessible.Row).sort((a, b) => a.y - b.y);
+        mouseClick(rows[2], 40, 5, Qt.RightButton);
+        compare(t.backend.table.clicks[0], "2:0");
+        verify(t.win.actionMenu.opened);
+        compare(t.win.actionMenu.items.length, 4);
+        t.win.actionMenu.close();
+    }
+
+    // AM54: the app's own row quit: the window closes.
+    function test_selfQuitClosesTheWindow() {
+        const t = make();
+        verify(t.win.visible);
+        t.backend.actions.closeWindowRequested();
+        verify(!t.win.visible);
+    }
 }

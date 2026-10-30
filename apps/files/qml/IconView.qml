@@ -718,11 +718,11 @@ FocusScope {
                 const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier);
                 collapseOnRelease = cell.selected && mods === 0;
                 if (!cell.selected || mods !== 0)
-                    root.model.select(cell.row, mods);
+                    root.model.select(cell.row, mods, true);
             }
             onReleased: {
                 if (collapseOnRelease && !drag.active)
-                    root.model.select(cell.row, 0);
+                    root.model.select(cell.row, 0, true);
                 collapseOnRelease = false;
             }
             onDoubleClicked: event => {

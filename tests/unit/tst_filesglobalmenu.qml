@@ -155,6 +155,86 @@ TestCase {
         compare(glance.enabled, true, "Glance in a folder of files");
     }
 
+    // Open With > Other… (ADR-0035 5c-1): for files, whatever the applications for them; it asks the tab for the Choose
+    // Application panel. Not for a folder, not in Applications.
+    function test_openWithOther() {
+        const bar = createTemporaryObject(menuComponent, test);
+        verify(bar);
+        select([0], {0: false});
+        compare(bar.openWithFiles, true, "a file");
+        const other = findAny(bar, "Other…");
+        verify(other !== null, "Open With has Other…");
+        // The type's applications, a separator, Other….
+        const menu = findMenu(bar, "Open With");
+        verify(menu !== null, "the Open With menu");
+        compare(Array.from(menu.items).filter(i => i.visible).map(i => i.separator ? "-" : i.text), ["Editor", "-", "Other…"]);
+        const asked = [];
+        const tab = fakeWin.tab;
+        fakeWin.tab = Object.assign({}, tab, {
+            runAction: (id, f) => asked.push(id)
+        });
+        other.triggered();
+        fakeWin.tab = tab;
+        compare(asked, ["openWithOther"]);
+        select([0], {0: true});
+        compare(bar.openWithFiles, false, "a folder");
+        select([0], {0: false});
+        folder.isApplications = true;
+        compare(bar.openWithFiles, false, "Applications");
+        folder.isApplications = false;
+        folder.isTrash = true;
+        compare(bar.openWithFiles, false, "the Trash");
+        folder.isTrash = false;
+        select([], {});
+        compare(bar.openWithFiles, false, "nothing selected");
+    }
+
+    // The menu titled `title` below `item`.
+    function findMenu(item: var, title: string): var {
+        const stack = [item];
+        const seen = [];
+        while (stack.length > 0 && seen.length < 2000) {
+            const it = stack.pop();
+            if (it === null || it === undefined || seen.indexOf(it) >= 0)
+                continue;
+            seen.push(it);
+            if (it.title === title && it.items !== undefined)
+                return it;
+            for (const list of [it.menus, it.items, it.data]) {
+                if (list !== undefined && list !== null && list.length !== undefined) {
+                    for (let i = 0; i < list.length; i++)
+                        stack.push(list[i]);
+                }
+            }
+            if (it.subMenu !== undefined)
+                stack.push(it.subMenu);
+        }
+        return null;
+    }
+
+    // Any menu item (with or without a shortcut) whose text is `text`, below `item`, submenus included.
+    function findAny(item: var, text: string): var {
+        const stack = [item];
+        const seen = [];
+        while (stack.length > 0 && seen.length < 2000) {
+            const it = stack.pop();
+            if (it === null || it === undefined || seen.indexOf(it) >= 0)
+                continue;
+            seen.push(it);
+            if (it.text === text && it.triggered !== undefined)
+                return it;
+            for (const list of [it.menus, it.items, it.data]) {
+                if (list !== undefined && list !== null && list.length !== undefined) {
+                    for (let i = 0; i < list.length; i++)
+                        stack.push(list[i]);
+                }
+            }
+            if (it.subMenu !== undefined)
+                stack.push(it.subMenu);
+        }
+        return null;
+    }
+
     // The menu item whose text starts with `prefix`, below `item`: through the menus' `menus` and `items` (the items hold their
     // menu, so every object is visited once).
     function findItem(item: var, prefix: string): var {

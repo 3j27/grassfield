@@ -138,7 +138,13 @@ QList<QObject *> extensions(KioPrompts *prompts)
 
 KioPrompts::KioPrompts(QObject *parent)
     : QObject(parent)
+    , m_applications(new ApplicationChooser(this))
 {
+}
+
+ApplicationChooser *KioPrompts::applications() const
+{
+    return m_applications;
 }
 
 int KioPrompts::ask(const QVariantMap &request, QObject *owner, const Answer &answer)
@@ -446,13 +452,23 @@ GrassfieldOpenWithHandler::GrassfieldOpenWithHandler(KioPrompts *prompts, QObjec
 {
 }
 
-void GrassfieldOpenWithHandler::promptUserForApplication(KJob *, const QList<QUrl> &urls, const QString &)
+void GrassfieldOpenWithHandler::promptUserForApplication(KJob *job, const QList<QUrl> &urls, const QString &mimeType)
 {
-    if (m_prompts)
-        m_prompts->tell(tr("There is no application set to open the document “%1”.").arg(urls.isEmpty() ? QString() : itemName(urls.first())),
-                    tr("Choose one with Open With, in the File menu or the document’s menu."));
-    QTimer::singleShot(0, this, [this] {
-        Q_EMIT canceled();
+    // The question stands while the job runs (OpenUrlJob waits for it); every way out but a chosen application is Cancel.
+    QObject *owner = job ? static_cast<QObject *>(job) : this;
+    const QVariantMap request{{kKind, QStringLiteral("noApplication")}, {QStringLiteral("name"), urls.isEmpty() ? QString() : itemName(urls.first())}};
+    askOrStop(m_prompts, request, owner, [this, owner, urls, mimeType](const QVariantMap &reply) {
+        if (reply.value(kButton).toString() != QLatin1String("choose") || !m_prompts) {
+            Q_EMIT canceled();
+            return;
+        }
+        m_prompts->applications()->ask(urls, mimeType, owner, [this](const QString &id) {
+            const KService::Ptr service = id.isEmpty() ? KService::Ptr() : KService::serviceByMenuId(id + QLatin1String(".desktop"));
+            if (service)
+                Q_EMIT serviceSelected(service);
+            else
+                Q_EMIT canceled();
+        });
     });
 }
 

@@ -15,6 +15,7 @@
 #include <QMimeData>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -22,10 +23,12 @@
 #include <KIO/CopyJob>
 #include <KIO/FileUndoManager>
 #include <KIO/JobUiDelegateFactory>
+#include <KIO/OpenUrlJob>
 #include <KIO/OpenWithHandlerInterface>
 #include <KIO/StatJob>
 #include <KIO/UntrustedProgramHandlerInterface>
 #include <KJobTrackerInterface>
+#include <KSycoca>
 #include <kio/jobtracker.h>
 #include <kio/workerbase.h>
 
@@ -567,6 +570,93 @@ TEST_F(KioDialogsTest, WithoutFilesPromptsTheAnswerIsSafe)
     EXPECT_TRUE(s_prompts->current().isEmpty()) << "nothing asked through another window's prompts";
     job->end();
     delete delegate;
+}
+
+// A document whose type has no application (ADR-0035 5c-3; A-OW2): Finder's alert, then on Choose Application… the
+// Choose Application panel; the application chosen opens the document. Cancel on the alert opens nothing, and a job that
+// ends takes its panel away.
+TEST_F(KioDialogsTest, NoApplicationAsksThenChoosesOne)
+{
+    // A type nothing opens, and an application that copies what it is given next to it.
+    write(QStringLiteral("from/a.gfnone"), QByteArray("\x00\x01\x02\x03", 4));
+    const QString apps = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(apps));
+    {
+        QFile entry(apps + QStringLiteral("/org.example.GfOpenWithCopy.desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=Copy\nExec=cp %f %1\n").arg(path(QStringLiteral("to/opened"))).toUtf8());
+    }
+    ASSERT_TRUE(waitFor([] {
+        KSycoca::self()->ensureCacheValid();
+        return KService::serviceByMenuId(QStringLiteral("org.example.GfOpenWithCopy.desktop"));
+    }));
+    ApplicationChooser *chooser = s_prompts->applications();
+    QList<QVariantMap> panels;
+    QString choice = QStringLiteral("org.example.GfOpenWithCopy");
+    const QMetaObject::Connection c = QObject::connect(chooser, &ApplicationChooser::opened, chooser, [&](int id, const QVariantMap &request) {
+        panels << request;
+        if (!choice.isEmpty())
+            chooser->answer(id, 0, {{QStringLiteral("choice"), choice}});
+    });
+    const auto open = [this] {
+        auto *job = new KIO::OpenUrlJob(url(QStringLiteral("from/a.gfnone")));
+        job->setUiDelegate(KioDialogs::createDelegate(KJobUiDelegate::AutoHandlingDisabled));
+        job->setRunExecutables(false);
+        job->start(); // its handler answers after this returns (KioPrompts' responder, ApplicationChooser)
+        return job;
+    };
+
+    answer({{QStringLiteral("button"), QStringLiteral("choose")}});
+    EXPECT_TRUE(run(open()));
+    ASSERT_EQ(m_asked.size(), 1);
+    EXPECT_EQ(m_asked.first().value(QStringLiteral("kind")).toString(), QStringLiteral("noApplication"));
+    EXPECT_EQ(m_asked.first().value(QStringLiteral("name")).toString(), QStringLiteral("a.gfnone"));
+    ASSERT_EQ(panels.size(), 1);
+    EXPECT_EQ(panels.first().value(QStringLiteral("kind")).toString(), QStringLiteral("application"));
+    EXPECT_EQ(panels.first().value(QStringLiteral("filename")).toString(), QStringLiteral("a.gfnone"));
+    EXPECT_TRUE(waitFor([this] {
+        return read(QStringLiteral("to/opened")) == QByteArray("\x00\x01\x02\x03", 4);
+    })) << "the chosen application opened the document";
+
+    // Cancel on the alert: no panel, nothing opened, and the job ends as cancelled.
+    m_asked.clear();
+    panels.clear();
+    QFile::remove(path(QStringLiteral("to/opened")));
+    answer({{QStringLiteral("button"), QStringLiteral("cancel")}});
+    KJob *cancelled = open();
+    int error = 0;
+    QObject::connect(cancelled, &KJob::result, cancelled, [&error](KJob *j) {
+        error = j->error();
+    });
+    EXPECT_FALSE(run(cancelled));
+    EXPECT_EQ(error, int(KIO::ERR_USER_CANCELED));
+    EXPECT_EQ(m_asked.size(), 1);
+    EXPECT_TRUE(panels.isEmpty());
+
+    // Cancel in the panel: the job ends as cancelled.
+    answer({{QStringLiteral("button"), QStringLiteral("choose")}});
+    choice.clear();
+    QList<int> closed;
+    const QMetaObject::Connection d = QObject::connect(chooser, &ApplicationChooser::opened, chooser, [&](int id, const QVariantMap &) {
+        chooser->answer(id, 1);
+    });
+    EXPECT_FALSE(run(open()));
+    QObject::disconnect(d);
+
+    // A job killed while its panel is open: the panel goes.
+    const QMetaObject::Connection e = QObject::connect(chooser, &ApplicationChooser::closed, chooser, [&closed](int id) {
+        closed << id;
+    });
+    panels.clear();
+    KJob *killed = open();
+    ASSERT_TRUE(waitFor([&panels] {
+        return !panels.isEmpty();
+    }));
+    killed->kill();
+    EXPECT_EQ(closed.size(), 1);
+    QObject::disconnect(e);
+    QObject::disconnect(c);
+    EXPECT_FALSE(QFile::exists(path(QStringLiteral("to/opened"))));
 }
 
 TEST_F(KioDialogsTest, KiosOwnJobsGetGrassfieldsDelegate)

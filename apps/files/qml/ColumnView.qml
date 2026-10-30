@@ -14,7 +14,14 @@ FocusScope {
     property int activeColumn: -1
     // Set while the column view itself changes the tab location (keeps the focused column).
     property bool internalNav: false
-    readonly property Item activeItem: root.activeColumn >= 0 ? columns.itemAt(root.activeColumn) : null
+    // Counts the columns made and removed: itemAt() is no property, and the Repeater may make a column after activeColumn
+    // names it (the location a panel starts in: the binding stayed null, so the panel read another listing's selection;
+    // integrator nested pass of f9a25ce, follow-up 1).
+    property int columnsMade: 0
+    readonly property Item activeItem: {
+        root.columnsMade;
+        return root.activeColumn >= 0 ? columns.itemAt(root.activeColumn) : null;
+    }
     readonly property var activeModel: root.activeItem ? (root.activeItem as FileColumn).model : null
     readonly property var previewInfo: {
         const m = root.activeModel;
@@ -142,6 +149,8 @@ FocusScope {
                 id: columns
                 model: columnsModel
                 delegate: FileColumn {}
+                onItemAdded: root.columnsMade++
+                onItemRemoved: root.columnsMade++
             }
 
             // Preview column for a selected file (View > Show Preview, the column view's own setting): the preview pane on the
@@ -438,7 +447,7 @@ FocusScope {
                             root.tab.contextMenu(col.model, entry.index, p.x, p.y, false);
                             return;
                         }
-                        col.model.select(entry.index, event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                        col.model.select(entry.index, event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier), true);
                         root.userSelected(col.index);
                     }
                     onDoubleClicked: event => {

@@ -731,8 +731,9 @@ FocusScope {
 
     // Context menu for `row` of `model` (-1: the folder background) at window coordinates.
     function contextMenu(model: var, row: int, x: real, y: real, keyboard: bool): void {
+        // A right-click is a click: on a panel's dimmed item it keeps the selection (review of step 5c's PR, NIT 3).
         if (row >= 0 && !model.isSelected(row))
-            model.select(row, 0);
+            model.select(row, 0, !keyboard);
         if (row < 0)
             model.clearSelection();
         const items = root.chooser ? root.chooserMenu(model, row >= 0) : row >= 0 ? root.itemMenu(model) : root.backgroundMenu(model);
@@ -768,11 +769,15 @@ FocusScope {
         const items = [];
         items.push({id: "open", text: qsTr("Open")});
         const allFiles = rows.every(r => !model.isDirAt(r));
-        const apps = allFiles ? root.app.applicationsFor(model.selectedUrls()) : [];
-        if (apps.length > 0) {
+        if (allFiles) {
+            // Finder's submenu: the type's applications, then Other…, the Choose Application panel (ADR-0035 5c-1).
+            const apps = root.app.applicationsFor(model.selectedUrls());
             const sub = [];
             for (let i = 0; i < apps.length; i++)
                 sub.push({id: "app:" + apps[i].id, text: apps[i].name});
+            if (sub.length > 0)
+                sub.push({separator: true});
+            sub.push({id: "openWithOther", text: qsTr("Other…")});
             items.push({id: "openWith", text: qsTr("Open With"), submenu: sub});
         } else {
             items.push({id: "openWith", text: qsTr("Open With"), enabled: false});
@@ -909,6 +914,10 @@ FocusScope {
     function runAction(id: string, model: var): void {
         if (id.startsWith("app:")) {
             root.app.openWith(id.substring(4), model.selectedUrls());
+            return;
+        }
+        if (id === "openWithOther") {
+            root.app.chooseApplication(model.selectedUrls());
             return;
         }
         if (id.startsWith("view:")) {

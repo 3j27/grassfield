@@ -125,6 +125,8 @@ public:
     int currentRow() const;
     // The rows shown, in order (a copy, for the tests).
     std::vector<TableRow> shownRows() const;
+    // The selected processes as the table shows them, once each (a process under two GPUs), in the table's order (AM50).
+    std::vector<TableRow> selectedRows() const;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;

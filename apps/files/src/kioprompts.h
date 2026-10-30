@@ -1,5 +1,7 @@
 #pragma once
 
+#include "applicationchooser.h"
+
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -45,6 +47,8 @@ public:
     void tell(const QString &title, const QString &text);
     Q_INVOKABLE void reply(int id, const QVariantMap &reply);
     QVariantMap current() const;
+    // The Choose Application panels (KIO's question when a type has no application, and Open With > Other…).
+    ApplicationChooser *applications() const;
 
     // Tests: every question is answered by `responder` (no sheet), after the call that asked it returns.
     void setResponder(const std::function<QVariantMap(const QVariantMap &request)> &responder);
@@ -67,6 +71,7 @@ private:
     void withdraw(int id);
     QList<Pending> m_queue;
     int m_next = 1;
+    ApplicationChooser *m_applications;
     std::function<QVariantMap(const QVariantMap &)> m_responder;
 };
 
@@ -111,7 +116,8 @@ private:
     std::optional<bool> m_alwaysTrust;
 };
 
-// KIO asks for an application when none is set for a document's type: Files says so (Open With lists the applications).
+// KIO asks for an application when none is set for a document's type: Finder's alert (Choose Application…, Cancel), then
+// the Choose Application panel (ApplicationChooser; ADR-0035 5c-3).
 class GrassfieldOpenWithHandler : public KIO::OpenWithHandlerInterface
 {
     Q_OBJECT
