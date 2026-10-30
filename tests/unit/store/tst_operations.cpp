@@ -88,7 +88,7 @@ case $cmd in
   *) exit 2 ;;
 esac)SH";
 
-// grassfield-store-run's stand-in, `<run> <op> <deadline> setup|aur <recipe> [<arg>...]`: its tmode file says how it goes,
+// grassfield-store-run's stand-in, `<run> <op> <deadline> setup|aur|flatpak <recipe> [<arg>...]`: its tmode file says how it goes,
 // its tpackages file which packages the recipe installs or removes (the AUR's at a version of its build's own, 9-1).
 const QByteArray kFakeRun = R"SH(root=$(dirname "$0"); run=$root/runstore
 op=$2; recipe=$5
@@ -103,7 +103,7 @@ for p in $(cat "$root/tpackages"); do
   n=$((n + 1))
   [ "$mode" = closed ] && [ $n -gt 1 ] && exit 0
   case $recipe in
-    omarchy-install-*) echo "[2026-10-28T10:00:00+0000] [ALPM] installed $p (1-1)" >>"$root/pacman.log"; echo "$p 1-1" >>"$root/installed" ;;
+    omarchy-install-* | omarchy-pkg-add) echo "[2026-10-28T10:00:00+0000] [ALPM] installed $p (1-1)" >>"$root/pacman.log"; echo "$p 1-1" >>"$root/installed" ;;
     omarchy-pkg-aur-add) echo "[2026-10-28T10:00:00+0000] [ALPM] installed $p (9-1)" >>"$root/pacman.log"; echo "$p 9-1" >>"$root/installed" ;;
     *) echo "[2026-10-28T10:00:00+0000] [ALPM] removed $p (1-1)" >>"$root/pacman.log"; grep -v "^$p " "$root/installed" >"$root/i2"; mv "$root/i2" "$root/installed" ;;
   esac
@@ -605,6 +605,59 @@ TEST(Operations, AurThroughTheTerminal)
     ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
     EXPECT_TRUE(ops.results().isEmpty()) << "removed: exit 0 and both gone";
     EXPECT_EQ(f.read(QStringLiteral("installed")), "bash 5.3-1\n");
+}
+
+// Get Flatpak… (step 3c part 3, SD24): omarchy-pkg-add flatpak through the same terminal path, kind "flatpak", an install
+// of the flatpak package and nothing else; done once flatpak and what pacman added with it are there.
+TEST(Operations, GetFlatpakThroughTheTerminal)
+{
+    OperationRecord r = terminalRecord(QStringLiteral("store:flatpak"), QStringLiteral("install"), {QStringLiteral("flatpak"), QStringLiteral("ostree")});
+    r.recipe = kFlatpakAdd;
+    r.args = {kFlatpakPackage};
+    r.packages = {kFlatpakPackage};
+    r.pins = {{QStringLiteral("bin/omarchy-pkg-add"), QString(64, QLatin1Char('a'))}, {QStringLiteral("bin/omarchy-pkg-missing"), QString(64, QLatin1Char('b'))}};
+    const auto back = OperationRecord::fromJson(r.toJson());
+    ASSERT_TRUE(back);
+    EXPECT_EQ(back->recipe, kFlatpakAdd);
+    EXPECT_EQ(back->args, QStringList{kFlatpakPackage});
+    for (const auto &[key, value] : {std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{QStringLiteral("gimp")})},
+                                     std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{kFlatpakPackage, QStringLiteral("gimp")})},
+                                     std::pair{QStringLiteral("args"), QJsonValue(QJsonArray{})},
+                                     std::pair{QStringLiteral("packages"), QJsonValue(QJsonArray{QStringLiteral("gimp")})},
+                                     std::pair{QStringLiteral("packages"), QJsonValue(QJsonArray{kFlatpakPackage, QStringLiteral("gimp")})},
+                                     std::pair{QStringLiteral("kind"), QJsonValue(QStringLiteral("remove"))},
+                                     std::pair{QStringLiteral("recipe"), QJsonValue(QStringLiteral("omarchy-pkg-drop"))}}) {
+        QJsonObject bad = r.toJson();
+        bad.insert(key, value);
+        EXPECT_FALSE(OperationRecord::fromJson(bad)) << key.toStdString() << " " << QJsonDocument(QJsonObject{{key, value}}).toJson().toStdString();
+    }
+
+    const QString run = QStringLiteral("/usr/lib/grassfield/grassfield-store-run");
+    const QString id = QString(32, QLatin1Char('c'));
+    EXPECT_EQ(terminalKind(kFlatpakAdd, {kFlatpakPackage}), QStringLiteral("flatpak"));
+    EXPECT_EQ(terminalCommand(run, id, 1793155826, kFlatpakAdd, {kFlatpakPackage}),
+              run + QStringLiteral(" ") + id + QStringLiteral(" 1793155826 flatpak omarchy-pkg-add flatpak"));
+    for (const QStringList &bad : {QStringList{}, QStringList{QStringLiteral("gimp")}, QStringList{kFlatpakPackage, kFlatpakPackage},
+                                   QStringList{QStringLiteral("flatpak;id")}})
+        EXPECT_EQ(terminalCommand(run, id, 1, kFlatpakAdd, bad), QString()) << bad.join(QLatin1Char(' ')).toStdString();
+
+    Fixture f;
+    f.terminalMode("ok");
+    storetest::writeFile(f.dir.filePath(QStringLiteral("tpackages")), "flatpak ostree\n");
+    Operations ops(f.config);
+    Ended finished(ops);
+    ops.enqueue(r);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << "done: exit 0, flatpak and ostree there";
+    EXPECT_TRUE(f.read(QStringLiteral("commands")).contains(" flatpak omarchy-pkg-add flatpak\n"));
+    EXPECT_EQ(f.read(QStringLiteral("pins-seen")), QByteArray(QByteArray(64, 'a') + "  bin/omarchy-pkg-add\n" + QByteArray(64, 'b') + "  bin/omarchy-pkg-missing\n"));
+    // The terminal refused it (5: the installed Omarchy differs): said as a setup's, by its source.
+    storetest::writeFile(f.dir.filePath(QStringLiteral("installed")), "bash 5.3-1\n");
+    f.terminalMode("changed");
+    r.id = newOperationId();
+    ops.enqueue(r);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    EXPECT_EQ(ops.results().value(r.app).outcome, QStringLiteral("omarchyChanged"));
 }
 
 TEST(Operations, TerminalInstallAndRemove)

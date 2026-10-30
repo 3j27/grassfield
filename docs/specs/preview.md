@@ -25,8 +25,14 @@ single instance.
    directory, a device, a FIFO or a missing file is refused with one message on stderr and in the window. At most 200
    files, duplicates removed.
 2. P2 Window (`qml/Viewer.qml`): toolbar with Sidebar, zoom out, zoom label, zoom in, Fit, Rotate, previous/next page
-   and a search field (PDF); title = file name; opaque; light/dark and Reduce Motion follow `grassfield.json` (read
-   only, watched). The sidebar lists the files when more than one was given and the page thumbnails of a PDF.
+   and a search field (PDF); title = file name; opaque; light/dark, Reduce Motion, Increase Contrast and Text size follow
+   `grassfield.json` (read only, watched), as in every app. The window and the Glance draw the window neutrals of
+   ADR-0024 (`Appearance.windowSurface`: #FFFFFF / #292929, secondary text `Appearance.windowSecondary`), not the shell's
+   material tint; text on a floating glass capsule (search, Info) keeps the glass grey. Selected text is drawn in the
+   text highlight colour (`Appearance.highlight`, Settings > Appearance), as in Settings and Files. The title, the search
+   field and the PDF's file names use the body size, which follows Text size; the document's own text is content and
+   keeps its reading size (ADR-0039 step 3). The sidebar lists the files when more than one was given and the page
+   thumbnails of a PDF.
 3. P3 Images (`ImageView.qml`): any format Qt can decode (`qt6-imageformats`, SVG through `qt6-svg`); fit (shrinks
    only) or zoom (0.05 to 16, Ctrl+wheel, pinch, + / - / 0 for 100 %, Ctrl+9 for Fit); rotation by quarter turns
    (Ctrl+R / Ctrl+L, view only); EXIF orientation applied; multi-page TIFF steps through pages (PgUp/PgDn, toolbar);

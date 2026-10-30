@@ -2,11 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="fr" sourcelanguage="en">
 <context>
-    <name>AboutPage</name>
-    <message>
-        <source>About</source>
-        <translation>Informations</translation>
-    </message>
+    <name>AboutFacts</name>
     <message>
         <source>%1 (1 thread)</source>
         <translation>%1 (1 processeur logique)</translation>
@@ -18,6 +14,13 @@
     <message>
         <source>%1 GB</source>
         <translation>%1 Go</translation>
+    </message>
+</context>
+<context>
+    <name>AboutPage</name>
+    <message>
+        <source>About</source>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>%1 × %2</source>
@@ -53,7 +56,7 @@
     </message>
     <message>
         <source>Software</source>
-        <translation>Logiciels</translation>
+        <translation>Logiciel</translation>
     </message>
     <message>
         <source>Grassfield</source>
@@ -109,7 +112,7 @@
     </message>
 </context>
 <context>
-    <name>AboutPanel</name>
+    <name>AboutWindow</name>
     <message>
         <source>About This Computer</source>
         <translation>À propos de cet ordinateur</translation>
@@ -117,18 +120,6 @@
     <message>
         <source>%1: %2</source>
         <translation>%1&#xa0;: %2</translation>
-    </message>
-    <message>
-        <source>Operating system</source>
-        <translation>Système d’exploitation</translation>
-    </message>
-    <message>
-        <source>Grassfield</source>
-        <translation>Grassfield</translation>
-    </message>
-    <message>
-        <source>Kernel</source>
-        <translation>Noyau</translation>
     </message>
     <message>
         <source>Computer</source>
@@ -147,8 +138,20 @@
         <translation>Graphismes</translation>
     </message>
     <message>
-        <source>OK</source>
-        <translation>OK</translation>
+        <source>Software</source>
+        <translation>Logiciel</translation>
+    </message>
+    <message>
+        <source>Grassfield Desktop %1</source>
+        <translation>Grassfield Desktop %1</translation>
+    </message>
+    <message>
+        <source>More Info…</source>
+        <translation>Plus d’informations…</translation>
+    </message>
+    <message>
+        <source>Built for Omarchy · based on Arch Linux</source>
+        <translation>Conçu pour Omarchy · basé sur Arch Linux</translation>
     </message>
 </context>
 <context>
@@ -7660,12 +7663,28 @@
         <translation>AUR</translation>
     </message>
     <message>
+        <source>Get Flatpak?</source>
+        <translation>Obtenir Flatpak&#xa0;?</translation>
+    </message>
+    <message>
         <source>“%1” can&apos;t be installed from the AUR</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
     </message>
     <message>
         <source>“%1” is in a repository</source>
         <translation>« %1 » est dans un dépôt</translation>
+    </message>
+    <message>
+        <source>Flatpak installs the apps of Flathub in your own folder, for you alone.</source>
+        <translation>Flatpak installe les apps de Flathub dans votre propre dossier, pour vous uniquement.</translation>
+    </message>
+    <message>
+        <source>It comes from Arch Linux: Omarchy installs it in a Terminal window, which asks for your password.</source>
+        <translation>Il vient d’Arch Linux&#xa0;: Omarchy l’installe dans une fenêtre de Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>The apps you get from Flathub show in your app launcher after you log in again.</source>
+        <translation>Les apps obtenues sur Flathub apparaissent dans votre lanceur d’apps après votre prochaine connexion.</translation>
     </message>
     <message>
         <source>Omarchy&apos;s “%1” runs in a Terminal window, which asks for your password.</source>
@@ -9865,6 +9884,22 @@
         <translation>Flathub a besoin du paquet flatpak.</translation>
     </message>
     <message>
+        <source>Omarchy is installing Flatpak in a Terminal window.</source>
+        <translation>Omarchy installe Flatpak dans une fenêtre de Terminal.</translation>
+    </message>
+    <message>
+        <source>Flathub needs Flatpak, which installs its apps in your own folder.</source>
+        <translation>Flathub a besoin de Flatpak, qui installe ses apps dans votre propre dossier.</translation>
+    </message>
+    <message>
+        <source>The apps you get from Flathub show in your app launcher after you log in again.</source>
+        <translation>Les apps obtenues sur Flathub apparaissent dans votre lanceur d’apps après votre prochaine connexion.</translation>
+    </message>
+    <message>
+        <source>Get Flatpak…</source>
+        <translation>Obtenir Flatpak…</translation>
+    </message>
+    <message>
         <source>Screenshots</source>
         <translation>Captures d’écran</translation>
     </message>
@@ -10884,6 +10919,10 @@
         <translation>L&apos;installation depuis l&apos;AUR n&apos;a pas encore été vérifiée avec votre version d&apos;Omarchy. Le Store la propose de nouveau dès que son catalogue l&apos;a été.</translation>
     </message>
     <message>
+        <source>Getting Flatpak hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>L’obtention de Flatpak n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’aura été.</translation>
+    </message>
+    <message>
         <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
         <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
     </message>
@@ -11142,6 +11181,10 @@
     <message>
         <source>32-bit programs</source>
         <translation>Des programmes 32 bits</translation>
+    </message>
+    <message>
+        <source>Programs that start when you log in</source>
+        <translation>Des programmes qui se lancent à votre connexion</translation>
     </message>
     <message>
         <source>Programs outside its sandbox</source>
@@ -11525,21 +11568,6 @@
     <message>
         <source>that device is no longer paired</source>
         <translation>Cet appareil n’est plus associé</translation>
-    </message>
-</context>
-<context>
-    <name>SystemInfo</name>
-    <message>
-        <source>%1 (1 thread)</source>
-        <translation>%1 (1 processeur logique)</translation>
-    </message>
-    <message>
-        <source>%1 (%2 threads)</source>
-        <translation>%1 (%2 processeurs logiques)</translation>
-    </message>
-    <message>
-        <source>%1 GB</source>
-        <translation>%1 Go</translation>
     </message>
 </context>
 <context>

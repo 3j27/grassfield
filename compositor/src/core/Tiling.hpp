@@ -615,6 +615,13 @@ namespace gf::tiling {
     // (TL8). A Split View half too narrow for it is refused rather than overlapped (integrator nested pass of 1ee992e, MAJOR C).
     bool fitsFrame(const Constraints& c, const Rect& frame);
 
+    // A window of fixed size (minimum and maximum the same on both axes): macOS greys the zoom light of a window that cannot
+    // be resized, and a Grassfield app draws it disabled. Hovering it opens no tiling popover and the tile_popover request is
+    // refused; the Window menu greys Zoom, Enter Full Screen and the tiling items (the state reply's "fixed"). ADR-0040 step
+    // 1b's About This Computer, the integrator's nested pass of 85c2c10. A window fixed on one axis only stays zoomable; TL9
+    // refuses to tile it.
+    bool fixedSize(const Constraints& c);
+
     // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
     // the Overview's "+" does (ADR-0036 D41); 1 when there is none.
     int64_t nextDesktopId(std::span<const int64_t> ids);
@@ -666,8 +673,9 @@ namespace gf::tiling {
     };
     // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops with their members and whether one waits for
     // its second window (TL33), "unfit" the windows that do not fit half of their output (the Window menu greys their Full
-    // Screen Tile, D57), "suggestion" null without one.
+    // Screen Tile, D57), "fixed" the windows of fixed size (fixedSize: the Window menu greys their Zoom and tiling items),
+    // "suggestion" null without one.
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
-                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {});
+                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {}, std::span<const uint64_t> fixed = {});
 
 } // namespace gf::tiling

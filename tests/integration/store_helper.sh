@@ -24,7 +24,8 @@
 # before Arch's. Then an AUR package the same way (step 3b2): Omarchy's own omarchy-pkg-aur-add and omarchy-pkg-drop, the
 # Store's AUR plan from a folder of answers in the AUR's format; yay is a stand-in here (yay's binary comes from GitHub, which
 # this network refuses) that does what yay does for `-S --noconfirm --needed`: makepkg as the user from a folder of
-# PKGBUILDs, its AUR dependencies first, then sudo pacman -U (the dependencies --asdeps).
+# PKGBUILDs, its AUR dependencies first, then sudo pacman -U (the dependencies --asdeps). Last, Get Flatpak… (step 3c part
+# 3): the real flatpak package from Arch's mirror, through Omarchy's own omarchy-pkg-add and grassfield-store-run.
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
@@ -585,6 +586,22 @@ out=$(aur aur-remove gs-aur-app "$W/pins")
 sed 's/^/    /' <<<"$out"
 expect "aur-remove gs-aur-app: the whole plan (the app, its library, gs-lib), done through omarchy-pkg-drop, all gone" \
   eval 'has "$out" "result=done" && grep -qE "^plan=none packages=gs-aur-app,(gs-lib,gs-aur-lib|gs-aur-lib,gs-lib) " <<<"$out" && ! pacman -Q gs-aur-app >/dev/null 2>&1 && ! pacman -Q gs-aur-lib >/dev/null 2>&1'
+[[ -s $W/terminal.log ]] && { echo "  the terminal's last lines:"; tail -4 "$W/terminal.log" | sed 's/^/    /'; }
+
+say "A8 Get Flatpak through the Store's terminal path and grassfield-store-run (step 3c part 3, SD24), as carol"
+# The real flatpak package from Arch's mirror, through Omarchy's own omarchy-pkg-add (the mounted tree, unchanged).
+out=$(aur flatpak-get "$W/pins-changed")
+expect "pins that differ: refused by the plan, nothing installed" eval 'grep -q "^plan=omarchyChanged " <<<"$out" && ! pacman -Q flatpak >/dev/null 2>&1'
+out=$(aur flatpak-get "$W/pins")
+sed 's/^/    /' <<<"$out"
+expect "flatpak-get: the plan names flatpak and what pacman adds with it, done (exit 0 and the state)" \
+  eval 'grep -qE "^plan=none packages=(.*,)?flatpak(,.*)? detail=$" <<<"$out" && has "$out" "result=done" && pacman -Q flatpak >/dev/null'
+expect "  installed explicitly, as Omarchy's omarchy-pkg-add does" eval 'pacman -Qqe | grep -qx flatpak'
+expect "  Omarchy's own omarchy-pkg-add ran (the terminal's output)" grep -q "Grassfield Store runs Omarchy's omarchy-pkg-add flatpak" "$W/terminal.log"
+expect "  Omarchy's update lock was held while it ran (by the script), and free after" \
+  eval 'has "$out" "lock-while-running=1" && has "$out" "lock-after=0"'
+expect "  carol's own installation answers at once, before any new login (flatpak remotes --user)" \
+  runuser -u carol -- env -i HOME=/home/carol PATH=/usr/bin flatpak remotes --user
 [[ -s $W/terminal.log ]] && { echo "  the terminal's last lines:"; tail -4 "$W/terminal.log" | sed 's/^/    /'; }
 
 say "result"

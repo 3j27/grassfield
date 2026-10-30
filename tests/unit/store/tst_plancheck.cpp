@@ -358,6 +358,22 @@ TEST(PlanCheck, Setups)
     // With the pins matching again, the other refusals are the repository's.
     storetest::writeFile(f.dir.filePath(QStringLiteral("qu")), "linux 6.17-1 -> 6.18-1\n");
     EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, install, f.tools, true, false).refusal, Refusal::Unfinished);
+    QFile::remove(f.dir.filePath(QStringLiteral("qu")));
+
+    // Get Flatpak's omarchy-pkg-add (SD24): pinned with the omarchy-pkg-missing it calls first, or refused before pacman.
+    EXPECT_EQ(requiredPins(QStringLiteral("omarchy-pkg-add")), (QStringList{QStringLiteral("bin/omarchy-pkg-add"), QStringLiteral("bin/omarchy-pkg-missing")}));
+    EXPECT_EQ(requiredPins(QStringLiteral("omarchy-install-xterm")), QStringList{QStringLiteral("bin/omarchy-install-xterm")});
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-add"), "omarchy-pkg-missing \"$@\" && sudo pacman -S --noconfirm --needed \"$@\"");
+    storetest::script(root + QStringLiteral("/bin/omarchy-pkg-missing"), "exit 0");
+    const std::pair<QString, QString> add{QStringLiteral("bin/omarchy-pkg-add"), sha(QStringLiteral("bin/omarchy-pkg-add"))};
+    const std::pair<QString, QString> pkgMissing{QStringLiteral("bin/omarchy-pkg-missing"), sha(QStringLiteral("bin/omarchy-pkg-missing"))};
+    storetest::writeFile(helper, "true\n");
+    const SetupCheck getFlatpak{root, QStringLiteral("omarchy-pkg-add"), {add, pkgMissing}};
+    EXPECT_EQ(checkSetupInstall({QStringLiteral("xterm")}, getFlatpak, f.tools, true, false).refusal, Refusal::None);
+    const SetupCheck alone{root, QStringLiteral("omarchy-pkg-add"), {add}};
+    p = checkSetupInstall({QStringLiteral("xterm")}, alone, f.tools, true, false);
+    EXPECT_EQ(p.refusal, Refusal::OmarchyChanged);
+    EXPECT_EQ(p.detail, QStringLiteral("bin/omarchy-pkg-missing"));
 }
 
 namespace {

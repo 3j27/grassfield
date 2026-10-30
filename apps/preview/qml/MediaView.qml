@@ -140,7 +140,7 @@ FocusScope {
             }
             textFormat: Text.PlainText
             text: root.clock(player.position)
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -154,7 +154,7 @@ FocusScope {
             }
             textFormat: Text.PlainText
             text: root.clock(player.duration)
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
