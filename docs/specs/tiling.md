@@ -4,8 +4,9 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
-in two, then three (ADR-0036 D40 and D40 amended): 6a merged (PR #48: the Split View Desktop, TL33), 6b on its branch (the
-separator's reset and the swap), 6c not built. Below, "Today" is the state before step 1. A requirement
+in two, then four (ADR-0036 D40, D40 amended, D63): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR #56:
+the separator's reset and the swap), 6c on its branch (full screen's reveal, Dock and green button; windows gathered after
+an unplug), 6d not built. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -516,10 +517,20 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   integrator's note from an owner report (D61, D62): the overlay holds the keyboard and takes the output's input only while
   a popup is loaded on it (a stale `open` with no popup lets every key and click through, logged; its mapping follows `open`,
   as tying it to the popup made the window resize under the popup's position: a binding loop), and a
-  window in full screen is not minimized (Minimize greyed, Super+M nothing). Step 6c: the titles hidden and revealed at the
-  top, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen), the Overview's drop
-  targets for a Split View Desktop, and in full screen (D62) the green button's click acting while its popover is open, the
-  menu bar and the revealed titlebar revealing and hiding together, and the Dock revealing at the bottom edge.
+  window in full screen is not minimized (Minimize greyed, Super+M nothing).
+  Step 6c as built (ADR-0036 D63-D68): a click on the green light while its tiling popover is open (the popover's overlay
+  takes it) runs the light, released over it: a Split View member leaves the Split View, a full-screen window leaves full
+  screen, with Alt a window enters it, else Zoom; then the popover closes (shell `WindowTiling.greenAction`). In full
+  screen the plugin posts `titlebar-reveal` when the window's titlebar is revealed at the top edge of an output or goes
+  away (ADR-0007); the menu bar there is in view while it is revealed and leaves with it, without its hide grace
+  (`AutoHide.leaveNow`); an older plugin sends nothing and the bar keeps its own auto-hide. The Dock hides on an output
+  that shows a full-screen window (as on a Split View Desktop) and sits on the overlay layer meanwhile, so the pointer at
+  its edge brings it back over the window (`DockModel.hides`, `overlayLayer`); its reserved area does not change. After an
+  output goes away, a floating window left off every output comes back centred on the work area of its Desktop's output at
+  its size, at most the area's (core `strayFrame`, `gatheredFrame`; not a full-screen, Stages strip or minimized window).
+  The picker's deadline for the plugin's reply is 6 s (D68). Step 6d: the titles hidden and revealed at the top of a Split
+  View Desktop, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen) and the Overview's
+  drop targets for a Split View Desktop.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
