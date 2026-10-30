@@ -12,8 +12,10 @@ import os
 import re
 import sys
 
-# GRASSFIELD_XKB_LOCALEDIR (tests only: a catalog of their own) replaces the system's locale directory.
-LOCALEDIR = os.environ.get("GRASSFIELD_XKB_LOCALEDIR") or "/usr/share/locale"
+# GRASSFIELD_XKB_LOCALEDIR (a catalog of a test's own) replaces the system's locale directory in a development session only
+# (GRASSFIELD_DEV exactly 1 and GRASSFIELD_SESSION not 1, the run-mode rule of shell/lib/RunMode.js, as GRASSFIELD_TRANSLATIONS_DIR).
+DEV = os.environ.get("GRASSFIELD_DEV") == "1" and os.environ.get("GRASSFIELD_SESSION") != "1"
+LOCALEDIR = (os.environ.get("GRASSFIELD_XKB_LOCALEDIR") if DEV else "") or "/usr/share/locale"
 DOMAINS = ("xkeyboard-config-2", "xkeyboard-config")
 LANGUAGE = re.compile(r"^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})?(?:[.@][A-Za-z0-9_-]{1,32})*$")
 
@@ -34,14 +36,17 @@ def catalogs(language):
             try:
                 found.append(gettext.translation(domain, LOCALEDIR, languages=[candidate]))
                 break
-            except OSError:
+            except Exception:  # no catalog, or one that does not parse (struct.error, EOFError, ...): the next one, else the names as given
                 continue
     return found
 
 
 def translate(name, found):
     for catalog in found:
-        text = catalog.gettext(name)
+        try:
+            text = catalog.gettext(name)
+        except Exception:
+            continue
         if text != name:
             return text
     return name
