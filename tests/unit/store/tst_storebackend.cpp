@@ -735,6 +735,64 @@ TEST(StoreBackend, AurBlocksAgainstACatalog)
     EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("listsMissing"));
 }
 
+// "Get Flatpak…" (step 3c part 3, SD24): offered while flatpak is missing, the terminal path is there and the catalog pins
+// omarchy-pkg-add with the omarchy-pkg-missing it calls; its plan checked as a setup's (the pins against the installed
+// Omarchy first); never an install without the plan its sheet showed.
+TEST(StoreBackend, GetFlatpak)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    const std::pair<QString, QString> add{QStringLiteral("bin/omarchy-pkg-add"), QString(64, QLatin1Char('a'))};
+    const std::pair<QString, QString> missing{QStringLiteral("bin/omarchy-pkg-missing"), QString(64, QLatin1Char('b'))};
+    const auto snapshot = [](const QList<std::pair<QString, QString>> &pins, bool withPins = true) {
+        auto snap = std::make_shared<Snapshot>();
+        Catalog catalog;
+        if (withPins)
+            catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+        snap->catalog = catalog;
+        return std::shared_ptr<const Snapshot>(std::move(snap));
+    };
+    const auto block = [](const StoreBackend &b) { return b.sources().value(QStringLiteral("getFlatpak")).toString(); };
+    SnapshotBackend backend;
+    QList<std::pair<QString, QString>> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &app, const QString &, const QVariantMap &plan) {
+        plans.append({app, plan.value(QStringLiteral("refusal")).toString() + QLatin1Char('/') + plan.value(QStringLiteral("detail")).toString()});
+    });
+    int sourcesChanged = 0;
+    QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&sourcesChanged] { ++sourcesChanged; });
+    backend.apply(snapshot({add, missing}, false));
+    EXPECT_EQ(block(backend), QStringLiteral("omarchyChanged")) << "a catalog without Omarchy's pins";
+    EXPECT_EQ(sourcesChanged, 1) << "a snapshot applied says so to the settings";
+    backend.apply(snapshot({add}));
+    EXPECT_EQ(block(backend), QStringLiteral("flatpakUnchecked")) << "omarchy-pkg-missing not pinned";
+    backend.apply(snapshot({missing}));
+    EXPECT_EQ(block(backend), QStringLiteral("flatpakUnchecked")) << "omarchy-pkg-add not pinned";
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    ASSERT_EQ(plans.size(), 1);
+    EXPECT_EQ(plans.last(), (std::pair{kGetFlatpakApp, QStringLiteral("unavailable/flatpakUnchecked")}));
+    backend.apply(snapshot({add, missing}));
+    EXPECT_EQ(block(backend), QString());
+    backend.plan(kGetFlatpakApp, QStringLiteral("remove"));
+    ASSERT_EQ(plans.size(), 2);
+    EXPECT_EQ(plans.last().second, QStringLiteral("unavailable/")) << "nothing to remove";
+    // Its plan as a setup's: the pins against the installed Omarchy first (here none of it: refused, the file named).
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    QEventLoop loop;
+    for (int i = 0; i < 500 && plans.size() < 3; ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plans.size(), 3);
+    EXPECT_EQ(plans.last(), (std::pair{kGetFlatpakApp, QStringLiteral("omarchyChanged/bin/omarchy-pkg-add")}));
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "no plan its sheet showed";
+    EXPECT_TRUE(backend.operations().isEmpty());
+    // flatpak there: nothing to get.
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), "exit 0");
+    EXPECT_EQ(block(backend), QStringLiteral("installed"));
+    EXPECT_TRUE(backend.sources().value(QStringLiteral("flatpak")).toBool());
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;

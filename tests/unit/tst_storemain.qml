@@ -285,6 +285,62 @@ TestCase {
         sw.close();
     }
 
+    // "Get Flatpak…" (step 3c part 3, SD24): without flatpak, the settings offer it; its sheet, over the settings window, says
+    // what Flatpak is, that Omarchy installs it in its terminal (the password asked there) and when Flathub's apps reach the
+    // launcher, then pacman's plan; Install queues it; the line follows the operation, then says how it ended; with flatpak,
+    // the switch instead; a catalog that does not pin its command, or another Omarchy: why, and no button to press.
+    function test_getFlatpak() {
+        const t = make();
+        t.backend.sources = {aur: false, flathub: false, flatpak: false, getFlatpak: "", flatpakSession: false, screenshots: true};
+        t.win.openSettings();
+        tryVerify(() => t.win.settingsWindow && t.win.settingsWindow.visible);
+        const sw = t.win.settingsWindow;
+        const shown = text => find(sw.contentItem, i => i.text === text && i.visible) !== null;
+        const getButton = () => find(sw.contentItem, i => i.text === "Get Flatpak…" && i.visible && i.clicked !== undefined);
+        verify(shown("Flathub needs Flatpak, which installs its apps in your own folder."));
+        verify(getButton() && getButton().enabled);
+        t.backend.results = {"store:flatpak": {kind: "install", outcome: "failed", present: 0, total: 1}};
+        verify(shown("The installation failed."), "how the last one ended");
+        t.backend.plans["store:flatpak"] = {refusal: "", download: "3.2 MB", installed: "14.0 MB",
+                                            packages: [{name: "flatpak", version: "1:1.18.4-2", repo: "extra", size: "2.1 MB"},
+                                                       {name: "ostree", version: "2025.7-1", repo: "extra", size: "1.1 MB"}]};
+        getButton().clicked();
+        verify(t.backend.calls.indexOf("dismiss:store:flatpak") >= 0, "the last result goes when it is asked again");
+        verify(t.backend.calls.indexOf("plan:install:store:flatpak") >= 0);
+        const sheet = find(sw.contentItem, i => i.confirmEnabled !== undefined && i.plan !== undefined);
+        verify(sheet && sheet.visible, "the sheet over the settings window");
+        compare(sheet.title, "Get Flatpak?");
+        compare(sheet.message, "Flatpak installs the apps of Flathub in your own folder, for you alone.\n\n"
+                + "It comes from Arch Linux: Omarchy installs it in a Terminal window, which asks for your password.\n\n"
+                + "The apps you get from Flathub show in your app launcher after you log in again.\n\nThese packages will be installed:");
+        compare(sheet.confirmText, "Install");
+        verify(find(sheet, i => i.text === "Arch Linux" && i.visible) !== null, "its source");
+        verify(find(sheet, i => i.text === "Licence" && i.visible) === null, "no licence row: a package of the system's");
+        verify(find(sheet, i => i.text === "flatpak  1:1.18.4-2" && i.visible) !== null);
+        sheet.confirm();
+        verify(t.backend.calls.indexOf("install:store:flatpak") >= 0);
+        tryVerify(() => !sheet.visible);
+        verify(shown("Omarchy is installing Flatpak in a Terminal window."));
+        verify(!getButton().enabled, "once at a time");
+        // Installed: the switch, and until the next login the launcher's note once Flathub is on.
+        t.backend.operations = [];
+        t.backend.sources = {aur: false, flathub: true, flatpak: true, flathubReady: true, flathubProblem: "", getFlatpak: "installed",
+                             flatpakSession: false, screenshots: true};
+        verify(getButton() === null);
+        verify(find(sw.contentItem, i => i.title === "Flathub" && i.checked !== undefined && i.visible));
+        verify(shown("The apps you get from Flathub show in your app launcher after you log in again."));
+        t.backend.sources = Object.assign({}, t.backend.sources, {flatpakSession: true});
+        verify(!shown("The apps you get from Flathub show in your app launcher after you log in again."));
+        // Not offered: why, and the button dimmed (or gone, without Omarchy's terminal).
+        t.backend.sources = {aur: false, flathub: false, flatpak: false, getFlatpak: "flatpakUnchecked", screenshots: true};
+        verify(shown("Getting Flatpak hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been."));
+        verify(getButton() && !getButton().enabled);
+        t.backend.sources = {aur: false, flathub: false, flatpak: false, getFlatpak: "missing", screenshots: true};
+        verify(shown("Flathub needs the flatpak package."));
+        verify(getButton() && !getButton().enabled);
+        sw.close();
+    }
+
     // --page and the pages it names.
     function test_openPage() {
         const t = make({startPage: "category:graphics"});

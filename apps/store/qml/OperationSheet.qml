@@ -12,7 +12,9 @@ import "Store.js" as Store
 // beside Cancel, which is the default (Return cancels: the build runs the package's script before any password; common
 // rule 3); for a Flatpak (SD25), what it can reach and flatpak's own plan (the runtimes it pulls, each at most its
 // download), installed in the user's own folder without a password, and for a removal that its data stays and the runtimes
-// no other app needs go with it (SD27). A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
+// no other app needs go with it (SD27); for "Get Flatpak…" (SD24, from the settings), what Flatpak is, that Omarchy
+// installs it in its terminal, which asks for the password, and when Flathub's apps reach the launcher, then pacman's plan.
+// A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
 // or Cancel close it and nothing runs.
 Sheet {
     id: root
@@ -28,6 +30,7 @@ Sheet {
     readonly property bool setup: root.app.kind === "setup"
     readonly property bool aur: root.app.kind === "aur"
     readonly property bool flatpak: root.app.kind === "flatpak"
+    readonly property bool getFlatpak: root.app.kind === "getFlatpak"
     readonly property var setupInfo: root.app.setup || ({})
     readonly property string refusal: root.plan ? (root.plan.refusal || "") : ""
     readonly property bool updateFirst: root.refusal === "unfinished" || root.refusal === "outdated"
@@ -53,6 +56,8 @@ Sheet {
     }
 
     title: {
+        if (root.refusal === "" && root.getFlatpak)
+            return qsTr("Get Flatpak?");
         if (root.refusal === "")
             return root.removing ? qsTr("Uninstall “%1”?").arg(root.appName) : qsTr("Install “%1”?").arg(root.appName);
         switch (root.refusal) {
@@ -78,6 +83,14 @@ Sheet {
             return qsTr("Checking what this changes…");
         switch (root.refusal) {
         case "":
+            if (root.getFlatpak) {
+                // The flatpak package, as Omarchy installs it in its terminal (SD24); its exports reach the launcher at the next
+                // login (S20).
+                return [qsTr("Flatpak installs the apps of Flathub in your own folder, for you alone."),
+                        qsTr("It comes from Arch Linux: Omarchy installs it in a Terminal window, which asks for your password."),
+                        qsTr("The apps you get from Flathub show in your app launcher after you log in again."),
+                        qsTr("These packages will be installed:")].join("\n\n");
+            }
             if (root.webApp)
                 return root.removing ? qsTr("The launcher and its icon are removed from Apps.")
                                      : qsTr("A launcher that opens %1 in your browser is added to Apps, with its icon.").arg(Store.hostOf(root.app.webUrl || ""));
@@ -180,7 +193,7 @@ Sheet {
         Repeater {
             model: [
                 [qsTr("Source"), Store.sourceLabel(root.app.kind, root.app.repo)],
-                [qsTr("Licence"), root.app.license || qsTr("Licence not stated")],
+                [qsTr("Licence"), root.getFlatpak ? "" : root.app.license || qsTr("Licence not stated")],
                 // An AUR package's sizes are its build's, unknown before it: those of the repositories' part only.
                 // flatpak gives the most each ref downloads (its "<"): a total no larger than this.
                 [root.aur ? qsTr("Download from the repositories") : root.flatpak ? qsTr("Download, at most") : qsTr("Download"),

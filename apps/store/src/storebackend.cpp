@@ -707,6 +707,7 @@ void StoreBackend::apply(std::shared_ptr<const Snapshot> snapshot)
     m_loading = false;
     m_refreshing = false;
     emit dataChanged();
+    emit sourcesChanged(); // Flathub added, flatpak installed: what the settings say comes from the system read again
     if (wasLoading != m_loading || wasRefreshing != m_refreshing)
         emit loadingChanged();
     if (m_pendingJob) {
@@ -771,6 +772,10 @@ QVariantMap StoreBackend::sources() const
             {QStringLiteral("flatpak"), !env::flatpak().isEmpty()},
             {QStringLiteral("flathubReady"), m_flathub && m_snapshot && m_snapshot->flathubAdded},
             {QStringLiteral("flathubProblem"), m_flathub && m_snapshot ? m_snapshot->flathubProblem : QString()},
+            // Why "Get Flatpak…" cannot run now, or "" (SD24); "installed" once flatpak is there.
+            {QStringLiteral("getFlatpak"), m_snapshot ? getFlatpakBlock() : QStringLiteral("loading")},
+            // Whether this session's launcher sees the Flatpaks' entries (from the login after flatpak's install, S20).
+            {QStringLiteral("flatpakSession"), env::flatpakExportsSeen()},
             {QStringLiteral("screenshots"), m_screenshots}};
 }
 
@@ -1042,6 +1047,7 @@ QVariantMap StoreBackend::results() const
                                          {QStringLiteral("details"), it->details},
                                          // "aur" for the AUR's commands: their messages say so (Store.js).
                                          {QStringLiteral("source"), it->record.recipe == kAurAdd || it->record.recipe == kAurDrop ? QStringLiteral("aur")
+                                                                    : it->record.recipe == kFlatpakAdd                         ? QStringLiteral("getFlatpak")
                                                                     : it->record.path == QLatin1String("flatpak")              ? QStringLiteral("flatpak")
                                                                                                                                 : QString()}});
     }
@@ -1178,14 +1184,27 @@ QString StoreBackend::terminalBlock() const
 
 QString StoreBackend::aurBlock(const QString &command) const
 {
+    // The catalog does not vouch for the AUR's command: grassfield-packages pins it.
+    return pinnedBlock(command, QStringLiteral("aurUnchecked"));
+}
+
+QString StoreBackend::pinnedBlock(const QString &command, const QString &unchecked) const
+{
     if (const QString block = terminalBlock(); !block.isEmpty())
         return block;
     const auto &pins = m_snapshot->catalog->omarchy->files;
     for (const QString &path : requiredPins(command)) {
         if (std::none_of(pins.cbegin(), pins.cend(), [&path](const auto &pin) { return pin.first == path; }))
-            return QStringLiteral("aurUnchecked"); // the catalog does not vouch for the AUR's command (grassfield-packages pins it)
+            return unchecked;
     }
     return {};
+}
+
+QString StoreBackend::getFlatpakBlock() const
+{
+    if (!env::flatpak().isEmpty())
+        return QStringLiteral("installed");
+    return pinnedBlock(kFlatpakAdd, QStringLiteral("flatpakUnchecked"));
 }
 
 SetupCheck StoreBackend::aurCheck(const QString &command) const
@@ -1530,8 +1549,49 @@ QString refusalName(Refusal r)
 
 } // namespace
 
+void StoreBackend::planGetFlatpak()
+{
+    const QString kind = QStringLiteral("install");
+    if (const QString block = getFlatpakBlock(); !block.isEmpty()) {
+        emit planReady(kGetFlatpakApp, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), block}});
+        return;
+    }
+    const PlanTools tools = planTools();
+    const SetupCheck check = aurCheck(kFlatpakAdd);
+    const bool online = m_online;
+    const bool own = m_operations->running();
+    const QLocale locale = m_formats;
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    m_pool.start([this, kind, check, tools, online, own, locale, cancel] {
+        const InstallPlan p = checkSetupInstall({kFlatpakPackage}, check, tools, online, own);
+        const QVariantMap out{{QStringLiteral("refusal"), refusalName(p.refusal)},
+                              {QStringLiteral("packages"), packageList(p.packages, locale)},
+                              {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
+                              {QStringLiteral("installed"), view::sizeText(p.installedSize, locale)},
+                              {QStringLiteral("unfinished"), p.unfinished},
+                              {QStringLiteral("upgrades"), p.upgrades},
+                              {QStringLiteral("detail"), p.detail}};
+        if (*cancel)
+            return;
+        QMetaObject::invokeMethod(this, [this, kind, out, p] {
+            if (p.refusal == Refusal::None)
+                m_installPlans.insert(kGetFlatpakApp, p);
+            else
+                m_installPlans.remove(kGetFlatpakApp);
+            emit planReady(kGetFlatpakApp, kind, out);
+        }, Qt::QueuedConnection);
+    });
+}
+
 void StoreBackend::plan(const QString &id, const QString &kind)
 {
+    if (id == kGetFlatpakApp) {
+        if (kind == QLatin1String("install"))
+            planGetFlatpak();
+        else
+            emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}});
+        return;
+    }
     if (otherWebApp(id)) {
         const bool ok = kind == QLatin1String("remove") && actions(id).value(QStringLiteral("uninstall")).toString().isEmpty();
         emit planReady(id, kind, ok ? QVariantMap{{QStringLiteral("refusal"), QString()}, {QStringLiteral("packages"), QVariantList()}}
@@ -1665,6 +1725,27 @@ void StoreBackend::plan(const QString &id, const QString &kind)
 
 bool StoreBackend::install(const QString &id)
 {
+    if (id == kGetFlatpakApp) {
+        // Omarchy's omarchy-pkg-add flatpak in its terminal (SD24), the plan its sheet showed; grassfield-store-run checks it
+        // all again.
+        const auto it = m_installPlans.constFind(id);
+        if (m_operations->queued(id) || !getFlatpakBlock().isEmpty() || it == m_installPlans.cend() || it->packages.isEmpty())
+            return false;
+        OperationRecord r;
+        r.id = newOperationId();
+        r.kind = QStringLiteral("install");
+        r.app = id;
+        r.name = QStringLiteral("Flatpak");
+        r.path = QStringLiteral("terminal");
+        r.packages = {kFlatpakPackage};
+        r.recipe = kFlatpakAdd;
+        r.args = {kFlatpakPackage};
+        r.pins = aurCheck(kFlatpakAdd).pins;
+        r.plan = it->packages;
+        m_installPlans.remove(id);
+        m_operations->enqueue(r);
+        return true;
+    }
     const StoreApp *a = storeApp(id);
     if (!a || a->installed || m_operations->queued(id) || !getBlock(*a).isEmpty())
         return false;
@@ -1868,11 +1949,9 @@ bool StoreBackend::open(const QString &id)
         const QString appId = otherApp.isEmpty() ? flatpakRefId(a->flatpakRef) : otherApp;
         const QString desktop = otherApp.isEmpty() ? a->desktopId : otherApp + QStringLiteral(".desktop");
         const QString exports = env::flatpakExports();
-        const QStringList dirs = qEnvironmentVariable("XDG_DATA_DIRS").split(QLatin1Char(':'));
-        const bool seen = dirs.contains(exports) || dirs.contains(exports + QLatin1Char('/'));
         if (!isFlatpakId(appId))
             return false;
-        if (seen && isDesktopId(desktop) && QFileInfo::exists(exports + QStringLiteral("/applications/") + desktop))
+        if (env::flatpakExportsSeen() && isDesktopId(desktop) && QFileInfo::exists(exports + QStringLiteral("/applications/") + desktop))
             argv = {QStringLiteral("uwsm-app"), QStringLiteral("--"), desktop};
         else
             argv = {QStringLiteral("uwsm-app"), QStringLiteral("--"), QStringLiteral("/usr/bin/flatpak"), QStringLiteral("run"), appId};

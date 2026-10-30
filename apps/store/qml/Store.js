@@ -16,6 +16,8 @@ function sourceLabel(kind, repo) {
         return qsTr("AUR");
     case "flatpak":
         return qsTr("Flathub");
+    case "getFlatpak":
+        return qsTr("Arch Linux");
     case "foreign":
         return qsTr("Not from a repository");
     }
@@ -71,6 +73,8 @@ function getBlockText(reason, kind) {
         return omarchyChangedText(kind);
     case "aurUnchecked":
         return omarchyChangedText("aur");
+    case "flatpakUnchecked":
+        return omarchyChangedText("getFlatpak");
     case "aurOff":
         return qsTr("Turn on the AUR in the Store's settings to install from it.");
     case "aurProtected":
@@ -93,6 +97,8 @@ function getBlockText(reason, kind) {
 function omarchyChangedText(kind) {
     if (kind === "aur")
         return qsTr("Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+    if (kind === "getFlatpak")
+        return qsTr("Getting Flatpak hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
     return qsTr("This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
 }
 

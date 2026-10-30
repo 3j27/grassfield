@@ -63,7 +63,7 @@ Refusal readiness(const PlanTools &tools, bool ownOperation, QStringList *unfini
 // The recipe is an executable file of Omarchy's bin/ that the pins name, and every pinned file matches: "" or what differs.
 QString setupDifference(const SetupCheck &setup)
 {
-    static const QRegularExpression recipe(QStringLiteral(R"(\A(omarchy-(install|remove)-[a-z0-9-]+|omarchy-pkg-aur-add|omarchy-pkg-drop)\z)"));
+    static const QRegularExpression recipe(QStringLiteral(R"(\A(omarchy-(install|remove)-[a-z0-9-]+|omarchy-pkg-aur-add|omarchy-pkg-drop|omarchy-pkg-add)\z)"));
     const QString path = QStringLiteral("bin/") + setup.recipe;
     const QFileInfo program(setup.root + QLatin1Char('/') + path);
     if (!recipe.match(setup.recipe).hasMatch() || !program.isFile() || !program.isExecutable())
@@ -129,7 +129,7 @@ bool downloadGone(const QString &log)
 QStringList requiredPins(const QString &recipe)
 {
     QStringList out{QStringLiteral("bin/") + recipe};
-    if (recipe == QLatin1String("omarchy-pkg-aur-add"))
+    if (recipe == QLatin1String("omarchy-pkg-aur-add") || recipe == QLatin1String("omarchy-pkg-add"))
         out.append(QStringLiteral("bin/omarchy-pkg-missing"));
     return out;
 }

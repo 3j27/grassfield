@@ -2,10 +2,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "Preferences.js" as Preferences
+import "Store.js" as Store
 
 // The Store's settings (Ctrl+,; spec SR27, SR28): the optional sources (both off until turned on, owner ST2) and the
 // screenshots' switch (owner ST6, on), written to grassfield.json's "store" keys (SD20; turning Flathub on adds it to the
-// user's own Flatpak installation, step 3c);
+// user's own Flatpak installation, step 3c; without flatpak, "Get Flatpak…" has Omarchy install it in its terminal, SD24);
 // the catalog in use and why one is not; Arch's app data; what the Store fetches and from where, in plain words; Refresh.
 Window {
     id: root
@@ -18,6 +19,9 @@ Window {
     readonly property var sources: root.backend.sources
     // Why the last switch could not be saved ("" when it was): the switch shows the file's value again.
     property string saveError: ""
+    // "Get Flatpak…" (SD24): its operation while it waits or runs, and what it ended with when it did not install it.
+    readonly property var flatpakOperation: (root.backend.operations || []).find(o => o.app === "store:flatpak") || null
+    readonly property var flatpakResult: (root.backend.results || {})["store:flatpak"] || null
 
     function setPreference(path: string, value: bool): void {
         root.saveError = Preferences.set(root.backend, path, value);
@@ -43,6 +47,24 @@ Window {
                                       : qsTr("The catalog could not be fetched.");
         }
         return root.catalog.inUse ? qsTr("The catalog from %1, verified.").arg(root.catalog.date) : "";
+    }
+
+    function flatpakLine(): string {
+        if (root.flatpakOperation)
+            return qsTr("Omarchy is installing Flatpak in a Terminal window.");
+        const result = root.flatpakResult ? Store.resultText(root.flatpakResult) : "";
+        if (result !== "")
+            return result;
+        switch (root.sources.getFlatpak) {
+        case "":
+            return qsTr("Flathub needs Flatpak, which installs its apps in your own folder.");
+        case "flatpakUnchecked":
+        case "omarchyChanged":
+            return Store.omarchyChangedText("getFlatpak");
+        case "dev":
+            return qsTr("dev: not applied");
+        }
+        return qsTr("Flathub needs the flatpak package.");
     }
 
     function appDataLine(): string {
@@ -123,9 +145,28 @@ Window {
                                                                 : qsTr("Flathub couldn't be reached. The Store adds it once you're online; Refresh tries again.")
                 }
 
+                // Before this session's launcher sees Flathub's apps (from the login after flatpak's install, S20).
+                SettingsLine {
+                    visible: root.sources.flatpak && root.sources.flathub && root.sources.flathubReady && !root.sources.flatpakSession
+                    text: qsTr("The apps you get from Flathub show in your app launcher after you log in again.")
+                }
+
+                // Without flatpak (SD24): Omarchy installs it in its terminal, which asks for the password; this line says
+                // when it runs and how it ended.
                 SettingsLine {
                     visible: !root.sources.flatpak
-                    text: qsTr("Flathub needs the flatpak package.")
+                    text: root.flatpakLine()
+                }
+
+                Button {
+                    visible: !root.sources.flatpak && root.sources.getFlatpak !== "installed"
+                    push: true
+                    text: qsTr("Get Flatpak…")
+                    enabled: root.sources.getFlatpak === "" && root.flatpakOperation === null
+                    onClicked: {
+                        root.backend.dismiss("store:flatpak");
+                        getFlatpakSheet.show({id: "store:flatpak", kind: "getFlatpak", name: "Flatpak"}, "install");
+                    }
                 }
             }
 
@@ -213,6 +254,12 @@ Window {
             }
 
         }
+    }
+
+    // "Get Flatpak…"'s sheet, over this window (SD24).
+    OperationSheet {
+        id: getFlatpakSheet
+        backend: root.backend
     }
 
     component SettingsGroup: Column {
