@@ -28,6 +28,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
 find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 
 add_library(grassfield-activity-window STATIC
+    src/actions.cpp src/actions.h
     src/activityapp.cpp src/activityapp.h
     src/activitystate.cpp src/activitystate.h
     src/battery.cpp src/battery.h
@@ -74,6 +75,7 @@ if(GTest_FOUND)
     # The window's backend: its own main (a QCoreApplication around the cases).
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_executable(activity-window-tests
+        ../../tests/unit/activity/window/tst_actions.cpp
         ../../tests/unit/activity/window/tst_activityapp.cpp
         ../../tests/unit/activity/window/tst_format.cpp
         ../../tests/unit/activity/window/tst_main.cpp
