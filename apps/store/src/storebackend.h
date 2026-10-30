@@ -34,6 +34,9 @@
 
 namespace grassfield::store {
 
+// "Get Flatpak…" (step 3c part 3, SD24): the operation's app id (no app of a source takes a colon after "store").
+inline const QString kGetFlatpakApp = QStringLiteral("store:flatpak");
+
 // Everything one load read and made; never changed once built (StoreApp::entry points into `catalog`).
 struct Snapshot {
     std::optional<Catalog> catalog;
@@ -270,10 +273,19 @@ private:
     // omarchyChanged.
     QString terminalBlock() const;
     SetupCheck setupCheck(const StoreApp &a, bool install) const;
-    // The AUR's command (kAurAdd, kAurDrop) with the catalog's pins, checked as a setup's recipe.
+    // An Omarchy command of the terminal path (the AUR's kAurAdd, kAurDrop; Get Flatpak's kFlatpakAdd) with the catalog's
+    // pins, checked as a setup's recipe.
     SetupCheck aurCheck(const QString &command) const;
     // An AUR operation's path (b.2): terminalBlock(), then aurUnchecked when the catalog's pins do not name the command.
     QString aurBlock(const QString &command) const;
+    // terminalBlock(), then `unchecked` when the catalog's pins do not name `command` (and what it calls).
+    QString pinnedBlock(const QString &command, const QString &unchecked) const;
+    // Why "Get Flatpak…" cannot run now, or "" (SD24): installed (flatpak is there), the terminal's blocks, flatpakUnchecked
+    // (the catalog does not pin omarchy-pkg-add).
+    QString getFlatpakBlock() const;
+    // Get Flatpak's plan (SD24): the flatpak package and what pacman adds with it, checked as a setup's (the pins, the
+    // update lock, an unfinished update, the mirror), on a worker.
+    void planGetFlatpak();
     // The AUR package an id names: an AUR page's, or a catalog app's whose source is the AUR ("" otherwise).
     QString aurName(const QString &id) const;
     AurConfig aurConfig() const;

@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
+#include <QCryptographicHash>
 #include <QTimer>
 
 #include <gtest/gtest.h>
@@ -735,6 +736,147 @@ TEST(StoreBackend, AurBlocksAgainstACatalog)
     EXPECT_EQ(uninstall(backend, QStringLiteral("aur-kept")), QStringLiteral("listsMissing"));
 }
 
+// "Get Flatpak…" (step 3c part 3, SD24): offered while flatpak is missing, the terminal path is there and the catalog pins
+// omarchy-pkg-add with the omarchy-pkg-missing it calls; its plan checked as a setup's (the pins against the installed
+// Omarchy first); never an install without the plan its sheet showed.
+TEST(StoreBackend, GetFlatpak)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    const std::pair<QString, QString> add{QStringLiteral("bin/omarchy-pkg-add"), QString(64, QLatin1Char('a'))};
+    const std::pair<QString, QString> missing{QStringLiteral("bin/omarchy-pkg-missing"), QString(64, QLatin1Char('b'))};
+    const auto snapshot = [](const QList<std::pair<QString, QString>> &pins, bool withPins = true) {
+        auto snap = std::make_shared<Snapshot>();
+        Catalog catalog;
+        if (withPins)
+            catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+        snap->catalog = catalog;
+        return std::shared_ptr<const Snapshot>(std::move(snap));
+    };
+    const auto block = [](const StoreBackend &b) { return b.sources().value(QStringLiteral("getFlatpak")).toString(); };
+    SnapshotBackend backend;
+    QList<std::pair<QString, QString>> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plans](const QString &app, const QString &, const QVariantMap &plan) {
+        plans.append({app, plan.value(QStringLiteral("refusal")).toString() + QLatin1Char('/') + plan.value(QStringLiteral("detail")).toString()});
+    });
+    int sourcesChanged = 0;
+    QObject::connect(&backend, &StoreBackend::sourcesChanged, &backend, [&sourcesChanged] { ++sourcesChanged; });
+    backend.apply(snapshot({add, missing}, false));
+    EXPECT_EQ(block(backend), QStringLiteral("omarchyChanged")) << "a catalog without Omarchy's pins";
+    EXPECT_EQ(sourcesChanged, 1) << "a snapshot applied says so to the settings";
+    backend.apply(snapshot({add}));
+    EXPECT_EQ(block(backend), QStringLiteral("flatpakUnchecked")) << "omarchy-pkg-missing not pinned";
+    backend.apply(snapshot({missing}));
+    EXPECT_EQ(block(backend), QStringLiteral("flatpakUnchecked")) << "omarchy-pkg-add not pinned";
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    ASSERT_EQ(plans.size(), 1);
+    EXPECT_EQ(plans.last(), (std::pair{kGetFlatpakApp, QStringLiteral("unavailable/flatpakUnchecked")}));
+    backend.apply(snapshot({add, missing}));
+    EXPECT_EQ(block(backend), QString());
+    backend.plan(kGetFlatpakApp, QStringLiteral("remove"));
+    ASSERT_EQ(plans.size(), 2);
+    EXPECT_EQ(plans.last().second, QStringLiteral("unavailable/")) << "nothing to remove";
+    // Its plan as a setup's: the pins against the installed Omarchy first (here none of it: refused, the file named).
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    QEventLoop loop;
+    for (int i = 0; i < 500 && plans.size() < 3; ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plans.size(), 3);
+    EXPECT_EQ(plans.last(), (std::pair{kGetFlatpakApp, QStringLiteral("omarchyChanged/bin/omarchy-pkg-add")}));
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "no plan its sheet showed";
+    EXPECT_TRUE(backend.operations().isEmpty());
+    // flatpak there: nothing to get.
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), "exit 0");
+    EXPECT_EQ(block(backend), QStringLiteral("installed"));
+    EXPECT_TRUE(backend.sources().value(QStringLiteral("flatpak")).toBool());
+}
+
+// Get Flatpak… from its plan to its operation (PR #65's review: no test drove a successful install): the plan its sheet
+// showed, the record with the catalog's pins, written for grassfield-store-run when it starts; refused while flatpak is
+// there, and once queued.
+TEST(StoreBackend, GetFlatpakInstalls)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    // Omarchy's two commands, as the catalog pins them.
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/bin")));
+    storetest::script(s.path(QStringLiteral("fixture/omarchy/bin/omarchy-pkg-add")), "omarchy-pkg-missing \"$@\" && sudo pacman -S --noconfirm --needed \"$@\"");
+    storetest::script(s.path(QStringLiteral("fixture/omarchy/bin/omarchy-pkg-missing")), "exit 0");
+    const auto sha = [&s](const char *rel) {
+        QFile file(s.path(QStringLiteral("fixture/omarchy/")) + QLatin1String(rel));
+        return file.open(QIODevice::ReadOnly) ? QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex()) : QString();
+    };
+    const QList<std::pair<QString, QString>> pins{{QStringLiteral("bin/omarchy-pkg-add"), sha("bin/omarchy-pkg-add")},
+                                                  {QStringLiteral("bin/omarchy-pkg-missing"), sha("bin/omarchy-pkg-missing")}};
+    // pacman: nothing unfinished, and flatpak's plan with one dependency, both on the mirror in served/.
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QByteArray mirror = QUrl::fromLocalFile(s.path(QStringLiteral("served"))).toString().toUtf8();
+    for (const char *file : {"flatpak-1:1.18.4-2-x86_64.pkg.tar.zst", "ostree-2025.7-1-x86_64.pkg.tar.zst"})
+        storetest::writeFile(s.path(QStringLiteral("served/")) + QLatin1String(file), "pkg");
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  -Qq) printf '%s\\n' gimp sketch cafe ;;\n"
+                      "  -S) printf '%s\\n' 'flatpak 1:1.18.4-2 extra 2100000 " + mirror + "/flatpak-1:1.18.4-2-x86_64.pkg.tar.zst' "
+                      "'ostree 2025.7-1 extra 1100000 " + mirror + "/ostree-2025.7-1-x86_64.pkg.tar.zst' ;;\n"
+                      "  *) exec '" + base.toUtf8() + "' \"$@\" ;;\n"
+                      "esac");
+    auto snap = std::make_shared<Snapshot>();
+    Catalog catalog;
+    catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+    snap->catalog = catalog;
+    snap->appstream.origin = AppStreamData::Origin::Installed; // online, nothing to fetch: no load replaces this snapshot
+    SnapshotBackend backend;
+    backend.apply(std::shared_ptr<const Snapshot>(std::move(snap)));
+    ASSERT_EQ(backend.sources().value(QStringLiteral("getFlatpak")).toString(), QString());
+    QVariantMap plan;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plan](const QString &, const QString &, const QVariantMap &p) { plan = p; });
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    QEventLoop loop;
+    for (int i = 0; i < 500 && plan.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString()) << plan.value(QStringLiteral("detail")).toString().toStdString();
+    const QVariantList packages = plan.value(QStringLiteral("packages")).toList();
+    ASSERT_EQ(packages.size(), 2);
+    EXPECT_EQ(packages.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("flatpak"));
+    // flatpak there meanwhile (installed another way): nothing to get, the plan or not.
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), "exit 0");
+    EXPECT_FALSE(backend.install(kGetFlatpakApp));
+    QFile::remove(s.path(QStringLiteral("fixture/bin/flatpak")));
+    ASSERT_TRUE(backend.install(kGetFlatpakApp));
+    const QVariantList ops = backend.operations();
+    ASSERT_EQ(ops.size(), 1);
+    const QVariantMap op = ops.first().toMap();
+    EXPECT_EQ(op.value(QStringLiteral("app")).toString(), kGetFlatpakApp);
+    EXPECT_EQ(op.value(QStringLiteral("name")).toString(), QStringLiteral("Flatpak"));
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "queued";
+    // Planned again while it waits for Omarchy's terminal: still once at a time.
+    plan.clear();
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    for (int i = 0; i < 500 && plan.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString()) << plan.value(QStringLiteral("detail")).toString().toStdString();
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "once at a time";
+    // The catalog's pins, written for grassfield-store-run as it starts.
+    const QString written = s.path(QStringLiteral("fixture/run/store/")) + op.value(QStringLiteral("id")).toString() + QStringLiteral(".pins");
+    for (int i = 0; i < 250 && !QFile::exists(written); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    QFile file(written);
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << written.toStdString();
+    EXPECT_EQ(file.readAll(), (pins.at(0).second + QStringLiteral("  bin/omarchy-pkg-add\n") + pins.at(1).second + QStringLiteral("  bin/omarchy-pkg-missing\n")).toUtf8());
+}
+
 TEST(StoreBackend, FrenchSession)
 {
     Scratch s;
@@ -928,7 +1070,8 @@ TEST(StoreBackend, Flathub)
     }
     EXPECT_EQ(facts.value(QStringLiteral("version")).toString(), QStringLiteral("1.2"));
     EXPECT_EQ(facts.value(QStringLiteral("license")).toString(), QStringLiteral("MIT"));
-    EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home")}));
+    EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login"),
+                                                                                    QStringLiteral("outside")}));
     EXPECT_FALSE(facts.value(QStringLiteral("download")).toString().isEmpty());
     // Its metadata unread: its facts without "access", so the page says nothing of what it can reach (PR #58).
     storetest::writeFile(s.path(QStringLiteral("fixture/nometa")), "");
@@ -951,7 +1094,8 @@ TEST(StoreBackend, Flathub)
     const QVariantList refs = plans.last().value(QStringLiteral("packages")).toList();
     ASSERT_EQ(refs.size(), 2);
     EXPECT_EQ(refs.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("org.gnome.Platform"));
-    EXPECT_EQ(plans.last().value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home")}));
+    EXPECT_EQ(plans.last().value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login"),
+                                                                                    QStringLiteral("outside")}));
 
     // Installed by the queue: then in Installed's Flatpak group, beside the user's other Flatpak.
     ASSERT_TRUE(backend.install(QStringLiteral("org.example.Notes")));

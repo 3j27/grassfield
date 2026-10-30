@@ -8,6 +8,9 @@
 #   2 plugin     the compositor plugin and its unit-test binary built with CMake/Ninja against the INSTALLED Hyprland headers
 #   3 comp-tests the compositor unit tests (compositor/build/grassfield-compositor-tests) run as their own step: in a clean
 #                tree `just test` finds no binary and records them as a silent skip, so they are not left to it
+#   3b comp-asan the same suite built with AddressSanitizer and UndefinedBehaviorSanitizer (compositor/build-direct.sh
+#                tests-asan), with the parsers' mutation fuzzing at its long budget (ADR-0041 step 5: GF_FUZZ_ITERATIONS
+#                50000 per parser instead of 2000)
 #   4 test       `just test` of the snapshot (QML unit tests, gtest suites, bridge logic, inventory gate), run after 2 and 3
 #   5 coverage   scripts/gates/coverage.sh: line coverage of the compositor core and the menu bridge logic (Q3, >= 70 %)
 #   6 secrets    gitleaks over the WHOLE history of this repository (gate S1)
@@ -82,6 +85,10 @@ step plugin just plugin-build
 step comp-tests compositor/build/grassfield-compositor-tests
 if want comp-tests && [[ ${names[${#names[@]} - 1]:-} == comp-tests ]]; then
   notes[${#notes[@]} - 1]=$(grep -a -E '^\[  (PASSED|FAILED)  \]' "$logs/comp-tests.log" | head -n 2 | paste -sd';' - | sed 's/\[ *//g; s/ *\]//g')
+fi
+step comp-asan sh -c 'compositor/build-direct.sh tests-asan && GF_FUZZ_ITERATIONS=50000 compositor/build/grassfield-compositor-tests-asan'
+if want comp-asan && [[ ${names[${#names[@]} - 1]:-} == comp-asan ]]; then
+  notes[${#notes[@]} - 1]=$(grep -a -E '^\[  (PASSED|FAILED)  \]' "$logs/comp-asan.log" | head -n 2 | paste -sd';' - | sed 's/\[ *//g; s/ *\]//g')
 fi
 step test just test
 if want test && [[ ${#names[@]} -gt 0 ]]; then

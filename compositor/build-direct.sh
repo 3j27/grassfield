@@ -2,7 +2,9 @@
 # Interim build of grassfield-compositor without CMake/Ninja (not installed yet; see README.md).
 # Writes the same outputs as the CMake build: build/grassfield-compositor.so, build/grassfield-compositor-tests
 # and build/compile_commands.json (for clang-tidy, gate Q1).
-# Usage: compositor/build-direct.sh [plugin|tests|compdb|all|tidy]   (default: all = plugin + tests + compdb)
+# Usage: compositor/build-direct.sh [plugin|tests|tests-asan|compdb|all|tidy]   (default: all = plugin + tests + compdb)
+#   tests-asan: the unit tests (ParserFuzzTest included) built again with -fsanitize=address,undefined into
+#   build/grassfield-compositor-tests-asan (ADR-0041 step 5); `tests` and `tests-asan` need gtest only, not Hyprland's headers.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
@@ -17,7 +19,7 @@ plugin_srcs=("${glue_srcs[@]}" "${core_srcs[@]}")
 test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
   tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
   tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp tests/ClientChromeTest.cpp tests/FrameLogTest.cpp tests/QuietTest.cpp
-  tests/NoticesTest.cpp tests/RunModeTest.cpp tests/TopClampTest.cpp)
+  tests/NoticesTest.cpp tests/RunModeTest.cpp tests/TopClampTest.cpp tests/ParserFuzzTest.cpp)
 
 # Every source file is in one of the lists above, which also feed the compile database and so clang-tidy
 # (scripts/dev/tidy.sh): a file left out was neither built here nor linted (core/Notices.cpp and its test were, until
@@ -53,11 +55,17 @@ protocols() {
   fi
 }
 
-# Lua symbols are resolved at load time from Hyprland's own liblua (5.5): only Lua's headers are needed.
-# shellcheck disable=SC2207
-plugin_flags=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <../VERSION)\"" -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
-# shellcheck disable=SC2207
-plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
+# Lua symbols are resolved at load time from Hyprland's own liblua (5.5): only Lua's headers are needed. The plugin's
+# flags are asked of pkg-config only for the modes that build or lint the plugin: the tests need no Hyprland headers
+# (a machine or a container without them still runs `tests` and `tests-asan`).
+plugin_flags=()
+plugin_libs=()
+if [[ $what == plugin || $what == all || $what == compdb || $what == tidy ]]; then
+  # shellcheck disable=SC2207
+  plugin_flags=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <../VERSION)\"" -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
+  # shellcheck disable=SC2207
+  plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
+fi
 # Pure logic only (src/core): no Hyprland headers, no compositor needed.
 # shellcheck disable=SC2207
 # GF_PLUGIN_SOURCE_DIR: QuietTest reads the plugin's sources (every key listener opens the quiet scope), as CMakeLists.txt.
@@ -75,6 +83,13 @@ fi
 
 if [[ $what == tests || $what == all ]]; then
   g++ "${test_flags[@]}" "${test_srcs[@]}" "${core_srcs[@]}" "${test_libs[@]}" -o build/grassfield-compositor-tests
+fi
+
+# The same tests under AddressSanitizer and UndefinedBehaviorSanitizer (ADR-0041 step 5: the fuzzed parsers run inside the
+# compositor, so a memory error there is a session lost). Not part of `all`: it doubles the build time; scripts/dev/test.sh
+# runs the binary when it exists, `just release-check` builds it.
+if [[ $what == tests-asan ]]; then
+  g++ "${test_flags[@]}" -fsanitize=address,undefined -fno-omit-frame-pointer "${test_srcs[@]}" "${core_srcs[@]}" "${test_libs[@]}" -o build/grassfield-compositor-tests-asan
 fi
 
 # One compile command per translation unit, with the exact flags used above.

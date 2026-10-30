@@ -228,6 +228,15 @@ inline QString flatpakExports()
     return flatpakUserDir() + QStringLiteral("/exports/share");
 }
 
+// Whether this session sees them: XDG_DATA_DIRS names the folder (flatpak's profile.d and environment generator add it at
+// login, S20).
+inline bool flatpakExportsSeen()
+{
+    const QString exports = flatpakExports();
+    const QStringList dirs = qEnvironmentVariable("XDG_DATA_DIRS").split(QLatin1Char(':'));
+    return dirs.contains(exports) || dirs.contains(exports + QLatin1Char('/'));
+}
+
 inline const QString gpgv = QStringLiteral("/usr/bin/gpgv");
 inline const QString bsdtar = QStringLiteral("/usr/bin/bsdtar");
 

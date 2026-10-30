@@ -118,9 +118,9 @@ struct SetupCheck {
 // when every one matches; "(no pins)" for an empty list (nothing says the files are the ones read).
 QString omarchyDifference(const QString &root, const QList<std::pair<QString, QString>> &pins);
 
-// The files of Omarchy's folder the catalog must pin for a recipe or one of the AUR's two commands: its own, and for
-// omarchy-pkg-aur-add the omarchy-pkg-missing it calls first (grassfield-packages pins the whole closure; a catalog that
-// does not is treated as one that does not pin the command).
+// The files of Omarchy's folder the catalog must pin for a recipe, one of the AUR's two commands or Get Flatpak's
+// omarchy-pkg-add: its own, and for omarchy-pkg-aur-add and omarchy-pkg-add the omarchy-pkg-missing they call first
+// (grassfield-packages pins the whole closure; a catalog that does not is treated as one that does not pin the command).
 QStringList requiredPins(const QString &recipe);
 
 // Someone holds `path` with flock (Omarchy's update lock): asked by taking it without waiting and letting it go at once.
