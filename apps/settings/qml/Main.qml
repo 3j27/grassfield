@@ -460,7 +460,7 @@ Window {
             bottomMargin: Tokens.controlFocusOutline
             clip: true
             // The wheel and two-finger scrolling move the list (macOS), stopping at the ends; the mouse never drags it, so a
-            // click on a row always selects it. The overlay scroll bar shows while it moves.
+            // click on a row always selects it. The shared overlay scroll bar sits on the right edge (faint when idle).
             acceptedButtons: Qt.NoButton
             boundsBehavior: Flickable.StopAtBounds
             keyNavigationEnabled: false
@@ -470,13 +470,34 @@ Window {
             ScrollBar.vertical: ScrollBar {}
 
             // The selected row stays in view whoever selected it: keys, a click, search, a deep link, back and forward.
+            // Its focus ring (outside the row) stays inside the clipped list too, which positionViewAtIndex does not allow for.
             function showSelected(): void {
                 const hub = root.parentOf(root.selectedId);
                 for (let i = 0; i < root.filtered.length; i++) {
                     if (root.filtered[i].id === root.selectedId || root.filtered[i].id === hub) {
                         list.positionViewAtIndex(i, ListView.Contain);
+                        const item = list.itemAtIndex(i);
+                        if (item) {
+                            const ring = Tokens.controlFocusOutline;
+                            const top = item.y + item.height - Tokens.settingsSidebarItemHeight - ring;
+                            const bottom = item.y + item.height + ring;
+                            if (top < list.contentY)
+                                list.contentY = top;
+                            else if (bottom > list.contentY + list.height)
+                                list.contentY = bottom - list.height;
+                        }
                         return;
                     }
+                }
+            }
+
+            // Search results (macOS) start at the top; clearing the search brings the selected section back into view.
+            function showResults(): void {
+                if (root.query.trim() === "") {
+                    list.showSelected();
+                } else {
+                    list.positionViewAtBeginning();
+                    list.contentY = list.originY - list.topMargin;
                 }
             }
 
@@ -486,7 +507,7 @@ Window {
                     list.showSelected();
                 }
                 function onFilteredChanged(): void {
-                    Qt.callLater(list.showSelected);
+                    Qt.callLater(list.showResults);
                 }
             }
 
@@ -596,7 +617,8 @@ Window {
                     CountBadge {
                         id: countBadge
                         anchors.right: parent.right
-                        anchors.rightMargin: Tokens.spacingSm
+                        // Clear of the overlay scroll bar (its width plus the gap it keeps).
+                        anchors.rightMargin: Tokens.controlScrollbarWidth + Tokens.spacingXs
                         anchors.verticalCenter: parent.verticalCenter
                         count: entry.modelData.id === "general" || entry.modelData.id === "software-update" ? updateState.count : 0
                     }
