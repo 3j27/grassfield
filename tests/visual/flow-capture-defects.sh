@@ -72,7 +72,8 @@ vs_spawn "$b/grassfield-settings"
 vs_spawn "$b/grassfield-preview" "$img/img1.png"
 vs_spawn "$b/grassfield-activity"
 files='org\.grassfield\.Files'
-fl_check_wait "two Files windows" 40 test "$(fl_window_count "$files")" -ge 2
+two_files() { [[ $(fl_window_count "$files") -ge 2 ]]; }
+fl_check_wait "two Files windows" 40 two_files
 fl_check_wait "Settings opens" 40 fl_has_window 'org\.grassfield\.Settings'
 fl_check_wait "Preview opens" 40 fl_has_window '^org\.grassfield\.Preview$'
 fl_check_wait "Activity Monitor opens" 40 fl_has_window 'org\.grassfield\.Activity'
@@ -93,21 +94,6 @@ vs_sleep 1
 tiles=$(vs_ipc dock tiles)
 echo "dock tiles: $tiles"
 
-# 7. Glance on top of Preview: no Dock tile, the bar keeps naming Preview
-fl_focus_class '^org\.grassfield\.Preview$' >/dev/null
-vs_sleep 1
-fl_shot before-glance >/dev/null
-vs_spawn "$b/grassfield-preview" --glance -- "$img/img2.png"
-fl_check_wait "Glance opens" 30 fl_has_window 'Preview\.Glance'
-vs_sleep 2
-fl_check "Glance has the focus" fl_active_is 'Preview\.Glance'
-tiles=$(vs_ipc dock tiles)
-echo "dock tiles with Glance: $tiles"
-fl_check "no Dock tile for Glance" test "$(grep -ci glance <<<"$tiles")" = 0
-fl_shot glance >/dev/null
-fl_close_windows 'Preview\.Glance'
-vs_sleep 1
-
 # 9. the Window menu and a Dock menu with a checked window
 fl_focus_class "$files" >/dev/null
 vs_sleep 1
@@ -124,6 +110,19 @@ if [[ $idx != null && -n $idx ]]; then
   fl_shot dock-menu >/dev/null
   vs_ipc menubar close >/dev/null
 fi
+
+# 7. Glance on top of Preview: no Dock tile, the bar keeps naming Preview
+fl_focus_class '^org\.grassfield\.Preview$' >/dev/null
+vs_sleep 1
+fl_shot before-glance >/dev/null
+vs_spawn "$b/grassfield-preview" --glance -- "$img/img2.png"
+fl_check_wait "Glance opens" 30 fl_has_window 'Preview\.Glance'
+vs_sleep 2
+fl_check "Glance has the focus" fl_active_is 'Preview\.Glance'
+tiles=$(vs_ipc dock tiles)
+echo "dock tiles with Glance: $tiles"
+fl_check "no Dock tile for Glance" test "$(grep -ci glance <<<"$tiles")" = 0
+fl_shot glance >/dev/null
 
 # 8. a stack in Grid view with long names
 fix=$VS_DEV/stackfix
