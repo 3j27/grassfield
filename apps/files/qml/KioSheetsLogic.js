@@ -254,6 +254,24 @@ function notice(request) {
     };
 }
 
+// A document whose type has no application (KIO's Open With question; ADR-0035 5c-3): Finder's alert without its App Store
+// button. Choose Application… (the default) opens the Choose Application panel; Cancel and Esc open nothing.
+function noApplication(request) {
+    return {
+        title: qsTr("There is no application set to open the document “%1”.").arg(request.name),
+        message: qsTr("Choose an application on this computer to open it."),
+        confirmText: qsTr("Choose Application…"),
+        confirmId: "choose",
+        destructive: false,
+        showCancel: true,
+        cancelText: qsTr("Cancel"),
+        cancelId: "cancel",
+        returnCancels: false,
+        extras: [],
+        applyToAll: false
+    };
+}
+
 // The sheet for `request`, or null for none (no question, or a kind this version doesn't know: it stops the operation).
 function sheet(request) {
     if (!request || request.id === undefined)
@@ -271,6 +289,8 @@ function sheet(request) {
         return certificate(request);
     case "notice":
         return notice(request);
+    case "noApplication":
+        return noApplication(request);
     }
     return null;
 }

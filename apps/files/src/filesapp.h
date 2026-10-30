@@ -39,6 +39,9 @@ class FilesApp : public QObject
     Q_PROPERTY(QObject *places READ places CONSTANT)
     // KIO's questions (conflicts, skips, certificates…), shown as sheets by the browser window (ADR-0035 D-12 a).
     Q_PROPERTY(QObject *prompts READ prompts CONSTANT)
+    // Files' Choose Application panels (Open With > Other…, KIO's question when a type has no application; ADR-0035 D-5,
+    // step 5c): qml/Main.qml makes each one.
+    Q_PROPERTY(QObject *applicationChooser READ applicationChooser CONSTANT)
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
@@ -110,6 +113,7 @@ public:
 
     QObject *places() const;
     QObject *prompts() const;
+    QObject *applicationChooser() const;
     QString homePath() const;
     QList<QUrl> initialUrls() const { return m_initialUrls; }
     bool dark() const { return m_dark; }
@@ -211,6 +215,8 @@ public:
     // [{id, name}] of the applications registered for the first item's MIME type, preferred first.
     Q_INVOKABLE QVariantList applicationsFor(const QList<QUrl> &urls) const;
     Q_INVOKABLE void openWith(const QString &storageId, const QList<QUrl> &urls);
+    // Open With > Other…: the Choose Application panel for `urls`; the application chosen opens them (openWith).
+    Q_INVOKABLE void chooseApplication(const QList<QUrl> &urls);
     // The Applications location (grassfield-apps:/): the installed applications as Finder's Applications folder shows them.
     // launchApplication starts the application of a grassfield-app:/<id> item (nothing else) the way the shell's
     // Apps grid does (ApplicationsLogic::launchCommand: xdg-terminal-exec for Terminal=true, uwsm-app scope in a session).

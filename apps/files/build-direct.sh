@@ -56,7 +56,7 @@ if [[ ${1:-} == "--tests" ]]; then
   g++ "${cxxflags[@]}" "${kfdefs[@]}" "-DFILES_SOURCE_DIR=\"$here/src\"" -I"$here/src" -I"$root/apps" "${kf_includes[@]}" \
     $(pkg-config --cflags Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick) \
     "$root/tests/unit/files/tst_kioprompts.cpp" "$root/tests/unit/files/tst_kiodialogs.cpp" "$root/tests/unit/files/tst_folderchooser.cpp" \
-    "$root/tests/unit/files/tst_diskprobe.cpp" \
+    "$root/tests/unit/files/tst_diskprobe.cpp" "$root/tests/unit/files/tst_applicationchooser.cpp" \
     "$out/libgrassfield-files-core.a" \
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Widgets Qt6DBus Qt6Network Qt6Qml Qt6Quick wayland-client) "${kf_libs[@]}" -lgtest -pthread -o "$out/files-kio-tests"
   echo "built $out/files-kio-tests"
@@ -89,14 +89,14 @@ compile() {
 
 defs=()
 mocs=()
-for h in foldermodel placesmodel filesapp tagsearch recents kioprompts diskprobe; do
+for h in foldermodel placesmodel filesapp tagsearch recents kioprompts applicationchooser diskprobe; do
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
 compile "$out/files-core-obj" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp" "$here/src/diskprobe.cpp" \
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
   "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
-  "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "${mocs[@]}"
+  "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "$here/src/applicationchooser.cpp" "${mocs[@]}"
 core=$out/libgrassfield-files-core.a
 rm -f "$core"
 ar rcs "$core" "${objs[@]}"

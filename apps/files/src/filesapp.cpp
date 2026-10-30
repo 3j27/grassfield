@@ -317,6 +317,11 @@ QObject *FilesApp::prompts() const
     return m_prompts;
 }
 
+QObject *FilesApp::applicationChooser() const
+{
+    return m_prompts->applications();
+}
+
 QString FilesApp::homePath() const
 {
     return QDir::homePath();
@@ -871,6 +876,22 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
             emit operationFailed(job->errorString());
     });
     job->start();
+}
+
+void FilesApp::chooseApplication(const QList<QUrl> &urls)
+{
+    if (urls.isEmpty())
+        return;
+    for (const QUrl &u : urls) {
+        if (u.scheme() == QLatin1String("grassfield-app") || ApplicationsLogic::isLocationUrl(u)) {
+            emit operationFailed(tr("An application is not a file: it cannot be opened with another application."));
+            return;
+        }
+    }
+    m_prompts->applications()->ask(urls, {}, nullptr, [this, urls](const QString &id) {
+        if (!id.isEmpty())
+            openWith(id + QLatin1String(".desktop"), urls);
+    });
 }
 
 QUrl FilesApp::applicationsUrl() const
