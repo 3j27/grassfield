@@ -79,7 +79,7 @@ SettingsPage {
     Component.onCompleted: {
         root.info = root.collect();
         for (const pkg of root.packages)
-            root.backend.query(["pacman", "-Q", pkg], "about.pacman." + pkg, Tokens.settingsAboutQueryTimeout, true);
+            root.backend.readOnlyQuery(["pacman", "-Q", pkg], "about.pacman." + pkg, Tokens.settingsAboutQueryTimeout, true);
         root.screens = root.backend.screens();
         root.volume = General.startupVolume(root.backend.volumes());
         root.system.queryBus("host.state", "host.state");

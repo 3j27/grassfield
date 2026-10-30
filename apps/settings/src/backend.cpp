@@ -222,6 +222,17 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs, 
     start(argv, tag, timeoutMs, m_queries.begin(tag, key) ? Track::Query : Track::None);
 }
 
+void Backend::readOnlyQuery(const QStringList &argv, const QString &tag, int timeoutMs, bool shared)
+{
+    if (!grassfield::settings::isReadOnlyQuery(argv)) {
+        if (!argv.isEmpty())
+            qWarning().noquote() << "refused a read-only query that is not one:" << argv.first();
+        emit finished(tag, false, QString());
+        return;
+    }
+    query(argv, tag, timeoutMs, shared);
+}
+
 bool Backend::beginAction(const QString &tag, const QString &what)
 {
     if (!m_actions.begin(tag, what)) {

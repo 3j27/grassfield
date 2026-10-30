@@ -4,9 +4,9 @@ import "SysInfo.js" as SysInfo
 
 // The computer's processor, memory and graphics in the UI language: Settings > General > About and the About This Computer
 // window (AboutWindow.qml, ADR-0040 ID-19) show the same lines. "" for what could not be read.
-// Nothing here waits on the GUI thread (review of ce69dc6): lspci runs as a query and fills `graphics` when it answers
-// (`graphicsDone`); /proc/cpuinfo and /proc/meminfo are kernel memory, read in place in microseconds, as Main.qml reads
-// /proc/bus/input/devices.
+// Nothing here waits on the GUI thread (review of ce69dc6): lspci runs as a read-only query (Backend.readOnlyQuery: the
+// allow-list in every session) and fills `graphics` when it answers (`graphicsDone`); /proc/cpuinfo and /proc/meminfo are
+// kernel memory, read in place in microseconds, as Main.qml reads /proc/bus/input/devices.
 QtObject {
     id: root
 
@@ -46,5 +46,5 @@ QtObject {
         }
     }
 
-    Component.onCompleted: root.backend.query(["lspci"], root.graphicsTag, Tokens.settingsAboutQueryTimeout, true)
+    Component.onCompleted: root.backend.readOnlyQuery(["lspci"], root.graphicsTag, Tokens.settingsAboutQueryTimeout, true)
 }

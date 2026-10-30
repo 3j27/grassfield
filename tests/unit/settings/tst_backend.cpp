@@ -218,6 +218,33 @@ TEST_F(BackendTest, ASharedQueryStillRunningIsReused)
     EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 3);
 }
 
+// About's lspci and pacman -Q (AboutFacts.qml, AboutPage.qml) are read-only queries (the re-review of c6cf328): held to
+// systemguard.h's allow-list in a real session too, where query() alone runs whatever a page asks for, as run() did.
+TEST_F(BackendTest, AReadOnlyQueryTakesOnlyTheAllowListInARealSession)
+{
+    writeRecorder(QStringLiteral("lspci"), "00:02.0 VGA compatible controller: Intel Corporation Device");
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.readOnlyQuery({QStringLiteral("gf-fake-query")}, QStringLiteral("stray"));
+    EXPECT_EQ(seen.finished.value(QStringLiteral("stray")), 1); // refused at once
+    EXPECT_FALSE(seen.ok.value(QStringLiteral("stray")));
+    backend.readOnlyQuery({QStringLiteral("lspci"), QStringLiteral("-vv")}, QStringLiteral("stray"));
+    EXPECT_EQ(seen.finished.value(QStringLiteral("stray")), 2);
+    backend.readOnlyQuery({QStringLiteral("lspci")}, QStringLiteral("facts.lspci"), 5000, true);
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("facts.lspci")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("facts.lspci")));
+    EXPECT_TRUE(seen.output.value(QStringLiteral("facts.lspci")).contains(QStringLiteral("VGA")));
+    spinUntil([] { return false; }, 400);
+    EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 0);
+    EXPECT_EQ(recorded(QStringLiteral("lspci")).size(), 1); // the allowed form only, once
+
+    // query() runs it in a real session: the backstop is readOnlyQuery's own.
+    backend.query({QStringLiteral("gf-fake-query")}, QStringLiteral("plain"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("plain")) >= 1; }));
+    EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 1);
+}
+
 // ---- actions: one per tag while it may wait for a password ----
 
 // Language & Region shown again while Omarchy's prompt is up (omarchy-language may wait for pkexec) cannot start a second

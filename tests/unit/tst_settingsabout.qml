@@ -55,7 +55,7 @@ TestCase {
             }
             function watch(path: string): void {
             }
-            function query(argv: var, tag: string, timeoutMs: int, shared: bool): void {
+            function readOnlyQuery(argv: var, tag: string, timeoutMs: int, shared: bool): void {
                 queries.push({argv: argv, tag: tag, shared: shared});
             }
             function busQuery(what: string, tag: string): void {
