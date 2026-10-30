@@ -12,10 +12,10 @@ check() { # <description> <condition exit status>
   if [[ $2 -eq 0 ]]; then echo "PASS stack_label_wrap: $1"; else echo "FAIL stack_label_wrap: $1"; fail=1; fi
 }
 # The Text block that shows the grid cell's name: from `text: DisplayName.text(cell.modelData.name)` up to its closing brace.
-block=$(awk '/text: DisplayName.text\(cell.modelData.name\)/ { on = 1 } on { print } on && /^                }$/ { exit }' "$f")
+block=$(awk '/id: nameLabel/ { on = 1 } on { print } on && /^                }$/ { exit }' "$f")
 [[ -n $block ]] || { echo "FAIL stack_label_wrap: the Grid cell's label was not found in $f"; exit 1; }
-grep -q 'wrapMode: Text.WordWrap' <<<"$block"; check "the Grid label wraps at word boundaries" $?
-grep -q 'elide: Text.ElideMiddle' <<<"$block"; check "the Grid label is truncated in the middle" $?
+grep -q 'Stacks.labelLines(DisplayName.text(cell.modelData.name)' <<<"$block"; check "the Grid label text comes from Stacks.labelLines (words, middle cut of line 2)" $?
+grep -q 'wrapMode: Text.NoWrap' <<<"$block"; check "the Grid label does no wrapping of its own (labelLines already did)" $?
 grep -q 'maximumLineCount: 2' <<<"$block"; check "the Grid label has two lines at most" $?
 ! grep -q 'WrapAnywhere\|WrapAtWordBoundaryOrAnywhere' "$f"; check "no mid-word wrapping in the Dock stack" $?
 exit $fail

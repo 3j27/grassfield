@@ -1,10 +1,11 @@
 import QtQuick
 import QtTest
+import "../../shell/dock/Stacks.js" as Stacks
 
-// Capture defect 8: a label of the Dock stack's Grid view wraps at word boundaries and is truncated in the middle (macOS), never
-// split inside a word ("Présentation.od/p"). The Text below has the properties of the Grid cell's label in
-// shell/overlay/StackPopup.qml (tests/shell/stack_label_wrap.sh holds the two together); the cell is 76 pt wide at the
-// caption size.
+// Capture defect 8 and review MINOR 3: a label of the Dock stack's Grid view wraps at word boundaries onto two lines and is cut in
+// the MIDDLE of the second line, keeping the end of the name (its extension), as macOS stack labels do; never split inside a word
+// ("Présentation.od/p"). Stacks.labelLines decides the visible text; the real font metrics measure it here as in the cell of
+// shell/overlay/StackPopup.qml (76 pt wide at the caption size). The tests read the text that is shown, not a "truncated" flag.
 TestCase {
     id: testCase
     name: "StackLabel"
@@ -13,56 +14,56 @@ TestCase {
     visible: true
     when: windowShown
 
-    Component {
-        id: label
-        Text {
-            width: 76
-            font.pixelSize: 11
-            maximumLineCount: 2
-            elide: Text.ElideMiddle
-            wrapMode: Text.WordWrap
-        }
+    readonly property real cell: 76
+
+    FontMetrics {
+        id: metrics
+        font.pixelSize: 11
     }
 
-    function show(text) {
-        const t = createTemporaryObject(label, testCase, {text: text});
-        verify(t !== null);
-        wait(20);
-        return t;
+    function label(name) {
+        return Stacks.labelLines(name, t => metrics.advanceWidth(t) <= cell, t => metrics.elidedText(t, Qt.ElideMiddle, cell));
     }
 
-    // A name with no space is one line, shortened in the middle: it is never broken into two lines.
-    function test_aLongSingleWordIsTruncatedInTheMiddle() {
-        const t = show("Présentationtrimestrielledevente.odp");
-        compare(t.lineCount, 1);
-        verify(t.truncated);
-        verify(t.contentWidth <= t.width);
+    function widest(text) {
+        return Math.max(...text.split("\n").map(l => metrics.advanceWidth(l)));
+    }
+
+    function test_aLongSingleWordIsOneLineCutInTheMiddle() {
+        const t = label("Présentationtrimestrielledevente.odp");
+        compare(t.split("\n").length, 1);
+        verify(t.indexOf("…") > 0, "an ellipsis in the middle: " + t);
+        verify(t.endsWith(".odp"), "the extension stays: " + t);
+        verify(t.startsWith("Prés"), t);
+        verify(widest(t) <= cell);
     }
 
     function test_wordsWrapAtTheirBoundaries() {
-        const t = show("Photo de vacances.jpg");
-        compare(t.lineCount, 2);
-        verify(!t.truncated);
+        const t = label("Photo de vacances.jpg");
+        const lines = t.split("\n");
+        compare(lines.length, 2);
+        compare(lines.join(" "), "Photo de vacances.jpg");
+        verify(t.indexOf("…") < 0);
     }
 
-    function test_threeLinesOfWordsAreTruncated() {
-        const t = show("Rapport annuel 2025 final version definitive.pdf");
-        compare(t.lineCount, 2);
-        verify(t.truncated);
+    // The case of the capture: too long for two lines. The second line is cut in the middle and ends with the extension.
+    function test_theSecondLineIsCutInTheMiddleAndKeepsTheExtension() {
+        const t = label("Rapport annuel 2025 final version definitive.pdf");
+        const lines = t.split("\n");
+        compare(lines.length, 2);
+        verify("Rapport annuel".startsWith(lines[0]), "the first line is whole words: " + lines[0]);
+        verify(lines[1].indexOf("…") > 0, "an ellipsis inside the second line: " + lines[1]);
+        verify(!lines[1].startsWith("…"), lines[1]);
+        verify(lines[1].endsWith(".pdf"), "the extension stays: " + lines[1]);
+        verify(widest(t) <= cell);
     }
 
     function test_aShortNameIsOneLine() {
-        const t = show("Documents");
-        compare(t.lineCount, 1);
-        verify(!t.truncated);
+        compare(label("Documents"), "Documents");
+        compare(label(""), "");
     }
 
-    // The mode the cell used to have splits a word across two lines.
-    function test_wrapAnywhereWouldSplitTheWord() {
-        const t = createTemporaryObject(label, testCase, {text: "Présentation.odp", wrapMode: Text.WrapAnywhere});
-        wait(20);
-        compare(t.lineCount, 2);
-        const w = show("Présentation.odp");
-        compare(w.lineCount, 1);
+    function test_spacesAreNormalised() {
+        compare(label("  a   b  "), "a b");
     }
 }

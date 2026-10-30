@@ -407,15 +407,22 @@ FocusScope {
                     size: root.iconSize
                 }
 
+                FontMetrics {
+                    id: labelMetrics
+                    font: nameLabel.font
+                }
+
+                // Two lines at most, wrapped at words, the end cut in the middle of the second line (Stacks.labelLines): Qt's own
+                // elide does not cut wrapped text, and would drop the extension.
                 Text {
+                    id: nameLabel
                     textFormat: Text.PlainText
                     x: Tokens.spacingXs
                     y: Tokens.spacingSm + root.iconSize + Tokens.spacingXs
                     width: parent.width - 2 * Tokens.spacingXs
-                    text: DisplayName.text(cell.modelData.name)
-                    elide: Text.ElideMiddle
+                    text: Stacks.labelLines(DisplayName.text(cell.modelData.name), t => labelMetrics.advanceWidth(t) <= nameLabel.width, t => labelMetrics.elidedText(t, Qt.ElideMiddle, nameLabel.width))
                     maximumLineCount: 2
-                    wrapMode: Text.WordWrap
+                    wrapMode: Text.NoWrap
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
