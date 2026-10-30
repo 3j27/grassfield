@@ -271,6 +271,38 @@ down, how sleep behaves) is written in the table at the end of this step.
   while locked: the session stays locked, the restarts stop, `$XDG_RUNTIME_DIR/grassfield/shell-safe-mode` exists;
   (4) the same while unlocked, then the lid brings the shell back; (5) a logout counts nothing.
 
+### S1 as built, first part (2026-10-30, the branch of the stability lane; the readers of the UI not yet freed)
+- `shell/security.qml`: a second root next to `shell.qml` (so `qs.*` resolves from the same directory and the modules
+  move later without moving a file), QtQuick + Quickshell + Quickshell.Io only, `settings.watchFiles: false`, one
+  `IpcHandler` `security` with `state` (`starting`) and `heartbeat` (the state and a sequence number), the journal line
+  "grassfield-security: ready" its start time is measured from; it hosts nothing moved yet, locks nothing, draws nothing.
+- `packaging/systemd/grassfield-security.service`: `ExecStart=/usr/bin/qs -n -p /usr/share/grassfield/shell/security.qml`,
+  the UI unit's `Environment=` and `UnsetEnvironment=` lines verbatim (a test keeps them identical), `Restart=always`,
+  `RestartSec=1`, `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `PartOf=`/`Requisite=graphical-session.target`,
+  `ConditionEnvironment=GRASSFIELD_SESSION=1`, no sandbox (the helpers of S2/S3), no `OnFailure=` yet (S2),
+  `MemoryHigh=256M`/`MemoryMax=512M`/`CPUQuota=50%` marked provisional until the measurement. `autostart.lua` starts it
+  just before the shell with `--no-block`; the PKGBUILD installs the unit (the root ships with the shell tree, the helper
+  from `packaging/bin`). `packaging/bin/grassfield-security-status`: read-only, prints the state, the heartbeat and the
+  unit's live values; it is the real-session caller of the two IPC functions (the IPC surface table has the row).
+- Deferred to S1's second part, which needs a Quickshell to run (none in this container): the UI-import freedom of
+  `shell/security/` (ADR-0010 S1: `LockView`'s `qs.desktop` backdrop through a `Grassfield.Ui` type, `Lock.lock()`'s
+  `Popups.close()` dropped since GF-116 closes popups on `SessionState.locked`, `SleepInhibitor`'s notice through the
+  notification server's D-Bus interface, `AuthAgent`'s and `Idle`'s `qs.services` reads), and the measurement.
+- Tests: `tests/security/security_unit.sh` (data: the root's imports, no module instantiated, the handler, the unit's
+  lines identical to the UI's, the start limit, the autostart order, the package, the helper, the IPC row; qmllint parses
+  the root where installed); `session_services.sh` knows the new unit in the autostart chain; the IPC surface table gains
+  the `security` row for `ipc_inventory.sh`; inventory 577.
+- Evidence (this container): `security_unit.sh` exit 0; `unit_restart_limits.sh`, `session_services.sh`,
+  `sleep_lock_units.sh`, `shell_unit_env.sh` exit 0; `python3 -I tests/ci/inventory.py` ok; `qmllint 6.4` parses
+  `shell/security.qml` (only the Quickshell modules are unknown to it). NOT VERIFIED: the process under Quickshell
+  (`ipc_inventory.sh` and `import_graph.py` need Qt's `qmldom` and `qmlimportscanner` at their Arch paths: the
+  integrator's `just check-quick`), the nested run (`qs -p shell/security.qml` beside the dev shell: one instance each,
+  `grassfield-security-status` answers `state=starting`), the measurement (RSS at idle with `scripts/gates/rss.sh --nested
+  --pid`, the start time from the unit's "Started" line to "grassfield-security: ready" in the journal), and the real
+  session (the unit starts at login before the shell, `systemctl --user status grassfield-security.service` active/running,
+  the helper's line).
+- Review: opus security (R12: a new process in the lock's future path; at S1 it changes nothing about the lock).
+
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
 of the session, never in a terminal.

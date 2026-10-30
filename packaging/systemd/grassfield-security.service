@@ -1,0 +1,47 @@
+[Unit]
+Description=Grassfield security process (the lock, the polkit agent, idle and the sleep inhibitor, moved in step by step)
+Documentation=file:///usr/share/doc/grassfield/README.md
+# ADR-0041 step 1 (the owner's SQ-1 B, ADR-0010 "Separate security process"): a second Quickshell process beside the UI,
+# so that a crash of the desktop never takes the lock down. S1 (this unit): the process runs beside the UI and hosts
+# nothing moved yet (shell/security.qml); S2 moves the lock, idle and the sleep inhibitor here (then this unit gets
+# OnFailure=omarchy-sleep-lock.service and the sleep-lock gate is keyed on it), S3 the polkit agent, S4 safe mode.
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+# Only inside the Grassfield session, never in the Omarchy session.
+ConditionEnvironment=GRASSFIELD_SESSION=1
+# A loop of this process ends at its fifth start in five minutes (ADR-0041 step 1b: the compositor then keeps any lock,
+# the known limit); with RestartSec=1 a loop faster than one crash every 59 s reaches it (tests/shell/unit_restart_limits.sh).
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Slice=session.slice
+# Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree (as the UI's unit).
+Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# The same cleared search paths and option variables as grassfield-shell.service (GF-115, the review of 360d6fa): a leaked
+# developer path or a stray QS_MANIFEST must not replace this process's QML either. tests/security/security_unit.sh keeps
+# the two lists identical; tests/security/shell_unit_env.sh derives the UI's from `qs --help`.
+UnsetEnvironment=QML_IMPORT_PATH QML2_IMPORT_PATH QML_PLUGIN_PATH QML_DISK_CACHE_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GTK_MODULES GTK3_MODULES GTK_PATH GIO_EXTRA_MODULES QT_VULKAN_LIB QSG_RHI_BACKEND
+# This process never asks the portal (no GTK platform theme work at start; gate P5, ADR-0035 D-4).
+UnsetEnvironment=GTK_USE_PORTAL
+# GF-115: the root is loaded by path from the system tree only; `qs.*` resolves from /usr/share/grassfield/shell, the
+# UI root's directory, so the security modules keep their place. Every `qs ipc` caller names this same path.
+ExecStart=/usr/bin/qs -n -p /usr/share/grassfield/shell/security.qml
+# Back within about 1 s after any exit while the session runs; a stop through systemd is never restarted (logout stops
+# graphical-session.target, PartOf=), and Requisite= refuses a start once the target is gone.
+Restart=always
+RestartSec=1
+TimeoutStopSec=5
+# Resource guard, provisional until the S1 measurement (ADR-0041 step 1: the process's RSS at idle and its start time are
+# measured in nested and in the real session, then these are set from them). At S1 the process hosts one IPC handler.
+MemoryHigh=256M
+MemoryMax=512M
+CPUQuota=50%
+# No NoNewPrivileges/ProtectSystem here on purpose, as for the UI's unit: from S2 the lock and from S3 the polkit agent
+# rely on the setuid/setgid helpers unix_chkpwd and polkit-agent-helper-1, which NoNewPrivileges would break, leaving the
+# session unable to unlock.
+
+[Install]
+WantedBy=graphical-session.target
