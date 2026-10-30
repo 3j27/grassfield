@@ -24,22 +24,28 @@ SettingsPage {
     // up shows it too and cannot send a second one.
     readonly property bool waiting: (root.backend.pendingActions ?? {})["host.act"] !== undefined
 
-    function pacman(pkgs: var): string {
-        for (const pkg of pkgs) {
-            const v = SysInfo.pacmanVersion(root.backend.run(["pacman", "-Q", pkg]));
-            if (v !== "")
-                return v;
-        }
-        return "";
-    }
+    // The installed versions from `pacman -Q`, as queries off the GUI thread (review of ce69dc6): {package: version, "" when it
+    // is not installed} for each answer so far.
+    property var versions: ({})
+    readonly property var packages: ["hyprland", "quickshell", "quickshell-git"]
 
     function collect(): var {
         const osRelease = root.backend.readText("/etc/os-release").text;
         return {
-            omarchy: SysInfo.osReleaseValue(osRelease, "VERSION_ID") || SysInfo.osLabel(osRelease),
-            hyprland: root.pacman(["hyprland"]),
-            quickshell: root.pacman(["quickshell", "quickshell-git"])
+            omarchy: SysInfo.osReleaseValue(osRelease, "VERSION_ID") || SysInfo.osLabel(osRelease)
         };
+    }
+
+    // The first of `pkgs` installed; "" while pacman has not answered for all of them, "Unknown" when none is installed.
+    function versionText(pkgs: var): string {
+        let pending = false;
+        for (const pkg of pkgs) {
+            if (root.versions[pkg] === undefined)
+                pending = true;
+            else if (root.versions[pkg] !== "")
+                return root.versions[pkg];
+        }
+        return pending ? "" : root.unknown;
     }
 
     // Processor, memory and graphics, as the About This Computer window shows them.
@@ -72,6 +78,8 @@ SettingsPage {
 
     Component.onCompleted: {
         root.info = root.collect();
+        for (const pkg of root.packages)
+            root.backend.query(["pacman", "-Q", pkg], "about.pacman." + pkg, Tokens.settingsAboutQueryTimeout, true);
         root.screens = root.backend.screens();
         root.volume = General.startupVolume(root.backend.volumes());
         root.system.queryBus("host.state", "host.state");
@@ -87,6 +95,10 @@ SettingsPage {
                     nameField.text = General.computerName(root.host);
             } else if (tag === "host.act") {
                 root.system.queryBus("host.state", "host.state");
+            } else if (tag.startsWith("about.pacman.")) {
+                const answered = Object.assign({}, root.versions);
+                answered[tag.slice("about.pacman.".length)] = ok ? SysInfo.pacmanVersion(output) : "";
+                root.versions = answered;
             }
         }
     }
@@ -183,11 +195,11 @@ SettingsPage {
         }
         SettingsRow {
             title: qsTr("Hyprland")
-            valueText: root.info.hyprland || root.unknown
+            valueText: root.versionText(["hyprland"])
         }
         SettingsRow {
             title: qsTr("Quickshell")
-            valueText: root.info.quickshell || root.unknown
+            valueText: root.versionText(["quickshell", "quickshell-git"])
         }
         SettingsRow {
             title: qsTr("Qt")

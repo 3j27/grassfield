@@ -115,8 +115,7 @@ Singleton {
         const tops = root.toplevels ? root.toplevels.values : [];
         for (let i = 0; i < tops.length; i++) {
             const top = hyprlandToplevel(tops[i]);
-            const data = top ? top.lastIpcObject : null;
-            if (data && data.class === appClass && data.xdgTag === tag)
+            if (Minimized.hasTag(top ? top.lastIpcObject : null, appClass, tag))
                 return tops[i];
         }
         return null;

@@ -2,11 +2,12 @@ import QtQuick
 import QtTest
 import Grassfield.Ui
 
-// About This Computer (apps/settings/qml/AboutWindow.qml, ADR-0040 ID-19): the window maps once hostname1 has answered, or
-// after settings.aboutWindowRevealTimeout with what it has (P-2, P-6); computer first (the drawing by chassis, the model
-// name), then processor, memory, graphics and the product line, whose mark keeps the brand green whatever the accent; a
-// window of fixed size; More Info… opens Settings at General > About once, then brings that window back. The backend is a
-// fake in a dev session: nothing reaches a bus, a tool or a file.
+// About This Computer (apps/settings/qml/AboutWindow.qml, ADR-0040 ID-19): the window maps once hostname1 and lspci (a
+// query, off the GUI thread) have answered, or after settings.aboutWindowRevealTimeout with what it has, a late line then
+// filling in (P-2, P-6); computer first (the drawing by chassis, the model name), then processor, memory, graphics and the
+// product line, whose mark keeps the brand green whatever the accent; a line with nothing to say is not shown; a window of
+// fixed size that Esc and Ctrl+W close; More Info… opens Settings at General > About once, then brings that window back.
+// The backend is a fake in a dev session: nothing reaches a bus, a tool or a file.
 TestCase {
     id: testCase
     name: "SettingsAbout"
@@ -40,7 +41,7 @@ TestCase {
                     "/proc/meminfo": "MemTotal:       32555000 kB\n"
                 })
             property var busQueries: []
-            property var runs: []
+            property var queries: []
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
             signal fileChanged(string path)
@@ -54,11 +55,8 @@ TestCase {
             }
             function watch(path: string): void {
             }
-            function run(argv: var): string {
-                runs.push(argv);
-                return argv[0] === "lspci" ? "00:02.0 VGA compatible controller: Intel Corporation Raptor Lake-P [Iris Xe Graphics] (rev 04)\n" : "";
-            }
-            function query(argv: var, tag: string): void {
+            function query(argv: var, tag: string, timeoutMs: int, shared: bool): void {
+                queries.push({argv: argv, tag: tag, shared: shared});
             }
             function busQuery(what: string, tag: string): void {
                 busQueries.push({what: what, tag: tag});
@@ -82,9 +80,18 @@ TestCase {
         }
     }
 
-    function make(config) {
+    readonly property string lspci: "00:02.0 VGA compatible controller: Intel Corporation Raptor Lake-P [Iris Xe Graphics] (rev 04)\n"
+
+    // hostname1 and lspci answer.
+    function answer(t) {
+        t.backend.finished("about.host", true, testCase.host);
+        t.backend.finished("facts.lspci", true, testCase.lspci);
+    }
+
+    // `files` (optional) replaces the fake's /proc files.
+    function make(config, files) {
         // The backend outlives the window: it goes with the test case.
-        const backend = fakeBackend.createObject(testCase, {config: config ?? ""});
+        const backend = fakeBackend.createObject(testCase, files ? {config: config ?? "", files: files} : {config: config ?? ""});
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/AboutWindow.qml"));
         compare(comp.status, Component.Ready, comp.errorString());
         const win = createTemporaryObject(comp, testCase, {backend: backend, globalMenu: false});
@@ -127,11 +134,15 @@ TestCase {
 
     property var settingsWindows: []
 
-    function test_mapsOnceHostname1Answered() {
+    function test_mapsOnceHostname1AndLspciAnswered() {
         const t = make();
         verify(t.backend.busQueries.some(q => q.what === "host.state" && q.tag === "about.host"));
+        // lspci is a query (off the GUI thread), shared with General > About in the same process.
+        verify(t.backend.queries.some(q => q.argv.length === 1 && q.argv[0] === "lspci" && q.tag === "facts.lspci" && q.shared));
         verify(!t.win.visible, "nothing shows before hostname1 answers");
         t.backend.finished("about.host", true, testCase.host);
+        verify(!t.win.visible, "nothing shows before lspci answers");
+        t.backend.finished("facts.lspci", true, testCase.lspci);
         verify(t.win.visible);
         verify(text(t.win, "LENOVO ThinkPad X1 Carbon Gen 11"));
         compare(picture(t.win).kind, "laptop");
@@ -146,18 +157,49 @@ TestCase {
         tryVerify(() => t.win.visible, Tokens.settingsAboutWindowRevealTimeout * 3);
         verify(text(t.win, "Computer"));
         compare(picture(t.win).kind, "desktop");
+        // Graphics is not known yet: no line for it; lspci's late answer fills it in and the window grows to fit.
+        verify(!row(t.win, "Graphics").visible);
+        const before = t.win.height;
+        t.backend.finished("facts.lspci", true, testCase.lspci);
+        verify(row(t.win, "Graphics").visible);
+        compare(row(t.win, "Graphics").value, "Intel Iris Xe Graphics");
+        // The column lays out at the next polish.
+        tryVerify(() => t.win.height > before);
+        compare(t.win.height, t.win.maximumHeight);
+    }
+
+    function test_emptyLinesAreNotShown() {
+        // No /proc/meminfo, and lspci fails.
+        const t = make(undefined, {"/proc/cpuinfo": "processor\t: 0\nmodel name\t: AMD Ryzen 7 7840U\n"});
+        t.backend.finished("about.host", true, testCase.host);
+        t.backend.finished("facts.lspci", false, "");
+        verify(t.win.visible);
+        verify(row(t.win, "Processor").visible);
+        verify(!row(t.win, "Memory").visible);
+        verify(!row(t.win, "Graphics").visible);
+        verify(row(t.win, "Software").visible);
+    }
+
+    function test_escAndCtrlWClose() {
+        const t = make();
+        testCase.answer(t);
+        verify(t.win.visible);
+        const shortcut = Array.from(t.win.data).find(o => o.sequences !== undefined);
+        verify(shortcut, "the window's Shortcut");
+        verify(shortcut.sequences.indexOf("Esc") >= 0 && shortcut.sequences.indexOf("Ctrl+W") >= 0, String(shortcut.sequences));
+        shortcut.activated();
+        verify(!t.win.visible);
     }
 
     function test_facts() {
         const t = make();
-        t.backend.finished("about.host", true, testCase.host);
+        testCase.answer(t);
         compare(row(t.win, "Processor").value, "AMD Ryzen 7 7840U (2 threads)");
         compare(row(t.win, "Memory").value, "32 GB");
         compare(row(t.win, "Graphics").value, "Intel Iris Xe Graphics");
         compare(row(t.win, "Software").value, "Grassfield Desktop 1.0.0-rc1");
         verify(row(t.win, "Software").mark);
         verify(text(t.win, "Built for Omarchy · based on Arch Linux"));
-        verify(t.backend.runs.some(a => a[0] === "lspci"));
         // A window of fixed size, the titlebar-only style.
         compare(t.win.width, Tokens.settingsAboutWindowWidth);
         compare(t.win.minimumWidth, t.win.maximumWidth);
@@ -168,7 +210,7 @@ TestCase {
 
     function test_markKeepsTheBrandGreen() {
         const t = make('{"version":1,"accent":{"color":"blue"}}');
-        t.backend.finished("about.host", true, testCase.host);
+        testCase.answer(t);
         compare(Appearance.accentSetting, "blue");
         const mark = find(t.win.contentItem, i => i.name === "grassfield-logo" && i.visible);
         verify(mark);
@@ -177,7 +219,7 @@ TestCase {
 
     function test_moreInfoOpensSettingsOnce() {
         const t = make();
-        t.backend.finished("about.host", true, testCase.host);
+        testCase.answer(t);
         const button = find(t.win.contentItem, i => i.text === "More Info…" && i.clicked !== undefined);
         verify(button);
         button.clicked();

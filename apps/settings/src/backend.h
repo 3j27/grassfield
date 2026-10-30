@@ -109,7 +109,9 @@ public:
     // Atomic replace (QSaveFile); creates the directory. Returns "" on success, else an error message.
     Q_INVOKABLE QString writeText(const QString &path, const QString &text) const;
     // Run one of the read-only queries of systemguard.h::isReadOnlyQuery synchronously (no shell, 3 s timeout, C locale).
-    // Returns stdout, "" on any failure and for any command outside that list, in dev and real sessions alike.
+    // Returns stdout, "" on any failure and for any command outside that list, in dev and real sessions alike. No page calls
+    // it since the review of ce69dc6 (About's lspci and pacman -Q are queries: nothing waits on the GUI thread);
+    // tests/shell/settings_system_guard.sh still holds its allow-list.
     Q_INVOKABLE QString run(const QStringList &argv) const;
     // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev

@@ -1457,6 +1457,8 @@ QtObject {
     readonly property int settingsAboutWindowMarkSize: Math.round(14 * Appearance.textScale)
     // estimate: About This Computer maps once hostname1 has named the computer and its chassis (ADR-0040 P-2), at the latest after this long with what it has (P-6), ms; hostnamed starts on demand, a few hundred ms when cold [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
     readonly property int settingsAboutWindowRevealTimeout: 800
+    // lspci and pacman -Q for About This Computer and General > About, run as queries off the GUI thread (review of ce69dc6): the Backend's default query bound, ms (Backend::run, which they used, waited 3 s on the GUI thread) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/specs/settings.md]
+    readonly property int settingsAboutQueryTimeout: 5000
     // estimate: the screen bezel of About's device picture (Grassfield's own drawing; the macOS picture is Apple artwork) [ref: docs/audits/settings-parity-2026-10-26.md § About]
     readonly property string settingsDeviceBezel: "#1D1D1F"
     // estimate: the aluminium of About's device picture (Grassfield's own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § About]

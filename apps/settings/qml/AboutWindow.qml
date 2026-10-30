@@ -8,8 +8,9 @@ import "General.js" as General
 // Grassfield's drawing of the computer (DevicePicture, by hostname1's chassis) and its model name; processor, memory and
 // graphics (AboutFacts, the lines of Settings > General > About); the product line with the Grassfield mark in the brand
 // green (the default accent's green, whatever accent is chosen; IQ-B1 B); More Info…, which opens Settings at
-// General > About in this process; "Built for Omarchy · based on Arch Linux" (master-prompt §14). The window maps once
-// hostname1 has answered, at the latest after settings.aboutWindowRevealTimeout (P-2, P-6), and says so once in the log (P-8).
+// General > About in this process; "Built for Omarchy · based on Arch Linux" (master-prompt §14). Nothing waits on the GUI
+// thread (hostname1 and lspci answer asynchronously); the window maps once both have answered, at the latest after
+// settings.aboutWindowRevealTimeout with what it has, a late line then filling in (P-2, P-6), and says so once in the log (P-8).
 Window {
     id: root
 
@@ -20,9 +21,12 @@ Window {
     // ADR-0015: the titlebar-only style of Get Info; the compositor plugin draws no titlebar on it, and the shell finds this
     // window by its role to bring it forward (shell/services/SettingsApp.qml openAbout).
     property string gfChromeRole: "info"
-    // hostname1's answer (General.parseHost), null until it came or when it failed.
+    // hostname1's answer (General.parseHost), null until it came or when it failed; `hostDone` once it came.
     property var host: null
-    // hostname1 answered, or the wait ran out: the window maps.
+    property bool hostDone: false
+    // hostname1 and lspci have both answered.
+    readonly property bool answered: root.hostDone && root.facts.graphicsDone
+    // They answered, or the wait ran out: the window maps.
     property bool ready: false
     // The Settings window of More Info… (null before the first press): shown again rather than a second one.
     property var settingsWindow: null
@@ -78,14 +82,19 @@ Window {
             if (tag !== "about.host")
                 return;
             root.host = ok ? General.parseHost(output) : null;
-            root.reveal(root.host ? "hostname1 answered" : "hostname1 gave no answer");
+            root.hostDone = true;
         }
+    }
+
+    onAnsweredChanged: {
+        if (root.answered)
+            root.reveal((root.host ? "hostname1" : "no hostname1") + " and " + (root.facts.graphics !== "" ? "lspci" : "no lspci") + " answered");
     }
 
     Timer {
         interval: Tokens.settingsAboutWindowRevealTimeout
         running: !root.ready
-        onTriggered: root.reveal("hostname1 too slow")
+        onTriggered: root.reveal("the wait ran out: " + (root.hostDone ? "" : "hostname1 ") + (root.facts.graphicsDone ? "" : "lspci ") + "still to answer")
     }
 
     ConfigStore {

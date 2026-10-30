@@ -1,8 +1,12 @@
 import QtQuick
+import Grassfield.Ui
 import "SysInfo.js" as SysInfo
 
-// The computer's processor, memory and graphics in the UI language, read once when created: Settings > General > About and
-// the About This Computer window (AboutWindow.qml, ADR-0040 ID-19) show the same lines. "" for what could not be read.
+// The computer's processor, memory and graphics in the UI language: Settings > General > About and the About This Computer
+// window (AboutWindow.qml, ADR-0040 ID-19) show the same lines. "" for what could not be read.
+// Nothing here waits on the GUI thread (review of ce69dc6): lspci runs as a query and fills `graphics` when it answers
+// (`graphicsDone`); /proc/cpuinfo and /proc/meminfo are kernel memory, read in place in microseconds, as Main.qml reads
+// /proc/bus/input/devices.
 QtObject {
     id: root
 
@@ -24,6 +28,23 @@ QtObject {
         const gib = SysInfo.installedGiB(root.memoryBytes);
         return gib > 0 ? qsTr("%1 GB").arg(gib) : "";
     }
-    // The adapters' marketing names from lspci ("Intel Iris Xe Graphics").
-    readonly property string graphics: SysInfo.gpus(root.backend.run(["lspci"]))
+    // The adapters' marketing names from lspci ("Intel Iris Xe Graphics"), once it has answered.
+    property string graphics: ""
+    property bool graphicsDone: false
+
+    // One lspci for every reader in the process (a shared query: the About window and General > About ask together).
+    readonly property string graphicsTag: "facts.lspci"
+
+    property Connections answers: Connections {
+        target: root.backend
+
+        function onFinished(tag: string, ok: bool, output: string): void {
+            if (tag !== root.graphicsTag)
+                return;
+            root.graphics = ok ? SysInfo.gpus(output) : "";
+            root.graphicsDone = true;
+        }
+    }
+
+    Component.onCompleted: root.backend.query(["lspci"], root.graphicsTag, Tokens.settingsAboutQueryTimeout, true)
 }

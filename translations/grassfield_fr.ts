@@ -56,7 +56,7 @@
     </message>
     <message>
         <source>Software</source>
-        <translation>Logiciels</translation>
+        <translation>Logiciel</translation>
     </message>
     <message>
         <source>Grassfield</source>
