@@ -29,6 +29,8 @@ TestCase {
             property bool isTrash: false
             // The Applications location: the rows are applications, opened by launchApplication.
             property bool isApplications: false
+            // FolderModel.chooser: what a panel can take (FilePanel's tab sets it).
+            property var chooser: ({})
             property var selected: []
             property bool writable: true
             property bool isSearch: false
@@ -227,6 +229,32 @@ TestCase {
         function open(urls: var): void {
             fakeApp.opened = fakeApp.opened.concat(urls.map(u => String(u)));
         }
+        // Open With > Other… (FilesApp.chooseApplication) and the panels it asks for (FilesApp.applicationChooser, as
+        // ApplicationChooser: closed once answered).
+        property var chosen: []
+        function chooseApplication(urls: var): void {
+            fakeApp.chosen = fakeApp.chosen.concat([urls.map(u => String(u))]);
+        }
+        property QtObject applicationChooser: QtObject {
+            id: fakeChooser
+            signal opened(int id, var request)
+            signal closed(int id)
+            property var answers: []
+            function answer(id: int, response: int, answer: var): void {
+                fakeChooser.answers = fakeChooser.answers.concat([[id, response, answer.choice ?? ""]]);
+                fakeChooser.closed(id);
+            }
+        }
+        function applicationsUrl(): url {
+            return "grassfield-apps:/";
+        }
+        function applicationUrl(id: string): url {
+            return "grassfield-app:/" + id;
+        }
+        function applicationId(target: url): string {
+            const s = String(target);
+            return s.startsWith("grassfield-app:/") ? s.substring(16) : "";
+        }
         function baseNameLength(name: string, isDir: bool): int {
             return name.length;
         }
@@ -385,6 +413,82 @@ TestCase {
         tab.openSelection();
         compare(fakeApp.launched, [], "a folder of files launches nothing");
         compare(fakeApp.opened, [String(folder.url)], "the file is opened");
+    }
+
+    // Open With (ADR-0035 5c-1): Finder's submenu, the type's applications then Other…, which asks for the Choose Application
+    // panel; with no application for the type, Other… alone. Not for a folder.
+    function test_openWithOther() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const folder = tab.folder;
+        folder.isApplications = false;
+        folder.selected = [0];
+        const openWith = tab.itemMenu(folder).find(i => i.id === "openWith");
+        verify(openWith.enabled !== false, "Open With for a file");
+        compare(openWith.submenu.map(i => i.id ?? (i.separator ? "-" : "")), ["openWithOther"], "no application for the type: Other… alone");
+        compare(openWith.submenu[0].text, "Other…");
+        fakeApp.chosen = [];
+        tab.runAction("openWithOther", folder);
+        compare(fakeApp.chosen, [[String(folder.url)]], "the selection's Choose Application");
+        folder.selected = [];
+    }
+
+    // Files' own Choose Application panel (ADR-0035 5c-1, 5c-2): modal over the window the user worked in, never answered
+    // by itself; Cancel answers 1 and the panel goes, and the window it was over gets back what follows (errors, KIO's
+    // questions). A request that ends (its job went) takes its panel away.
+    function test_chooseApplicationPanel() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        fakeChooser.answers = [];
+        const request = {
+            kind: "application",
+            appId: "",
+            title: "",
+            acceptLabel: "",
+            modal: true,
+            parented: true,
+            multiple: false,
+            directory: false,
+            filters: [],
+            currentFilter: -1,
+            choices: [],
+            currentName: "",
+            files: [],
+            currentFolder: "",
+            applications: ["app1"],
+            lastChoice: "",
+            filename: "notes.txt",
+            uri: "",
+            count: 1
+        };
+        fakeChooser.opened(7, request);
+        const entry = files.applicationPanels[7];
+        verify(entry !== undefined, "a panel for the request");
+        const panel = entry.panel;
+        compare(entry.over, browser);
+        verify(panel.transientParent === browser, "over the browser window");
+        compare(panel.modality, Qt.WindowModal);
+        compare(panel.title, "Choose Application");
+        compare(panel.message, "Choose an application to open the document “notes.txt”.");
+        tryVerify(() => panel.visible, 1000);
+        verify(waitForRendering(panel.contentItem, 2000));
+        wait(100);
+        compare(fakeChooser.answers, [], "Files' panels have no test answer: nothing answered by itself");
+        test.giveKeys(panel);
+        compare(files.lastActiveWindow, panel);
+        panel.cancel();
+        compare(fakeChooser.answers, [[7, 1, ""]]);
+        compare(files.applicationPanels[7], undefined, "the panel went");
+        compare(files.lastActiveWindow, browser, "errors show in the window it was over");
+
+        fakeChooser.opened(8, Object.assign({}, request, {
+            filename: "",
+            count: 3
+        }));
+        compare(files.applicationPanels[8].panel.message, "Choose an application to open the 3 selected documents.");
+        fakeChooser.closed(8);
+        compare(files.applicationPanels[8], undefined, "its request ended: the panel went");
+        compare(fakeChooser.answers.length, 1);
     }
 
     function test_closeInfoKeepsTheBrowser_data() {

@@ -18,6 +18,9 @@
 #include <QTemporaryDir>
 #include <QThread>
 
+#include <KService>
+#include <KSycoca>
+
 #include <gtest/gtest.h>
 
 namespace {
@@ -263,6 +266,14 @@ TEST(ApplicationLaunch, TheFailureNamesTheRowsNameCleaned)
         QThread::msleep(5);
     }
     ASSERT_GE(rowOf(), 0);
+    // The launch reads KDE's service cache, which looks at the folders at most every 1.5 s: another test of this run may have
+    // opened it before the entry was written (tst_applicationchooser.cpp, tst_kiodialogs.cpp's OpenUrlJob).
+    deadline = QDeadlineTimer(15000);
+    while (!KService::serviceByMenuId(QStringLiteral("org.example.BidiLaunch.desktop")) && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(100);
+        KSycoca::self()->ensureCacheValid();
+    }
     QStringList failures;
     QObject::connect(&app, &FilesApp::operationFailed, &app, [&failures](const QString &message) { failures << message; });
     app.launchApplication(ApplicationsLogic::entryUrl(QStringLiteral("org.example.BidiLaunch")));
