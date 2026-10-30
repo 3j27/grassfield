@@ -849,7 +849,8 @@ case "$1" in
   info) for id; do :; done; grep -qx "$id" "$root/flatpaks" 2>/dev/null || exit 1
         case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\n' "$id" ;; *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
   remote-info)
-    case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\nfilesystems=home;\n' "$(echo "$5" | cut -d/ -f2)" ;;
+    case "$3" in --show-metadata) [ -f "$root/nometa" ] && exit 1
+                                  printf '[Application]\nname=%s\n\n[Context]\nshared=network;\nfilesystems=home;\n' "$(echo "$5" | cut -d/ -f2)" ;;
                  *) printf '           Ref: %s\n       Version: 1.2\n       License: MIT\n Download Size: 1.5 MB\nInstalled Size: 4.0 MB\n' "$4" ;; esac ;;
   install)
     if [ "$3" = --noninteractive ]; then
@@ -929,6 +930,17 @@ TEST(StoreBackend, Flathub)
     EXPECT_EQ(facts.value(QStringLiteral("license")).toString(), QStringLiteral("MIT"));
     EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home")}));
     EXPECT_FALSE(facts.value(QStringLiteral("download")).toString().isEmpty());
+    // Its metadata unread: its facts without "access", so the page says nothing of what it can reach (PR #58).
+    storetest::writeFile(s.path(QStringLiteral("fixture/nometa")), "");
+    facts.clear();
+    backend.requestFlatpakInfo(QStringLiteral("org.example.Notes"));
+    for (int i = 0; i < 500 && facts.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_EQ(facts.value(QStringLiteral("version")).toString(), QStringLiteral("1.2"));
+    EXPECT_FALSE(facts.contains(QStringLiteral("access")));
+    QFile::remove(s.path(QStringLiteral("fixture/nometa")));
     backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("install"));
     for (int i = 0; i < 500 && plans.isEmpty(); ++i) {
         QTimer::singleShot(20, &loop, &QEventLoop::quit);

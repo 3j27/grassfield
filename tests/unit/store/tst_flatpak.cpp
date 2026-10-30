@@ -341,15 +341,22 @@ TEST(Flatpak, MetadataUnread)
     for (const char *metadata : {"exit 1", "printf '[Context]\\nshared=network;\\n'", "printf '[Application]\\nname=org.example.App\\n'"}) {
         QTemporaryDir dir;
         FlatpakTools tools;
+        // flatpak's plan itself is complete: only the metadata can refuse it.
         tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
-                                          "case \"$3\" in --show-metadata) " + QByteArray(metadata) + " ;;\n"
-                                          "  *) printf 'Ref: app/org.example.App/x86_64/stable\\nVersion: 1\\n' ;; esac");
+                                          "case \"$1 $3\" in\n"
+                                          "  'remote-info --show-metadata') " + QByteArray(metadata) + " ;;\n"
+                                          "  'remote-info flathub') printf 'Ref: app/org.example.App/x86_64/stable\\nVersion: 1\\n' ;;\n"
+                                          "  'install flathub') cat '" STORE_FIXTURES "/flatpak/plan-table.txt'\n"
+                                          "    printf 'Proceed with these changes to the user installation? [Y/n]: '; read b; exit 1 ;;\n"
+                                          "esac");
         const std::optional<FlatpakFacts> facts = flatpakFacts(tools, ref, false);
         ASSERT_TRUE(facts) << metadata;
         EXPECT_EQ(facts->version, QStringLiteral("1"));
         const InstallPlan plan = checkFlatpakInstall(ref, tools, true);
         if (QByteArray(metadata).contains("name=")) {
             EXPECT_EQ(facts->access, QStringList()) << "read, and nothing granted";
+            EXPECT_EQ(plan.refusal, Refusal::None) << plan.detail.toStdString();
+            EXPECT_EQ(plan.access, QStringList());
         } else {
             EXPECT_EQ(facts->access, std::nullopt) << metadata;
             EXPECT_EQ(plan.refusal, Refusal::Failed) << metadata;
