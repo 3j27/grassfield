@@ -847,9 +847,9 @@ case "$1" in
   update) mkdir -p "$active/icons/128x128" && cp "$root/../flathub.xml.gz" "$active/appstream.xml.gz" && echo png >"$active/icons/128x128/org.example.Notes.png" ;;
   list) cat "$root/flatpaks" 2>/dev/null ;;
   info) for id; do :; done; grep -qx "$id" "$root/flatpaks" 2>/dev/null || exit 1
-        case "$3" in --show-metadata) printf '[Context]\nshared=network;\n' ;; *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
+        case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\n' "$id" ;; *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
   remote-info)
-    case "$3" in --show-metadata) printf '[Context]\nshared=network;\nfilesystems=home;\n' ;;
+    case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\nfilesystems=home;\n' "$(echo "$5" | cut -d/ -f2)" ;;
                  *) printf '           Ref: %s\n       Version: 1.2\n       License: MIT\n Download Size: 1.5 MB\nInstalled Size: 4.0 MB\n' "$4" ;; esac ;;
   install)
     if [ "$3" = --noninteractive ]; then

@@ -1841,8 +1841,9 @@ void StoreBackend::requestFlatpakInfo(const QString &id)
             out = {{QStringLiteral("version"), facts->version},
                    {QStringLiteral("license"), facts->license},
                    {QStringLiteral("download"), view::sizeText(facts->download, locale)},
-                   {QStringLiteral("installed"), view::sizeText(facts->installed, locale)},
-                   {QStringLiteral("access"), facts->access}};
+                   {QStringLiteral("installed"), view::sizeText(facts->installed, locale)}};
+            if (facts->access) // unread: the page says nothing rather than "only its own window and files"
+                out.insert(QStringLiteral("access"), *facts->access);
         }
         QMetaObject::invokeMethod(this, [this, id, out] { emit flatpakInfo(id, out); }, Qt::QueuedConnection);
     });

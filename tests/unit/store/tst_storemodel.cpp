@@ -267,4 +267,17 @@ TEST(StoreModel, Flathub)
     in.flathubOn = false;
     const QList<StoreApp> off = buildModel(in);
     EXPECT_TRUE(std::none_of(off.cbegin(), off.cend(), [](const StoreApp &a) { return a.source == CatalogSource::Kind::Flatpak; }));
+
+    // A ref whose branch is not one (".."), or a ref of another app: neither listed nor offered to Get, ours hidden too.
+    in.flathubOn = true;
+    for (AppStreamComponent &c : in.flathub) {
+        if (c.flatpak == QLatin1String("org.example.Flat"))
+            c.flatpakRef = QStringLiteral("app/org.example.Flat/x86_64/..");
+        if (c.flatpak == QLatin1String("org.example.Notes"))
+            c.flatpakRef = QStringLiteral("app/org.example.Other/x86_64/stable");
+    }
+    const QList<StoreApp> bad = buildModel(in);
+    EXPECT_TRUE(std::none_of(bad.cbegin(), bad.cend(), [](const StoreApp &a) {
+        return a.id == QLatin1String("org.example.Flat") || a.id == QLatin1String("org.example.Notes") || a.id == QLatin1String("org.example.Other");
+    }));
 }

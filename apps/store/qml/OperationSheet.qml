@@ -96,11 +96,12 @@ Sheet {
                 // The user's own installation: no password, nothing of the system changes (b.3).
                 if (root.removing)
                     return qsTr("Its data in ~/.var/app/%1 stays. Runtimes no other app needs are removed too.").arg(root.app.flatpakId || root.app.name || "");
-                const access = Store.accessWords(root.plan.access);
+                // What it can reach, never less than its metadata grants (SD25): unread, nothing is said.
+                const access = root.plan.access === undefined || root.plan.access === null ? null : Store.accessWords(root.plan.access);
                 return [qsTr("It's installed in your own folder, for you alone, without administrator rights."),
-                        access.length === 0 ? qsTr("It can reach only its own window and files.")
-                                            : qsTr("It can reach: %1.").arg(access.join(", ")),
-                        qsTr("These will be installed:")].join("\n\n");
+                        access === null ? "" : access.length === 0 ? qsTr("It can reach only its own window and files.")
+                                                                   : qsTr("It can reach: %1.").arg(access.join(", ")),
+                        qsTr("These will be installed:")].filter(t => t !== "").join("\n\n");
             }
             if (root.aur) {
                 // yay builds them in Omarchy's terminal and pacman installs them there: the password is asked there (sudo).

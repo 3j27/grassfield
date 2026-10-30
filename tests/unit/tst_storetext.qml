@@ -47,13 +47,26 @@ TestCase {
         compare(Store.getBlockText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to install from it.");
         compare(Store.getBlockText("noFlatpak", "flatpak"), "Flathub needs the flatpak package.");
         compare(Store.uninstallReasonText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to uninstall it from the Store.");
-        compare(Store.accessWords(["network", "allFiles", "home", "folders", "devices", "audio", "x11", "bus", "bluetooth", "outside", "unknown"]),
+        compare(Store.accessWords(["network", "allFiles", "home", "folders", "devices", "input", "usb", "kvm", "audio", "x11", "sharedMemory",
+                                   "printers", "ssh", "gpg", "smartCards", "bus", "systemBus", "bluetooth", "canbus", "devel", "multiarch", "outside"]),
                 ["The internet", "All your files", "Your home folder", "Some of your folders", "Devices such as cameras, USB drives and game controllers",
-                 "Your speakers and microphone", "The X11 display, where it can see what other X11 apps show and what you type in them",
-                 "Every service of your session", "Bluetooth", "Programs outside its sandbox"]);
+                 "Game controllers and other input devices", "USB devices", "Virtual machines, through KVM", "Your speakers and microphone",
+                 "The X11 display, where it can see what other X11 apps show and what you type in them", "Memory your other programs share",
+                 "Your printers", "Your SSH keys, through the SSH agent", "Your GnuPG keys, through the GnuPG agent", "Smart cards",
+                 "Every service of your session", "Every service of the system", "Bluetooth", "CAN bus devices",
+                 "Developer features that can trace programs", "32-bit programs", "Programs outside its sandbox"]);
+        // Named services, flatpak's own words for a grant the Store does not know, the count past the list; a key this
+        // window does not know is said as it is (PR #58: never less than the metadata grants).
+        compare(Store.accessWords(["sessionService:org.freedesktop.secrets", "systemService:org.freedesktop.login1", "other:devices=tpm",
+                                   "more:14", "unknown", "later:x"]),
+                ["The session service “org.freedesktop.secrets”", "The system service “org.freedesktop.login1”",
+                 "A permission the Store can't describe: devices=tpm", "14 more", "A permission the Store can't describe: unknown",
+                 "A permission the Store can't describe: later:x"]);
         compare(Store.accessText(["network", "home"]), "The internet, Your home folder");
+        compare(Store.accessText(["unknown"]), "A permission the Store can't describe: unknown");
         compare(Store.accessText([]), "Only its own window and files");
-        compare(Store.accessText(undefined), "Only its own window and files");
+        compare(Store.accessText(undefined), "", "unread: nothing said rather than too little");
+        compare(Store.accessText(null), "");
         compare(Store.groupTitle("flatpak"), "Flathub");
         compare(Store.resultText({kind: "install", outcome: "stopped"}), "", "stopped by the user: nothing to say");
         verify(!Store.canTryAgain({outcome: "stopped"}));

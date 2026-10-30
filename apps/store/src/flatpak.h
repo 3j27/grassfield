@@ -60,19 +60,26 @@ enum class FlatpakPrompt {
 };
 FlatpakPrompt flatpakPrompt(const QStringList &lines);
 
-// What an app's metadata (its [Context] and [Session Bus Policy], `remote-info --show-metadata`) lets it reach beyond its
-// own window and folder, as keys the window words (SR11): network, allFiles (host, host-os, host-etc), home, folders (the
-// user's Documents, Downloads and the like, or another path), devices (all of them), audio (the sound server: speakers
-// and microphone), x11 (the X11 display, without Wayland's separation), bus (the whole session or system bus), bluetooth,
-// outside (it may start programs outside its sandbox: org.freedesktop.Flatpak). In that order, each once.
-QStringList flatpakAccess(const QByteArray &metadata);
+// What an app's metadata (`remote-info --show-metadata`) lets it reach beyond its own window (Wayland, or X11 only as
+// a fallback where Wayland is missing; the graphics processor drawing it) and its own folder in ~/.var/app (SR11, SD25):
+// every grant named, never one left out. Keys, in this order, each once: network, allFiles (host, host-os, host-etc),
+// home, folders (any other path), devices (all), input, usb (devices=usb, or [USB Devices] it may list), kvm, audio
+// (the sound server: speakers and microphone), x11, sharedMemory (shared=ipc, devices=shm), printers (cups), ssh
+// (ssh-auth), gpg (gpg-agent), smartCards (pcsc), bus (the whole session bus), systemBus, bluetooth, canbus, devel,
+// multiarch, outside (it may start programs outside its sandbox: the whole session bus, or org.freedesktop.Flatpak,
+// org.freedesktop.systemd1 or the permission store, by name or a wildcard). Then "sessionService:<name>" and
+// "systemService:<name>" for each bus name it may talk to or own, sorted (on the session bus, not the harmless ones:
+// notifications, tray, menus, screen saver, accessibility, file manager, the portals, media-player names and its own),
+// and "other:<text>" for each grant the Store does not know, as flatpak writes it. At most 30 lines: the last is then
+// "more:<count>". nullopt when it is not an app's metadata (no [Application] name): unknown, never "nothing".
+std::optional<QStringList> flatpakAccess(const QByteArray &metadata);
 
 // What `remote-info` (before an install) or `info --user` (after) says of an app, for the Information list (SR11).
 struct FlatpakFacts {
     QString version, license;
     qint64 download = -1;  // remote-info's Download Size
     qint64 installed = -1; // remote-info's Installed Size, info's Installed
-    QStringList access;    // flatpakAccess of its metadata
+    std::optional<QStringList> access; // flatpakAccess of its metadata; nullopt when it could not be read
 };
 // Their "Key: value" lines (version, licence, sizes; access is not in them).
 FlatpakFacts parseFlatpakInfo(const QByteArray &out);

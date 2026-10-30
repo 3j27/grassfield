@@ -68,10 +68,14 @@ QByteArray readAll(const QString &path)
 TEST(Flatpak, RefsAndLists)
 {
     EXPECT_TRUE(isFlatpakAppRef(QStringLiteral("app/org.gnome.design.Typography/x86_64/stable")));
+    EXPECT_TRUE(isFlatpakAppRef(QStringLiteral("app/org.x.Y/aarch64/24.08")));
+    EXPECT_TRUE(isFlatpakAppRef(QStringLiteral("app/org.x.Y/x86_64/_beta-1")));
     EXPECT_EQ(flatpakRefId(QStringLiteral("app/io.github.fragglet.sdl_sopwith/x86_64/stable")), QStringLiteral("io.github.fragglet.sdl_sopwith"));
     for (const char *bad : {"runtime/org.gnome.Platform/x86_64/50", "app/org.gnome.Typography/x86_64", "app/notanid/x86_64/stable",
                             "app/org.gnome.Typography/x86_64/stable/x", "app/org.gnome.Typography/x86 64/stable",
-                            "app/org.gnome.Typography/x86_64/sta;ble", "app/org.gnome.Typography/x86_64/", "app/-org.a.b/x86_64/stable"}) {
+                            "app/org.gnome.Typography/x86_64/sta;ble", "app/org.gnome.Typography/x86_64/", "app/-org.a.b/x86_64/stable",
+                            "app/org.x.Y/../stable", "app/org.x.Y/x86_64/..", "app/org.x.Y/x86_64/a..b", "app/org.x.Y/-x86_64/stable",
+                            "app/org.x.Y/x86_64/-stable", "app/org.x.Y/x86_64/.stable", "app/org.x.Y/.x/stable"}) {
         EXPECT_FALSE(isFlatpakAppRef(QLatin1String(bad))) << bad;
         EXPECT_TRUE(flatpakRefId(QLatin1String(bad)).isEmpty()) << bad;
     }
@@ -147,22 +151,98 @@ TEST(Flatpak, ItsQuestions)
     EXPECT_EQ(flatpakPrompt({QStringLiteral("Proceed with these changes to the system installation? [Y/n]: ")}), FlatpakPrompt::Other);
 }
 
+// What an app's metadata grants it, every grant named (SR11, SD25): "only its own window and files" ([]) only when
+// nothing is granted beyond them.
+namespace {
+QStringList reach(const QByteArray &context, const QByteArray &more = {})
+{
+    const std::optional<QStringList> access = flatpakAccess("[Application]\nname=org.example.App\nruntime=org.example.Platform/x86_64/1\n\n[Context]\n"
+                                                            + context + "\n" + more);
+    return access ? *access : QStringList{QStringLiteral("(unread)")};
+}
+} // namespace
+
 TEST(Flatpak, WhatItCanReach)
 {
-    // S22's app: the network, its sound and the X11 display (dri, ipc, wayland and fallback-x11 are not said).
+    // S22's app: the network, its sound, the X11 display and the shared memory X11 uses (dri, wayland and fallback-x11
+    // beside wayland draw its own window; notifications are harmless).
     EXPECT_EQ(flatpakAccess(storetest::readFixture(QStringLiteral("flatpak/metadata.txt"))),
-              (QStringList{QStringLiteral("network"), QStringLiteral("audio"), QStringLiteral("x11")}));
+              (QStringList{QStringLiteral("network"), QStringLiteral("audio"), QStringLiteral("x11"), QStringLiteral("sharedMemory")}));
     const QByteArray wide = "[Application]\nname=org.example.Wide\n\n[Context]\nfilesystems=host;xdg-download;~/Games:create;!home;\n"
                             "devices=all;\nsockets=wayland;session-bus;\nfeatures=bluetooth;devel;\nshared=ipc;\n\n"
                             "[Session Bus Policy]\norg.freedesktop.Flatpak=talk\n";
-    EXPECT_EQ(flatpakAccess(wide), (QStringList{QStringLiteral("allFiles"), QStringLiteral("folders"), QStringLiteral("devices"),
-                                                QStringLiteral("bus"), QStringLiteral("bluetooth"), QStringLiteral("outside")}));
-    EXPECT_EQ(flatpakAccess("[Context]\nfilesystems=home:ro;\nshared=!network;\nsockets=fallback-x11;\n"), QStringList{QStringLiteral("home")});
-    EXPECT_TRUE(flatpakAccess("[Context]\nshared=ipc;\nsockets=wayland;\ndevices=dri;\n[Extension x]\nfilesystems=host;\n").isEmpty())
-        << "another group's keys are not the app's";
-    EXPECT_TRUE(flatpakAccess("[Session Bus Policy]\norg.freedesktop.Flatpak=none\n").isEmpty());
-    EXPECT_TRUE(flatpakAccess("[Context]\nfilesystems=!host;!home;!xdg-download;\ndevices=!all;\n").isEmpty()) << "taken away, not granted";
-    EXPECT_TRUE(flatpakAccess({}).isEmpty());
+    EXPECT_EQ(flatpakAccess(wide),
+              (QStringList{QStringLiteral("allFiles"), QStringLiteral("folders"), QStringLiteral("devices"), QStringLiteral("sharedMemory"),
+                           QStringLiteral("bus"), QStringLiteral("bluetooth"), QStringLiteral("devel"), QStringLiteral("outside"),
+                           QStringLiteral("sessionService:org.freedesktop.Flatpak")}));
+    EXPECT_EQ(reach("filesystems=home:ro;\nshared=!network;\nsockets=fallback-x11;"), (QStringList{QStringLiteral("home"), QStringLiteral("x11")}))
+        << "fallback-x11 without a Wayland socket is the X11 display";
+
+    // Nothing beyond its window and files: its window, the graphics processor, its own folder and variables, names it
+    // only sees, harmless names, its own names, another group's keys.
+    EXPECT_EQ(reach("sockets=wayland;fallback-x11;inherit-wayland-socket;\ndevices=dri;\nfeatures=per-app-dev-shm;\npersistent=.app;\n"
+                    "unset-environment=FOO;",
+                    "[Session Bus Policy]\norg.freedesktop.Flatpak=see\norg.freedesktop.systemd1=none\norg.freedesktop.Notifications=talk\n"
+                    "org.freedesktop.portal.Desktop=talk\norg.mpris.MediaPlayer2.App=own\norg.example.App=own\norg.example.App.Tray=own\n"
+                    "org.kde.StatusNotifierWatcher=talk\ncom.canonical.AppMenu.Registrar=talk\norg.freedesktop.ScreenSaver=talk\norg.a11y.Bus=talk\n"
+                    "org.freedesktop.FileManager1=talk\n[System Bus Policy]\norg.freedesktop.UPower=none\n[Environment]\nLD_PRELOAD=x\n"
+                    "[Extension org.example.App.Locale]\ndirectory=share/runtime/locale\n[Extra Data]\nuri=https://example.org\n"),
+              QStringList());
+    EXPECT_EQ(reach("filesystems=!host;!home;!xdg-download;\ndevices=!all;"), QStringList()) << "taken away, not granted";
+
+    // The review's cases (PR #58): each named.
+    const auto service = [](const char *name) { return QStringLiteral("sessionService:") + QLatin1String(name); };
+    for (const char *escape : {"org.freedesktop.systemd1", "org.freedesktop.impl.portal.PermissionStore", "org.freedesktop.Flatpak"}) {
+        EXPECT_EQ(reach({}, "[Session Bus Policy]\n" + QByteArray(escape) + "=talk\n"), (QStringList{QStringLiteral("outside"), service(escape)}))
+            << escape;
+        EXPECT_EQ(reach({}, "[Session Bus Policy]\n" + QByteArray(escape) + "=own\n"), (QStringList{QStringLiteral("outside"), service(escape)}))
+            << escape;
+    }
+    EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.*=talk\n"), (QStringList{QStringLiteral("outside"), service("org.freedesktop.*")}))
+        << "a wildcard covering org.freedesktop.Flatpak";
+    EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.secrets=talk\norg.gtk.vfs.*=talk\nca.desrt.dconf=talk\norg.example.AppX=own\n"
+                        "org.example.Other=frobnicate\n"),
+              (QStringList{service("ca.desrt.dconf"), service("org.example.AppX"), service("org.example.Other"), service("org.freedesktop.secrets"),
+                           service("org.gtk.vfs.*")}))
+        << "every name outside the harmless ones, sorted; a name that only starts like its id is not its own";
+    EXPECT_EQ(reach({}, "[System Bus Policy]\norg.freedesktop.login1=talk\norg.freedesktop.systemd1=talk\norg.freedesktop.Notifications=talk\n"),
+              (QStringList{QStringLiteral("systemService:org.freedesktop.Notifications"), QStringLiteral("systemService:org.freedesktop.login1"),
+                           QStringLiteral("systemService:org.freedesktop.systemd1")}))
+        << "the system bus has no harmless names";
+    EXPECT_EQ(reach("sockets=ssh-auth;gpg-agent;pcsc;cups;system-bus;"),
+              (QStringList{QStringLiteral("printers"), QStringLiteral("ssh"), QStringLiteral("gpg"), QStringLiteral("smartCards"), QStringLiteral("systemBus")}));
+    EXPECT_EQ(reach("sockets=session-bus;"), (QStringList{QStringLiteral("bus"), QStringLiteral("outside")}))
+        << "the whole session bus reaches org.freedesktop.Flatpak";
+    EXPECT_EQ(reach("devices=kvm;shm;input;usb;"),
+              (QStringList{QStringLiteral("input"), QStringLiteral("usb"), QStringLiteral("kvm"), QStringLiteral("sharedMemory")}));
+    EXPECT_EQ(reach("features=devel;multiarch;canbus;"), (QStringList{QStringLiteral("canbus"), QStringLiteral("devel"), QStringLiteral("multiarch")}));
+    EXPECT_EQ(reach({}, "[USB Devices]\nenumerable-devices=vnd:1234+dev:5678;\nhidden-devices=all;\n"), QStringList{QStringLiteral("usb")});
+    EXPECT_EQ(reach({}, "[USB Devices]\nhidden-devices=all;\n"), QStringList());
+
+    // A grant the Store does not know: a line of its own, as flatpak writes it.
+    EXPECT_EQ(reach("sockets=wayland;tpm;\ndevices=tpm;\nfeatures=newfeature;\nshared=newns;\nnewkey=a;b;a;",
+                    "[Policy portal]\nkey=v1;v2\n[Some Later Group]\nx=y\n[USB Devices]\nhid=1\n[Session Bus Policy]\nnot a name!=talk\n"),
+              (QStringList{QStringLiteral("other:sockets=tpm"), QStringLiteral("other:devices=tpm"), QStringLiteral("other:features=newfeature"),
+                           QStringLiteral("other:shared=newns"), QStringLiteral("other:newkey=a"), QStringLiteral("other:newkey=b"),
+                           QStringLiteral("other:[Policy portal] key=v1;v2"), QStringLiteral("other:[Some Later Group] x=y"),
+                           QStringLiteral("other:[USB Devices] hid=1"), QStringLiteral("other:[Session Bus Policy] not a name!=talk")}));
+    // A bus name before [Application]: its own names are still its own.
+    EXPECT_EQ(flatpakAccess("[Session Bus Policy]\norg.example.App.Tray=own\n[Application]\nname=org.example.App\n"), QStringList());
+
+    // At most 30 lines: the named classes first, the rest counted.
+    QByteArray many = "[Session Bus Policy]\n";
+    for (int i = 10; i < 50; ++i)
+        many += "org.example.Service" + QByteArray::number(i) + "=talk\n";
+    const QStringList capped = reach("sockets=session-bus;ssh-auth;", many);
+    ASSERT_EQ(capped.size(), 30);
+    EXPECT_EQ(capped.mid(0, 3), (QStringList{QStringLiteral("ssh"), QStringLiteral("bus"), QStringLiteral("outside")}));
+    EXPECT_EQ(capped.at(3), service("org.example.Service10"));
+    EXPECT_EQ(capped.last(), QStringLiteral("more:14"));
+
+    // Not an app's metadata: unknown, never "nothing".
+    EXPECT_EQ(flatpakAccess({}), std::nullopt);
+    EXPECT_EQ(flatpakAccess("[Context]\nshared=network;\n"), std::nullopt);
+    EXPECT_EQ(flatpakAccess("[Application]\nname=notanid\n"), std::nullopt);
 }
 
 TEST(Flatpak, InfoAndProgress)
@@ -202,7 +282,7 @@ TEST(Flatpak, PlanOnATerminal)
     EXPECT_EQ(plan.packages.at(4).repo, QStringLiteral("flathub"));
     EXPECT_EQ(plan.downloadSize, 147900000LL + 148000000 + 14600000 + 386500000 + 418800000 + 19700 + 68600);
     EXPECT_EQ(plan.installedSize, -1);
-    EXPECT_EQ(plan.access, (QStringList{QStringLiteral("network"), QStringLiteral("audio"), QStringLiteral("x11")}));
+    EXPECT_EQ(plan.access, (QStringList{QStringLiteral("network"), QStringLiteral("audio"), QStringLiteral("x11"), QStringLiteral("sharedMemory")}));
     EXPECT_EQ(readAll(dir.filePath(QStringLiteral("answers"))), QByteArray("y\nn\n"));
     EXPECT_FALSE(QFile::exists(dir.filePath(QStringLiteral("installed"))));
     EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))),
@@ -233,7 +313,7 @@ TEST(Flatpak, PlanInTime)
     QTemporaryDir dir;
     FlatpakTools tools;
     tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
-                                      "case \"$1\" in remote-info) echo '[Context]' ;; install) sleep 30 & echo $! >'"
+                                      "case \"$1\" in remote-info) printf '[Application]\\nname=org.example.Slow\\n' ;; install) sleep 30 & echo $! >'"
                                           + dir.path().toUtf8() + "/child'; wait ;; esac");
     tools.planMs = 1500;
     QElapsedTimer clock;
@@ -252,6 +332,61 @@ TEST(Flatpak, PlanInTime)
     for (int i = 0; i < 50 && alive(); ++i)
         QThread::msleep(100);
     EXPECT_FALSE(alive()) << "what it started is stopped with it";
+}
+
+// Metadata that could not be read, or that names no app: no access said on the page, and no plan (PR #58).
+TEST(Flatpak, MetadataUnread)
+{
+    const QString ref = QStringLiteral("app/org.example.App/x86_64/stable");
+    for (const char *metadata : {"exit 1", "printf '[Context]\\nshared=network;\\n'", "printf '[Application]\\nname=org.example.App\\n'"}) {
+        QTemporaryDir dir;
+        FlatpakTools tools;
+        tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
+                                          "case \"$3\" in --show-metadata) " + QByteArray(metadata) + " ;;\n"
+                                          "  *) printf 'Ref: app/org.example.App/x86_64/stable\\nVersion: 1\\n' ;; esac");
+        const std::optional<FlatpakFacts> facts = flatpakFacts(tools, ref, false);
+        ASSERT_TRUE(facts) << metadata;
+        EXPECT_EQ(facts->version, QStringLiteral("1"));
+        const InstallPlan plan = checkFlatpakInstall(ref, tools, true);
+        if (QByteArray(metadata).contains("name=")) {
+            EXPECT_EQ(facts->access, QStringList()) << "read, and nothing granted";
+        } else {
+            EXPECT_EQ(facts->access, std::nullopt) << metadata;
+            EXPECT_EQ(plan.refusal, Refusal::Failed) << metadata;
+            EXPECT_TRUE(plan.packages.isEmpty());
+        }
+    }
+}
+
+// A runtime flatpak asks for is said yes to eight times at most: a ninth question is another kind (refused, no to all).
+TEST(Flatpak, RuntimesAtMostEight)
+{
+    const QByteArray fixtures = STORE_FIXTURES "/flatpak";
+    for (const int asked : {8, 9}) {
+        QTemporaryDir dir;
+        const QByteArray d = dir.path().toUtf8();
+        FlatpakTools tools;
+        tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
+                                          "case \"$1\" in\n"
+                                          "  remote-info) cat '" + fixtures + "/metadata.txt' ;;\n"
+                                          "  install)\n"
+                                          "    i=0; while [ $i -lt " + QByteArray::number(asked) + " ]; do i=$((i + 1))\n"
+                                          "      echo \"Required runtime for org.example.Many/x86_64/stable (runtime/org.example.R$i/x86_64/1) found in remote flathub\"\n"
+                                          "      printf 'Do you want to install it? [Y/n]: '; read a; echo \"$a\" >>'" + d + "/answers'\n"
+                                          "    done\n"
+                                          "    cat '" + fixtures + "/plan-table.txt'\n"
+                                          "    printf 'Proceed with these changes to the user installation? [Y/n]: '; read b; echo \"$b\" >>'" + d + "/answers'\n"
+                                          "    exit 1 ;;\n"
+                                          "esac");
+        const InstallPlan plan = checkFlatpakInstall(QStringLiteral("app/org.example.Many/x86_64/stable"), tools, true);
+        if (asked == 8) {
+            EXPECT_EQ(plan.refusal, Refusal::None) << plan.detail.toStdString();
+            EXPECT_EQ(readAll(dir.filePath(QStringLiteral("answers"))), QByteArray("y\n").repeated(8) + "n\n");
+        } else {
+            EXPECT_EQ(plan.refusal, Refusal::Failed);
+            EXPECT_EQ(readAll(dir.filePath(QStringLiteral("answers"))), QByteArray("y\n").repeated(8) + "n\nn\n");
+        }
+    }
 }
 
 // The real flatpak (tests/integration/store_flatpak.sh: a throwaway container, root's own installation, and a local

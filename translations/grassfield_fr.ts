@@ -10932,6 +10932,18 @@
         <translation>Des appareils comme les caméras, les clés USB et les manettes de jeu</translation>
     </message>
     <message>
+        <source>Game controllers and other input devices</source>
+        <translation>Les manettes de jeu et les autres périphériques d’entrée</translation>
+    </message>
+    <message>
+        <source>USB devices</source>
+        <translation>Les appareils USB</translation>
+    </message>
+    <message>
+        <source>Virtual machines, through KVM</source>
+        <translation>Les machines virtuelles, par KVM</translation>
+    </message>
+    <message>
         <source>Your speakers and microphone</source>
         <translation>Vos haut-parleurs et votre micro</translation>
     </message>
@@ -10940,16 +10952,68 @@
         <translation>L’affichage X11, où elle peut voir ce que montrent les autres apps X11 et ce que vous y tapez</translation>
     </message>
     <message>
+        <source>Memory your other programs share</source>
+        <translation>La mémoire que partagent vos autres programmes</translation>
+    </message>
+    <message>
+        <source>Your printers</source>
+        <translation>Vos imprimantes</translation>
+    </message>
+    <message>
+        <source>Your SSH keys, through the SSH agent</source>
+        <translation>Vos clés SSH, par l’agent SSH</translation>
+    </message>
+    <message>
+        <source>Your GnuPG keys, through the GnuPG agent</source>
+        <translation>Vos clés GnuPG, par l’agent GnuPG</translation>
+    </message>
+    <message>
+        <source>Smart cards</source>
+        <translation>Les cartes à puce</translation>
+    </message>
+    <message>
         <source>Every service of your session</source>
         <translation>Tous les services de votre session</translation>
+    </message>
+    <message>
+        <source>Every service of the system</source>
+        <translation>Tous les services du système</translation>
     </message>
     <message>
         <source>Bluetooth</source>
         <translation>Bluetooth</translation>
     </message>
     <message>
+        <source>CAN bus devices</source>
+        <translation>Les appareils du bus CAN</translation>
+    </message>
+    <message>
+        <source>Developer features that can trace programs</source>
+        <translation>Des fonctions de développement qui peuvent tracer des programmes</translation>
+    </message>
+    <message>
+        <source>32-bit programs</source>
+        <translation>Des programmes 32 bits</translation>
+    </message>
+    <message>
         <source>Programs outside its sandbox</source>
         <translation>Des programmes hors de son bac à sable</translation>
+    </message>
+    <message>
+        <source>The session service “%1”</source>
+        <translation>Le service de session «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>The system service “%1”</source>
+        <translation>Le service système «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 more</source>
+        <translation>%1 de plus</translation>
+    </message>
+    <message>
+        <source>A permission the Store can&apos;t describe: %1</source>
+        <translation>Une permission que le Store ne sait pas décrire&#xa0;: %1</translation>
     </message>
     <message>
         <source>Only its own window and files</source>

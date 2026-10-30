@@ -325,6 +325,19 @@ TestCase {
             download: "1.5 MB", access: []});
         verify(s.message.indexOf("It can reach only its own window and files.") >= 0, s.message);
         s.close();
+        // A grant the window does not know is still said; what it can reach unread: no claim at all (PR #58).
+        t.win.requestGet(app);
+        t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}],
+            download: "1.5 MB", access: ["outside", "sessionService:org.freedesktop.systemd1", "other:devices=tpm"]});
+        verify(s.message.indexOf("It can reach: Programs outside its sandbox, The session service “org.freedesktop.systemd1”, "
+                                 + "A permission the Store can't describe: devices=tpm.") >= 0, s.message);
+        s.close();
+        t.win.requestGet(app);
+        t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}],
+            download: "1.5 MB"});
+        verify(s.message.indexOf("It can reach") < 0, s.message);
+        verify(s.message.indexOf("These will be installed:") >= 0, s.message);
+        s.close();
         // flatpak could not give its plan: its own words, no Install.
         t.win.requestGet(app);
         t.backend.planReady("org.example.Notes", "install", {refusal: "failed", packages: [], detail: "error: No remote refs found for org.example.Notes"});
