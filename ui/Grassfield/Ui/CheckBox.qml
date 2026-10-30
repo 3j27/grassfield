@@ -12,8 +12,9 @@ T.CheckBox {
     // Whole pixels, so that the next control in a row stays on the pixel grid.
     implicitWidth: Math.ceil(Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding))
     implicitHeight: Math.max(Tokens.controlButtonHeight, implicitContentHeight + topPadding + bottomPadding)
-    // Whole pixels: the measured gap (5.5) would start the label between two pixels at scale 1.
-    leftPadding: Math.round(Tokens.controlCheckBoxSize + Tokens.controlCheckBoxGap)
+    // Whole device pixels: the measured gap (5.5) would start the label between two pixels at scale 1 (it stays 5.5 at 2x).
+    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
+    leftPadding: Math.round((Tokens.controlCheckBoxSize + Tokens.controlCheckBoxGap) * root.pixelRatio) / root.pixelRatio
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox

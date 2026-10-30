@@ -75,6 +75,9 @@ T.Control {
         y: inset
         x: root.checked ? root.width - width - inset : inset
         color: Appearance.colors.knob
+        // Increase Contrast outlines the knob too: white on a light track is 1.57:1 without it.
+        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.dimmed ? Tokens.controlToggleDisabledKnobOpacity : 1
 
         Behavior on x {

@@ -471,6 +471,7 @@
  {"path": "tests/ci/run_mode.py", "layer": "logic"},
  {"path": "tests/ci/gtk_themes.py", "layer": "logic"},
  {"path": "tests/ci/icon_strokes.py", "layer": "logic"},
+ {"path": "tests/ci/qml_literals.py", "layer": "logic"},
  {"path": "tests/ci/token_sources.py", "layer": "logic"},
  {"path": "tests/ci/socket_errors.py", "layer": "logic"},
  {"path": "scripts/dev/i18n-cmake-check.sh", "layer": "headless"},

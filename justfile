@@ -9,11 +9,11 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-contrast check-upstream check-version check-licenses check-tidy check-secrets
+check: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-contrast check-literals check-upstream check-version check-licenses check-tidy check-secrets
 
 # Every offline check except clang-tidy, for a tree that leaves compositor/ unchanged (`just check` runs them all). One
 # recipe on purpose: `just check-schema check-shell` would pass check-shell to check-schema as a file argument.
-check-quick: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-contrast check-upstream check-version check-licenses check-secrets
+check-quick: check-config check-schema check-cmake check-shell check-shaders check-i18n check-scripts check-inventory check-contracts check-contrast check-literals check-upstream check-version check-licenses check-secrets
 
 # clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
 check-tidy:
@@ -104,6 +104,13 @@ check-contracts:
 # Gate A2 from the tokens: every contrast role meets its threshold and the role table matches the QML.
 check-contrast:
     python3 -I tests/visual/test_contrast_tokens.py
+
+# Rule 6 of ADR-0039 (step 2): a radius, font size, opacity, geometry value, animation duration or colour written as a number in
+# the QML fails (Timer intervals are logic; reviewed exceptions: the allowlist in the script or `literal-ok: <reason>`).
+# Tokens only: no literal design value in the QML of ui/Grassfield, shell (security included) and apps.
+check-literals:
+    python3 -I tests/ci/qml_literals.py --selftest
+    python3 -I tests/ci/qml_literals.py
 
 # The upstream Omarchy files the security forks derive from are unchanged (docs/upstream/omarchy.lock, GF-031); after a
 # review of an upstream change: scripts/dev/upstream-drift.sh --update.
