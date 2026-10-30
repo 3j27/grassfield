@@ -27,6 +27,8 @@ QtObject {
     property string wanted: ""
     property string asking: ""
     property string askingLanguage: ""
+    // The longest the helper may take (a catalog on a stalled disk): then it is stopped and the English name is shown.
+    property int helperTimeoutMs: 3000
 
     // Test hook: the same path as the compositor's event.
     function feed(data: string): void {
@@ -73,11 +75,13 @@ QtObject {
             startOnExit = true;
         else
             lookup.running = true;
+        helperTimeout.restart();
     }
 
     function answered(text: string): void {
         if (asking === "")
             return;
+        helperTimeout.stop();
         const name = Logic.lookupResult(text, asking);
         const next = Object.assign({}, translated);
         next[askingLanguage + "|" + asking] = name;
@@ -111,6 +115,18 @@ QtObject {
                 root.exitedFor = root.asking;
                 root.giveUp.restart();
             }
+        }
+    }
+
+    property Timer helperTimeout: Timer {
+        interval: root.helperTimeoutMs
+        onTriggered: {
+            if (root.asking === "")
+                return;
+            // Stopped: the next question starts when it has exited; this one is answered in English now.
+            root.startOnExit = false;
+            root.lookup.signal(15);
+            root.answered("");
         }
     }
 
