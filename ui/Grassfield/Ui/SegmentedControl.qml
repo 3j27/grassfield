@@ -60,7 +60,7 @@ T.Control {
     }
 
     // The selected pill sits this far inside the track, on whole pixels, with a concentric radius.
-    readonly property int pillInset: 2
+    readonly property int pillInset: Tokens.controlSegmentPillInset
 
     background: Rectangle {
         radius: Tokens.radiusControl

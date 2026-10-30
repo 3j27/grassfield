@@ -80,7 +80,7 @@ ListView {
             }
             textFormat: Text.PlainText
             text: cell.index + 1
-            color: cell.selected ? Appearance.colors.text : Appearance.colors.textSecondary
+            color: cell.selected ? Appearance.colors.text : Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }

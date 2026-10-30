@@ -105,8 +105,9 @@ check-contracts:
 check-contrast:
     python3 -I tests/visual/test_contrast_tokens.py
 
-# Rule 6 of ADR-0039 (step 2): a radius, font size, opacity, geometry value, animation duration or colour written as a number in
-# the QML fails (Timer intervals are logic; reviewed exceptions: the allowlist in the script or `literal-ok: <reason>`).
+# Rule 6 of ADR-0039 (steps 2 and 3): a radius, font size, opacity, scale, geometry value, animation duration or colour written
+# as a literal in the QML fails, also as a ternary's branch, an offset to a token, a literal alpha or a named colour (Timer
+# intervals are logic; reviewed exceptions: the allowlist in the script or `// literal-ok <kind>: <reason>`).
 # Tokens only: no literal design value in the QML of ui/Grassfield, shell (security included) and apps.
 check-literals:
     python3 -I tests/ci/qml_literals.py --selftest

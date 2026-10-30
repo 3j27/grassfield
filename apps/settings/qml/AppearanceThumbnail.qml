@@ -72,7 +72,7 @@ Item {
                 required property color modelData
                 required property int index
 
-                width: Math.max(2, Math.round(desktop.width * Tokens.settingsAppearanceThumbLightSize))
+                width: Math.max(Tokens.settingsPictureMinimumPart, Math.round(desktop.width * Tokens.settingsAppearanceThumbLightSize))
                 height: width
                 radius: width / 2
                 x: Math.round(desktop.width * Tokens.settingsAppearanceThumbLightX[index] - width / 2)
