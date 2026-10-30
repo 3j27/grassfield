@@ -121,8 +121,8 @@ QtObject {
         orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings. A light green, as macOS's Green, clearly apart from the brand green color.light.accent (OKLab distance 0.21; #3A7512 was 0.04): the owner's choice B of 2026-10-30 (IQ-B3 A) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        greenText: "#10240A",  // text and icons on the light green accent: dark, 6.5:1 (white would be 2.5:1; as yellowText) (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py) [ref: docs/decisions/ADR-0040-identity.md step 1c]
         graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
     })
@@ -143,8 +143,8 @@ QtObject {
         orangeText: "#FFFFFF",  // text on the dark-appearance orange selection fill (A2: tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // dark-appearance selection fill, yellow: yellow keeps its light pair (dark text): a lighter shade would only lower the contrast [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         yellowText: "#241C00",  // text on the dark-appearance yellow selection fill (A2: tests/visual/test_contrast_tokens.py)
-        green: "#408014",  // dark-appearance selection fill, green: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
-        greenText: "#FFFFFF",  // text on the dark-appearance green selection fill (A2: tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // dark-appearance selection fill, green: the light accent itself, as yellow's: it holds dark text, and a selection is never darker than the light accent (the owner's choice B of 2026-10-30, ADR-0040 step 1c) [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        greenText: "#10240A",  // text on the dark-appearance green selection fill: dark, 6.5:1, as on the light accent (A2: tests/visual/test_contrast_tokens.py)
         graphite: "#6C717D",  // dark-appearance selection fill, graphite: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         graphiteText: "#FFFFFF"  // text on the dark-appearance graphite selection fill (A2: tests/visual/test_contrast_tokens.py)
     })

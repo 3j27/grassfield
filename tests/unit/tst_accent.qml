@@ -135,7 +135,7 @@ TestCase {
 
     // The keyboard focus ring (UX-09, A11Y-08): one colour for every surface, 3:1 or more as a non-text element against the
     // material tint and against that tint over the extreme wallpapers (the tint alpha floor), for every accent in both
-    // appearances, the light appearance's yellow included (it falls back to the text colour).
+    // appearances, the light appearance's yellow and green included (they fall back to the text colour).
     function test_focusRingHolds3to1OnEveryAccentInBothAppearances() {
         function over(fg, a, bg) {
             const f = Qt.color(fg), b = Qt.color(bg);
@@ -157,6 +157,8 @@ TestCase {
         Appearance.dark = false;
         Appearance.accentSetting = "yellow";
         compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorLight.text).toString(), "light yellow: the text colour");
+        Appearance.accentSetting = "green";
+        compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorLight.text).toString(), "light green (ADR-0040 step 1c): the text colour");
         Appearance.accentSetting = "blue";
         compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorAccentLight.blue).toString(), "light blue: the accent");
     }

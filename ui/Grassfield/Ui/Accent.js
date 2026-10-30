@@ -4,8 +4,9 @@
 // `color.accentDark` / `color.accentLight` token groups, passed in as `tokens` (the Tokens singleton or any object with the
 // same fields), so tests can check setting -> colours without a scene.
 
-// "multicolor" is the default and keeps the Grassfield green of the `accent` / `accentText` roles; the others have their
-// own light and dark values (roles `<name>` and `<name>Text` of the token groups). Order = order of the swatches.
+// "multicolor" is the default, named "Grassfield" in Settings (ADR-0040 step 1c; the stored value keeps its name), and keeps
+// the Grassfield green of the `accent` / `accentText` roles; the others have their own light and dark values (roles `<name>`
+// and `<name>Text` of the token groups). Order = order of the swatches.
 const NAMES = ["multicolor", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite"];
 
 function validName(setting) {
@@ -58,8 +59,8 @@ function highlight(setting, dark, palette, tokens) {
 // The dark palette's accent is bright for glyphs, rings and indicators and holds 4.5:1 only with dark text, so a fill that
 // carries text or a mark has its own pair (ADR-0024 section 1): the light appearance's accent and text colour in the light
 // appearance; in the dark one a lighter shade of it that keeps white at 4.85:1 or more (`color.selectionDark`: the
-// Grassfield green #2E8049, the owner's pick of 2026-10-26, and one shade per accent; yellow keeps its light pair). `light`
-// is the light palette with the same accent applied.
+// Grassfield green #2E8049, the owner's pick of 2026-10-26, and one shade per accent; yellow and green, light accents with
+// dark text, keep their light pair). `light` is the light palette with the same accent applied.
 function selectionPair(setting, dark, light, tokens) {
     if (!dark)
         return {selection: light.accent, selectionText: light.accentText};
@@ -101,8 +102,8 @@ function contrast(a, b) {
 }
 
 // The keyboard focus ring colour (one ring for every surface): the accent when it holds `minContrast` against the surface
-// tint, else the text colour (the light appearance's yellow accent is 1.8:1 against its material; every other accent in both
-// appearances passes), so the ring is a non-text element of 3:1 or more (WCAG 1.4.11) on every accent.
+// tint, else the text colour (the light appearance's yellow and green accents are under 3:1 against its material; every other
+// accent in both appearances passes), so the ring is a non-text element of 3:1 or more (WCAG 1.4.11) on every accent.
 function focusRing(accent, tint, text, minContrast) {
     return contrast(accent, tint) >= minContrast ? accent : text;
 }
