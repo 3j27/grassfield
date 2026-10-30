@@ -496,6 +496,16 @@ TestCase {
         browser.bannerText = "";
         fakeApp.operationFailed("The application is no longer installed.");
         compare(browser.bannerText, "The application is no longer installed.");
+        // The same with another application's window in front: the browser window is no longer active (while the panel
+        // was, Qt counted it active as the panel's transient parent), and the panel stays the window worked in.
+        const elsewhere = createTemporaryQmlObject("import QtQuick; Window { width: 120; height: 80; visible: true }", test);
+        test.giveKeys(elsewhere);
+        verify(!browser.active, "the browser window is not active");
+        compare(files.lastActiveWindow, over);
+        browser.bannerText = "";
+        fakeApp.operationFailed("The document could not be opened.");
+        compare(browser.bannerText, "The document could not be opened.");
+        elsewhere.visible = false;
         // A panel asked for while a panel is the window worked in opens over the browser window under it.
         fakeChooser.opened(12, request);
         compare(files.applicationPanels[12].over, browser);

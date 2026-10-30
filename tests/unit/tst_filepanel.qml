@@ -1114,6 +1114,21 @@ TestCase {
         fakeApp.viewMode = "icons";
     }
 
+    // A view chosen in the panel: the column made for it, already listed, takes the last choice (it never loads, so only
+    // the change of listing tells the panel).
+    function test_the_last_choice_in_a_view_chosen_in_the_panel(): void {
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tryVerify(() => tab.folder.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "selected in the icon view");
+        tab.setViewMode("columns");
+        tryVerify(() => tab.view && tab.view.activeModel !== null, 2000, "the column view");
+        const m = tab.activeFolder;
+        verify(m !== tab.folder, "another listing");
+        compare(m.loading, false);
+        tryVerify(() => m.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "the last choice is selected in the column");
+    }
+
     // The last choice never replaces an application the user selected while the listing loaded.
     function test_the_last_choice_never_over_a_choice(): void {
         test.slowApplications = true;
