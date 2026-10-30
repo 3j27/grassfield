@@ -6,8 +6,12 @@ After=graphical-session.target
 Requisite=graphical-session.target
 # Only inside the Grassfield session, never in the Omarchy session.
 ConditionEnvironment=GRASSFIELD_SESSION=1
-# A crash loop (10 starts within 30 s) stops the restarts and the unit fails: the shell is broken, not stopped.
-StartLimitIntervalSec=30
+# The start limit is the backstop of a crash loop (ADR-0041 step 1a, owner decision SQ-2 A): systemd refuses the eleventh
+# start within 5 minutes, so with RestartSec=1 a loop faster than one crash every 29 s ends here in "failed" (the first
+# limit, 10 in 30 s, needed a crash within 2 s of each start and never tripped the loop of 2026-10-29, a crash 5 s after
+# every start). The loop detector below counts failures instead and stops a loop of any pace at the third failure within
+# 10 minutes.
+StartLimitIntervalSec=300
 StartLimitBurst=10
 # Fail-safe for lock before sleep (D-12). With the default RestartMode=normal (systemd 254+) this unit passes through
 # "failed" on EVERY failure (a crash, an exit code, 255 included), before the restart, so OnFailure= starts Omarchy's
@@ -16,7 +20,9 @@ StartLimitBurst=10
 # logind delay inhibitor while this shell restarts or stays failed and, before a sleep, asks this shell to lock
 # through Grassfield's `omarchy-shell` stand-in (packaging/shims), starting it again if needed. Its Grassfield
 # drop-in skips it once this shell is up again (active/running), at its next start.
-OnFailure=omarchy-sleep-lock.service
+# grassfield-shell-failed.service (ADR-0041 step 1a): the failure counter, started after every failure as well. At the
+# third failure within 10 minutes it cancels the pending restart and writes the safe-mode state; a logout counts nothing.
+OnFailure=omarchy-sleep-lock.service grassfield-shell-failed.service
 
 [Service]
 Type=simple

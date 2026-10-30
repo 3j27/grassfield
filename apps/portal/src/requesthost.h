@@ -93,6 +93,8 @@ protected:
     // The request is open and its window not shown yet / open and not forwarded.
     bool isMaking(int id) const;
     bool isOpen(int id) const;
+    // The request at `handle` (open or forwarded), 0 when none.
+    int requestId(const QString &handle) const;
     // Ends the call at once without an answer (response 2, or a D-Bus error with failAsError), the reason logged.
     void refuse(const QDBusMessage &message, const char *why);
     // The results of a forwarded call, relayed with their D-Bus types (only what the interface defines).

@@ -189,6 +189,14 @@ bool RequestHost::isOpen(int id) const
     return r && r->state != Request::State::Forwarded;
 }
 
+int RequestHost::requestId(const QString &handle) const
+{
+    for (const auto &r : std::as_const(m_requests))
+        if (r->handle == handle)
+            return r->id;
+    return 0;
+}
+
 void RequestHost::present(int id, QObject *object)
 {
     const auto r = m_requests.value(id);

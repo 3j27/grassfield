@@ -215,6 +215,10 @@ public:
     // launchApplication starts the application of a grassfield-app:/<id> item (nothing else) the way the shell's
     // Apps grid does (ApplicationsLogic::launchCommand: xdg-terminal-exec for Terminal=true, uwsm-app scope in a session).
     Q_INVOKABLE QUrl applicationsUrl() const;
+    // An application's item in that location (grassfield-app:/<desktop id>), and the desktop id of such an item ("" for any
+    // other URL): grassfield-portal's Choose Application panel answers with it.
+    Q_INVOKABLE QUrl applicationUrl(const QString &id) const;
+    Q_INVOKABLE QString applicationId(const QUrl &url) const;
     // True (and operationFailed with the permission message) when `urls` hold an item of the Applications location or the
     // location itself: nothing can be done to them but opening.
     bool refuseApplicationItems(const QList<QUrl> &urls);
@@ -387,6 +391,7 @@ private:
 
     // id -> .desktop path of the rows the Applications location listed last (built by a FolderModel on its thread).
     QVariantMap m_applicationPaths;
+    QVariantMap m_applicationNames; // id -> the name the Applications location shows (the disambiguated one)
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).

@@ -182,7 +182,9 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   now and fits either half of its output's Split View Desktop, its minimum size with its titlebar band: the popover greys
   Left and Right of Screen otherwise); `split`, and a pick into the other half of a Split View Desktop, refuse a window
   that does not fit its half (`reason:"invalid"`), and the suggestion of that half offers only windows that fit
-  (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57).
+  (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57). The reply gains `"unfit":["<hex>",…]` (always present): the
+  windows that can be tiled now and do not fit half of their output; the shell reads it again when the Window menu opens
+  and greys its Full Screen Tile for those (integrator PASS on 8316ed2, for later).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -214,7 +216,7 @@ event frames: clock marks monitors name presented refreshHz renders t total unit
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting unfit suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid

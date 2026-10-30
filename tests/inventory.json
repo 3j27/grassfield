@@ -21,7 +21,6 @@
  "scripts/gates/*.py"
 ],
 "ignore": [
- {"path": "tests/shell/startup_settle.d/shell.qml", "reason": "scenario of tests/shell/startup_settle.sh (the real Settings service under qs -p)"},
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
@@ -239,6 +238,7 @@
  {"path": "tests/unit/portal/tst_panelstate.cpp", "layer": "logic"},
  {"path": "tests/unit/portal/tst_filechooser.cpp", "layer": "logic"},
  {"path": "tests/unit/portal/tst_access.cpp", "layer": "logic"},
+ {"path": "tests/unit/portal/tst_appchooser.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_systembus.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_busjobs.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_backend.cpp", "layer": "logic"},
@@ -419,6 +419,7 @@
  {"path": "tests/shell/icon_svg_qt.sh", "layer": "logic"},
  {"path": "tests/shell/launch_keys.sh", "layer": "logic"},
  {"path": "tests/security/foreign_locker_guard.sh", "layer": "logic"},
+ {"path": "tests/shell/shell_failures.sh", "layer": "logic"},
  {"path": "tests/shell/shell_version.sh", "layer": "headless"},
  {"path": "tests/shell/icons_compose.sh", "layer": "data"},
  {"path": "tests/shell/icons_real_pins.sh", "layer": "data"},
@@ -470,6 +471,7 @@
  {"path": "tests/ci/run_mode.py", "layer": "logic"},
  {"path": "tests/ci/gtk_themes.py", "layer": "logic"},
  {"path": "tests/ci/icon_strokes.py", "layer": "logic"},
+ {"path": "tests/ci/qml_literals.py", "layer": "logic"},
  {"path": "tests/ci/token_sources.py", "layer": "logic"},
  {"path": "tests/ci/socket_errors.py", "layer": "logic"},
  {"path": "scripts/dev/i18n-cmake-check.sh", "layer": "headless"},

@@ -14,6 +14,17 @@ Singleton {
 
     readonly property AppMenuModel model: AppMenuModel {}
 
+    // The Window menu opens: whether its window fits half of its output is read again from the plugin (Full Screen Tile,
+    // ADR-0036 D57); the menu follows when the reply comes.
+    Connections {
+        target: Popups
+
+        function onKindChanged(): void {
+            if (Popups.kind === "appwindow")
+                TilingLink.refresh();
+        }
+    }
+
     // Desktop entry id -> SingleMainWindow=true. Quickshell does not expose that key, so one
     // small shell loop reads it from the entry file (absent key = false).
     property var singleMain: ({})
@@ -83,6 +94,7 @@ Singleton {
             canArrange: Compositor.canArrange,
             canSplit: Compositor.canSplit,
             splitBlocked: Compositor.splitBlocked,
+            splittable: focusedHere ? Compositor.fitsHalf(focusedHere) : true,
             outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }

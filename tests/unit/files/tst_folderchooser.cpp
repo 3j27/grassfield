@@ -1,8 +1,11 @@
 // The listings of grassfield-portal's Open and Save panels (FolderModel.chooser; ADR-0035 D-4, docs/specs/system-dialogs.md
 // section 1): over a real KIO listing of a scratch folder, the files a panel cannot take are dimmed and never selected, a
-// panel that takes one item keeps one, a folder panel dims every file, and the Applications location dims every application.
+// panel that takes one item keeps one, a folder panel dims every file, and the Applications location dims every application
+// but those Choose Application takes.
 // Part of files-kio-tests (a scratch home).
 #include "filesapp.h"
+#include "applicationslogic.h"
+#include "filelogic.h"
 #include "foldermodel.h"
 
 #include <QCoreApplication>
@@ -146,6 +149,50 @@ TEST(FolderChooserApplications, EveryApplicationIsDimmedInAPanel)
     QFile::remove(entry.fileName());
 }
 
+// Choose Application (grassfield-portal's AppChooser, ADR-0035 D-5, step 5b): the applications the chooser names by desktop id
+// are taken, the others dimmed and never selected; `allApplications` takes every one.
+TEST(FolderChooserApplications, ChooseApplicationTakesTheNamedOnes)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    for (const char *id : {"org.example.ChooserEditor", "org.example.ChooserViewer"}) {
+        QFile entry(dir + QLatin1Char('/') + QString::fromLatin1(id) + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write(QByteArray("[Desktop Entry]\nType=Application\nName=") + QByteArray(id).mid(12) + "\nExec=true\n");
+    }
+    FolderModel model;
+    model.setUrl(QUrl(QStringLiteral("grassfield-apps:/")));
+    const auto rowOf = [&model](const char *name) {
+        for (int r = 0; r < model.count(); ++r)
+            if (model.nameAt(r) == QLatin1String(name))
+                return r;
+        return -1;
+    };
+    QDeadlineTimer deadline(10000);
+    while ((rowOf("ChooserEditor") < 0 || rowOf("ChooserViewer") < 0) && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+    }
+    const int editor = rowOf("ChooserEditor");
+    const int viewer = rowOf("ChooserViewer");
+    ASSERT_GE(editor, 0);
+    ASSERT_GE(viewer, 0);
+    const auto dimmed = [&model](int row) { return model.data(model.index(row, 0), FolderModel::DimmedRole).toBool(); };
+    model.setChooser({{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true},
+                      {QStringLiteral("applications"), QStringList{QStringLiteral("org.example.ChooserEditor")}}});
+    EXPECT_FALSE(dimmed(editor));
+    EXPECT_TRUE(dimmed(viewer));
+    model.select(viewer, Qt::NoModifier);
+    EXPECT_EQ(model.selectedCount(), 0) << "a dimmed application is never selected";
+    model.select(editor, Qt::NoModifier);
+    EXPECT_EQ(model.selectedCount(), 1);
+    model.setChooser({{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true}, {QStringLiteral("allApplications"), true}});
+    EXPECT_FALSE(dimmed(editor));
+    EXPECT_FALSE(dimmed(viewer));
+    for (const char *id : {"org.example.ChooserEditor", "org.example.ChooserViewer"})
+        QFile::remove(dir + QLatin1Char('/') + QString::fromLatin1(id) + QStringLiteral(".desktop"));
+}
+
 // New Folder of a Save panel (FilesApp::makeFolder): a taken name, a folder's or a file's, is told by KIO's own error, since
 // the panels never look at the disk on the GUI thread first (ADR-0035 4b-18; re-review of 6b26afc); a new name is made; an
 // invalid one is refused at once.
@@ -184,4 +231,43 @@ TEST(PanelNewFolder, ATakenNameIsToldByKio)
     EXPECT_TRUE(QFileInfo(dir.filePath(QStringLiteral("fresh"))).isDir());
     answer = make(QStringLiteral("a/b"));
     EXPECT_TRUE(answer.property(QStringLiteral("error")).toString().startsWith(QStringLiteral("The name “a/b” can’t be used.")));
+}
+
+// An application Files cannot start: the message names it as the Applications location shows it (the name of the row, told
+// apart from an app of the same name) and through FileLogic::displayName, so a bidirectional override in a Name= never
+// reaches the banner. Exec= is a program that does not exist.
+TEST(ApplicationLaunch, TheFailureNamesTheRowsNameCleaned)
+{
+    qunsetenv("GRASSFIELD_FILES_NO_LAUNCH");
+    qunsetenv("GRASSFIELD_SESSION"); // not a real session: the program is started as it is, so that a missing one fails
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString name = QStringLiteral("Invoice‮fdp.sh");
+    QFile entry(dir + QStringLiteral("/org.example.BidiLaunch.desktop"));
+    ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+    entry.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=/nonexistent/grassfield-test-binary\n").arg(name).toUtf8());
+    entry.close();
+    FilesApp app(QList<QUrl>{});
+    auto *model = qobject_cast<FolderModel *>(app.createFolderModel(&app));
+    ASSERT_NE(model, nullptr);
+    model->setUrl(QUrl(QStringLiteral("grassfield-apps:/")));
+    const auto rowOf = [model, &name] {
+        for (int r = 0; r < model->count(); ++r)
+            if (model->nameAt(r) == name)
+                return r;
+        return -1;
+    };
+    QDeadlineTimer deadline(10000);
+    while (rowOf() < 0 && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+    }
+    ASSERT_GE(rowOf(), 0);
+    QStringList failures;
+    QObject::connect(&app, &FilesApp::operationFailed, &app, [&failures](const QString &message) { failures << message; });
+    app.launchApplication(ApplicationsLogic::entryUrl(QStringLiteral("org.example.BidiLaunch")));
+    ASSERT_EQ(failures.size(), 1);
+    EXPECT_FALSE(failures.first().contains(QChar(0x202E))) << failures.first().toStdString();
+    EXPECT_EQ(failures.first(), QStringLiteral("“%1” could not be started.").arg(FileLogic::displayName(model->nameAt(rowOf()))));
+    QFile::remove(entry.fileName());
 }

@@ -29,8 +29,8 @@ check bash -c 'for c in "showDesktopFlow.press();" "return showDesktopFlow.endFo
 desc="the Show Desktop block takes no decision of its own: no callLater, no flow call, no focus request, no rule of ShowDesktop.js"
 check bash -c 'b=$(awk "/---- Show Desktop \\(macOS/,/\"Hide Others\"/" "$1"); [ "$(wc -l <<<"$b")" -gt 60 ] && ! grep -qE "Qt.callLater|ShowDesktopFlow\\.on[A-Z]|focusWindowRequest|moveRequest|hideParkingRequest|endsOn|checksSpaces|spaceChanged|toRestore|survivors|stragglerRecords|recoverStep|parkingShownAfter|captureAll|Date.now" <<<"$b"' _ "$f"
 
-desc="the only focus requests in the Compositor are activate() giving the focus to the window it activates (after the ending) and the plain focus action"
-check bash -c 'a=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); [ "$(grep -c "focusWindowRequest(" "$1")" = 2 ] && [ "$a" = 1 ]' _ "$f"
+desc="the only focus requests in the Compositor are activate() giving the focus to the window it activates (after the ending), showTileGroup()'s focus step (after its own root.endShowDesktop(), TL29) and the plain focus action"
+check bash -c 'a=$(awk "/function activate\\(/,/^    }/" "$1" | grep -c "focusWindowRequest("); t=$(awk "/function showTileGroup\\(/,/^    }/" "$1" | sed "s#//.*##"); ! grep -q "if (false" <<<"$t" && grep -qE "^        root\\.endShowDesktop\\(\\);\$" <<<"$t" && [ "$(grep -c "focusWindowRequest(" "$1")" = 3 ] && [ "$a" = 1 ] && [ "$(grep -c "focusWindowRequest(" <<<"$t")" = 1 ] && [ "$(grep -n "root.endShowDesktop()" <<<"$t" | head -1 | cut -d: -f1)" -lt "$(grep -n "focusWindowRequest(" <<<"$t" | head -1 | cut -d: -f1)" ]' _ "$f"
 
 desc="activate() and unminimize() end Show Desktop first (before the Stages test, before the focus)"
 check bash -c 'awk "/function activate\\(/,/^    }/" "$1" | head -8 | grep -q "root.endShowDesktop()" && awk "/function unminimize/,/^    }/" "$1" | grep -q "root.endShowDesktop()"' _ "$f"

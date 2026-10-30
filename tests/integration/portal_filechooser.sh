@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# grassfield-portal's Open and Save panels and permission alerts (ADR-0035 D-4, D-5, steps 4b and 5a; docs/specs/system-
-# dialogs.md sections 1 and 2) with the real xdg-desktop-portal frontend.
+# grassfield-portal's Open and Save panels, Choose Application and permission alerts (ADR-0035 D-4, D-5, steps 4b, 5a and 5b;
+# docs/specs/system-dialogs.md sections 1 and 2) with the real xdg-desktop-portal frontend.
 # Static (always): the .portal file, the D-Bus service file and the unit name the same bus name and program and list
-# FileChooser and Access; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
+# FileChooser, Access and AppChooser; the unit is Type=dbus with no Restart (D-Bus activation starts it again), clears GTK_USE_PORTAL and
 # QT_QPA_PLATFORMTHEME and is hardened; the PKGBUILD builds and installs every piece; the session's window rules give a panel's
 # and an alert's xdg tags the client-chrome tag.
 # Runtime, on a private bus of the test's own (the frontend under env -i with a scratch HOME, XDG_CURRENT_DESKTOP=Hyprland and
@@ -20,6 +20,9 @@
 #  7 the camera through the frontend (the frontend's permission store on the scratch home): the alert allows (response 0,
 #    "yes" kept) or does not (response 1, "no" kept); an AccessDialog with a choice answers the choice (A-AC1 without the
 #    nested session)
+#  8 Open With through the frontend (OpenFile with "ask" on a text file, two scratch applications for text/plain, one the default):
+#    Choose Application answers the default (its last choice, selected), the frontend starts it with the document and counts
+#    the choice in its permission store; Cancel starts nothing (A-OW1 through the real frontend)
 # Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal, and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
@@ -39,13 +42,14 @@ name=org.freedesktop.impl.portal.desktop.grassfield
 unit=$pk/systemd/grassfield-portal.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser and Access (D-5)"
-check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;" "$2" && grep -qx "Name=$1" "$3" &&
+desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser, Access and AppChooser (D-5)"
+check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal" "$3" && grep -qx "SystemdService=grassfield-portal.service" "$3" &&
   grep -qx "BusName=$1" "$4" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-portal" "$4"' _ "$name" \
   "$pk/xdg/xdg-desktop-portal/portals/grassfield.portal" "$pk/dbus/$name.service" "$unit"
-desc="the session's routing sends FileChooser and Access to grassfield, then gtk"
-check bash -c 'grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Access=grassfield;gtk" "$1"' _ \
+desc="the session's routing sends FileChooser, Access and AppChooser to grassfield, then gtk"
+check bash -c 'grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Access=grassfield;gtk" "$1" &&
+  grep -qx "org.freedesktop.impl.portal.AppChooser=grassfield;gtk" "$1"' _ \
   "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
 desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened, every place the user may write writable (4b-12)"
 check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME" \
@@ -118,6 +122,7 @@ impl() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" impl "$@"; }
 camera() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" camera "$@"; }
 access() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" access "$@"; }
 permission() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" permission "$@"; }
+openfile() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" open-file "$@"; }
 value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(json.dumps(eval(sys.argv[1], {}, {"d": d})))' "$1"; }
 starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
 # The backend's process is gone (or a zombie): backend.sh writes its pid before it execs the backend.
@@ -243,6 +248,51 @@ if [[ -x $store ]]; then
   stop_bus
 else
   echo "SKIP: 7 needs xdg-permission-store ($store)"
+fi
+
+# 8 --------------------------------------------------------------------------------------------------------------------
+# Open With (D-5, step 5b): an application opens a document through the frontend's OpenFile with "ask"; the frontend asks the
+# AppChooser backend (its candidates for text/plain, its last choice the type's default application), Choose Application
+# answers it, and the frontend starts that application with the document and counts the choice in its permission store.
+openwith() { # openwith <scenario name>: two applications for text/plain (each writes the file it is given) and the default
+  local dd=$tmp/$1 app
+  mkdir -p "$dd/home/.local/share/applications" "$dd/cfg"
+  for app in A B; do
+    printf '#!/bin/sh\nprintf "%%s" "$1" >%s/opened-%s\n' "$dd" "$app" >"$dd/open-$app.sh"
+    chmod 755 "$dd/open-$app.sh"
+    printf '[Desktop Entry]\nType=Application\nName=Grassfield Test %s\nExec=%s/open-%s.sh %%f\nMimeType=text/plain;\n' "$app" "$dd" "$app" \
+      >"$dd/home/.local/share/applications/org.example.GfOpen$app.desktop"
+  done
+  printf '[Default Applications]\ntext/plain=org.example.GfOpenB.desktop\n' >"$dd/cfg/mimeapps.list"
+}
+if [[ -x $store ]]; then
+  openwith openwith
+  scenario openwith accept || exit 1
+  out=$(openfile "$d/home/Documents/a.txt" 30)
+  got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.AppChooser \(.*config\)" "$d/frontend.log" | sort -u)
+  desc="8 the frontend routes AppChooser to the Grassfield backend [$got]"
+  check bash -c '[[ $1 == *"grassfield.portal for org.freedesktop.impl.portal.AppChooser"* ]]' _ "$got"
+  desc="8 Choose Application answers (the type's default application, selected), the application gets response 0 [$out]"
+  check test "$(value 'd.get("response")' <<<"$out")" = "0"
+  wait_until 10 test -s "$d/opened-B"
+  desc="8 ... the frontend starts the chosen application with the document [$(cat "$d/opened-B" 2>/dev/null)]"
+  check test "$(cat "$d/opened-B" 2>/dev/null)" = "$d/home/Documents/a.txt"
+  perm=$(permission desktop-used-apps text/plain)
+  desc="8 ... and counts the choice in its permission store [$perm]"
+  check test "$(value '[v[0] for v in d.get("permissions", {}).values()]' <<<"$perm")" = '["org.example.GfOpenB"]'
+  # The same process then serves an Open panel: one panels root for both interfaces (made by the first of them).
+  out=$(choose OpenFile "{\"directory\": true}" 20)
+  desc="8 ... then an Open panel in the same process answers too [$out; starts $(starts)]"
+  check test "$(value 'd.get("response")' <<<"$out") $(starts)" = "0 1"
+  stop_bus
+  openwith openwith-cancel
+  scenario openwith-cancel cancel || exit 1
+  out=$(openfile "$d/home/Documents/a.txt" 30)
+  desc="8 Cancel: the application gets response 1, and no application starts [$out]"
+  check bash -c '[[ $1 == 1 && ! -e $2/opened-A && ! -e $2/opened-B ]]' _ "$(value 'd.get("response")' <<<"$out")" "$d"
+  stop_bus
+else
+  echo "SKIP: 8 needs xdg-permission-store ($store)"
 fi
 
 exit "$fail"

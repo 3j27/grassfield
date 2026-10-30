@@ -1350,6 +1350,28 @@ namespace gf::tiling {
         return it == splits.end() ? nullptr : &*it;
     }
 
+    bool staleRecord(const TileRecord& r, bool mapped, bool atItsBox, uint64_t dragged) {
+        if (!mapped)
+            return true;
+        return r.state == TileState::Tiled && !r.relayout && !atItsBox && r.id != dragged;
+    }
+
+    const SplitDesk* splitOfEdge(std::span<const SplitDesk> splits, const SharedEdge& edge) {
+        if (edge.before.size() != 1 || edge.after.size() != 1)
+            return nullptr;
+        const auto* d = splitOfWindow(splits, edge.before.front());
+        return d && d->members.size() == 2 && std::ranges::find(d->members, edge.after.front()) != d->members.end() ? d : nullptr;
+    }
+
+    std::optional<int> splitDropZone(const Rect& left, const Rect& right, int ownZone, double x, double y) {
+        if (ownZone != 0 && ownZone != 1)
+            return std::nullopt;
+        const Rect& other = ownZone == 0 ? right : left;
+        if (x < other.x || x >= other.x + other.w || y < other.y || y >= other.y + other.h)
+            return std::nullopt;
+        return ownZone == 0 ? 1 : 0;
+    }
+
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
         return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
     }
@@ -1364,7 +1386,7 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1400,6 +1422,9 @@ namespace gf::tiling {
                 out += std::format(R"({}"{:x}")", j == 0 ? "" : ",", splits[i].members[j]);
             out += std::format(R"(],"waiting":{}}})", splits[i].waiting);
         }
+        out += R"(],"unfit":[)";
+        for (size_t i = 0; i < unfit.size(); ++i)
+            out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", unfit[i]);
         out += "]";
         if (!suggestion) {
             out += R"(,"suggestion":null})";

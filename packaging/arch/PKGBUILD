@@ -26,7 +26,7 @@ if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; the
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
   exit 1
 fi
-pkgrel=${GRASSFIELD_PKGREL:-11}
+pkgrel=${GRASSFIELD_PKGREL:-12}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -259,6 +259,9 @@ package_grassfield-desktop() {
   install -Dm644 "$root/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" \
     "$pkgdir/usr/lib/systemd/user/omarchy-sleep-lock.service.d/10-grassfield.conf"
   install -Dm755 "$root/packaging/systemd/sleep-lock-gate" "$pkgdir/usr/lib/grassfield/sleep-lock-gate"
+  # The "compositor certainly gone" test the gate and the shell failure counter share (ADR-0041 step 1a); the counter's
+  # script comes from packaging/bin below and its unit from the loop further down.
+  install -Dm755 "$root/packaging/systemd/session-gone" "$pkgdir/usr/lib/grassfield/session-gone"
   # Session services and helpers that Omarchy's own session provides through its shell or autostart (audit GF-AUDIT-001,
   # 02 §5.3): crash, low-battery and migration notices, removable media, Night Shift, lid, graceful log out / restart /
   # shut down, login choice. All user units skip themselves outside the Grassfield session.
@@ -292,7 +295,7 @@ package_grassfield-desktop() {
   find "$root/packaging/session-bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/session-bin/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do

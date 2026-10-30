@@ -85,7 +85,8 @@ class FolderModel : public QSortFilterProxyModel
     // The Open and Save panels (grassfield-portal, ADR-0035 D-4): {globs, mimeTypes, foldersOnly, single}, empty in Files.
     // Files the panel cannot take (a folder panel: every file; else those its filter, FileLogic::passesFilter, refuses) are
     // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
-    // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file).
+    // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file), except
+    // in Choose Application: `applications` (desktop ids) names the ones it takes, `allApplications` takes every one.
     Q_PROPERTY(QVariantMap chooser READ chooser WRITE setChooser NOTIFY chooserChanged)
     // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
     Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
@@ -211,7 +212,7 @@ public:
 
 signals:
     // The Applications location was built (id -> .desktop path of every row): FilesApp keeps it for Copy and Get Info.
-    void applicationsListed(const QVariantMap &paths);
+    void applicationsListed(const QVariantMap &paths, const QVariantMap &names); // id -> .desktop path, id -> the name the row shows
     void urlChanged();
     void sortChanged();
     void showHiddenChanged();
@@ -407,4 +408,8 @@ private:
     QStringList m_chooserMimeTypes;
     bool m_chooserFoldersOnly = false;
     bool m_chooserSingle = false;
+    // Choose Application (grassfield-portal's AppChooser): the applications of the Applications location it can take (their
+    // desktop ids), or every one.
+    QSet<QString> m_chooserApplications;
+    bool m_chooserAllApplications = false;
 };

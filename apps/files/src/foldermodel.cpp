@@ -1155,6 +1155,9 @@ void FolderModel::setChooser(const QVariantMap &chooser)
     m_chooserMimeTypes = chooser.value(QStringLiteral("mimeTypes")).toStringList();
     m_chooserFoldersOnly = chooser.value(QStringLiteral("foldersOnly")).toBool();
     m_chooserSingle = chooser.value(QStringLiteral("single")).toBool();
+    const QStringList applications = chooser.value(QStringLiteral("applications")).toStringList();
+    m_chooserApplications = QSet<QString>(applications.cbegin(), applications.cend());
+    m_chooserAllApplications = chooser.value(QStringLiteral("allApplications")).toBool();
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {DimmedRole});
     // What the panel can no longer take leaves the selection.
@@ -1166,9 +1169,10 @@ bool FolderModel::dimmed(const KFileItem &item) const
 {
     if (m_chooser.isEmpty() || item.isNull())
         return false;
-    // An application of the Applications location is a launcher, not a file an application can open.
+    // An application of the Applications location is a launcher, not a file an application can open; Choose Application takes
+    // the applications it names, or every one.
     if (isApplications())
-        return true;
+        return !m_chooserAllApplications && !m_chooserApplications.contains(ApplicationsLogic::entryId(item.url()));
     if (item.isDir())
         return false;
     if (m_chooserFoldersOnly)
@@ -1568,10 +1572,12 @@ void FolderModel::loadApplications()
 
 void FolderModel::applyApplications(const QList<ApplicationsLogic::Entry> &entries)
 {
-    QVariantMap paths;
-    for (const ApplicationsLogic::Entry &e : entries)
+    QVariantMap paths, names;
+    for (const ApplicationsLogic::Entry &e : entries) {
         paths.insert(e.id, e.path);
-    emit applicationsListed(paths);
+        names.insert(e.id, e.name);
+    }
+    emit applicationsListed(paths, names);
     // Rows that stay keep their selection; the others go.
     QHash<QUrl, ApplicationsLogic::Entry> next;
     KFileItemList items;
