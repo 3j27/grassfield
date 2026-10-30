@@ -675,7 +675,11 @@ the panel read the tab's own listing, Open stayed disabled); the last choice is 
 choice; a click on a dimmed item keeps the selection (`FolderModel::select`); the late-focus clock starts at the first frame,
 and a click that brings a panel the keyboard holds nothing; Choose Application's line cuts the document's name in its middle and
 decodes an address; Get Info's and the preview's "Where" go through `DisplayName.text`; x-d-p-gtk's Cancel relays no empty
-choice. Tests: `tests/unit/files/tst_applicationchooser.cpp`, `tst_kiodialogs.cpp` (a type with no application through a real
+choice. After the opus review of step 5c (PASS; MINORs and NITs done): an error raised while a Files panel is the window
+worked in shows in the window under it; only a click on a dimmed item keeps the selection (a key that lands there selects
+nothing, so Return never answers an item out of sight); a panel asked for from a panel opens over the browser window under it,
+and a window that closes cancels the panels over it; one document with no file name is named by its address; a chooser with
+nothing to show its panel answers none at once (grassfield-portal's own FilesApp). Tests: `tests/unit/files/tst_applicationchooser.cpp`, `tst_kiodialogs.cpp` (a type with no application through a real
 OpenUrlJob: the sheet, the panel, the chosen application started with the document; Cancel on either; a job killed under its
 panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.qml`, `tst_filesbrowser.qml`,
 `tst_filescolumns.qml`, `tst_filepanel.qml`, `tst_appchooser.cpp`, `tests/shell/display_names.sh` (a raw path).
@@ -705,6 +709,11 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
 - **5c-6. An answer that cannot be kept.** An application no longer installed when Open is pressed opens nothing (never another
   one); KIO's question then ends as cancelled. A request whose job ends (KIO killed it) closes its panel unanswered. With no
   browser window (`--info`), nothing is asked: Cancel.
+- **5c-7. A dimmed item and the keys.** Options: (a) a click and a key on a dimmed item both leave the selection; (b) a click
+  leaves it, a key that lands there selects nothing (the current row moves); (c) the keys skip dimmed items. **Choice: (b)**:
+  macOS's disabled items take no click; (a) left a selection out of sight that Return answered (review of step 5c, MINOR 2);
+  (c) is macOS's, but the views' movers take the current row as their origin, a change of every view for a key path the
+  panel's Return already keeps safe.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
@@ -1625,7 +1634,7 @@ requests #8, #9 and #10 are merged (owner).
    split and the portal.
 5. **Open With and permission alerts** (D-5), in two pull requests (decision 5a-1): **5a**, the permission alerts (Access);
    **5b**, Open With (AppChooser); then **5c**, Files' Open With > Other… and KIO's "no application" question as the same panel
-   (decisions 5b-7, 5c-1 to 5c-6).
+   (decisions 5b-7, 5c-1 to 5c-7).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording

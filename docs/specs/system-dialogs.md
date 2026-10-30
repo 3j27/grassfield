@@ -238,7 +238,7 @@ ADR-0035 5b-1 to 5b-7):
   panel answers the type's default application, the frontend starts it with the document and counts the choice; Cancel starts
   nothing.
 
-Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-6):
+Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
 - OW2 Files' Open With, in the item menu and the File menu, lists the applications for the selected files' type, then Other…
   (Other… alone when none); Other… opens the same Choose Application panel, modal over the Files window the user worked in,
   for the selection ("Choose an application to open the document “X”.", or "… the N selected documents."); the application
