@@ -256,6 +256,8 @@ Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
   under its panel), `tests/unit/tst_filesbrowser.qml` (Other…, the panel over the browser window), `tst_filesglobalmenu.qml`,
   `tst_fileskiosheets.qml`, `tst_filepanel.qml` (a click and a right-click on a dimmed item in each view); the look in a nested
   session is the integrator's.
+- Delivered with step 6a (5c-8): the panel lists the type's applications the Applications grid hides (NoDisplay, as Omarchy's
+  imv), so the default one is preselected and Open is enabled; `tst_applications.cpp`, `tst_folderchooser.cpp`.
 
 ## 3. Screen-sharing picker (P10; ADR-0035 D-6)
 
@@ -656,10 +658,34 @@ The last-used printer and settings are remembered per app.
   Grassfield sheet (screenshot).
 - A-PR3 F1 against the reference print sheet captures (both appearances).
 
+### Built in step 6a (ADR-0035 6-1 to 6-9)
+- PR1 done without Presets and the printer's own options (6b): Printer (the application's last printer, else the default; Add
+  Printer… last), Copies (up to what the printer takes), Pages (All Pages; Current Page and Selection when the application has
+  them; a range typed "1-3, 5", Print dimmed until it reads), Paper Size (the printer's, its default first shown, 6-8),
+  Orientation, Scale, and Two-Sided (Off, Long-Edge Binding, Short-Edge Binding) and Colour (Colour, Black & White) when the
+  printer has them. The answer: GTK's settings (strings) and page setup (doubles), and a token good once, for its
+  application, for five minutes (6-5).
+- PR2 with a token done: the job carries the copies, collation, paper, two sides and colour, never the pages, scale or
+  orientation GTK already applied (6-4); a job the printer refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
+- PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
+  only a PDF is written, through a temporary file; Cancel there brings the sheet back.
+- PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
+  as PDF kept.
+- PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
+  a job's connection 10 s and 30 s without progress) and libcups' cancel flag; a sheet that cannot show sends the call to
+  x-d-p-gtk (RequestHost).
+- A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options),
+  `tests/unit/portal/tst_print.cpp` (the D-Bus interface with fakes: tokens, Save as PDF, no printer, another printer, the
+  forward), `tests/integration/print_cups.sh` (libcups against a scratch cupsd: printers, options, a job with its options kept on
+  it). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9 (the real frontend, the sheet's test answer, the
+  job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
+- `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings.
+Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
+sides and colour (trays, quality, finishing) are its defaults.
 
 ## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9)
 
