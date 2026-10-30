@@ -177,11 +177,13 @@ TEST(Fetch, HeadStatusesAgainstALocalServer)
     QSslConfiguration trusting = saved;
     trusting.addCaCertificate(certificate.first());
     QSslConfiguration::setDefaultConfiguration(trusting);
-    const QNetworkProxy proxy = QNetworkProxy::applicationProxy();
+    // Never QNetworkProxy::applicationProxy(): it asks the system's proxy (libproxy 0.5.12 leaks under LSan when one is set).
+    const bool systemProxy = QNetworkProxyFactory::usesSystemConfiguration();
     QNetworkProxy::setApplicationProxy(QNetworkProxy::NoProxy);
-    const auto restore = qScopeGuard([&saved, &proxy] {
+    const auto restore = qScopeGuard([&saved, systemProxy] {
         QSslConfiguration::setDefaultConfiguration(saved);
-        QNetworkProxy::setApplicationProxy(proxy);
+        QNetworkProxy::setApplicationProxy(QNetworkProxy());
+        QNetworkProxyFactory::setUseSystemConfiguration(systemProxy);
     });
     HeadServer server;
     ASSERT_TRUE(server.listen(certificate.first(), key));
