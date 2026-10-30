@@ -854,7 +854,10 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   `n-copies` "1", and the job asks the printer for the copies and their collation, with the paper, the two sides and the colour;
   never the page ranges, the scale or the orientation, which (a) would apply twice (pages 3–5 of a three-page file print
   nothing). The first build gave GTK the copies too, and a GTK 3 application printed n × n of them (review of step 6a, MAJOR).
-  The page setup names its paper without a `PPDName` (GTK takes any `PPDName` key, an empty one too, over `Name`).
+  The page setup names its paper without a `PPDName` (GTK takes any `PPDName` key, an empty one too, over `Name`). x-d-p-gtk's
+  answer, when the call goes to it (the sheet cannot show), is relayed as it is: a GTK 3 application gets n × n copies there,
+  as with x-d-p-gtk alone; giving GTK one copy in that answer would leave one copy for x-d-p-gtk's print to a file, and the
+  fallback stays upstream's own (counter-review of step 6a, NIT 4).
 - **6-5. Tokens.** Good once, for the application that got it, for five minutes (x-d-p-gtk's rule, src/print.c), at most 64 kept;
   a token this backend did not give (x-d-p-gtk's, after a PreparePrint it served) or an expired one goes to x-d-p-gtk, which
   knows its own or asks. A live token keeps grassfield-portal from quitting when idle (GTK may take a while to render a long
