@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <csignal>
+#include <cstdlib>
 #include <fcntl.h>
 #include <fstream>
 #include <sched.h>
@@ -64,15 +65,13 @@ bool writeFile(const std::string &path, const std::string &text)
     return ok;
 }
 
-// The pid-reuse case, as the init of a pid namespace of its own with its own /proc: A (pid 2) is opened, killed and
-// reaped; the next pid is set back so that B takes pid 2; the signal through A's descriptor must fail with ESRCH and
-// leave B alive. Exit codes: 0 passed, 77 the namespace's /proc or ns_last_pid refused (skip), others a failure.
-[[noreturn]] void reuseAsInit()
+// The pid-reuse case, as the init of a pid namespace of its own with its own /proc mounted on `dir` (made and removed by
+// the test, outside the namespace): A (pid 2) is opened, killed and reaped; the next pid is set back so that B takes pid
+// 2; the signal through A's descriptor must fail with ESRCH and leave B alive. Exit codes: 0 passed, 77 the namespace's
+// /proc or ns_last_pid refused (skip), others a failure. The mount goes with the namespace.
+[[noreturn]] void reuseAsInit(const char *dir)
 {
     if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) != 0)
-        _exit(77);
-    char dir[] = "/tmp/activity-signals-proc-XXXXXX";
-    if (!mkdtemp(dir))
         _exit(77);
     if (mount("proc", dir, "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) != 0)
         _exit(77);
@@ -97,8 +96,6 @@ bool writeFile(const std::string &path, const std::string &text)
     const bool bAlive = waitpid(b, &status, WNOHANG) == 0;
     kill(b, SIGKILL);
     waitpid(b, &status, 0);
-    umount(dir);
-    rmdir(dir);
     if (error != ESRCH)
         _exit(14);
     _exit(bAlive ? 0 : 15);
@@ -158,6 +155,11 @@ TEST(Signals, APidTakenAgainIsNeverSignalled)
 {
     const uid_t uid = getuid();
     const gid_t gid = getgid();
+    // The namespace's /proc goes here; the directory is removed below whatever the case's end (review of 1153365: an empty
+    // one was left after each run).
+    const char *tmp = std::getenv("TMPDIR");
+    std::string dir = std::string(tmp && *tmp ? tmp : "/tmp") + "/activity-signals-proc-XXXXXX";
+    ASSERT_NE(mkdtemp(dir.data()), nullptr);
     const pid_t helper = fork();
     ASSERT_GE(helper, 0);
     if (helper == 0) {
@@ -169,13 +171,15 @@ TEST(Signals, APidTakenAgainIsNeverSignalled)
             _exit(77);
         const pid_t init = fork();
         if (init == 0)
-            reuseAsInit();
+            reuseAsInit(dir.c_str());
         int status = 0;
         waitpid(init, &status, 0);
         _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 20);
     }
     int status = 0;
-    ASSERT_EQ(waitpid(helper, &status, 0), helper);
+    const pid_t waited = waitpid(helper, &status, 0);
+    rmdir(dir.c_str()); // the mount went with the namespace
+    ASSERT_EQ(waited, helper);
     ASSERT_TRUE(WIFEXITED(status));
     if (WEXITSTATUS(status) == 77)
         GTEST_SKIP() << "the kernel refused a user and pid namespace with its own /proc here (seccomp or masked /proc): "

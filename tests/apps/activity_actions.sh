@@ -14,7 +14,9 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd "$root" || exit 2
 [[ $(id -u) != 0 ]] || { echo "refused: run as the app's user, not root"; exit 2; }
 apps/activity/build-direct.sh --tests >/dev/null || { echo "FAIL: building activity-window-qml-tests"; exit 1; }
-env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen timeout 300 \
+# Offscreen, without the desktop's platform theme (QT_QPA_PLATFORMTHEME=gtk3 calls gtk_init, which needs a display; as
+# scripts/dev/test.sh; the integrator's review of 1153365).
+env -u DISPLAY -u WAYLAND_DISPLAY -u QT_QPA_PLATFORMTHEME QT_QPA_PLATFORM=offscreen timeout 300 \
   .dev/build/activity-window-qml-tests --gtest_filter='ActivityActions.*' --gtest_brief=1
 status=$?
 ((status == 0)) && echo "PASS: A-W2" || echo "FAIL: A-W2 (exit $status)"
