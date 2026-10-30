@@ -55,19 +55,39 @@ Window {
     // The entries of the Show, Format or Enable pop-up.
     readonly property var formatEntries: panel.choosingApp ? [{id: "0", text: qsTr("Recommended Applications")}, {id: "1", text: qsTr("All Applications")}]
                                                            : (panel.request.filters || []).map((f, i) => ({id: String(i), text: f.name}))
-    // The line over the browser: the application's own title, or what Choose Application opens.
+    // The line over the browser: the application's own title, or what Choose Application opens. Choose Application names
+    // the document (or the address, decoded as the user reads it): `messageName` in `messageText`'s %1; the line shows the
+    // name cut in its middle to fit (shownMessage), so that its extension and the closing quote stay (integrator nested
+    // pass of f9a25ce, NIT).
+    readonly property string messageName: {
+        if (!panel.choosingApp)
+            return "";
+        if (panel.request.filename)
+            return DisplayName.text(String(panel.request.filename));
+        if (panel.request.uri && !(panel.request.count > 1))
+            return DisplayName.text(PanelLogic.decodedUri(String(panel.request.uri)));
+        return "";
+    }
+    readonly property string messageText: {
+        if (!panel.choosingApp)
+            return "";
+        if (panel.request.filename)
+            return qsTr("Choose an application to open the document “%1”.");
+        if (panel.messageName !== "")
+            return qsTr("Choose an application to open “%1”.");
+        return "";
+    }
     readonly property string message: {
         if (!panel.choosingApp)
             return String(panel.request.title);
-        if (panel.request.filename)
-            return qsTr("Choose an application to open the document “%1”.").arg(DisplayName.text(String(panel.request.filename)));
+        if (panel.messageText !== "")
+            return panel.messageText.arg(panel.messageName);
         // Files' Open With > Other… for several documents.
         if (panel.request.count > 1)
             return qsTr("Choose an application to open the %1 selected documents.").arg(panel.request.count);
-        if (panel.request.uri)
-            return qsTr("Choose an application to open “%1”.").arg(String(panel.request.uri));
         return qsTr("Choose an application.");
     }
+    readonly property string shownMessage: panel.messageText !== "" ? panel.messageText.arg(nameMetrics.elidedText) : panel.message
     // New Folder where a folder is the answer, or the place of a new file.
     readonly property bool canMakeFolder: !panel.choosingApp && (panel.kind !== "open" || panel.request.directory === true)
     // The view of this application's panels (the tab reads it when it opens).
@@ -109,7 +129,11 @@ Window {
     // A panel that first gets the keyboard late (it opened behind the lock, or under another window) takes keys only after a
     // click in it (spec common rule 6, the hold rule): a key meant for something else never answers it unseen.
     property bool keysHeld: false
+    // When the first frame was shown (the window's mapping; a fresh process can take seconds to draw it, so the clock starts
+    // there, not when the window is made visible: integrator nested pass of f9a25ce, follow-up 2), and when the last press
+    // in the panel came.
     property real shownAt: 0
+    property real pressedAt: 0
     property bool everActive: false
     property bool testAnswered: false
     // GRASSFIELD_PORTAL_TEST_ANSWER "accept" on a Choose Application panel: waits for the listing's preselected application.
@@ -422,18 +446,18 @@ Window {
 
     // The window ------------------------------------------------------------------------------------------------------------
 
-    onVisibleChanged: {
-        if (panel.visible && panel.shownAt === 0)
-            panel.shownAt = Date.now();
-    }
-
     onActiveChanged: {
         if (!panel.active)
             return;
         panel.manager.lastActiveWindow = panel;
         if (!panel.everActive) {
             panel.everActive = true;
-            if (Date.now() - panel.shownAt > Tokens.filesPanelLateFocusMs)
+            // Late: shown a while ago (behind the lock, under another window), and no click in the panel brought it the
+            // keyboard just now (a click to focus: the user is looking at it). Active before its first frame: not late.
+            const now = Date.now();
+            const late = panel.shownAt > 0 && now - panel.shownAt > Tokens.filesPanelLateFocusMs;
+            const clicked = panel.pressedAt > 0 && now - panel.pressedAt <= Tokens.filesPanelLateFocusMs;
+            if (late && !clicked)
                 panel.keysHeld = true;
             else
                 panel.focusStart();
@@ -446,6 +470,8 @@ Window {
     onFilterChanged: tab.applyChooser()
 
     onFrameSwapped: {
+        if (panel.shownAt === 0)
+            panel.shownAt = Date.now();
         // Files' Main.qml has no test answer.
         if (!panel.manager.testAnswer || panel.testAnswered)
             return;
@@ -478,20 +504,28 @@ Window {
     }
 
     // Choose Application: the frontend's last choice for the document (its default application, or the one chosen last) is
-    // selected once the Applications listing holds it, as the panel opened on it.
-    property bool preselected: false
+    // selected once the Applications listing holds it, as the panel opened on it: in the listing the panel shows, which in
+    // the column view is the column made after the tab's own listing (integrator nested pass of f9a25ce, follow-up 1), and
+    // not over a choice the user made.
+    property var preselectedIn: null
     function preselect(): void {
         const m = tab.activeFolder;
-        if (panel.preselected || !m || !m.isApplications || m.loading)
+        if (!m || m === panel.preselectedIn || !m.isApplications || m.loading)
             return;
-        panel.preselected = true;
-        if (panel.lastChoice !== "")
+        panel.preselectedIn = m;
+        if (panel.lastChoice !== "" && m.selectedCount === 0)
             m.expect(panel.app.applicationUrl(panel.lastChoice), false);
     }
     Connections {
-        target: panel.choosingApp && !panel.preselected ? tab.activeFolder : null
+        target: panel.choosingApp && tab.activeFolder !== panel.preselectedIn ? tab.activeFolder : null
         function onLoadingChanged(): void {
             panel.preselect();
+        }
+    }
+    Connections {
+        target: panel.choosingApp ? tab : null
+        function onActiveFolderChanged(): void {
+            Qt.callLater(panel.preselect);
         }
     }
 
@@ -631,10 +665,25 @@ Window {
             textFormat: Text.PlainText
             elide: Text.ElideRight
             maximumLineCount: 1
-            text: panel.message
+            text: panel.shownMessage
+            Accessible.name: panel.message
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
+        }
+
+        // Choose Application's line: the sentence without the name, and the name cut in its middle to the width left.
+        TextMetrics {
+            id: sentenceMetrics
+            font: titleLine.font
+            text: panel.messageText !== "" ? panel.messageText.arg("") : ""
+        }
+        TextMetrics {
+            id: nameMetrics
+            font: titleLine.font
+            elide: Text.ElideMiddle
+            elideWidth: Math.max(0, titleLine.width - titleLine.leftPadding - titleLine.rightPadding - sentenceMetrics.advanceWidth)
+            text: panel.messageName
         }
 
         // Save As (Save): the name, the disclosure button, and Where while compact.
@@ -1050,12 +1099,11 @@ Window {
     }
 
     // The keys wait for a click (keysHeld): this takes them meanwhile, and the first press anywhere in the panel ends the
-    // hold and goes on to what is under it.
+    // hold and goes on to what is under it. Every press is noted on its way (pressedAt), held or not.
     Item {
         id: hold
         anchors.fill: parent
         z: 10
-        visible: panel.keysHeld
         focus: panel.keysHeld
         Keys.onPressed: event => {
             event.accepted = true;
@@ -1065,8 +1113,11 @@ Window {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
             onPressed: mouse => {
-                panel.keysHeld = false;
-                panel.focusStart();
+                panel.pressedAt = Date.now();
+                if (panel.keysHeld) {
+                    panel.keysHeld = false;
+                    panel.focusStart();
+                }
                 mouse.accepted = false;
             }
         }

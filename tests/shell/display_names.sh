@@ -27,6 +27,11 @@ check test -z "$hitsB"
 desc="no QML view shows a raw file name${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"
 
+# A location's path (Get Info's and the preview's "Where") holds folder names: through the helper too.
+hits=$(grep -nE "info\.where" "${files[@]}" | grep -v "DisplayName.text" | grep -v "raw-name-ok" || true)
+desc="no view shows a raw path${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
+check test -z "$hits"
+
 hits=$(grep -nE 'replace\(/\[\\r\\n\]' "${files[@]}" shell/desktop/*.qml | grep -v raw-name-ok || true)
 desc="no view replaces line breaks by hand${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"

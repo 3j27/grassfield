@@ -128,3 +128,12 @@ function clashes(names, folder, kind) {
     }
     return out;
 }
+
+// An address as the user reads it: percent-escapes decoded; a malformed one stays as it is.
+function decodedUri(uri) {
+    try {
+        return decodeURIComponent(uri);
+    } catch (e) {
+        return uri;
+    }
+}

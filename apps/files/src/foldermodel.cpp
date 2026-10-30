@@ -1084,6 +1084,12 @@ void FolderModel::select(int row, int modifiers)
             next.insert(url);
         m_anchor = url;
     } else {
+        // A panel's dimmed item can't be chosen: a click on it leaves the selection as it is (macOS: a disabled item takes
+        // no click; integrator nested pass of f9a25ce, NIT: it cleared the preselected application).
+        if (!m_chooser.isEmpty() && dimmed(itemAt(row))) {
+            setCurrent(url);
+            return;
+        }
         next = {url};
         m_anchor = url;
     }
