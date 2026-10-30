@@ -103,7 +103,7 @@ fl_shot window-menu >/dev/null
 vs_ipc menubar close >/dev/null
 vs_sleep 0.5
 # Files' own File menu through the menu bridge: the shortcuts are in French (Qt's names: Ctrl+Backspace -> Ctrl+Retour arriere).
-vs_ipc menubar open appfile "$VS_OUTPUT" >/dev/null
+vs_pointer abs 146 12 click >/dev/null
 vs_sleep 1.5
 fl_shot file-menu >/dev/null
 vs_ipc menubar close >/dev/null
@@ -117,18 +117,6 @@ if [[ $idx != null && -n $idx ]]; then
   vs_ipc menubar close >/dev/null
 fi
 
-# 7b. Glance opened from the desktop (the desktop holds the keyboard, then Glance is clicked): the bar stays on the desktop
-vs_pointer abs 700 300 click >/dev/null
-vs_sleep 1
-vs_spawn "$b/grassfield-preview" --glance -- "$img/img1.png"
-fl_check_wait "Glance opens from the desktop" 30 fl_has_window 'Preview\.Glance'
-vs_sleep 2
-fl_focus_class 'Preview\.Glance' >/dev/null
-vs_sleep 1
-fl_shot glance-desktop >/dev/null
-fl_tap Escape
-vs_sleep 1
-
 # 7. Glance on top of Preview: no Dock tile, the bar keeps naming Preview
 fl_focus_class '^org\.grassfield\.Preview$' >/dev/null
 vs_sleep 1
@@ -141,6 +129,21 @@ tiles=$(vs_ipc dock tiles)
 echo "dock tiles with Glance: $tiles"
 fl_check "no Dock tile for Glance" test "$(grep -ci glance <<<"$tiles")" = 0
 fl_shot glance >/dev/null
+
+fl_tap Escape
+vs_sleep 1
+
+# 7b. Glance opened from the desktop (the desktop holds the keyboard, then Glance is clicked): the bar stays on the desktop
+vs_pointer abs 250 600 click >/dev/null
+vs_sleep 1
+vs_spawn "$b/grassfield-preview" --glance -- "$img/img1.png"
+fl_check_wait "Glance opens from the desktop" 30 fl_has_window 'Preview\.Glance'
+vs_sleep 2
+fl_focus_class 'Preview\.Glance' >/dev/null
+vs_sleep 1
+fl_shot glance-desktop >/dev/null
+fl_tap Escape
+vs_sleep 1
 
 # 8. a stack in Grid view with long names
 fix=$VS_DEV/stackfix
