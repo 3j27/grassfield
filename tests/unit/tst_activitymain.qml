@@ -368,12 +368,14 @@ TestCase {
         // The app's own row: refused before anything is sent.
         t.backend.actions.sheet = Object.assign({}, t.backend.actions.sheet, {self: true});
         t.win.sheets.openSignal();
-        compare(sheet.errorText, "This app can't force quit itself.");
+        compare(sheet.errorText, "This app can't send a signal to itself.");
         verify(!buttonNamed(sheet, "Send").enabled);
         keyClick(Qt.Key_Return);
         verify(sheet.shown);
         keyClick(Qt.Key_Escape);
+        verify(!sheet.shown);
         compare(calls(t).filter(c => c.startsWith("send")).length, 1);
+        compare(calls(t)[calls(t).length - 1], "release", "Cancel lets the sheet's processes go (review of 1153365)");
     }
 
     // AM50: a row's context menu selects the row under the pointer, then shows the action menu there.

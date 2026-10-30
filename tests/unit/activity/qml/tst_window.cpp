@@ -468,7 +468,9 @@ int ending(pid_t pid, int ms = 5000)
 }
 
 // The test's children: whatever a failed case left running is killed and reaped when it ends (a child left alive keeps
-// the test's output open).
+// the test's output open). Only a child not reaped yet is signalled: waitpid answers 0 for it alone, so a pid the case
+// already reaped, which another process may have taken since, is never hit (AM51's rule, in the tests too; the
+// integrator's review of 1153365).
 struct Children {
     pid_t add()
     {
@@ -479,8 +481,10 @@ struct Children {
     ~Children()
     {
         for (pid_t pid : pids) {
-            kill(pid, SIGKILL);
-            waitpid(pid, nullptr, 0);
+            if (waitpid(pid, nullptr, WNOHANG) == 0) {
+                kill(pid, SIGKILL);
+                waitpid(pid, nullptr, 0);
+            }
         }
     }
     std::vector<pid_t> pids;
@@ -546,7 +550,7 @@ struct DevRoots {
     if (!w.win || !QTest::qWaitForWindowExposed(w.win))
         return ::testing::AssertionFailure() << "no window";
     const std::string path = unit;
-    w.backend->processActions().setUnitReader([path](const ProcessHandle &) { return path; });
+    w.backend->processActions().setUnitReader([path](int) { return path; });
     w.backend->setInterval(1);
     return becomes(
         [&] {

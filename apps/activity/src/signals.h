@@ -29,6 +29,10 @@ public:
     int pid() const { return m_pid; }
     uint64_t start() const { return m_start; }
     int ppid() const { return m_ppid; }
+    // The parent now, read again through the descriptor (the dev guard's walk starts there; ppid() when it cannot be read).
+    int currentPpid() const;
+    // stat's tty_nr: the controlling terminal's device, 0 for none (AD43: a command run in a terminal).
+    int tty() const { return m_tty; }
     // The process's cgroup v2 path, read through the descriptor when the action needs it (AM52, AM54: a row keeps none,
     // AD25); "" when it cannot be read.
     std::string cgroup() const;
@@ -40,7 +44,12 @@ private:
     int m_pid = 0;
     uint64_t m_start = 0;
     int m_ppid = 0;
+    int m_tty = 0;
 };
+
+// The cgroup v2 path of any process, read by path ("" when it cannot be read): a sheet process's parent, to tell whether
+// the process started its unit (AD43).
+std::string cgroupOf(const std::string &procRoot, int pid);
 
 // AM56: in a dev session, an action reaches only a process a root names or a descendant of one. A root is a pid record of
 // scripts/dev/pidfile.sh: a file holding the pid, and "<file>.start" its start time (stat field 22). `list` holds the

@@ -99,9 +99,13 @@ QVariantMap ProcessActions::prepare(const QString &action)
         p.name = t.name;
         p.self = t.pid == self;
         // AM52, AM54: the unit, read now through the descriptor (a row keeps no cgroup path, AD25).
-        const std::string cgroup = m_unitReader ? m_unitReader(handle) : handle.cgroup();
+        const std::string cgroup = m_unitReader ? m_unitReader(handle.pid()) : handle.cgroup();
         p.session = isSessionProcess(cgroup);
         p.appUnit = classify(cgroup, true, false, false) == Kind::App;
+        if (p.appUnit && handle.tty() != 0) {
+            const int parent = handle.ppid();
+            p.terminal = !cgroup.empty() && (m_unitReader ? m_unitReader(parent) : cgroupOf(m_procRoot, parent)) == cgroup;
+        }
         p.handle = std::move(handle);
         if (p.session && session.isEmpty())
             session = p.name;
@@ -146,7 +150,7 @@ QString ProcessActions::devRefusal(const char *what) const
     for (const Pending &p : m_pending) {
         if (p.self)
             continue;
-        if (!underDevRoot(m_procRoot, p.handle.pid(), p.handle.start(), p.handle.ppid(), roots)) {
+        if (!underDevRoot(m_procRoot, p.handle.pid(), p.handle.start(), p.handle.currentPpid(), roots)) {
             qInfo().noquote() << "dev guard:" << what << "of pid" << p.handle.pid()
                               << "refused: it descends from no process GRASSFIELD_ACTIVITY_DEV_ROOTS names";
             return tr("Development session: only the nested session's processes can be quit.");
@@ -178,10 +182,11 @@ QVariantMap ProcessActions::quit()
     if (const QString refused = devRefusal("quit"); !refused.isEmpty())
         return failed(refused);
     // AM52: a process of an app unit is quit by the shell, which closes its windows so the app can save or ask (step 3, the
-    // projection and `activity quit`). Without it, no process of an app unit is quit by a signal: the sheet offers Force
-    // Quit only (AM75: no shell, Quit as AM52).
+    // projection and `activity quit`). Without it, the process that started an app unit is not quit by a signal: the sheet
+    // offers Force Quit only (AM75: no shell, Quit as AM52). A command run in a terminal has no window of its own to
+    // close: it gets SIGTERM (AD43, the integrator's decision on the review of 1153365).
     for (const Pending &p : m_pending) {
-        if (p.appUnit && !p.self)
+        if (p.appUnit && !p.self && !p.terminal)
             return failed(m_pending.size() == 1 ? tr("The process couldn't be quit safely.") : tr("These processes couldn't all be quit safely."), true);
     }
     // AM54: the app's own row closes its window instead of a signal; the others get SIGTERM.
@@ -219,7 +224,7 @@ QVariantMap ProcessActions::send(int signal)
         return done();
     const Pending &p = m_pending.front();
     if (p.self)
-        return failed(tr("This app can't force quit itself."));
+        return failed(tr("This app can't send a signal to itself."));
     bool offered = false;
     for (const QVariant &v : signalChoices(!p.session)) {
         if (v.toMap().value(QStringLiteral("number")).toInt() == signal)

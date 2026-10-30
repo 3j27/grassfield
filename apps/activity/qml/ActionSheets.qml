@@ -58,7 +58,7 @@ Item {
             root.signalChoice = choices.some(c => c.number === 15) ? "15" : choices.length > 0 ? String(choices[0].number) : "";
             signalSheet.open();
             if (root.info.self)
-                signalSheet.errorText = qsTr("This app can't force quit itself.");
+                signalSheet.errorText = qsTr("This app can't send a signal to itself.");
         } else {
             quitSheet.open();
         }

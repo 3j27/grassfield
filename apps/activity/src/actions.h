@@ -64,9 +64,9 @@ public:
     // AM55's signals in their order: the number and the pop-up's title.
     static QVariantList signalChoices(bool withStop);
 
-    // Tests: the cgroup path of a process (by default read through its descriptor). A test's children are in the unit of
-    // whatever runs the tests, an app's terminal or a container.
-    using UnitReader = std::function<std::string(const ProcessHandle &)>;
+    // Tests: the cgroup path of a process by its pid (by default a sheet process's is read through its descriptor, its
+    // parent's by path). A test's children are in the unit of whatever runs the tests, an app's terminal or a container.
+    using UnitReader = std::function<std::string(int pid)>;
     void setUnitReader(UnitReader reader) { m_unitReader = std::move(reader); }
 
 signals:
@@ -81,6 +81,9 @@ private:
         bool self = false;
         bool session = false;
         bool appUnit = false;
+        // AD43: a command run in a terminal (a controlling terminal, and a parent in the same unit: not the process that
+        // started the unit).
+        bool terminal = false;
     };
     // The dev guard (AM56): "" when every pending process may be acted on, else the sheet's message (one journal line).
     QString devRefusal(const char *what) const;

@@ -520,8 +520,8 @@
 <context>
     <name>ActionSheets</name>
     <message>
-        <source>This app can&apos;t force quit itself.</source>
-        <translation>Cette app ne peut pas se forcer à quitter.</translation>
+        <source>This app can&apos;t send a signal to itself.</source>
+        <translation>Cette app ne peut pas s’envoyer de signal.</translation>
     </message>
     <message>
         <source>Sending a signal to “%1” may end your session or stop part of it.</source>
@@ -12676,7 +12676,11 @@
     </message>
     <message>
         <source>This app can&apos;t force quit itself.</source>
-        <translation>Cette app ne peut pas se forcer à quitter.</translation>
+        <translation>Cette app ne peut pas forcer sa propre fermeture.</translation>
+    </message>
+    <message>
+        <source>This app can&apos;t send a signal to itself.</source>
+        <translation>Cette app ne peut pas s’envoyer de signal.</translation>
     </message>
 </context>
 <context>

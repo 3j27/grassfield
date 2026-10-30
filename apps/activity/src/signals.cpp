@@ -30,10 +30,20 @@ bool readAt(int dir, const std::string &name, std::string &out)
     return ok;
 }
 
-bool readStat(int dir, const std::string &name, StatFields &st)
+bool readStat(int dir, const std::string &name, StatFields &st, int *tty = nullptr)
 {
     std::string text;
-    return readAt(dir, name, text) && parseStat(text, st, false);
+    if (!readAt(dir, name, text) || !parseStat(text, st, false))
+        return false;
+    if (tty) { // field 7, tty_nr: the fifth word after the name's ')'; the sampler's own parse skips it
+        *tty = 0;
+        size_t pos = text.rfind(')');
+        for (int word = 0; word < 4 && pos != std::string::npos; ++word)
+            pos = text.find(' ', pos + 2);
+        if (pos != std::string::npos)
+            std::from_chars(text.data() + pos + 1, text.data() + text.size(), *tty);
+    }
+    return true;
 }
 
 bool parseNumber(const std::string &text, uint64_t &out)
@@ -65,7 +75,8 @@ ProcessHandle ProcessHandle::open(const std::string &procRoot, int pid, uint64_t
     if (fd < 0)
         return h;
     StatFields st;
-    if (!readStat(fd, "stat", st) || st.pid != pid || st.starttime != start) {
+    int tty = 0;
+    if (!readStat(fd, "stat", st, &tty) || st.pid != pid || st.starttime != start) {
         close(fd);
         return h;
     }
@@ -73,6 +84,7 @@ ProcessHandle ProcessHandle::open(const std::string &procRoot, int pid, uint64_t
     h.m_pid = pid;
     h.m_start = start;
     h.m_ppid = st.ppid;
+    h.m_tty = tty;
     return h;
 }
 
@@ -83,7 +95,7 @@ ProcessHandle::~ProcessHandle()
 }
 
 ProcessHandle::ProcessHandle(ProcessHandle &&other) noexcept
-    : m_fd(other.m_fd), m_pid(other.m_pid), m_start(other.m_start), m_ppid(other.m_ppid)
+    : m_fd(other.m_fd), m_pid(other.m_pid), m_start(other.m_start), m_ppid(other.m_ppid), m_tty(other.m_tty)
 {
     other.m_fd = -1;
 }
@@ -97,9 +109,24 @@ ProcessHandle &ProcessHandle::operator=(ProcessHandle &&other) noexcept
         m_pid = other.m_pid;
         m_start = other.m_start;
         m_ppid = other.m_ppid;
+        m_tty = other.m_tty;
         other.m_fd = -1;
     }
     return *this;
+}
+
+int ProcessHandle::currentPpid() const
+{
+    StatFields st;
+    return m_fd >= 0 && readStat(m_fd, "stat", st) && st.pid == m_pid ? st.ppid : m_ppid;
+}
+
+std::string cgroupOf(const std::string &procRoot, int pid)
+{
+    std::string text;
+    if (pid <= 0 || !readAt(AT_FDCWD, procRoot + '/' + std::to_string(pid) + "/cgroup", text))
+        return {};
+    return parseCgroupV2(text);
 }
 
 std::string ProcessHandle::cgroup() const

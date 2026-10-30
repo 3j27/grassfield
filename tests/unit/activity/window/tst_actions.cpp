@@ -11,6 +11,8 @@
 #include <gtest/gtest.h>
 
 #include <csignal>
+#include <cstdlib>
+#include <fcntl.h>
 #include <fstream>
 #include <sstream>
 #include <sys/wait.h>
@@ -31,15 +33,43 @@ uint64_t startOf(const std::string &procRoot, int pid)
     return parseStat(text.str(), st, false) ? st.starttime : 0;
 }
 
-// A child that waits for a signal; reaped by ending().
+// A child that waits for a signal, in a session of its own without a controlling terminal (whatever runs the tests);
+// reaped by ending().
 pid_t idleChild()
 {
     const pid_t pid = fork();
     if (pid == 0) {
+        setsid();
         for (;;)
             pause();
     }
     return pid;
+}
+
+// A child whose controlling terminal is a pseudo-terminal's, as a command run in foot (AD43). `master` stays open until
+// the child ended: closing it hangs the terminal up, which sends its session SIGHUP.
+pid_t terminalChild(int &master)
+{
+    master = posix_openpt(O_RDWR | O_NOCTTY);
+    if (master < 0 || grantpt(master) != 0 || unlockpt(master) != 0)
+        return -1;
+    const std::string slave = ptsname(master);
+    int ready[2];
+    if (pipe(ready) != 0)
+        return -1;
+    const pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        const int fd = open(slave.c_str(), O_RDWR); // a session leader's first terminal becomes its controlling one
+        (void)!write(ready[1], fd >= 0 ? "1" : "0", 1);
+        for (;;)
+            pause();
+    }
+    char c = 0;
+    (void)!read(ready[0], &c, 1);
+    close(ready[0]);
+    close(ready[1]);
+    return c == '1' ? pid : -1;
 }
 
 // How a child ended: its signal, 0 for an exit, -1 while it runs (`wait` false) or when it is not a child. A child still
@@ -76,7 +106,7 @@ struct Actions {
     explicit Actions(const char *unit = kPlain) : actions("/proc")
     {
         const std::string path = unit;
-        actions.setUnitReader([path](const ProcessHandle &) { return path; });
+        actions.setUnitReader([path](int) { return path; });
     }
     ProcessActions actions;
 };
@@ -216,7 +246,7 @@ TEST(ProcessActions, TheAppItself)
     EXPECT_EQ(close.count(), 1);
     sheet = t.actions.prepare(QStringLiteral("signal"));
     EXPECT_FALSE(titles(sheet.value(QStringLiteral("signals")).toList()).contains("Stop (SIGSTOP)"));
-    EXPECT_EQ(t.actions.send(SIGTERM).value(QStringLiteral("error")).toString(), "This app can't force quit itself.");
+    EXPECT_EQ(t.actions.send(SIGTERM).value(QStringLiteral("error")).toString(), "This app can't send a signal to itself.");
     // With another process: Quit signals it and closes the window too.
     const pid_t child = idleChild();
     t.actions.setSelection({own(getpid(), "Activity Monitor"), own(child)});
@@ -297,6 +327,40 @@ TEST(ProcessActions, AnAppUnitProcessIsNotQuitByASignal)
     EXPECT_EQ(ending(b), SIGKILL);
 }
 
+// AD43 (the integrator's decision on the review of 1153365): a command run in a terminal, in the terminal's app unit but
+// not the process that started it, is quit by SIGTERM; the unit's own process, with a terminal or not, waits for step 3.
+TEST(ProcessActions, ATerminalCommandIsQuitBySigterm)
+{
+    int master = -1;
+    const pid_t command = terminalChild(master);
+    ASSERT_GT(command, 0);
+    EXPECT_NE(ProcessHandle::open("/proc", command, startOf("/proc", command)).tty(), 0);
+    const pid_t windowless = idleChild();
+    EXPECT_EQ(ProcessHandle::open("/proc", windowless, startOf("/proc", windowless)).tty(), 0);
+    kill(windowless, SIGKILL);
+    ending(windowless);
+
+    Actions t(kAppUnit); // the command and its parent (this test) in the same unit
+    t.actions.setSelection({own(command, "python")});
+    ASSERT_TRUE(t.actions.prepare(QStringLiteral("quit")).value(QStringLiteral("ok")).toBool());
+    EXPECT_TRUE(t.actions.quit().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(command), SIGTERM);
+    close(master);
+
+    // The process that started the unit (its parent elsewhere): Force Quit only, terminal or not.
+    const pid_t first = terminalChild(master);
+    ASSERT_GT(first, 0);
+    const std::string unit = kAppUnit;
+    t.actions.setUnitReader([first, unit](int pid) { return pid == first ? unit : std::string(kPlain); });
+    t.actions.setSelection({own(first, "foot")});
+    t.actions.prepare(QStringLiteral("quit"));
+    EXPECT_TRUE(t.actions.quit().value(QStringLiteral("unsafe")).toBool());
+    EXPECT_EQ(ending(first, false), -1);
+    t.actions.forceQuit();
+    EXPECT_EQ(ending(first), SIGKILL);
+    close(master);
+}
+
 // AM56: in a dev session only a process a dev root names, or one of its descendants, is acted on; the others are refused
 // with the sheet's message, and nothing is sent.
 TEST(ProcessActions, TheDevGuard)
@@ -317,6 +381,10 @@ TEST(ProcessActions, TheDevGuard)
         EXPECT_EQ(t.actions.quit().value(QStringLiteral("error")).toString(),
                   "Development session: only the nested session's processes can be quit.");
         EXPECT_EQ(t.actions.forceQuit().value(QStringLiteral("error")).toString(),
+                  "Development session: only the nested session's processes can be quit.");
+        // Send Signal too (the review of 1153365: its guard was untested).
+        t.actions.prepare(QStringLiteral("signal"));
+        EXPECT_EQ(t.actions.send(SIGTERM).value(QStringLiteral("error")).toString(),
                   "Development session: only the nested session's processes can be quit.");
         EXPECT_EQ(ending(child, false), -1);
     }
