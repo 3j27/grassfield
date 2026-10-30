@@ -52,7 +52,10 @@
 #   fixed          (ADR-0040 step 1b) About This Computer (grassfield-settings --about, minimum = maximum): listed in the
 #                  reply's "fixed"; tile_popover, the pointer resting on its disabled zoom light and a click there post no
 #                  tile-hover and open no shell popup, its box unchanged (skipped without apps/settings/build-direct.sh)
-#   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
+#   fixed bar      (step 1b's review) an xdgact window of fixed size with the plugin's titlebar: listed in "fixed"; its zoom
+#                  light drawn disabled (captured under the pointer) and a click there leaves its box and mode; a resizable
+#                  window's light still zooms (the control)
+#   move-to       on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
 #   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
@@ -1254,6 +1257,49 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     fi
   else
     say "SKIP: fixed (no Settings build at $settings_bin: apps/settings/build-direct.sh)"
+  fi
+
+  # fixed bar (ADR-0040 step 1b's review): a window of fixed size drawn with the plugin's own titlebar (an xdgact window of
+  # 420x300, minimum = maximum): its zoom light is disabled (drawn grey with no glyph under the pointer: captured) and a click
+  # there leaves its box and its mode; a resizable window's click still zooms (the control).
+  open_xdg gf-fixed-bar 420x300
+  if [[ -n $xdg_addr ]]; then
+    fixed_addr=$xdg_addr fixed_pid=$xdg_pid
+    mode_box() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.fullscreen)"'; }
+    zoom_light_of() { # address: the middle of the plugin titlebar's zoom light, relative to GF-REF
+      local x y
+      read -r x y _ < <(mode_box "$1")
+      echo "$((x + zl - mx)) $((y - GF_TB_MID - my))"
+    }
+    zl=$(jq -r '.window | .titlebarLightInset.value + 2 * (.lightDiameter.value + .lightGap.value) + .lightDiameter.value / 2 | floor' "$root/ui/tokens/tokens.json")
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$fixed_addr' })" >>"$log" 2>&1
+    sleep 0.5
+    fb0=$(mode_box "$fixed_addr")
+    say "  fixed bar: $fixed_addr $fb0"
+    fixed_listed() { tiling_state | jq -e --arg a "${fixed_addr#0x}" '(.fixed // []) | index($a) != null' >/dev/null 2>&1; }
+    check "fixed bar: the reply lists the window among those of fixed size" fixed_listed
+    read -r fzx fzy < <(zoom_light_of "$fixed_addr")
+    pointer abs $((fzx + 120)) $((fzy + 80)) sleep 200 abs "$fzx" "$fzy" sleep 400
+    "$root/scripts/dev/shot.sh" tiling-fixed-bar-light "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-fixed-bar-light.png" "$run/" 2>/dev/null
+    pointer click sleep 800
+    check "fixed bar: a click on its disabled zoom light leaves its box and mode (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed bar: the plugin says why" plugin_logged "titlebar zoom: refused for a window of fixed size"
+    close_shell_popup "fixed bar"
+    # The control: a resizable window's zoom light still zooms, and back.
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.5
+    read -r czx czy < <(zoom_light_of "$addr")
+    pointer abs "$czx" "$czy" sleep 300 click sleep 800
+    check "fixed bar: the control's zoom light zooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = 'maximized' })" >>"$log" 2>&1 # back (the focused control)
+    sleep 0.8
+    check "fixed bar: the control is back from its zoom" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    pointer abs 20 $((mh / 2)) sleep 200
+    close_shell_popup "fixed bar"
+    kill "$fixed_pid" 2>/dev/null
+    sleep 0.5
+  else
+    check "fixed bar: the xdgact window opened" false
   fi
 
   # covered: a layer surface of a tiny Quickshell config (the run directory, never the repository): Exclusive or not, at a
