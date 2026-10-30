@@ -1,8 +1,9 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c) and step 1a merged (pull request #52, a5488a6); step 1b under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no
-technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
+#46, e16fa8c), step 1a merged (pull request #52, a5488a6) and step 1b merged (pull request #55, 12bcda9); step 1c under
+way (the owner chose its Green on 2026-10-30). Every other choice follows the owner's rule of 2026-10-28 ("the closest to
+macOS 27, no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
 NITs), and after the review of step 1a's 6c310a8 (FAIL: one MAJOR, one MINOR, three NITs), answered in "Review
@@ -188,6 +189,15 @@ and IQ-B3 here changes the palette only, not which controls read it.
   `#4FB36B`; no new brand token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
   tiles (the sidebar's Battery and Motion, `apps/settings/qml/Main.qml:27, 32`; rows of Accessibility, Menu Bar, Software
   Update and Storage): moving it moves them (review of b44d17e). Mockup: `mockups/b2-accent.svg`.
+  Step 1c as built: Settings > Appearance's first swatch is "Grassfield", one disc of the brand green (the colour wheel is
+  gone); the stored value stays `multicolor` (no grassfield.json to migrate). The pickable Green is `#6DB53C` with dark
+  text `#10240A` (6.5:1) in the light appearance, the owner's choice B of 2026-10-30 (below): OKLab distance 0.21 from the
+  brand green, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
+  text, so its dark-appearance selection pair is its light pair (`color.selectionDark.green`, the rule that a selection
+  is never darker than the light accent), its focus ring falls back to the text colour on light grounds
+  (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.48:1 (`tests/ci/gtk_themes.py`), and
+  the white glyphs of the Settings tiles drawn in it are 2.5:1, as macOS draws them. General > About's Grassfield row
+  draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11).
 - **About This Computer (ID-19, the macOS model; review of b44d17e).** Computer first, as macOS 27 and as Settings >
   About already do: the
   Grassfield-drawn picture of the computer (`DevicePicture`, by chassis), its model name, processor, memory, graphics,
@@ -429,6 +439,12 @@ Asked by the integrator from this ADR's options, with the recommendations shown;
 | IQ-T5 red lock-died screen | « Le retarder » | **A** (recommended) |
 | B-5 trademark record | « J'ai vérifié le nom » | The owner checked the **name** "Grassfield" on 2026-10-18 and **not the logo** (no logo clearance, 2026-10-27). The legal dossier is corrected (E33, Q7, section 7); STATE stays. |
 
+**Step 1c's Green (2026-10-30).** Asked when step 1c started, the brand green and the pickable Green being 0.04 apart
+(OKLab) in the light appearance; two values shown against today's (a capture of the accent row and the tiles in both
+appearances): « B : vert clair, comme macOS » (`#6DB53C`, dark text; not the recommended A, a dark green `#2D5A04` with
+white text). The costs named in the question and taken: the white glyphs of the green Settings tiles at 2.5:1, and green
+joins yellow among the light accents with dark marks (its selection pair; ADR-0039 step 11's knob on the "on" fill).
+
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
 - **W1 C, the time of day** (section 2, "The time-of-day rule"): the times from the time zone with no location and no
@@ -542,6 +558,9 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - **VERIFY on Hyprland 0.56.2:** changing `background_color` at run time (ID-2); whether a session lock is confirmed
   while the displays are off (IQ-T4 A with a delay). `misc:lockdead_screen_delay` exists (the integrator's check, review
   of b44d17e); the owner chose IQ-T5 A, so step 5's nested pass shows that only black is drawn during the delay.
+- **NOT VERIFIED (step 1c, nested pass):** the accent row, the green tiles' white glyphs and the brand-green tile of
+  General > About in the session (offscreen Qt 6.10 draws no `Icon` here); a GTK app with the Green accent (the pinned
+  thin marks); the shell's surfaces with the Green accent (menu highlights, focus rings falling back to the text colour).
 - **NOT VERIFIED (step 1b, nested pass):** About This Computer in the session: the window's look and size, the mark
   in the brand green (the container's offscreen Qt 6.10 renders no `Icon`: MultiEffect draws nothing there), the shell
   bringing an open window forward. That rests on Hyprland's window data carrying `xdgTag`, which
