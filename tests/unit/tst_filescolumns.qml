@@ -56,15 +56,20 @@ TestCase {
                 return row === listing.currentRow;
             }
             function info(row: int): var {
-                return {name: listing.get(row).name, isDir: listing.get(row).isDir};
+                return row >= 0 ? {name: listing.get(row).name, isDir: listing.get(row).isDir, url: listing.get(row).url, kind: "", size: -1, tags: [], tagKeys: [], tagColors: []} : null;
             }
+            // The preview requests, in order: "request <name> large" / "cancel <name> large".
+            property var previews: []
             function requestPreview(row: int, large: bool): void {
+                listing.previews = listing.previews.concat(["request " + listing.get(row).name + (large ? " large" : "")]);
             }
             function cancelPreview(url: url, large: bool): void {
+                listing.previews = listing.previews.concat(["cancel " + String(url).split("/").pop() + (large ? " large" : "")]);
             }
 
             Component.onCompleted: {
-                const rows = [["Folder", true], ["note.txt", false]];
+                // photo.png first: a pane made with its row already 0 saw no change of it.
+                const rows = [["photo.png", false], ["Folder", true], ["note.txt", false]];
                 for (const r of rows) {
                     listing.append({name: r[0], url: "file:///sandbox/" + r[0], iconName: "", emblem: "", selected: false, isDir: r[1],
                                     folderColor: "", folderGlyph: "", hidden: false, dimmed: false, tagColors: []});
@@ -79,8 +84,15 @@ TestCase {
 
         property var segments: [{url: "file:///sandbox"}]
         property var activated: []
+        property var chooser: null
         property var app: QtObject {
             property bool columnPreview: false
+            function rotatableImages(urls: var): var {
+                return [];
+            }
+            function tagsUnavailable(urls: var): string {
+                return "";
+            }
             function baseNameLength(name: string, isDir: bool): int {
                 return name.length;
             }
@@ -170,5 +182,25 @@ TestCase {
         compare(fakeTab.activated, ["note.txt"], "a folder does not: a click already shows it in the next column");
         mouseDoubleClickSequence(folder, 40, folder.height / 2, Qt.LeftButton, Qt.ControlModifier);
         compare(fakeTab.activated, ["note.txt", "Folder +cmd"], "Cmd-double-click opens the folder (in a new tab)");
+    }
+
+    // The preview column asks for the selected file's large preview as soon as it is made (website captures of
+    // 2026-10-30: the column only exists once a file is selected, so a first row, 0 from the start, never changed and the
+    // picture showed the type icon), then for each file selected next, cancelling the previous request.
+    function test_thePreviewColumnAsksForThePictureAtOnce() {
+        tryVerify(() => rowNamed("photo.png") !== null, 2000, "the column is listed");
+        fakeTab.app.columnPreview = true;
+        const listing = columns.activeModel;
+        listing.previews = [];
+        const photo = rowNamed("photo.png");
+        mouseClick(photo, 40, photo.height / 2, Qt.LeftButton);
+        verify(columns.previewInfo !== null, "a selected file shows the preview column");
+        tryVerify(() => listing.previews.indexOf("request photo.png large") >= 0, 2000, "the large preview is asked for: " + JSON.stringify(listing.previews));
+        const note = rowNamed("note.txt");
+        mouseClick(note, 40, note.height / 2, Qt.LeftButton);
+        tryVerify(() => listing.previews.indexOf("request note.txt large") >= 0, 2000, "the next file's too: " + JSON.stringify(listing.previews));
+        verify(listing.previews.indexOf("cancel photo.png large") >= 0, "and the previous request is cancelled: " + JSON.stringify(listing.previews));
+        fakeTab.app.columnPreview = false;
+        listing.select(-1, 0);
     }
 }
