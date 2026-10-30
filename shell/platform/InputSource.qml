@@ -99,14 +99,17 @@ QtObject {
         }
         // A helper that cannot start (or dies) answers nothing: the English name, a moment after the exit (the output, when
         // there is any, arrives first).
-        onExited: (code, status) => {
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            // qmllint enable signal-handler-parameters
             if (root.startOnExit) {
                 root.startOnExit = false;
-                lookup.running = true;
+                root.lookup.running = true;
             } else {
                 // The question this helper was running for, if nobody has answered it yet.
                 root.exitedFor = root.asking;
-                giveUp.restart();
+                root.giveUp.restart();
             }
         }
     }
