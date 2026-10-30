@@ -32,6 +32,31 @@ bool isPart(const QString &part, int max)
     return part.size() <= max && re.match(part).hasMatch() && !part.contains(QLatin1String(".."));
 }
 
+// A filesystems entry it can write that holds ~/.config/autostart or ~/.config/systemd: what it puts there runs when the
+// user logs in, outside its sandbox (host, home, xdg-config and the like, a home folder by its absolute path; never :ro).
+bool startsAtLogin(const QString &entry)
+{
+    const QString mode = entry.section(QLatin1Char(':'), 1);
+    if (mode == QLatin1String("ro"))
+        return false;
+    QString path = entry.section(QLatin1Char(':'), 0, 0);
+    while (path.size() > 1 && path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    if (path == QLatin1String("host") || path == QLatin1String("home") || path == QLatin1String("~"))
+        return true;
+    if (path == QLatin1String("xdg-config") || path.startsWith(QLatin1String("xdg-config/")))
+        path = QStringLiteral("~/.config") + path.mid(10);
+    static const QRegularExpression absoluteHome(QStringLiteral(R"(\A/(?:var/)?home(?:/[^/]+)?(?=/|\z))"));
+    if (const QRegularExpressionMatch m = absoluteHome.match(path); m.hasMatch())
+        path = QStringLiteral("~") + path.mid(m.capturedLength());
+    for (const QLatin1String target : {QLatin1String("~/.config/autostart"), QLatin1String("~/.config/systemd")}) {
+        if (path == QLatin1String("~") || target == path || target.startsWith(path + QLatin1Char('/'))
+            || path.startsWith(target + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
 // flatpak's last words when a command failed: its error lines, else the last lines it wrote.
 QString lastWords(const QStringList &lines)
 {
@@ -364,14 +389,14 @@ std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
             return;
         }
         if (onSession) {
-            if (harmless.contains(l.key) || l.key.startsWith(QLatin1String("org.freedesktop.portal."))
-                || l.key.startsWith(QLatin1String("org.mpris.MediaPlayer2.")) || l.key == appId
-                || l.key.startsWith(appId + QLatin1Char('.')))
+            // The escapes first: an app whose own id is one of them (or covers one) is not harmless for it.
+            const bool escaping = std::any_of(escapes.cbegin(), escapes.cend(), [&](const QString &service) { return covers(l.key, service); });
+            if (escaping)
+                found.insert(QStringLiteral("outside"));
+            else if (harmless.contains(l.key) || l.key.startsWith(QLatin1String("org.freedesktop.portal."))
+                     || l.key.startsWith(QLatin1String("org.mpris.MediaPlayer2.")) || l.key == appId
+                     || l.key.startsWith(appId + QLatin1Char('.')))
                 return;
-            for (const QString &service : escapes) {
-                if (covers(l.key, service))
-                    found.insert(QStringLiteral("outside"));
-            }
         }
         QStringList &names = onSession ? session : system;
         if (!names.contains(l.key))
@@ -447,6 +472,8 @@ std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
                 : QString();
             if (l.key == QLatin1String("sockets"))
                 sockets.insert(entry);
+            if (l.key == QLatin1String("filesystems") && startsAtLogin(entry))
+                found.insert(QStringLiteral("login"));
             if (word.isEmpty())
                 unknown(QStringLiteral("%1=%2").arg(l.key, entry)); // a grant this flatpak may know and the Store does not
             else if (word != QLatin1String("-"))
@@ -461,7 +488,7 @@ std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
 
     QStringList out;
     for (const char *key : {"network", "allFiles", "home", "folders", "devices", "input", "usb", "kvm", "audio", "x11", "sharedMemory", "printers",
-                            "ssh", "gpg", "smartCards", "bus", "systemBus", "bluetooth", "canbus", "devel", "multiarch", "outside"}) {
+                            "ssh", "gpg", "smartCards", "bus", "systemBus", "bluetooth", "canbus", "devel", "multiarch", "login", "outside"}) {
         if (found.contains(QLatin1String(key)))
             out.append(QLatin1String(key));
     }

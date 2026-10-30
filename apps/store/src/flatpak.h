@@ -66,7 +66,8 @@ FlatpakPrompt flatpakPrompt(const QStringList &lines);
 // home, folders (any other path), devices (all), input, usb (devices=usb, or [USB Devices] it may list), kvm, audio
 // (the sound server: speakers and microphone), x11, sharedMemory (shared=ipc, devices=shm), printers (cups), ssh
 // (ssh-auth), gpg (gpg-agent), smartCards (pcsc), bus (the whole session bus), systemBus, bluetooth, canbus, devel,
-// multiarch, outside (it may start programs outside its sandbox: the whole session bus, or org.freedesktop.Flatpak,
+// multiarch, login (it can write where programs start at login: ~/.config/autostart or ~/.config/systemd, by host, home,
+// xdg-config or a path), outside (it may start programs outside its sandbox: the whole session bus, or org.freedesktop.Flatpak,
 // org.freedesktop.systemd1 or the permission store, by name or a wildcard). Then "sessionService:<name>" and
 // "systemService:<name>" for each bus name it may talk to or own, sorted (on the session bus, not the harmless ones:
 // notifications, tray, menus, screen saver, accessibility, file manager, the portals, media-player names and its own),

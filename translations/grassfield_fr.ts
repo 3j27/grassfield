@@ -11044,6 +11044,10 @@
         <translation>Des programmes 32 bits</translation>
     </message>
     <message>
+        <source>Programs that start when you log in</source>
+        <translation>Des programmes qui se lancent à votre connexion</translation>
+    </message>
+    <message>
         <source>Programs outside its sandbox</source>
         <translation>Des programmes hors de son bac à sable</translation>
     </message>

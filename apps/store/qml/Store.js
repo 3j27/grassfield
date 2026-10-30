@@ -245,6 +245,7 @@ function accessWords(keys) {
         "canbus": qsTr("CAN bus devices"),
         "devel": qsTr("Developer features that can trace programs"),
         "multiarch": qsTr("32-bit programs"),
+        "login": qsTr("Programs that start when you log in"),
         "outside": qsTr("Programs outside its sandbox")
     };
     return Array.from(keys || [], k => {

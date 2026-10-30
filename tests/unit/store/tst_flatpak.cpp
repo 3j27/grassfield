@@ -173,8 +173,8 @@ TEST(Flatpak, WhatItCanReach)
                             "[Session Bus Policy]\norg.freedesktop.Flatpak=talk\n";
     EXPECT_EQ(flatpakAccess(wide),
               (QStringList{QStringLiteral("allFiles"), QStringLiteral("folders"), QStringLiteral("devices"), QStringLiteral("sharedMemory"),
-                           QStringLiteral("bus"), QStringLiteral("bluetooth"), QStringLiteral("devel"), QStringLiteral("outside"),
-                           QStringLiteral("sessionService:org.freedesktop.Flatpak")}));
+                           QStringLiteral("bus"), QStringLiteral("bluetooth"), QStringLiteral("devel"), QStringLiteral("login"),
+                           QStringLiteral("outside"), QStringLiteral("sessionService:org.freedesktop.Flatpak")}));
     EXPECT_EQ(reach("filesystems=home:ro;\nshared=!network;\nsockets=fallback-x11;"), (QStringList{QStringLiteral("home"), QStringLiteral("x11")}))
         << "fallback-x11 without a Wayland socket is the X11 display";
 
@@ -200,6 +200,25 @@ TEST(Flatpak, WhatItCanReach)
     }
     EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.*=talk\n"), (QStringList{QStringLiteral("outside"), service("org.freedesktop.*")}))
         << "a wildcard covering org.freedesktop.Flatpak";
+    // The escapes before its own names (PR #58's merge note): an app named like one is not harmless for it.
+    EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.systemd1\n[Session Bus Policy]\norg.freedesktop.systemd1=talk\n"),
+              (QStringList{QStringLiteral("outside"), service("org.freedesktop.systemd1")}));
+    EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.impl\n[Session Bus Policy]\norg.freedesktop.impl.*=own\n"),
+              (QStringList{QStringLiteral("outside"), service("org.freedesktop.impl.*")}));
+
+    // Where programs start at login (~/.config/autostart, ~/.config/systemd), writable: a line of its own.
+    const auto folders = [](bool login) {
+        return login ? QStringList{QStringLiteral("folders"), QStringLiteral("login")} : QStringList{QStringLiteral("folders")};
+    };
+    for (const char *grant : {"xdg-config/autostart", "xdg-config/autostart:create", "xdg-config", "xdg-config/", "~/.config", "~/.config/systemd/user:rw",
+                              "~/.config/autostart/app.desktop", "/home/alice/.config", "/home/alice", "/var/home", "/home"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), folders(true)) << grant;
+    for (const char *grant : {"xdg-config/autostart:ro", "xdg-config:ro", "xdg-config/gtk-3.0", "~/.config/other", "/homework", "/home/alice/Music", "xdg-data"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), folders(false)) << grant;
+    EXPECT_EQ(reach("filesystems=home;"), (QStringList{QStringLiteral("home"), QStringLiteral("login")}));
+    EXPECT_EQ(reach("filesystems=~/;"), (QStringList{QStringLiteral("home"), QStringLiteral("login")}));
+    EXPECT_EQ(reach("filesystems=host;"), (QStringList{QStringLiteral("allFiles"), QStringLiteral("login")}));
+    EXPECT_EQ(reach("filesystems=host-os;host-etc:ro;"), QStringList{QStringLiteral("allFiles")});
     EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.secrets=talk\norg.gtk.vfs.*=talk\nca.desrt.dconf=talk\norg.example.AppX=own\n"
                         "org.example.Other=frobnicate\n"),
               (QStringList{service("ca.desrt.dconf"), service("org.example.AppX"), service("org.example.Other"), service("org.freedesktop.secrets"),
@@ -423,7 +442,7 @@ TEST(Flatpak, RealFlatpak)
     EXPECT_EQ(plan.packages.at(0).name, QStringLiteral("org.example.Platform"));
     EXPECT_EQ(plan.packages.at(1).name, QStringLiteral("org.example.Hello"));
     EXPECT_GT(plan.downloadSize, 20000000);
-    EXPECT_EQ(plan.access, (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("audio")}));
+    EXPECT_EQ(plan.access, (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("audio"), QStringLiteral("login")}));
     EXPECT_EQ(listFlatpakApps(tools), QSet<QString>()) << "the plan installs nothing";
     const std::optional<FlatpakFacts> before = flatpakFacts(tools, ref, false);
     ASSERT_TRUE(before);

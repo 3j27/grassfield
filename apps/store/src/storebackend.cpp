@@ -1126,10 +1126,10 @@ QString StoreBackend::getBlock(const StoreApp &a) const
             return block;
         break;
     case CatalogSource::Kind::Flatpak:
+        // The ref is the model's (storemodel installableFlatpak): an app of a bad ref is never offered, and the plan
+        // refuses one again (checkFlatpakInstall).
         if (const QString block = flatpakBlock(); !block.isEmpty())
             return block;
-        if (!isFlatpakAppRef(a.flatpakRef))
-            return QStringLiteral("source");
         break;
     }
     return m_online ? QString() : QStringLiteral("offline");
