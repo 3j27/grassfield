@@ -129,7 +129,10 @@ QtObject {
     }
 
     function openApplicationPanel(id: int, request: var): void {
-        const over = root.lastActiveWindow ?? (root.windows.length > 0 ? root.windows[root.windows.length - 1] : null);
+        // A browser window: the one under the panel the user worked in, if it was a panel (review of step 5c, NIT).
+        let over = root.lastActiveWindow ?? (root.windows.length > 0 ? root.windows[root.windows.length - 1] : null);
+        while (over && root.windows.indexOf(over) < 0)
+            over = over.transientParent ?? null;
         const panel = over ? root.applicationPanel.createObject(root, {
             app: root.app,
             host: null,
@@ -201,6 +204,11 @@ QtObject {
 
     function forgetWindow(win: var): void {
         root.windows = root.windows.filter(w => w !== win);
+        // Its Choose Application panels go with it, unanswered (Close All, Merge All Windows; review of step 5c, NIT).
+        for (const id of Object.keys(root.applicationPanels)) {
+            if (root.applicationPanels[id].over === win)
+                root.app.applicationChooser.answer(Number(id), 1, {});
+        }
         if (root.lastActiveWindow === win)
             root.lastActiveWindow = null;
         if (root.promptWindow === win) {

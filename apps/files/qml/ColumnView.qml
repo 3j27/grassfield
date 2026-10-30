@@ -447,7 +447,7 @@ FocusScope {
                             root.tab.contextMenu(col.model, entry.index, p.x, p.y, false);
                             return;
                         }
-                        col.model.select(entry.index, event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                        col.model.select(entry.index, event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier), true);
                         root.userSelected(col.index);
                     }
                     onDoubleClicked: event => {

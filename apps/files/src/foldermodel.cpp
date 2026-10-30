@@ -1059,7 +1059,7 @@ bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParen
     return FileLogic::nameMatchesFilter(item.text(), m_filterText);
 }
 
-void FolderModel::select(int row, int modifiers)
+void FolderModel::select(int row, int modifiers, bool pointer)
 {
     // A panel that takes one item: a click with Shift or Ctrl is a plain click.
     if (m_chooserSingle)
@@ -1084,12 +1084,11 @@ void FolderModel::select(int row, int modifiers)
             next.insert(url);
         m_anchor = url;
     } else {
-        // A panel's dimmed item can't be chosen: a click on it leaves the selection as it is (macOS: a disabled item takes
-        // no click; integrator nested pass of f9a25ce, NIT: it cleared the preselected application).
-        if (!m_chooser.isEmpty() && dimmed(itemAt(row))) {
-            setCurrent(url);
+        // A click on a panel's dimmed item does nothing (macOS: a disabled item takes no click; integrator nested pass of
+        // f9a25ce, NIT: it cleared the preselected application). A key that lands there selects nothing, as before: no
+        // selection left out of sight for Return to take (review of step 5c, MINOR 2).
+        if (pointer && !m_chooser.isEmpty() && dimmed(itemAt(row)))
             return;
-        }
         next = {url};
         m_anchor = url;
     }

@@ -217,8 +217,10 @@ TestCase {
         }
         function directorySize(target: url, done: var): void {
         }
+        // Applications that open the selection (Open With's list).
+        property var openWithApps: []
         function applicationsFor(urls: var): var {
-            return [];
+            return fakeApp.openWithApps;
         }
         // What opened what (BrowserTab.activate and openSelection): applications start, files open.
         property var launched: []
@@ -430,6 +432,10 @@ TestCase {
         fakeApp.chosen = [];
         tab.runAction("openWithOther", folder);
         compare(fakeApp.chosen, [[String(folder.url)]], "the selection's Choose Application");
+        fakeApp.openWithApps = [{id: "org.example.Editor.desktop", name: "Editor"}];
+        const listed = tab.itemMenu(folder).find(i => i.id === "openWith");
+        compare(listed.submenu.map(i => i.id ?? (i.separator ? "-" : "")), ["app:org.example.Editor.desktop", "-", "openWithOther"], "the type's applications, then Other…");
+        fakeApp.openWithApps = [];
         folder.selected = [];
     }
 
@@ -481,6 +487,33 @@ TestCase {
         compare(files.applicationPanels[7], undefined, "the panel went");
         compare(files.lastActiveWindow, browser, "errors show in the window it was over");
 
+        // While a panel is the window worked in, an error shows in the window under it (review of step 5c, MINOR 1).
+        fakeChooser.opened(9, request);
+        const over = files.applicationPanels[9].panel;
+        tryVerify(() => over.visible, 1000);
+        test.giveKeys(over);
+        compare(files.lastActiveWindow, over);
+        browser.bannerText = "";
+        fakeApp.operationFailed("The application is no longer installed.");
+        compare(browser.bannerText, "The application is no longer installed.");
+        // A panel asked for while a panel is the window worked in opens over the browser window under it.
+        fakeChooser.opened(12, request);
+        compare(files.applicationPanels[12].over, browser);
+        fakeChooser.closed(12);
+        test.giveKeys(over);
+        // KIO's question asked meanwhile shows in the panel; when the panel goes, it moves to the window under it.
+        fakePrompts.current = {
+            id: 21,
+            kind: "notice",
+            title: "A notice",
+            text: "Shown in the panel"
+        };
+        compare(files.promptWindow, over);
+        fakeChooser.closed(9);
+        compare(files.promptWindow, browser, "the question moves to the window under the panel");
+        fakePrompts.current = ({});
+        files.placePrompt();
+
         fakeChooser.opened(8, Object.assign({}, request, {
             filename: "",
             count: 3
@@ -489,6 +522,17 @@ TestCase {
         fakeChooser.closed(8);
         compare(files.applicationPanels[8], undefined, "its request ended: the panel went");
         compare(fakeChooser.answers.length, 1);
+
+        // A window that closes cancels the panels over it (Close All); with no browser window, nothing is asked.
+        fakeChooser.opened(10, request);
+        verify(files.applicationPanels[10] !== undefined);
+        browser.close();
+        tryCompare(files.windows, "length", 0);
+        compare(fakeChooser.answers[fakeChooser.answers.length - 1], [10, 1, ""], "cancelled with its window");
+        compare(files.applicationPanels[10], undefined);
+        fakeChooser.opened(11, request);
+        compare(fakeChooser.answers[fakeChooser.answers.length - 1], [11, 1, ""], "no window: Cancel");
+        compare(files.applicationPanels[11], undefined);
     }
 
     function test_closeInfoKeepsTheBrowser_data() {

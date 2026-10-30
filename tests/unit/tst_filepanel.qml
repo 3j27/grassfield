@@ -936,19 +936,24 @@ TestCase {
         tryVerify(() => panel.shownAt > 0, 2000, "at the first frame");
     }
 
-    // A click that brings the panel the keyboard (a click to focus) holds nothing, however late: the user is looking at it.
+    // A click that brings the panel the keyboard (a click to focus: the compositor delivers the press, then the keyboard)
+    // holds nothing, however late: the user is looking at it. Every press in the panel is noted, held or not.
     function test_a_click_to_focus_holds_nothing(): void {
         const request = test.request({currentFolder: "file:///home/u/Documents", folderKinds: {"file:///home/u/Documents": 2}});
-        const panel = createTemporaryObject(panelComponent, test, {request: request, shownAt: 1});
+        // Shown long ago, a press just now, and not yet active (offscreen Qt activates a window as it shows it).
+        const panel = createTemporaryObject(panelComponent, test, {request: request, shownAt: 1, pressedAt: Date.now()});
         verify(panel !== null);
+        verify(!panel.everActive);
         panel.show();
-        verify(waitForRendering(panel.contentItem, 2000));
+        panel.requestActivate();
+        // `active` reads true before the activation's handler has run: wait for the handler.
+        tryVerify(() => panel.everActive, 2000, "the panel got the keyboard");
+        verify(!panel.keysHeld, "the click brought it the keyboard");
+        const before = panel.pressedAt;
+        wait(5);
         mousePress(panel.contentItem, 10, 10);
         mouseRelease(panel.contentItem, 10, 10);
-        verify(panel.pressedAt > 0, "the press is noted");
-        panel.requestActivate();
-        tryVerify(() => panel.active, 2000);
-        verify(!panel.keysHeld, "the click brought it the keyboard");
+        verify(panel.pressedAt > before, "the press is noted while nothing is held");
     }
 
     function test_a_panel_that_gets_the_keyboard_late_waits_for_a_click(): void {

@@ -164,6 +164,10 @@ TestCase {
         compare(bar.openWithFiles, true, "a file");
         const other = findAny(bar, "Other…");
         verify(other !== null, "Open With has Other…");
+        // The type's applications, a separator, Other….
+        const menu = findMenu(bar, "Open With");
+        verify(menu !== null, "the Open With menu");
+        compare(Array.from(menu.items).filter(i => i.visible).map(i => i.separator ? "-" : i.text), ["Editor", "-", "Other…"]);
         const asked = [];
         const tab = fakeWin.tab;
         fakeWin.tab = Object.assign({}, tab, {
@@ -183,6 +187,29 @@ TestCase {
         folder.isTrash = false;
         select([], {});
         compare(bar.openWithFiles, false, "nothing selected");
+    }
+
+    // The menu titled `title` below `item`.
+    function findMenu(item: var, title: string): var {
+        const stack = [item];
+        const seen = [];
+        while (stack.length > 0 && seen.length < 2000) {
+            const it = stack.pop();
+            if (it === null || it === undefined || seen.indexOf(it) >= 0)
+                continue;
+            seen.push(it);
+            if (it.title === title && it.items !== undefined)
+                return it;
+            for (const list of [it.menus, it.items, it.data]) {
+                if (list !== undefined && list !== null && list.length !== undefined) {
+                    for (let i = 0; i < list.length; i++)
+                        stack.push(list[i]);
+                }
+            }
+            if (it.subMenu !== undefined)
+                stack.push(it.subMenu);
+        }
+        return null;
     }
 
     // Any menu item (with or without a shortcut) whose text is `text`, below `item`, submenus included.

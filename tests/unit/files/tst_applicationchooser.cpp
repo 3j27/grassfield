@@ -153,6 +153,7 @@ TEST(ApplicationChooser, CancelAndAWrongChoiceAreNone)
 {
     installApplications();
     ApplicationChooser chooser;
+    QObject::connect(&chooser, &ApplicationChooser::opened, &chooser, [](int, const QVariantMap &) {});
     QStringList answers;
     const auto ask = [&] {
         return chooser.ask({QUrl::fromLocalFile(QDir::tempPath() + QStringLiteral("/notes.txt"))}, {}, nullptr, [&](const QString &chosen) {
@@ -171,6 +172,7 @@ TEST(ApplicationChooser, CancelAndAWrongChoiceAreNone)
 TEST(ApplicationChooser, ThePanelGoesWithItsOwner)
 {
     ApplicationChooser chooser;
+    QObject::connect(&chooser, &ApplicationChooser::opened, &chooser, [](int, const QVariantMap &) {});
     QList<int> closed;
     int answered = 0;
     QObject::connect(&chooser, &ApplicationChooser::closed, &chooser, [&](int id) {
@@ -203,6 +205,32 @@ TEST(ApplicationChooser, ThePanelGoesWithItsOwner)
     spin();
     EXPECT_EQ(answered, 0);
     delete late;
+}
+
+// One document with no file name (a server's root) is named by its address; with nothing to show a panel (no listener, as in
+// grassfield-portal's FilesApp) the answer is none at once, never a job waiting for ever (review of step 5c, NITs).
+TEST(ApplicationChooser, AnAddressAndNoPanel)
+{
+    ApplicationChooser chooser;
+    QStringList answers;
+    QList<int> closed;
+    QObject::connect(&chooser, &ApplicationChooser::closed, &chooser, [&closed](int id) {
+        closed << id;
+    });
+    const int id = chooser.ask({QUrl(QStringLiteral("https://example.org/"))}, QStringLiteral("text/html"), nullptr, [&](const QString &chosen) {
+        answers << chosen;
+    });
+    spin();
+    spin();
+    EXPECT_EQ(answers, QStringList({QString()}));
+    EXPECT_EQ(closed, QList<int>({id}));
+    QVariantMap request;
+    QObject::connect(&chooser, &ApplicationChooser::opened, &chooser, [&request](int, const QVariantMap &r) {
+        request = r;
+    });
+    chooser.ask({QUrl(QStringLiteral("https://example.org/"))}, QStringLiteral("text/html"), nullptr, [](const QString &) {});
+    EXPECT_EQ(request.value(QStringLiteral("filename")).toString(), QString());
+    EXPECT_EQ(request.value(QStringLiteral("uri")).toString(), QStringLiteral("https://example.org/"));
 }
 
 // Open With > Other… (FilesApp::chooseApplication): the panel for the selection; the application chosen opens it

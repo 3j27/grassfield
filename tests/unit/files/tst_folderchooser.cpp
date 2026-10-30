@@ -82,11 +82,16 @@ TEST_F(FolderChooserTest, ThePanelsFilterDimsAndRefuses)
     EXPECT_EQ(m_model.selectedCount(), 0);
     m_model.select(row("a.txt"), Qt::NoModifier);
     EXPECT_EQ(m_model.selectedUrls(), QList<QUrl>{QUrl::fromLocalFile(m_dir.filePath(QStringLiteral("a.txt")))});
-    // A click on a dimmed item leaves the selection as it is (macOS; integrator nested pass of f9a25ce, NIT: it cleared
-    // Choose Application's preselected application); the keyboard's place moves there.
-    m_model.select(row("b.png"), Qt::NoModifier);
+    // A click on a dimmed item does nothing (macOS; integrator nested pass of f9a25ce, NIT: it cleared Choose Application's
+    // preselected application). A key that lands there selects nothing: no selection out of sight for Return (review of
+    // step 5c, MINOR 2).
+    m_model.select(row("b.png"), Qt::NoModifier, true);
     EXPECT_EQ(m_model.selectedUrls(), QList<QUrl>{QUrl::fromLocalFile(m_dir.filePath(QStringLiteral("a.txt")))});
+    EXPECT_EQ(m_model.currentRow(), row("a.txt"));
+    m_model.select(row("b.png"), Qt::NoModifier);
+    EXPECT_EQ(m_model.selectedCount(), 0);
     EXPECT_EQ(m_model.currentRow(), row("b.png"));
+    m_model.select(row("a.txt"), Qt::NoModifier, true);
     // One item at most: Ctrl and Shift are plain clicks, Select All does nothing.
     m_model.select(row("report.PDF"), Qt::ControlModifier);
     EXPECT_EQ(m_model.selectedCount(), 1);

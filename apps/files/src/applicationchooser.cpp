@@ -2,6 +2,7 @@
 
 #include "filelogic.h"
 
+#include <QMetaMethod>
 #include <QMimeDatabase>
 #include <QTimer>
 
@@ -86,7 +87,10 @@ int ApplicationChooser::ask(const QList<QUrl> &urls, const QString &mimeType, QO
         type = (first.isLocalFile() ? db.mimeTypeForFile(first.toLocalFile()) : db.mimeTypeForUrl(first)).name();
     }
     const QString name = urls.isEmpty() ? QString() : urls.first().adjusted(QUrl::StripTrailingSlash).fileName();
-    const QVariantMap r = request(FileLogic::displayName(name), int(urls.size()), candidates(type), defaultApplication(type));
+    QVariantMap r = request(FileLogic::displayName(name), int(urls.size()), candidates(type), defaultApplication(type));
+    // One document with no file name (a server's root): the panel names its address (review of step 5c, NIT).
+    if (urls.size() == 1 && name.isEmpty())
+        r.insert(QStringLiteral("uri"), urls.first().toString());
 
     Pending pending{answer, owner, owner != nullptr, std::make_shared<bool>(false), {}};
     if (owner) {
@@ -105,6 +109,15 @@ int ApplicationChooser::ask(const QList<QUrl> &urls, const QString &mimeType, QO
         });
     }
     m_pending.insert(id, pending);
+    // Nobody makes panels in this process (grassfield-portal's FilesApp): none, rather than a job waiting for ever (review
+    // of step 5c, NIT).
+    if (!isSignalConnected(QMetaMethod::fromSignal(&ApplicationChooser::opened))) {
+        qWarning("grassfield-files: no Choose Application panel can show here; nothing is chosen");
+        QTimer::singleShot(0, this, [this, id] {
+            this->answer(id, 1);
+        });
+        return id;
+    }
     emit opened(id, r);
     return id;
 }

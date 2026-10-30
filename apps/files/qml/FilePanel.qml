@@ -382,17 +382,18 @@ Window {
 
     // What BrowserTab asks of its panel ------------------------------------------------------------------------------------
 
-    // A double-click on a file: an Open panel chooses it (when it can take it), a Save panel takes its name and saves.
+    // A double-click on a file: an Open panel chooses it (when it can take it), a Save panel takes its name and saves. A
+    // dimmed one takes no click: the selection stays and nothing is answered.
     function fileActivated(model: var, row: int): void {
         if (panel.choosingApp) {
-            model.select(row, 0);
+            model.select(row, 0, true);
             if (model.isSelected(row))
                 panel.pressDefault();
         } else if (panel.saving) {
             nameField.text = model.nameAt(row);
             panel.pressDefault();
         } else if (panel.kind === "open" && !panel.foldersOnly) {
-            model.select(row, 0);
+            model.select(row, 0, true);
             if (model.isSelected(row))
                 panel.pressDefault();
         }

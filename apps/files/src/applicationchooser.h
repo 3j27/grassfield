@@ -30,7 +30,7 @@ public:
     // A panel to open `urls` with an application (their type: `mimeType`, or the first item's when empty). `answer` runs
     // once, after the panel has gone and the call that answered has returned. The panel stands while `owner` exists and,
     // when the owner is a job, while it runs (KIO closes its own dialog when the job ends); then it closes and `answer`
-    // never runs. No owner: it waits for the user.
+    // never runs. No owner: it waits for the user. With nothing connected to opened(), the answer is none at once.
     int ask(const QList<QUrl> &urls, const QString &mimeType, QObject *owner, const Answer &answer);
     // The panel's answer: response 0 with {choice: an installed application's desktop id}; anything else is none. An answer
     // for a panel that is gone is ignored.
