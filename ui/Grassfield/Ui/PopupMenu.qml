@@ -77,23 +77,16 @@ FocusScope {
 
     onDisplayModelChanged: Qt.callLater(measure)
 
-    // Per row: whether its section (the rows between two separators) holds a checkable row, so that every label of that
-    // section starts after the check column (macOS). A row is checkable when its model entry has a `checked` field.
+    // Per row: whether the menu holds a checkable row, so that every label starts after the check column (macOS: the check
+    // hangs in a fixed leading column). A row is checkable when its model entry has a `checked` field.
     readonly property var checkColumns: {
+        // The check sits in a leading column that the whole menu keeps (macOS): once any row is checkable, every label of the
+        // menu starts after that column, so a checked window title lines up with Minimize, Zoom and the other rows.
         const out = [];
         const m = root.displayModel;
-        let start = 0;
-        for (let i = 0; i <= m.length; i++) {
-            if (i === m.length || (m[i] && m[i].separator)) {
-                let any = false;
-                for (let j = start; j < i; j++)
-                    any = any || (m[j] && m[j].checked !== undefined);
-                for (let j = start; j < i; j++)
-                    out[j] = any;
-                out[i] = false;
-                start = i + 1;
-            }
-        }
+        const any = m.some(item => item && item.checked !== undefined);
+        for (let i = 0; i < m.length; i++)
+            out[i] = any && !(m[i] && m[i].separator);
         return out;
     }
 
@@ -325,7 +318,7 @@ FocusScope {
                         Text {
                             id: headerText
                             textFormat: Text.PlainText
-                            x: Tokens.menuItemPadding
+                            x: root.checkColumns[row.index] === true ? Tokens.menuCheckInset : Tokens.menuItemPadding
                             anchors.verticalCenter: parent.verticalCenter
                             text: row.modelData.text !== undefined ? row.modelData.text : ""
                             color: Appearance.colors.textSecondary

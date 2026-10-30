@@ -127,6 +127,13 @@ TestCase {
         }
     }
 
+    Component {
+        id: plainMenuComponent
+        PopupMenu {
+            model: [{id: "a", text: "One"}, {separator: true}, {id: "b", text: "Two"}]
+        }
+    }
+
     function test_labelsFollowTheirRowAndSection() {
         const m = createTemporaryObject(layoutMenuComponent, testCase);
         wait(0);
@@ -146,11 +153,15 @@ TestCase {
             verify(t !== null, name);
             return t.mapToItem(m, 0, 0).x;
         };
-        compare(left("Plain"), Tokens.menuPadding + Tokens.menuItemPadding);
-        compare(left("With icon"), Tokens.menuPadding + Tokens.menuItemPadding + Tokens.menuIconSize + Tokens.spacingSm);
+        // Capture defect 9: the check hangs in a leading column the whole menu keeps, so every label lines up with the checked one.
+        compare(left("Plain"), Tokens.menuPadding + Tokens.menuCheckInset, "a menu with a checkable row keeps the column for every row");
+        compare(left("With icon"), Tokens.menuPadding + Tokens.menuCheckInset + Tokens.menuIconSize + Tokens.spacingSm);
         compare(left("Checked"), Tokens.menuPadding + Tokens.menuCheckInset);
-        compare(left("Unchecked"), Tokens.menuPadding + Tokens.menuCheckInset, "the whole section aligns after the check column");
-        compare(left("After"), Tokens.menuPadding + Tokens.menuItemPadding, "the next section has no check column");
+        compare(left("Unchecked"), Tokens.menuPadding + Tokens.menuCheckInset, "the checked and unchecked rows align");
+        compare(left("After"), Tokens.menuPadding + Tokens.menuCheckInset, "the next section aligns too");
+        const plain = createTemporaryObject(plainMenuComponent, testCase);
+        wait(0);
+        compare(plain.checkColumns.some(c => c), false, "a menu without a checkable row has no column");
         verify(Math.abs(m.width - Math.round(m.width)) < 1e-9, "whole-pixel width " + m.width);
     }
 
