@@ -91,7 +91,9 @@ Product page (step 2)
   Licence, Homepage and Bug tracker (buttons that open the browser on click, https only). For an Omarchy setup: "What this
   setup changes" (our catalog's text) and the recipe's name. For the AUR: Maintainer (or "Orphaned"), Votes, Popularity, Last
   updated, "Flagged out of date" when so, and "View Build Script" (the PKGBUILD as plain text in a sheet, fetched on click).
-  For a Flatpak: the app id, the runtime, "Can access" (its permissions in plain words: files, devices, network) and
+  For a Flatpak: the app id, the runtime, "Can access" (every grant of its metadata in plain words, a bus name or a grant
+  the Store does not know named as flatpak writes it; "Only its own window and files" only when nothing more is granted,
+  nothing when its metadata could not be read; ADR-0037 SD25) and
   Flathub's verified-developer flag when its AppStream carries one.
 - SR12. An app with several launchers names the one "Open" uses; an app with none (a command-line tool) says so and has no
   "Open".
