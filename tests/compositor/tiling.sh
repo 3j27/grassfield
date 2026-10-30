@@ -295,9 +295,48 @@ close_shell_popup() { # case name
   shell_popup_open || return 0
   say "  $1: a shell popup was open on $out (the overlay is mapped): closed with Esc before the case"
   "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
-  sleep 0.5
-  shell_popup_open && say "  $1: the popup is still open after Esc"
+  wait_popup_closed || say "  $1: the popup is still open after Esc"
   return 0
+}
+# The nested shell answers its IPC (tests/visual/ipc.sh): its popups open and close asynchronously. Asked once.
+shell_running=""
+shell_up() {
+  if [[ -z $shell_running ]]; then
+    local k
+    if k=$(timeout 5 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null) && [[ $k != refused ]]; then shell_running=1; else shell_running=0; fi
+  fi
+  [[ $shell_running == 1 ]]
+}
+# Waits (up to 5 s) until no shell popup shows on GF-REF: no grassfield-overlay layer mapped and, when the shell answers, its
+# open popup kind empty. A fixed wait after Esc raced the overlay's unmap under load: the next click reached the closing popup
+# (integrator nested pass of 12e3dd3).
+wait_popup_closed() {
+  local k=""
+  for _ in $(seq 1 50); do
+    if ! shell_popup_open; then
+      shell_up || return 0
+      k=$(timeout 3 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null || true)
+      [[ -z $k ]] && return 0
+    fi
+    sleep 0.1
+  done
+  say "  a shell popup still showed after 5 s (openKind '${k}')"
+  return 1
+}
+# Waits (up to 3 s, with the shell running) until a popup shows on GF-REF (the popover a tile_popover asked for).
+wait_popup_open() {
+  shell_up || return 0
+  for _ in $(seq 1 30); do
+    shell_popup_open && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# The binding loops the shell has logged so far (.dev/shell.log; the gate Q2 counts one as a failure).
+shell_loops() {
+  local n
+  n=$(grep -ac "Binding loop" "$dev/shell.log" 2>/dev/null)
+  echo "${n:-0}"
 }
 # The plugin's last lines naming PATTERN (Hyprland's in-memory log, then its file), for a failed check.
 plugin_lines() { # pattern
@@ -1072,7 +1111,13 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     [[ $got == "$2" ]]
   }
   keys() { "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
-  close_popover() { keys -k Escape; sleep 0.5; }
+  # The popover a tile_popover or a hover asked for is shown first (with the shell running), then Esc, then nothing shows
+  # any more before the next case clicks (integrator nested pass of 12e3dd3: a fixed 0.5 s raced it).
+  close_popover() {
+    wait_popup_open || say "  no shell popover showed before Esc"
+    keys -k Escape
+    wait_popup_closed || true
+  }
   move_to() { nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$1\")" >>"$log" 2>&1; sleep 0.8; }
   free_foot() {
     nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
@@ -2013,6 +2058,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       [[ $a == "$1" ]]
     }
     if kind=$(open_kind) && [[ $kind != refused ]]; then
+      split_loops_before=$(shell_loops)
       close_shell_popup "split shell"
       next5=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
       split_ipc "$addr3" left
@@ -2031,7 +2077,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       sleep 1
       check "split shell popover: the tiling popover opens on a member" test "$(open_kind)" = "tiling@$out"
       keys -k Escape
-      sleep 1
+      wait_popup_closed || true
       check "split shell popover: Esc closes it" test -z "$(open_kind)"
       check "split shell popover: no overlay left mapped" overlay_gone
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
@@ -2049,6 +2095,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       tile_ipc "$addr3" previous
       tile_ipc "0x$first" previous
       surfaces_state
+      split_loops_after=$(shell_loops)
+      check "split shell: the picker and the popover log no binding loop (${split_loops_before} before, ${split_loops_after} after)" \
+        test "$split_loops_after" = "$split_loops_before"
     else
       say "SKIP: split shell cases (no nested shell answers tests/visual/ipc.sh: run them with the shell)"
     fi
@@ -2062,9 +2111,8 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       fs_bar_y=$((fs_inset + GF_TB_MID))
       fs_rest=$(( ${hover_delay:-$(jq -r '.tiling.hoverDelay.value' "$root/ui/tokens/tokens.json")} + 700 ))
       fs_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen'; }
-      fs_loops() { grep -ac "Binding loop" "$dev/shell.log" 2>/dev/null || echo 0; }
       fs_reveal() { pointer abs $((mw / 2)) $((mh / 2)) sleep 100 abs $((mw / 2)) 0 sleep 300; }
-      loops_before=$(fs_loops)
+      loops_before=$(shell_loops)
       close_shell_popup "full-screen popover"
       for round in 1 2 3 4; do
         nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
@@ -2081,7 +2129,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep "$fs_rest"
         check "full-screen popover $round: resting on the revealed zoom light opens the tiling popover" test "$(open_kind)" = "tiling@$out"
         keys -k Escape
-        sleep 1
+        wait_popup_closed || true
         check "full-screen popover $round: Esc closes it" test -z "$(open_kind)"
         check "full-screen popover $round: no overlay left mapped" overlay_gone
         fs_reveal
@@ -2090,7 +2138,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         pointer abs 20 $((mh / 2)) sleep 200
         close_shell_popup "full-screen popover $round"
       done
-      loops_after=$(fs_loops)
+      loops_after=$(shell_loops)
       check "full-screen popover: no binding loop in the shell's log (${loops_before} before, ${loops_after} after)" test "$loops_after" = "$loops_before"
       tile_ipc "$addr" previous
     else
