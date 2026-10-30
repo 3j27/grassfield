@@ -308,6 +308,7 @@ void RequestHost::forward(int id)
     QDBusMessage call = QDBusMessage::createMethodCall(m_limits.gtkService, QString::fromLatin1(kPath), m_interface, r->message.member());
     call.setArguments(r->message.arguments());
     auto *watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(call, std::numeric_limits<int>::max()), this);
+    forwarded(id);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, id](QDBusPendingCallWatcher *w) {
         w->deleteLater();
         const auto forwarded = m_requests.take(id);

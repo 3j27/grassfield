@@ -22,8 +22,10 @@ QtObject {
         app: root.app
     }
 
-    // Open panels by request id (key()).
+    // Open panels by request id (key()), and their keys in the order they opened (an object's keys put integer-like ones
+    // first: FileChooser's after AppChooser's; integrator review of f9a25ce, NIT).
     property var panels: ({})
+    property var order: []
     // The panel the user last worked in: KIO's questions are asked there (Main.qml's rule).
     property var lastActiveWindow: null
     property var promptWindow: null
@@ -89,6 +91,7 @@ QtObject {
         const next = Object.assign({}, root.panels);
         next[root.key(id, application)] = panel;
         root.panels = next;
+        root.order = root.order.concat([root.key(id, application)]);
         owner.present(id, panel);
     }
 
@@ -104,6 +107,7 @@ QtObject {
         const next = Object.assign({}, root.panels);
         delete next[root.key(id, application)];
         root.panels = next;
+        root.order = root.order.filter(k => k !== root.key(id, application));
         if (root.lastActiveWindow === panel)
             root.lastActiveWindow = null;
         if (root.promptWindow === panel) {
@@ -125,8 +129,8 @@ QtObject {
         if (id === root.promptId && root.promptWindow)
             return;
         root.promptId = id;
-        const open = Object.keys(root.panels).map(k => root.panels[k]);
-        root.promptWindow = root.lastActiveWindow ?? (open.length > 0 ? open[open.length - 1] : null);
+        const last = root.order.length > 0 ? root.panels[root.order[root.order.length - 1]] : null;
+        root.promptWindow = root.lastActiveWindow ?? last;
         if (!root.promptWindow)
             root.app.prompts.reply(id, {
                 button: "stop"

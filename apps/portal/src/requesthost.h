@@ -101,6 +101,8 @@ protected:
     virtual QVariantMap relayed(const QVariantMap &gtkResults) const = 0;
     // Request `id` is gone (answered, or its forward answered): what the subclass kept of it can go.
     virtual void ended(int id) { Q_UNUSED(id) }
+    // Request `id` has just been sent to x-d-p-gtk (after its call): what the subclass must send after it can go now.
+    virtual void forwarded(int id) { Q_UNUSED(id) }
 
     QDBusConnection m_bus;
 

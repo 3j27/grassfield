@@ -42,11 +42,18 @@ Platform.MenuBar {
     // binding on `count` only re-runs when the number changes (selecting another single item kept the old name and
     // Open With list, and Open With then acted on the new selection: review of 72272e4).
     readonly property string firstName: bar.folder && bar.folder.selectedCount === 1 ? bar.label(bar.folder.nameAt(bar.folder.selectedRows()[0])) : ""
-    // Open With: the applications for a selection of files (re-read when the selection changes).
-    readonly property var openWithApps: {
+    // Open With: for a selection of files (re-read when the selection changes), the applications for them and Other…, the
+    // Choose Application panel (ADR-0035 5c-1).
+    readonly property bool openWithFiles: {
         const f = bar.folder;
         // Not in Applications: an item there is an application (the desktop entry is not a file to open with another one:
         // Kdenlive offered itself for "*.kdenlive" and was started with a grassfield-app: URL).
+        if (!f || f.selectedCount === 0 || f.isTrash || f.isApplications)
+            return false;
+        return f.selectedRows().every(r => !f.isDirAt(r));
+    }
+    readonly property var openWithApps: {
+        const f = bar.folder;
         if (!f || f.selectedCount === 0 || f.isTrash || f.isApplications)
             return [];
         const rows = f.selectedRows();
@@ -123,7 +130,7 @@ Platform.MenuBar {
         Platform.Menu {
             id: openWithMenu
             title: qsTr("Open With")
-            enabled: bar.openWithApps.length > 0
+            enabled: bar.openWithFiles
 
             Instantiator {
                 model: bar.openWithApps
@@ -137,6 +144,13 @@ Platform.MenuBar {
 
                 onObjectAdded: (index, object) => openWithMenu.insertItem(index, object as Platform.MenuItem)
                 onObjectRemoved: (index, object) => openWithMenu.removeItem(object as Platform.MenuItem)
+            }
+            Platform.MenuSeparator {
+                visible: bar.openWithApps.length > 0
+            }
+            Platform.MenuItem {
+                text: qsTr("Other…")
+                onTriggered: bar.tab.runAction("openWithOther", bar.folder)
             }
         }
         Platform.MenuItem {

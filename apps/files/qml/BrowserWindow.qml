@@ -280,7 +280,9 @@ Window {
     Connections {
         target: win.app
         function onOperationFailed(message: string): void {
-            if (win.active || win.manager.lastActiveWindow === win)
+            // Or the window under the Choose Application panel the user works in (Main.qml; review of step 5c, MINOR 1).
+            const last = win.manager.lastActiveWindow;
+            if (win.active || last === win || (last && last.transientParent === win))
                 win.showBanner(message);
         }
     }
