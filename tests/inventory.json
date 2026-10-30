@@ -302,6 +302,7 @@
  {"path": "tests/security/lock_surfaces/shell.qml", "layer": "headless"},
  {"path": "tests/security/lock_surfaces.sh", "layer": "data"},
  {"path": "tests/security/theme_icon_files.sh", "layer": "headless"},
+ {"path": "tests/security/security_unit.sh", "layer": "data"},
  {"path": "tests/security/shell_unit_env.sh", "layer": "data"},
  {"path": "tests/security/unit_env_paths.sh", "layer": "headless"},
  {"path": "tests/security/translations_dir.sh", "layer": "headless"},
