@@ -143,6 +143,7 @@
  {"path": "tests/unit/tst_previewviewer.qml", "layer": "headless"},
  {"path": "tests/unit/tst_recentitems.qml", "layer": "headless"},
  {"path": "tests/unit/tst_rfkill.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_overlayblur.qml", "layer": "headless"},
  {"path": "tests/unit/tst_popupkinds.qml", "layer": "logic"},
  {"path": "tests/unit/tst_runmode.qml", "layer": "headless"},
  {"path": "tests/shell/run_mode_import/shell.qml", "layer": "headless"},
