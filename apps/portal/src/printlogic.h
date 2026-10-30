@@ -2,12 +2,13 @@
 // settings and page setup, data/org.freedesktop.portal.Print.xml) and what Grassfield's print sheet makes of them (ADR-0035
 // D-7, step 6a; docs/specs/system-dialogs.md section 7, PR1-PR3). Pure: no bus, no window, no CUPS; Qt Core only.
 //
-// How GTK uses the answer (gtk 4 gtk/print/gtkprintoperation-portal.c, read as data): it renders the document itself into a
-// file with the returned settings and page setup, and only the pages asked (print-pages, page-ranges), scaled (scale), turned
-// to the orientation, in the collation, order and page set asked; then it sends that file to Print with the token. It makes
-// neither the copies nor the pages per sheet for a printer ("printers used through portals always have the COPIES and
-// NUMBER_UP capability"), but makes both for a file (output-uri set). The backend therefore gives CUPS the copies, the
-// collation, the paper, the two sides and the colour, and never the page ranges, the scale or the orientation again.
+// How GTK uses the answer (gtk/print/gtkprintoperation-portal.c, read as data): it renders the document itself into a file
+// with the returned settings and page setup, and only the pages asked (print-pages, page-ranges), scaled (scale), turned to the
+// orientation, in the collation, order and page set asked; then it sends that file to Print with the token. GTK 4 makes
+// neither the copies nor the pages per sheet for a printer, but makes both for a file (output-uri set); GTK 3.24 always makes
+// both (its manual_num_copies is the settings' n-copies). So the answer always gives GTK one copy, and the backend gives CUPS
+// the copies, the collation, the paper, the two sides and the colour, never the page ranges, the scale or the orientation
+// again (review of step 6a, MAJOR: GTK 3 applications printed n² copies).
 #pragma once
 
 #include <QList>
@@ -122,8 +123,9 @@ Choices initialChoices(const QString &printer, const Capabilities &capabilities,
                        const QVariantMap &pageSetup, bool hasCurrentPage, bool hasSelection);
 
 // The answer the application gets (PreparePrint's results): GTK's settings keys and page setup keys, with the D-Bus types GTK
-// reads (strings in the settings, doubles in the page setup). False when the choices cannot be printed (bad page ranges, no
-// paper size).
+// reads (strings in the settings, doubles in the page setup). n-copies is always "1" (GTK must not make the copies: the job
+// carries them, cupsOptions); the page setup names its paper without a PPD name (GTK's gtk_paper_size_new_from_gvariant takes
+// any PPDName key, an empty one too, over Name). False when the choices cannot be printed (bad page ranges, no paper size).
 bool toGtk(const Choices &choices, QVariantMap *settings, QVariantMap *pageSetup);
 
 // The CUPS options of the job (name, value): copies, collation, paper, two sides, colour; never pages, scale or orientation

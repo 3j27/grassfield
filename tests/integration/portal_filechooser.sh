@@ -25,8 +25,8 @@
 #    the choice in its permission store; Cancel starts nothing (A-OW1 through the real frontend)
 #  9 Print through the frontend as GTK makes it, over a scratch CUPS scheduler (tests/integration/print-cups.sh, when a cupsd
 #    the user can run is there): the print sheet over its default queue prints, the application gets GTK's settings with the
-#    printer and the copies asked and a token, and Print with the token sends the document there with its copies (A-PR1, A-PR2
-#    without the nested session)
+#    printer and one copy (GTK must not make them) and a token, and Print with the token sends the document there with the two
+#    copies asked (A-PR1, A-PR2 without the nested session)
 # Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal (and for 9 a scratch CUPS: print-cups.sh), and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
@@ -314,8 +314,8 @@ if cups_ready && start_cups "$tmp/cups"; then
   got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.Print \(.*config\)" "$d/frontend.log" | sort -u)
   desc="9 the frontend routes Print to the Grassfield backend [$got]"
   check bash -c '[[ $1 == *"grassfield.portal for org.freedesktop.impl.portal.Print"* ]]' _ "$got"
-  desc="9 the print sheet prints on the default queue: response 0, GTK's settings with the printer and the copies, a token [$out]"
-  check test "$(value '[d["prepare"].get("response"), d["prepare"]["results"]["settings"].get("printer"), d["prepare"]["results"]["settings"].get("n-copies"), d["prepare"]["results"].get("token", 0) > 0]' <<<"$out")" = '[0, "Office", "2", true]'
+  desc="9 the print sheet prints on the default queue: response 0, GTK's settings with the printer and one copy for GTK to make, a token [$out]"
+  check test "$(value '[d["prepare"].get("response"), d["prepare"]["results"]["settings"].get("printer"), d["prepare"]["results"]["settings"].get("n-copies"), d["prepare"]["results"].get("token", 0) > 0]' <<<"$out")" = '[0, "Office", "1", true]'
   desc="9 ... Print with the token: response 0 [$(value 'd.get("print")' <<<"$out")]"
   check test "$(value 'd.get("print", {}).get("response")' <<<"$out")" = "0"
   wait_until 15 bash -c 'CUPS_SERVER=localhost:$1 lpstat -W completed -o Office | grep -q Office' _ "$cups_port"

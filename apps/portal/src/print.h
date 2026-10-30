@@ -71,6 +71,9 @@ public:
     Q_INVOKABLE bool answer(int id, int response, const QVariantMap &choices = {});
     // Add Printer…: Settings > Printers.
     Q_INVOKABLE void addPrinter();
+    // Not quiet while a token waits for its Print (GTK may take a while to render the document): the process quitting would
+    // lose it, and the Print would end in x-d-p-gtk's dialog (review of step 6a, MINOR 2).
+    qint64 quietFor() const override;
     // Save as PDF…: grassfield-portal's own Save panel (FileChooser's SaveFile, called on this process's bus connection, so it
     // is the panel of D-4 with the application's remembered folder), over the application's window, suggesting `name`
     // (".pdf" added) under `title`; pdfChosen or pdfCancelled answers. The sheet then answers with outputUri, or comes back.
@@ -109,6 +112,8 @@ private:
         bool hasSelection = false;
         bool canSavePdf = false;
         QString printer;
+        // The printer's options are being read: no answer prints on it meanwhile (review of step 6a, MINOR 4).
+        bool reading = false;
         print::Capabilities capabilities;
         print::Choices choices;
     };

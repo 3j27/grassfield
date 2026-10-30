@@ -424,7 +424,8 @@ TEST_F(PrintTest, PreparePrintThenPrintWithItsToken)
     const QVariantMap settings = mapOf(reply->results.value("settings"));
     const QVariantMap pageSetup = mapOf(reply->results.value("page-setup"));
     EXPECT_EQ(settings.value("printer").toString(), QStringLiteral("Office"));
-    EXPECT_EQ(settings.value("n-copies").toString(), QStringLiteral("2"));
+    EXPECT_EQ(settings.value("n-copies").toString(), QStringLiteral("1")) << "GTK makes one copy; the job asks for two";
+    EXPECT_FALSE(pageSetup.contains("PPDName"));
     EXPECT_EQ(settings.value("page-ranges").toString(), QStringLiteral("0-1"));
     EXPECT_EQ(settings.value("duplex").toString(), QStringLiteral("horizontal"));
     EXPECT_EQ(pageSetup.value("Name").toString(), QStringLiteral("iso_a5_148x210mm"));
@@ -448,6 +449,10 @@ TEST_F(PrintTest, PreparePrintThenPrintWithItsToken)
                                                     {QStringLiteral("print-color-mode"), QStringLiteral("monochrome")}}));
     EXPECT_TRUE(gtk.calls.isEmpty()) << "nothing went to x-d-p-gtk";
 
+    // While a token waits for its Print the process is not idle (GTK may render for longer than the idle time).
+    QTest::qWait(20);
+    EXPECT_GE(printer->quietFor(), 15) << "the job's request is over, no token left";
+
     // The token is good once: a second Print with it is x-d-p-gtk's.
     auto again = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/again"), "%PDF-1.4",
                                {{QStringLiteral("token"), QVariant::fromValue(token)}});
@@ -466,6 +471,8 @@ TEST_F(PrintTest, ATokenIsItsApplicationsAndExpires)
 {
     auto reply = preparedAnswer(kHandle, {});
     const uint token = reply->results.value("token").toUInt();
+    QTest::qWait(20);
+    EXPECT_EQ(printer->quietFor(), 0) << "a token waits for its Print: the process must not quit (review of step 6a, MINOR 2)";
     auto other = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/other"), "%PDF-1.4",
                                {{QStringLiteral("token"), QVariant::fromValue(token)}}, QStringLiteral("org.example.Other"));
     ASSERT_TRUE(waitFor([&] { return gtk.calls.size() == 1; }));
@@ -485,10 +492,18 @@ TEST_F(PrintTest, ATokenIsItsApplicationsAndExpires)
     gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(0u), QVariantMap{}}));
     ASSERT_TRUE(waitFor([&] { return none->done; }));
 
-    make([](Print::Options &o) { o.tokenLifetimeMs = 100; });
+    make([](Print::Options &o) {
+        o.tokenLifetimeMs = 100;
+        o.idleQuitMs = 50;
+    });
+    bool idled = false;
+    QObject::connect(printer.get(), &Print::idle, printer.get(), [&idled] { idled = true; });
     auto late = preparedAnswer(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/late"), {});
     const uint lateToken = late->results.value("token").toUInt();
+    idled = false;
     QTest::qWait(250);
+    EXPECT_TRUE(idled) << "the idle time starts again once the token has expired";
+    EXPECT_GE(printer->quietFor(), 50);
     printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/late2"), "%PDF-1.4",
                   {{QStringLiteral("token"), QVariant::fromValue(lateToken)}});
     ASSERT_TRUE(waitFor([&] { return gtk.calls.size() == 3; })) << "an expired token is not ours any more";
@@ -659,6 +674,11 @@ TEST_F(PrintTest, AnotherPrinterKeepsTheChoicesItTakes)
     choices.insert(QStringLiteral("ranges"), QStringLiteral("2-"));
     const int id = chosen.first().id;
     printer->choosePrinter(id, QStringLiteral("Mono"), choices);
+    // Its options are being read: no answer prints on it yet.
+    QVariantMap early = choices;
+    early.insert(QStringLiteral("printer"), QStringLiteral("Mono"));
+    early.insert(QStringLiteral("ranges"), QStringLiteral("2"));
+    EXPECT_FALSE(printer->answer(id, 0, early)) << "the options are not read yet";
     ASSERT_TRUE(waitFor([&] { return chosen.size() == 2; }));
     const QVariantMap mono = chosen.last().choices;
     EXPECT_EQ(chosen.last().printer, QStringLiteral("Mono"));

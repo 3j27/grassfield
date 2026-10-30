@@ -62,7 +62,8 @@ Window {
     }
 
     readonly property bool rangesValid: sheet.choices.pages !== "ranges" || sheet.host.tidyRanges(String(sheet.choices.ranges)) !== ""
-    readonly property bool canPrint: !sheet.answered && sheet.printer !== "" && sheet.rangesValid
+    // Not while the printer's options are read: Return would print with none of them (review of step 6a, MINOR 4).
+    readonly property bool canPrint: !sheet.answered && sheet.printer !== "" && !sheet.reading && sheet.rangesValid
     readonly property string acceptText: sheet.request.acceptLabel ? String(sheet.request.acceptLabel) : qsTr("Print")
 
     title: sheet.request.title ? String(sheet.request.title) : qsTr("Print")
@@ -159,14 +160,15 @@ Window {
                 given.ranges = sheet.host.tidyRanges(String(given.ranges));
             sheet.answered = sheet.host.answer(sheet.requestId, 0, given);
             if (!sheet.answered)
-                sheet.visible = true;
+                sheet.host.reshow(sheet.requestId);
         }
         function onPdfCancelled(id: int): void {
             if (id !== sheet.requestId)
                 return;
             // Cancel in the Save panel: back to the print sheet (macOS ends the print there; Grassfield keeps the choices made).
             sheet.saving = false;
-            sheet.visible = true;
+            // Shown again under the application's id, as it first was (Print's reshow).
+            sheet.host.reshow(sheet.requestId);
             sheet.requestActivate();
         }
     }
@@ -455,7 +457,7 @@ Window {
                 Button {
                     text: sheet.acceptText
                     primary: true
-                    enabled: sheet.canPrint && !sheet.reading
+                    enabled: sheet.canPrint
                     onClicked: sheet.pressPrint()
                 }
             }

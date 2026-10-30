@@ -8,7 +8,9 @@
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
 #include <QRandomGenerator>
+#include <QCoreApplication>
 #include <QThread>
+#include <QTimer>
 
 #include <KIO/CommandLauncherJob>
 
@@ -74,6 +76,16 @@ Print::~Print()
         if (!writer->wait(3500))
             writer->setParent(nullptr); // never destroyed while it runs
     }
+    // The writes that ended meanwhile answer their requests (their queued answers), before RequestHost ends the rest.
+    QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
+}
+
+qint64 Print::quietFor() const
+{
+    for (const Ticket &t : m_tickets)
+        if (t.age.elapsed() <= m_options.tokenLifetimeMs)
+            return 0;
+    return RequestHost::quietFor();
 }
 
 QVariantMap Print::toQml(const QString &appId, const QString &parentWindow, const QString &title, const QVariantMap &settings,
@@ -164,12 +176,14 @@ void Print::choosePrinter(int id, const QString &printer, const QVariantMap &cho
     it->choices = print::fromQml(choices, it->choices);
     it->printer = printer;
     it->capabilities = {};
+    it->reading = true;
     m_system->capabilities(printer, this, [this, id, printer](const print::Capabilities &caps) {
         const auto p = m_pending.find(id);
         // Another printer chosen meanwhile: its own answer comes.
         if (p == m_pending.end() || !isOpen(id) || p->printer != printer)
             return;
         p->capabilities = caps;
+        p->reading = false;
         // The choices made so far, as the new printer takes them (its paper, two sides and colour where it has them).
         print::Choices current = p->choices;
         current.printer = printer;
@@ -186,6 +200,9 @@ void Print::choosePrinter(int id, const QString &printer, const QVariantMap &cho
             carried.pages = current.pages;
             carried.ranges = current.ranges;
         }
+        // The copies are the job's, not GTK's (GTK gets one): carried as chosen, within the printer's limit.
+        carried.copies = std::clamp(current.copies, 1, std::clamp(caps.known ? caps.maxCopies : print::kMaxCopies, 1, print::kMaxCopies));
+        carried.collate = current.collate;
         p->choices = carried;
         emit printerChosen(id, printer, print::toQml(caps), print::toQml(carried));
     });
@@ -212,8 +229,8 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
         if (!it->canSavePdf)
             return false;
         c.printer.clear();
-    } else if (c.printer.isEmpty() || c.printer != it->printer) {
-        // To print, the printer the sheet chose (choosePrinter) and whose options it read.
+    } else if (c.printer.isEmpty() || c.printer != it->printer || it->reading) {
+        // To print, the printer the sheet chose (choosePrinter), once its options are read.
         return false;
     }
     QVariantMap settings, pageSetup;
@@ -303,6 +320,12 @@ uint Print::issue(const Ticket &ticket)
     Ticket t = ticket;
     t.age.start();
     m_tickets.insert(token, t);
+    // When it expires, the idle time starts again (quietFor kept the process for it meanwhile).
+    QTimer::singleShot(m_options.tokenLifetimeMs + 50, this, [this] {
+        dropExpired();
+        if (pending() == 0)
+            armIdle();
+    });
     return token;
 }
 
@@ -366,7 +389,9 @@ void Print::printWithTicket(int id, const Ticket &ticket, const QString &title, 
         finish(id, 2, {});
         return;
     }
-    const QString name = title.isEmpty() ? QStringLiteral("Document") : title;
+    // The job's name in the printer's queue: the application's (GTK's title is "Print" for every job).
+    const QString app = appName(ticket.appId);
+    const QString name = !app.isEmpty() ? app : !title.isEmpty() ? title : QStringLiteral("Document");
     m_system->submit(ticket.printer, name, print::cupsOptions(ticket.choices, ticket.capabilities), fd, this, [this, id](const QString &error) {
         if (!error.isEmpty())
             qWarning("grassfield-portal: the print job did not go: %s", qPrintable(error));

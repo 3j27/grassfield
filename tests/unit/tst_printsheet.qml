@@ -59,8 +59,15 @@ TestCase {
         function savePdf(id: int, name: string, title: string): void {
             fakeHost.saves = fakeHost.saves.concat([{id: id, name: name, title: title}]);
         }
+        property var windows: ({})
         function present(id: int, window: var): void {
+            fakeHost.windows[id] = window;
             window.visible = true;
+        }
+        function reshow(id: int): void {
+            const window = fakeHost.windows[id];
+            if (window)
+                window.visible = true;
         }
         function fail(id: int): void {
         }
@@ -178,6 +185,21 @@ TestCase {
         test.control(sheet, "Printer").picked("__add");
         compare(fakeHost.added, 1, "Add Printer… opens Settings > Printers");
         compare(sheet.printer, "Mono", "and changes no printer");
+    }
+
+    // The printer's options being read: Print is dimmed and Return prints nothing (they would be missing from the job).
+    function test_no_print_while_the_options_are_read(): void {
+        const sheet = test.open({});
+        fakeHost.printersListed(7, test.printers, "Office", true);
+        verify(sheet.reading);
+        verify(!test.button(sheet, "Print").enabled);
+        sheet.requestActivate();
+        tryVerify(() => sheet.active, 1000);
+        keyClick(Qt.Key_Return);
+        compare(fakeHost.answers.length, 0, "Return waits for the options");
+        fakeHost.printerChosen(7, "Office", test.officeCaps, test.choices({printer: "Office"}));
+        keyClick(Qt.Key_Return);
+        compare(fakeHost.answers.length, 1);
     }
 
     function test_pages_typed(): void {

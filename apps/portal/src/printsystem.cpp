@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 
 namespace grassfield::portal {
@@ -21,6 +22,8 @@ using print::Media;
 
 struct CupsPrintSystem::Call {
     // Set by the deadline or the destructor; libcups reads it (cupsEnumDests, cupsConnectDest) and the workers between steps.
+    // A plain int, as libcups' API takes it: written once (0 to 1) on the GUI thread and only read elsewhere; a worker that
+    // reads it late does one more step, bounded by its own limits.
     int cancel = 0;
     std::atomic<bool> answered{false};
     QThread *thread = nullptr;
@@ -271,6 +274,10 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
             }
             char resource[1024] = {};
             http_t *http = cupsConnectDest(dest, CUPS_DEST_FLAGS_NONE, limits.connectMs, &call.cancel, resource, sizeof resource, nullptr, nullptr);
+            // The limit before the first request on the connection (a printer that takes the connection and never answers;
+            // review of step 6a, MINOR 3).
+            if (http)
+                httpSetTimeout(http, limits.idleMs / 1000.0, stopWaiting, nullptr);
             cups_dinfo_t *info = http ? cupsCopyDestInfo(http, dest) : nullptr;
             if (!http || !info) {
                 ::close(fd);
@@ -279,7 +286,6 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
                 cupsFreeDests(1, dest);
                 return fail(QStringLiteral("cannot reach the printer: %1").arg(fromUtf8(cupsLastErrorString())));
             }
-            httpSetTimeout(http, limits.idleMs / 1000.0, stopWaiting, nullptr);
             int numOptions = 0;
             cups_option_t *cupsOptions = nullptr;
             for (const auto &o : options)

@@ -142,6 +142,15 @@ TEST(PrintLogic, TheFirstStateIsThePrintersDefaultsThenWhatTheApplicationAsks)
     EXPECT_EQ(c.media, kA4) << "A5 is not offered: the printer's default";
     EXPECT_EQ(c.copies, 999);
 
+    // Numbers an application could send to overflow a conversion: bounded first.
+    c = initialChoices(QStringLiteral("Office"), office(),
+                       {{QStringLiteral("n-copies"), QStringLiteral("1e300")}, {QStringLiteral("scale"), QStringLiteral("1e300")},
+                        {QStringLiteral("print-pages"), QStringLiteral("ranges")}, {QStringLiteral("page-ranges"), QStringLiteral("0-2147483647")}},
+                       {}, false, false);
+    EXPECT_EQ(c.copies, 99);
+    EXPECT_EQ(c.scale, 1000);
+    EXPECT_EQ(c.pages, QStringLiteral("all")) << "a page past the last one the sheet takes";
+
     // "current" and "selection" only when the application has them; bad ranges are all pages.
     EXPECT_EQ(initialChoices({}, office(), {{QStringLiteral("print-pages"), QStringLiteral("current")}}, {}, false, false).pages,
               QStringLiteral("all"));
@@ -181,7 +190,7 @@ TEST(PrintLogic, TheAnswerHasGtksKeysAndTypes)
     QVariantMap settings, pageSetup;
     ASSERT_TRUE(toGtk(c, &settings, &pageSetup));
     const QVariantMap wantSettings{
-        {QStringLiteral("printer"), QStringLiteral("Office")},       {QStringLiteral("n-copies"), QStringLiteral("2")},
+        {QStringLiteral("printer"), QStringLiteral("Office")},       {QStringLiteral("n-copies"), QStringLiteral("1")},
         {QStringLiteral("collate"), QStringLiteral("false")},        {QStringLiteral("print-pages"), QStringLiteral("ranges")},
         {QStringLiteral("page-ranges"), QStringLiteral("1-2,6")},    {QStringLiteral("orientation"), QStringLiteral("landscape")},
         {QStringLiteral("paper-format"), QStringLiteral("iso_a4_210x297mm")},
@@ -193,7 +202,7 @@ TEST(PrintLogic, TheAnswerHasGtksKeysAndTypes)
     for (auto it = settings.cbegin(); it != settings.cend(); ++it)
         EXPECT_EQ(it.value().metaType(), QMetaType::fromType<QString>()) << it.key().toStdString() << ": GTK reads strings";
     const QVariantMap wantPage{
-        {QStringLiteral("PPDName"), QString()},       {QStringLiteral("Name"), QStringLiteral("iso_a4_210x297mm")},
+        {QStringLiteral("Name"), QStringLiteral("iso_a4_210x297mm")},
         {QStringLiteral("DisplayName"), QStringLiteral("A4")}, {QStringLiteral("Width"), 210.0},
         {QStringLiteral("Height"), 297.0},            {QStringLiteral("MarginTop"), 4.2},
         {QStringLiteral("MarginBottom"), 4.2},        {QStringLiteral("MarginLeft"), 4.2},
@@ -201,10 +210,14 @@ TEST(PrintLogic, TheAnswerHasGtksKeysAndTypes)
     };
     EXPECT_EQ(pageSetup, wantPage);
     EXPECT_EQ(pageSetup.value(QStringLiteral("Width")).metaType(), QMetaType::fromType<double>()) << "GTK reads doubles";
+    EXPECT_FALSE(pageSetup.contains(QStringLiteral("PPDName"))) << "GTK takes any PPDName over Name (a paper named \"ppd_\")";
+    // GTK gets one copy whatever is chosen: GTK 3 renders n-copies into the document (and GTK 4 for a file); the job asks the
+    // printer for the copies (review of step 6a, MAJOR: n² copies).
+    EXPECT_EQ(c.copies, 2);
 
     // Round trip: what the answer gives is the state the sheet opens in next time.
     const Choices back = initialChoices(QStringLiteral("Office"), office(), settings, pageSetup, false, false);
-    EXPECT_EQ(back.copies, 2);
+    EXPECT_EQ(back.copies, 1) << "the application keeps one copy";
     EXPECT_FALSE(back.collate);
     EXPECT_EQ(back.ranges, QStringLiteral("2-3, 7"));
     EXPECT_EQ(back.media, kA4);

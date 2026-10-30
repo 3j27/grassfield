@@ -31,12 +31,13 @@ bool flag(const QVariantMap &map, const QString &key, bool fallback)
     return fallback;
 }
 
-// A positive number in a GTK settings string ("2", "100.000000"), else 0.
+// A positive number in a GTK settings string ("2", "100.000000"), else 0; at most 1e6 (an application's "1e300" never reaches
+// an int conversion it would overflow).
 double number(const QVariant &value)
 {
     bool ok = false;
     const double d = value.toString().trimmed().toDouble(&ok);
-    return ok && std::isfinite(d) && d > 0 ? d : 0;
+    return ok && std::isfinite(d) && d > 0 ? std::min(d, 1e6) : 0;
 }
 
 QString orientationOf(const QString &value)
@@ -251,7 +252,7 @@ Choices initialChoices(const QString &printer, const Capabilities &caps, const Q
             bool a = false, b = true;
             const int first = ends.value(0).trimmed().toInt(&a);
             const int last = ends.size() > 1 ? ends.value(1).trimmed().toInt(&b) : first;
-            if (!a || !b || ends.size() > 2 || first < 0 || last < first) {
+            if (!a || !b || ends.size() > 2 || first < 0 || last < first || last >= kMaxPage) {
                 ok = false;
                 break;
             }
@@ -291,7 +292,8 @@ bool toGtk(const Choices &c, QVariantMap *settings, QVariantMap *pageSetup)
     QVariantMap s;
     if (!toFile && !c.printer.isEmpty())
         s.insert(QStringLiteral("printer"), c.printer);
-    s.insert(QStringLiteral("n-copies"), QString::number(std::clamp(c.copies, 1, kMaxCopies)));
+    // One copy: GTK 3 would render the copies into the document, GTK 4 too for a file; the job asks the printer for them.
+    s.insert(QStringLiteral("n-copies"), QStringLiteral("1"));
     s.insert(QStringLiteral("collate"), c.collate ? QStringLiteral("true") : QStringLiteral("false"));
     const QString pages = c.pages == QLatin1String("ranges") || c.pages == QLatin1String("current") || c.pages == QLatin1String("selection")
         ? c.pages
@@ -314,7 +316,6 @@ bool toGtk(const Choices &c, QVariantMap *settings, QVariantMap *pageSetup)
     }
 
     QVariantMap p;
-    p.insert(QStringLiteral("PPDName"), QString());
     p.insert(QStringLiteral("Name"), c.media.name);
     p.insert(QStringLiteral("DisplayName"), c.media.displayName.isEmpty() ? mediaDisplayName(c.media.name) : c.media.displayName);
     p.insert(QStringLiteral("Width"), c.media.widthMm);
