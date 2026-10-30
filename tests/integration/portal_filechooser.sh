@@ -23,7 +23,11 @@
 #  8 Open With through the frontend (OpenFile with "ask" on a text file, two scratch applications for text/plain, one the default):
 #    Choose Application answers the default (its last choice, selected), the frontend starts it with the document and counts
 #    the choice in its permission store; Cancel starts nothing (A-OW1 through the real frontend)
-# Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal, and the built backend (GRASSFIELD_PORTAL, or
+#  9 Print through the frontend as GTK makes it, over a scratch CUPS scheduler (tests/integration/print-cups.sh, when a cupsd
+#    the user can run is there): the print sheet over its default queue prints, the application gets GTK's settings with the
+#    printer and the copies asked and a token, and Print with the token sends the document there with its copies (A-PR1, A-PR2
+#    without the nested session)
+# Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal (and for 9 a scratch CUPS: print-cups.sh), and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
 set -uo pipefail
@@ -31,7 +35,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/portal-filechooser.XXXXXX")
 # The private bus (start_bus, stop_bus, owned, start_service, wait_until), shared with portal_settings.sh.
 . "$root/tests/integration/portal-bus.sh"
-stop_all() { stop_bus; wait 2>/dev/null; rm -rf "$tmp"; }
+stop_all() { stop_bus; declare -F stop_cups >/dev/null && stop_cups; wait 2>/dev/null; rm -rf "$tmp"; }
 trap stop_all EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -127,6 +131,10 @@ value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(
 starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
 # The backend's process is gone (or a zombie): backend.sh writes its pid before it execs the backend.
 exited() { [[ ! -e /proc/$1 ]] || grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null; }
+
+printdoc() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" print "$@"; }
+# The scratch CUPS scheduler of scenario 9 (cups_ready, start_cups, stop_cups).
+. "$root/tests/integration/print-cups.sh"
 
 # Preflight: libdbus reaches a private bus.
 mkdir -p "$tmp/pre/services"
@@ -293,6 +301,34 @@ if [[ -x $store ]]; then
   stop_bus
 else
   echo "SKIP: 8 needs xdg-permission-store ($store)"
+fi
+
+# 9 --------------------------------------------------------------------------------------------------------------------
+# Print (D-7, step 6a): an application's Print… through the frontend as GTK makes it: PreparePrint shows the print sheet over the
+# scratch scheduler's default queue, the sheet prints (its test answer), the application gets GTK's settings and a token, and
+# Print with the token sends the document to that queue with the copies asked.
+if cups_ready && start_cups "$tmp/cups"; then
+  scenario print accept "" "" real "CUPS_SERVER=localhost:$cups_port" || exit 1
+  printf '%%PDF-1.4\n%% a page\n%%%%EOF\n' >"$d/document.pdf"
+  out=$(printdoc "$d/document.pdf" 30)
+  got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.Print \(.*config\)" "$d/frontend.log" | sort -u)
+  desc="9 the frontend routes Print to the Grassfield backend [$got]"
+  check bash -c '[[ $1 == *"grassfield.portal for org.freedesktop.impl.portal.Print"* ]]' _ "$got"
+  desc="9 the print sheet prints on the default queue: response 0, GTK's settings with the printer and the copies, a token [$out]"
+  check test "$(value '[d["prepare"].get("response"), d["prepare"]["results"]["settings"].get("printer"), d["prepare"]["results"]["settings"].get("n-copies"), d["prepare"]["results"].get("token", 0) > 0]' <<<"$out")" = '[0, "Office", "2", true]'
+  desc="9 ... Print with the token: response 0 [$(value 'd.get("print")' <<<"$out")]"
+  check test "$(value 'd.get("print", {}).get("response")' <<<"$out")" = "0"
+  wait_until 15 bash -c 'CUPS_SERVER=localhost:$1 lpstat -W completed -o Office | grep -q Office' _ "$cups_port"
+  job=$(CUPS_SERVER=localhost:$cups_port lpstat -W completed -o Office | awk 'NR == 1 {print $1}')
+  copies=$(CUPS_SERVER=localhost:$cups_port ipptool -tv "ipp://localhost:$cups_port/jobs/${job##*-}" get-job-attributes.test 2>/dev/null |
+    sed -n 's/^ *copies (integer) = //p')
+  document=$(ls "$tmp/cups/spool"/d*-001 2>/dev/null | head -1)
+  desc="9 ... the scheduler has the job ($job) with its two copies and the document the application made [copies $copies]"
+  check bash -c '[[ -n $1 && $2 == 2 && -n $3 ]] && cmp -s "$3" "$4"' _ "$job" "$copies" "$document" "$d/document.pdf"
+  stop_bus
+  stop_cups
+else
+  echo "SKIP: 9 needs a cupsd the user can run (GF_TEST_CUPSD), lpadmin and python3"
 fi
 
 exit "$fail"

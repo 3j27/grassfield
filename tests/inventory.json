@@ -25,6 +25,7 @@
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
  {"path": "tests/integration/portal-bus.sh", "reason": "helper sourced by portal_settings.sh and portal_filechooser.sh (the private bus)"},
+ {"path": "tests/integration/print-cups.sh", "reason": "helper sourced by print_cups.sh and portal_filechooser.sh (the scratch CUPS scheduler)"},
  {"path": "tests/visual/fringe-count.sh", "reason": "measuring tool for captures (colour fringes of text), used by hand in the grayscale-text proof"},
  {"path": "tests/visual/ipc.sh", "reason": "helper: qs ipc against the nested shell"},
  {"path": "tests/visual/flow-lib.sh", "reason": "helper sourced by the tests/visual/flow-*.sh functional flows"},
