@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
+#include <QCryptographicHash>
 #include <QTimer>
 
 #include <gtest/gtest.h>
@@ -791,6 +792,89 @@ TEST(StoreBackend, GetFlatpak)
     storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), "exit 0");
     EXPECT_EQ(block(backend), QStringLiteral("installed"));
     EXPECT_TRUE(backend.sources().value(QStringLiteral("flatpak")).toBool());
+}
+
+// Get Flatpak… from its plan to its operation (PR #65's review: no test drove a successful install): the plan its sheet
+// showed, the record with the catalog's pins, written for grassfield-store-run when it starts; refused while flatpak is
+// there, and once queued.
+TEST(StoreBackend, GetFlatpakInstalls)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_INSTALLER", QStringLiteral("/bin/true"));
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    // Omarchy's two commands, as the catalog pins them.
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/bin")));
+    storetest::script(s.path(QStringLiteral("fixture/omarchy/bin/omarchy-pkg-add")), "omarchy-pkg-missing \"$@\" && sudo pacman -S --noconfirm --needed \"$@\"");
+    storetest::script(s.path(QStringLiteral("fixture/omarchy/bin/omarchy-pkg-missing")), "exit 0");
+    const auto sha = [&s](const char *rel) {
+        QFile file(s.path(QStringLiteral("fixture/omarchy/")) + QLatin1String(rel));
+        return file.open(QIODevice::ReadOnly) ? QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex()) : QString();
+    };
+    const QList<std::pair<QString, QString>> pins{{QStringLiteral("bin/omarchy-pkg-add"), sha("bin/omarchy-pkg-add")},
+                                                  {QStringLiteral("bin/omarchy-pkg-missing"), sha("bin/omarchy-pkg-missing")}};
+    // pacman: nothing unfinished, and flatpak's plan with one dependency, both on the mirror in served/.
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QByteArray mirror = QUrl::fromLocalFile(s.path(QStringLiteral("served"))).toString().toUtf8();
+    for (const char *file : {"flatpak-1:1.18.4-2-x86_64.pkg.tar.zst", "ostree-2025.7-1-x86_64.pkg.tar.zst"})
+        storetest::writeFile(s.path(QStringLiteral("served/")) + QLatin1String(file), "pkg");
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  -Qq) printf '%s\\n' gimp sketch cafe ;;\n"
+                      "  -S) printf '%s\\n' 'flatpak 1:1.18.4-2 extra 2100000 " + mirror + "/flatpak-1:1.18.4-2-x86_64.pkg.tar.zst' "
+                      "'ostree 2025.7-1 extra 1100000 " + mirror + "/ostree-2025.7-1-x86_64.pkg.tar.zst' ;;\n"
+                      "  *) exec '" + base.toUtf8() + "' \"$@\" ;;\n"
+                      "esac");
+    auto snap = std::make_shared<Snapshot>();
+    Catalog catalog;
+    catalog.omarchy = OmarchyPins{QStringLiteral("v4.0.4"), QString(40, QLatin1Char('0')), pins};
+    snap->catalog = catalog;
+    snap->appstream.origin = AppStreamData::Origin::Installed; // online, nothing to fetch: no load replaces this snapshot
+    SnapshotBackend backend;
+    backend.apply(std::shared_ptr<const Snapshot>(std::move(snap)));
+    ASSERT_EQ(backend.sources().value(QStringLiteral("getFlatpak")).toString(), QString());
+    QVariantMap plan;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend, [&plan](const QString &, const QString &, const QVariantMap &p) { plan = p; });
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    QEventLoop loop;
+    for (int i = 0; i < 500 && plan.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    ASSERT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString()) << plan.value(QStringLiteral("detail")).toString().toStdString();
+    const QVariantList packages = plan.value(QStringLiteral("packages")).toList();
+    ASSERT_EQ(packages.size(), 2);
+    EXPECT_EQ(packages.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("flatpak"));
+    // flatpak there meanwhile (installed another way): nothing to get, the plan or not.
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), "exit 0");
+    EXPECT_FALSE(backend.install(kGetFlatpakApp));
+    QFile::remove(s.path(QStringLiteral("fixture/bin/flatpak")));
+    ASSERT_TRUE(backend.install(kGetFlatpakApp));
+    const QVariantList ops = backend.operations();
+    ASSERT_EQ(ops.size(), 1);
+    const QVariantMap op = ops.first().toMap();
+    EXPECT_EQ(op.value(QStringLiteral("app")).toString(), kGetFlatpakApp);
+    EXPECT_EQ(op.value(QStringLiteral("name")).toString(), QStringLiteral("Flatpak"));
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "queued";
+    // Planned again while it waits for Omarchy's terminal: still once at a time.
+    plan.clear();
+    backend.plan(kGetFlatpakApp, QStringLiteral("install"));
+    for (int i = 0; i < 500 && plan.isEmpty(); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString()) << plan.value(QStringLiteral("detail")).toString().toStdString();
+    EXPECT_FALSE(backend.install(kGetFlatpakApp)) << "once at a time";
+    // The catalog's pins, written for grassfield-store-run as it starts.
+    const QString written = s.path(QStringLiteral("fixture/run/store/")) + op.value(QStringLiteral("id")).toString() + QStringLiteral(".pins");
+    for (int i = 0; i < 250 && !QFile::exists(written); ++i) {
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    QFile file(written);
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << written.toStdString();
+    EXPECT_EQ(file.readAll(), (pins.at(0).second + QStringLiteral("  bin/omarchy-pkg-add\n") + pins.at(1).second + QStringLiteral("  bin/omarchy-pkg-missing\n")).toUtf8());
 }
 
 TEST(StoreBackend, FrenchSession)
