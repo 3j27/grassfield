@@ -16,6 +16,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusUnixFileDescriptor>
 #include <QDeadlineTimer>
+#include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -31,6 +32,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <utility>
 
 using namespace grassfield::portal;
 
@@ -716,6 +718,51 @@ TEST_F(PrintTest, CloseTakesTheSheetAway)
     EXPECT_TRUE(printer->answer(chosen.first().id, 0, chosen.first().choices)) << "gone: ignored";
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_NE(reply->response, 0u);
+}
+
+// Save as PDF's writer: a PDF read to its end whatever the pieces it comes in, written through a temporary file; anything that
+// is not a PDF, or a source that stops, writes nothing and leaves the file there as it was.
+TEST(WritePdf, OnlyAWholePdfIsWritten)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString target = dir.filePath(QStringLiteral("out.pdf"));
+    const auto pipeOf = [](const QList<QByteArray> &pieces, bool close) {
+        int ends[2];
+        EXPECT_EQ(::pipe2(ends, O_CLOEXEC), 0);
+        for (const QByteArray &piece : pieces)
+            EXPECT_EQ(::write(ends[1], piece.constData(), size_t(piece.size())), piece.size());
+        if (close)
+            ::close(ends[1]);
+        return std::make_pair(ends[0], ends[1]);
+    };
+    // The header in two pieces (fewer than five bytes first): nothing of it lost.
+    auto [whole, wholeWriter] = pipeOf({QByteArray("%P"), QByteArray("DF-1.7 body")}, true);
+    Q_UNUSED(wholeWriter)
+    EXPECT_EQ(writePdf(whole, target, 2000), QString());
+    QFile written(target);
+    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
+    EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 body"));
+    written.close();
+
+    auto [ps, psWriter] = pipeOf({QByteArray("%!PS-Adobe-3.0")}, true);
+    Q_UNUSED(psWriter)
+    EXPECT_EQ(writePdf(ps, target, 2000), QStringLiteral("the document is not a PDF"));
+    auto [shortOne, shortWriter] = pipeOf({QByteArray("%PD")}, true);
+    Q_UNUSED(shortWriter)
+    EXPECT_EQ(writePdf(shortOne, target, 2000), QStringLiteral("the document is not a PDF"));
+    // A source that stops halfway: no half document.
+    auto [silent, silentWriter] = pipeOf({QByteArray("%PDF-1.7 half")}, false);
+    EXPECT_EQ(writePdf(silent, target, 200), QStringLiteral("the document stopped coming"));
+    ::close(silentWriter);
+    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
+    EXPECT_EQ(written.readAll(), QByteArray("%PDF-1.7 body")) << "the file there is untouched";
+    written.close();
+    // A folder that cannot be written.
+    auto [blocked, blockedWriter] = pipeOf({QByteArray("%PDF-1.7")}, true);
+    Q_UNUSED(blockedWriter)
+    EXPECT_TRUE(writePdf(blocked, dir.filePath(QStringLiteral("missing/out.pdf")), 2000).startsWith(QStringLiteral("cannot write")));
+    EXPECT_EQ(QDir(dir.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("out.pdf")}) << "no temporary file left";
 }
 
 // The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
