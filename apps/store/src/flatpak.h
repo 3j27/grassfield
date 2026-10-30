@@ -66,9 +66,11 @@ FlatpakPrompt flatpakPrompt(const QStringList &lines);
 // home, folders (any other path), devices (all), input, usb (devices=usb, or [USB Devices] it may list), kvm, audio
 // (the sound server: speakers and microphone), x11, sharedMemory (shared=ipc, devices=shm), printers (cups), ssh
 // (ssh-auth), gpg (gpg-agent), smartCards (pcsc), bus (the whole session bus), systemBus, bluetooth, canbus, devel,
-// multiarch, login (it can write where programs start at login: ~/.config/autostart or ~/.config/systemd, by host, home,
-// xdg-config or a path), outside (it may start programs outside its sandbox: the whole session bus, or org.freedesktop.Flatpak,
-// org.freedesktop.systemd1 or the permission store, by name or a wildcard). Then "sessionService:<name>" and
+// multiarch, login (it can write where programs start at the next login: autostart, systemd user units, Hyprland's and
+// uwsm's configuration, environment.d, the shells' start files, ~/.local/bin; by host, home, xdg-config, xdg-data or a
+// path, normalised), outside (it may start programs outside its sandbox: the session bus's or systemd's socket, flatpak's
+// own folder, the session's D-Bus services or the launcher's entries written, the whole session bus, or org.freedesktop.Flatpak, org.freedesktop.systemd1 or the permission
+// store, by name or a wildcard ("X.*" is X and below), or as its own id or above it). Then "sessionService:<name>" and
 // "systemService:<name>" for each bus name it may talk to or own, sorted (on the session bus, not the harmless ones:
 // notifications, tray, menus, screen saver, accessibility, file manager, the portals, media-player names and its own),
 // and "other:<text>" for each grant the Store does not know, as flatpak writes it. At most 30 lines: the last is then

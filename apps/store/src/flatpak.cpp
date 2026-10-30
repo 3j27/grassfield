@@ -32,29 +32,95 @@ bool isPart(const QString &part, int max)
     return part.size() <= max && re.match(part).hasMatch() && !part.contains(QLatin1String(".."));
 }
 
-// A filesystems entry it can write that holds ~/.config/autostart or ~/.config/systemd: what it puts there runs when the
-// user logs in, outside its sandbox (host, home, xdg-config and the like, a home folder by its absolute path; never :ro).
+// A filesystems entry's path as one place: "~" for the home folder (home, ~, a home folder by its absolute path),
+// "~/.config", "~/.local/share", "~/.cache" for xdg-config, xdg-data and xdg-cache, "$RUN" for the user's runtime
+// folder (xdg-run, /run/user/<uid>), "/" for host (all but /run, /var, /tmp and the system's own folders, as flatpak
+// mounts it), and "*" for a path with ".." (it could be anywhere); "//", "/./" and a trailing "/." collapsed. Any other
+// word (xdg-download, host-os...) stays as written.
+QString canonicalPath(const QString &path)
+{
+    if (path == QLatin1String("host"))
+        return QStringLiteral("/");
+    const bool absolute = path.startsWith(QLatin1Char('/'));
+    QStringList parts;
+    for (const QString &part : path.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+        if (part == QLatin1String(".."))
+            return QStringLiteral("*");
+        if (part != QLatin1String("."))
+            parts.append(part);
+    }
+    if (parts.isEmpty())
+        return absolute ? QStringLiteral("/") : QString();
+    QString base;
+    if (!absolute) {
+        const QString head = parts.takeFirst();
+        if (head == QLatin1String("home") || head == QLatin1String("~"))
+            base = QStringLiteral("~");
+        else if (head == QLatin1String("xdg-config"))
+            base = QStringLiteral("~/.config");
+        else if (head == QLatin1String("xdg-data"))
+            base = QStringLiteral("~/.local/share");
+        else if (head == QLatin1String("xdg-cache"))
+            base = QStringLiteral("~/.cache");
+        else if (head == QLatin1String("xdg-run"))
+            base = QStringLiteral("$RUN");
+        else
+            return (QStringList{head} + parts).join(QLatin1Char('/'));
+    } else if (parts.first() == QLatin1String("home") || (parts.first() == QLatin1String("var") && parts.value(1) == QLatin1String("home"))) {
+        parts.remove(0, parts.first() == QLatin1String("var") ? 2 : 1); // /home, /var/home: every home folder
+        if (!parts.isEmpty())
+            parts.removeFirst(); // the user's
+        base = QStringLiteral("~");
+    } else if (parts.first() == QLatin1String("run") && (parts.size() == 1 || parts.at(1) == QLatin1String("user"))) {
+        parts.remove(0, qMin<qsizetype>(parts.size(), 3)); // /run, /run/user, /run/user/<uid>
+        base = QStringLiteral("$RUN");
+    } else {
+        return QLatin1Char('/') + parts.join(QLatin1Char('/'));
+    }
+    return parts.isEmpty() ? base : base + QLatin1Char('/') + parts.join(QLatin1Char('/'));
+}
+
+// Whether a canonical path reaches `target`: holds it, or is inside it ("/" holds the home folder, not the runtime folder;
+// "*" holds everything).
+bool reaches(const QString &path, const QString &target)
+{
+    if (path == QLatin1String("*"))
+        return true;
+    if (path == QLatin1String("/"))
+        return target.startsWith(QLatin1Char('~'));
+    return path == target || target.startsWith(path + QLatin1Char('/')) || path.startsWith(target + QLatin1Char('/'));
+}
+
+// A filesystems entry it can write where programs start at the next login, outside its sandbox: the session's autostart
+// and systemd user units, Hyprland's and uwsm's configuration, environment.d, the shells' start files, ~/.local/bin (on
+// PATH). Never :ro.
 bool startsAtLogin(const QString &entry)
 {
-    const QString mode = entry.section(QLatin1Char(':'), 1);
-    if (mode == QLatin1String("ro"))
+    if (entry.section(QLatin1Char(':'), 1) == QLatin1String("ro"))
         return false;
-    QString path = entry.section(QLatin1Char(':'), 0, 0);
-    while (path.size() > 1 && path.endsWith(QLatin1Char('/')))
-        path.chop(1);
-    if (path == QLatin1String("host") || path == QLatin1String("home") || path == QLatin1String("~"))
+    static const QStringList targets{QStringLiteral("~/.config/autostart"), QStringLiteral("~/.config/systemd"), QStringLiteral("~/.config/hypr"),
+                                     QStringLiteral("~/.config/uwsm"), QStringLiteral("~/.config/environment.d"), QStringLiteral("~/.config/fish"),
+                                     QStringLiteral("~/.local/share/systemd"), QStringLiteral("~/.local/bin"), QStringLiteral("~/.bashrc"),
+                                     QStringLiteral("~/.bash_profile"), QStringLiteral("~/.bash_login"), QStringLiteral("~/.profile"),
+                                     QStringLiteral("~/.zshrc"), QStringLiteral("~/.zshenv"), QStringLiteral("~/.zprofile"), QStringLiteral("~/.zlogin")};
+    const QString path = canonicalPath(entry.section(QLatin1Char(':'), 0, 0));
+    return std::any_of(targets.cbegin(), targets.cend(), [&path](const QString &t) { return reaches(path, t); });
+}
+
+// A filesystems entry that reaches past its sandbox: the session bus's and systemd's sockets in the runtime folder (they
+// bypass the bus filter; read-only does not stop a connection; a path with ".." reaches them too), or one of these folders
+// named and written: flatpak's own (its overrides grant any permission), the session's D-Bus services (D-Bus starts one on
+// the host when its name is called), the launcher's application entries (run on the host when opened). A grant above
+// them, the home folder's or xdg-data's, says "login" already.
+bool reachesOutside(const QString &entry)
+{
+    const QString path = canonicalPath(entry.section(QLatin1Char(':'), 0, 0));
+    if (reaches(path, QStringLiteral("$RUN/bus")) || reaches(path, QStringLiteral("$RUN/systemd")))
         return true;
-    if (path == QLatin1String("xdg-config") || path.startsWith(QLatin1String("xdg-config/")))
-        path = QStringLiteral("~/.config") + path.mid(10);
-    static const QRegularExpression absoluteHome(QStringLiteral(R"(\A/(?:var/)?home(?:/[^/]+)?(?=/|\z))"));
-    if (const QRegularExpressionMatch m = absoluteHome.match(path); m.hasMatch())
-        path = QStringLiteral("~") + path.mid(m.capturedLength());
-    for (const QLatin1String target : {QLatin1String("~/.config/autostart"), QLatin1String("~/.config/systemd")}) {
-        if (path == QLatin1String("~") || target == path || target.startsWith(path + QLatin1Char('/'))
-            || path.startsWith(target + QLatin1Char('/')))
-            return true;
-    }
-    return false;
+    static const QStringList written{QStringLiteral("~/.local/share/flatpak"), QStringLiteral("~/.local/share/dbus-1"),
+                                     QStringLiteral("~/.local/share/applications")};
+    return entry.section(QLatin1Char(':'), 1) != QLatin1String("ro")
+        && std::any_of(written.cbegin(), written.cend(), [&path](const QString &w) { return path == w || path.startsWith(w + QLatin1Char('/')); });
 }
 
 // flatpak's last words when a command failed: its error lines, else the last lines it wrote.
@@ -379,7 +445,9 @@ std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
                                      QStringLiteral("org.freedesktop.impl.portal.PermissionStore")};
     static const QRegularExpression busName(QStringLiteral(R"(\A[A-Za-z0-9_.*-]{1,255}\z)"));
     const auto covers = [](const QString &name, const QString &service) {
-        return name == service || (name.endsWith(QLatin1String(".*")) && service.startsWith(name.chopped(1)));
+        // "X.*" is X and every name below it, as xdg-dbus-proxy reads it.
+        return name == service
+            || (name.endsWith(QLatin1String(".*")) && (service == name.chopped(2) || service.startsWith(name.chopped(1))));
     };
     const auto busPolicy = [&](const Line &l, bool onSession) {
         if (l.value == QLatin1String("none") || l.value == QLatin1String("see"))
@@ -466,20 +534,26 @@ std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
                       return path == QLatin1String("host") || path == QLatin1String("host-os") || path == QLatin1String("host-etc")
                               || path == QLatin1String("host-root")
                           ? QStringLiteral("allFiles")
-                          : path == QLatin1String("home") || path == QLatin1String("~") || path == QLatin1String("~/") ? QStringLiteral("home")
-                                                                                                                      : QStringLiteral("folders");
+                          : canonicalPath(path) == QLatin1String("~") ? QStringLiteral("home")
+                                                                      : QStringLiteral("folders");
                   }()
                 : QString();
             if (l.key == QLatin1String("sockets"))
                 sockets.insert(entry);
             if (l.key == QLatin1String("filesystems") && startsAtLogin(entry))
                 found.insert(QStringLiteral("login"));
+            if (l.key == QLatin1String("filesystems") && reachesOutside(entry))
+                found.insert(QStringLiteral("outside"));
             if (word.isEmpty())
                 unknown(QStringLiteral("%1=%2").arg(l.key, entry)); // a grant this flatpak may know and the Store does not
             else if (word != QLatin1String("-"))
                 found.insert(word);
         }
     }
+    // Its own id and every name below it are its to own on the session bus (flatpak's default): an id that is one of the
+    // session's escapes, or holds one, is outside its sandbox whatever its policy says.
+    if (std::any_of(escapes.cbegin(), escapes.cend(), [&appId](const QString &e) { return e == appId || e.startsWith(appId + QLatin1Char('.')); }))
+        found.insert(QStringLiteral("outside"));
     // fallback-x11 is the X11 display when it has no Wayland socket; the whole session bus reaches org.freedesktop.Flatpak.
     if (sockets.contains(QStringLiteral("fallback-x11")) && !sockets.contains(QStringLiteral("wayland")))
         found.insert(QStringLiteral("x11"));

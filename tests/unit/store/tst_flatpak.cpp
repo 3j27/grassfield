@@ -205,19 +205,51 @@ TEST(Flatpak, WhatItCanReach)
               (QStringList{QStringLiteral("outside"), service("org.freedesktop.systemd1")}));
     EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.impl\n[Session Bus Policy]\norg.freedesktop.impl.*=own\n"),
               (QStringList{QStringLiteral("outside"), service("org.freedesktop.impl.*")}));
+    // "X.*" is X and every name below it (xdg-dbus-proxy); an id that is an escape, or holds one, owns it (PR #65).
+    for (const char *escape : {"org.freedesktop.Flatpak", "org.freedesktop.systemd1", "org.freedesktop.impl.portal.PermissionStore"}) {
+        const QByteArray rule = QByteArray(escape) + ".*";
+        EXPECT_EQ(reach({}, "[Session Bus Policy]\n" + rule + "=talk\n"), (QStringList{QStringLiteral("outside"), service(rule.constData())})) << rule.constData();
+        EXPECT_EQ(flatpakAccess("[Application]\nname=" + QByteArray(escape) + "\n"), QStringList{QStringLiteral("outside")}) << escape;
+        EXPECT_EQ(flatpakAccess("[Application]\nname=" + QByteArray(escape) + "\n[Session Bus Policy]\n" + rule + "=own\n"),
+                  (QStringList{QStringLiteral("outside"), service(rule.constData())}))
+            << escape;
+    }
+    EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.impl.portal\n"), QStringList{QStringLiteral("outside")}) << "above the permission store";
+    EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.FlatpakTools\n"), QStringList()) << "only starts like one";
+    EXPECT_EQ(flatpakAccess("[Application]\nname=org.freedesktop.Flat\n"), QStringList()) << "only the start of one";
+    EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.Flat.*=talk\n"), QStringList{service("org.freedesktop.Flat.*")});
 
-    // Where programs start at login (~/.config/autostart, ~/.config/systemd), writable: a line of its own.
-    const auto folders = [](bool login) {
-        return login ? QStringList{QStringLiteral("folders"), QStringLiteral("login")} : QStringList{QStringLiteral("folders")};
+    // Where programs start at the next login, writable: a line of its own (autostart, systemd user units, Hyprland's and
+    // uwsm's configuration, environment.d, the shells' start files, ~/.local/bin; PR #65: paths normalised first).
+    const auto with = [](const char *first, std::initializer_list<const char *> more) {
+        QStringList out{QLatin1String(first)};
+        for (const char *m : more)
+            out.append(QLatin1String(m));
+        return out;
     };
     for (const char *grant : {"xdg-config/autostart", "xdg-config/autostart:create", "xdg-config", "xdg-config/", "~/.config", "~/.config/systemd/user:rw",
-                              "~/.config/autostart/app.desktop", "/home/alice/.config", "/home/alice", "/var/home", "/home"})
-        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), folders(true)) << grant;
-    for (const char *grant : {"xdg-config/autostart:ro", "xdg-config:ro", "xdg-config/gtk-3.0", "~/.config/other", "/homework", "/home/alice/Music", "xdg-data"})
-        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), folders(false)) << grant;
-    EXPECT_EQ(reach("filesystems=home;"), (QStringList{QStringLiteral("home"), QStringLiteral("login")}));
-    EXPECT_EQ(reach("filesystems=~/;"), (QStringList{QStringLiteral("home"), QStringLiteral("login")}));
-    EXPECT_EQ(reach("filesystems=host;"), (QStringList{QStringLiteral("allFiles"), QStringLiteral("login")}));
+                              "~/.config/autostart/app.desktop", "/home/alice/.config", "~/.config//autostart", "~/./.config/autostart",
+                              "xdg-config/./autostart", "~/.config/autostart/.", "~/.config/hypr", "xdg-config/hypr/hyprland.conf", "xdg-config/uwsm",
+                              "xdg-config/environment.d", "~/.config/fish", "xdg-data", "xdg-data/systemd/user", "~/.local/share/systemd", "~/.local",
+                              "~/.local/bin", "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile", "~/.zshrc", "~/.zshenv", "/var/home/alice/.zprofile",
+                              "~/.zlogin"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), with("folders", {"login"})) << grant;
+    for (const char *grant : {"xdg-config/autostart:ro", "xdg-config:ro", "xdg-config/gtk-3.0", "~/.config/other", "/homework", "/home/alice/Music",
+                              "xdg-data/applications:ro", "~/.local/share/fonts", "~/.bashrc.d.old", "xdg-run/pipewire-0", "/run/media", "~/.config/hyprland-themes"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), with("folders", {})) << grant;
+    for (const char *grant : {"home", "~/", "~/.", "~//", "/home/alice", "/var/home", "/home"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), with("home", {"login"})) << grant;
+    EXPECT_EQ(reach("filesystems=home:ro;"), with("home", {}));
+    EXPECT_EQ(reach("filesystems=host;"), with("allFiles", {"login"})) << "host mounts the home folders, not /run";
+    // Past its sandbox: the session bus's or systemd's socket (read-only too); flatpak's own folder, the session's D-Bus
+    // services or the launcher's entries written; a path with ".." could be anywhere.
+    for (const char *grant : {"xdg-run/bus", "xdg-run/bus:ro", "xdg-run/systemd", "xdg-run/systemd/private", "xdg-run", "/run/user/1000/bus", "/run/user",
+                              "xdg-data/flatpak", "xdg-data/flatpak/overrides:create", "~/.local/share/flatpak/overrides", "xdg-data/dbus-1/services",
+                              "~/.local/share/dbus-1", "xdg-data/applications", "~/.local/share/applications/org.example.Browser.desktop:create"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), with("folders", {"outside"})) << grant;
+    for (const char *grant : {"xdg-data/flatpak:ro", "xdg-data/dbus-1:ro", "~/.local/share/applications:ro"})
+        EXPECT_EQ(reach("filesystems=" + QByteArray(grant) + ";"), with("folders", {})) << grant;
+    EXPECT_EQ(reach("filesystems=~/Documents/../.bashrc;"), with("folders", {"login", "outside"}));
     EXPECT_EQ(reach("filesystems=host-os;host-etc:ro;"), QStringList{QStringLiteral("allFiles")});
     EXPECT_EQ(reach({}, "[Session Bus Policy]\norg.freedesktop.secrets=talk\norg.gtk.vfs.*=talk\nca.desrt.dconf=talk\norg.example.AppX=own\n"
                         "org.example.Other=frobnicate\n"),
@@ -510,7 +542,8 @@ TEST(Flatpak, RealFlatpak)
     ASSERT_TRUE(after);
     EXPECT_EQ(after->version, QStringLiteral("1.2"));
     EXPECT_GT(after->installed, 0);
-    EXPECT_EQ(after->access, (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("audio")}));
+    EXPECT_EQ(after->access, (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("audio"), QStringLiteral("login")}))
+        << "its home folder, writable, holds where programs start at login";
 
     // Removed, and the runtime no other app needs with it.
     OperationRecord removal = install;
