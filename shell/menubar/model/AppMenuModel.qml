@@ -9,7 +9,8 @@ import Grassfield.Ui
 //       fullscreen: bool, maximized: bool, windowSpaceId: int,
 //       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling"),
 //       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover"),
-//       canLayouts?: bool (plugin "tiling-layouts"), outputClass?: string (WindowTiling.outputClass, the popover's Layouts section)}
+//       canLayouts?: bool (plugin "tiling-layouts"), outputClass?: string (WindowTiling.outputClass, the popover's Layouts section),
+//       fixedSize?: bool (the window is of fixed size, the plugin's "fixed": Zoom, Enter Full Screen and tiling greyed)}
 // Items: {id, text, shortcut?, glyph?, enabled?, checked?, separator?, header?, alternate?, submenu?, ...payload}; AppMenus.run()
 // performs them. The tiling popover's model (tilingPopover) shares the tiling rows (docs/specs/tiling.md TL23, TL25).
 QtObject {
@@ -297,7 +298,10 @@ QtObject {
         // them for a zoomed window). Move & Resize has the headed sections Halves, Quarters and Arrange (with Alt the "&
         // Quarters" alternates in place, M28; with the plugin's tiling-arrange only), then Return to Previous Size. A window of a
         // Split View Desktop (TL33) is placed by its Desktop: no tiling command, no Zoom.
-        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized && ctx.inSplit !== true;
+        // A window of fixed size (ADR-0040 step 1b): its zoom light is disabled, and so are Zoom, Enter Full Screen and the
+        // tiling items (macOS greys them for a window that cannot be resized); Unzoom and Exit Full Screen still bring it back.
+        const fixed = ctx.fixedSize === true;
+        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized && ctx.inSplit !== true && !fixed;
         const arrange = (layout, quarters) => Object.assign(root.arrangeItem(layout, canTile), {alternate: root.arrangeItem(quarters, canTile)});
         const arrangeRows = ctx.canArrange === true ? [
             {separator: true},
@@ -336,13 +340,13 @@ QtObject {
         // false, D57).
         const canSplit = canTile && ctx.splitBlocked !== true && ctx.splittable !== false;
         const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}] : [
-            {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct}
+            {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct && (ctx.fullscreen || !fixed)}
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 
         const items = [
             // A window in full screen or on a Split View Desktop is not minimized (macOS; D56, D61).
             {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true && ctx.fullscreen !== true},
-            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true}
+            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true && (ctx.maximized || !fixed)}
         ].concat(tiling, fullScreen, [
             {separator: true},
             {id: "moveMenu", text: qsTr("Move to Desktop"), enabled: canAct, submenu: spaces},

@@ -25,6 +25,9 @@ Singleton {
     // The windows that do not fit half of their output (WindowTiling.parseUnfit: the Window menu greys their Full Screen Tile,
     // ADR-0036 D57); [] without one, a malformed reply or tiling-split. Read again when the Window menu opens (refresh()).
     property var unfit: []
+    // The windows of fixed size (WindowTiling.parseFixed: the Window menu greys their Zoom, Enter Full Screen and tiling items,
+    // ADR-0040 step 1b); [] without one, a malformed reply or window-tiling. Read again when the Window menu opens.
+    property var fixed: []
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
     // A suggestion asked for is on its way (from the notice of its arrangement until its reply is read or the deadline passes):
@@ -49,9 +52,10 @@ Singleton {
         Compositor.suggestionAsked = null;
     }
 
-    // The Window menu opens: what fits a half is read again (a window opened or changed its limits since the last reply).
+    // The Window menu opens: what fits a half, and what is of fixed size, is read again (a window opened or changed its limits
+    // since the last reply).
     function refresh(): void {
-        if (Compositor.canSplit)
+        if (Compositor.canSplit || Compositor.canTile)
             root.fetch();
     }
 
@@ -109,10 +113,17 @@ Singleton {
                 root.unfit = [];
             }
         }
+
+        function onCanTileChanged(): void {
+            if (Compositor.canTile)
+                root.fetch();
+            else
+                root.fixed = [];
+        }
     }
 
     Component.onCompleted: {
-        if (Compositor.canGroups || Compositor.canSplit)
+        if (Compositor.canGroups || Compositor.canSplit || Compositor.canTile)
             root.fetch();
     }
 
@@ -145,6 +156,9 @@ Singleton {
                 const unfit = Compositor.canSplit ? WindowTiling.parseUnfit(text) : null;
                 if (unfit !== null)
                     root.unfit = unfit;
+                const fixed = Compositor.canTile ? WindowTiling.parseFixed(text) : null;
+                if (fixed !== null)
+                    root.fixed = fixed;
                 if (splits !== null)
                     root.retried = false;
                 if (adopted !== null) {

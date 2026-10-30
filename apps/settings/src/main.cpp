@@ -1,13 +1,17 @@
+#include <QDBusConnection>
 #include <QDir>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QUrl>
+#include <QWindow>
 
 #include "translationloader.h"
 #include "backend.h"
 #include "busjobs.h"
 #include "globalmenu.h"
 #include "iconprovider.h"
+#include "settingsinstance.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
@@ -31,6 +35,29 @@ int main(int argc, char *argv[])
     // Wayland app_id: matches org.grassfield.Settings.desktop.
     app.setDesktopFileName(QStringLiteral("org.grassfield.Settings"));
 
+    // --section=<id> opens that section first (screenshots, tests); unknown ids fall back to Appearance.
+    // --about opens the About This Computer window (AboutWindow.qml, ADR-0040 ID-19; the shell's Grassfield menu).
+    QString startSection;
+    bool about = false;
+    for (const QString &arg : app.arguments().mid(1)) {
+        if (arg.startsWith(QLatin1String("--section=")))
+            startSection = arg.mid(10);
+        else if (arg == QLatin1String("--about"))
+            about = true;
+    }
+    // One Settings per user (settingsinstance.h): a second launch hands its request and its activation token to the running
+    // one and leaves, however late that one answers (still starting); without a session bus it runs itself.
+    using grassfield::settings::SettingsInstance;
+    SettingsInstance instance;
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (bus.isConnected()) {
+        const QString token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
+        const QString method = about ? QStringLiteral("About") : QStringLiteral("Open"); // i18n-ignore: D-Bus methods
+        const QVariantList arguments = about ? QVariantList{token} : QVariantList{startSection, token};
+        if (grassfield::settings::claimOrHandOver(bus, &instance, method, arguments) == grassfield::settings::Launch::Leave)
+            return 0;
+    }
+
     // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
     // window down still see it.
     Backend backend;
@@ -50,29 +77,65 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_SETTINGS_QML_DIR);
 
-    // Global menu (T1): the window exports its menus only while the registrar is there (globalmenu.h).
-    // --section=<id> opens that section first (screenshots, tests); unknown ids fall back to Appearance.
-    QString startSection;
-    for (const QString &arg : app.arguments().mid(1)) {
-        if (arg.startsWith(QLatin1String("--section=")))
-            startSection = arg.mid(10);
-    }
     // Login Items: the applications' icons (the engine owns the provider).
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
-    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)},
-                                 {"globalMenu", grassfield::apps::globalMenuAvailable()},
-                                 {"startSection", startSection}});
-
+    // A window that cannot be made leaves the app only when it has no other.
     QObject::connect(
-        &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
+        &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
+        [&engine] {
+            if (engine.rootObjects().isEmpty())
+                QCoreApplication::exit(1);
+        },
         Qt::QueuedConnection);
-    engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));
+
+    // The two windows, each made when first asked for and then kept: closing one hides it, and the app quits when the last
+    // shown one closes.
+    QPointer<QWindow> settingsWindow;
+    QPointer<QWindow> aboutWindow;
+    const auto load = [&engine, &qmlDir](const QString &file, const QVariantMap &properties) -> QWindow * {
+        engine.setInitialProperties(properties);
+        const auto before = engine.rootObjects().size();
+        engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(file)));
+        return engine.rootObjects().size() > before ? qobject_cast<QWindow *>(engine.rootObjects().constLast()) : nullptr;
+    };
+    // The Settings window, on `section` when one is given (an unknown one falls back to Appearance).
+    const auto showSettings = [&](const QString &section, const QString &token) {
+        if (!settingsWindow) {
+            // Global menu (T1): the window exports its menus only while the registrar is there (globalmenu.h).
+            settingsWindow = load(QStringLiteral("Main.qml"), {{QStringLiteral("backend"), QVariant::fromValue(&backend)},
+                                                               {QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable()},
+                                                               {QStringLiteral("startSection"), section}});
+            // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
+            grassfield::apps::followGlobalMenu(settingsWindow, "globalMenu");
+            if (settingsWindow && !token.isEmpty())
+                grassfield::settings::activateWindow(settingsWindow, token);
+            return;
+        }
+        if (!section.isEmpty())
+            QMetaObject::invokeMethod(settingsWindow.data(), "select", Q_ARG(QString, section));
+        grassfield::settings::activateWindow(settingsWindow, token);
+    };
+    // About This Computer: it maps itself once its facts are in (ADR-0040 P-2); asked again meanwhile, it is still coming.
+    const auto showAbout = [&](const QString &token) {
+        if (!aboutWindow) {
+            aboutWindow = load(QStringLiteral("AboutWindow.qml"), {{QStringLiteral("backend"), QVariant::fromValue(&backend)},
+                                                                  {QStringLiteral("instance"), QVariant::fromValue(&instance)}});
+            return;
+        }
+        if (aboutWindow->property("ready").toBool())
+            grassfield::settings::activateWindow(aboutWindow, token);
+    };
+    QObject::connect(&instance, &SettingsInstance::settingsRequested, &app, showSettings);
+    QObject::connect(&instance, &SettingsInstance::aboutRequested, &app, showAbout);
+
+    if (about)
+        showAbout(QString());
+    else
+        showSettings(startSection, QString());
     if (engine.rootObjects().isEmpty()) {
         grassfield::settings::BusJobs::setExitCode(1); // the same code if a D-Bus job were abandoned on the way out
         return 1;
     }
-    // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
-    grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     const int code = app.exec();
     grassfield::settings::BusJobs::setExitCode(code); // a D-Bus job stuck at exit abandons the process with the app's own code
     return code;

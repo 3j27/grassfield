@@ -40,7 +40,8 @@ out=$(QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= timeout 60 qs -n -p "$tmp/
 want=$(tr -d '[:space:]' <"$root/VERSION")
 desc="the first read of SystemInfo.grassfieldVersion in the packaged layout is $want, not unknown"
 check bash -c 'grep -q "VERSION-AT-START=$2\$" <<<"$1"' _ "$out" "$want"
-# The consumers read the same property (About panel); Settings has the compile-time VERSION (apps/settings/build-direct.sh).
-desc="the About panel shows SystemInfo.grassfieldVersion and nothing writes it"
-check bash -c 'grep -q "value: SystemInfo.grassfieldVersion" "$1/shell/overlay/AboutPanel.qml" && ! grep -rq "grassfieldVersion *=" "$1/shell"' _ "$root"
+# The shell's one reader is that log line; About This Computer is Settings' window and shows Settings' compile-time VERSION
+# (apps/settings/build-direct.sh; ADR-0040 step 1b).
+desc="the startup log reads SystemInfo.grassfieldVersion and nothing writes it"
+check bash -c 'grep -q "version\", SystemInfo.grassfieldVersion" "$1/shell/shell.qml" && ! grep -rq "grassfieldVersion *=" "$1/shell"' _ "$root"
 exit "$fail"

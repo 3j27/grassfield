@@ -680,7 +680,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"unfit":[],"suggestion":null})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"unfit":[],"fixed":[],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -1098,9 +1098,9 @@ TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
     sg.windows    = {0xd1, 0xd2};
     const std::array<StateOutput, 0> none{};
     EXPECT_EQ(stateJson(12, none, &sg),
-              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
               R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
-    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"suggestion":null})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"suggestion":null})");
     // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
     for (uint64_t i = 0; i < 20; ++i)
         sg.windows.push_back(0x100 + i);
@@ -1421,14 +1421,30 @@ TEST(TilingSplit, TheReplyListsTheSplitDesktops) {
                                           SplitDesk{.workspace = 9, .output = "A\"B", .home = 4, .members = {0xc3}, .waiting = true}};
     EXPECT_EQ(stateJson(5, none, nullptr, splits),
               R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2,"windows":["a1","b2"],"waiting":false},)"
-              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"unfit":[],"suggestion":null})");
+              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"unfit":[],"fixed":[],"suggestion":null})");
 }
 
 // D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.
 TEST(TilingSplit, TheReplyListsTheWindowsThatDoNotFitAHalf) {
     const std::array<StateOutput, 0> none{};
     const std::array<uint64_t, 2>    unfit{0xa1, 0xbeef};
-    EXPECT_EQ(stateJson(5, none, nullptr, {}, unfit), R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":["a1","beef"],"suggestion":null})");
+    EXPECT_EQ(stateJson(5, none, nullptr, {}, unfit), R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":["a1","beef"],"fixed":[],"suggestion":null})");
+}
+
+// ADR-0040 step 1b (the integrator's nested pass of 85c2c10): a window of fixed size has its zoom light disabled (no tiling
+// popover on hover, the tile_popover request refused), and the reply lists it for the Window menu, which greys its Zoom and
+// tiling items. Fixed on both axes only: a window fixed on one axis stays zoomable (TL9 still refuses to tile it).
+TEST(TilingFixed, AWindowOfFixedSizeHasItsZoomLightDisabled) {
+    EXPECT_TRUE(fixedSize(Constraints{.minW = 340, .minH = 380, .maxW = 340, .maxH = 380}));   // About This Computer
+    EXPECT_TRUE(fixedSize(Constraints{.minW = 341, .minH = 381, .maxW = 340, .maxH = 380}));   // a minimum above the maximum
+    EXPECT_FALSE(fixedSize(Constraints{.minW = 340, .minH = 200, .maxW = 340, .maxH = 0}));    // the Store's settings: fixed width
+    EXPECT_FALSE(fixedSize(Constraints{.minW = 340, .minH = 200, .maxW = 340, .maxH = 900}));  // a height range
+    EXPECT_FALSE(fixedSize(Constraints{.minW = 200, .minH = 380, .maxW = 800, .maxH = 380}));  // a width range
+    EXPECT_FALSE(fixedSize(Constraints{}));                                                    // no limits at all
+    EXPECT_FALSE(fixedSize(Constraints{.minW = 1, .minH = 1, .maxW = 0, .maxH = 0}));
+    const std::array<StateOutput, 0> none{};
+    const std::array<uint64_t, 1>    fixed{0xab0};
+    EXPECT_EQ(stateJson(6, none, nullptr, {}, {}, fixed), R"({"v":"gfc/1","type":"tiling","gen":6,"outputs":[],"splits":[],"unfit":[],"fixed":["ab0"],"suggestion":null})");
 }
 
 // TL33, ADR-0036 D50, D52: the members are the Split View's two windows, whatever their state; a window that left its

@@ -2,14 +2,16 @@ pragma Singleton
 import QtQuick
 import qs.platform
 import "../platform/ScreenChoice.js" as ScreenChoice
+import "PopupKinds.js" as PopupKinds
 import Quickshell
 import Quickshell.Io
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
 //
-// kind: "" | "system" | "app" | "appfile" | "appwindow" | "appbridge" | "tray" | "volume" | "network" | "battery" | "controlcenter" | "dock" | "dockstack"
-//       | "about" | "forcequit" | "confirm" | "appabout" | "notice" | "tiling" | "tilingSuggest"
+// kind: "" or one of PopupKinds.kinds: "system" | "app" | "appfile" | "appwindow" | "appbridge" | "tray" | "nowplaying" | "volume"
+//       | "network" | "battery" | "controlcenter" | "dock" | "dockstack" | "forcequit" | "confirm" | "appabout" | "notice" | "tiling"
+//       | "tilingSuggest"; open() refuses any other kind.
 Singleton {
     id: root
 
@@ -131,6 +133,11 @@ Singleton {
         // Nothing opens over the lock screen (GF-116): menus, Control Center, panels and sheets included.
         if (SessionState.refuses("popup " + popupKind))
             return;
+        // Only a kind the Overlay draws: another would map an empty overlay that takes the keyboard (review of ce69dc6).
+        if (!PopupKinds.known(popupKind)) {
+            console.warn("grassfield: refused a popup of unknown kind:", popupKind);
+            return;
+        }
         root.openCount++;
         root.opening = true;
         try {

@@ -154,7 +154,6 @@ Variants {
             item: holder
             radius: {
                 switch (Popups.kind) {
-                case "about":
                 case "forcequit":
                 case "confirm":
                 case "appabout":
@@ -331,8 +330,6 @@ Variants {
                     return dockMenu;
                 case "dockstack":
                     return stackPopup;
-                case "about":
-                    return aboutPanel;
                 case "forcequit":
                     return forceQuit;
                 case "confirm":
@@ -414,11 +411,6 @@ Variants {
         Component {
             id: stackPopup
             StackPopup {}
-        }
-
-        Component {
-            id: aboutPanel
-            AboutPanel {}
         }
 
         Component {

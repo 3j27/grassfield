@@ -415,6 +415,12 @@ function isZoomed(data) {
     return !!data && data.fullscreen === 1;
 }
 
+// Hyprland window data of the window of Wayland app id `appClass` whose xdg-toplevel tag (its ADR-0015 role) is `tag`:
+// Compositor.taggedToplevel, for Settings' About This Computer window (class org.grassfield.Settings, role "info").
+function hasTag(data, appClass, tag) {
+    return !!data && appClass !== "" && tag !== "" && data.class === appClass && data.xdgTag === tag;
+}
+
 function has(list, toplevel) {
     return list.some(r => r.toplevel === toplevel);
 }
