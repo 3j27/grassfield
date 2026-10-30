@@ -654,6 +654,19 @@ this ADR follows it, and any later pull request of either lane that meets one of
   instance; a frozen Settings bounds a launch at 25 s per attempt). A MINOR left for a follow-up: a Settings that dies while
   a launch waits on it answers NoReply, not "no owner", so that click was lost; the launch now retries whenever the name has
   no owner after any error (`tst_settingsinstance.cpp`: the owner, this test binary run again, killed during the call).
+- **Nested pass of 85c2c10 (integrator, 2026-10-30): single instance PASS; FAIL scenario 6, one MINOR.**
+  - Scenario 6, the pointer resting on About's disabled (grey) zoom light opened the full tiling popover: the plugin posted
+    `tile-hover` for every `org.grassfield.*` window with app-drawn lights. A window of fixed size (minimum = maximum on both
+    axes, core `tiling::fixedSize`) now posts no `tile-hover` from its zoom light and `tile_popover` (Super+Ctrl+L) is
+    refused for it, on hover or click; the `hyprctl grassfield-tiling` reply lists such windows (`fixed`), and the Window
+    menu greys their Zoom, Enter Full Screen, Full Screen Tile and tiling items (Unzoom and Exit Full Screen stay); the
+    tiling keys refused them already (TL9). Tests: `TilingFixed` (core), `tst_windowtiling.qml`, `tst_appmenumodel.qml`
+    and the nested case `fixed` of `tests/compositor/tiling.sh` (About's hover and click: no event, no popup, its box kept).
+  - MINOR, in French About's processor wrapped to three lines: the window shows the processor's name alone (About This Mac
+    names the chip alone; the French thread count alone cut the model), shortened (`SysInfo.cpuShortName`: no "(R)",
+    "(TM)", "CPU", clock, generation prefix, integrated graphics or trailing "Processor"), on one line cut in the middle,
+    the full model name in a tooltip while the pointer rests on it when it was shortened or cut. General > About keeps the
+    thread count after the same short name.
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.
