@@ -329,6 +329,8 @@ TEST(PrintLogic, TheFrontendsOptions)
     EXPECT_TRUE(o.value(QStringLiteral("hasCurrentPage")).toBool());
     EXPECT_TRUE(o.value(QStringLiteral("hasSelection")).toBool());
     EXPECT_EQ(o.value(QStringLiteral("formats")).toStringList(), QStringList{QStringLiteral("ps")});
-    EXPECT_TRUE(prepareOptions({{QStringLiteral("modal"), QStringLiteral("no")}}).value(QStringLiteral("modal")).toBool())
-        << "a modal that is not a boolean is the default";
+    // Values a conversion would read as false: only a boolean says it.
+    for (const QVariant &notBool : {QVariant(QStringLiteral("false")), QVariant(0), QVariant(0u)})
+        EXPECT_TRUE(prepareOptions({{QStringLiteral("modal"), notBool}}).value(QStringLiteral("modal")).toBool())
+            << "a modal that is not a boolean is the default: " << notBool.typeName();
 }
