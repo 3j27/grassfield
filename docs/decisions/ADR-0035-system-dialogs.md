@@ -846,7 +846,7 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   D-4's own, asked through FileChooser (the application's remembered folder), over the application's window; the sheet steps
   aside meanwhile, and Cancel in the Save panel brings it back with its choices (macOS ends the print there; Grassfield loses
   nothing the user chose). Only an application that can make a PDF (its `supported_output_file_formats`) gets the button.
-  The file is written only where the Save panel answered, and never through a link (integrator security review of step 6a,
+  The file is written only in the folder the Save panel's answer named, and never through a link (integrator security review of step 6a,
   MAJOR 1: the first build wrote through `QSaveFile`, which follows a link put at the name, so a sandboxed application that can
   write in the folder could have replaced `~/.bashrc` with "%PDF-" and commands):
   - the folder is resolved (its links followed) when the Save panel answers, off the GUI thread: a folder the user chose that is
@@ -854,20 +854,32 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   - when the document comes, that folder is opened from "/" one folder at a time with `O_NOFOLLOW`, so a link put since then in
     place of it or of a folder above it fails the write;
   - the document, only a PDF ("%PDF-" first) and at most 2 GiB, goes to a temporary file made there with `O_EXCL | O_NOFOLLOW`,
-    is synced, then `renameat` puts it in the name's place: a link at the name is replaced, never followed; any failure removes
-    the temporary file and leaves the file there as it was; a file there keeps its permissions;
+    is synced, then `renameat` puts it in the name's place: a link at the name is replaced, never followed (the user's own
+    link there too, where `QSaveFile` updated the file it led to); any failure, or the process going away (the writes are told
+    to stop and react within 200 ms), removes the temporary file and leaves the file there as it was; a file there keeps its
+    permissions, and one that may not be written stays (as `QSaveFile` refused it); the folders are opened as places
+    (`O_PATH`), so a folder one may write in but not list still takes the file;
   - the application gets `file:///dev/null` as its `output-uri`, never the user's path (MINOR 3): GTK 3 and 4 only read
     whether the key is there and put a temporary file of theirs in its place before rendering;
-  - the sheet's answer may name only the file the Save panel answered (NIT).
+  - the sheet's answer may name only the file the Save panel answered (NIT), and only the last Save panel's answer counts.
+  Remaining risk (the counter-review, MINOR 2): the panel answers with a path, so an application that can write in the folder
+  above the one chosen can swap that folder for a link to another in the moment between the answer and its resolution; the file
+  then goes, under the name the user gave, to the folder the link leads to. Inherent to a panel that answers by path (the window
+  is a few milliseconds, the name is the user's); closing it would need the panel to hand over the folder it listed.
 - **6-4. What the job carries.** GTK renders only the pages asked, scaled and turned, in the collation and order asked. GTK 4
   makes neither the copies nor the pages per sheet for a printer, but makes both for a file; GTK 3.24 always makes both (its
   `manual_num_copies` is the settings' `n-copies`, gtk/gtkprintoperation-portal.c). Options: (a) every choice again as CUPS
   options; (b) only what GTK leaves to the printer. **Choice: (b)**, with the copies taken from GTK: the answer always gives GTK
   `n-copies` "1", and the job asks the printer for the copies and their collation, with the paper, the two sides and the colour;
   never the page ranges, the scale or the orientation, which (a) would apply twice (pages 3–5 of a three-page file print
-  nothing). Only a PDF or PostScript reaches the printer, sent as what its first bytes say (`application/pdf`,
-  `application/postscript`), never as `CUPS_FORMAT_AUTO`, which would let an application send a printer language (PJL, PCL)
-  straight to the device (integrator security review of step 6a, MINOR 2); at most 2 GiB. The paper goes as one the printer
+  nothing). Only a PDF reaches the printer ("%PDF-" first), sent as `application/pdf`, never as `CUPS_FORMAT_AUTO`, which
+  would let an application send a printer language (PJL, PCL) straight to the device (integrator security review of step 6a,
+  MINOR 2); at most 2 GiB. PostScript is refused too (decision delegated by the owner on 2026-10-27, from the counter-review's
+  MINOR 1): question, PDF and PostScript as the review first said, or PDF only; options (a) both, (b) PDF only; choice (b);
+  rule applied: the smallest surface that keeps every application printing, since GTK always sends a PDF here (its file
+  backend's default; the answer never asks another format) and a PostScript program can change a PostScript printer's settings
+  (`exitserver`). Accepted risk: a raw queue (one an administrator sets up without a driver; deprecated in CUPS 2.x) passes the
+  bytes after the PDF header to the device as they are, whatever the type sent. The paper goes as one the printer
   lists, or, when it listed none, only as a PWG name (no comma: CUPS would read several values); the job's name is cut to
   IPP's 255 bytes on a character's boundary. The first build gave GTK the copies too, and a GTK 3 application printed n × n of them (review of step 6a, MAJOR).
   The page setup names its paper without a `PPDName` (GTK takes any `PPDName` key, an empty one too, over `Name`). x-d-p-gtk's

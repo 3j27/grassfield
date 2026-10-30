@@ -144,9 +144,10 @@ QList<QPair<QString, QString>> cupsOptions(const Choices &choices, const Capabil
 // A PWG 5101.1 media name as CUPS takes it ("iso_a4_210x297mm", "na_letter_8.5x11in"): lowercase letters, digits, "_", "." and
 // "-", at most 64 characters; never a comma (CUPS would read several values) or anything else.
 bool validMediaName(const QString &name);
-// The document's type from its first bytes (at least five, or all there are): "application/pdf" for "%PDF-",
-// "application/postscript" for "%!", else "" (raw printer languages and anything else are not sent: integrator security review
-// of step 6a, MINOR 2).
+// The document's type from its first bytes (at least five, or all there are): "application/pdf" for "%PDF-", else "". Only a
+// PDF is sent: raw printer languages (PJL, PCL) and PostScript, which can program a PostScript printer, are not (integrator
+// security review of step 6a, MINOR 2, and its counter-review); GTK always sends a PDF here (its file backend's default,
+// toGtk never asks another format).
 QString documentFormat(const QByteArray &head);
 // The job's name as IPP takes it: UTF-8, at most 255 bytes, cut on a character's boundary.
 QByteArray jobName(const QString &title);

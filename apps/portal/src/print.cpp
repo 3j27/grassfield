@@ -7,6 +7,7 @@
 #include <QDBusConnection>
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
+#include <QDeadlineTimer>
 #include <QFileInfo>
 #include <QRandomGenerator>
 #include <QCoreApplication>
@@ -73,9 +74,11 @@ Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &opt
 
 Print::~Print()
 {
-    // Save as PDF's writers and folder lookups.
+    // Save as PDF's writers (told to stop) and folder lookups, all within one deadline.
+    m_stopWriting->store(true);
+    const QDeadlineTimer deadline(3500);
     for (QThread *writer : findChildren<QThread *>(Qt::FindDirectChildrenOnly)) {
-        if (!writer->wait(3500))
+        if (!writer->wait(deadline))
             writer->setParent(nullptr); // never destroyed while it runs
     }
     // The writes that ended meanwhile answer their requests (their queued answers), before RequestHost ends the rest.
@@ -288,6 +291,7 @@ void Print::savePdf(int id, const QString &name, const QString &title)
     call << QVariant::fromValue(QDBusObjectPath(handle)) << it->appId << it->parentWindow << chooser::oneLine(title)
          << QVariantMap{{QStringLiteral("current_name"), file}, {QStringLiteral("modal"), true}};
     m_saving.insert(id, handle);
+    it->saveHandle = handle;
     auto *watcher = new QDBusPendingCallWatcher(m_panelBus->asyncCall(call, std::numeric_limits<int>::max()), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, id, handle](QDBusPendingCallWatcher *w) {
         w->deleteLater();
@@ -315,11 +319,11 @@ void Print::savePdf(int id, const QString &name, const QString &title)
         const QString parent = QFileInfo(path).absolutePath();
         QThread *resolver = QThread::create([parent, folder] { *folder = QFileInfo(parent).canonicalFilePath(); });
         resolver->setParent(this);
-        connect(resolver, &QThread::finished, this, [this, id, uri, path, folder, resolver] {
+        connect(resolver, &QThread::finished, this, [this, id, handle, uri, path, folder, resolver] {
             resolver->deleteLater();
             const auto p = m_pending.find(id);
-            // Gone meanwhile, or another Save panel opened since: no answer of this one's.
-            if (p == m_pending.end() || !isOpen(id) || m_saving.contains(id))
+            // Gone meanwhile, or another Save panel opened since (answered or not): no answer of this one's.
+            if (p == m_pending.end() || !isOpen(id) || p->saveHandle != handle)
                 return;
             if (folder->isEmpty()) {
                 emit pdfCancelled(id);
@@ -407,7 +411,10 @@ void Print::printWithTicket(int id, const Ticket &ticket, const QString &title, 
         auto error = std::make_shared<QString>();
         const int idle = m_options.fileIdleMs;
         const QString folder = ticket.pdfFolder, file = ticket.pdfName;
-        QThread *writer = QThread::create([fd, folder, file, idle, error] { *error = writePdf(fd, folder, file, idle); });
+        const auto stop = m_stopWriting;
+        QThread *writer = QThread::create([fd, folder, file, idle, error, stop] {
+            *error = writePdf(fd, folder, file, idle, print::kMaxDocumentBytes, [stop] { return stop->load(); });
+        });
         writer->setParent(this);
         connect(writer, &QThread::finished, this, [this, id, writer, error] {
             writer->deleteLater();

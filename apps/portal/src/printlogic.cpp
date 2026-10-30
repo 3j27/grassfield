@@ -496,8 +496,6 @@ QString documentFormat(const QByteArray &head)
 {
     if (head.startsWith("%PDF-"))
         return QStringLiteral("application/pdf");
-    if (head.startsWith("%!"))
-        return QStringLiteral("application/postscript");
     return {};
 }
 

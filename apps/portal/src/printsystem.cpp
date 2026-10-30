@@ -92,17 +92,21 @@ Media mediaOf(http_t *http, cups_dest_t *dest, cups_dinfo_t *info, cups_size_t &
 }
 
 // Reads what `fd` has next into `into` (at most `size` bytes): the count, 0 at its end, -1 (and `error` set) when it is silent
-// for idleMs, fails, or `cancel` is set.
-ssize_t readSome(int fd, char *into, size_t size, int idleMs, const int *cancel, QString *error)
+// for idleMs, fails, or `stopped` says so (asked every 200 ms at most while it waits, so a shutdown never waits on a silent
+// source).
+ssize_t readSome(int fd, char *into, size_t size, int idleMs, const std::function<bool()> &stopped, QString *error)
 {
+    QDeadlineTimer silence(idleMs);
     for (;;) {
-        if (cancel && *cancel) {
+        if (stopped && stopped()) {
             *error = QStringLiteral("cancelled");
             return -1;
         }
         pollfd p{fd, POLLIN, 0};
-        const int ready = ::poll(&p, 1, idleMs);
+        const int ready = ::poll(&p, 1, int(std::min<qint64>(200, std::max<qint64>(0, silence.remainingTime()))));
         if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0 && !silence.hasExpired())
             continue;
         if (ready <= 0) {
             *error = QStringLiteral("the document stopped coming");
@@ -120,12 +124,12 @@ ssize_t readSome(int fd, char *into, size_t size, int idleMs, const int *cancel,
 }
 
 // The document's first bytes, until there are enough to tell its type (five) or it ends.
-QByteArray readHead(int fd, int idleMs, const int *cancel, QString *error)
+QByteArray readHead(int fd, int idleMs, const std::function<bool()> &stopped, QString *error)
 {
     QByteArray head;
     char buffer[65536];
     while (head.size() < 5) {
-        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, cancel, error);
+        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, stopped, error);
         if (n <= 0)
             break;
         head.append(buffer, qsizetype(n));
@@ -175,9 +179,8 @@ int openFolder(const QString &path, QString *error)
             *error = QStringLiteral("the folder “%1” is not a plain path").arg(path);
             return -1;
         }
-        // The folders on the way only as places (O_PATH: no read permission needed); the last one open to be synced.
-        const int flags = (i + 1 == parts.size() ? O_RDONLY : O_PATH) | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC;
-        const int next = ::openat(dir, parts.at(i).constData(), flags);
+        // Only as places (O_PATH): a folder one may write in but not list (0300, a drop box) is written in as before.
+        const int next = ::openat(dir, parts.at(i).constData(), O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         const int saved = errno;
         ::close(dir);
         if (next < 0) {
@@ -377,14 +380,16 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
         0,
         [printer, title, options, fd, limits](Call &call) {
             const auto fail = [&call](const QString &why) { call.error = why; };
-            // Only a PDF or PostScript reaches the printer, sent as what it is (never CUPS_FORMAT_AUTO, which takes raw printer
-            // languages too; integrator security review of step 6a, MINOR 2).
+            // Only a PDF reaches the printer, sent as one (never CUPS_FORMAT_AUTO, which takes raw printer languages too;
+            // integrator security review of step 6a, MINOR 2, and its counter-review: PostScript can program a PostScript
+            // printer, and GTK always sends a PDF here).
+            const auto stopped = [&call] { return call.cancel != 0; };
             QString headError;
-            const QByteArray head = readHead(fd, limits.idleMs, &call.cancel, &headError);
+            const QByteArray head = readHead(fd, limits.idleMs, stopped, &headError);
             const QByteArray format = print::documentFormat(head).toLatin1();
             if (!headError.isEmpty() || format.isEmpty()) {
                 ::close(fd);
-                return fail(!headError.isEmpty() ? headError : QStringLiteral("the document is neither a PDF nor PostScript"));
+                return fail(!headError.isEmpty() ? headError : QStringLiteral("the document is not a PDF"));
             }
             if (head.size() > limits.maxDocumentBytes) {
                 ::close(fd);
@@ -425,22 +430,10 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
                 qint64 total = head.size();
                 if (cupsWriteRequestData(http, head.constData(), size_t(head.size())) != HTTP_STATUS_CONTINUE)
                     call.error = QStringLiteral("the printer stopped taking the document");
-                while (reading && !call.cancel && call.error.isEmpty()) {
-                    pollfd p{fd, POLLIN, 0};
-                    const int ready = ::poll(&p, 1, limits.idleMs);
-                    if (ready < 0 && errno == EINTR)
-                        continue;
-                    if (ready <= 0) {
-                        call.error = QStringLiteral("the document stopped coming");
+                while (call.error.isEmpty()) {
+                    const ssize_t n = readSome(fd, buffer, sizeof buffer, limits.idleMs, stopped, &call.error);
+                    if (n < 0)
                         break;
-                    }
-                    const ssize_t n = ::read(fd, buffer, sizeof buffer);
-                    if (n < 0 && errno == EINTR)
-                        continue;
-                    if (n < 0) {
-                        call.error = QStringLiteral("cannot read the document");
-                        break;
-                    }
                     if (n == 0) {
                         reading = false;
                         break;
@@ -476,12 +469,12 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
         [] {});
 }
 
-QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes)
+QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes, const std::function<bool()> &stopped)
 {
     const QString target = QDir(folder).filePath(name);
     QString error;
     // Only a PDF: nothing is made in the folder before its first bytes say so.
-    QByteArray head = readHead(fd, idleMs, nullptr, &error);
+    QByteArray head = readHead(fd, idleMs, stopped, &error);
     if (error.isEmpty() && !head.startsWith("%PDF-"))
         error = QStringLiteral("the document is not a PDF");
     const QByteArray file = QFile::encodeName(name);
@@ -489,6 +482,16 @@ QString writePdf(int fd, const QString &folder, const QString &name, int idleMs,
         error = QStringLiteral("cannot write “%1”: not a file name").arg(target);
     const int dir = error.isEmpty() ? openFolder(folder, &error) : -1;
     if (dir < 0) {
+        ::close(fd);
+        return error;
+    }
+    // A regular file there that may not be written stays (as QSaveFile refused it); one that may keeps its permissions (read off
+    // the file itself, never off what a link points to).
+    struct stat existing;
+    const bool replacing = ::fstatat(dir, file.constData(), &existing, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(existing.st_mode);
+    if (replacing && ::faccessat(dir, file.constData(), W_OK, AT_EACCESS | AT_SYMLINK_NOFOLLOW) != 0 && errno != EINVAL && errno != ENOSYS) {
+        error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
+        ::close(dir);
         ::close(fd);
         return error;
     }
@@ -507,9 +510,7 @@ QString writePdf(int fd, const QString &folder, const QString &name, int idleMs,
         ::close(fd);
         return error;
     }
-    // A PDF there already keeps its permissions (read off the file itself, never off what a link points to).
-    struct stat existing;
-    if (::fstatat(dir, file.constData(), &existing, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(existing.st_mode))
+    if (replacing)
         ::fchmod(out, existing.st_mode & 0777);
     qint64 total = head.size();
     if (total > maxBytes)
@@ -518,7 +519,7 @@ QString writePdf(int fd, const QString &folder, const QString &name, int idleMs,
         error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
     char buffer[65536];
     while (error.isEmpty()) {
-        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, nullptr, &error);
+        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, stopped, &error);
         if (n <= 0)
             break;
         total += n;
@@ -537,10 +538,16 @@ QString writePdf(int fd, const QString &folder, const QString &name, int idleMs,
     // The rename puts the file in the name's place: a link there is replaced, never followed.
     if (error.isEmpty() && ::renameat(dir, temporary.constData(), dir, file.constData()) != 0)
         error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
-    if (error.isEmpty())
-        ::fsync(dir);
-    else
+    if (error.isEmpty()) {
+        // The rename made durable where the folder can be read (an O_PATH descriptor cannot be synced).
+        const int sync = ::openat(dir, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (sync >= 0) {
+            ::fsync(sync);
+            ::close(sync);
+        }
+    } else {
         ::unlinkat(dir, temporary.constData(), 0);
+    }
     ::close(dir);
     return error;
 }

@@ -85,9 +85,11 @@ private:
 // Writes what `fd` holds (taken: closed when done) as `name` in `folder` (Save as PDF): only a PDF ("%PDF-" first), at most
 // maxBytes. `folder` is the folder as the Save panel's answer named it, its links resolved then; it is opened from "/" one folder
 // at a time without following a link, the document goes to a temporary file made there (O_EXCL, O_NOFOLLOW), synced, then renamed
-// over `name`: a link put at the name is replaced, never followed, and a link put in place of a folder fails the write (integrator
-// security review of step 6a, MAJOR 1). Never half a document; a source silent for idleMs fails; a regular file there keeps its
-// permissions. "" on success, else why. Blocking: run it off the GUI thread.
-QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes = print::kMaxDocumentBytes);
+// over `name`: a link put at the name is replaced, never followed (the user's own link too), and a link put in place of a folder
+// fails the write (integrator security review of step 6a, MAJOR 1). Never half a document: a source silent for idleMs, or
+// `stopped` saying so (asked at least every 200 ms), ends it and removes the temporary file. A regular file there that may not be
+// written stays; one that may keeps its permissions. "" on success, else why. Blocking: run it off the GUI thread.
+QString writePdf(int fd, const QString &folder, const QString &name, int idleMs, qint64 maxBytes = print::kMaxDocumentBytes,
+                 const std::function<bool()> &stopped = {});
 
 } // namespace grassfield::portal

@@ -667,13 +667,13 @@ The last-used printer and settings are remembered per app.
   one copy: GTK 3 would render the copies itself) and page setup (doubles, no PPD name), and a token good once, for its
   application, for five minutes, that keeps the backend running while it lives (6-4, 6-5).
 - PR2 with a token done: the job, named after the application, carries the copies, collation, paper, two sides and colour,
-  never the pages, scale or orientation GTK already applied (6-4); only a PDF or PostScript, sent as such, at most 2 GiB; a
-  job the printer refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
+  never the pages, scale or orientation GTK already applied (6-4); only a PDF, sent as one, at most 2 GiB; a job the printer
+  refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
 - PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
-  Cancel there brings the sheet back, under the application's id. Only a PDF, at most 2 GiB, is written, only where the Save
-  panel answered (its folder resolved then), never through a link: the folder opened with `O_NOFOLLOW` all the way from "/", a
-  temporary file made there with `O_EXCL | O_NOFOLLOW`, synced and renamed over the name (6-3). The application never gets the
-  path (its `output-uri` is `file:///dev/null`).
+  Cancel there brings the sheet back, under the application's id. Only a PDF, at most 2 GiB, is written, only in the folder the
+  Save panel's answer named (resolved then), never through a link: the folder opened with `O_NOFOLLOW` all the way from "/", a
+  temporary file made there with `O_EXCL | O_NOFOLLOW`, synced and renamed over the name (a link at the name is replaced; a file
+  that may not be written stays) (6-3). The application never gets the path (its `output-uri` is `file:///dev/null`).
 - PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
   as PDF kept.
 - PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
@@ -694,7 +694,9 @@ preview when the app asks for settings before it renders (the portal sends the d
 Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
 sides and colour (trays, quality, finishing) are its defaults. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
 a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
-again): upstream's behaviour, relayed unchanged (ADR-0035 6-4).
+again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
+it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that
+moment (6-3). A raw print queue passes a document's bytes to the device as they are (6-4).
 
 ## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9)
 

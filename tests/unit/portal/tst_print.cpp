@@ -17,6 +17,7 @@
 #include <QDBusUnixFileDescriptor>
 #include <QDeadlineTimer>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -951,12 +952,34 @@ TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
     EXPECT_FALSE(QFileInfo::exists(dir.filePath(QStringLiteral("big.pdf"))));
     EXPECT_EQ(leftovers(folder), QStringList());
 
-    // A file there keeps its permissions.
+    // A file there keeps its permissions; one that may not be written stays as it is (as QSaveFile refused it).
     ASSERT_EQ(::chmod(QFile::encodeName(target).constData(), 0600), 0);
     EXPECT_EQ(writePdf(source({QByteArray("%PDF-1.7 again")}), folder, QStringLiteral("out.pdf"), 2000), QString());
     struct stat st;
     ASSERT_EQ(::stat(QFile::encodeName(target).constData(), &st), 0);
     EXPECT_EQ(st.st_mode & 0777, 0600u);
+    ASSERT_EQ(::chmod(QFile::encodeName(target).constData(), 0400), 0);
+    EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7 over")}), folder, QStringLiteral("out.pdf"), 2000).startsWith(QStringLiteral("cannot write")));
+    EXPECT_EQ(contents(target), QByteArray("%PDF-1.7 again"));
+    EXPECT_EQ(leftovers(folder), QStringList());
+
+    // A folder one may write in but not list (a drop box, 0300): written in.
+    const QString dropBox = dir.filePath(QStringLiteral("drop"));
+    ASSERT_TRUE(QDir(folder).mkdir(QStringLiteral("drop")));
+    ASSERT_EQ(::chmod(QFile::encodeName(dropBox).constData(), 0300), 0);
+    EXPECT_EQ(writePdf(source({QByteArray("%PDF-1.7 dropped")}), dropBox, QStringLiteral("in.pdf"), 2000), QString());
+    ASSERT_EQ(::chmod(QFile::encodeName(dropBox).constData(), 0700), 0);
+    EXPECT_EQ(contents(dir.filePath(QStringLiteral("drop/in.pdf"))), QByteArray("%PDF-1.7 dropped"));
+
+    // Stopped (Print going away) while the source is silent: it ends at once, without its temporary file.
+    auto [held, heldWriter] = pipeOf({QByteArray("%PDF-1.7 started")}, false);
+    QElapsedTimer clock;
+    clock.start();
+    EXPECT_EQ(writePdf(held, folder, QStringLiteral("stopped.pdf"), 30000, print::kMaxDocumentBytes, [&clock] { return clock.elapsed() > 100; }),
+              QStringLiteral("cancelled"));
+    EXPECT_LT(clock.elapsed(), 2000) << "not the 30 s of silence";
+    ::close(heldWriter);
+    EXPECT_FALSE(QFileInfo::exists(dir.filePath(QStringLiteral("stopped.pdf"))));
     EXPECT_EQ(leftovers(folder), QStringList());
 }
 
@@ -1084,13 +1107,30 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
         sent = true;
     });
     ASSERT_TRUE(wait([&] { return sent; }));
-    EXPECT_EQ(error, QStringLiteral("the document is neither a PDF nor PostScript"));
-    jobs = nullptr;
-    const int after = cupsGetJobs2(CUPS_HTTP_DEFAULT, &jobs, queue.toUtf8().constData(), 0, CUPS_WHICHJOBS_ALL);
-    cupsFreeJobs(after, jobs);
-    EXPECT_EQ(after, count) << "no job made";
+    EXPECT_EQ(error, QStringLiteral("the document is not a PDF"));
+    const auto jobCount = [&queue] {
+        cups_job_t *list = nullptr;
+        const int n = cupsGetJobs2(CUPS_HTTP_DEFAULT, &list, queue.toUtf8().constData(), 0, CUPS_WHICHJOBS_ALL);
+        cupsFreeJobs(n, list);
+        return n;
+    };
+    EXPECT_EQ(jobCount(), count) << "no job made";
+    // PostScript neither (it can program a PostScript printer; GTK always sends a PDF here).
+    ASSERT_TRUE(raw.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    raw.write("%!PS-Adobe-3.0\nserverdict begin 0 exitserver\n");
+    raw.close();
+    const int psFd = ::open(QFile::encodeName(raw.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(psFd, 0);
+    sent = false;
+    system.submit(queue, QStringLiteral("ps"), {}, psFd, &context, [&](const QString &why) {
+        error = why;
+        sent = true;
+    });
+    ASSERT_TRUE(wait([&] { return sent; }));
+    EXPECT_EQ(error, QStringLiteral("the document is not a PDF"));
+    EXPECT_EQ(jobCount(), count) << "no job made";
 
-    // A document over the limit: the job is cancelled, short (within the first read) or long.
+    // A document over the limit: refused before any job when its first read is already over it, else its job cancelled.
     CupsPrintSystem::Limits small;
     small.maxDocumentBytes = 40;
     CupsPrintSystem limited(small, nullptr);
@@ -1102,6 +1142,7 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
         over.close();
         const int overFd = ::open(QFile::encodeName(over.fileName()).constData(), O_RDONLY | O_CLOEXEC);
         ASSERT_GE(overFd, 0);
+        const int before = jobCount();
         sent = false;
         limited.submit(queue, QStringLiteral("over"), {}, overFd, &context, [&](const QString &why) {
             error = why;
@@ -1109,6 +1150,9 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
         });
         ASSERT_TRUE(wait([&] { return sent; }));
         EXPECT_EQ(error, QStringLiteral("the document is too large")) << size;
+        if (size < 65536) {
+            EXPECT_EQ(jobCount(), before) << "no job made";
+        }
     }
 
     // A printer CUPS does not know: refused, the document closed.

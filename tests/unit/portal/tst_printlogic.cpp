@@ -291,7 +291,7 @@ TEST(PrintLogic, TheJobGetsCopiesPaperSidesAndColourNeverPagesScaleOrOrientation
     EXPECT_TRUE(cupsOptions(c, office()).isEmpty());
 }
 
-// What reaches CUPS besides the options: a PWG paper name, the document's type off its first bytes (only PDF and PostScript),
+// What reaches CUPS besides the options: a PWG paper name, the document's type off its first bytes (only a PDF),
 // the job's name within IPP's 255 bytes, on a character's boundary.
 TEST(PrintLogic, WhatReachesCups)
 {
@@ -304,7 +304,7 @@ TEST(PrintLogic, WhatReachesCups)
 
     EXPECT_EQ(documentFormat("%PDF-1.7 body"), QStringLiteral("application/pdf"));
     EXPECT_EQ(documentFormat("%PDF-"), QStringLiteral("application/pdf"));
-    EXPECT_EQ(documentFormat("%!PS-Adobe-3.0"), QStringLiteral("application/postscript"));
+    EXPECT_EQ(documentFormat("%!PS-Adobe-3.0"), QString()) << "PostScript can program a PostScript printer";
     EXPECT_EQ(documentFormat("%PDF"), QString()) << "not five bytes of a PDF";
     EXPECT_EQ(documentFormat("\x1b%-12345X@PJL ENTER LANGUAGE=PCL"), QString()) << "a printer language";
     EXPECT_EQ(documentFormat(""), QString());

@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QVariantMap>
 
+#include <atomic>
 #include <memory>
 
 namespace grassfield::portal {
@@ -121,6 +122,8 @@ private:
         QString pdfUri;
         QString pdfFolder;
         QString pdfName;
+        // The Save panel last opened (its handle): only its answer is the sheet's.
+        QString saveHandle;
     };
     struct Ticket {
         QString appId;
@@ -144,6 +147,8 @@ private:
     QHash<uint, Ticket> m_tickets;
     // The Save panel each sheet opened (its handle), closed if the sheet's request ends first.
     QHash<int, QString> m_saving;
+    // Set when Print goes: the writes still running stop and remove their temporary files.
+    std::shared_ptr<std::atomic<bool>> m_stopWriting = std::make_shared<std::atomic<bool>>(false);
     int m_saves = 0;
     std::unique_ptr<QDBusConnection> m_panelBus;
 };
