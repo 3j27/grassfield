@@ -108,6 +108,10 @@ check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
 run '[{"address":"0x1\"});os.exit()--","class":"x","title":"y"}]' logout
 check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
 
+desc="an address ending in a newline never reaches the Lua expression either (the regex's \$ matched before it; tests/fuzz/fuzz_helpers.py session-end, seed 1, iteration 19129)"
+run '[{"address":"0x1\n","class":"x","title":"y"}]' logout
+check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
+
 desc="GF-025 review: ONE failed window query while waiting is not 'no windows': it is retried, the window is still there, nothing is ended"
 FAKE_REFUSE="0x1" FAKE_FAIL_CALLS="2" run '[{"address":"0x1","class":"editor","title":"Save changes?"}]' logout
 check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]] && [[ $(cat "$1/clients.calls") -ge 3 ]]' _ "$tmp" "$status"

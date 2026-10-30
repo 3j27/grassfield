@@ -54,8 +54,10 @@ CMake (`cmake` and `ninja` are installed now; same outputs, protocol code genera
 just plugin-build      # = cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build compositor/build
 ```
 
-Direct build (no CMake): `compositor/build-direct.sh [plugin|tests|compdb|all|tidy]` (default `all` =
-plugin + tests + compdb). The exact commands it runs, from `compositor/`:
+Direct build (no CMake): `compositor/build-direct.sh [plugin|tests|tests-asan|compdb|all|tidy]` (default `all` =
+plugin + tests + compdb; `tests-asan` builds the unit tests again with `-fsanitize=address,undefined` into
+`build/grassfield-compositor-tests-asan`, the build `scripts/gates/release-check.sh` runs the parsers' mutation fuzzing on,
+ADR-0041 step 5; `tests` and `tests-asan` need gtest only, not Hyprland's headers). The exact commands it runs, from `compositor/`:
 
 ```sh
 hyprwayland-scanner protocols/appmenu.xml build/protocols     # when an output is missing, empty or older than the XML
