@@ -42,11 +42,21 @@ pid_t idleChild()
     return pid;
 }
 
-// How a child ended: its signal, 0 for an exit, -1 while it runs (`wait` false) or when it is not a child.
+// How a child ended: its signal, 0 for an exit, -1 while it runs (`wait` false) or when it is not a child. A child still
+// running after 5 s (a stopped process ignores SIGTERM until it continues) is killed and reaped: -2, never a hung test.
 int ending(pid_t pid, bool wait = true)
 {
     int status = 0;
-    const pid_t r = waitpid(pid, &status, wait ? 0 : WNOHANG);
+    pid_t r = waitpid(pid, &status, WNOHANG);
+    for (int i = 0; wait && r == 0 && i < 250; ++i) {
+        usleep(20000);
+        r = waitpid(pid, &status, WNOHANG);
+    }
+    if (r == 0 && wait) {
+        kill(pid, SIGKILL);
+        waitpid(pid, &status, 0);
+        return -2;
+    }
     if (r != pid)
         return -1;
     return WIFSIGNALED(status) ? WTERMSIG(status) : 0;
