@@ -307,14 +307,19 @@ function findItem(items, id) {
 // macOS symbols on a Mac), so an application's shortcut and the shell's look the same. A key the table does not know keeps the
 // name the application sent.
 function keyName(k) {
-    switch (k) {
-    case "Control":
+    // Both naming schemes, in any letter case: GTK/X names (BackSpace, Delete, Escape, Page_Up, space, Prior) and Qt's own
+    // (QKeySequence::toString: Backspace, Del, Esc, PgUp, PgDown, Space, Ins, Print, Return, Enter...).
+    switch (String(k).toLowerCase()) {
+    case "control":
+    case "ctrl":
         return qsTr("Ctrl");
-    case "Shift":
+    case "shift":
         return qsTr("Shift");
-    case "Alt":
+    case "alt":
         return qsTr("Alt");
-    case "Super":
+    case "super":
+    case "meta":
+    case "win":
         return qsTr("Super");
     case "plus":
         return "+";
@@ -322,35 +327,52 @@ function keyName(k) {
         return "-";
     case "space":
         return qsTr("Space");
-    case "Return":
+    case "return":
+    case "enter":
+    case "kp_enter":
         return qsTr("Enter");
-    case "Delete":
+    case "delete":
+    case "del":
         return qsTr("Del");
-    case "BackSpace":
+    case "insert":
+    case "ins":
+        return qsTr("Ins");
+    case "backspace":
         return qsTr("Backspace");
-    case "Escape":
+    case "escape":
+    case "esc":
         return qsTr("Esc");
-    case "Tab":
+    case "tab":
         return qsTr("Tab");
-    case "Left":
+    case "left":
         return qsTr("Left");
-    case "Right":
+    case "right":
         return qsTr("Right");
-    case "Up":
+    case "up":
         return qsTr("Up");
-    case "Down":
+    case "down":
         return qsTr("Down");
-    case "Home":
+    case "home":
         return qsTr("Home");
-    case "End":
+    case "end":
         return qsTr("End");
-    case "Page_Up":
-    case "Prior":
+    case "page_up":
+    case "pageup":
+    case "pgup":
+    case "prior":
         return qsTr("PageUp");
-    case "Page_Down":
-    case "Next":
+    case "page_down":
+    case "pagedown":
+    case "pgdown":
+    case "pgdn":
+    case "next":
         return qsTr("PageDown");
+    case "print":
+    case "printscreen":
+        return qsTr("Print");
     }
+    if (/^f\d{1,2}$/i.test(k))
+        return String(k).toUpperCase();
     return k.length === 1 ? k.toUpperCase() : k;
 }
 

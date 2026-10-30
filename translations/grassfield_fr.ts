@@ -7175,6 +7175,10 @@
         <translation>Suppr</translation>
     </message>
     <message>
+        <source>Ins</source>
+        <translation>Inser</translation>
+    </message>
+    <message>
         <source>Backspace</source>
         <translation>Retour arrière</translation>
     </message>
@@ -7217,6 +7221,10 @@
     <message>
         <source>PageDown</source>
         <translation>Page suiv.</translation>
+    </message>
+    <message>
+        <source>Print</source>
+        <translation>Impr. écran</translation>
     </message>
 </context>
 <context>
