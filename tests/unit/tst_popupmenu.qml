@@ -165,6 +165,33 @@ TestCase {
         verify(Math.abs(m.width - Math.round(m.width)) < 1e-9, "whole-pixel width " + m.width);
     }
 
+    Component {
+        id: headerMenuComponent
+        PopupMenu {
+            model: [{header: true, text: "A section header much wider than any row below it"}, {id: "a", text: "A", checked: true}]
+        }
+    }
+
+    // Review NIT 6: a header after the check column keeps its right padding (its width counted the plain inset only).
+    function test_aHeaderKeepsItsRightPaddingAfterTheCheckColumn() {
+        const m = createTemporaryObject(headerMenuComponent, testCase);
+        wait(50);
+        const find = root => {
+            for (const child of root.children) {
+                if (String(child).indexOf("QQuickText") === 0 && child.text.indexOf("A section header") === 0)
+                    return child;
+                const found = find(child);
+                if (found)
+                    return found;
+            }
+            return null;
+        };
+        const t = find(m);
+        verify(t !== null);
+        const right = t.mapToItem(m, t.width, 0).x;
+        verify(right <= m.width - Tokens.menuPadding - Tokens.menuItemPadding + 0.5, "right edge " + right + " in a menu " + m.width + " wide");
+    }
+
     function test_highlightIsConcentricWithTheMenu() {
         const row = createTemporaryObject(itemComponent, testCase, {text: "Open", highlighted: true});
         let fill = null;

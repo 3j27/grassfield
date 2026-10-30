@@ -310,7 +310,7 @@ FocusScope {
                 Component {
                     id: headerComponent
                     Item {
-                        implicitWidth: Math.ceil(Tokens.menuItemPadding * 2 + headerText.implicitWidth)
+                        implicitWidth: Math.ceil(headerText.x + headerText.implicitWidth + Tokens.menuItemPadding)
                         implicitHeight: Tokens.menuItemHeight
                         Accessible.role: Accessible.Heading
                         Accessible.name: headerText.text
