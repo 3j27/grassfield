@@ -94,13 +94,19 @@ Window {
     }
 
     // A label and its value, the label right-aligned in the left column (About This Mac's two columns); `mark` puts the
-    // Grassfield mark before the value.
+    // Grassfield mark before the value. With `full` (the processor, its name alone, shortened: integrator nested pass of
+    // 85c2c10, its name and thread count wrapped to three lines in French) the value stays on one line, cut in the middle,
+    // and `full` shows in a tooltip (factTip) while the pointer rests on it, when the value was shortened (`shortened`) or cut.
     component FactRow: Item {
         id: fact
 
         property string label: ""
         property string value: ""
         property bool mark: false
+        property string full: ""
+        property bool shortened: false
+        readonly property bool tip: fact.full !== "" && valueHover.hovered && (fact.shortened || valueText.truncated)
+        readonly property real valueX: valueText.x
 
         width: content.width
         height: Math.max(labelText.implicitHeight, valueText.implicitHeight)
@@ -135,13 +141,19 @@ Window {
             id: valueText
             x: labelText.width + Tokens.spacingSm + (fact.mark ? markIcon.width + Tokens.spacingXs : 0)
             width: fact.width - x
-            wrapMode: Text.Wrap
+            wrapMode: fact.full !== "" ? Text.NoWrap : Text.Wrap
+            elide: fact.full !== "" ? Text.ElideMiddle : Text.ElideNone
             textFormat: Text.PlainText
             text: fact.value
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             Accessible.ignored: true
+
+            HoverHandler {
+                id: valueHover
+                enabled: fact.full !== ""
+            }
         }
     }
 
@@ -206,8 +218,11 @@ Window {
         }
 
         FactRow {
+            id: processorRow
             label: qsTr("Processor")
-            value: root.facts.processor
+            value: root.facts.processorShort
+            full: root.facts.processorName
+            shortened: root.facts.processorShort !== root.facts.processorName
         }
         FactRow {
             label: qsTr("Memory")
@@ -250,5 +265,18 @@ Window {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
+    }
+
+    // The processor's full name (FactRow `full`) under its one-line value after the shared delay, kept inside the window;
+    // declared last so that it shows over the rows below.
+    Tooltip {
+        id: factTip
+        objectName: "factTip"
+        readonly property point place: processorRow.tip ? processorRow.mapToItem(root.contentItem, processorRow.valueX, processorRow.height) : Qt.point(0, 0)
+        text: processorRow.full
+        shown: processorRow.tip
+        x: Math.round(Math.max(Tokens.spacingXs, Math.min(root.width - width - Tokens.spacingXs, place.x)))
+        y: Math.round(place.y + Tokens.spacingXs)
+        z: 10
     }
 }

@@ -110,6 +110,13 @@ TestCase {
         return {backend: backend, instance: instance, win: win};
     }
 
+    // The window takes the pointer's hover once active (tst_activitymain's tooltips).
+    function activate(t) {
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000, "the window is active");
+        wait(50);
+    }
+
     function find(item, pred) {
         if (!item)
             return null;
@@ -196,7 +203,7 @@ TestCase {
     function test_facts() {
         const t = make();
         testCase.answer(t);
-        compare(row(t.win, "Processor").value, "AMD Ryzen 7 7840U (2 threads)");
+        compare(row(t.win, "Processor").value, "AMD Ryzen 7 7840U", "the processor's name alone (About This Mac names the chip alone)");
         compare(row(t.win, "Memory").value, "32 GB");
         compare(row(t.win, "Graphics").value, "Intel Iris Xe Graphics");
         compare(row(t.win, "Software").value, "Grassfield Desktop 1.0.0-rc1");
@@ -208,6 +215,63 @@ TestCase {
         compare(t.win.minimumHeight, t.win.maximumHeight);
         compare(t.win.height, t.win.minimumHeight);
         compare(t.win.gfChromeRole, "info");
+    }
+
+    // Integrator nested pass of 85c2c10 (MINOR): the processor's name and thread count wrapped to three lines in French. The
+    // name alone, shortened (SysInfo.cpuShortName), stays on one line cut in the middle, and its full name shows in a tooltip
+    // while the pointer rests on it.
+    function test_processorOnOneLineWithItsFullNameInATooltip() {
+        const full = "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz";
+        const t = make(undefined, {"/proc/cpuinfo": "processor\t: 0\nmodel name\t: " + full + "\nprocessor\t: 1\nmodel name\t: " + full + "\n"});
+        testCase.answer(t);
+        testCase.activate(t);
+        const processor = row(t.win, "Processor");
+        compare(processor.value, "Intel Core i7-1165G7");
+        const value = find(processor, i => i.text === processor.value && i.lineCount !== undefined);
+        verify(value);
+        compare(value.lineCount, 1);
+        const tip = find(t.win.contentItem, i => i.objectName === "factTip");
+        verify(tip);
+        verify(!tip.shown, "no tooltip before the pointer rests on it");
+        mouseMove(value, 4, value.height / 2);
+        tryVerify(() => tip.shown, 1000, "the tooltip shows on the processor's value");
+        compare(tip.text, full);
+        verify(tip.x >= 0 && tip.x + tip.width <= t.win.width, "inside the window: " + tip.x + " + " + tip.width);
+        verify(tip.y >= processor.mapToItem(t.win.contentItem, 0, processor.height).y, "under the value");
+        mouseMove(row(t.win, "Software"), 4, 4);
+        tryVerify(() => !tip.shown, 1000);
+        // Other rows wrap as before and show no tooltip.
+        compare(find(row(t.win, "Graphics"), i => i.text === "Intel Iris Xe Graphics" && i.lineCount !== undefined).wrapMode, Text.Wrap);
+    }
+
+    function test_aLongProcessorNameIsCutInTheMiddle() {
+        const full = "AMD Ryzen Threadripper PRO 7995WX Engineering Sample Extended Edition 96-Cores Liquid Cooled";
+        const t = make(undefined, {"/proc/cpuinfo": "processor\t: 0\nmodel name\t: " + full + "\n"});
+        testCase.answer(t);
+        testCase.activate(t);
+        const processor = row(t.win, "Processor");
+        compare(processor.value, full, "nothing to shorten");
+        const value = find(processor, i => i.text === processor.value && i.lineCount !== undefined);
+        compare(value.lineCount, 1);
+        verify(value.truncated, "cut");
+        compare(value.elide, Text.ElideMiddle);
+        compare(processor.height, row(t.win, "Memory").height, "one line high");
+        const tip = find(t.win.contentItem, i => i.objectName === "factTip");
+        mouseMove(value, value.width / 2, value.height / 2);
+        tryVerify(() => tip.shown, 1000, "cut: the tooltip shows");
+        compare(tip.text, full);
+    }
+
+    function test_aProcessorNameShownWholeHasNoTooltip() {
+        const t = make();
+        testCase.answer(t);
+        testCase.activate(t);
+        const processor = row(t.win, "Processor");
+        const value = find(processor, i => i.text === processor.value && i.lineCount !== undefined);
+        verify(!value.truncated);
+        mouseMove(value, 4, value.height / 2);
+        wait(100);
+        verify(!find(t.win.contentItem, i => i.objectName === "factTip").shown, "the whole name: nothing more to show");
     }
 
     function test_markKeepsTheBrandGreen() {

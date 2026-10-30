@@ -151,8 +151,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      Name (the computer's name: hostname1's pretty name, else the static, else the transient host name; editable in place, Return
      or leaving the field applies, Escape gives it back; `host.setName` sets the pretty name then the static host name derived
      from it, through polkit, ADR-0030; "Waiting for permission…" while the dialog is up; a refusal shows "The name could not be
-     changed: <reason>." under the group), Processor (model and threads; these three lines are `AboutFacts.qml`, shared with
-     About This Computer), Graphics (the adapters' marketing names from `lspci`:
+     changed: <reason>." under the group), Processor (the short model name, `SysInfo.cpuShortName`, and the threads; these
+     three lines are `AboutFacts.qml`, shared with About This Computer), Graphics (the adapters' marketing names from `lspci`:
      "Intel Iris Xe Graphics"), Memory (the installed size as sold, "32 GB", from MemTotal); a Software group (Grassfield with its
      tile and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from `pacman -Q`, Qt); Displays (one row per
      output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the start-up volume, "742.81 GB available of
@@ -252,7 +252,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
    - `--about` opens About This Computer (ADR-0040 ID-19, step 1b; the shell's Grassfield menu starts it, or brings an open
      one forward itself): `AboutWindow.qml`, a window of fixed size (`settings.aboutWindowWidth`, its height from the content)
      in the titlebar-only style (role "info", close light only). Computer first: `DevicePicture` by hostname1's chassis and
-     the model name (as General > About), Processor, Memory and Graphics (`AboutFacts.qml`, shared with General > About),
+     the model name (as General > About), Processor, Memory and Graphics (`AboutFacts.qml`, shared with General > About; the
+     processor's short name alone, on one line cut in the middle, its full model name in a tooltip when shortened or cut),
      Software "Grassfield Desktop <version>" (the compile-time VERSION) after the Grassfield mark in the brand green (the
      default accent's green, `color.light.accent` / `color.dark.accent`, whatever accent is chosen), More Info… (asks the
      running Settings for its window at General > About) and "Built for Omarchy · based on Arch Linux". Nothing waits on the

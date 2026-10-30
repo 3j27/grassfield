@@ -3,7 +3,9 @@ import Grassfield.Ui
 import "SysInfo.js" as SysInfo
 
 // The computer's processor, memory and graphics in the UI language: Settings > General > About and the About This Computer
-// window (AboutWindow.qml, ADR-0040 ID-19) show the same lines. "" for what could not be read.
+// window (AboutWindow.qml, ADR-0040 ID-19) show the same lines, the window the processor's name alone (`processorShort`:
+// About This Mac names the chip alone; its thread count made the French line wrap or cut the model, the integrator's nested
+// pass of 85c2c10). "" for what could not be read.
 // Nothing here waits on the GUI thread (review of ce69dc6): lspci runs as a read-only query (Backend.readOnlyQuery: the
 // allow-list in every session) and fills `graphics` when it answers (`graphicsDone`); /proc/cpuinfo and /proc/meminfo are
 // kernel memory, read in place in microseconds, as Main.qml reads /proc/bus/input/devices.
@@ -15,13 +17,17 @@ QtObject {
     readonly property var cpu: SysInfo.cpu(root.backend.readText("/proc/cpuinfo").text)
     readonly property real memoryBytes: SysInfo.memoryBytes(root.backend.readText("/proc/meminfo").text)
 
-    // "AMD Ryzen 7 (16 threads)".
+    // The model name of /proc/cpuinfo ("11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz": About This Computer's tooltip) and
+    // the name shown (SysInfo.cpuShortName: "Intel Core i7-1165G7").
+    readonly property string processorName: root.cpu ? root.cpu.model : ""
+    readonly property string processorShort: root.processorName !== "" ? SysInfo.cpuShortName(root.processorName) : ""
+    // General > About: "Intel Core i7-1165G7 (8 threads)".
     readonly property string processor: {
-        if (!root.cpu || root.cpu.model === "")
+        if (root.processorShort === "")
             return "";
         if (root.cpu.threads === 1)
-            return qsTr("%1 (1 thread)").arg(root.cpu.model);
-        return root.cpu.threads > 1 ? qsTr("%1 (%2 threads)").arg(root.cpu.model).arg(root.cpu.threads) : root.cpu.model;
+            return qsTr("%1 (1 thread)").arg(root.processorShort);
+        return root.cpu.threads > 1 ? qsTr("%1 (%2 threads)").arg(root.processorShort).arg(root.cpu.threads) : root.processorShort;
     }
     // The installed memory as macOS shows it ("32 GB"): MemTotal leaves out what the firmware keeps (SysInfo.installedGiB).
     readonly property string memory: {
