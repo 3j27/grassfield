@@ -9,6 +9,7 @@ import qs.services // layering-exception: GF-087
 import qs.lib
 import "MenuBridge.js" as Logic
 import "Minimized.js" as Minimized
+import "QuickLook.js" as QuickLook
 
 // Global menus of applications (T1/T2, master-prompt §5.7, ADR-0008, docs/specs/menu-bridge.md).
 //
@@ -225,8 +226,28 @@ Singleton {
         return address !== "" ? address : root.mappedFocus;
     }
 
+    // The app id of the Hyprland window at `address` ("" when Hyprland's window data does not map it yet).
+    function appIdAt(address: string): string {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        for (let i = 0; i < all.length; i++) {
+            if (Minimized.normalizeAddress(all[i].address) === address)
+                return all[i].wayland ? all[i].wayland.appId : "";
+        }
+        return "";
+    }
+
+    // The last focused window that was not a quick look (Glance): its menus stay while the quick look has the focus (macOS:
+    // Quick Look belongs to the app that opened it).
+    property string regularWindow: ""
+
     function updateFocus(): void {
-        const address = focusedAddress();
+        let address = focusedAddress();
+        if (address !== "") {
+            if (QuickLook.isQuickLook(appIdAt(address)))
+                address = root.regularWindow;
+            else
+                root.regularWindow = address;
+        }
         // A shell popup (menus) takes the keyboard: the bar keeps showing the app's menus meanwhile.
         if (address !== "" || !Popups.active)
             setWindow(address);

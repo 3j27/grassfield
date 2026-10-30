@@ -9,6 +9,7 @@ import Grassfield.Ui
 import qs.lib
 import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
+import "QuickLook.js" as QuickLook
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
 import "SpaceGeometry.js" as SpaceGeometry
@@ -25,6 +26,19 @@ Singleton {
     readonly property var toplevels: ToplevelManager.toplevels
     readonly property var focusedToplevel: ToplevelManager.activeToplevel
     readonly property string focusedAppId: focusedToplevel ? focusedToplevel.appId : ""
+
+    // Quick Look (Glance, platform/QuickLook.js) belongs to the app that opened it (macOS): while it has the focus the menu
+    // bar and the app menus stay with the window that was in front before it. `regularToplevel` is the last focus that was not
+    // a quick look (null: the desktop or nothing). Anything that acts on the focused window keeps using focusedToplevel.
+    readonly property bool quickLookFocused: !!focusedToplevel && QuickLook.isQuickLook(focusedToplevel.appId)
+    property var regularToplevel: null
+    readonly property var frontToplevel: {
+        if (!quickLookFocused)
+            return focusedToplevel;
+        const list = toplevels ? toplevels.values : [];
+        return regularToplevel && list.indexOf(regularToplevel) >= 0 ? regularToplevel : null;
+    }
+    readonly property string frontAppId: frontToplevel ? frontToplevel.appId : ""
 
     // Last Stages state (StagesFront.parse of the reply StagesLink fetched: the `stages` event is only a change notice) or
     // null (Stages off, not active, or its state unknown). Set by applyStagesState only.
@@ -1508,6 +1522,9 @@ Singleton {
     onFocusedToplevelChanged: {
         if (focusedToplevel)
             recency.set(focusedToplevel, Date.now());
+        // The window in front before a quick look (see frontToplevel).
+        if (!quickLookFocused)
+            regularToplevel = focusedToplevel;
     }
 
     // Window to raise when an app is clicked: the most recently focused one.

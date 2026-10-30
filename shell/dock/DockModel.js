@@ -1,4 +1,5 @@
 .pragma library
+.import "../platform/QuickLook.js" as QuickLook
 
 // Dock model (pure, unit-tested): merges pinned apps with running apps.
 //
@@ -22,7 +23,8 @@ function merge(pinned, running, lookup) {
     }
     for (let j = 0; j < running.length; j++) {
         const win = running[j];
-        if (!win.appId)
+        // A Quick Look window (Glance) is the opening app's, never a tile of its own (macOS), nor an app of the switcher.
+        if (!win.appId || QuickLook.isQuickLook(win.appId))
             continue;
         const entry = lookup(win.appId);
         const key = entry ? entry.id : win.appId;

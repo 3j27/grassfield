@@ -58,6 +58,7 @@
  {"path": "tests/unit/tst_spacegeometry.qml", "layer": "headless"},
  {"path": "tests/unit/tst_visualaudit.qml", "layer": "headless"},
  {"path": "tests/unit/tst_clockformat.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_quicklook.qml", "layer": "headless"},
  {"path": "tests/unit/tst_medialogic.qml", "layer": "headless"},
  {"path": "tests/unit/tst_buttonkeys.qml", "layer": "headless"},
  {"path": "tests/unit/tst_controlsbuttons.qml", "layer": "headless"},
