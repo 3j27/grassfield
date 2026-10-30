@@ -398,6 +398,19 @@ TestCase {
         verify(WindowTiling.fitsHalf(["a1"], ""), "no window");
     }
 
+    // ADR-0040 step 1b (nested pass of 85c2c10, scenario 6): the windows of fixed size, whose zoom light is disabled.
+    function test_parseFixedReadsTheWindowsOfFixedSize() {
+        compare(JSON.stringify(WindowTiling.parseFixed('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":[],"fixed":["A1","0xbeef","xyz",7],"suggestion":null}')),
+                JSON.stringify(["a1", "beef"]), "lower-case hex, a malformed one left out");
+        compare(JSON.stringify(WindowTiling.parseFixed('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":[],"suggestion":null}')), "[]", "an older plugin lists none");
+        for (const bad of ["", "not json", "null", '{"v":"gfc/2","type":"tiling","fixed":["a1"]}', '{"v":"gfc/1","type":"tile-hover","fixed":["a1"]}'])
+            compare(WindowTiling.parseFixed(bad), null, bad);
+        verify(WindowTiling.isFixed(["a1", "beef"], "0xA1"), "listed: of fixed size, any address form");
+        verify(!WindowTiling.isFixed(["a1"], "b2"), "not listed");
+        verify(!WindowTiling.isFixed(null, "a1"), "not known: not (the plugin still opens nothing from its light)");
+        verify(!WindowTiling.isFixed(["a1"], ""), "no window");
+    }
+
     // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
     function test_keptSelectionStartsOnTheFirstTile() {
         const three = ["a", "b", "c"];

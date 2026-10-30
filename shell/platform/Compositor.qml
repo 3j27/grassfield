@@ -619,6 +619,12 @@ Singleton {
         return WindowTiling.fitsHalf(TilingLink.unfit, addressOf(toplevel));
     }
 
+    // The window is of fixed size (ADR-0040 step 1b; from the plugin's last reply: not known yet counts as not, the plugin still
+    // opens nothing from its zoom light).
+    function fixedSize(toplevel: var): bool {
+        return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
+    }
+
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
     function splitShown(screenName: string): bool {
         const mon = monitorByName(screenName);

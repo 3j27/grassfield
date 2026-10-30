@@ -635,7 +635,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   one left, ends one without a member (at the unlock when locked), and refuses the tiling of a member; the zoom light of a
   member leaves the Split View, and a member's lights are those of full screen (its minimize light grey and inert, ADR-0036
   D56). `split` and a pick into a Split View's other half refuse a window whose minimum size does not fit that half; the
-  `tile-hover` event says it (`splittable`, D57) and the state reply lists such windows (`unfit`, D57 amended). Step 6b: a
+  `tile-hover` event says it (`splittable`, D57) and the state reply lists such windows (`unfit`, D57 amended); a window of
+  fixed size posts no `tile-hover` and `tile_popover` is refused for it, the reply listing it (`fixed`, tiling.md TL24,
+  ADR-0040 step 1b). Step 6b: a
   double-click on the separator (the shared edge between the two members) puts both back to equal halves (D60); a member
   dragged by its titlebar swaps halves with the other when released over it, else goes back in its half (D59). Untrusted: fixed-size strings, the address
   compared with live windows, the place and the side from fixed lists, the output name checked and compared with the live
@@ -801,7 +803,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hyprctl grassfield-stages` (request socket; StagesLink, on each notice with `on:true`) | the state: `{"v":"gfc/1","type":"stages","gen":N,"on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
 | shell → plugin | `hl.plugin.grassfield.arrange("<json>")` (feature `tiling-arrange`) | `{"layout":"<catalogue id>","windows":["0x<hex>",…],"fill":bool?,"zone":int?,"output":"<name>"?}` (tiling.md TL6, ADR-0007) |
 | plugin → shell | socket2 event `grassfield` (tiling change notice) | `{"v":"gfc/1","type":"tiling","gen":N}` (+ `"reason"`) |
-| shell → plugin | `hyprctl grassfield-tiling` (request socket) | the state: `{"v":"gfc/1","type":"tiling","gen":N,"outputs":[{"name","area","class","grid","windows":[…]}],"splits":[{"workspace","output","home"}],"suggestion":…}` (tiling.md TL15, TL28, TL33) |
+| shell → plugin | `hyprctl grassfield-tiling` (request socket) | the state: `{"v":"gfc/1","type":"tiling","gen":N,"outputs":[{"name","area","class","grid","windows":[…]}],"splits":[{"workspace","output","home"}],"unfit":[…],"fixed":[…],"suggestion":…}` (tiling.md TL15, TL28, TL33) |
 | shell → plugin | `hl.plugin.grassfield.split("0x<hex>", "left"\|"right")`, `hl.plugin.grassfield.unsplit("0x<hex>")` (feature `tiling-split`) | Full Screen › Left or Right of Screen; Exit Full Screen of a Split View window (tiling.md TL33, ADR-0007); the `tiling` notice follows |
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
 | shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window"\|"workspace"\|"remembered"\|"none",…}` (FR41; contract `docs/specs/overview.md` "Close focus") |
