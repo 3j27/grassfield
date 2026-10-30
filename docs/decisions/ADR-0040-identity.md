@@ -640,6 +640,16 @@ this ADR follows it, and any later pull request of either lane that meets one of
     `lock_surfaces`).
   - NITs: "Logiciel" in both places; tests for Esc and Ctrl+W, the hidden empty lines and the window lookup
     (`Minimized.hasTag`).
+- **Opus re-review of c6cf328 (integrator, 2026-10-30): FAIL, one MAJOR, one MINOR, one NIT.** The four MINORs above
+  confirmed fixed.
+  - MAJOR 1, a second launch gave up after 2 s and opened its own Settings while the first was still starting (3.7 to
+    7.7 s under load): the hand-over is Activity Monitor's `claimOrHandOver` (up to 25 s; a launch leaves whatever the
+    answer and runs only when the name has no owner left). Reproduced with the real binary and a Settings window that takes
+    5 s to start: the old hand-over left two instances, the new one one.
+  - MINOR 2, nothing tested the single instance: `tests/unit/settings/tst_settingsinstance.cpp` (the name and its suffix,
+    the cleaning, the hand-over on a private dbus-daemon, a dev run beside the owner's), built by `build-direct.sh --tests`.
+  - NIT 3, `Backend::query` checks its allow-list only in dev: About's commands go through `Backend::readOnlyQuery`, which
+    checks it in every session (`tst_backend.cpp`).
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.

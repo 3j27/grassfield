@@ -243,6 +243,7 @@
  {"path": "tests/unit/settings/tst_systembus.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_busjobs.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_backend.cpp", "layer": "logic"},
+ {"path": "tests/unit/settings/tst_settingsinstance.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_appstream.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_catalog.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_catalogstore.cpp", "layer": "logic"},

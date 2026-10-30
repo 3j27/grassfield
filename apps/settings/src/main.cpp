@@ -1,5 +1,4 @@
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDir>
 #include <QGuiApplication>
 #include <QPointer>
@@ -47,23 +46,16 @@ int main(int argc, char *argv[])
             about = true;
     }
     // One Settings per user (settingsinstance.h): a second launch hands its request and its activation token to the running
-    // one and leaves. Without a session bus, or with no answer from the name's owner (stuck, or gone meanwhile), this one runs.
+    // one and leaves, however late that one answers (still starting); without a session bus it runs itself.
     using grassfield::settings::SettingsInstance;
     SettingsInstance instance;
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (bus.isConnected()) {
-        bus.registerObject(SettingsInstance::objectPath(), &instance, QDBusConnection::ExportScriptableSlots);
-        if (!bus.registerService(SettingsInstance::serviceName())) {
-            const QString method = about ? QStringLiteral("About") : QStringLiteral("Open"); // i18n-ignore: D-Bus methods
-            QDBusMessage call = QDBusMessage::createMethodCall(SettingsInstance::serviceName(), SettingsInstance::objectPath(),
-                                                               SettingsInstance::interfaceName(), method);
-            if (!about)
-                call << startSection;
-            call << qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
-            const QDBusMessage reply = bus.call(call, QDBus::Block, 2000);
-            if (reply.type() == QDBusMessage::ReplyMessage)
-                return 0;
-        }
+        const QString token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
+        const QString method = about ? QStringLiteral("About") : QStringLiteral("Open"); // i18n-ignore: D-Bus methods
+        const QVariantList arguments = about ? QVariantList{token} : QVariantList{startSection, token};
+        if (grassfield::settings::claimOrHandOver(bus, &instance, method, arguments) == grassfield::settings::Launch::Leave)
+            return 0;
     }
 
     // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the

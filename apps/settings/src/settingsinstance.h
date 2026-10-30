@@ -8,13 +8,15 @@
 // GRASSFIELD_STATE_HOME, scripts/dev/isolated.sh) shares the owner's session bus, so its name adds ".Dev" in a dev session
 // and a digest of that directory, and never reaches the owner's Settings, nor another run's.
 //
-// activateWindow and askShellToReopen repeat Activity Monitor's (apps/activity/src/shownwatch.h, activityapp.cpp) until the
-// two apps share one header (apps/activity is under work elsewhere).
+// claimOrHandOver, activateWindow and askShellToReopen repeat Activity Monitor's (apps/activity/src/activityapp.cpp,
+// shownwatch.h) until the two apps share one header.
 #pragma once
 
 #include "runmode.h"
 
 #include <QCryptographicHash>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDir>
 #include <QObject>
 #include <QProcess>
@@ -75,6 +77,37 @@ signals:
     void settingsRequested(const QString &section, const QString &token);
     void aboutRequested(const QString &token);
 };
+
+enum class Launch { Run, Leave };
+
+// A launch takes the bus name (Run), or hands its request over to the Settings that holds it and leaves (Leave): `method` is
+// "Open" or "About", `arguments` its arguments. The running Settings answers from its event loop, once its windows exist,
+// which a slow start delays (the re-review of c6cf328: a launch that gave up after 2 s opened a second Settings while the
+// first was still starting; Activity Monitor's claimOrHandOver, ADR-0038, for the same race): a launch leaves whatever the
+// answer, and runs only when the name has no owner left, after taking it. `answerMs` bounds the wait for the delivery; a
+// request that waited past it is still queued for the running Settings, which acts on it once it runs its loop.
+inline Launch claimOrHandOver(QDBusConnection &bus, SettingsInstance *instance, const QString &method, const QVariantList &arguments,
+                              int answerMs = 25000)
+{
+    bus.registerObject(SettingsInstance::objectPath(), instance, QDBusConnection::ExportScriptableSlots);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (bus.registerService(SettingsInstance::serviceName()))
+            return Launch::Run;
+        QDBusMessage call = QDBusMessage::createMethodCall(SettingsInstance::serviceName(), SettingsInstance::objectPath(),
+                                                           SettingsInstance::interfaceName(), method);
+        call.setArguments(arguments);
+        const QDBusMessage reply = bus.call(call, QDBus::Block, answerMs);
+        if (reply.type() == QDBusMessage::ReplyMessage)
+            return Launch::Leave;
+        // Only a name left meanwhile is taken; a running Settings that answers late (still starting) or not at all keeps its
+        // one window, as a busy app on macOS opens nothing more.
+        const QString error = reply.errorName();
+        if (error != QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
+            && error != QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner"))
+            return Launch::Leave;
+    }
+    return Launch::Leave;
+}
 
 // The shell's Dock brings Settings' windows back (`qs ipc -p <shell> call dock reopen org.grassfield.Settings`, what a click
 // on its tile does): xdg-activation switches to another Desktop but leaves a window on special:minimized (AD34). Nothing
