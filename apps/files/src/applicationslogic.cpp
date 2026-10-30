@@ -300,17 +300,18 @@ bool parseEntry(const QByteArray &text, const QString &id, const QString &path, 
     const Fields f = readFields(text);
     if (f.type != QLatin1String("Application"))
         return false;
-    if (f.noDisplay == QLatin1String("true") || f.hidden == QLatin1String("true"))
+    const bool shown = env.shownIds.contains(id);
+    if (f.hidden == QLatin1String("true") || (f.noDisplay == QLatin1String("true") && !shown))
         return false;
     const QString name = nameOf(f, env.locales);
     if (name.isEmpty())
         return false;
     const ScriptFields s = readScriptFields(text);
-    if (!s.onlyShowIn.isEmpty() && !hasDesktop(s.onlyShowIn, env.currentDesktop))
+    if (!shown && !s.onlyShowIn.isEmpty() && !hasDesktop(s.onlyShowIn, env.currentDesktop))
         return false;
-    if (!s.notShowIn.isEmpty() && hasDesktop(s.notShowIn, env.currentDesktop))
+    if (!shown && !s.notShowIn.isEmpty() && hasDesktop(s.notShowIn, env.currentDesktop))
         return false;
-    if (terminalHelper(s.categories, s.exec))
+    if (!shown && terminalHelper(s.categories, s.exec))
         return false;
     Entry e;
     e.id = id;
@@ -404,7 +405,7 @@ QList<Entry> listApplications(const Environment &env)
         for (const QString &id : std::as_const(order)) {
             // The highest-priority directory that has an id counts.
             seen.insert(id);
-            if (env.helperIds.contains(id))
+            if (env.helperIds.contains(id) && !env.shownIds.contains(id))
                 continue;
             Entry entry;
             if (parseEntry(winner.value(id).text, id, winner.value(id).path, env, &entry))

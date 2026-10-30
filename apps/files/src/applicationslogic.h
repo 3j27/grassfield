@@ -66,6 +66,11 @@ struct Environment {
     QStringList locales;
     // Ids that are helpers.
     QSet<QString> helperIds;
+    // Ids listed although the grid hides them (NoDisplay=true, a helper, OnlyShowIn/NotShowIn, a terminal's server or
+    // client): a Choose Application panel's applications for the document's type, which Open With lists too (Omarchy hides
+    // imv, every image's default). Such an entry still needs Type=Application and a Name, and Hidden=true (deleted) still
+    // hides it. Empty for the location itself, which lists what the grid lists.
+    QSet<QString> shownIds;
 };
 
 // The ids the shell's hidden-entries.sh hides as helpers by default (GRASSFIELD_HELPER_IDS replaces them there).

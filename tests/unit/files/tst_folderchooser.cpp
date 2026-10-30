@@ -206,6 +206,58 @@ TEST(FolderChooserApplications, ChooseApplicationTakesTheNamedOnes)
         QFile::remove(dir + QLatin1Char('/') + QString::fromLatin1(id) + QStringLiteral(".desktop"));
 }
 
+// The type's applications the grid hides (NoDisplay=true: Omarchy's imv) join the listing once the chooser names them as
+// listed, and leave it with the chooser (integrator nested pass of step 5c, MINOR).
+TEST(FolderChooserApplications, TheTypesHiddenApplicationIsListedInThePanel)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString id = QStringLiteral("org.example.ChooserHiddenViewer");
+    {
+        QFile entry(dir + QLatin1Char('/') + id + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write("[Desktop Entry]\nType=Application\nName=HiddenViewer\nExec=true %f\nNoDisplay=true\n");
+    }
+    FolderModel model;
+    model.setUrl(QUrl(QStringLiteral("grassfield-apps:/")));
+    const auto rowOf = [&model]() {
+        for (int r = 0; r < model.count(); ++r)
+            if (model.nameAt(r) == QLatin1String("HiddenViewer"))
+                return r;
+        return -1;
+    };
+    const auto settle = [&model]() {
+        QDeadlineTimer deadline(10000);
+        do {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        } while (model.loading() && !deadline.hasExpired());
+    };
+    settle();
+    EXPECT_LT(rowOf(), 0) << "the location lists what the grid lists";
+    const QVariantMap chooser{{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true},
+                              {QStringLiteral("applications"), QStringList{id}}, {QStringLiteral("listedApplications"), QStringList{id}}};
+    model.setChooser(chooser);
+    QDeadlineTimer deadline(10000);
+    while (rowOf() < 0 && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+    }
+    const int row = rowOf();
+    ASSERT_GE(row, 0) << "listed in the panel";
+    EXPECT_FALSE(model.data(model.index(row, 0), FolderModel::DimmedRole).toBool());
+    model.select(row, Qt::NoModifier);
+    EXPECT_EQ(model.selectedCount(), 1) << "and chosen";
+    model.setChooser({});
+    deadline.setRemainingTime(10000);
+    while (rowOf() >= 0 && !deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+    }
+    EXPECT_LT(rowOf(), 0) << "out of the panel, the location is the grid's again";
+    QFile::remove(dir + QLatin1Char('/') + id + QStringLiteral(".desktop"));
+}
+
 // New Folder of a Save panel (FilesApp::makeFolder): a taken name, a folder's or a file's, is told by KIO's own error, since
 // the panels never look at the disk on the GUI thread first (ADR-0035 4b-18; re-review of 6b26afc); a new name is made; an
 // invalid one is refused at once.

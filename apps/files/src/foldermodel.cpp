@@ -1163,6 +1163,14 @@ void FolderModel::setChooser(const QVariantMap &chooser)
     const QStringList applications = chooser.value(QStringLiteral("applications")).toStringList();
     m_chooserApplications = QSet<QString>(applications.cbegin(), applications.cend());
     m_chooserAllApplications = chooser.value(QStringLiteral("allApplications")).toBool();
+    const QStringList listed = chooser.value(QStringLiteral("listedApplications")).toStringList();
+    const QSet<QString> listedSet(listed.cbegin(), listed.cend());
+    // The type's applications the grid hides join the listing (integrator nested pass of step 5c, MINOR).
+    if (listedSet != m_chooserListedApplications) {
+        m_chooserListedApplications = listedSet;
+        if (isApplications())
+            loadApplications();
+    }
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {DimmedRole});
     // What the panel can no longer take leaves the selection.
@@ -1569,7 +1577,9 @@ void FolderModel::loadApplications()
         emit loadingChanged();
     }
     QPointer<FolderModel> self(this);
-    ApplicationsLogic::startListing(ApplicationsLogic::processEnvironment(), [self, generation](const QList<ApplicationsLogic::Entry> &entries) {
+    ApplicationsLogic::Environment env = ApplicationsLogic::processEnvironment();
+    env.shownIds = m_chooserListedApplications;
+    ApplicationsLogic::startListing(env, [self, generation](const QList<ApplicationsLogic::Entry> &entries) {
         if (self && generation == self->m_appsGeneration && self->isApplications())
             self->applyApplications(entries);
     });

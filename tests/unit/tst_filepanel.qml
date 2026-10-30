@@ -985,6 +985,8 @@ TestCase {
         verify(recommended.foldersOnly, "no file elsewhere");
         verify(recommended.single);
         compare(PanelLogic.applicationFilter(["a", "b"], "b", 0).applications, ["a", "b"], "the last choice once");
+        compare(recommended.listedApplications, ["org.gnome.TextEditor", "org.kde.kate"], "listed even when the grid hides them");
+        compare(PanelLogic.applicationFilter(["a"], "b", 1).listedApplications, ["a", "b"], "in All Applications too");
         const all = PanelLogic.applicationFilter(["a"], "", 1);
         verify(all.allApplications);
         compare(all.applications, []);

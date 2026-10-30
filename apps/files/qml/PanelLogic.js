@@ -35,7 +35,9 @@ function applicationFilter(recommended, lastChoice, filterIndex) {
         foldersOnly: true,
         single: true,
         applications: filterIndex === 1 ? [] : ids,
-        allApplications: filterIndex === 1
+        allApplications: filterIndex === 1,
+        // Listed even when the Applications grid hides them (Omarchy's imv): Open With lists them too.
+        listedApplications: ids
     };
 }
 

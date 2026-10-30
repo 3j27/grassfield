@@ -167,6 +167,33 @@ TEST(Applications, OnlyApplicationsThatAreShownAreListedAndTryExecIsNotRead)
     EXPECT_EQ(got, want);
 }
 
+// A Choose Application panel's applications for the document's type are listed although the grid hides them (Open With
+// lists them; Omarchy hides imv, every image's default): NoDisplay=true, a helper, OnlyShowIn elsewhere, a terminal's server.
+// Hidden=true (deleted), no Name or not an application still hides one; an id not named stays hidden (integrator nested
+// pass of step 5c, MINOR).
+TEST(Applications, ThePanelsTypeApplicationsAreListedThoughTheGridHidesThem)
+{
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QString sys = tmp.filePath(QStringLiteral("sys")), home = tmp.filePath(QStringLiteral("home"));
+    const QString sa = sys + QStringLiteral("/applications/");
+    write(sa + QStringLiteral("imv.desktop"), app(QStringLiteral("NoDisplay=true"), QStringLiteral("imv")));
+    write(sa + QStringLiteral("other-nodisplay.desktop"), app(QStringLiteral("NoDisplay=true")));
+    write(sa + QStringLiteral("elsewhere.desktop"), app(QStringLiteral("OnlyShowIn=KDE;")));
+    write(sa + QStringLiteral("gone.desktop"), app(QStringLiteral("Hidden=true")));
+    write(sa + QStringLiteral("noname.desktop"), "[Desktop Entry]\nType=Application\nExec=x\nNoDisplay=true\n");
+    write(sa + QStringLiteral("foot-server.desktop"),
+          app(QStringLiteral("Categories=System;TerminalEmulator;\nExec=foot --server"), QStringLiteral("Foot Server")));
+    Environment env = envFor(home, sys);
+    env.helperIds.insert(QStringLiteral("helper"));
+    write(sa + QStringLiteral("helper.desktop"), app());
+    EXPECT_EQ(ids(listApplications(env)), QSet<QString>()) << "the location lists what the grid lists";
+    env.shownIds = {QStringLiteral("imv"), QStringLiteral("elsewhere"), QStringLiteral("gone"), QStringLiteral("noname"),
+                    QStringLiteral("foot-server"), QStringLiteral("helper")};
+    EXPECT_EQ(ids(listApplications(env)),
+              QSet<QString>({QStringLiteral("imv"), QStringLiteral("elsewhere"), QStringLiteral("foot-server"), QStringLiteral("helper")}));
+}
+
 TEST(Applications, SortedByNameThenIdWithNumbersByValue)
 {
     QTemporaryDir tmp;
