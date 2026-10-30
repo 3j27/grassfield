@@ -197,7 +197,10 @@ and IQ-B3 here changes the palette only, not which controls read it.
   is never darker than the light accent), its focus ring falls back to the text colour on light grounds
   (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.48:1 (`tests/ci/gtk_themes.py`), and
   the white glyphs of the Settings tiles drawn in it are 2.5:1, as macOS draws them. General > About's Grassfield row
-  draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11).
+  draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11), and so does Software Update's
+  Grassfield release row. Text and glyphs drawn in the accent colour read `colors.accentInk`: in the light appearance a
+  light accent's darker shade (`color.accentInkLight`: yellow, green and pink, 4.5:1 on an app window; macOS draws a light
+  accent's text darker), the accent itself elsewhere (the integrator's review of 5391761, below).
 - **About This Computer (ID-19, the macOS model; review of b44d17e).** Computer first, as macOS 27 and as Settings >
   About already do: the
   Grassfield-drawn picture of the computer (`DevicePicture`, by chassis), its model name, processor, memory, graphics,
@@ -686,6 +689,25 @@ this ADR follows it, and any later pull request of either lane that meets one of
     "(TM)", "CPU", clock, generation prefix, integrated graphics or trailing "Processor"), on one line cut in the middle,
     the full model name in a tooltip while the pointer rests on it when it was shortened or cut. General > About keeps the
     thread count after the same short name.
+
+- **Opus review of 5391761 (step 1c, pull request #69; integrator, 2026-10-30): FAIL, one MAJOR, two MINORs, NITs.** The
+  design held; the nested pass (French, light and dark, the accent row, About, the controls, the Dock and the menu bar in
+  Green) was legible.
+  - MAJOR 1, the new About test's fake system had `act()` alone: three TypeErrors in the full unit run, which gate Q2
+    (`tests/ci/qml_warnings.py`) counts. The fake now has what AboutPage and DevNote read (`queryBus`, `errors`,
+    `suppressedNote`); Q2 exits 0 on the full run.
+  - MINOR 2, Software Update's Grassfield release row drew the mark's tile in the pickable Green: it uses the brand green.
+  - MINOR 3, text drawn in the accent colour fell to 2.1-2.5:1 with the light Green (yellow already had it). The
+    integrator's decision, under the owner's rule of 2026-10-27: as macOS, a light accent's text is drawn darker. A role,
+    `colors.accentInk`: `color.accentInkLight` gives yellow `#816500`, green `#467427` and pink `#BD2F6C` (pink was 4.34:1
+    under a rimmed capsule), each the lightest shade of its accent with 4.5:1 on an app window; every other accent and the
+    dark appearance draw in the accent itself. Two A2 roles: on an app window (4.5:1, every accent, both appearances) and
+    on glass (exempt: no accent holds 4.5:1 over the worst wallpaper, the Grassfield green 2.36:1; every ink keeps 2.2:1,
+    tested). Ten texts and glyphs moved to it (the widgets' weekday, a Control Center checkmark, the alert glyph, Files'
+    Show All and Show More and sidebar glyphs, the Store button label and its sidebar and category glyphs); a test fails
+    when a text or glyph reads the bare accent.
+  - NITs: ADR-0039's knob wording and the comments of `RadioRow.qml` and `StoragePage.qml` now name green beside yellow;
+    main merged (STATE only).
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.
