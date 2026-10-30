@@ -193,17 +193,17 @@ Variants {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            property bool onGreen: false
+            property bool pressedOnGreen: false
             onPressed: mouse => {
                 const popover = holder.item as TilingPopover;
-                onGreen = win.hasPopup && popover !== null && mouse.button === Qt.LeftButton && popover.onLight(mouse.x, mouse.y);
-                if (!onGreen)
+                pressedOnGreen = win.hasPopup && popover !== null && mouse.button === Qt.LeftButton && popover.onLight(mouse.x, mouse.y);
+                if (!pressedOnGreen)
                     Popups.close();
             }
             onReleased: mouse => {
-                if (!onGreen)
+                if (!pressedOnGreen)
                     return;
-                onGreen = false;
+                pressedOnGreen = false;
                 const popover = holder.item as TilingPopover;
                 if (popover && popover.onLight(mouse.x, mouse.y))
                     popover.greenClick((mouse.modifiers & Qt.AltModifier) !== 0);
@@ -211,9 +211,9 @@ Variants {
                     Popups.close();
             }
             onCanceled: {
-                if (onGreen)
+                if (pressedOnGreen)
                     Popups.close();
-                onGreen = false;
+                pressedOnGreen = false;
             }
         }
 
