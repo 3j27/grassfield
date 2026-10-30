@@ -126,7 +126,8 @@ private:
     };
     // A new token for `ticket`: random, not 0, not one in use.
     uint issue(const Ticket &ticket);
-    void dropExpired();
+    // Drops the expired tokens; true when it dropped one.
+    bool dropExpired();
     void printWithTicket(int id, const Ticket &ticket, const QString &title, int fd);
 
     PrintSystem *m_system;

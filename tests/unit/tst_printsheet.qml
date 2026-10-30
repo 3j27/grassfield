@@ -23,6 +23,7 @@ TestCase {
         property var answers: []
         property var chosen: []
         property var saves: []
+        property var reshown: []
         property int added: 0
         property bool refuse: false
 
@@ -65,6 +66,7 @@ TestCase {
             window.visible = true;
         }
         function reshow(id: int): void {
+            fakeHost.reshown = fakeHost.reshown.concat([id]);
             const window = fakeHost.windows[id];
             if (window)
                 window.visible = true;
@@ -104,6 +106,7 @@ TestCase {
         fakeHost.answers = [];
         fakeHost.chosen = [];
         fakeHost.saves = [];
+        fakeHost.reshown = [];
         fakeHost.added = 0;
         fakeHost.refuse = false;
         // No window under it, as FilePanels.qml makes it (a Window made under an Item would be that item's window's child).
@@ -265,7 +268,15 @@ TestCase {
         verify(!sheet.visible, "the Save panel takes its place");
         fakeHost.pdfCancelled(7);
         verify(sheet.visible, "Cancel there: the sheet comes back");
+        compare(fakeHost.reshown, [7], "under the application's id (Print's reshow)");
         compare(fakeHost.answers.length, 0);
+        // A file the backend refuses (the request ending meanwhile): the sheet comes back the same way.
+        fakeHost.refuse = true;
+        test.button(sheet, "Save as PDF…").clicked();
+        fakeHost.pdfChosen(7, "file:///home/u/Quarterly%20Report.pdf");
+        verify(sheet.visible && !sheet.answered, "refused: the sheet again");
+        compare(fakeHost.reshown, [7, 7]);
+        fakeHost.refuse = false;
         test.button(sheet, "Save as PDF…").clicked();
         fakeHost.pdfChosen(7, "file:///home/u/Quarterly%20Report.pdf");
         compare(fakeHost.answers.length, 1);

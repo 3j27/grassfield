@@ -492,18 +492,22 @@ TEST_F(PrintTest, ATokenIsItsApplicationsAndExpires)
     gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(0u), QVariantMap{}}));
     ASSERT_TRUE(waitFor([&] { return none->done; }));
 
+    // A live token keeps the process (its idle time passes, but it is not quiet); its expiry starts the idle time again.
     make([](Print::Options &o) {
-        o.tokenLifetimeMs = 100;
+        o.tokenLifetimeMs = 300;
         o.idleQuitMs = 50;
     });
     bool idled = false;
     QObject::connect(printer.get(), &Print::idle, printer.get(), [&idled] { idled = true; });
     auto late = preparedAnswer(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/late"), {});
     const uint lateToken = late->results.value("token").toUInt();
+    ASSERT_TRUE(waitFor([&] { return idled; })) << "the idle time after the sheet";
+    EXPECT_EQ(printer->quietFor(), 0) << "the token lives";
+    EXPECT_FALSE(RequestHost::quiet({printer.get()}, 50));
     idled = false;
-    QTest::qWait(250);
-    EXPECT_TRUE(idled) << "the idle time starts again once the token has expired";
-    EXPECT_GE(printer->quietFor(), 50);
+    ASSERT_TRUE(waitFor([&] { return idled; })) << "the idle time starts again once the token has expired";
+    EXPECT_GE(printer->quietFor(), 50) << "quiet for the idle time since it started again";
+    EXPECT_TRUE(RequestHost::quiet({printer.get()}, 50));
     printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/late2"), "%PDF-1.4",
                   {{QStringLiteral("token"), QVariant::fromValue(lateToken)}});
     ASSERT_TRUE(waitFor([&] { return gtk.calls.size() == 3; })) << "an expired token is not ours any more";

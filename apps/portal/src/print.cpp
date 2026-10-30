@@ -320,19 +320,21 @@ uint Print::issue(const Ticket &ticket)
     Ticket t = ticket;
     t.age.start();
     m_tickets.insert(token, t);
-    // When it expires, the idle time starts again (quietFor kept the process for it meanwhile).
-    QTimer::singleShot(m_options.tokenLifetimeMs + 50, this, [this] {
-        dropExpired();
-        if (pending() == 0)
+    // When it expires unused, the idle time starts again (quietFor kept the process for it meanwhile). Precise: a coarse timer
+    // may fire up to 5% early, before the token has expired, and nothing would start the idle time then.
+    QTimer::singleShot(m_options.tokenLifetimeMs + 50, Qt::PreciseTimer, this, [this] {
+        if (dropExpired() && pending() == 0)
             armIdle();
     });
     return token;
 }
 
-void Print::dropExpired()
+bool Print::dropExpired()
 {
+    const auto before = m_tickets.size();
     for (auto it = m_tickets.begin(); it != m_tickets.end();)
         it = it->age.elapsed() > m_options.tokenLifetimeMs ? m_tickets.erase(it) : std::next(it);
+    return m_tickets.size() != before;
 }
 
 void Print::handlePrint(const QDBusObjectPath &handle, const QString &appId, const QString &parentWindow, const QString &title,
