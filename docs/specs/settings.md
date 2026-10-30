@@ -120,7 +120,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      docs/specs/controlcenter.md) and Transparency (`material.transparency`, 0-1: a preview of the Grassfield artwork with
      three glass controls tinted as the shell's surfaces are at that value over the artwork really blurred, a caption band, and
      a slider from clear glass on the left to tinted on the right, `GlassPreview.qml`). Theme: Colour (`accent.color`, nine
-     round swatches, Multicolour a colour wheel; the chosen one ringed and named; the shell, Files and Preview follow it live;
+     round swatches, the first "Grassfield" in the brand green (the default, stored `multicolor`; ADR-0040 step 1c), the
+     chosen one ringed and named; the shell, Files and Preview follow it live;
      docs/specs/ui.md, Accent colour) and Text highlight colour (`accent.highlight`: Automatic, the accent, or one of the eight
      accent colours; the selection of text in fields and editors, in the shell, Settings, Files and Preview). Then Icon style
      (ADR-0014: `icons.mode`, four sample icons through the real TintedIcon), Tint colour (`icons.tint`, a pop-up shown only
@@ -154,9 +155,9 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      changed: <reason>." under the group), Processor (the short model name, `SysInfo.cpuShortName`, and the threads; these
      three lines are `AboutFacts.qml`, shared with About This Computer), Graphics (the adapters' marketing names from `lspci`:
      "Intel Iris Xe Graphics"), Memory (the installed size as sold, "32 GB", from MemTotal); a Software group (Grassfield with its
-     tile and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from `pacman -Q`, Qt); Displays (one row per
-     output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the start-up volume, "742.81 GB available of
-     1.00 TB", decimal units as macOS). Not shown: the serial number (root-only), coverage, System Report.
+     tile in the brand green, ADR-0040 ID-11, and "Version 1.0.0-rc1", Omarchy's VERSION_ID, Hyprland and Quickshell from
+     `pacman -Q`, Qt); Displays (one row per output: "14-inch (1920 × 1080)" from the size the output reports); Storage (the
+     start-up volume, "742.81 GB available of 1.00 TB", decimal units as macOS). Not shown: the serial number (root-only), coverage, System Report.
    - Storage (General > Storage since PR #6; the macOS 15 structure, the macOS 27 look; `StoragePage.qml`): the start-up volume's
      card (its name, else "Startup Disk"; "257.39 GB of 1.00 TB used" in decimal units; an "All Volumes…" capsule; a bar with
      one segment per category, 1 apart, a tiny one still 1 wide, the free space last with its size; a legend that wraps), then

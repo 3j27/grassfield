@@ -186,7 +186,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Grassfield")
             glyph: "grassfield-logo"
-            tileColor: "green"
+            tileColor: "grassfield"
             valueText: qsTr("Version %1").arg(root.backend.appVersion)
         }
         SettingsRow {

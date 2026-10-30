@@ -274,6 +274,29 @@ TestCase {
         verify(!find(t.win.contentItem, i => i.objectName === "factTip").shown, "the whole name: nothing more to show");
     }
 
+    // ADR-0040 ID-11 (step 1c): General > About's Grassfield row draws its tile in the brand green, not the pickable Green.
+    Component {
+        id: fakeSystem
+        QtObject {
+            function act(what: string, op: var, tag: string): bool {
+                return true;
+            }
+        }
+    }
+
+    function test_generalAboutsGrassfieldTileIsTheBrandGreen() {
+        const backend = fakeBackend.createObject(testCase, {config: ""});
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/AboutPage.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const page = createTemporaryObject(comp, testCase, {backend: backend, system: fakeSystem.createObject(testCase), width: 600});
+        verify(page);
+        const grassfield = find(page, i => i.title === "Grassfield" && i.tileColor !== undefined);
+        verify(grassfield, "the Grassfield row");
+        compare(grassfield.tileColor, "grassfield");
+        verify(find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorLight.accent)), "a tile of the brand green");
+        verify(!Qt.colorEqual(Tokens.colorLight.accent, Tokens.colorAccentLight.green), "the pickable Green is another green");
+    }
+
     function test_markKeepsTheBrandGreen() {
         const t = make('{"version":1,"accent":{"color":"blue"}}');
         testCase.answer(t);
