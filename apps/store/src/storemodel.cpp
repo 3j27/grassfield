@@ -1,5 +1,7 @@
 #include "storemodel.h"
 
+#include "flatpak.h"
+
 #include <QFileInfo>
 
 #include <algorithm>
@@ -31,6 +33,21 @@ QString iconFile(const QString &root, const AppStreamComponent &c)
     // Arch's data ships its cached icons as JPEG XL whatever the XML names (S3).
     const QString jxl = path.section(QLatin1Char('.'), 0, -2) + QStringLiteral(".jxl");
     return QFileInfo::exists(jxl) ? jxl : QString();
+}
+
+// Flathub's icons are <root>/icons/<width>x<height>/<file> (S21), the AppStream's cached icon.
+QString flathubIcon(const QString &root, const AppStreamComponent &c)
+{
+    if (c.cachedIcon.isEmpty() || root.isEmpty())
+        return {};
+    const QString path = root + QStringLiteral("/icons/") + c.cachedIcon;
+    return QFileInfo::exists(path) ? path : QString();
+}
+
+// A Flathub component the Store can install: a bundle whose ref is an app's, of the app id it names.
+bool installableFlatpak(const AppStreamComponent &c)
+{
+    return isFlatpakAppRef(c.flatpakRef) && flatpakRefId(c.flatpakRef) == c.flatpak;
 }
 
 QStringList mapCategories(const QStringList &freedesktop, const Catalog *catalog)
@@ -68,6 +85,12 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         const AppStreamComponent &c = in.appstream.at(i);
         if (c.type == QLatin1String("desktop-application") && !byId.contains(c.id))
             byId.insert(c.id, i);
+    }
+    QHash<QString, int> byFlatpak; // index into in.flathub, by app id
+    for (int i = 0; in.flathubOn && i < in.flathub.size(); ++i) {
+        const AppStreamComponent &c = in.flathub.at(i);
+        if (installableFlatpak(c) && !byFlatpak.contains(c.flatpak))
+            byFlatpak.insert(c.flatpak, i);
     }
 
     QList<StoreApp> apps;
@@ -114,17 +137,21 @@ QList<StoreApp> buildModel(const ModelInputs &in)
                 a.installed = in.foreign.contains(a.package);
                 break;
             case CatalogSource::Kind::Flatpak:
-                if (!in.flathubOn)
+                // Flathub's data or nothing: an app Flathub does not have (or its AppStream not there yet) is hidden.
+                if (!in.flathubOn || !byFlatpak.contains(e.source.flatpakId))
                     continue;
+                listedIds.insert(e.source.flatpakId);
+                a.installed = in.flatpaks.contains(e.source.flatpakId);
                 break;
             case CatalogSource::Kind::WebApp:
                 break;
             }
             // AppStream's data only for the package this entry installs: an id alone could lend an entry another package's
             // texts and desktop id, and step 3 would open the wrong app (web apps and Flatpaks have no Arch package).
-            const int found = byId.value(e.id, -1);
-            const AppStreamComponent *c = found >= 0 ? &in.appstream.at(found) : nullptr;
-            if (c && !a.packages.contains(c->pkgname))
+            const bool flatpak = e.source.kind == CatalogSource::Kind::Flatpak;
+            const int found = flatpak ? byFlatpak.value(e.source.flatpakId) : byId.value(e.id, -1);
+            const AppStreamComponent *c = found < 0 ? nullptr : flatpak ? &in.flathub.at(found) : &in.appstream.at(found);
+            if (c && !flatpak && !a.packages.contains(c->pkgname))
                 c = nullptr;
             a.hasAppStream = c != nullptr;
             a.component = c ? found : -1;
@@ -135,7 +162,14 @@ QList<StoreApp> buildModel(const ModelInputs &in)
             a.license = c && !c->license.isEmpty() ? c->license : e.license;
             a.homepage = !e.homepage.isEmpty() ? e.homepage : (c ? c->homepage : QString());
             a.desktopId = !e.desktopId.isEmpty() ? e.desktopId : (c ? c->desktopId : QString());
-            a.icon = c ? iconFile(in.appstreamRoot, *c) : QString();
+            a.icon = !c ? QString() : flatpak ? flathubIcon(in.flathubRoot, *c) : iconFile(in.appstreamRoot, *c);
+            if (flatpak) {
+                a.flatpakRef = c->flatpakRef;
+                a.runtime = c->runtime;
+                a.verified = c->verified;
+                if (a.desktopId.isEmpty())
+                    a.desktopId = e.source.flatpakId + QStringLiteral(".desktop"); // flatpak exports it by the app id
+            }
             if (a.icon.isEmpty() && !c && e.icon && in.catalogIcon)
                 a.icon = in.catalogIcon(*e.icon);
             a.screenshots = c ? c->screenshots : QStringList{};
@@ -177,6 +211,37 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         a.categories = mapCategories(c.categories, in.catalog);
         listedIds.insert(a.id);
         listedPackages.insert(c.pkgname);
+        apps.append(a);
+    }
+    // Flathub's desktop applications neither our catalog nor Arch's AppStream has (Arch names some by their entry's file,
+    // "<id>.desktop": the same app).
+    for (int i = 0; in.flathubOn && i < in.flathub.size(); ++i) {
+        const AppStreamComponent &c = in.flathub.at(i);
+        if (c.type != QLatin1String("desktop-application") || !installableFlatpak(c) || byFlatpak.value(c.flatpak) != i
+            || listedIds.contains(c.id) || listedIds.contains(c.flatpak) || listedIds.contains(c.flatpak + QStringLiteral(".desktop")))
+            continue;
+        StoreApp a;
+        a.id = c.flatpak;
+        a.source = CatalogSource::Kind::Flatpak;
+        a.installed = in.flatpaks.contains(c.flatpak);
+        a.hasAppStream = true;
+        a.component = i;
+        a.name = c.name.isEmpty() ? LocalizedText{c.flatpak, {}} : c.name;
+        a.summary = c.summary;
+        a.description = c.description;
+        a.developer = c.developer;
+        a.license = c.license;
+        a.homepage = c.homepage;
+        a.desktopId = c.desktopId.isEmpty() ? c.flatpak + QStringLiteral(".desktop") : c.desktopId;
+        a.flatpakRef = c.flatpakRef;
+        a.runtime = c.runtime;
+        a.verified = c.verified;
+        a.icon = flathubIcon(in.flathubRoot, c);
+        a.screenshots = c.screenshots;
+        a.keywords = c.keywords;
+        a.categories = mapCategories(c.categories, in.catalog);
+        listedIds.insert(a.id);
+        listedIds.insert(c.id);
         apps.append(a);
     }
     std::stable_sort(apps.begin(), apps.end(), [](const StoreApp &x, const StoreApp &y) {

@@ -25,6 +25,7 @@ add_library(grassfield-store-backend STATIC
     src/channel.cpp src/channel.h
     src/childprocess.cpp src/childprocess.h
     src/fetch.cpp src/fetch.h
+    src/flatpak.cpp src/flatpak.h
     src/operations.cpp src/operations.h
     src/pacman.cpp src/pacman.h
     src/plancheck.cpp src/plancheck.h
@@ -69,6 +70,7 @@ if(GTest_FOUND)
         ../../tests/unit/store/tst_channel.cpp
         ../../tests/unit/store/tst_childprocess.cpp
         ../../tests/unit/store/tst_fetch.cpp
+        ../../tests/unit/store/tst_flatpak.cpp
         ../../tests/unit/store/tst_operations.cpp
         ../../tests/unit/store/tst_pacman.cpp
         ../../tests/unit/store/tst_plancheck.cpp

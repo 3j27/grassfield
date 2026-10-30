@@ -11,10 +11,15 @@
 //           pins the Store wrote in $XDG_RUNTIME_DIR/grassfield/store/<op-id>.pins, and its <op-id>.started and
 //           <op-id>.exit there say when it started and how it ended; pacman's log gives the progress as for the helper
 //   webapp  Omarchy's omarchy-webapp-install / -remove as the Store's own child (b.3), 10 minutes at most
+//   flatpak a Flatpak of Flathub (b.3, step 3c): `flatpak install --user --noninteractive flathub <ref>`, or `flatpak
+//           uninstall --user --noninteractive <app id>` then `--unused` (the runtimes no app needs any more, SD27), as the
+//           Store's own child (it dies with the Store: SIGTERM, which stops flatpak cleanly, S25); no time limit, and an
+//           install can be stopped (SIGTERM, SD26); progress from its "Installing <ref>" lines against flatpak's own plan
 // Before an operation starts, it is written to store.json; on the next start a record still there is compared with what is
 // there (recover): done, still running (followed again), interrupted (a part there), or not finished. The Store never
 // signals pacman, the helper, the terminal or Omarchy's commands, except a web app command past its limit, and pkexec while
-// it still waits for the password (before the helper started, pkexec is the user's process).
+// it still waits for the password (before the helper started, pkexec is the user's process), and flatpak when the user stops
+// an install.
 #pragma once
 
 #include "plancheck.h"
@@ -26,6 +31,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -51,6 +57,7 @@ struct OperationRecord {
     // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
     QList<std::pair<QString, QString>> pins;
     QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
+    QString flatpak; // flatpak: the ref an install takes (app/<id>/<arch>/<branch>), or the app id a removal takes
     QDateTime startedAt;
 
     QJsonObject toJson() const;
@@ -100,6 +107,8 @@ struct OperationsConfig {
     QString runDir;       // $XDG_RUNTIME_DIR/grassfield/store ("": no setup runs)
     // The argument vector that runs one of Omarchy's commands: its own program, or a fake one (GRASSFIELD_STORE_INSTALLER).
     std::function<QStringList(const QString &command, const QStringList &args)> omarchy;
+    QString flatpak;                 // /usr/bin/flatpak, or the fixture's fake ("": no Flatpak operation runs)
+    QProcessEnvironment flatpakEnv; // the user's HOME, XDG folders and proxy (flatpak.h flatpakEnvironment)
     // The limits (ADR-0037 b.1, b.3; spec SR19), shorter in the tests.
     int authorizationMs = 120 * 1000;
     qint64 helperMs = 2LL * 3600 * 1000;
@@ -129,8 +138,8 @@ public:
     // How the last operation of an app ended, while it says something (a failure; "done" is said by the button).
     struct Result {
         QString app, kind;
-        QString outcome; // cancelled, failed, interrupted, notFinished, lostTrack, timedOut, busy, unfinished, outdated,
-                         // refused, notApp, didNotStart, omarchyChanged, terminalDidNotOpen
+        QString outcome; // cancelled, stopped, failed, interrupted, notFinished, lostTrack, timedOut, busy, unfinished,
+                         // outdated, refused, notApp, didNotStart, omarchyChanged, terminalDidNotOpen
         int present = 0, total = 0;
         QString details; // pacman's message (the helper's log), pkexec's or Omarchy's output
         OperationRecord record;
@@ -144,6 +153,9 @@ public:
     bool removeWaiting(const QString &id);
     // A failure's line goes (the user read it, or tries again).
     void dismiss(const QString &app);
+    // The running Flatpak install stops (SD26: SIGTERM, which ends flatpak at once and leaves nothing half-installed, S25);
+    // false for anything else, which cannot be stopped.
+    bool stop(const QString &id);
     // The record left in store.json by an earlier run of the Store, compared with what is there.
     void recover();
 
@@ -151,8 +163,8 @@ public:
     bool queued(const QString &app) const;
     QList<Item> items() const;
     QHash<QString, Result> results() const { return m_results; }
-    // [{id, app, name, kind, path, state: waiting | authorizing | opening | running | checking, blocked, done, total}]
-    // for QML.
+    // [{id, app, name, kind, path, state: waiting | authorizing | opening | running | checking, blocked, done, total,
+    // stoppable}] for QML.
     QVariantList list() const;
 
 signals:
@@ -167,6 +179,8 @@ private:
     void startHelper(Item &item);
     void startWebApp(Item &item);
     void startTerminal(Item &item);
+    // flatpak with `args`, its output kept for Details and counted for the progress.
+    void startFlatpak(const QStringList &args);
     void pollTerminal(Item &item, qint64 elapsed);
     // The plan's packages pacman's log counted since the operation started.
     void countProgress(Item &item);
@@ -197,6 +211,9 @@ private:
     int m_lockFd = -1;
     bool m_concluding = false;
     bool m_followOnly = false; // recover(): a helper of an earlier run is followed, not owned
+    bool m_stopping = false;   // stop(): the running Flatpak install was asked to stop
+    std::optional<int> m_firstExit; // a Flatpak removal's own exit code, while `--unused` runs after it
+    QByteArray m_flatpakOutput;     // what flatpak printed (1 MiB at most): its progress
 };
 
 } // namespace grassfield::store

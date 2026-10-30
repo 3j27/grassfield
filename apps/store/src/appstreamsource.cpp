@@ -31,6 +31,20 @@ bool validVersion(const QString &v)
 
 } // namespace
 
+AppStreamData readFlathubAppStream(const QString &activeDir)
+{
+    constexpr qint64 kFlathubXmlMax = 128 * 1024 * 1024; // 51 MB on 2026-10-28 (S21)
+    AppStreamData data;
+    QFile f(activeDir + QStringLiteral("/appstream.xml.gz"));
+    if (!f.open(QIODevice::ReadOnly) || f.size() > kXmlMax)
+        return data;
+    data.components = parseAppStream(gunzip(f.readAll(), kFlathubXmlMax));
+    data.components.removeIf([](const AppStreamComponent &c) { return c.flatpak.isEmpty(); });
+    data.origin = AppStreamData::Origin::Installed;
+    data.root = activeDir;
+    return data;
+}
+
 AppStreamData readAppStream(const QString &swcatalogRoot, AppStreamData::Origin origin)
 {
     AppStreamData data;
