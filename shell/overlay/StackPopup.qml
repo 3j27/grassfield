@@ -415,7 +415,7 @@ FocusScope {
                     text: DisplayName.text(cell.modelData.name)
                     elide: Text.ElideMiddle
                     maximumLineCount: 2
-                    wrapMode: Text.WrapAnywhere
+                    wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
