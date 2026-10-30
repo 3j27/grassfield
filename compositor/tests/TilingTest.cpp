@@ -1449,6 +1449,20 @@ TEST(TilingFixed, AWindowOfFixedSizeHasItsZoomLightDisabled) {
     EXPECT_EQ(stateJson(6, none, nullptr, {}, {}, fixed), R"({"v":"gfc/1","type":"tiling","gen":6,"outputs":[],"splits":[],"unfit":[],"fixed":["ab0"],"unfitZones":[],"suggestion":null})");
 }
 
+// ADR-0040 step 1b's review: Super+Alt+F zoomed About This Computer to 1918x980 and Super+Ctrl+F made it full screen in
+// nested, while the Window menu greys Zoom and Enter Full Screen for a window of fixed size. The keys ask window_size: the
+// modes by Hyprland's names only, and a window of fixed size only leaves the mode it is in.
+TEST(TilingFixed, TheFullScreenAndZoomKeysLeaveAWindowOfFixedSizeAlone) {
+    EXPECT_EQ(parseSizeMode("fullscreen"), SizeMode::Fullscreen);
+    EXPECT_EQ(parseSizeMode("maximized"), SizeMode::Maximized);
+    for (const auto* bad : {"", "Fullscreen", "maximised", "fullscreen ", "zoom", "fullscreenstate"})
+        EXPECT_FALSE(parseSizeMode(bad).has_value()) << '"' << bad << '"';
+    EXPECT_FALSE(sizeKeyActs(true, false)) << "About This Computer: no Zoom, no Enter Full Screen";
+    EXPECT_TRUE(sizeKeyActs(true, true)) << "zoomed or in full screen anyway: Unzoom, Exit Full Screen";
+    EXPECT_TRUE(sizeKeyActs(false, false)) << "a resizable window zooms";
+    EXPECT_TRUE(sizeKeyActs(false, true)) << "and unzooms";
+}
+
 // TL33, ADR-0036 D50, D52: the members are the Split View's two windows, whatever their state; a window that left its
 // workspace is no member any more; another window there never was one.
 TEST(TilingSplit, MembersFollowTheirWorkspace) {

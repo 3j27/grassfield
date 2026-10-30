@@ -197,6 +197,13 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   and a zone no window fits stays empty; the suggestion offers only windows that fit its zone; a drag shows no preview over a
   place the window does not fit. Fill and Center are always offered. The shell greys the places, arrangements and Layouts
   zones whose zone is listed (the item's zone: a place's, an arrangement's first, a Layouts zone itself).
+- The Full Screen and Zoom keys (2026-10-30, additive, ADR-0040 step 1b's review): verb `window_size(mode)`, mode
+  `"fullscreen"` or `"maximized"` (strict). It returns Hyprland's own `hl.dsp.window.fullscreen({ mode = mode })`, or
+  `hl.dsp.no_op()` when the focused window is of fixed size (minimum = maximum, the reply's `fixed`) and not in that mode:
+  the Window menu greys Zoom and Enter Full Screen for such a window, and Unzoom and Exit Full Screen still act.
+  `config/hypr/grassfield/bindings.lua` calls it at each press of Super+Ctrl+F and Super+Alt+F and dispatches the result;
+  without the verb (no plugin, an older one), when it fails or returns nothing, Hyprland's dispatcher as before (C2). Not a
+  shell verb (the shell does not call it); no feature: the binding tests the verb itself.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -240,7 +247,7 @@ enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
 feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split
-verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit
+verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit window_size
 ```
 
 ## Evidence

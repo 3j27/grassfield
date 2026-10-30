@@ -1753,6 +1753,19 @@ namespace gf::tiler {
         return w && tiling::fixedSize(constraintsOf(w));
     }
 
+    bool sizeKeyActs(tiling::SizeMode mode) {
+        const auto  focus = Desktop::focusState();
+        const auto  w     = focus ? focus->window() : nullptr;
+        const auto& fs    = Fullscreen::controller();
+        if (!w || !fs)
+            return true;
+        const auto in  = fs->getFullscreenModes(w).internal == (mode == tiling::SizeMode::Maximized ? Fullscreen::FSMODE_MAXIMIZED : Fullscreen::FSMODE_FULLSCREEN);
+        const bool act = tiling::sizeKeyActs(fixedSize(w), in);
+        if (!act)
+            logRequest(Log::INFO, "window_size: {} refused: window {:x} is of fixed size", mode == tiling::SizeMode::Maximized ? "maximized" : "fullscreen", idOf(w));
+        return act;
+    }
+
     bool splittable(const PHLWINDOW& w) {
         const auto m = placeable(w) ? monitorOf(w) : nullptr;
         return m && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 0)) && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 1));

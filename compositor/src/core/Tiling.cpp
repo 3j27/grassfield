@@ -1329,6 +1329,18 @@ namespace gf::tiling {
         return c.maxW > 0 && c.maxH > 0 && c.minW >= c.maxW && c.minH >= c.maxH;
     }
 
+    std::optional<SizeMode> parseSizeMode(std::string_view name) {
+        if (name == "fullscreen")
+            return SizeMode::Fullscreen;
+        if (name == "maximized")
+            return SizeMode::Maximized;
+        return std::nullopt;
+    }
+
+    bool sizeKeyActs(bool fixed, bool inMode) {
+        return !fixed || inMode;
+    }
+
     bool fitsZone(const Constraints& c, const Zone& zone, const Area& area) {
         return fitsFrame(c, zoneFrame(zone, area));
     }

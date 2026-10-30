@@ -301,7 +301,12 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   A window of fixed size (minimum = maximum on both axes, core `fixedSize`; About This Computer, ADR-0040 step 1b) posts
   no `tile-hover` from its zoom light, which its app draws disabled, and `tile_popover` (Super+Ctrl+L) is refused for it:
   nothing opens, on hover or click (integrator nested pass of 85c2c10, scenario 6). The reply lists such windows
-  (`fixed`); `tests/compositor/tiling.sh` case `fixed`.
+  (`fixed`); `tests/compositor/tiling.sh` case `fixed`. Its review: the plugin's own titlebar draws that zoom light
+  disabled too (grey, no glyph) and its click, Alt-click and a double-click set to Zoom do nothing, unless the window is
+  zoomed or in full screen already (core `lightAvailable`; case `fixed bar`); Super+Alt+F (Zoom) and Super+Ctrl+F (Full
+  Screen) leave it alone the same way: `bindings.lua` asks the plugin's `window_size(mode)` at each press, which returns
+  Hyprland's own dispatcher or a no-op (core `sizeKeyActs`; Hyprland's dispatcher as before without the plugin;
+  `tests/compositor/size_keys.sh`, case `fixed keys`).
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt

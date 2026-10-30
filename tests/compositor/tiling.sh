@@ -55,7 +55,9 @@
 #   fixed bar      (step 1b's review) an xdgact window of fixed size with the plugin's titlebar: listed in "fixed"; its zoom
 #                  light drawn disabled (captured under the pointer) and a click there leaves its box and mode; a resizable
 #                  window's light still zooms (the control)
-#   move-to       on another output when there is one: a tiled window takes the same place there (still tiled, that
+#   fixed keys     (step 1b's review) Super+Alt+F and Super+Ctrl+F leave that window (bindings.lua asks the plugin's
+#                  window_size, which refuses it, logged); the control zooms with Super+Alt+F and back
+#   move-to      on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
 #   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
@@ -1296,6 +1298,27 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     check "fixed bar: the control is back from its zoom" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
     pointer abs 20 $((mh / 2)) sleep 200
     close_shell_popup "fixed bar"
+    # fixed keys (step 1b's review: Super+Alt+F zoomed About to 1918x980, Super+Ctrl+F made it full screen): bindings.lua asks
+    # the plugin's window_size, which refuses a window of fixed size; the control still zooms with Super+Alt+F, and back.
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$fixed_addr' })" >>"$log" 2>&1
+    sleep 0.5
+    keys -M logo -M alt -k f -m alt -m logo
+    sleep 1
+    check "fixed keys: Super+Alt+F leaves the window of fixed size (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed keys: the plugin refused the zoom" plugin_logged "window_size: maximized refused: window ${fixed_addr#0x} is of fixed size"
+    keys -M logo -M ctrl -k f -m ctrl -m logo
+    sleep 1
+    check "fixed keys: Super+Ctrl+F leaves it too (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed keys: the plugin refused the full screen" plugin_logged "window_size: fullscreen refused: window ${fixed_addr#0x} is of fixed size"
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.5
+    keys -M logo -M alt -k f -m alt -m logo
+    sleep 1
+    check "fixed keys: Super+Alt+F zooms the control" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    keys -M logo -M alt -k f -m alt -m logo
+    sleep 1
+    check "fixed keys: Super+Alt+F again unzooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    close_shell_popup "fixed keys"
     kill "$fixed_pid" 2>/dev/null
     sleep 0.5
   else

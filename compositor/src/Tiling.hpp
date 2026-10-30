@@ -93,6 +93,12 @@ namespace gf::tiler {
     // nested pass of 85c2c10); the reply's "fixed" lists it.
     bool fixedSize(const PHLWINDOW& w);
 
+    // hl.plugin.grassfield.window_size(mode), the Full Screen and Zoom keys (core sizeKeyActs): whether Hyprland's own
+    // fullscreen dispatcher in that mode may act on the focused window now. False for a window of fixed size that is not
+    // in that mode (the Window menu greys Enter Full Screen and Zoom for it); true with no focused window (Hyprland's
+    // dispatcher then does nothing itself).
+    bool sizeKeyActs(tiling::SizeMode mode);
+
     // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
     // popover greys Left and Right of Screen otherwise; split refuses it).
     bool splittable(const PHLWINDOW& w);

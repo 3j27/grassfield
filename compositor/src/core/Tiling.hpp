@@ -626,6 +626,18 @@ namespace gf::tiling {
     // refuses to tile it.
     bool fixedSize(const Constraints& c);
 
+    // The Full Screen and Zoom keys (Super+Ctrl+F, Super+Alt+F; config/hypr/grassfield/bindings.lua asks the plugin's
+    // window_size at each press, ADR-0040 step 1b's review): Hyprland's fullscreen modes by the names its dispatcher takes,
+    // "fullscreen" and "maximized" (strict; nullopt for anything else).
+    enum class SizeMode : uint8_t {
+        Fullscreen,
+        Maximized,
+    };
+    std::optional<SizeMode> parseSizeMode(std::string_view name);
+    // Whether such a key acts on the focused window, as the Window menu has it: a window of fixed size (`fixed`) only leaves
+    // the mode it is in (`inMode`: Exit Full Screen, Unzoom); any other window toggles as Hyprland's dispatcher does.
+    bool sizeKeyActs(bool fixed, bool inMode);
+
     // ---- what a window fits (ADR-0036 D63: D57's model for every place and arrangement) ----
 
     // A window with limits `c` fits zone `zone` of `area`: fitsFrame on the zone's frame as its glyph shows it (zoneFrame). The
