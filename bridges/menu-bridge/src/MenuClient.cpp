@@ -16,8 +16,12 @@ namespace gf::menubridge {
         constexpr int kCallTimeoutMs = 3000;
         // Bursts of LayoutUpdated / ItemsPropertiesUpdated collapse into one GetLayout.
         constexpr int kRefetchDelayMs = 40;
-        // Consecutive failed re-reads of a menu that was shown before the bridge gives up on it.
-        constexpr int kMaxFailures = 3;
+        // Consecutive failed reads before the bridge gives up on a menu, the first read included. A failed read is tried
+        // again after kRetryDelayMs, doubled each time (0.5, 1, 2 s), and a menu shown before stays shown meanwhile: an
+        // application busy for longer than a call's timeout (Files drawing the Applications location on a loaded machine:
+        // GetLayout NoReply) or whose menu object is not exported yet gets its menu once it answers, about 15 s at most.
+        constexpr int kMaxFailures  = 4;
+        constexpr int kRetryDelayMs = 500;
     } // namespace
 
     MenuClient::MenuClient(const QDBusConnection& bus, QString window, QString service, QString path, QObject* parent) :
@@ -25,6 +29,8 @@ namespace gf::menubridge {
         m_refetch.setSingleShot(true);
         m_refetch.setInterval(kRefetchDelayMs);
         connect(&m_refetch, &QTimer::timeout, this, &MenuClient::fetch);
+        m_retry.setSingleShot(true);
+        connect(&m_retry, &QTimer::timeout, this, &MenuClient::fetch);
 
         m_watcher.setConnection(m_bus);
         m_watcher.setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
@@ -34,6 +40,7 @@ namespace gf::menubridge {
                 return;
             m_gone = true;
             m_refetch.stop();
+            m_retry.stop();
             emit failed(m_window, QStringLiteral("gone"), QStringLiteral("the application left the bus"));
         });
     }
@@ -97,10 +104,12 @@ namespace gf::menubridge {
             log(QStringLiteral("window %1: menu of %2 has more than %3 items or %4 levels: refused").arg(m_window, m_service).arg(limits::kItems).arg(limits::kDepth));
             m_stopped = true;
             m_refetch.stop();
+            m_retry.stop();
             emit failed(m_window, QStringLiteral("oversized"), QStringLiteral("the menu is larger than the supported limits"));
             return;
         }
         m_failures = 0;
+        m_retry.stop();
         LayoutBudget mapBudget;
         m_items = mapChildren(root, mapBudget);
         m_index = indexItems(m_items);
@@ -111,13 +120,17 @@ namespace gf::menubridge {
     }
 
     void MenuClient::fail(const QString& code, const QString& why) {
-        // The first layout never arrived: the menu cannot be shown. Later failures keep the previous menu until the
-        // application keeps failing.
-        if (!m_ready || ++m_failures >= kMaxFailures) {
+        // Read again later (a menu shown before stays shown), until the application keeps failing. The first read used
+        // to fail at once: a window whose application was busy past the timeout showed the T0 menus until its next focus.
+        if (++m_failures >= kMaxFailures) {
             m_stopped = true;
             m_refetch.stop();
+            m_retry.stop();
             emit failed(m_window, code, why);
+            return;
         }
+        log(QStringLiteral("window %1: reading its menu again in %2 ms (%3 of %4)").arg(m_window).arg(kRetryDelayMs << (m_failures - 1)).arg(m_failures).arg(kMaxFailures));
+        m_retry.start(kRetryDelayMs << (m_failures - 1));
     }
 
     void MenuClient::track(const QDBusMessage& message, std::function<void(const QDBusMessage&)> handler) {

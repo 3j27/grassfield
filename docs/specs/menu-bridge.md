@@ -50,7 +50,10 @@ top-level menus (Left/Right).
   as [])`, `AboutToShow(int32)`, `Event(int32 id, "clicked", variant<int32 0>, uint32 0)`. `LayoutUpdated` and
   `ItemsPropertiesUpdated` trigger one coalesced `GetLayout` (40 ms); `AboutToShow` returning `needUpdate` too. The
   menu is dropped (`gone`) when the unique name leaves the bus (NameOwnerChanged) and on `close`. Calls time out after
-  3 s; at most 16 windows have an open menu (least recently opened dropped).
+  3 s; at most 16 windows have an open menu (least recently opened dropped). A failed `GetLayout`, the first one too, is
+  read again after 0.5, 1 and 2 s (a menu shown before stays shown); the fourth failure in a row is `layout-failed`. An
+  application busy past the timeout (Files drawing the Applications location on a loaded machine answered NoReply and its
+  window kept T0, website captures of 2026-10-30) gets its menus once it answers.
 - **MB7 Mapping (untrusted application).** Only known properties are read (`label`, `enabled`, `visible`, `type`,
   `toggle-type`, `toggle-state`, `children-display`, `icon-name`, `shortcut`); wrong types fall back to the DBusMenu
   defaults. Labels: `_x` mnemonic markers removed (`__` → `_`), control and bidirectional formatting characters
@@ -331,7 +334,8 @@ application localized them; Grassfield strings use `qsTr()`.
 - Electron (MB17): every window of an app shows the menu of its newest registered window (Electron's window id cannot be
   mapped to a Wayland window), so with two Obsidian windows the second one's menu shows over the first as well, until
   one of them registers again. A new window shows T0 for the 300 ms a registration takes to settle; a menu object slower
-  than that fails its first read (`layout-failed`: T0, the app refused 2 s, its menus back at the window's next focus).
+  than that is read again (MB6) and shows once exported; one that never answers is `layout-failed` after about 15 s (T0,
+  the app refused 2 s, its menus back at the window's next focus).
 - An item's action reaches the application once its window has the keyboard back after the menu closed, about 30 ms
   later, 300 ms at most (MB12; macOS blinks the chosen item, then runs the action); the item does not blink.
 - Sandboxed apps behind a D-Bus proxy (Flatpak) fail the pid check (`pid-mismatch`) and keep T0: a later rule is
