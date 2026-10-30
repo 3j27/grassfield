@@ -156,14 +156,15 @@ patching any upstream package (D1).
     that changes them makes the stand-in fall back, never guess. When the compositor plugin is present, a later step may
     replace the parsing by a `gfc/1` event (ADR-0007) from `CANRManager` carrying the pid itself; not required.
   - Every other call (Safe Mode, permission prompts if ever enabled, an unknown button set) and every case where the shell does
-    not answer within 1 s execs `/usr/bin/hyprland-dialog` with the same arguments, keeping Hyprland's PID-based special
-    treatment (uncloseable, priority focus).
+    not answer within 1 s (10 s since decision 3-16: a shell under load is waited for) execs `/usr/bin/hyprland-dialog` with
+    the same arguments, keeping Hyprland's PID-based special treatment (uncloseable, priority focus).
   - `misc.anr_missed_pings = 3` (about 4.5 s, Omarchy's value in its own looknfeel; macOS shows the wait cursor after a few
     seconds).
 - macOS's spinning cursor over the hung window: Hyprland already tints the hung window (`m_notRespondingTint = 0.2`); a wait
   cursor needs the compositor plugin and is left to a later step (known limitation).
 - Fallback: shell absent (safe mode, crash, restart): the stock dialog, which still works. Never blocks: Hyprland does not wait
-  on the dialog (async), and the stand-in's IPC call has a 1-s deadline.
+  on the dialog (async), and the stand-in's IPC call has a 1-s deadline (10 s since decision 3-16; no shell still ends it at
+  once).
 - Cost: one stand-in script, one IPC target `anr` (`report`, dev `status`), Force Quit and Dock changes, tests with a fake
   Hyprland caller (one pid, two pids sharing class and title, pid reuse between mark and confirm). Risk: a Hyprland release
   that changes the text or the buttons → the stand-in falls back to the stock dialog (a test pins the strings of the installed
@@ -176,7 +177,7 @@ patching any upstream package (D1).
   (`--title T --text X --buttons B`, nothing else), tries every " - " split of "{title} - {class}" against
   `hyprctl -j clients` (read with `python3 -I`), and with exactly one (split, client pid above 1) match asks
   `qs ipc -p /usr/share/grassfield/shell call anr report <its pid> <pid> c:<class> t:<title> i:<instance>` under
-  `timeout -k 0.2 1` (decision 3-11). On `ok` it `exec`s `sleep infinity` (same pid, silent, nothing forked) until
+  `timeout -k 0.2 1` (decision 3-11; `timeout -k 1 10` since decision 3-16). On `ok` it `exec`s `sleep infinity` (same pid, silent, nothing forked) until
   Hyprland kills it (decision 3-12); in every other case it `exec`s `/usr/bin/hyprland-dialog` with the same arguments.
 - `shell/services/NotResponding.qml` (singleton, IPC target `anr`: `report` action, `status` dev) and its pure decisions
   `NotResponding.js`: a report is refused for a pid of 1 or below, an empty class, another compositor's instance, and a
@@ -287,6 +288,16 @@ patching any upstream package (D1).
   parser of a format that is not an interface). **Choice: (b)**: the user must see what went wrong without a terminal, and
   Hyprland's bar does that today; the macOS look of that one surface waits for a source that works. Recorded for the owner:
   an upstream report (`eval` clearing the config errors) is theirs to decide.
+- **3-16. How long the stand-in waits for the shell** (capture defect of 2026-10-30: under heavy load the shell's "ok" came
+  after the 1-s deadline, and Hyprland's stock English `hyprland-dialog` showed in a French session, its name in the menu
+  bar). Options: (a) keep 1 s; (b) a longer bound on the same single call: `qs ipc` ends by itself at once when no shell runs
+  or the shell refuses (the stock dialog then shows at once), so the bound only matters for a live shell that is slow or hung;
+  (c) never fall back while the shell's process lives (a hung shell would leave no Force Quit and no dialog). **Choice: (b),
+  10 s** (`timeout -k 1 10`): twice the 5-s answer the shell watchdog takes as alive (ADR-0041 SQ-5), so a shell that is only
+  slow is waited for, and only a shell that hangs past it leaves the stock dialog, the one way out then (macOS shows only its
+  own cues: the stock alert is the last resort, never the answer to load). An app that answers during the wait gets the
+  stand-in killed by Hyprland; the orphaned `qs ipc` call ends within the bound, and a mark it still makes goes within 250 ms
+  (3-4: its stand-in is gone). Same pid and arguments as before for every fallback.
 
 ### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
 - **Two processes, two bus names** (review of PR #13, MAJOR 4): the frontend chooses a backend from its `.portal` files when
