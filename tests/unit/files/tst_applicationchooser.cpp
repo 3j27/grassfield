@@ -4,6 +4,8 @@
 // and a panel that closes unanswered when its owner (a job) goes. In files-kio-tests (tst_kiodialogs.cpp's main: a scratch
 // home, offscreen): the applications are desktop files of the scratch XDG_DATA_HOME, KDE's service cache built from them.
 #include "applicationchooser.h"
+#include "filesapp.h"
+#include "kioprompts.h"
 
 #include <QCoreApplication>
 #include <QDeadlineTimer>
@@ -201,4 +203,46 @@ TEST(ApplicationChooser, ThePanelGoesWithItsOwner)
     spin();
     EXPECT_EQ(answered, 0);
     delete late;
+}
+
+// Open With > Other… (FilesApp::chooseApplication): the panel for the selection; the application chosen opens it
+// (FilesApp::openWith: here the session blocks launches, which tells openWith was reached); an application of the
+// Applications location is no document and gets no panel.
+TEST(ApplicationChooser, OtherOpensWithTheChosenOne)
+{
+    installApplications();
+    qputenv("GRASSFIELD_FILES_NO_LAUNCH", "1");
+    FilesApp app(QList<QUrl>{});
+    auto *chooser = qobject_cast<ApplicationChooser *>(app.applicationChooser());
+    ASSERT_NE(chooser, nullptr);
+    QList<QPair<int, QVariantMap>> opened;
+    QStringList failures;
+    QObject::connect(chooser, &ApplicationChooser::opened, chooser, [&](int id, const QVariantMap &request) {
+        opened.append({id, request});
+    });
+    QObject::connect(&app, &FilesApp::operationFailed, &app, [&failures](const QString &message) {
+        failures << message;
+    });
+    app.chooseApplication({QUrl(QStringLiteral("grassfield-app:/org.example.GfChooseA"))});
+    EXPECT_TRUE(opened.isEmpty()) << "an application is no document";
+    EXPECT_EQ(failures.size(), 1);
+    failures.clear();
+    const QList<QUrl> docs{QUrl::fromLocalFile(QDir::tempPath() + QStringLiteral("/a.txt")), QUrl::fromLocalFile(QDir::tempPath() + QStringLiteral("/b.txt"))};
+    app.chooseApplication(docs);
+    ASSERT_EQ(opened.size(), 1);
+    EXPECT_EQ(opened.first().second.value(QStringLiteral("count")).toInt(), 2);
+    EXPECT_TRUE(opened.first().second.value(QStringLiteral("applications")).toStringList().contains(kA));
+    chooser->answer(opened.first().first, 0, {{QStringLiteral("choice"), kA}});
+    EXPECT_TRUE(failures.isEmpty());
+    spin();
+    EXPECT_EQ(failures, QStringList({QStringLiteral("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH).")}))
+        << "openWith was asked to open them with the chosen application";
+    // Cancel opens nothing.
+    failures.clear();
+    app.chooseApplication(docs);
+    ASSERT_EQ(opened.size(), 2);
+    chooser->answer(opened.last().first, 1);
+    spin();
+    EXPECT_TRUE(failures.isEmpty());
+    qunsetenv("GRASSFIELD_FILES_NO_LAUNCH");
 }

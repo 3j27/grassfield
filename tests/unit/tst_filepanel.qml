@@ -1109,6 +1109,19 @@ TestCase {
         fakeApp.viewMode = "icons";
     }
 
+    // The last choice never replaces an application the user selected while the listing loaded.
+    function test_the_last_choice_never_over_a_choice(): void {
+        test.slowApplications = true;
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tab.folder.select(test.rowOf(tab.folder, "org.gnome.TextEditor"), 0);
+        compare(tab.folder.selectedCount, 1);
+        tab.folder.loading = false;
+        wait(50);
+        compare(tab.folder.expected.length, 0, "the user's choice stays");
+    }
+
     function test_the_last_choice_once_the_listing_has_loaded(): void {
         test.slowApplications = true;
         const panel = test.openPanel(test.appRequest({}));
