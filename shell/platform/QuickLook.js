@@ -13,3 +13,11 @@ function isQuickLook(appId) {
     const id = String(appId === undefined || appId === null ? "" : appId).replace(/\.desktop$/i, "").toLowerCase();
     return id !== "" && IDS.indexOf(id) >= 0;
 }
+
+// Who opened a quick look that now has the focus: the desktop when the desktop took the keyboard more recently than the last
+// regular window got the focus (`desktopHeldAt`, `regularAt`: ms stamps, 0 = never), else that window. macOS: Quick Look from the
+// desktop keeps the Finder's menus, from an app that app's. Stamps, not the state at the moment of the focus change: the
+// desktop lets go of the keyboard and the quick look is focused in an order the compositor decides.
+function openerIsDesktop(desktopHeldAt, regularAt) {
+    return (desktopHeldAt || 0) > (regularAt || 0);
+}

@@ -54,6 +54,16 @@ TestCase {
         compare(apps.map(a => a.key), ["org.grassfield.Files"]);
     }
 
+    // Review MINOR 2: a quick look opened from the desktop belongs to the desktop (macOS: the Finder's menus), not to the last window.
+    function test_theDesktopIsTheOpenerWhenItTookTheKeyboardLast() {
+        verify(QuickLook.openerIsDesktop(2000, 1000), "the desktop took the keyboard after the window got the focus");
+        verify(!QuickLook.openerIsDesktop(1000, 2000), "the window was focused after the desktop");
+        verify(!QuickLook.openerIsDesktop(0, 0), "nothing happened yet: no desktop");
+        verify(!QuickLook.openerIsDesktop(undefined, 5), "no desktop stamp");
+        verify(QuickLook.openerIsDesktop(5, undefined), "the desktop and no window at all");
+        verify(!QuickLook.openerIsDesktop(1000, 1000), "a tie keeps the window");
+    }
+
     function test_aPinnedAppWithOnlyAQuickLookIsNotRunning() {
         const list = DockModel.merge(["org.grassfield.Preview"], [{appId: "org.grassfield.Preview.Glance", ref: "g1"}], lookup);
         compare(list.length, 1);

@@ -29,12 +29,19 @@ Singleton {
 
     // Quick Look (Glance, platform/QuickLook.js) belongs to the app that opened it (macOS): while it has the focus the menu
     // bar and the app menus stay with the window that was in front before it. `regularToplevel` is the last focus that was not
-    // a quick look (null: the desktop or nothing). Anything that acts on the focused window keeps using focusedToplevel.
+    // a quick look, `regularAt` when it got it; `desktopHeldAt` is when the desktop last took the keyboard. A quick look opened
+    // from the desktop (the desktop took the keyboard after that window) belongs to the desktop. Anything that acts on the
+    // focused window keeps using focusedToplevel.
     readonly property bool quickLookFocused: !!focusedToplevel && QuickLook.isQuickLook(focusedToplevel.appId)
     property var regularToplevel: null
+    property real regularAt: 0
+    property real desktopHeldAt: 0
+    readonly property bool quickLookFromDesktop: quickLookFocused && QuickLook.openerIsDesktop(desktopHeldAt, regularAt)
     readonly property var frontToplevel: {
         if (!quickLookFocused)
             return focusedToplevel;
+        if (quickLookFromDesktop)
+            return null;
         const list = toplevels ? toplevels.values : [];
         return regularToplevel && list.indexOf(regularToplevel) >= 0 ? regularToplevel : null;
     }
@@ -1549,8 +1556,19 @@ Singleton {
     // either (it could be the quick look itself) and the id's arrival is looked at too. The quick look test reads the id
     // directly: the quickLookFocused binding may not have caught up yet when this runs.
     function noteRegularFocus(): void {
-        if (focusedToplevel && focusedToplevel.appId !== "" && !QuickLook.isQuickLook(focusedToplevel.appId))
+        if (focusedToplevel && focusedToplevel.appId !== "" && !QuickLook.isQuickLook(focusedToplevel.appId)) {
             regularToplevel = focusedToplevel;
+            regularAt = Date.now();
+        }
+    }
+
+    Connections {
+        target: DesktopState
+
+        function onHoldsKeyboardChanged(): void {
+            if (DesktopState.holdsKeyboard)
+                root.desktopHeldAt = Date.now();
+        }
     }
 
     onFocusedAppIdChanged: noteRegularFocus()

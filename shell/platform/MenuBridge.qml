@@ -245,7 +245,7 @@ Singleton {
         if (address !== "") {
             const appId = appIdAt(address);
             if (QuickLook.isQuickLook(appId))
-                address = root.regularWindow;
+                address = Compositor.quickLookFromDesktop ? "" : root.regularWindow;
             else if (appId !== "")
                 root.regularWindow = address;
         }
