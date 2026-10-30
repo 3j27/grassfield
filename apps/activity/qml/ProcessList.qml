@@ -4,8 +4,8 @@ import Grassfield.Ui
 
 // The table of processes (spec AM10 to AM19): Files' list header and rows (ADR-0038 AD24), with the tab's shown columns.
 // A click on a header sorts by it, again reverses; a header's right edge resizes its column; the headers' context menu shows
-// and hides the optional columns. The rows keep their identity across samples (the model never resets), so the scroll
-// position never jumps (AM11).
+// and hides the optional columns; a row's opens the window's action menu (step 2c). The rows keep their identity across
+// samples (the model never resets), so the scroll position never jumps (AM11).
 FocusScope {
     id: root
 
@@ -19,6 +19,9 @@ FocusScope {
     property var liveWidths: ({})
     // The headers' context menu (the tests open it).
     readonly property alias headerMenu: headerMenu
+
+    // A row's context menu (AM50): the window opens its action menu at (x, y) in this item, the row selected first.
+    signal contextMenuRequested(real x, real y)
 
     function baseWidth(column: var): real {
         if (root.liveWidths[column.key] !== undefined)
@@ -363,9 +366,17 @@ FocusScope {
 
             MouseArea {
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onPressed: mouse => {
                     list.forceActiveFocus();
+                    // The context menu acts on the row under the pointer: it is selected first unless it already is (AM50).
+                    if (mouse.button === Qt.RightButton) {
+                        if (!row.selected && !row.group)
+                            root.table.click(row.index, 0);
+                        const p = mapToItem(root, mouse.x, mouse.y);
+                        root.contextMenuRequested(p.x, p.y);
+                        return;
+                    }
                     // The disclosure triangle (and a little around it) opens or closes the row; elsewhere a click selects.
                     const triangle = Tokens.spacingSm + row.depth * Tokens.activityTreeIndent;
                     if (root.outline && row.expandable && mouse.x >= triangle - Tokens.spacingXs

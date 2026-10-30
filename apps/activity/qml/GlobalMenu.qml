@@ -111,5 +111,20 @@ Platform.MenuBar {
                 onTriggered: bar.backend.interval = 5
             }
         }
+
+        Platform.MenuSeparator {}
+
+        // AM50, AM55 (step 2c): the sheets of the window.
+        Platform.MenuItem {
+            text: qsTr("Quit Process")
+            shortcut: "Ctrl+Alt+Q"
+            enabled: bar.backend.actions.canQuit
+            onTriggered: bar.win.sheets.openQuit()
+        }
+        Platform.MenuItem {
+            text: qsTr("Send Signal to Process…")
+            enabled: bar.backend.actions.canSignal
+            onTriggered: bar.win.sheets.openSignal()
+        }
     }
 }

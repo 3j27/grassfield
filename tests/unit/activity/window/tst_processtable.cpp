@@ -340,6 +340,11 @@ TEST(ProcessTable, ByGpuGroupsTheClientsUnderTheirGpu)
     f.table.selectAll();
     EXPECT_EQ(f.table.selectedCount(), 3);
     EXPECT_EQ(f.table.copyText().count(QLatin1Char('\n')), 4); // the headers' line and three processes
+    // The actions' processes once each, in the table's order (step 2c, AM50).
+    QStringList acted;
+    for (const TableRow &r : f.table.selectedRows())
+        acted << r.name;
+    EXPECT_EQ(acted, (QStringList{"game", "Hyprland", "encoder"}));
 
     f.table.setExpanded(0, false); // the first GPU collapsed, kept across samples
     f.table.setRows({gpuClient(10, "game", 40, {"0000:00:02.0"}), gpuClient(40, "encoder", 10, {"0000:03:00.0"})});
