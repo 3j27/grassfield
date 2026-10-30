@@ -37,51 +37,6 @@ SettingsPage {
         root.store.setMany({"dock.magnificationEnabled": true, "dock.magnification": m});
     }
 
-    // A slider with its title above it and its end labels under it (macOS 27 Size and Magnification).
-    component DockSlider: Item {
-        id: dockSlider
-
-        property string title: ""
-        property alias slider: control
-        // The end labels: [{text, at}] with `at` 0 to 1 along the knob's travel; 0 starts at the track's start, 1 ends at its
-        // end, any other is centred on its place.
-        property var labels: []
-
-        height: parent ? parent.height : 0
-
-        Text {
-            y: Tokens.settingsDockSliderTitleBaseline - baselineOffset
-            textFormat: Text.PlainText
-            text: dockSlider.title
-            color: Appearance.colors.text
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyBodySize
-        }
-
-        Slider {
-            id: control
-            y: Tokens.settingsDockSliderCenter - height / 2
-            width: parent.width
-            accessibleName: dockSlider.title
-        }
-
-        Repeater {
-            model: dockSlider.labels
-
-            delegate: Text {
-                required property var modelData
-                readonly property real centre: control.knobWidth / 2 + modelData.at * control.travel
-                x: modelData.at === 0 ? 0 : modelData.at === 1 ? dockSlider.width - width : Math.round((centre - width / 2) * 2) / 2
-                y: Tokens.settingsDockSliderLabelBaseline - baselineOffset
-                textFormat: Text.PlainText
-                text: modelData.text
-                color: Appearance.colors.text
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
-            }
-        }
-    }
-
     SettingsGroup {
         caption: qsTr("Dock")
 

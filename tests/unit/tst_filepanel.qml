@@ -668,9 +668,21 @@ TestCase {
         tryVerify(() => panel.sheetShown);
         const sheet = test.findSheet(panel.contentItem, true);
         verify(sheet.title.indexOf("a.txt") >= 0);
+        // One name: the message speaks of it, not of them (step 4b's integrator status, MINOR).
+        compare(sheet.message, "Replacing it will overwrite its current contents.");
         sheet.confirm();
         tryVerify(() => fakeHost.answers.length === 1);
         compare(fakeHost.answers[0].map.uris, ["file:///home/u/Documents/a.txt", "file:///home/u/Documents/c.txt"]);
+    }
+
+    function test_save_files_asks_about_several_names_together(): void {
+        const panel = test.openPanel({kind: "saveFiles", files: ["a.txt", "b.png", "c.txt"], currentFolder: "file:///home/u/Documents"});
+        fakeHost.kinds = {"file:///home/u/Documents/a.txt": 1, "file:///home/u/Documents/b.png": 1};
+        panel.pressDefault();
+        tryVerify(() => panel.sheetShown);
+        const sheet = test.findSheet(panel.contentItem, true);
+        compare(sheet.title, "2 items already exist in “Documents”. Do you want to replace them?");
+        compare(sheet.message, "a.txt\nb.png\n\nReplacing them will overwrite their current contents.");
     }
 
     // SaveFiles into a folder that does not answer: the folder is not responding, never a replace question, nothing answered

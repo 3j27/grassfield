@@ -13,8 +13,8 @@ set(CMAKE_AUTOMOC ON)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../files/files-core.cmake)
 find_package(KF6WindowSystem ${KF_MIN_VERSION} REQUIRED)
 
-add_executable(grassfield-portal src/main.cpp src/filechooser.cpp src/filechooser.h src/chooserlogic.cpp src/chooserlogic.h
-    src/panelstate.cpp src/panelstate.h)
+add_executable(grassfield-portal src/main.cpp src/requesthost.cpp src/requesthost.h src/filechooser.cpp src/filechooser.h
+    src/access.cpp src/access.h src/chooserlogic.cpp src/chooserlogic.h src/panelstate.cpp src/panelstate.h)
 target_include_directories(grassfield-portal PRIVATE src)
 target_link_libraries(grassfield-portal PRIVATE grassfield-files-core KF6::WindowSystem)
 target_compile_definitions(grassfield-portal PRIVATE
@@ -28,7 +28,8 @@ if(GTest_FOUND)
     enable_testing()
     # The option mapping and the panels' memory (pure), and the D-Bus service on a private bus (its own main).
     add_executable(portal-unit-tests ../../tests/unit/portal/tst_chooserlogic.cpp ../../tests/unit/portal/tst_panelstate.cpp
-        ../../tests/unit/portal/tst_filechooser.cpp src/filechooser.cpp src/chooserlogic.cpp src/panelstate.cpp)
+        ../../tests/unit/portal/tst_filechooser.cpp ../../tests/unit/portal/tst_access.cpp src/requesthost.cpp src/filechooser.cpp
+        src/access.cpp src/chooserlogic.cpp src/panelstate.cpp)
     target_include_directories(portal-unit-tests PRIVATE src)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     target_link_libraries(portal-unit-tests PRIVATE grassfield-files-core KF6::WindowSystem Qt6::Test GTest::gtest)

@@ -250,4 +250,68 @@ TestCase {
             compare(last(t.store), {["hotCorners." + keys[i]]: "overview"});
         }
     }
+
+    Component {
+        id: dockSliderComponent
+        SettingsQml.DockSlider {
+            x: Tokens.settingsDockMagnificationX
+            width: 250
+            height: Tokens.settingsDockSlidersHeight
+            title: "Magnification"
+            // French-sized labels: "Désactivé" is wider than the room between its place and Small's.
+            labels: [{text: "Désactivé", at: 0}, {text: "Petit", at: Tokens.settingsDockMagnificationSmallAt}, {text: "Grand", at: 1}]
+        }
+    }
+
+    // The end labels never overlap, whatever the language: each starts after the one before it plus a gap, in a long
+    // language as in English.
+    function test_sliderLabelsNeverOverlap() {
+        const slider = createTemporaryObject(dockSliderComponent, testCase);
+        verify(slider);
+        waitForRendering(slider);
+        const texts = ["Désactivé", "Petit", "Grand"].map(w => find(slider, i => i.text === w && i.baselineOffset !== undefined));
+        for (const t of texts)
+            verify(t);
+        for (let i = 1; i < texts.length; i++)
+            verify(texts[i].x >= texts[i - 1].x + texts[i - 1].width + Tokens.settingsDockSliderLabelGap, "label " + i + " starts at " + texts[i].x + " after " + (texts[i - 1].x + texts[i - 1].width));
+        verify(texts[2].x + texts[2].width <= slider.width, "the last label stays inside the track's end");
+    }
+
+    // Short labels keep their measured places (macOS: Small centred under its tick), at the real 220 as at 250, and after a
+    // resize (the slider's travel changes after this item's width).
+    function test_sliderLabelsKeepTheirPlaces() {
+        const slider = createTemporaryObject(dockSliderComponent, testCase);
+        slider.labels = [{text: "Off", at: 0}, {text: "Small", at: Tokens.settingsDockMagnificationSmallAt}, {text: "Large", at: 1}];
+        for (const w of [250, 220, 300]) {
+            slider.width = w;
+            waitForRendering(slider);
+            wait(50);
+            const small = find(slider, i => i.text === "Small" && i.baselineOffset !== undefined);
+            verify(small && small.visible);
+            const centre = slider.slider.knobWidth / 2 + Tokens.settingsDockMagnificationSmallAt * slider.slider.travel;
+            verify(Math.abs(small.x + small.width / 2 - centre) <= 1, "width " + w + ": English Small stays centred on its place (" + (small.x + small.width / 2) + " vs " + centre + ")");
+        }
+    }
+
+    // At Settings' minimum window width the slider is only 40 wide: no label leaves the track and none overlaps another (a
+    // label that cannot fit whole is left out), in French and English; the real 220 shows them all.
+    function test_sliderLabelsInsideTheTrackAtTheMinimumWidth() {
+        const sets = [["Désactivé", "Petit", "Grand"], ["Off", "Small", "Large"]];
+        for (const names of sets) {
+            const slider = createTemporaryObject(dockSliderComponent, testCase);
+            slider.labels = [{text: names[0], at: 0}, {text: names[1], at: Tokens.settingsDockMagnificationSmallAt}, {text: names[2], at: 1}];
+            for (const w of [40, 220]) {
+                slider.width = w;
+                waitForRendering(slider);
+                wait(50);
+                const shown = names.map(n => find(slider, i => i.text === n && i.baselineOffset !== undefined)).filter(t => t && t.visible);
+                for (const t of shown)
+                    verify(t.x >= 0 && t.x + t.width <= w, names[0] + " at " + w + ": " + t.text + " " + t.x + " to " + (t.x + t.width) + " leaves the track");
+                for (let i = 1; i < shown.length; i++)
+                    verify(shown[i].x >= shown[i - 1].x + shown[i - 1].width + Tokens.settingsDockSliderLabelGap, names[0] + " at " + w + ": " + shown[i].text + " overlaps " + shown[i - 1].text);
+                if (w === 220)
+                    compare(shown.length, 3);
+            }
+        }
+    }
 }

@@ -304,8 +304,13 @@ void Backend::askShellToCheck(const QString &tag)
 {
     const QStringList ipc = grassfield::apps::runmode::shellIpcArgs();
     if (ipc.isEmpty()) {
-        emit failed(tag, grassfield::apps::runmode::shellIpcRefusal().left(kMaxReason));
-        emit finished(tag, false, QString());
+        // Answered on the next turn of the event loop, like a run: the pane asks while it is being built (its Component.onCompleted),
+        // before its connections to this signal exist, and a refusal emitted at once was lost and left it on "Checking" for good.
+        const QString reason = grassfield::apps::runmode::shellIpcRefusal().left(kMaxReason);
+        QTimer::singleShot(0, this, [this, tag, reason] {
+            emit failed(tag, reason);
+            emit finished(tag, false, QString());
+        });
         return;
     }
     // The running shell is named by its directory (-p), never by a configuration Quickshell would look up from QS_*.
