@@ -2583,6 +2583,10 @@
         <translation>F2</translation>
     </message>
     <message>
+        <source>Other…</source>
+        <translation>Autre…</translation>
+    </message>
+    <message>
         <source>Duplicate</source>
         <translation>Dupliquer</translation>
     </message>
@@ -4124,6 +4128,10 @@
         <translation>Choisissez une application pour ouvrir «&#xa0;%1&#xa0;».</translation>
     </message>
     <message>
+        <source>Choose an application to open the %1 selected documents.</source>
+        <translation>Choisissez une application pour ouvrir les %1 documents sélectionnés.</translation>
+    </message>
+    <message>
         <source>Choose an application.</source>
         <translation>Choisissez une application.</translation>
     </message>
@@ -4978,6 +4986,10 @@
         <translation>Aucun</translation>
     </message>
     <message>
+        <source>Other…</source>
+        <translation>Autre…</translation>
+    </message>
+    <message>
         <source>Use Groups</source>
         <translation>Utiliser les groupes</translation>
     </message>
@@ -5187,17 +5199,6 @@
     <message>
         <source>The operation can’t be completed.</source>
         <translation>L’opération ne peut pas être effectuée.</translation>
-    </message>
-</context>
-<context>
-    <name>GrassfieldOpenWithHandler</name>
-    <message>
-        <source>There is no application set to open the document “%1”.</source>
-        <translation>Aucune app n’est définie pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
-    </message>
-    <message>
-        <source>Choose one with Open With, in the File menu or the document’s menu.</source>
-        <translation>Choisissez-en une avec Ouvrir avec, dans le menu Fichier ou le menu du document.</translation>
     </message>
 </context>
 <context>
@@ -5931,6 +5932,18 @@
     <message>
         <source>Show Certificate</source>
         <translation>Afficher le certificat</translation>
+    </message>
+    <message>
+        <source>There is no application set to open the document “%1”.</source>
+        <translation>Aucune application n’est définie pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Choose an application on this computer to open it.</source>
+        <translation>Choisissez une application de cet ordinateur pour l’ouvrir.</translation>
+    </message>
+    <message>
+        <source>Choose Application…</source>
+        <translation>Choisir une application…</translation>
     </message>
     <message>
         <source>Unnamed certificate</source>

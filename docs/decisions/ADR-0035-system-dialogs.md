@@ -661,6 +661,51 @@ document and counts the choice).
 - **5b-7. Files' Open With > Other… and KIO's "no application" notice (4a-5).** Not in this step: they are Files' own process,
   where the same panel becomes a sheet of Files' window; step **5c**. Rule applied: the smallest slice.
 
+**Delivered in step 5c (Files' Open With).** `apps/files/src/applicationchooser.{h,cpp}` (owned by KioPrompts, given to QML as
+`FilesApp.applicationChooser`): a request for documents (their type's applications from KDE's associations as the candidates,
+Files left out, the type's default application as the last choice, the one document's name or their number), the panel's answer
+(a desktop id that is installed, or none), delivered after the panel has gone; a request whose job ends takes its panel away
+unanswered. `FilesApp.chooseApplication(urls)`: Open With > Other… in the item menu and the File menu (`BrowserTab.qml`,
+`GlobalMenu.qml`). `GrassfieldOpenWithHandler`: KIO's question for a type with no application is a sheet ("noApplication",
+`KioSheetsLogic.js`), and Choose Application… opens the panel; the chosen application is KIO's `serviceSelected`, anything else
+`canceled`. `Main.qml` makes each panel (FilePanel.qml, kind `application`, no FileChooser host) modal over the browser window
+the user worked in, and gives that window back what follows (errors, KIO's questions). With the integrator's nested pass of
+f9a25ce (follow-ups for this step): the column view's active column follows a column replaced at its place (`ColumnView.qml`:
+the panel read the tab's own listing, Open stayed disabled); the last choice is preselected in the listing shown, never over a
+choice; a click on a dimmed item keeps the selection (`FolderModel::select`); the late-focus clock starts at the first frame,
+and a click that brings a panel the keyboard holds nothing; Choose Application's line cuts the document's name in its middle and
+decodes an address; Get Info's and the preview's "Where" go through `DisplayName.text`; x-d-p-gtk's Cancel relays no empty
+choice. Tests: `tests/unit/files/tst_applicationchooser.cpp`, `tst_kiodialogs.cpp` (a type with no application through a real
+OpenUrlJob: the sheet, the panel, the chosen application started with the document; Cancel on either; a job killed under its
+panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.qml`, `tst_filesbrowser.qml`,
+`tst_filescolumns.qml`, `tst_filepanel.qml`, `tst_appchooser.cpp`, `tests/shell/display_names.sh` (a raw path).
+
+**Decisions of step 5c** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **5c-1. Open With > Other….** Options: (a) only the applications KDE associates with the type; (b) the list, then Other…,
+  which opens Choose Application; (c) KDE's `KOpenWithDialog`. **Choice: (b)**: Finder's Open With ends with Other…; with no
+  application for the type, Open With is Other… alone (it was a dimmed item). In the item menu and the File menu; not for a
+  folder, in the Trash or in Applications (Open With is not there).
+- **5c-2. Where the panel shows.** Options: (a) a sheet inside the Files window (5b-7's wording); (b) the Choose Application
+  window, modal to the Files window the user worked in (`transientParent`, Qt's window modality: Hyprland centres it over that
+  window, dims and blocks it, as for an application's panel); (c) a window that blocks every Files window. **Choice: (b)**:
+  macOS's Choose Application is a panel of its own run modally, not a sheet, and it is the panel the portal shows; (c) is macOS's
+  application-modal run, but Hyprland marks only the parent, so the other Files windows would look usable and ignore clicks.
+  This settles 5b-7's "sheet".
+- **5c-3. A type with no application** (KIO's `OpenWithHandlerInterface`; 4a-5's notice). Options: (a) keep the notice; (b)
+  Finder's alert, "There is no application set to open the document “X”.", with Choose Application… (the default) and Cancel,
+  then the panel; (c) the panel at once. **Choice: (b)**: Finder's alert without its App Store button (no store here); Return
+  chooses, Esc cancels; the chosen application opens the document (KIO starts it); Cancel on either opens nothing.
+- **5c-4. "Always Open With".** Options: (a) no box, as 5b-3; (b) a box that sets the type's default application
+  (mimeapps.list); (c) a box that binds that document to the application. **Choice: (a)**: macOS's box binds that one document
+  (a per-document setting with no store here, and no reader: KIO and the frontend look at the type); the type's default is Get
+  Info's "Change All…" in macOS, which Files does not have yet (an open item, not this dialog).
+- **5c-5. Several documents.** Options: (a) one panel for all; (b) one per document. **Choice: (a)**: Finder's Open With acts
+  on the selection; the line reads "Choose an application to open the N selected documents."; the candidates are the first
+  document's type's, as in the Open With list above it.
+- **5c-6. An answer that cannot be kept.** An application no longer installed when Open is pressed opens nothing (never another
+  one); KIO's question then ends as cancelled. A request whose job ends (KIO killed it) closes its panel unanswered. With no
+  browser window (`--info`), nothing is asked: Cancel.
+
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
   xdph runs on this machine, Omarchy's `xdph.conf` choice and xdph's default) ask the shell to show the Grassfield picker and
@@ -1442,7 +1487,8 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
   Files' sources ever enable it.
 - **4a-5. No application set for a document's type** (`OpenWithHandlerInterface`). Options: (a) KDE's `KOpenWithDialog` until
   step 5; (b) a Grassfield notice that names the document and points to Open With; (c) the Choose Application sheet now.
-  **Choice: (b)**: no KDE dialog, and the sheet of section 2 stays step 5's (D-5); step 5 replaces the notice with it.
+  **Choice: (b)**: no KDE dialog, and the sheet of section 2 stays step 5's (D-5); step 5 replaces the notice with it (done in
+  step 5c: decision 5c-3).
 - **4a-6. "Always trust".** After Continue on a certificate, KIO's http worker asks a second question on the same job: accept
   the certificate "Forever" or for the "Current Session only" (30 minutes; `kioworkers/http/http.cpp:310-336`). Options:
   (a) show it as a second sheet; (b) answer it from the first sheet's "Always trust “host”" box (unticked at every opening).
@@ -1578,8 +1624,8 @@ requests #8, #9 and #10 are merged (owner).
    request #7 (views). In two pull requests (decision 4a-1): **4a**, the delegates and sheets in Files; **4b**, the library
    split and the portal.
 5. **Open With and permission alerts** (D-5), in two pull requests (decision 5a-1): **5a**, the permission alerts (Access);
-   **5b**, Open With (AppChooser); then **5c**, Files' Open With > Other… and KIO's "no application" notice as the same panel
-   (decision 5b-7).
+   **5b**, Open With (AppChooser); then **5c**, Files' Open With > Other… and KIO's "no application" question as the same panel
+   (decisions 5b-7, 5c-1 to 5c-6).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording
