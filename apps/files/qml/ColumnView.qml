@@ -376,6 +376,8 @@ FocusScope {
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
                     text: DisplayName.text(entry.name)
+                    // At the left edge, also a name that starts with a right-to-left letter (as in the list view).
+                    horizontalAlignment: Text.AlignLeft
                     elide: Text.ElideMiddle
                     color: entry.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily

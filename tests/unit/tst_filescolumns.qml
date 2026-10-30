@@ -64,7 +64,7 @@ TestCase {
             }
 
             Component.onCompleted: {
-                const rows = [["Folder", true], ["note.txt", false]];
+                const rows = [["Folder", true], ["note.txt", false], ["\u05e9\u05dc\u05d5\u05dd.txt", false]];
                 for (const r of rows) {
                     listing.append({name: r[0], url: "file:///sandbox/" + r[0], iconName: "", emblem: "", selected: false, isDir: r[1],
                                     folderColor: "", folderGlyph: "", hidden: false, dimmed: false, tagColors: []});
@@ -156,6 +156,24 @@ TestCase {
         mouseClick(file, 40, file.height / 2, Qt.LeftButton);
         compare(columns.activeModel.selectedCount, 1, "a click selects in the active listing");
         fakeTab.segments = [{url: "file:///sandbox"}];
+    }
+
+    // A name that starts with a right-to-left letter keeps to the left edge, as every name (integrator nested pass of step 5c,
+    // NIT: Qt aligned it right by itself).
+    function test_aRightToLeftNameStartsAtTheLeft() {
+        tryVerify(() => rowNamed("\u05e9\u05dc\u05d5\u05dd.txt") !== null, 2000, "the column is listed");
+        const row = rowNamed("\u05e9\u05dc\u05d5\u05dd.txt");
+        const stack = [row];
+        let label = null;
+        while (stack.length && !label) {
+            const it = stack.pop();
+            if (it.effectiveHorizontalAlignment !== undefined && String(it.text).indexOf("\u05e9") >= 0)
+                label = it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        verify(label !== null, "the name's label");
+        compare(label.effectiveHorizontalAlignment, Text.AlignLeft);
     }
 
     function test_aDoubleClickOpensAFileAndAFolderOnlyWithCmd() {
