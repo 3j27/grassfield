@@ -66,8 +66,9 @@ a11y_start() {
 # a11y_end PID START: ends that process group, only while the pid is still the process started here.
 a11y_end() {
   if [[ -n $1 && $(dev_start_time "$1" 2>/dev/null) == "$2" ]] && dev_may_signal "$1"; then
-    kill -- "-$1" 2>/dev/null
-    wait "$1" 2>/dev/null
+    # Never a failure for the caller: lib.sh sets errexit, and wait returns the signal's status (143).
+    kill -- "-$1" 2>/dev/null || true
+    wait "$1" 2>/dev/null || true
   fi
   return 0
 }

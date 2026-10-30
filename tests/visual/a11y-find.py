@@ -22,6 +22,7 @@ import os
 import re
 import sys
 import time
+import warnings
 
 
 def private_bus_or_exit():
@@ -106,11 +107,22 @@ def main():
         box = {"x": r.x, "y": r.y, "width": r.width, "height": r.height}
     except Exception:
         pass
-    print(json.dumps(dict(name=node.get_name(), role=node.get_role_name(), **box), ensure_ascii=False))
+    actions = []
+    try:
+        # get_action_name is deprecated in at-spi2-core 2.60 but still the action's untranslated name ("Press").
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            actions = [node.get_action_name(i) for i in range(node.get_n_actions())]
+    except Exception:
+        pass
+    print(json.dumps(dict(name=node.get_name(), role=node.get_role_name(), actions=actions, **box), ensure_ascii=False))
     if args.press:
+        # The "Press" action (QML Accessible.onPressAction); a radio button lists "Toggle" first, which runs nothing there.
+        names = [a.lower() for a in actions]
+        index = names.index("press") if "press" in names else 0
         try:
-            if node.get_n_actions() < 1 or not node.do_action(0):
-                print("a11y-find: the control has no action to run", file=sys.stderr)
+            if not actions or not node.do_action(index):
+                print("a11y-find: the control has no action to run (%s)" % actions, file=sys.stderr)
                 return 1
         except Exception as e:
             print("a11y-find: the action failed: %s" % e, file=sys.stderr)
