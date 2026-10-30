@@ -20,11 +20,13 @@ Window {
     id: panel
 
     required property var app
-    // FileChooser (apps/portal/src/filechooser.h): the disk probes and, for an Open or Save panel, the answer.
+    // FileChooser (apps/portal/src/filechooser.h): the disk probes and, for an Open or Save panel, the answer. Null for Files'
+    // own Choose Application panels.
     required property var host
-    // AppChooser (apps/portal/src/appchooser.h): the answer of a Choose Application panel.
+    // AppChooser (apps/portal/src/appchooser.h), or in Files ApplicationChooser (apps/files/src/applicationchooser.h): the
+    // answer of a Choose Application panel.
     property var appHost: null
-    // FilePanels.qml.
+    // FilePanels.qml, or Files' Main.qml.
     required property var manager
     required property int requestId
     // chooser::toQml.
@@ -59,6 +61,9 @@ Window {
             return String(panel.request.title);
         if (panel.request.filename)
             return qsTr("Choose an application to open the document “%1”.").arg(DisplayName.text(String(panel.request.filename)));
+        // Files' Open With > Other… for several documents.
+        if (panel.request.count > 1)
+            return qsTr("Choose an application to open the %1 selected documents.").arg(panel.request.count);
         if (panel.request.uri)
             return qsTr("Choose an application to open “%1”.").arg(String(panel.request.uri));
         return qsTr("Choose an application.");
@@ -75,7 +80,7 @@ Window {
             values[choices[i].id] = choices[i].initial;
         return values;
     }
-    readonly property string appName: panel.host.appName(panel.request.appId)
+    readonly property string appName: panel.host ? panel.host.appName(panel.request.appId) : ""
     readonly property string acceptText: panel.request.acceptLabel !== "" ? panel.request.acceptLabel : panel.kind === "open" || panel.choosingApp ? qsTr("Open") : qsTr("Save")
     readonly property bool acceptEnabled: {
         if (panel.answered)
@@ -441,7 +446,8 @@ Window {
     onFilterChanged: tab.applyChooser()
 
     onFrameSwapped: {
-        if (panel.manager.testAnswer === "" || panel.testAnswered)
+        // Files' Main.qml has no test answer.
+        if (!panel.manager.testAnswer || panel.testAnswered)
             return;
         panel.testAnswered = true;
         const answer = panel.manager.testAnswer;

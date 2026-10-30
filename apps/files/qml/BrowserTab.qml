@@ -768,11 +768,15 @@ FocusScope {
         const items = [];
         items.push({id: "open", text: qsTr("Open")});
         const allFiles = rows.every(r => !model.isDirAt(r));
-        const apps = allFiles ? root.app.applicationsFor(model.selectedUrls()) : [];
-        if (apps.length > 0) {
+        if (allFiles) {
+            // Finder's submenu: the type's applications, then Other…, the Choose Application panel (ADR-0035 5c-1).
+            const apps = root.app.applicationsFor(model.selectedUrls());
             const sub = [];
             for (let i = 0; i < apps.length; i++)
                 sub.push({id: "app:" + apps[i].id, text: apps[i].name});
+            if (sub.length > 0)
+                sub.push({separator: true});
+            sub.push({id: "openWithOther", text: qsTr("Other…")});
             items.push({id: "openWith", text: qsTr("Open With"), submenu: sub});
         } else {
             items.push({id: "openWith", text: qsTr("Open With"), enabled: false});
@@ -909,6 +913,10 @@ FocusScope {
     function runAction(id: string, model: var): void {
         if (id.startsWith("app:")) {
             root.app.openWith(id.substring(4), model.selectedUrls());
+            return;
+        }
+        if (id === "openWithOther") {
+            root.app.chooseApplication(model.selectedUrls());
             return;
         }
         if (id.startsWith("view:")) {

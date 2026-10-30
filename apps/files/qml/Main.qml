@@ -111,6 +111,69 @@ QtObject {
             });
     }
 
+    // Files' Choose Application panels (ADR-0035 D-5, step 5c): Open With > Other… and KIO's question when a document's type
+    // has no application (FilesApp.applicationChooser, src/applicationchooser.h). Each is grassfield-portal's panel
+    // (FilePanel.qml, kind "application"), modal to the browser window the user worked in: {panel, over} by request id.
+    property var applicationPanels: ({})
+    property Component applicationPanel: Component {
+        FilePanel {}
+    }
+    property Connections applicationRequests: Connections {
+        target: root.app.applicationChooser ?? null
+        function onOpened(id: int, request: var): void {
+            root.openApplicationPanel(id, request);
+        }
+        function onClosed(id: int): void {
+            root.closeApplicationPanel(id);
+        }
+    }
+
+    function openApplicationPanel(id: int, request: var): void {
+        const over = root.lastActiveWindow ?? (root.windows.length > 0 ? root.windows[root.windows.length - 1] : null);
+        const panel = over ? root.applicationPanel.createObject(root, {
+            app: root.app,
+            host: null,
+            appHost: root.app.applicationChooser,
+            manager: root,
+            requestId: id,
+            request: request,
+            transientParent: over
+        }) : null;
+        if (!panel) {
+            // No browser window (--info), or the panel could not be made: nothing is chosen.
+            if (over)
+                console.warn("grassfield-files: cannot make the Choose Application panel:", root.applicationPanel.errorString());
+            root.app.applicationChooser.answer(id, 1, {});
+            return;
+        }
+        const next = Object.assign({}, root.applicationPanels);
+        next[id] = {
+            panel: panel,
+            over: over
+        };
+        root.applicationPanels = next;
+        panel.visible = true;
+    }
+
+    // The request ended (answered, or its job went): the panel goes, and what follows (the chosen application's errors, KIO's
+    // questions) shows in the window it was over.
+    function closeApplicationPanel(id: int): void {
+        const entry = root.applicationPanels[id];
+        if (!entry)
+            return;
+        const next = Object.assign({}, root.applicationPanels);
+        delete next[id];
+        root.applicationPanels = next;
+        if (root.lastActiveWindow === entry.panel)
+            root.lastActiveWindow = root.windows.indexOf(entry.over) >= 0 ? entry.over : null;
+        if (root.promptWindow === entry.panel) {
+            root.promptWindow = null;
+            root.placePrompt();
+        }
+        entry.panel.visible = false;
+        entry.panel.destroy();
+    }
+
     function springStarted(tab: var): void {
         if (root.springTabs.indexOf(tab) < 0)
             root.springTabs = root.springTabs.concat([tab]);
