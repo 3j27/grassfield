@@ -847,13 +847,19 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   aside meanwhile, and Cancel in the Save panel brings it back with its choices (macOS ends the print there; Grassfield loses
   nothing the user chose). Only an application that can make a PDF (its `supported_output_file_formats`) gets the button; the
   file written is only a PDF, through a temporary file renamed over the target.
-- **6-4. What the job carries.** GTK renders only the pages asked, scaled and turned, in the collation and order asked, and
-  makes neither the copies nor the pages per sheet for a printer. Options: (a) every choice again as CUPS options; (b) only
-  what GTK leaves to the printer. **Choice: (b)**: copies, collation, paper, two sides and colour; never the page ranges, the
-  scale or the orientation, which (a) would apply twice (pages 3–5 of a three-page file print nothing).
+- **6-4. What the job carries.** GTK renders only the pages asked, scaled and turned, in the collation and order asked. GTK 4
+  makes neither the copies nor the pages per sheet for a printer, but makes both for a file; GTK 3.24 always makes both (its
+  `manual_num_copies` is the settings' `n-copies`, gtk/gtkprintoperation-portal.c). Options: (a) every choice again as CUPS
+  options; (b) only what GTK leaves to the printer. **Choice: (b)**, with the copies taken from GTK: the answer always gives GTK
+  `n-copies` "1", and the job asks the printer for the copies and their collation, with the paper, the two sides and the colour;
+  never the page ranges, the scale or the orientation, which (a) would apply twice (pages 3–5 of a three-page file print
+  nothing). The first build gave GTK the copies too, and a GTK 3 application printed n × n of them (review of step 6a, MAJOR).
+  The page setup names its paper without a `PPDName` (GTK takes any `PPDName` key, an empty one too, over `Name`).
 - **6-5. Tokens.** Good once, for the application that got it, for five minutes (x-d-p-gtk's rule, src/print.c), at most 64 kept;
   a token this backend did not give (x-d-p-gtk's, after a PreparePrint it served) or an expired one goes to x-d-p-gtk, which
-  knows its own or asks.
+  knows its own or asks. A live token keeps grassfield-portal from quitting when idle (GTK may take a while to render a long
+  document, and the Print would otherwise land in x-d-p-gtk's dialog); its expiry starts the idle time again (review of step
+  6a, MINOR 2).
 - **6-6. No printer.** The Printer pop-up says "No Printers Available" (or "Printers Not Responding" when CUPS does not answer),
   with Add Printer… opening Settings > Printers (`grassfield-settings --section=printers`); Print is dimmed; Save as PDF stays.
 - **6-7. A job that does not go.** The application gets response 2 (GTK tells it the print failed); no alert of Grassfield's in
@@ -863,8 +869,10 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   only the first of those and then falls back to US Letter whatever the printer says (found by print_cups.sh), so the backend
   reads them itself.
 - **6-9. The printer first shown.** The application's last one (its settings' "printer": GTK applications keep it), else CUPS's
-  default, else the first; another printer keeps the choices made where it takes them (its paper, two sides and colour), and
-  pages being typed stay as typed. No memory of Grassfield's in 6a ("Last Used Settings" is 6b's).
+  default, else the first; another printer keeps the choices made where it takes them (its paper, two sides and colour; the
+  copies within its limit, and their collation), and pages being typed stay as typed. Print waits while the new printer's
+  options are read (the button dimmed, Return held, the backend refusing an answer meanwhile). No memory of Grassfield's in 6a
+  ("Last Used Settings" is 6b's).
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal

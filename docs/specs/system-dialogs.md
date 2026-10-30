@@ -663,16 +663,18 @@ The last-used printer and settings are remembered per app.
   Printer… last), Copies (up to what the printer takes), Pages (All Pages; Current Page and Selection when the application has
   them; a range typed "1-3, 5", Print dimmed until it reads), Paper Size (the printer's, its default first shown, 6-8),
   Orientation, Scale, and Two-Sided (Off, Long-Edge Binding, Short-Edge Binding) and Colour (Colour, Black & White) when the
-  printer has them. The answer: GTK's settings (strings) and page setup (doubles), and a token good once, for its
-  application, for five minutes (6-5).
-- PR2 with a token done: the job carries the copies, collation, paper, two sides and colour, never the pages, scale or
-  orientation GTK already applied (6-4); a job the printer refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
+  printer has them; another printer chosen dims Print until its options are read. The answer: GTK's settings (strings, with
+  one copy: GTK 3 would render the copies itself) and page setup (doubles, no PPD name), and a token good once, for its
+  application, for five minutes, that keeps the backend running while it lives (6-4, 6-5).
+- PR2 with a token done: the job, named after the application, carries the copies, collation, paper, two sides and colour,
+  never the pages, scale or orientation GTK already applied (6-4); a job the printer refuses is response 2. Without a token:
+  x-d-p-gtk's dialog (6b).
 - PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
-  only a PDF is written, through a temporary file; Cancel there brings the sheet back.
+  only a PDF is written, through a temporary file; Cancel there brings the sheet back, under the application's id.
 - PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
   as PDF kept.
 - PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
-  a job's connection 10 s and 30 s without progress) and libcups' cancel flag; a sheet that cannot show sends the call to
+  a job's connection 10 s and 30 s without progress, from its first request) and libcups' cancel flag; a sheet that cannot show sends the call to
   x-d-p-gtk (RequestHost).
 - A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options),
   `tests/unit/portal/tst_print.cpp` (the D-Bus interface with fakes: tokens, Save as PDF, no printer, another printer, the
