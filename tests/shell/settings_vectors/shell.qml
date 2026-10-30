@@ -158,7 +158,18 @@ ShellRoot {
             failures.push(name);
     }
 
+    // Contract keys the shell's SettingsStore does not read at all: an app reads them (apps/store/qml/Main.qml,
+    // SettingsWindow.qml), with its own tests. They are the only keys exempt from "has a reader here" and from the
+    // every-key-is-its-default check; a key listed here that this test also reads is a failure (the list never goes stale).
+    readonly property var appOnly: ({
+            "store.sources.aur": "apps/store",
+            "store.sources.flathub": "apps/store",
+            "store.screenshots": "apps/store"
+        })
+
     function readerValue(store: var, path: string): var {
+        if (root.readers[path] === undefined)
+            return undefined; // reported by the contract-key check; never a throw (it left the case unread and ended in a timeout)
         let got = store;
         for (const part of root.readers[path].split("."))
             got = got[part];
@@ -170,8 +181,12 @@ ShellRoot {
         // Nothing is skipped: a key without a reader is a failure, and so is a contract key the shell does not read.
         for (const v of all)
             root.check(v.name + ": no reader for " + v.path + " in this test", root.readers[v.path] !== undefined);
-        for (const path in SettingsContract.RULES)
-            root.check("contract key " + path + " has no reader in this test", root.readers[path] !== undefined);
+        for (const path in SettingsContract.RULES) {
+            if (root.appOnly[path] !== undefined)
+                root.check("contract key " + path + " is listed as read by " + root.appOnly[path] + " but this test reads it too", root.readers[path] === undefined);
+            else
+                root.check("contract key " + path + " has no reader in this test", root.readers[path] !== undefined);
+        }
         const picked = all.filter(v => root.readers[v.path] !== undefined);
         picked.push({name: "a file without any key", allAbsent: true});
         // Files whose values the contract cannot use at all: every key reads its default, and the store still finishes its
@@ -215,6 +230,8 @@ ShellRoot {
                     const v = root.cases[item.index];
                     if (v.allAbsent === true) {
                         for (const path in SettingsContract.RULES) {
+                            if (root.appOnly[path] !== undefined)
+                                continue;
                             const got = root.readerValue(this, path);
                             root.check(v.name + ": " + path + " is " + JSON.stringify(got) + ", the default is " + JSON.stringify(SettingsContract.DEFAULTS[path]), JSON.stringify(got) === JSON.stringify(SettingsContract.DEFAULTS[path]));
                         }

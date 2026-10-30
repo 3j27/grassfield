@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Startup settle, store side (review of fix/startup-settle): `Settings.loaded` is the signal the Dock and the desktop wait for. With the
-# REAL Settings service (tests/shell/startup_settle.d/shell.qml, a dev session under `env -i`, every directory under a mktemp -d):
+# REAL Settings service (tests/shell/startup_settle.d/settings.qml, a dev session under `env -i`, every directory under a mktemp -d):
 #  1. no grassfield.json (a fresh account): `loaded` still becomes true;
 #  2. a file with values: they are already the document's when `loaded` flips (not the defaults);
 #  3. a desktop icon whose launcher file never reads (a FIFO) is hidden at first and visible after desktopIcon.loadTimeout.
@@ -27,7 +27,7 @@ run() { # <yes|no|icon>
     cp tests/shell/startup_settle.d/icon.qml "$tmp/cfg/shell.qml"
     rm -f "$tmp/fifo"; mkfifo "$tmp/fifo"
   else
-    cp tests/shell/startup_settle.d/shell.qml "$tmp/cfg/shell.qml"
+    cp tests/shell/startup_settle.d/settings.qml "$tmp/cfg/shell.qml"
   fi
   env -i ICON_FIFO="$tmp/fifo" PATH="$PATH" HOME="$tmp/home" GRASSFIELD_DEV=1 QS_NO_RELOAD_POPUP=1 XDG_RUNTIME_DIR="$tmp/runtime" EXPECT_FILE="$1" \
     GRASSFIELD_STATE_HOME="$tmp/state" GRASSFIELD_CONFIG_HOME="$tmp/config" QT_QPA_PLATFORM=offscreen \
