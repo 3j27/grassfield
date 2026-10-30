@@ -507,8 +507,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   takes another output's Desktop that way; nothing swaps while locked. After #48's merge: the picker no longer reads its
   windows before they exist (a TypeError at each open), the window picked has the keyboard on any output whose Desktop shows
   it, and the tiling popover and the suggestions close with their output instead of moving to another one. After the
-  integrator's note from an owner report (D61, D62): the overlay holds the keyboard, takes the output's input and stays
-  mapped only while a popup is loaded on it (a stale `open` with no popup lets everything through and unmaps, logged), and a
+  integrator's note from an owner report (D61, D62): the overlay holds the keyboard and takes the output's input only while
+  a popup is loaded on it (a stale `open` with no popup lets every key and click through, logged; its mapping follows `open`,
+  as tying it to the popup made the window resize under the popup's position: a binding loop), and a
   window in full screen is not minimized (Minimize greyed, Super+M nothing). Step 6c: the titles hidden and revealed at the
   top, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen), the Overview's drop
   targets for a Split View Desktop, and in full screen (D62) the green button's click acting while its popover is open, the
