@@ -384,12 +384,12 @@ FocusScope {
                     const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier);
                     mouse.collapseOnRelease = cell.selected && mods === 0;
                     if (!cell.selected || mods !== 0)
-                        root.model.select(cell.index, mods);
+                        root.model.select(cell.index, mods, true);
                 }
                 // A formal parameter: an injected `mouse` (the event) would hide the MouseArea's id.
                 onReleased: () => {
                     if (mouse.collapseOnRelease && !mouse.drag.active)
-                        root.model.select(cell.index, 0);
+                        root.model.select(cell.index, 0, true);
                     mouse.collapseOnRelease = false;
                 }
                 onDoubleClicked: event => {

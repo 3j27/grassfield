@@ -88,6 +88,11 @@ namespace gf::tiler {
     // `w` can be tiled now (TL9): what the tiling popover greys when not (the tile-hover event's "tileable").
     bool tileable(const PHLWINDOW& w);
 
+    // `w` is of fixed size (core fixedSize: minimum = maximum on both axes): hovering its zoom light opens no tiling popover
+    // and tile_popover is refused (a Grassfield app draws that light disabled: ADR-0040 step 1b's About This Computer, the
+    // nested pass of 85c2c10); the reply's "fixed" lists it.
+    bool fixedSize(const PHLWINDOW& w);
+
     // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
     // popover greys Left and Right of Screen otherwise; split refuses it).
     bool splittable(const PHLWINDOW& w);

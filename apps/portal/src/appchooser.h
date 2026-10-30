@@ -38,7 +38,8 @@ public:
     // The D-Bus methods (AppChooserAdaptor). handle(): a delayed reply, sent when the request ends.
     void handle(const QDBusObjectPath &handle, const QString &appId, const QString &parentWindow, const QStringList &choices,
                 const QVariantMap &options, const QDBusMessage &message);
-    void updateChoices(const QDBusObjectPath &handle, const QStringList &choices);
+    // From the caller of the request's ChooseApplication only (`sender`: the frontend's unique name); any other is ignored.
+    void updateChoices(const QDBusObjectPath &handle, const QStringList &choices, const QString &sender);
 
     // The panel's answer: response 0 with {choice: a desktop id}, or 1 (Cancel). An answer for a request that is no longer
     // shown is ignored; a choice that is not a desktop id ends the request with response 2.
@@ -64,13 +65,21 @@ signals:
 
 protected:
     QVariantMap relayed(const QVariantMap &gtkResults) const override;
-    void ended(int id) override { m_tokens.remove(id); }
+    void ended(int id) override;
+    void forwarded(int id) override;
 
 private:
+    void sendUpdate(const QDBusObjectPath &handle, const QStringList &choices);
+
     QString m_gtkService;
     // The activation token each open request came with: given back with the choice (the frontend starts the application
     // with it).
     QHash<int, QString> m_tokens;
+    // Who called each open request's ChooseApplication (its UpdateChoices must come from there too), and the last candidates
+    // an UpdateChoices gave while the panel was open: they follow the request if it goes to x-d-p-gtk (integrator review of
+    // f9a25ce, NITs).
+    QHash<int, QString> m_callers;
+    QHash<int, QPair<QDBusObjectPath, QStringList>> m_updated;
 };
 
 // The interface on /org/freedesktop/portal/desktop (the object FileChooser is exported as; this adaptor is its child and
@@ -87,7 +96,7 @@ public Q_SLOTS:
     uint ChooseApplication(const QDBusObjectPath &handle, const QString &app_id, const QString &parent_window,
                            const QStringList &choices, const QVariantMap &options, const QDBusMessage &message,
                            QVariantMap &results);
-    void UpdateChoices(const QDBusObjectPath &handle, const QStringList &choices);
+    void UpdateChoices(const QDBusObjectPath &handle, const QStringList &choices, const QDBusMessage &message);
 
 private:
     AppChooser *m_chooser;

@@ -174,8 +174,9 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
-    // Selection. `modifiers` is a Qt.KeyboardModifiers value: Shift extends from the anchor, Ctrl toggles.
-    Q_INVOKABLE void select(int row, int modifiers = 0);
+    // Selection. `modifiers` is a Qt.KeyboardModifiers value: Shift extends from the anchor, Ctrl toggles. `pointer`: a click
+    // (the views' mouse handlers), which a panel's dimmed item does not take.
+    Q_INVOKABLE void select(int row, int modifiers = 0, bool pointer = false);
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void selectUrls(const QList<QUrl> &urls);

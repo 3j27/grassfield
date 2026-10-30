@@ -86,7 +86,7 @@ Window {
         {label: qsTr("Kind:"), value: root.info.kind},
         {label: qsTr("Category:"), value: root.info.genericName},
         {label: qsTr("Comment:"), value: root.info.comment},
-        {label: qsTr("Where:"), value: root.info.where},
+        {label: qsTr("Where:"), value: DisplayName.text(root.info.where)},
         {label: qsTr("Desktop entry:"), value: root.info.desktopEntry},
         {label: qsTr("Command:"), value: root.info.command},
         {label: qsTr("Categories:"), value: root.info.categories},
@@ -97,7 +97,7 @@ Window {
     readonly property var rows: root.isApplication ? root.applicationRows : [
         {label: qsTr("Kind:"), value: root.info.kind},
         {label: qsTr("Size:"), value: root.info.isDir ? root.folderSize : qsTr("%1 (%2 bytes)").arg(root.info.sizeText).arg(root.info.bytes)},
-        {label: qsTr("Where:"), value: root.info.where},
+        {label: qsTr("Where:"), value: DisplayName.text(root.info.where)},
         {label: qsTr("Created:"), value: root.info.created},
         {label: qsTr("Modified:"), value: root.info.modified},
         {label: qsTr("Opened:"), value: root.info.accessed},

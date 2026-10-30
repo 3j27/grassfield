@@ -298,6 +298,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Step 3 as built (D23): an `org.grassfield.*` window with the client-chrome tag, not in full screen: its xdg-toplevel tag
   names the row, `info` the titlebar row (`window.titlebarLightInset`), any other role the unified toolbar row
   (`window.unifiedLightCentre`); zoomed windows keep their lights there; Grassfield apps never mirror their lights.
+  A window of fixed size (minimum = maximum on both axes, core `fixedSize`; About This Computer, ADR-0040 step 1b) posts
+  no `tile-hover` from its zoom light, which its app draws disabled, and `tile_popover` (Super+Ctrl+L) is refused for it:
+  nothing opens, on hover or click (integrator nested pass of 85c2c10, scenario 6). The reply lists such windows
+  (`fixed`); `tests/compositor/tiling.sh` case `fixed`.
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
@@ -305,7 +309,9 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Step 3 as built: Minimize, Zoom, Fill, Center, —, Move & Resize ›, one Move to <display> row per other output (D21), —,
   Enter Full Screen, …; Full Screen Tile › waits for step 6 (D17; step 6a as built: after Enter Full Screen, TL33). PopupMenu gained section headers, glyph rows and Alt
   alternates (`alternate`, also in a submenu opened by the pointer: it follows the Alt of the menu that opened it). Arrange
-  needs `tiling-arrange`.
+  needs `tiling-arrange`. A window of fixed size (the reply's `fixed`, read again when the menu opens): Zoom, Enter Full
+  Screen, Full Screen Tile and the tiling rows greyed, as macOS greys them for a window that cannot be resized (Unzoom and
+  Exit Full Screen stay, ADR-0040 step 1b); the tiling keys refuse it already (TL9: fixed on an axis).
 - **TL26** Keyboard (T2 option A as amended by T2a and T2b): Super+Ctrl+arrows always give the half, as on macOS (the same
   key again does nothing); Super+Ctrl+U, I, J, K the top-left, top-right, bottom-left and bottom-right quarters, bound by
   key position (`code:` bindings, as `bindings.lua` does for the key above Tab) so they sit in the same place on AZERTY;
@@ -575,7 +581,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - **Plugin events:** `tiling` notice `{gen, reason}` (bounded); `tile-hover` `{address, state: enter|leave|open, x, y, w,
   h, tileable}` (step 3; `open` answers `tile_popover(address)`; `move_to(address, output)` moves a window to another output).
 - **Plugin reply:** `hyprctl grassfield-tiling`: per output the work area, the tiled windows (address, place, layout and
-  zone or the sides an edge double-click extended, group, box) and, from step 4, a pending suggestion.
+  zone or the sides an edge double-click extended, group, box) and, from step 4, a pending suggestion; the windows that do
+  not fit half of their output (`unfit`, D57) and the windows of fixed size (`fixed`, TL24).
 - **Features:** `window-tiling` (today) plus one per capability (layouts and arrangements, hover, groups, shared edge),
   each advertised only when its listeners and verbs registered.
 - **Shell IPC (`qs ipc`, for key bindings):** `windows tile <place>` (today), `windows arrange <layout>`, `windows

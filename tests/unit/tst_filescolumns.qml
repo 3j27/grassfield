@@ -138,6 +138,26 @@ TestCase {
         return null;
     }
 
+    // A column replaced at the active place (a panel starting in its location after the tab's first one, a location of the
+    // same depth): the active column is the new one, and its listing the active model, whose selection a panel reads
+    // (integrator nested pass of f9a25ce, follow-up 1: the binding kept the destroyed column, so the panel read the tab's
+    // own listing: Open stayed disabled after a click in the column).
+    function test_aReplacedColumnIsTheActiveOne() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        compare(columns.activeColumn, 0);
+        verify(columns.activeModel !== null);
+        compare(String(columns.activeModel.url), "file:///sandbox");
+        fakeTab.segments = [{url: "file:///other"}];
+        compare(columns.activeColumn, 0, "the same place");
+        verify(columns.activeItem !== null, "the new column");
+        verify(columns.activeModel !== null, "its listing");
+        compare(String(columns.activeModel.url), "file:///other");
+        const file = rowNamed("note.txt");
+        mouseClick(file, 40, file.height / 2, Qt.LeftButton);
+        compare(columns.activeModel.selectedCount, 1, "a click selects in the active listing");
+        fakeTab.segments = [{url: "file:///sandbox"}];
+    }
+
     function test_aDoubleClickOpensAFileAndAFolderOnlyWithCmd() {
         tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
         const file = rowNamed("note.txt");

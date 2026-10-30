@@ -95,6 +95,45 @@ QtObject {
         {kind: "figures", rows: [{label: "Data read:", value: "5.00 MB", swatch: ""}]}
     ]
 
+    // Quit, Force Quit and Send Signal (apps/activity/src/actions.h): the answers each test sets, the calls recorded.
+    readonly property var signalList: [
+        {number: 1, title: "Hangup (SIGHUP)"}, {number: 2, title: "Interrupt (SIGINT)"}, {number: 3, title: "Quit (SIGQUIT)"},
+        {number: 6, title: "Abort (SIGABRT)"}, {number: 9, title: "Kill (SIGKILL)"}, {number: 14, title: "Alarm (SIGALRM)"},
+        {number: 15, title: "Terminate (SIGTERM)"}, {number: 10, title: "User Defined 1 (SIGUSR1)"},
+        {number: 12, title: "User Defined 2 (SIGUSR2)"}, {number: 19, title: "Stop (SIGSTOP)"}, {number: 18, title: "Continue (SIGCONT)"}
+    ]
+    readonly property QtObject actions: QtObject {
+        property bool canQuit: false
+        property bool canSignal: false
+        property string refusal: ""
+        property var sheet: ({ok: true, count: 1, name: "foot", pid: 2001, session: "", self: false, signals: backend.signalList})
+        property var quitResult: ({done: true})
+        property var forceQuitResult: ({done: true})
+        property var sendResult: ({done: true})
+
+        signal closeWindowRequested
+
+        function prepare(action: string): var {
+            backend.record("prepare:" + action);
+            return this.sheet;
+        }
+        function quit(): var {
+            backend.record("quit");
+            return this.quitResult;
+        }
+        function forceQuit(): var {
+            backend.record("forceQuit");
+            return this.forceQuitResult;
+        }
+        function send(signal: int): var {
+            backend.record("send:" + signal);
+            return this.sendResult;
+        }
+        function release(): void {
+            backend.record("release");
+        }
+    }
+
     function row(name: string, cpu: string, pid: string): var {
         return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"],
                 depth: 0, expandable: false, expanded: true, group: false};

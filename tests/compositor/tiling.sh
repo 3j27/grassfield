@@ -49,6 +49,9 @@
 #                  "leave"
 #   layouts-off    (step 5, TL32) config tilingLayouts false: the pointer resting on the light posts no "enter";
 #                  tile_popover still posts "open"; then true again
+#   fixed          (ADR-0040 step 1b) About This Computer (grassfield-settings --about, minimum = maximum): listed in the
+#                  reply's "fixed"; tile_popover, the pointer resting on its disabled zoom light and a click there post no
+#                  tile-hover and open no shell popup, its box unchanged (skipped without apps/settings/build-direct.sh)
 #   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
@@ -1195,6 +1198,62 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     pointer abs $((lcx - mx + 300)) $((lcy - my + 200)) sleep 300
   else
     check "hover: needs the light from the open event" false
+  fi
+
+  # fixed (ADR-0040 step 1b; integrator nested pass of 85c2c10, scenario 6): About This Computer (grassfield-settings
+  # --about), a window of fixed size whose own zoom light is disabled. The reply lists it in "fixed"; tile_popover posts no
+  # "open" for it; the pointer resting on its zoom light posts no "enter"; a click there posts nothing, opens no shell popup
+  # and leaves its box. Its zoom light: the titlebar row of the "info" role (compositor/src/core/TitlebarLayout.cpp
+  # appZoomLight: the third light, tokens window.*). Skipped without the Settings build (apps/settings/build-direct.sh).
+  settings_bin=$dev/build/grassfield-settings
+  if [[ -x $settings_bin ]]; then
+    env -u DISPLAY WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_SETTINGS_QML="$root/apps/settings/qml" \
+      QML_IMPORT_PATH="$root/ui:$dev/build/qml" setsid "$root/scripts/dev/isolated.sh" --name tiling-about -- "$settings_bin" --about \
+      >>"$run/about.out" 2>&1 </dev/null &
+    pids+=("$!")
+    about_box() { nestctl clients -j | jq -r '[.[] | select(.class == "org.grassfield.Settings" and .xdgTag == "info")][0] | select(. != null) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.fullscreen) \(.address)"'; }
+    for _ in $(seq 1 60); do [[ -n $(about_box) ]] && break; sleep 0.25; done
+    read -r _ _ _ _ _ about < <(about_box)
+    if [[ -n ${about:-} ]]; then
+      nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$about' })" >>"$log" 2>&1
+      nestctl dispatch "hl.dsp.focus({ window = 'address:$about' })" >>"$log" 2>&1
+      sleep 0.8
+      read -r ax0 ay0 aw0 ah0 afs0 _ < <(about_box)
+      say "  About This Computer: $about, ${aw0}x${ah0} at $ax0,$ay0, fullscreen $afs0"
+      about_events() { events_since ".type == \"tile-hover\" and .address == \"${about#0x}\""; }
+      about_listed() { tiling_state | jq -e --arg a "${about#0x}" '(.fixed // []) | index($a) != null' >/dev/null 2>&1; }
+      no_popup() { ! shell_popup_open; }
+      check "fixed: the reply lists About This Computer among the windows of fixed size" about_listed
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$about\")" >>"$log" 2>&1
+      sleep 1.5
+      check "fixed: tile_popover posts no tile-hover for it" test -z "$(about_events)"
+      check "fixed: the plugin says why (fixed size)" plugin_logged "tile_popover: refused: window ${about#0x} is of fixed size"
+      check "fixed: no shell popup opens from tile_popover" no_popup
+      read -r zx zy < <(jq -r '.window | "\(.titlebarLightInset.value + 2 * (.lightDiameter.value + .lightGap.value) + .lightDiameter.value / 2 | floor) \(.titlebarHeight.value / 2 | floor)"' "$root/ui/tokens/tokens.json")
+      lzx=$((ax0 + zx - mx)) lzy=$((ay0 + zy - my))
+      pointer abs $((lzx + 200)) $((lzy + 150)) sleep 200
+      mark_events
+      pointer abs "$lzx" "$lzy" sleep 300
+      sleep "$(awk -v d="$hover_delay" 'BEGIN { print (d + 500) / 1000 }')"
+      check "fixed: the pointer resting on its disabled zoom light posts no tile-hover" test -z "$(about_events)"
+      check "fixed: no shell popup opens from the hover" no_popup
+      mark_events
+      pointer click sleep 800
+      check "fixed: a click on its disabled zoom light posts no tile-hover" test -z "$(about_events)"
+      check "fixed: no shell popup opens from the click" no_popup
+      read -r ax1 ay1 aw1 ah1 afs1 _ < <(about_box)
+      say "  after the click: ${aw1:-?}x${ah1:-?} at ${ax1:-?},${ay1:-?}, fullscreen ${afs1:-?}"
+      check "fixed: the click leaves its box (not zoomed, not tiled)" test "$ax1 $ay1 $aw1 $ah1 $afs1" = "$ax0 $ay0 $aw0 $ah0 $afs0"
+      close_shell_popup "fixed"
+      pointer abs $((lzx + 300)) $((lzy + 200)) sleep 200
+      nestctl dispatch "hl.dsp.window.close({ window = 'address:$about' })" >>"$log" 2>&1
+      sleep 0.5
+    else
+      check "fixed: About This Computer maps (grassfield-settings --about)" false
+    fi
+  else
+    say "SKIP: fixed (no Settings build at $settings_bin: apps/settings/build-direct.sh)"
   fi
 
   # covered: a layer surface of a tiny Quickshell config (the run directory, never the repository): Exclusive or not, at a

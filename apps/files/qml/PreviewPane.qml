@@ -336,7 +336,7 @@ Item {
                     {label: qsTr("Dimensions"), value: root.dimensions, more: false},
                     {label: qsTr("Last opened"), value: root.info.accessed, more: true},
                     {label: qsTr("Size"), value: root.info.isDir ? "" : root.byteCount(root.info.size, root.info.bytes), more: true},
-                    {label: qsTr("Where"), value: root.info.where, more: true}
+                    {label: qsTr("Where"), value: DisplayName.text(root.info.where), more: true}
                 ].filter(line => line.value !== undefined && line.value !== "" && (root.showMore || !line.more))
 
                 delegate: Item {

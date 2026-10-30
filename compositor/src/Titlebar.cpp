@@ -405,7 +405,10 @@ namespace {
     }
 
     // The topmost window under `pos` whose zoom light contains it (TL22, TL24), and that light. The windows are walked as
-    // titlebarHoveredAt walks them (geometry only, from the top); a revealed full-screen bar is over every window.
+    // titlebarHoveredAt walks them (geometry only, from the top); a revealed full-screen bar is over every window. A window of
+    // fixed size (gf::tiler::fixedSize) is under the pointer, but none of its lights opens the tiling popover: nothing in it
+    // can be tiled, and a Grassfield app draws that light disabled (ADR-0040 step 1b: About This Computer's grey zoom light
+    // opened the popover, the nested pass of 85c2c10).
     std::optional<std::pair<PHLWINDOW, CBox>> zoomLightAt(const Vector2D& pos) {
         const auto  inLight = [&pos](const CBox& light) {
             CBox hit = light;
@@ -415,7 +418,7 @@ namespace {
         for (auto* deco : gf::state().titlebars) {
             if (deco->revealed() && deco->barContains(pos)) {
                 const auto w     = deco->window();
-                const auto light = w ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
+                const auto light = w && !gf::tiler::fixedSize(w) ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
                 return light && inLight(*light) ? std::optional{std::pair{w, *light}} : std::nullopt;
             }
         }
@@ -431,7 +434,7 @@ namespace {
             const bool  onBar = deco != all.end() && (*deco)->barContains(pos);
             if (!onBar && !w->getWindowMainSurfaceBox().containsPoint(pos))
                 continue; // not under the pointer: a window further down may be
-            const auto light = drawnInPlace(w) ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
+            const auto light = drawnInPlace(w) && !gf::tiler::fixedSize(w) ? CGrassfieldTitlebar::zoomLightOf(w) : std::nullopt;
             return light && inLight(*light) ? std::optional{std::pair{w, *light}} : std::nullopt;
         }
         return std::nullopt;
@@ -654,6 +657,11 @@ void CGrassfieldTitlebar::popoverRequest(std::string_view address) {
     }
     if (!w) {
         gf::logRequest(Log::WARN, "tile_popover: no mapped window {:x}", *id);
+        return;
+    }
+    // Its zoom light is disabled: nothing opens from it (ADR-0040 step 1b; Super+Ctrl+L included).
+    if (gf::tiler::fixedSize(w)) {
+        gf::logRequest(Log::INFO, "tile_popover: refused: window {:x} is of fixed size", *id);
         return;
     }
     // Without a known light: the top-left corner of the frame, where the lights of a third-party title bar usually are.

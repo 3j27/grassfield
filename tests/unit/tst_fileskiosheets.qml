@@ -452,6 +452,43 @@ TestCase {
         compare(fakePrompts.replies[1].button, "cancel");
     }
 
+    // A document whose type has no application (ADR-0035 5c-3): Finder's alert; Choose Application… is the default (Return),
+    // Cancel and Esc open nothing.
+    function test_noApplication(): void {
+        const s = KioSheetsLogic.sheet({
+            id: 63,
+            kind: "noApplication",
+            name: "a.gfnone"
+        });
+        compare(s.title, "There is no application set to open the document “a.gfnone”.");
+        compare(s.confirmText, "Choose Application…");
+        compare([s.confirmId, s.cancelId], ["choose", "cancel"]);
+        compare([s.destructive, s.returnCancels, s.showCancel], [false, false, true]);
+        const sheets = test.make();
+        const sheet = test.sheetOf(sheets);
+        const request = {
+            id: 64,
+            kind: "noApplication",
+            name: "a.gfnone"
+        };
+        fakePrompts.current = request;
+        test.shown(sheet);
+        keyClick(Qt.Key_Return);
+        compare(fakePrompts.replies[0].button, "choose");
+        fakePrompts.current = Object.assign({}, request, {
+            id: 65
+        });
+        test.shown(sheet);
+        keyClick(Qt.Key_Escape);
+        compare(fakePrompts.replies[1].button, "cancel");
+        fakePrompts.current = Object.assign({}, request, {
+            id: 66
+        });
+        test.shown(sheet);
+        test.click(sheet, "Cancel");
+        compare(fakePrompts.replies[2].button, "cancel");
+    }
+
     // A worker's warning: Return never takes its action. With a Cancel it cancels; without one it gives the secondary
     // action (KDE's own box defaults to Cancel; an sftp host key that changed must not be accepted by Return).
     function test_warningReturnIsSafe(): void {

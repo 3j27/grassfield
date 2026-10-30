@@ -2,10 +2,13 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.lib
+import qs.platform
 import Quickshell.Io
 
 // Launches Grassfield Settings. Lives in a singleton (not in the menu that triggers it) so the launcher
-// process survives the menu closing. A missing binary is reported instead of failing silently.
+// process survives the menu closing. A missing binary is reported instead of failing silently. Settings is one instance per
+// user (apps/settings/src/settingsinstance.h): a launch while it runs hands its section or --about to it and leaves, so the
+// one Settings window comes to that page instead of a second one opening.
 Singleton {
     id: root
 
@@ -13,16 +16,29 @@ Singleton {
     signal missing
 
     function open(): void {
-        Apps.whenScopeKnown(() => root.openNow(""));
+        Apps.whenScopeKnown(() => root.openNow([]));
     }
 
     // Settings showing one section first (`--section=<id>`: "wallpaper" for the desktop's Change Wallpaper…).
     function openSection(section: string): void {
-        Apps.whenScopeKnown(() => root.openNow(section));
+        Apps.whenScopeKnown(() => root.openNow(section !== "" ? ["--section=" + section] : []));
     }
 
-    function openNow(section: string): void {
-        const cmd = (Mode.devValue("SETTINGS_CMD") || "grassfield-settings").split(" ").concat(section !== "" ? ["--section=" + section] : []);
+    // About This Computer (ADR-0040 ID-19): Settings' own small window (`--about`, role "info"). An open one comes forward,
+    // once the Grassfield menu's layer has gone; a start while Settings runs makes it in that process, or finds it still
+    // mapping, so there is never a second one.
+    function openAbout(): void {
+        const shown = Compositor.taggedToplevel("org.grassfield.Settings", "info");
+        if (shown) {
+            Compositor.activateAfterLayer(shown, "grassfield-overlay");
+            return;
+        }
+        Apps.whenScopeKnown(() => root.openNow(["--about"]));
+    }
+
+    // `args`: Settings' own options after the command.
+    function openNow(args: var): void {
+        const cmd = (Mode.devValue("SETTINGS_CMD") || "grassfield-settings").split(" ").concat(args);
         // In a real session Settings gets a scope of its own (Apps.scoped): a shell restart never closes it.
         launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; shift; setsid -f \"$@\" >/dev/null 2>&1", "sh", cmd[0]].concat(Apps.scoped(cmd));
         // The pointer size and colour theme the user chose, and GTK_USE_PORTAL, like every app the shell starts.
