@@ -185,6 +185,18 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57). The reply gains `"unfit":["<hex>",…]` (always present): the
   windows that can be tiled now and do not fit half of their output; the shell reads it again when the Window menu opens
   and greys its Full Screen Tile for those (integrator PASS on 8316ed2, for later).
+- Window tiling, D57's model for every place and arrangement (2026-10-30, additive, ADR-0036 D63; capture defect: Quarters
+  at 1440 x 900 with a window 420 px tall at least came out with shifted rows). The `tile-hover` event's `enter` and `open`
+  add `"unfitZones":["x,y,w,h",…]` (always present, `[]` when the window fits everything): the zones of the places and of
+  the layout catalogue, by their twelfths as the shell's glyph tokens hold them, that the window's minimum (titlebar band
+  included) does not fit on its output's Desktop; at most every offered zone, under the 1024-byte cut. The reply gains
+  `"unfitZones":[{"address":"<hex>","zones":["x,y,w,h",…]},…]` (always present): the same for each window that can be tiled
+  now and does not fit some zone (the Window menu reads it again when it opens, as `unfit`). `tile` refuses a place whose
+  zone (or TL7 frame beside a neighbour) the window does not fit, and `arrange` a given window that does not fit its zone
+  (`reason:"invalid"`, nothing moves); the fill of an arrangement gives each remaining zone the topmost window that fits it,
+  and a zone no window fits stays empty; the suggestion offers only windows that fit its zone; a drag shows no preview over a
+  place the window does not fit. Fill and Center are always offered. The shell greys the places, arrangements and Layouts
+  zones whose zone is listed (the item's zone: a place's, an arrangement's first, a Layouts zone itself).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -211,12 +223,12 @@ event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
-event tile-hover: address state x y w h tileable splittable
+event tile-hover: address state x y w h tileable splittable unfitZones
 event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting unfit suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting unfit unfitZones suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid

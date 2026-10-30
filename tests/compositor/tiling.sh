@@ -79,6 +79,10 @@
 #                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
+#   fit wide       (D63, after the step 4c cases) an xdgact window wider than a quarter: its open event's unfitZones lists the
+#                  quarters and the left and right halves, not the top half (an ordinary window's lists none); a quarter and
+#                  Quarters asked by it are refused (nothing moves), the top half places it; Quarters asked by an ordinary
+#                  window leaves it out and its quarters share rows and columns; the reply's unfitZones lists it
 # Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
 # end in one group):
 #   group-front    the second window (no group) focused above the group; group_front(first): the third window, then the
@@ -1668,6 +1672,79 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "shared-edge: outside the handle one window is resized, the other stays" only_one
   else
     say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
+  fi
+
+  # ADR-0036 D63 (capture defect of 2026-10-30: Quarters at 1440 x 900 with a window taller than a quarter came out with
+  # shifted rows): a window is placed only in a zone it fits. An xdgact window at least half the output plus 200 px wide fits
+  # the top and bottom halves (the whole width) and no quarter nor left or right half: the popover's event lists those zones;
+  # a quarter is refused and moves nothing, the top half places it; Quarters asked by it is refused; Quarters asked by an
+  # ordinary window leaves it out (each zone takes the topmost window that fits it) and comes out aligned; the reply lists it.
+  tile_ipc "$addr" previous
+  tile_ipc "$addr2" previous
+  tile_ipc "$addr3" previous
+  open_xdg gf-fit-wide $((mw / 2 + 200))
+  if [[ -n $xdg_addr ]]; then
+    fit_open() { # address jq-condition: tile_popover posts open for that window, the condition holding on its event
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+      event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\" and $2"
+      local ok=$?
+      say "  event: $last_event"
+      close_shell_popup "fit wide"
+      return $ok
+    }
+    check "fit wide: its event lists the quarters and the left and right halves, not the top half" fit_open "$xdg_addr" \
+      '(.unfitZones | (index("0,0,6,6") != null and index("6,6,6,6") != null and index("0,0,6,12") != null and index("6,0,6,12") != null and index("0,0,12,6") == null))'
+    check "fit wide: an ordinary window's event lists no zone" fit_open "$addr" '.unfitZones == []'
+    xdg_box() { nestctl clients -j | jq -r --arg a "$xdg_addr" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"'; }
+    wb=$(xdg_box)
+    mark_events
+    tile_ipc "$xdg_addr" top-left
+    check "fit wide: tile to a quarter is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "fit wide: the refusal moved nothing (was $wb)" test "$(xdg_box)" = "$wb"
+    check "fit wide: the refusal left no record" test "$(record_of "$xdg_addr")" = null
+    mark_events
+    tile_ipc "$xdg_addr" top
+    check "fit wide: the top half places it" event_came '.type == "tiling" and .reason == "placed"'
+    check "fit wide: its record is the top half" test "$(record_of "$xdg_addr" | jq -r '.place')" = top
+    tile_ipc "$xdg_addr" previous
+    wb=$(xdg_box)
+    mark_events
+    arrange "{\"layout\":\"quarters\",\"windows\":[\"$xdg_addr\"]}"
+    check "fit wide: Quarters asked by it is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "fit wide: that refusal moved nothing (was $wb)" test "$(xdg_box)" = "$wb"
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$xdg_addr' })" >>"$log" 2>&1 # the topmost window: the fill meets it first
+    sleep 0.5
+    wb=$(xdg_box)
+    mark_events
+    arrange "{\"layout\":\"quarters\",\"windows\":[\"$addr\"]}"
+    check "fit wide: Quarters asked by an ordinary window is placed" event_came '.type == "tiling" and .reason == "placed"'
+    check "fit wide: its fill leaves the wide window out (no record, not moved; was $wb)" test "$(record_of "$xdg_addr"):$(xdg_box)" = "null:$wb"
+    quarters_aligned() {
+      local q
+      q=$(tiling_state | jq -c '[.outputs[].windows[] | select(.layout == "quarters" and .state == "tiled") | {zone, x, y, w, h}]')
+      say "  quarters: $q"
+      jq -e 'length >= 2
+        and ([.[] | select(.zone == 0 or .zone == 1) | [.y, .h]] | unique | length <= 1)
+        and ([.[] | select(.zone == 2 or .zone == 3) | [.y, .h]] | unique | length <= 1)
+        and ([.[] | select(.zone == 0 or .zone == 2) | [.x, .w]] | unique | length <= 1)
+        and ([.[] | select(.zone == 1 or .zone == 3) | [.x, .w]] | unique | length <= 1)' <<<"$q" >/dev/null
+    }
+    check "fit wide: the quarters placed share their rows and columns" quarters_aligned
+    reply_lists_wide() {
+      local z
+      z=$(tiling_state | jq -c --arg a "${xdg_addr#0x}" '[.unfitZones[] | select(.address == $a) | .zones][0] // null')
+      say "  reply unfitZones of the wide window: $z"
+      jq -e 'index("0,0,6,6") != null and index("0,0,12,6") == null' <<<"$z" >/dev/null
+    }
+    check "fit wide: the reply lists its unfit zones" reply_lists_wide
+    for a in $(tiling_state | jq -r '.outputs[].windows[] | select(.layout == "quarters") | "0x" + .address'); do
+      tile_ipc "$a" previous
+    done
+    kill "$xdg_pid" 2>/dev/null
+    sleep 0.5
+  else
+    check "fit wide: the xdgact window opened" false
   fi
 
   # Step 6a (TL33, ADR-0036 D41-D47): Full Screen › Left or Right of Screen makes a Split View Desktop. Every window back to

@@ -174,7 +174,11 @@ namespace gf::tiling {
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
     // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false);
+    // enter and open also carry "unfitZones" (always, [] when it fits every zone): the zones it does not fit (unfitZones, D63;
+    // the popover greys the places, arrangements and Layouts zones that would put it there). Under kMaxEventBytes even with
+    // every offered zone listed.
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false,
+                              std::span<const std::string> unfitZones = {});
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -615,6 +619,33 @@ namespace gf::tiling {
     // (TL8). A Split View half too narrow for it is refused rather than overlapped (integrator nested pass of 1ee992e, MAJOR C).
     bool fitsFrame(const Constraints& c, const Rect& frame);
 
+    // ---- what a window fits (ADR-0036 D63: D57's model for every place and arrangement) ----
+
+    // A window with limits `c` fits zone `zone` of `area`: fitsFrame on the zone's frame as its glyph shows it (zoneFrame). The
+    // plugin places a window only in a zone it fits (a place, a zone of the Layouts section, an arrangement's every member),
+    // so an arrangement is always the catalogue's equal zones, never shifted rows or columns (capture defect of 2026-10-30:
+    // Quarters at 1440 x 900 with a window 420 px tall at least). fitFrames' make-room stays for windows already placed when
+    // their work area shrinks (a margins switch, the Dock).
+    bool fitsZone(const Constraints& c, const Zone& zone, const Area& area);
+
+    // The zones a window may be asked into, each once: the places' zones (TL4) in Place order, then the catalogue's (TL5) in
+    // its order; not Fill's whole area (Fill always takes the window as far as its minimum allows) nor Center (no zone).
+    std::span<const Zone> offeredZones();
+
+    // A zone as the shell names it: its twelfths "x,y,w,h" (the token array of its glyph, joined by ",").
+    std::string zoneName(const Zone& zone);
+
+    // The names (zoneName) of the zones of offeredZones() that a window with limits `c` does not fit in `area` (fitsZone), in
+    // that order: the "unfitZones" of the tile-hover event and of the state reply (the shell greys those places, arrangements
+    // and Layouts zones).
+    std::vector<std::string> unfitZones(const Constraints& c, const Area& area);
+
+    // One window's unfitZones for the state reply (the Window menu reads it again when it opens, as D57's "unfit").
+    struct WindowFit {
+        uint64_t                 address = 0;
+        std::vector<std::string> zones;
+    };
+
     // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
     // the Overview's "+" does (ADR-0036 D41); 1 when there is none.
     int64_t nextDesktopId(std::span<const int64_t> ids);
@@ -666,8 +697,9 @@ namespace gf::tiling {
     };
     // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops with their members and whether one waits for
     // its second window (TL33), "unfit" the windows that do not fit half of their output (the Window menu greys their Full
-    // Screen Tile, D57), "suggestion" null without one.
+    // Screen Tile, D57), "unfitZones" the windows that do not fit some offered zone with those zones (always present; the
+    // Window menu greys those Halves, Quarters and Arrange items, D63), "suggestion" null without one.
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
-                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {});
+                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {}, std::span<const WindowFit> unfitZones = {});
 
 } // namespace gf::tiling

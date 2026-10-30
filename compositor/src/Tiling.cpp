@@ -419,14 +419,10 @@ namespace gf::tiler {
             return tiling::fitFrames(zones, frames, limits, area);
         }
 
-        // The frame of a single place for `w` (TL4, TL7, TL8): Center keeps its size; a half next to a tiled neighbour on
-        // the same output and Desktop takes the rest of the work area beside it.
-        tiling::Rect placeFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
-            const auto band = gf::chrome::bandOf(w);
-            if (place == tiling::Place::Center)
-                return tiling::centerFrame(toRect(w->layoutTarget()->position()), band, area);
-            const tiling::Zone zone  = tiling::zoneOf(place).value_or(tiling::Zone{});
-            tiling::Rect       frame = tiling::zoneFrame(zone, area);
+        // The frame a place gives `w` before its limits (TL4, TL7): its zone's; for a half next to a tiled neighbour on the
+        // same output and Desktop, the rest of the work area beside it. Not for Center (it keeps the window's size).
+        tiling::Rect startFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
+            const tiling::Zone zone = tiling::zoneOf(place).value_or(tiling::Zone{});
             if (isHalf(place)) {
                 const auto                strip = stripWindows();
                 std::vector<tiling::Rect> neighbours;
@@ -437,10 +433,27 @@ namespace gf::tiler {
                         neighbours.push_back(tiling::frameOf(r.box, r.band));
                 }
                 if (const auto beside = tiling::halfBesideNeighbour(place, area, neighbours))
-                    frame = *beside;
+                    return *beside;
             }
-            const std::array<tiling::Zone, 1>        zones{zone};
-            const std::array<tiling::Rect, 1>        frames{frame};
+            return tiling::zoneFrame(zone, area);
+        }
+
+        // ADR-0036 D63 (D57's model for every place): `w` fits the frame `place` starts from (startFrame). Fill and Center always
+        // do (Fill takes the window as far as its minimum allows, Center keeps its size).
+        bool fitsPlace(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
+            if (place == tiling::Place::Fill || place == tiling::Place::Center)
+                return true;
+            return tiling::fitsFrame(constraintsOf(w), startFrame(w, place, area, output, workspace));
+        }
+
+        // The frame of a single place for `w` (TL4, TL7, TL8): Center keeps its size; a half next to a tiled neighbour on
+        // the same output and Desktop takes the rest of the work area beside it.
+        tiling::Rect placeFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
+            const auto band = gf::chrome::bandOf(w);
+            if (place == tiling::Place::Center)
+                return tiling::centerFrame(toRect(w->layoutTarget()->position()), band, area);
+            const std::array<tiling::Zone, 1>        zones{tiling::zoneOf(place).value_or(tiling::Zone{})};
+            const std::array<tiling::Rect, 1>        frames{startFrame(w, place, area, output, workspace)};
             const std::array<tiling::Constraints, 1> limits{constraintsOf(w)};
             return tiling::fitFrames(zones, frames, limits, area).front();
         }
@@ -636,8 +649,9 @@ namespace gf::tiler {
             const auto*   split = tiling::splitOf(s.splits, m->m_activeWorkspace->m_id);
             const int64_t from  = split ? split->home : m->m_activeWorkspace->m_id;
             const auto&   all   = Desktop::windowState()->windows(); // bottom to top
-            // A Split View's other half takes only a window that fits it (TL8; nested pass of 1ee992e, MAJOR C: no overlap).
-            const auto fits = [&](const PHLWINDOW& w) { return !split || tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
+            // A zone takes only a window that fits it (TL8: a Split View's other half since the nested pass of 1ee992e, MAJOR C;
+            // every zone since D63, so that a pick never shifts the layout's rows or columns).
+            const auto fits = [&](const PHLWINDOW& w) { return tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
             for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
                 const auto& w = *it;
                 if (w && w->m_workspace && w->m_workspace->m_id == from && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)) && fits(w))
@@ -887,7 +901,8 @@ namespace gf::tiler {
                 return;
             }
             if (rel.snap) {
-                tile(w, rel.snap->place, rel.snap->monitor.lock());
+                if (!tile(w, rel.snap->place, rel.snap->monitor.lock()))
+                    endMove(w); // refused (D63: its minimum grew since the preview): Free where it was dropped
                 return;
             }
             if (const auto r = s.book.find(idOf(w)); r && r->state == tiling::TileState::Tiled) {
@@ -1308,7 +1323,7 @@ namespace gf::tiler {
             SEdgeScene scene;
             if (press)
                 scene = edgeScene(m);
-            const auto edge = tiling::edgeAt(press ? scene.edges : hoverEdges(m), p.x, p.y);
+            auto edge = tiling::edgeAt(press ? scene.edges : hoverEdges(m), p.x, p.y); // not const: returned by move
             if (!edge || CGrassfieldTitlebar::pointerCovered(p) || !handleClearAt(*edge, p)) // the hit tests only over a handle
                 return std::nullopt;
             if (windows)
@@ -1488,6 +1503,8 @@ namespace gf::tiler {
         // output (TL30, P3: the neighbours are configured at most once per refresh), the rest when the frame is due.
         void edgeMotion() {
             auto& s = st();
+            if (!s.edge)
+                return; // beforePointerMotion calls it during a drag only
             auto& d = *s.edge;
             if (gf::deferredFocus::sessionLocked()) {
                 edgeEnd("the session locked");
@@ -1636,8 +1653,8 @@ namespace gf::tiler {
         const tiling::Output output{toRect(box), box.y + m->m_reservedArea.top(), edgeFree(m, true), edgeFree(m, false)};
         const auto           area  = areaFor(m);
         const auto           place = tiling::dragPlace(pointer.x, pointer.y, output, area.box, options, alt);
-        if (!place)
-            return std::nullopt;
+        if (!place || !fitsPlace(w, *place, area, m->m_name, w->m_workspace->m_id))
+            return std::nullopt; // D63: no preview of a place the window does not fit (the release only moves it)
         return Snap{*place, toCBox(placeFrame(w, *place, area, m->m_name, w->m_workspace->m_id)), m};
     }
 
@@ -1705,7 +1722,15 @@ namespace gf::tiler {
         const CBox current = target->position();
         const auto band    = gf::chrome::bandOf(w);
         const auto onDesktop = monitorOf(w) == m ? std::optional<int64_t>{w->m_workspace->m_id} : std::nullopt; // its own Desktop's area, shown or not
-        const CBox surface   = toCBox(tiling::surfaceOf(placeFrame(w, place, areaFor(m, onDesktop), m->m_name, w->m_workspace->m_id), band));
+        const auto area      = areaFor(m, onDesktop);
+        if (!fitsPlace(w, place, area, m->m_name, w->m_workspace->m_id)) {
+            // D63: never a tile larger than its place (it would overlap its neighbours and shift their rows or columns); the
+            // shell greys that place (unfitZones), so this is a key, a stale menu or a request of another client.
+            logRequest(Log::INFO, "tile {:x}: refused: its minimum does not fit {} on {} (TL8, D63)", idOf(w), tiling::nameOf(place), m->m_name);
+            notify(tiling::Reason::Invalid);
+            return false;
+        }
+        const CBox surface = toCBox(tiling::surfaceOf(placeFrame(w, place, area, m->m_name, w->m_workspace->m_id), band));
         g_layoutManager->setTargetGeom(surface, target);
         followOutput(w); // tiled on another output (a drag's release there, tile() after a drag over): that output's Desktop
         const int64_t workspace = w->m_workspace ? w->m_workspace->m_id : 0;
@@ -1727,6 +1752,13 @@ namespace gf::tiler {
     bool splittable(const PHLWINDOW& w) {
         const auto m = placeable(w) ? monitorOf(w) : nullptr;
         return m && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 0)) && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 1));
+    }
+
+    std::vector<std::string> unfitZones(const PHLWINDOW& w) {
+        const auto m = w && w->m_workspace ? monitorOf(w) : nullptr;
+        if (!m)
+            return {};
+        return tiling::unfitZones(constraintsOf(w), areaFor(m, w->m_workspace->m_id)); // the area tile() places it in
     }
 
     void moveToRequest(std::string_view addressText, std::string_view outputName) {
@@ -2255,6 +2287,22 @@ namespace gf::tiler {
                 return;
             }
         }
+        // D63 (D57's model for every arrangement): each given window fits its zone as the glyph shows it, else nothing moves (it
+        // would overlap its neighbours and shift the layout's rows or columns); the shell greys those (unfitZones).
+        const auto* layout = tiling::layoutById(request->layout); // parseArrange checked the id
+        if (!layout) {
+            refuse("the layout is unknown");
+            return;
+        }
+        const auto area = areaFor(m);
+        for (size_t i = 0; i < windows.size(); ++i) {
+            const int zone = request->zone ? *request->zone : static_cast<int>(i);
+            if (zone < 0 || zone >= static_cast<int>(layout->zones.size()) ||
+                !tiling::fitsZone(constraintsOf(windows[i]), layout->zones[static_cast<size_t>(zone)], area)) {
+                refuse(std::format("{:x} does not fit zone {} of {} (TL8, D63)", idOf(windows[i]), zone, request->layout));
+                return;
+            }
+        }
         // Then a minimized pick comes back to that output's Desktop (no Dock animation: it appears in its zone), and each window
         // takes the Desktop of the output it is on (D9), whatever moved it there: the plugin's titlebar drag, or a move
         // Hyprland's own action makes without changing the Desktop (Actions::move).
@@ -2284,7 +2332,6 @@ namespace gf::tiler {
                 return;
             }
         }
-        const auto*               layout = tiling::layoutById(request->layout); // parseArrange checked the id
         std::vector<int>          zoneIndex;
         std::vector<tiling::Zone> zones;
         zoneIndex.reserve(layout->zones.size());
@@ -2292,22 +2339,30 @@ namespace gf::tiler {
         if (request->zone) {
             zoneIndex.push_back(*request->zone);
         } else {
-            // TL6: then the next tileable windows in stacking order (top first) on that output and Desktop, in the active stage.
-            if (request->fill && Desktop::windowState()) {
-                const auto& all = Desktop::windowState()->windows(); // bottom to top
-                for (auto it = all.rbegin(); it != all.rend() && windows.size() < layout->zones.size(); ++it) {
-                    const auto& w = *it;
-                    if (!w || std::ranges::find(windows, w) != windows.end() || w->m_workspace != workspace || !placeable(w) || monitorOf(w) != m)
-                        continue;
-                    windows.push_back(w);
-                }
-            }
             for (size_t i = 0; i < windows.size(); ++i)
                 zoneIndex.push_back(static_cast<int>(i));
+            // TL6: then each remaining zone takes the topmost tileable window (stacking order) on that output and Desktop, in the
+            // active stage, that fits it (D63: a window too large for a zone is left for another zone or left out; a zone no
+            // window fits stays empty, for the suggestion).
+            if (request->fill && Desktop::windowState()) {
+                const auto& all = Desktop::windowState()->windows(); // bottom to top
+                for (size_t z = windows.size(); z < layout->zones.size(); ++z) {
+                    for (auto it = all.rbegin(); it != all.rend(); ++it) {
+                        const auto& w = *it;
+                        if (!w || std::ranges::find(windows, w) != windows.end() || w->m_workspace != workspace || !placeable(w) || monitorOf(w) != m)
+                            continue;
+                        if (!tiling::fitsZone(constraintsOf(w), layout->zones[z], area))
+                            continue;
+                        windows.push_back(w);
+                        zoneIndex.push_back(static_cast<int>(z));
+                        break;
+                    }
+                }
+            }
         }
         for (const auto i : zoneIndex)
             zones.push_back(layout->zones[static_cast<size_t>(i)]);
-        const auto frames = fitted(zones, windows, areaFor(m));
+        const auto frames = fitted(zones, windows, area);
         // The windows placed together form a tile group (TL6, T1d); one window alone has none; a pick joins the asker's (TL28).
         const uint64_t group = request->with ? s.book.joinGroup(*request->with) : windows.size() >= 2 ? s.book.newGroup() : 0;
         for (size_t i = 0; i < windows.size(); ++i) {
@@ -2381,15 +2436,21 @@ namespace gf::tiler {
             if (State::workspaceState() && State::workspaceState()->query().id(d.workspace).run())
                 splits.push_back(d);
         }
-        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile).
-        std::vector<uint64_t> unfit;
+        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile). D63: the zones
+        // each one does not fit (the Window menu greys those Halves, Quarters and Arrange items).
+        std::vector<uint64_t>          unfit;
+        std::vector<tiling::WindowFit> fits;
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
-                if (w && placeable(w) && !splittable(w))
+                if (!w || !placeable(w))
+                    continue;
+                if (!splittable(w))
                     unfit.push_back(idOf(w));
+                if (auto zones = unfitZones(w); !zones.empty())
+                    fits.push_back(tiling::WindowFit{.address = idOf(w), .zones = std::move(zones)});
             }
         }
-        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit);
+        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit, fits);
     }
 
     void beforePointerMotion() {

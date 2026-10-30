@@ -1325,6 +1325,47 @@ namespace gf::tiling {
         return c.minW <= frame.w + kSlack && c.minH + c.band <= frame.h + kSlack;
     }
 
+    bool fitsZone(const Constraints& c, const Zone& zone, const Area& area) {
+        return fitsFrame(c, zoneFrame(zone, area));
+    }
+
+    std::span<const Zone> offeredZones() {
+        static const std::vector<Zone> all = [] {
+            constexpr std::array kPlaces{Place::Left,     Place::Right,     Place::Top,        Place::Bottom,        Place::TopLeft,
+                                         Place::TopRight, Place::BottomLeft, Place::BottomRight, Place::LeftThird,    Place::MiddleThird,
+                                         Place::RightThird, Place::LeftTwoThirds, Place::RightTwoThirds};
+            const Zone        whole{};
+            std::vector<Zone> out;
+            const auto        add = [&out, &whole](const Zone& z) {
+                if (z != whole && std::ranges::find(out, z) == out.end())
+                    out.push_back(z);
+            };
+            for (const auto p : kPlaces) {
+                if (const auto z = zoneOf(p))
+                    add(*z);
+            }
+            for (const auto& l : catalogue()) {
+                for (const auto& z : l.zones)
+                    add(z);
+            }
+            return out;
+        }();
+        return all;
+    }
+
+    std::string zoneName(const Zone& zone) {
+        return std::format("{},{},{},{}", zone.x, zone.y, zone.w, zone.h);
+    }
+
+    std::vector<std::string> unfitZones(const Constraints& c, const Area& area) {
+        std::vector<std::string> out;
+        for (const auto& z : offeredZones()) {
+            if (!fitsZone(c, z, area))
+                out.push_back(zoneName(z));
+        }
+        return out;
+    }
+
     int64_t nextDesktopId(std::span<const int64_t> ids) {
         int64_t top = 0;
         for (const auto id : ids)
@@ -1384,9 +1425,24 @@ namespace gf::tiling {
         return SplitStep::Keep;
     }
 
+    namespace {
+        // ["a","b",…] of zone names (zoneName), escaped.
+        void appendNames(std::string& out, std::span<const std::string> names) {
+            out += '[';
+            for (size_t i = 0; i < names.size(); ++i) {
+                if (i != 0)
+                    out += ',';
+                out += '"';
+                out += gf::gfc::jsonEscape(names[i]);
+                out += '"';
+            }
+            out += ']';
+        }
+    } // namespace
+
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit, std::span<const WindowFit> unfitZones) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1425,6 +1481,12 @@ namespace gf::tiling {
         out += R"(],"unfit":[)";
         for (size_t i = 0; i < unfit.size(); ++i)
             out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", unfit[i]);
+        out += R"(],"unfitZones":[)";
+        for (size_t i = 0; i < unfitZones.size(); ++i) {
+            out += std::format(R"({}{{"address":"{:x}","zones":)", i == 0 ? "" : ",", unfitZones[i].address);
+            appendNames(out, unfitZones[i].zones);
+            out += '}';
+        }
         out += "]";
         if (!suggestion) {
             out += R"(,"suggestion":null})";
@@ -1455,13 +1517,15 @@ namespace gf::tiling {
         return "leave";
     }
 
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable, bool splittable) {
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light, bool tileable, bool splittable, std::span<const std::string> unfitZones) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tile-hover","address":"{:x}","state":"{}")", address, hoverStateName(state));
-        if (state != HoverState::Leave)
-            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{},"splittable":{})", num(light.x), num(light.y), num(light.w), num(light.h), tileable,
-                               splittable);
+        if (state != HoverState::Leave) {
+            out += std::format(R"(,"x":{},"y":{},"w":{},"h":{},"tileable":{},"splittable":{},"unfitZones":)", num(light.x), num(light.y), num(light.w), num(light.h),
+                               tileable, splittable);
+            appendNames(out, unfitZones);
+        }
         out += '}';
         return out;
     }

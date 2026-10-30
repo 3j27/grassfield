@@ -133,6 +133,13 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
   the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
   fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
+  Since ADR-0036 D63 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
+  with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
+  as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
+  arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
+  shows no preview there, an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
+  fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
+  above now serves windows already placed whose work area shrinks (the margins switch, the Dock).
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up

@@ -444,7 +444,7 @@ namespace {
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.leave, gf::tiling::HoverState::Leave));
         if (change.enter && w && gf::state().tilingLayouts) // off (TL32): Super+Ctrl+L and the Window menu still open it
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.enter, gf::tiling::HoverState::Enter, gf::tiling::Rect{light.x, light.y, light.w, light.h},
-                                                              gf::tiler::tileable(w), gf::tiler::splittable(w)));
+                                                              gf::tiler::tileable(w), gf::tiler::splittable(w), gf::tiler::unfitZones(w)));
     }
 
     void armZoomTimer(uint64_t ms);
@@ -662,7 +662,7 @@ void CGrassfieldTitlebar::popoverRequest(std::string_view address) {
     const CBox light   = zoomLightOf(w).value_or(CBox{surface.x, surface.y - band, theme::kTitlebarHeight, theme::kTitlebarHeight});
     gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::TileHover, .id = 0},
                        gf::tiling::tileHoverJson(*id, gf::tiling::HoverState::Open, gf::tiling::Rect{light.x, light.y, light.w, light.h}, gf::tiler::tileable(w),
-                                                 gf::tiler::splittable(w)));
+                                                 gf::tiler::splittable(w), gf::tiler::unfitZones(w)));
 }
 
 SDecorationPositioningInfo CGrassfieldTitlebar::getPositioningInfo() {
