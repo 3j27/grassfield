@@ -936,8 +936,10 @@ TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
                     .endsWith(QStringLiteral("changed since it was chosen")));
     EXPECT_EQ(QDir(elsewhere.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("bashrc")});
     EXPECT_TRUE(QDir(elsewhere.filePath(QStringLiteral("inner"))).isEmpty());
-    // Not a file name.
+    // Not a file name (a folder of that name there too: never written into).
+    ASSERT_TRUE(QDir(folder).mkdir(QStringLiteral("a")));
     EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), folder, QStringLiteral("a/b.pdf"), 2000).startsWith(QStringLiteral("cannot write")));
+    EXPECT_TRUE(QDir(dir.filePath(QStringLiteral("a"))).isEmpty());
     EXPECT_TRUE(writePdf(source({QByteArray("%PDF-1.7")}), folder, QStringLiteral(".."), 2000).startsWith(QStringLiteral("cannot write")));
 
     // Over the limit past the first read (a document longer than one read: the limit holds on every piece).
@@ -1131,10 +1133,11 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
     EXPECT_EQ(jobCount(), count) << "no job made";
 
     // A document over the limit: refused before any job when its first read is already over it, else its job cancelled.
-    CupsPrintSystem::Limits small;
-    small.maxDocumentBytes = 40;
-    CupsPrintSystem limited(small, nullptr);
-    for (const qsizetype size : {qsizetype(60), qsizetype(200000)}) {
+    // (40 bytes: over within the first read; 70000: over only past it, the first read being 64 KiB.)
+    for (const auto &[size, limit] : {std::pair<qsizetype, qint64>(60, 40), std::pair<qsizetype, qint64>(200000, 70000)}) {
+        CupsPrintSystem::Limits small;
+        small.maxDocumentBytes = limit;
+        CupsPrintSystem limited(small, nullptr);
         QFile over(dir.filePath(QStringLiteral("over.pdf")));
         ASSERT_TRUE(over.open(QIODevice::WriteOnly | QIODevice::Truncate));
         over.write("%PDF-1.4\n");
