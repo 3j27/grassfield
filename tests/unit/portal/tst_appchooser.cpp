@@ -315,6 +315,20 @@ TEST_F(AppChooserTest, WithoutAUiTheCallAndItsUpdatesGoToGtk)
     EXPECT_FALSE(reply->results.contains("uris")) << "only what the interface defines";
 }
 
+// x-d-p-gtk's Cancel: its response, and no empty choice or token (integrator nested pass of f9a25ce, NIT).
+TEST_F(AppChooserTest, GtksCancelGivesNoChoice)
+{
+    chooser->setUiLoader([] { return false; });
+    auto reply = call(QStringLiteral("/r/g2"), {QStringLiteral("org.gnome.TextEditor")}, {});
+    ASSERT_TRUE(waitFor([&] { return gtk.held.type() == QDBusMessage::MethodCallMessage; }));
+    gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(1u),
+                                                   QVariantMap{{QStringLiteral("choice"), QString()},
+                                                               {QStringLiteral("activation_token"), QString()}}}));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_EQ(reply->response, 1u);
+    EXPECT_TRUE(reply->results.isEmpty()) << "no empty choice, no empty token";
+}
+
 // Close (the application went away) ends the request with response 2 and takes the panel away; a late answer is ignored.
 TEST_F(AppChooserTest, CloseEndsTheRequest)
 {

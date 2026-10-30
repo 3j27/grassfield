@@ -183,11 +183,12 @@ void AppChooser::answer(int id, int response, const QVariantMap &answer)
 
 QVariantMap AppChooser::relayed(const QVariantMap &gtkResults) const
 {
-    // The interface's results: the choice and the activation token (strings).
+    // The interface's results: the choice and the activation token (strings; an empty one is none: x-d-p-gtk's Cancel gives
+    // an empty choice, integrator nested pass of f9a25ce, NIT).
     QVariantMap out;
     for (const QString &key : {QStringLiteral("choice"), QStringLiteral("activation_token")}) {
         const QVariant value = gtkResults.value(key);
-        if (value.metaType() == QMetaType::fromType<QString>())
+        if (value.metaType() == QMetaType::fromType<QString>() && !value.toString().isEmpty())
             out.insert(key, value.toString());
     }
     // A choice that is no desktop id is none, as the panel's own (the frontend starts what it is given; integrator review of
