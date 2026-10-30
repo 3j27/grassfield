@@ -28,6 +28,28 @@ Item {
         value: root.backend.reduceMotion
     }
 
+    // Accessibility > Display, as every app (ADR-0039 Q7): controls outlined, secondary text in the text colour, and the text
+    // tokens marked textScale at the chosen size.
+    Binding {
+        target: Appearance
+        property: "increaseContrast"
+        value: root.backend.increaseContrast
+    }
+
+    Binding {
+        target: Appearance
+        property: "textScale"
+        value: root.backend.textScale
+    }
+
+    // The window's own surface and its secondary text grey (ADR-0024: app windows draw the window neutrals, not the shell's
+    // material tint; Appearance.windowFill, Appearance.windowSecondary).
+    Binding {
+        target: Appearance
+        property: "windowSurface"
+        value: true
+    }
+
     Binding {
         target: Appearance
         property: "accentSetting"

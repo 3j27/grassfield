@@ -110,7 +110,7 @@ Window {
     minimumWidth: Tokens.previewGlanceMinWidth
     minimumHeight: Tokens.previewGlanceMinHeight
     visible: true
-    color: Appearance.colors.materialTint
+    color: Appearance.windowFill
 
     onScreenChanged: win.fitToScreen()
     Component.onCompleted: {
@@ -208,7 +208,7 @@ Window {
                 anchors.centerIn: parent
                 kind: "close"
                 size: parent.width - Tokens.spacingXs
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
             }
             MouseArea {
                 id: closeMouse
@@ -232,7 +232,7 @@ Window {
             text: DisplayName.text(content.info.name)
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyMenuSize
+            font.pixelSize: Tokens.typographyBodySize
             font.weight: Tokens.typographyMenuBoldWeight
             Accessible.role: Accessible.Heading
             Accessible.name: text
@@ -267,7 +267,7 @@ Window {
                 visible: win.showCount
                 textFormat: Text.PlainText
                 text: qsTr("%1 of %2").arg(win.current + 1).arg(win.fileCount)
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.StaticText
