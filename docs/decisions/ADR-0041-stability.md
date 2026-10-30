@@ -455,6 +455,98 @@ Goal: no input a process reads from the system, a file or another process can cr
 - Review: the integrator; security for the new window (it shows untrusted text: plain `textFormat`, the existing rule
   of `scripts/dev/check-textformat.py`).
 
+### Step 5 as built, first part (2026-10-29, branch of the stability lane; the readers that need no Qt)
+- `compositor/tests/ParserFuzzTest.cpp`: an in-tree mutator (xorshift seed, twelve operations: bit flips, special bytes,
+  dictionary tokens, deleted, duplicated and swapped slices, truncation, number extremes, nesting, splices, growth past
+  the cap, raw bytes) over every core reader of untrusted text: `overview::parseRequest`, `overviewfocus::parseRequest`,
+  `stages::parseRequest`, `tiling::parseArrange`, `minimize::parseAddress`, the config readers (`parseAppearance`,
+  `parseDoubleClickAction`, `parseEffect`, `parseStagesEnabled`, `switchOf` + `parseBool`, `parsePlace`, `outputNameOk`,
+  `isFunnelShaderFault` outside a dev session), `appmenu::isValidBusName/ObjectPath/Address`, `json::CReader`,
+  `gfc::jsonEscape` (a round trip through the reader) and `stages::sanitizedText`. Properties: no crash, two reads agree,
+  at most 50 ms per call and 2 ms on average, and on an accepted input every invariant of the header (caps, distinct
+  addresses, finite numbers, ranges, name grammars, the catalogue). 2000 iterations per parser in the suite,
+  `GF_FUZZ_ITERATIONS` for more, `GF_FUZZ_SEED` for another seed. `compositor/build-direct.sh tests-asan` builds the suite
+  with ASan and UBSan without Hyprland's headers (the `tests` mode no longer needs them either); `scripts/dev/test.sh`
+  runs that binary when it exists; `scripts/gates/release-check.sh` gains the step `comp-asan` (50 000 iterations).
+- `tests/fuzz/mutate.py` (the same mutator in Python, with a self-test), `tests/fuzz/fuzz_helpers.py` and its runner
+  `tests/fuzz/helpers_fuzz.sh` (inventory layer `logic`): `grassfield-crash-watch` (the four real journal fixtures with
+  mutated text and values, desktop entries, `cgroup.events`, locale names), `grassfield-session-end` (`hyprctl -j
+  clients`), `grassfield-battery-watch` (sysfs), the ANR stand-in's client matcher, the `lock status` filter of the
+  `omarchy-shell` stand-in and `sleep-lock-gate`; each with its contract and a corpus sanity check (the seeds must be
+  accepted or decided as the contract says, so the accepting path is proven to run).
+- Findings, each fixed with a deterministic regression case:
+  1. `grassfield-crash-watch` `scope_state`: a `cgroup.events` that is not UTF-8 raised `UnicodeDecodeError`, a
+     `populated` line without its value raised `IndexError` (seed 1, iterations 1 and 23). The worker thread caught the
+     exception, but the candidate then stayed pending and was looked at again every poll, its deadline never reached.
+     Now "unknown" (a bounded, replacement-decoded read); cases in `tests/shell/crash_watch.sh`. The kernel never writes
+     such a file: a robustness defect, not a user-visible one.
+  2. `omarchy-shell lock status`: jq's `index("LOCK")` on a string finds a substring and `.[]` walks an object's values
+     like an array's, so a monitor whose `solitaryBlockedBy` were a string such as `"UNLOCKED"`, or an object of
+     monitors, read as secure. Hyprland 0.56.2 always answers an array of objects with an array; the filter now requires
+     both arrays (fail closed on any other shape); cases in `tests/security/sleep_lock_units.sh`. **The stand-in is the
+     sleep-lock fail-safe (D-12, SEC-02): this hunk needs the opus security review before the merge.**
+  3. The harness's own first version had three wrong oracles (an address prefix `0X` the parser accepts, a UTF-8 demand
+     the JSON reader never promised, a quote check that counted `\"`) and one dangling `string_view`; they are fixed in
+     the harness, not in the product, and are named here so a reviewer does not take them for product findings.
+- Evidence (Ubuntu 24.04 container, g++ 13.3, gtest 1.14; no Qt, no Quickshell, no Hyprland headers):
+  `compositor/build-direct.sh tests` → 468 tests passed (457 before); `tests-asan` → 468 passed; `GF_FUZZ_ITERATIONS=100000`
+  on the sanitized binary → 11 fuzz tests passed, 1.1 million inputs, worst call 10.8 ms (`sanitizedText` on 2 KiB),
+  15.5 s in all; `tests/fuzz/helpers_fuzz.sh` → PASS at 1500 and at 20 000 iterations (crash-watch 8909 of 20 000
+  accepted, session-end 2396, battery 3568, ANR matcher 397, lock status 83 of 4000, sleep-lock gate 2567 of 4000);
+  `tests/security/sleep_lock_units.sh` exit 0; `tests/shell/crash_watch.sh` exit 0; `python3 -I tests/ci/inventory.py`
+  ok (570 tests). `clang-tidy` could not run here (the container's clang 18 has no `std::expected` with libstdc++ 13);
+  the two lints it did report on the test file (an embedded NUL literal, adjacent literals) are fixed. The owner's
+  machine runs `just check-tidy`.
+- Not in this part (needs Qt or Quickshell offscreen): the shell's QML and JS readers, the bridge, Activity Monitor, the
+  Store (`docs/testing/README.md` "Fuzzing" lists them).
+- Review round 1 (2026-10-30; the integrator's independent opus security review of 265e6c7: FAIL, two majors, four minors,
+  three nits; each answered with a new commit on the same branch):
+  1. Major: `jq -e` without `-s` decides on the LAST of several JSON values, so `[unlocked] [locked]` and
+     `4294967296[locked]` read as secure (the harness itself finds the second at 10 000 iterations). The filter now
+     slurps and demands exactly one value (`jq -e -s 'length == 1 and (.[0] | ...)'`); both inputs, a scalar after a
+     locked array and an empty answer are cases of `tests/security/sleep_lock_units.sh` and of the harness's corpus
+     checks. The fail-closed claim holds again: anything but one array of objects each listing LOCK is not secure.
+  2. Major: a scenario's seed came from `hash(name)`, which is randomised per process and which `python3 -I` cannot pin
+     (it ignores PYTHONHASHSEED), so two runs of one seed mutated different inputs (58 and 49 accepted of 300 here with
+     the old seed). Now `zlib.crc32(name)`; `helpers_fuzz.sh` ends with two runs of one seed that must print the same
+     counts, and `GF_FUZZ_TRACE=1` prints a finding's whole traceback.
+  3. Minor: the lock status oracle read a lone surrogate escape where jq 1.7 and 1.8 refuse it (a false finding, fail
+     closed). The oracle now answers "either" for a locked shape jq may refuse (a lone surrogate, nesting past jq's 256
+     levels) and skips a leading byte order mark as jq does.
+  4. Minor: "every reader" claimed too much. `grassfield-update-check` is fuzzed now (checkupdates' and pacman's output,
+     vercmp's answer, its failures and last-success files, the release notes, pacman.conf and the repository file, with
+     stub children so nothing runs): its reading of `{"first": 1e999}` raised OverflowError (a defect that predates this
+     change), and a time the program never wrote (negative, beyond tomorrow, a bool, a string) now starts a fresh
+     episode instead of a raise or an unrepresentable `retryAt`; a notes document nested past Python's recursion limit
+     is "nested too deep" (a ValueError its caller catches) rather than an uncaught RecursionError. The four name readers
+     (`isGrassfieldNamespace`, `classifyLayer`, `splitZone`, `capabilityCandidate`) are fuzzed against their headers.
+  5. Minor: `helpers_fuzz.sh` inherited the caller's session (HYPRLAND_INSTANCE_SIGNATURE, D-Bus). It now starts the
+     harness without DISPLAY, WAYLAND_DISPLAY, HYPRLAND_INSTANCE_SIGNATURE and the D-Bus addresses, with every home under
+     its scratch directory (as `scripts/dev/isolated.sh` starts a client), and the harness drops them itself on a direct
+     run: the owner's session is never reachable from a test.
+  6. Minor: the 50 ms bound was wall-clock time (18.3 ms seen under ASan on a loaded machine). The bound is CPU time of
+     the thread now: 50 ms per call and 2 ms on average, 200 ms and 8 ms under the sanitizers (`__SANITIZE_ADDRESS__`,
+     or clang's `__has_feature`).
+  7. Nits: the trailing blank line of `docs/testing/README.md` (`git diff --check` clean); the parser without its "a
+     window is given twice" check survived 2000 iterations (killed at 8312): the arrange test now copies one quoted
+     token over another in one input of four, and that mutant dies at iteration 29; two `scope_state` guards
+     covered each other: three cases (a stray byte on a later line, the populated line after a frozen one, a directory
+     in the file's place) and four mutants of `scope_state` in `tests/shell/crash_watch.sh` tell each guard apart.
+  8. Found by this round's long run (the new seeds mutate other inputs): `grassfield-session-end` matched a window
+     address with `^0x[0-9a-fA-F]+$` and `re.match`, and `$` also matches before a trailing newline, so an address
+     `0x1\n` from a `hyprctl -j clients` answer went into the Lua close expression (seed 1, iteration 19129 of 20 000).
+     Now `fullmatch` on `0x[0-9a-fA-F]{1,16}`; a case in `tests/shell/session_end.sh`. The same slip in
+     `grassfield-update-check`'s version and date checks of the notes is fixed the same way (the harness's oracle shared
+     the regex, so it is not a harness finding).
+- Evidence of the round (same container): `compositor/build-direct.sh tests` and `tests-asan` → 479 tests passed each
+  (14 fuzz tests, 11 before); the sanitized fuzz tests at 2000 iterations: worst call 0.33 ms of CPU time
+  (`gfc.jsonEscape`; 0.54 ms on a first, loaded run); `tests/fuzz/helpers_fuzz.sh` → PASS at 1500 (update-check 172 of 1500 accepted,
+  determinism PASS) and at 20 000 (crash-watch 8801 of 20 000 accepted, session-end 2434, battery 3552, ANR matcher 390, lock status 77 of
+  4000, sleep-lock gate 2546 of 4000, update-check 2163); `tests/security/sleep_lock_units.sh` exit 0 (the four new stand-in
+  cases pass); `tests/shell/session_end.sh` exit 0 (36 PASS); `tests/shell/crash_watch.sh`: 69 PASS, the four new mutants caught, the one pre-existing timing check
+  fails here as on main; `python3 -I tests/ci/inventory.py` ok (576); `git diff --check` clean. Still NOT run here:
+  `clang-tidy` (`just check-tidy` on the owner's machine).
+
 ### Delivery order and what each step waits for
 | Step | Waits for | Pull requests |
 |---|---|---|

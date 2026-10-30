@@ -81,7 +81,7 @@ if(GRASSFIELD_BUILD_TESTS)
   add_executable(grassfield-compositor-tests tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
     tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
     tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp tests/ClientChromeTest.cpp tests/FrameLogTest.cpp tests/QuietTest.cpp
-    tests/NoticesTest.cpp tests/RunModeTest.cpp tests/TopClampTest.cpp)
+    tests/NoticesTest.cpp tests/RunModeTest.cpp tests/TopClampTest.cpp tests/ParserFuzzTest.cpp)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   # QuietTest reads the plugin's sources (every key listener opens the quiet scope).
   # RunModeTest reads the run-mode vectors shared with the shell and the apps (ADR-0019).
