@@ -255,7 +255,7 @@ function notice(request) {
 }
 
 // A document whose type has no application (KIO's Open With question; ADR-0035 5c-3): Finder's alert without its App Store
-// button. Choose Application… (the default) opens the Choose Application panel; Cancel and Esc open nothing.
+// button (Grassfield Store cannot yet search by document type). Choose Application… (the default) opens the Choose Application panel; Cancel and Esc open nothing.
 function noApplication(request) {
     return {
         title: qsTr("There is no application set to open the document “%1”.").arg(request.name),

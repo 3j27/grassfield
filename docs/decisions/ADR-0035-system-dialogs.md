@@ -679,7 +679,11 @@ choice. After the opus review of step 5c (PASS; MINORs and NITs done): an error 
 worked in shows in the window under it; only a click on a dimmed item keeps the selection (a key that lands there selects
 nothing, so Return never answers an item out of sight); a panel asked for from a panel opens over the browser window under it,
 and a window that closes cancels the panels over it; one document with no file name is named by its address; a chooser with
-nothing to show its panel answers none at once (grassfield-portal's own FilesApp). Tests: `tests/unit/files/tst_applicationchooser.cpp`, `tst_kiodialogs.cpp` (a type with no application through a real
+nothing to show its panel answers none at once (grassfield-portal's own FilesApp). After the integrator's review of the
+pull request (PASS; its MINORs and NITs done): Other… gives every selected document to the chosen application, never the type's
+default one (tested with two documents, one named with a shell's characters, and no shell reads them); a right-click on a
+dimmed item keeps the selection too, in each view; the address a panel names never shows its password
+(`QUrl::toDisplayString`); 5c-3's reason for leaving out the store button corrected. Tests: `tests/unit/files/tst_applicationchooser.cpp`, `tst_kiodialogs.cpp` (a type with no application through a real
 OpenUrlJob: the sheet, the panel, the chosen application started with the document; Cancel on either; a job killed under its
 panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.qml`, `tst_filesbrowser.qml`,
 `tst_filescolumns.qml`, `tst_filepanel.qml`, `tst_appchooser.cpp`, `tests/shell/display_names.sh` (a raw path).
@@ -697,11 +701,16 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   This settles 5b-7's "sheet".
 - **5c-3. A type with no application** (KIO's `OpenWithHandlerInterface`; 4a-5's notice). Options: (a) keep the notice; (b)
   Finder's alert, "There is no application set to open the document “X”.", with Choose Application… (the default) and Cancel,
-  then the panel; (c) the panel at once. **Choice: (b)**: Finder's alert without its App Store button (no store here); Return
-  chooses, Esc cancels; the chosen application opens the document (KIO starts it); Cancel on either opens nothing.
+  then the panel; (c) the panel at once. **Choice: (b)**: Finder's alert without its App Store button; Return chooses, Esc
+  cancels; the chosen application opens the document (KIO starts it); Cancel on either opens nothing. The button stays out
+  because Grassfield Store cannot yet search by document type: a "Search the Store" button that finds nothing for the type would
+  be a dead end. (The first reason given, "no store here", was wrong once main shipped Grassfield Store; corrected after the
+  integrator's review of the step's pull request, a decision the integrator took under the owner's delegation of 2026-10-27:
+  closest to macOS, no technical step for the user.) **Follow-up:** add "Search the Store" to this alert once the Store can
+  search by document type.
 - **5c-4. "Always Open With".** Options: (a) no box, as 5b-3; (b) a box that sets the type's default application
   (mimeapps.list); (c) a box that binds that document to the application. **Choice: (a)**: macOS's box binds that one document
-  (a per-document setting with no store here, and no reader: KIO and the frontend look at the type); the type's default is Get
+  (a per-document setting that nothing here keeps, and no reader: KIO and the frontend look at the type); the type's default is Get
   Info's "Change All…" in macOS, which Files does not have yet (an open item, not this dialog).
 - **5c-5. Several documents.** Options: (a) one panel for all; (b) one per document. **Choice: (a)**: Finder's Open With acts
   on the selection; the line reads "Choose an application to open the N selected documents."; the candidates are the first
