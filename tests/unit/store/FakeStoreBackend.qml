@@ -51,6 +51,18 @@ QtObject {
     signal aurInfo(string id)
     signal buildScript(string id, string text, bool ok)
     property bool aurRead: false
+    // Flathub (step 3c): the tests emit flatpak's facts.
+    signal flatpakInfo(string id, var facts)
+
+    function requestFlatpakInfo(id) {
+        calls.push("flatpakInfo:" + id);
+    }
+
+    function stopOperation(opId) {
+        calls.push("stop:" + opId);
+        operations = operations.filter(o => o.id !== opId || !o.stoppable);
+        return true;
+    }
 
     function searchAur(term) {
         calls.push("searchAur:" + term);
@@ -143,7 +155,8 @@ QtObject {
         app_("org.example.Games", "Game Hub", "setup", false, true),
         app_("org.example.Mail", "Mail Web", "webapp", false, true),
         app_("org.example.Tool", "Pack Tool", "repo", true, false),
-        app_("aur:example-app-bin", "example-app-bin", "aur", false, false)
+        app_("aur:example-app-bin", "example-app-bin", "aur", false, false),
+        Object.assign(app_("org.example.Notes", "Notes", "flatpak", false, true), {flatpakId: "org.example.Notes"})
     ]
 
     function find(id) {
@@ -193,7 +206,8 @@ QtObject {
             homepage: "https://example.org/" + id, bugtracker: "", package: "paint", packages: ["paint"], desktopId: "paint.desktop",
             inCatalog: true, screenshots: ["https://example.org/1.png"], captions: ["The main window"], categories: ["Graphics"],
             releases: [{version: "2.0", date: "October 1, 2026", notes: "Faster."}], languages: ["Deutsch", "français"],
-            rated: true, rating: {social: 3}, webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: "",
+            rated: true, rating: {social: 3}, webUrl: a.kind === "webapp" ? "https://mail.example.com/" : "", flatpakId: a.flatpakId || "",
+            runtime: a.kind === "flatpak" ? "org.gnome.Platform 50" : "", verified: a.kind === "flatpak",
             aur: a.kind !== "aur" ? ({}) : {version: "2.4.1-1", maintainer: "alice", orphaned: false, votes: 120, popularity: "1.53",
                 lastModified: "September 21, 2026", outOfDate: root.aurRead, outOfDateSince: root.aurRead ? "October 3, 2026" : "",
                 base: "example-app-bin", depends: root.aurRead ? ["gtk3", "example-lib"] : []},

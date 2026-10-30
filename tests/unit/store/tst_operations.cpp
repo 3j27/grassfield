@@ -111,6 +111,34 @@ done
 [ "$mode" = closed ] && exit 0
 fin 0)SH";
 
+// flatpak's stand-in (b.3, step 3c): `install --user --noninteractive flathub <ref>` prints S24's lines and adds the app to
+// the flatpaks file (fmode fail: flatpak's error; slow: it waits for SIGTERM after its first ref, S25), `uninstall` removes it
+// and `--unused` the runtime, `list --user --app` answers from the file. Each call is written to fcalls.
+const QByteArray kFlatpak = R"SH(root=$(dirname "$0")
+echo "$*" >>"$root/fcalls"
+mode=$(cat "$root/fmode" 2>/dev/null)
+case "$1" in
+  install)
+    id=$(echo "$5" | cut -d/ -f2)
+    [ "$mode" = fail ] && { echo "error: While pulling app/$id/x86_64/stable from remote flathub: Could not connect"; exit 1; }
+    echo "Looking for matches…"
+    echo "Installing runtime/org.example.Platform/x86_64/1"
+    if [ "$mode" = slow ]; then
+      trap 'echo stopped >>"$root/fcalls"; kill $! 2>/dev/null; exit 1' TERM
+      sleep 30 >/dev/null 2>&1 &
+      wait
+    fi
+    echo "Installing app/$id/x86_64/stable"
+    echo "$id" >>"$root/flatpaks"
+    echo "Installation complete." ;;
+  uninstall)
+    if [ "$4" = --unused ]; then echo "Uninstalling runtime/org.example.Platform/x86_64/1"; exit 0; fi
+    grep -vx "$5" "$root/flatpaks" >"$root/f2"; mv "$root/f2" "$root/flatpaks"
+    echo "Uninstalling app/$5/x86_64/stable" ;;
+  list) cat "$root/flatpaks" ;;
+  *) exit 2 ;;
+esac)SH";
+
 struct Fixture {
     QTemporaryDir dir;
     OperationsConfig config;
@@ -138,6 +166,8 @@ struct Fixture {
         config.terminalStartMs = 1000;
         config.terminalGraceMs = 500;
         config.omarchy = [installer](const QString &command, const QStringList &args) { return QStringList{installer, command} + args; };
+        config.flatpak = storetest::script(root + QStringLiteral("/flatpak"), kFlatpak);
+        storetest::writeFile(root + QStringLiteral("/flatpaks"), "");
         config.pollMs = 20;
     }
     void mode(const QByteArray &m) { storetest::writeFile(dir.filePath(QStringLiteral("mode")), m); }
@@ -176,6 +206,25 @@ OperationRecord terminalRecord(const QString &app, const QString &kind, const QS
     r.recipe = (kind == QLatin1String("install") ? QStringLiteral("omarchy-install-") : QStringLiteral("omarchy-remove-")) + app;
     r.args = {QStringLiteral("one"), QStringLiteral("v2.0")};
     r.pins = {{QStringLiteral("bin/") + r.recipe, QString(64, QLatin1Char('a'))}, {QStringLiteral("install/x.sh"), QString(64, QLatin1Char('b'))}};
+    return r;
+}
+
+// A Flatpak's operation (b.3): an install takes Flathub's ref and flatpak's own plan, a removal the app id.
+OperationRecord flatpakRecord(const QString &app, const QString &kind)
+{
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = kind;
+    r.path = QStringLiteral("flatpak");
+    r.app = app;
+    r.name = app;
+    r.flatpak = kind == QLatin1String("install") ? QStringLiteral("app/%1/x86_64/stable").arg(app) : app;
+    for (const QString &n : {QStringLiteral("org.example.Platform"), app}) {
+        PlannedPackage p;
+        p.name = n;
+        p.version = QStringLiteral("stable");
+        r.plan.append(p);
+    }
     return r;
 }
 
@@ -718,5 +767,138 @@ TEST(Operations, TerminalRecovery)
         EXPECT_EQ(ops.items().at(0).state, Operations::State::Opening);
         ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
         EXPECT_EQ(ops.results().value(QStringLiteral("third")).outcome, QStringLiteral("terminalDidNotOpen"));
+    }
+}
+
+TEST(Operations, FlatpakRecords)
+{
+    const OperationRecord install = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install"));
+    const auto back = OperationRecord::fromJson(install.toJson());
+    ASSERT_TRUE(back);
+    EXPECT_EQ(back->flatpak, QStringLiteral("app/org.example.Notes/x86_64/stable"));
+    EXPECT_EQ(back->plan.size(), 2);
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("remove")).toJson()));
+    QJsonObject bad = install.toJson();
+    bad.insert(QStringLiteral("flatpak"), QStringLiteral("org.example.Notes")); // an install takes a ref
+    EXPECT_FALSE(OperationRecord::fromJson(bad));
+    bad = install.toJson();
+    bad.insert(QStringLiteral("flatpak"), QStringLiteral("app/org.example.Notes/x86_64/stable --system"));
+    EXPECT_FALSE(OperationRecord::fromJson(bad));
+    bad = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("remove")).toJson();
+    bad.insert(QStringLiteral("flatpak"), QStringLiteral("--unused"));
+    EXPECT_FALSE(OperationRecord::fromJson(bad));
+    bad = install.toJson();
+    bad.insert(QStringLiteral("plan"), QJsonArray{QJsonObject{{QStringLiteral("name"), QStringLiteral("not an id")}}});
+    EXPECT_FALSE(OperationRecord::fromJson(bad));
+}
+
+// An install and a removal, as the Store's own child: flatpak's lines count the progress against its plan; success is the
+// exit code AND the app there (or gone); a removal is followed by `--unused` (SD27); a failure keeps flatpak's words.
+TEST(Operations, FlatpakInstallAndRemove)
+{
+    Fixture f;
+    Operations ops(f.config);
+    Ended finished(ops);
+    int done = 0;
+    QObject::connect(&ops, &Operations::changed, &ops, [&] {
+        for (const Operations::Item &i : ops.items())
+            done = qMax(done, i.done);
+    });
+    ops.enqueue(flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install")));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << ops.results().value(QStringLiteral("org.example.Notes")).outcome.toStdString();
+    EXPECT_EQ(done, 2);
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")),
+              "install --user --noninteractive flathub app/org.example.Notes/x86_64/stable\nlist --user --app --columns=application\n");
+
+    QFile::remove(f.dir.filePath(QStringLiteral("fcalls")));
+    ops.enqueue(flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("remove")));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    EXPECT_TRUE(ops.results().isEmpty());
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), "uninstall --user --noninteractive -- org.example.Notes\n"
+                                                "uninstall --user --noninteractive --unused\nlist --user --app --columns=application\n");
+
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "fail");
+    ops.enqueue(flatpakRecord(QStringLiteral("org.example.Paint"), QStringLiteral("install")));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    const Operations::Result failed = ops.results().value(QStringLiteral("org.example.Paint"));
+    EXPECT_EQ(failed.outcome, QStringLiteral("failed"));
+    EXPECT_TRUE(failed.details.contains(QLatin1String("Could not connect"))) << failed.details.toStdString();
+
+    // No flatpak (a dev session without its fake): nothing runs, and it says so.
+    OperationsConfig none = f.config;
+    none.flatpak.clear();
+    Operations without(none);
+    Ended ended(without);
+    without.enqueue(flatpakRecord(QStringLiteral("org.example.Draw"), QStringLiteral("install")));
+    ASSERT_TRUE(waitFor([&] { return ended.count() == 1; }));
+    EXPECT_EQ(without.results().value(QStringLiteral("org.example.Draw")).outcome, QStringLiteral("notFinished"));
+}
+
+// Stopping an install (SD26): SIGTERM to flatpak, which ends at once (S25); the outcome says it was stopped, and only a
+// running Flatpak install can be.
+TEST(Operations, FlatpakStop)
+{
+    Fixture f;
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "slow");
+    Operations ops(f.config);
+    Ended finished(ops);
+    OperationRecord r = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install"));
+    ops.enqueue(r);
+    OperationRecord waiting = flatpakRecord(QStringLiteral("org.example.Paint"), QStringLiteral("install"));
+    ops.enqueue(waiting);
+    ASSERT_TRUE(waitFor([&] { return f.read(QStringLiteral("fcalls")).contains("install"); }));
+    ASSERT_TRUE(waitFor([&] { return !ops.items().isEmpty() && ops.items().constFirst().done == 1; }));
+    EXPECT_TRUE(ops.list().constFirst().toMap().value(QStringLiteral("stoppable")).toBool());
+    EXPECT_FALSE(ops.list().at(1).toMap().value(QStringLiteral("stoppable")).toBool()) << "a waiting one is removed, not stopped";
+    EXPECT_FALSE(ops.stop(waiting.id));
+    EXPECT_TRUE(ops.removeWaiting(waiting.id));
+    EXPECT_TRUE(ops.stop(r.id));
+    EXPECT_FALSE(ops.stop(r.id)) << "once";
+    EXPECT_FALSE(ops.list().constFirst().toMap().value(QStringLiteral("stoppable")).toBool());
+    ASSERT_TRUE(waitFor([&] { return finished.count() >= 1; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("org.example.Notes")).outcome, QStringLiteral("stopped"));
+    EXPECT_TRUE(f.read(QStringLiteral("fcalls")).contains("stopped")) << "flatpak had SIGTERM";
+    EXPECT_FALSE(f.read(QStringLiteral("flatpaks")).contains("org.example.Notes"));
+
+    // A removal and the other paths cannot be stopped.
+    Fixture g;
+    Operations other(g.config);
+    Ended ended(other);
+    g.mode("slow");
+    const OperationRecord helper = helperRecord(QStringLiteral("xterm"), QStringLiteral("install"), {QStringLiteral("xterm")});
+    other.enqueue(helper);
+    EXPECT_FALSE(other.stop(helper.id));
+    storetest::writeFile(g.dir.filePath(QStringLiteral("flatpaks")), "org.example.Notes\n");
+    const OperationRecord removal = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("remove"));
+    other.enqueue(removal);
+    ASSERT_TRUE(waitFor([&] { return ended.count() == 1; }));
+    EXPECT_FALSE(other.stop(removal.id));
+    ASSERT_TRUE(waitFor([&] { return ended.count() == 2; }));
+}
+
+// Recovery (f): the child died with the Store (SIGTERM), so a recorded Flatpak operation is judged by the app's state.
+TEST(Operations, FlatpakRecovery)
+{
+    Fixture f;
+    const OperationRecord there = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("flatpaks")), "org.example.Notes\n");
+    updateStoreState(f.config.stateFile, [&](QJsonObject &s) { s.insert(QStringLiteral("operation"), there.toJson()); });
+    {
+        Operations ops(f.config);
+        Ended finished(ops);
+        ops.recover();
+        ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+        EXPECT_TRUE(ops.results().isEmpty()) << "installed: done, nothing said";
+    }
+    const OperationRecord missing = flatpakRecord(QStringLiteral("org.example.Paint"), QStringLiteral("install"));
+    updateStoreState(f.config.stateFile, [&](QJsonObject &s) { s.insert(QStringLiteral("operation"), missing.toJson()); });
+    {
+        Operations ops(f.config);
+        Ended finished(ops);
+        ops.recover();
+        ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+        EXPECT_EQ(ops.results().value(QStringLiteral("org.example.Paint")).outcome, QStringLiteral("notFinished"));
+        EXPECT_TRUE(f.record().isEmpty());
     }
 }

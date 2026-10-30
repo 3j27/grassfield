@@ -6784,6 +6784,10 @@
         <translation>Ne pas installer «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
+        <source>Stop Installing “%1”</source>
+        <translation>Arrêter l’installation de «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
         <source>Store Settings</source>
         <translation>Réglages du Store</translation>
     </message>
@@ -7576,6 +7580,26 @@
         <translation>Ces paquets seront supprimés&#xa0;:</translation>
     </message>
     <message>
+        <source>Its data in ~/.var/app/%1 stays. Runtimes no other app needs are removed too.</source>
+        <translation>Ses données dans ~/.var/app/%1 restent. Les environnements d’exécution dont aucune autre app n’a besoin sont aussi supprimés.</translation>
+    </message>
+    <message>
+        <source>It&apos;s installed in your own folder, for you alone, without administrator rights.</source>
+        <translation>Elle est installée dans votre propre dossier, pour vous uniquement, sans droits d’administrateur.</translation>
+    </message>
+    <message>
+        <source>It can reach only its own window and files.</source>
+        <translation>Elle n’accède qu’à sa propre fenêtre et à ses propres fichiers.</translation>
+    </message>
+    <message>
+        <source>It can reach: %1.</source>
+        <translation>Elle peut accéder à&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>These will be installed:</source>
+        <translation>Ces éléments seront installés&#xa0;:</translation>
+    </message>
+    <message>
         <source>It is removed in a Terminal window, which asks for your password.</source>
         <translation>Il est supprimé dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
     </message>
@@ -7670,6 +7694,10 @@
     <message>
         <source>Download from the repositories</source>
         <translation>Téléchargement depuis les dépôts</translation>
+    </message>
+    <message>
+        <source>Download, at most</source>
+        <translation>Téléchargement, au plus</translation>
     </message>
     <message>
         <source>Installed size</source>
@@ -8375,6 +8403,26 @@
     <message>
         <source>Package</source>
         <translation>Paquet</translation>
+    </message>
+    <message>
+        <source>App ID</source>
+        <translation>Identifiant de l’app</translation>
+    </message>
+    <message>
+        <source>Runtime</source>
+        <translation>Environnement d’exécution</translation>
+    </message>
+    <message>
+        <source>Verified Developer</source>
+        <translation>Développeur vérifié</translation>
+    </message>
+    <message>
+        <source>Verified by Flathub</source>
+        <translation>Vérifié par Flathub</translation>
+    </message>
+    <message>
+        <source>Can Access</source>
+        <translation>Accès</translation>
     </message>
     <message>
         <source>Version</source>
@@ -9705,6 +9753,14 @@
         <translation>Des apps de Flathub, installées dans votre propre dossier, sans droits d’administrateur.</translation>
     </message>
     <message>
+        <source>dev: not applied</source>
+        <translation>dév.&#xa0;: non appliqué</translation>
+    </message>
+    <message>
+        <source>Flathub couldn&apos;t be reached. The Store adds it once you&apos;re online; Refresh tries again.</source>
+        <translation>Flathub n’a pas pu être joint. Le Store l’ajoute dès que vous êtes en ligne&#xa0;; Actualiser réessaie.</translation>
+    </message>
+    <message>
         <source>Flathub needs the flatpak package.</source>
         <translation>Flathub a besoin du paquet flatpak.</translation>
     </message>
@@ -9769,6 +9825,10 @@
         <translation>Depuis l&apos;AUR (aur.archlinux.org), tant qu&apos;il est activé : ce que vous cherchez après avoir appuyé sur Entrée, les pages que vous ouvrez, les noms des paquets installés hors des dépôts, et un script de construction lorsque vous demandez à le voir.</translation>
     </message>
     <message>
+        <source>From Flathub (dl.flathub.org, through flatpak), while it is on: its app data, when the Store opens at most every 6 hours and on Refresh; an app&apos;s details when its page or install sheet opens; and the apps you install.</source>
+        <translation>Depuis Flathub (dl.flathub.org, par flatpak), tant qu’il est activé&#xa0;: ses données d’apps, à l’ouverture du Store au plus toutes les 6 heures et sur Actualiser&#xa0;; les détails d’une app quand sa page ou sa fenêtre d’installation s’ouvre&#xa0;; et les apps que vous installez.</translation>
+    </message>
+    <message>
         <source>Nothing on a metered connection unless you choose Refresh, press Return in the search field or open an AUR page. What you search for stays on this computer until you press Return, which sends it to the AUR.</source>
         <translation>Rien sur une connexion limitée, sauf si vous choisissez Actualiser, appuyez sur Entrée dans le champ de recherche ou ouvrez une page de l&apos;AUR. Ce que vous recherchez reste sur cet ordinateur jusqu&apos;à ce que vous appuyiez sur Entrée, qui l&apos;envoie à l&apos;AUR.</translation>
     </message>
@@ -9779,10 +9839,6 @@
     <message>
         <source>This setting could not be saved (%1).</source>
         <translation>Ce réglage n&apos;a pas pu être enregistré (%1).</translation>
-    </message>
-    <message>
-        <source>Turning Flathub on comes in a later version.</source>
-        <translation>L&apos;activation de Flathub arrivera dans une version ultérieure.</translation>
     </message>
 </context>
 <context>
@@ -10712,6 +10768,14 @@
         <translation>Un dépôt propose ce paquet : le Store l&apos;installe depuis ce dépôt, à partir de sa propre page.</translation>
     </message>
     <message>
+        <source>Turn on Flathub in the Store&apos;s settings to install from it.</source>
+        <translation>Activez Flathub dans les réglages du Store pour installer depuis celui-ci.</translation>
+    </message>
+    <message>
+        <source>Flathub needs the flatpak package.</source>
+        <translation>Flathub a besoin du paquet flatpak.</translation>
+    </message>
+    <message>
         <source>Installing apps from this source comes in a later version of the Store.</source>
         <translation>L’installation d’apps depuis cette source arrive dans une prochaine version du Store.</translation>
     </message>
@@ -10892,6 +10956,118 @@
         <translation>Activez l&apos;AUR dans les réglages du Store pour le désinstaller depuis le Store.</translation>
     </message>
     <message>
+        <source>Turn on Flathub in the Store&apos;s settings to uninstall it from the Store.</source>
+        <translation>Activez Flathub dans les réglages du Store pour la désinstaller depuis le Store.</translation>
+    </message>
+    <message>
+        <source>The internet</source>
+        <translation>Internet</translation>
+    </message>
+    <message>
+        <source>All your files</source>
+        <translation>Tous vos fichiers</translation>
+    </message>
+    <message>
+        <source>Your home folder</source>
+        <translation>Votre dossier personnel</translation>
+    </message>
+    <message>
+        <source>Some of your folders</source>
+        <translation>Certains de vos dossiers</translation>
+    </message>
+    <message>
+        <source>Devices such as cameras, USB drives and game controllers</source>
+        <translation>Des appareils comme les caméras, les clés USB et les manettes de jeu</translation>
+    </message>
+    <message>
+        <source>Game controllers and other input devices</source>
+        <translation>Les manettes de jeu et les autres périphériques d’entrée</translation>
+    </message>
+    <message>
+        <source>USB devices</source>
+        <translation>Les appareils USB</translation>
+    </message>
+    <message>
+        <source>Virtual machines, through KVM</source>
+        <translation>Les machines virtuelles, par KVM</translation>
+    </message>
+    <message>
+        <source>Your speakers and microphone</source>
+        <translation>Vos haut-parleurs et votre micro</translation>
+    </message>
+    <message>
+        <source>The X11 display, where it can see what other X11 apps show and what you type in them</source>
+        <translation>L’affichage X11, où elle peut voir ce que montrent les autres apps X11 et ce que vous y tapez</translation>
+    </message>
+    <message>
+        <source>Memory your other programs share</source>
+        <translation>La mémoire que partagent vos autres programmes</translation>
+    </message>
+    <message>
+        <source>Your printers</source>
+        <translation>Vos imprimantes</translation>
+    </message>
+    <message>
+        <source>Your SSH keys, through the SSH agent</source>
+        <translation>Vos clés SSH, par l’agent SSH</translation>
+    </message>
+    <message>
+        <source>Your GnuPG keys, through the GnuPG agent</source>
+        <translation>Vos clés GnuPG, par l’agent GnuPG</translation>
+    </message>
+    <message>
+        <source>Smart cards</source>
+        <translation>Les cartes à puce</translation>
+    </message>
+    <message>
+        <source>Every service of your session</source>
+        <translation>Tous les services de votre session</translation>
+    </message>
+    <message>
+        <source>Every service of the system</source>
+        <translation>Tous les services du système</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>CAN bus devices</source>
+        <translation>Les appareils du bus CAN</translation>
+    </message>
+    <message>
+        <source>Developer features that can trace programs</source>
+        <translation>Des fonctions de développement qui peuvent tracer des programmes</translation>
+    </message>
+    <message>
+        <source>32-bit programs</source>
+        <translation>Des programmes 32 bits</translation>
+    </message>
+    <message>
+        <source>Programs outside its sandbox</source>
+        <translation>Des programmes hors de son bac à sable</translation>
+    </message>
+    <message>
+        <source>The session service “%1”</source>
+        <translation>Le service de session «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>The system service “%1”</source>
+        <translation>Le service système «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 more</source>
+        <translation>%1 de plus</translation>
+    </message>
+    <message>
+        <source>A permission the Store can&apos;t describe: %1</source>
+        <translation>Une permission que le Store ne sait pas décrire&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Only its own window and files</source>
+        <translation>Seulement sa propre fenêtre et ses propres fichiers</translation>
+    </message>
+    <message>
         <source>Open</source>
         <translation>Ouvrir</translation>
     </message>
@@ -11069,6 +11245,10 @@
     <message>
         <source>Remove %1 from the queue</source>
         <translation>Retirer %1 de la file d’attente</translation>
+    </message>
+    <message>
+        <source>Stop installing %1</source>
+        <translation>Arrêter l’installation de %1</translation>
     </message>
 </context>
 <context>

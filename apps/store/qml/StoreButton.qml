@@ -6,7 +6,7 @@ import "Store.js" as Store
 
 // An app's button (spec SR13, SR17-SR19): "Get", "Open" or "Installed" on a grey capsule with the label in the accent
 // colour, bold (macOS 27); while the app's operation runs or waits in the queue, a progress ring in its place (a square in
-// it while it can still leave the queue). Get asks the window for the confirmation sheet (Main.qml requestGet), Open starts
+// it while it can still leave the queue, or stop: a Flatpak install that runs, SD26). Get asks the window for the confirmation sheet (Main.qml requestGet), Open starts
 // the app (launchApp). A button that cannot act says why in its tooltip (the pointer is read by the item around it: a
 // disabled control gets no hover). The backend is the window's (Main.qml): a button in a window without one shows its
 // app's state, disabled.
@@ -85,8 +85,9 @@ Item {
         }
     }
 
-    // The operation's ring: its count from pacman's log once there is one, else turning; a square while it waits in the
-    // queue, which takes it out (SR18). Read once a second at most by assistive technologies (the text changes with it).
+    // The operation's ring: its count from pacman's log (flatpak's lines) once there is one, else turning; a square while it
+    // waits in the queue, which takes it out (SR18), or while a Flatpak install runs, which stops it (SD26). Read once a
+    // second at most by assistive technologies (the text changes with it).
     ProgressRing {
         id: ring
         anchors.verticalCenter: parent.verticalCenter
@@ -95,16 +96,22 @@ Item {
         readonly property var op: root.operation
         indeterminate: !op || op.state !== "running" || op.total <= 0 || op.done <= 0
         value: op && op.total > 0 ? op.done / op.total : 0
-        stop: !!op && op.state === "waiting"
+        readonly property bool waiting: !!op && op.state === "waiting"
+        stop: ring.waiting || (!!op && op.stoppable === true)
         activeFocusOnTab: visible && stop
         Accessible.role: stop ? Accessible.Button : Accessible.ProgressBar
-        Accessible.name: stop ? qsTr("Remove %1 from the queue").arg(root.appName) : root.appName
+        Accessible.name: ring.waiting ? qsTr("Remove %1 from the queue").arg(root.appName)
+                       : ring.stop ? qsTr("Stop installing %1").arg(root.appName) : root.appName
         Accessible.description: Store.operationText(op)
         Accessible.onPressAction: ring.remove()
 
         function remove(): void {
-            if (ring.stop && root.backend)
+            if (!ring.stop || !root.backend)
+                return;
+            if (ring.waiting)
                 root.backend.removeWaiting(ring.op.id);
+            else
+                root.backend.stopOperation(ring.op.id);
         }
 
         Keys.onPressed: event => {

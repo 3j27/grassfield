@@ -1,0 +1,13 @@
+[Application]
+name=org.gnome.design.Typography
+runtime=org.gnome.Platform/x86_64/50
+sdk=org.gnome.Sdk/x86_64/50
+command=typography
+
+[Context]
+shared=network;ipc;
+sockets=x11;wayland;pulseaudio;fallback-x11;
+devices=dri;
+
+[Session Bus Policy]
+org.freedesktop.Notifications=talk

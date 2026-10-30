@@ -8,6 +8,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -169,6 +170,10 @@ TEST(PlanCheck, SystemOlderThanTheMirror)
                                      "databases were synced 2026-09-08T10:00:00Z"));
     EXPECT_FALSE(databasesBehind(file("up-to-date-others"), synced).isEmpty()) << "Arch's updates alone: up-to-date, others counted";
     EXPECT_FALSE(databasesBehind(file("available"), synced).isEmpty()) << "Grassfield's and Omarchy's releases";
+    EXPECT_EQ(databasesBehind(file("available-omarchy"), synced),
+              QStringLiteral("Software Update (available), 2026-10-26T07:33:20Z: 0 other updates, Omarchy 4.0.6-1; the package "
+                             "databases were synced 2026-09-08T10:00:00Z"))
+        << "Omarchy's release alone is the mirror's";
     // A later check failed: the last success the shell keeps (`previous`) still says so.
     EXPECT_TRUE(databasesBehind(file("failed-previous"), synced).startsWith(QStringLiteral("Software Update (not-set-up), 2026-10-26T07:33:20Z")));
     // Not behind: nothing pending; Grassfield's own release alone; a failed check with no success kept; a state with no
@@ -188,37 +193,29 @@ TEST(PlanCheck, SystemOlderThanTheMirror)
     EXPECT_TRUE(databasesBehind(QJsonDocument(later).toJson(), synced).isEmpty());
     EXPECT_TRUE(databasesBehind("not json", synced).isEmpty());
 
-    // When pacman last synced: its log's last "synchronizing package lists" (checkupdates' own syncs log nowhere), in its
-    // own offset; else the fallback. The integrator's case: the log says 10-29 while the newest database is dated 10-16
-    // (pacman sets the mirror's Last-Modified): Software Update's answer of 10-26 predates the sync and says nothing now.
-    const QDateTime dbDate = QDateTime::fromString(QStringLiteral("2026-10-16T06:00:00Z"), Qt::ISODate);
-    const QByteArray log = "[2026-10-16T09:00:00+0200] [PACMAN] Running 'pacman -Syu'\n"
-                           "[2026-10-16T09:00:01+0200] [PACMAN] synchronizing package lists\n"
-                           "[2026-10-16T09:05:00+0200] [ALPM] upgraded linux (6.17-1 -> 6.18-1)\n"
-                           "[2026-10-29T10:12:33+0100] [PACMAN] Running 'pacman -Syu'\n"
-                           "[2026-10-29T10:12:33+0100] [PACMAN] synchronizing package lists\n"
-                           "[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n"
-                           "[2026-10-30T08:00:00+0100] [ALPM] installed amarok (3.2-1)\n"
-                           "a note: [2026-10-31T00:00:00+0000] [PACMAN] synchronizing package lists\n";
-    EXPECT_EQ(lastSync(log, dbDate), QDateTime::fromString(QStringLiteral("2026-10-29T09:12:33Z"), Qt::ISODate));
-    EXPECT_TRUE(databasesBehind(file("not-set-up"), lastSync(log, dbDate)).isEmpty());
-    EXPECT_EQ(lastSync("[2026-10-29T10:12:40+0100] [PACMAN] starting full system upgrade\n", dbDate), dbDate);
-    EXPECT_EQ(lastSync({}, dbDate), dbDate);
-    EXPECT_FALSE(databasesBehind(file("not-set-up"), lastSync({}, dbDate)).isEmpty()) << "no log: the database's date, earlier";
-
-    // The fallback: the newest *.db of pacman's sync folder.
+    // When pacman last completed a sync: the newest ctime of its sync folder's *.db, which pacman writes only with the
+    // mirror's newer copy. Their mtime is the mirror's Last-Modified (here 2026-09-08), and a sync that failed or found
+    // nothing new changes neither, while pacman.log says "synchronizing package lists" all the same (S27,
+    // store-probes-5.sh: pacman's own behaviour, which a unit test cannot run).
     QTemporaryDir sync;
-    EXPECT_FALSE(newestSync(sync.path()).isValid());
-    storetest::writeFile(sync.filePath(QStringLiteral("core.db")), "db");
-    storetest::writeFile(sync.filePath(QStringLiteral("extra.db")), "db");
-    storetest::writeFile(sync.filePath(QStringLiteral("extra.files")), "files");
-    QFile core(sync.filePath(QStringLiteral("core.db")));
-    ASSERT_TRUE(core.open(QIODevice::ReadWrite));
-    ASSERT_TRUE(core.setFileTime(synced, QFileDevice::FileModificationTime));
-    QFile extra(sync.filePath(QStringLiteral("extra.db")));
-    ASSERT_TRUE(extra.open(QIODevice::ReadWrite));
-    ASSERT_TRUE(extra.setFileTime(synced.addDays(1), QFileDevice::FileModificationTime));
-    EXPECT_EQ(newestSync(sync.path()), synced.addDays(1));
+    EXPECT_FALSE(lastSync(sync.path()).isValid());
+    const QDateTime started = QDateTime::currentDateTimeUtc().addSecs(-1);
+    const auto pacmanWrites = [&sync, &synced](const char *name) {
+        const QString path = sync.filePath(QLatin1String(name));
+        storetest::writeFile(path, "db");
+        QFile f(path);
+        EXPECT_TRUE(f.open(QIODevice::ReadWrite) && f.setFileTime(synced, QFileDevice::FileModificationTime));
+        f.close();
+        QThread::msleep(50);
+        return QFileInfo(path).metadataChangeTime();
+    };
+    const QDateTime core = pacmanWrites("core.db");
+    const QDateTime extra = pacmanWrites("extra.db");
+    pacmanWrites("extra.files");
+    ASSERT_GT(extra, core);
+    EXPECT_EQ(lastSync(sync.path()), extra) << "the newest database, not its mtime, the first, or another file";
+    EXPECT_GE(lastSync(sync.path()), started);
+    EXPECT_TRUE(databasesBehind(file("not-set-up"), lastSync(sync.path())).isEmpty()) << "synced after the check of 10-26";
 
     // pacman's own lines, as the owner's helper log had them.
     EXPECT_TRUE(downloadGone(QStringLiteral(

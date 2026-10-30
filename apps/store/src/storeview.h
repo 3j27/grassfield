@@ -33,13 +33,15 @@ QString sizeText(qint64 bytes, const QLocale &locale);
 // when `year` is false ("October 27", « 27 octobre »). "" for an invalid date.
 QString dayText(const QDate &date, const QLocale &locale, bool year = true);
 
-// A card's, a list item's or a result's: id, name, summary, icon (a file URL or ""), kind, repo, installed, launcher.
+// A card's, a list item's or a result's: id, name, summary, icon (a file URL or ""), kind, repo, installed, launcher, and a
+// Flatpak's app id (flatpakId, "" for the others).
 QVariantMap summary(const StoreApp &app, const QString &language);
 
 // The product page's (SR9-SR12): the summary and description, developer, licence, homepage, bugtracker, screenshots and
 // their captions, releases (version, day as `locale` writes it, notes), languages (their own names, sorted), rating
 // (rated, and the level of each OARS group), categories (titles), packages, repository, desktop id, and for a setup its
-// recipe and our texts, for a web app its address. `component` may be null (no AppStream data).
+// recipe and our texts, for a web app its address, for a Flatpak its app id, runtime ("org.gnome.Platform 50") and Flathub's
+// verified flag. `component` may be null (no AppStream data).
 QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, const QList<CatalogCategory> &categories,
                    const QString &language, const QLocale &locale);
 
