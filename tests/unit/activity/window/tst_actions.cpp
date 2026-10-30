@@ -123,6 +123,11 @@ TEST(ProcessActions, OnlyOwnProcessesCanBeActedOn)
     a.setSelection({{-1, 0, QStringLiteral("Kernel"), false, true}});
     EXPECT_FALSE(a.canQuit());
     EXPECT_EQ(a.refusal(), "You can only quit your own processes.");
+    // The Kernel row is never acted on, even where its owner is the app's (an app run as root).
+    a.setSelection({{-1, 0, QStringLiteral("Kernel"), true, true}});
+    EXPECT_FALSE(a.canQuit());
+    EXPECT_FALSE(a.canSignal());
+    a.setSelection({{-1, 0, QStringLiteral("Kernel"), false, true}});
     // No sheet for a selection it may not act on.
     EXPECT_FALSE(a.prepare(QStringLiteral("quit")).value(QStringLiteral("ok")).toBool());
     const int before = static_cast<int>(changed.count());
