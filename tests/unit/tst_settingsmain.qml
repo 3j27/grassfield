@@ -313,4 +313,58 @@ TestCase {
         compare(t.win.activeFocusItem, inSheet);
         sources.close();
     }
+
+    // The sidebar's list is taller than a short window: the wheel scrolls it and stops at the ends, a click on a row still
+    // selects it (no drag), and a selection made by key, search or deep link brings its row into view.
+    function test_sidebarScrolls() {
+        const t = make(testCase.touchpad, {height: 360});
+        const win = t.win;
+        const list = findDeep(win.contentItem, i => i.Accessible.name === "Sections" && i.contentY !== undefined);
+        verify(list, "the sections list");
+        verify(list.contentHeight > list.height, "more sections than fit");
+        tryVerify(() => list.height > 0);
+        const top = list.contentY;
+
+        mouseWheel(list, list.width / 2, list.height / 2, 0, -120);
+        tryVerify(() => list.contentY > top, 1000, "wheel down moves the list");
+        for (let n = 0; n < 60 && !list.atYEnd; n++) {
+            mouseWheel(list, list.width / 2, list.height / 2, 0, -120);
+            wait(20);
+        }
+        tryCompare(list, "atYEnd", true);
+        const end = list.contentY;
+        mouseWheel(list, list.width / 2, list.height / 2, 0, -120);
+        compare(list.contentY, end, "stops at the bottom, no overshoot");
+        for (let n = 0; n < 80 && !list.atYBeginning; n++) {
+            mouseWheel(list, list.width / 2, list.height / 2, 0, 120);
+            wait(20);
+        }
+        tryCompare(list, "atYBeginning", true);
+
+        // A click on a row selects it: the first row in view that is not the selected one.
+        const row = findDeep(list.contentItem, i => {
+            if (i.modelData === undefined || i.modelData.id === win.selectedId)
+                return false;
+            const y = i.mapToItem(list, 0, 0).y;
+            return y > 0 && y + i.height < list.height;
+        });
+        verify(row, "a row in view");
+        const spot = row.mapToItem(null, row.width / 2, row.height / 2);
+        mouseClick(win.contentItem, spot.x, spot.y);
+        compare(win.selectedId, row.modelData.id);
+
+        // The last section by End: its row is inside the view.
+        list.forceActiveFocus();
+        keyClick(Qt.Key_End);
+        const last = win.filtered[win.filtered.length - 1].id;
+        compare(win.selectedId, last);
+        tryVerify(() => {
+            const r = findDeep(list.contentItem, i => i.modelData !== undefined && i.modelData.id === last);
+            return r && r.mapToItem(list, 0, 0).y + r.height <= list.height + 1;
+        });
+
+        // Selected from elsewhere (search, a deep link, back): the first section comes back into view.
+        win.select(win.filtered[0].id);
+        tryVerify(() => list.contentY <= top + 1);
+    }
 }

@@ -459,11 +459,38 @@ Window {
             topMargin: Tokens.controlFocusOutline
             bottomMargin: Tokens.controlFocusOutline
             clip: true
-            interactive: false
+            // The wheel and two-finger scrolling move the list (macOS), stopping at the ends; the mouse never drags it, so a
+            // click on a row always selects it. The overlay scroll bar shows while it moves.
+            acceptedButtons: Qt.NoButton
+            boundsBehavior: Flickable.StopAtBounds
             keyNavigationEnabled: false
             activeFocusOnTab: true
             Accessible.role: Accessible.List
             Accessible.name: qsTr("Sections")
+            ScrollBar.vertical: ScrollBar {}
+
+            // The selected row stays in view whoever selected it: keys, a click, search, a deep link, back and forward.
+            function showSelected(): void {
+                const hub = root.parentOf(root.selectedId);
+                for (let i = 0; i < root.filtered.length; i++) {
+                    if (root.filtered[i].id === root.selectedId || root.filtered[i].id === hub) {
+                        list.positionViewAtIndex(i, ListView.Contain);
+                        return;
+                    }
+                }
+            }
+
+            Connections {
+                target: root
+                function onSelectedIdChanged(): void {
+                    list.showSelected();
+                }
+                function onFilteredChanged(): void {
+                    Qt.callLater(list.showSelected);
+                }
+            }
+
+            Component.onCompleted: Qt.callLater(list.showSelected)
 
             // The focus ring is for the keyboard (macOS): it appears with the first key that moves the focus or the selection
             // (Tab, Down, Return in the search field; the arrows here) and goes with the focus, so a click on a row or the focus
