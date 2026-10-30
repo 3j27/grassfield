@@ -48,7 +48,7 @@ Window {
     minimumWidth: Tokens.previewWindowMinWidth
     minimumHeight: Tokens.previewWindowMinHeight
     visible: true
-    color: Appearance.colors.materialTint
+    color: Appearance.windowFill
 
     Theme {
         backend: win.backend
@@ -295,7 +295,7 @@ Window {
                 text: win.title
                 color: Appearance.colors.text
                 font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyMenuSize
+                font.pixelSize: Tokens.typographyBodySize
                 font.weight: Tokens.typographyMenuBoldWeight
                 Accessible.role: Accessible.Heading
                 Accessible.name: text
@@ -306,7 +306,7 @@ Window {
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 text: win.subtitle
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.StaticText
@@ -483,10 +483,10 @@ Window {
                     }
                     clip: true
                     color: Appearance.colors.text
-                    selectionColor: Appearance.colors.accent
-                    selectedTextColor: Appearance.colors.accentText
+                    selectionColor: Appearance.highlight
+                    selectedTextColor: Appearance.highlightText
                     font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyMenuSize
+                    font.pixelSize: Tokens.typographyBodySize
                     Accessible.role: Accessible.EditableText
                     Accessible.name: qsTr("Search in document")
                     Keys.onPressed: event => {
@@ -761,7 +761,7 @@ Window {
                         text: DisplayName.text(row.modelData.name)
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
-                        font.pixelSize: fileList.compact ? Tokens.typographyMenuSize : Tokens.typographyCaptionSize
+                        font.pixelSize: fileList.compact ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                     }
                     MouseArea {
                         id: rowMouse

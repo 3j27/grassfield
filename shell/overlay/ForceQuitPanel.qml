@@ -119,7 +119,7 @@ Dialog {
                         spacing: Tokens.spacingSm
 
                         TintedIcon {
-                            size: Tokens.menuItemHeight - 6
+                            size: Tokens.panelForceQuitIconSize
                             overAccent: row.current
                             anchors.verticalCenter: parent.verticalCenter
                             source: {

@@ -115,7 +115,6 @@ Item {
             accentFill: root.overAccent ? (root.accentBright ? 1 : 2) : 0
             recolor: root.recolor
             recolorTint: root.recolorTint
-            nominalSize: root.size
             artScale: root.artScale
             ownTile: root.ownTile
             shaderUrl: root.shaderUrl

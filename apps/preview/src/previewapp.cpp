@@ -162,6 +162,8 @@ void PreviewApp::readAppearance()
 {
     bool dark = true;
     bool reduce = false;
+    bool contrast = false;
+    qreal scale = 1;
     QString accent = QStringLiteral("multicolor");
     QString highlight = QStringLiteral("automatic");
     QString doubleClick = QStringLiteral("zoom");
@@ -172,7 +174,10 @@ void PreviewApp::readAppearance()
         const QString setting = root.value(QStringLiteral("appearance")).toString();
         m_autoAppearance = setting == QLatin1String("auto");
         dark = grassfield::apps::isDarkAppearance(setting, QTime::currentTime());
-        reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
+        const QJsonObject a11y = root.value(QStringLiteral("accessibility")).toObject();
+        reduce = a11y.value(QStringLiteral("reduceMotion")).toBool(false);
+        contrast = a11y.value(QStringLiteral("increaseContrast")).toBool(false);
+        scale = qBound(1.0, a11y.value(QStringLiteral("textSize")).toDouble(1), 1.3);
         // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
         const QString d = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
         if (d == QLatin1String("minimize") || d == QLatin1String("none"))
@@ -191,8 +196,8 @@ void PreviewApp::readAppearance()
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || highlight != m_accentHighlight || doubleClick != m_titlebarDoubleClick
-        || canMinimize != m_canMinimize || shortcuts != m_shortcutStyle) {
+    if (dark != m_dark || reduce != m_reduceMotion || contrast != m_increaseContrast || scale != m_textScale || accent != m_accentColor
+        || highlight != m_accentHighlight || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize || shortcuts != m_shortcutStyle) {
         m_accentHighlight = highlight;
         m_shortcutStyle = shortcuts;
         m_canMinimize = canMinimize;
@@ -200,6 +205,8 @@ void PreviewApp::readAppearance()
         m_accentColor = accent;
         m_dark = dark;
         m_reduceMotion = reduce;
+        m_increaseContrast = contrast;
+        m_textScale = scale;
         emit appearanceChanged();
     }
 }
