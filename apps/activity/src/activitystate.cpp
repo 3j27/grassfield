@@ -110,6 +110,12 @@ ActivityState readState(const QString &path)
     const int interval = root.value(QStringLiteral("interval")).toInt(5);
     if (interval == 1 || interval == 2 || interval == 5)
         s.interval = interval;
+    const QString disk = root.value(QStringLiteral("diskGraph")).toString();
+    if (disk == QLatin1String("io") || disk == QLatin1String("data"))
+        s.diskGraph = disk;
+    const QString network = root.value(QStringLiteral("networkGraph")).toString();
+    if (network == QLatin1String("packets") || network == QLatin1String("data"))
+        s.networkGraph = network;
     const QJsonObject tabs = root.value(QStringLiteral("tabs")).toObject();
     for (Tab tab : kTabs) {
         const QJsonValue v = tabs.value(tabKey(tab));
@@ -128,6 +134,8 @@ bool writeState(const QString &path, const ActivityState &state)
     root.insert(QStringLiteral("tab"), tabKey(state.tab));
     root.insert(QStringLiteral("view"), viewKey(state.view == View::Selected ? View::All : state.view));
     root.insert(QStringLiteral("interval"), state.interval);
+    root.insert(QStringLiteral("diskGraph"), state.diskGraph);
+    root.insert(QStringLiteral("networkGraph"), state.networkGraph);
     QJsonObject tabs;
     for (const auto &[tab, t] : state.tabs) {
         QJsonArray columns;

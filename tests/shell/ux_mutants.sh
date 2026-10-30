@@ -94,6 +94,13 @@ try "a shell activation never ends Show Desktop" $C "        return showDesktopF
 try "activate() does not end Show Desktop first" $C "        if (root.endShowDesktop()) {
             const chosen" "        if (true) {
             const chosen"
+try "Show Tile Group's ending is commented out" $C "        root.endShowDesktop();
+        const group" "        // root.endShowDesktop();
+        const group"
+try "Show Tile Group's ending is behind if (false)" $C "        root.endShowDesktop();
+        const group" "        if (false)
+            root.endShowDesktop();
+        const group"
 try "the window list is not read again at a press" $C "refreshWindows: () => Hyprland.refreshToplevels()" "refreshWindows: () => root.focusedToplevel"
 try "Stages is not given to the controller" $C "        stages: Settings.windowsStages" "        stages: false"
 

@@ -12,6 +12,8 @@ FocusScope {
     required property var backend
     readonly property var table: root.backend.table
     readonly property var columns: root.backend.shownColumns
+    // AM13, AM49: the views whose rows have levels, a disclosure triangle before the name of a row that has rows under it.
+    readonly property bool outline: root.backend.view === "tree" || root.backend.view === "byGpu"
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.activityRowHeight))
     // A column's width while its edge is dragged (key → width); written to activity.json when the drag ends.
     property var liveWidths: ({})
@@ -59,7 +61,7 @@ FocusScope {
 
     // Header ------------------------------------------------------------------------------------
     Row {
-        id: header
+        id: headerRow
         objectName: "columnHeaders"
         x: list.x - (list.contentX - list.originX)
         width: list.contentWidth
@@ -75,7 +77,7 @@ FocusScope {
                 readonly property bool active: root.backend.sortKey === column.modelData.key
 
                 width: root.widthOf(column.modelData)
-                height: header.height
+                height: headerRow.height
                 activeFocusOnTab: false
                 Accessible.role: Accessible.ColumnHeader
                 Accessible.name: column.modelData.title
@@ -172,7 +174,7 @@ FocusScope {
     }
 
     Rectangle {
-        anchors.top: header.bottom
+        anchors.top: headerRow.bottom
         width: parent.width
         height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -201,7 +203,7 @@ FocusScope {
     ListView {
         id: list
         objectName: "processRows"
-        anchors.top: header.bottom
+        anchors.top: headerRow.bottom
         anchors.topMargin: Tokens.appsBorderWidth
         anchors.left: parent.left
         anchors.right: parent.right
@@ -241,6 +243,12 @@ FocusScope {
             case Qt.Key_End:
                 root.move(list.count, extend);
                 break;
+            case Qt.Key_Right: // an outline's row opens, as in a macOS outline view
+            case Qt.Key_Left:
+                if (!root.outline || root.table.currentRow < 0)
+                    return;
+                root.table.setExpanded(root.table.currentRow, event.key === Qt.Key_Right);
+                break;
             default:
                 return;
             }
@@ -256,6 +264,10 @@ FocusScope {
             required property string icon
             required property bool selected
             required property string accessibleText
+            required property int depth
+            required property bool expandable
+            required property bool expanded
+            required property bool group
 
             readonly property bool emphasized: row.selected && list.activeFocus
             readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
@@ -264,8 +276,17 @@ FocusScope {
             height: Tokens.activityRowHeight
             Accessible.role: Accessible.Row
             Accessible.name: row.accessibleText
-            Accessible.selectable: true
+            Accessible.selectable: !row.group
             Accessible.selected: row.selected
+            // Qt 6.12 tells a screen reader which rows open and which are open; Qt 6.11.2 has neither property, and the
+            // app must load on it too (integrator, PR #53). They are set only where they exist.
+            Component.onCompleted: {
+                const accessible = row.Accessible;
+                if ("expanded" in accessible) {
+                    accessible["expandable"] = Qt.binding(() => row.expandable);
+                    accessible["expanded"] = Qt.binding(() => row.expanded);
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -287,14 +308,28 @@ FocusScope {
                         required property var modelData
                         required property int index
                         readonly property bool isName: cell.modelData.key === "name"
+                        // The outline's indentation: a level per depth, and the triangle's place on every row.
+                        readonly property real lead: cell.isName && root.outline ? (row.depth + 1) * Tokens.activityTreeIndent : 0
 
                         width: root.widthOf(cell.modelData)
                         height: row.height
 
+                        Icon {
+                            id: disclosure
+                            objectName: "disclosure"
+                            visible: cell.isName && root.outline && row.expandable
+                            x: Tokens.spacingSm + row.depth * Tokens.activityTreeIndent
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: Tokens.activityChevronSize
+                            name: "chevron-right"
+                            color: row.foreground
+                            rotation: row.expanded ? 90 : 0
+                        }
+
                         Image {
                             id: glyph
-                            visible: cell.isName
-                            x: Tokens.spacingSm + Tokens.spacingXs
+                            visible: cell.isName && !row.group
+                            x: Tokens.spacingSm + Tokens.spacingXs + cell.lead
                             anchors.verticalCenter: parent.verticalCenter
                             width: Tokens.activityIconSize
                             height: Tokens.activityIconSize
@@ -307,8 +342,8 @@ FocusScope {
 
                         Text {
                             textFormat: Text.PlainText
-                            anchors.left: cell.isName ? glyph.right : parent.left
-                            anchors.leftMargin: cell.isName ? Tokens.spacingXs : Tokens.spacingSm
+                            anchors.left: cell.isName && !row.group ? glyph.right : parent.left
+                            anchors.leftMargin: cell.isName ? (row.group ? Tokens.spacingSm + Tokens.spacingXs + cell.lead : Tokens.spacingXs) : Tokens.spacingSm
                             anchors.right: parent.right
                             anchors.rightMargin: Tokens.spacingSm
                             anchors.verticalCenter: parent.verticalCenter
@@ -319,6 +354,7 @@ FocusScope {
                             color: row.foreground
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
+                            font.weight: row.group ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
                             font.features: cell.modelData.numeric ? {"tnum": 1} : {}
                         }
                     }
@@ -330,6 +366,13 @@ FocusScope {
                 acceptedButtons: Qt.LeftButton
                 onPressed: mouse => {
                     list.forceActiveFocus();
+                    // The disclosure triangle (and a little around it) opens or closes the row; elsewhere a click selects.
+                    const triangle = Tokens.spacingSm + row.depth * Tokens.activityTreeIndent;
+                    if (root.outline && row.expandable && mouse.x >= triangle - Tokens.spacingXs
+                        && mouse.x <= triangle + Tokens.activityChevronSize + Tokens.spacingXs) {
+                        root.table.toggleExpanded(row.index);
+                        return;
+                    }
                     root.table.click(row.index, mouse.modifiers);
                 }
             }

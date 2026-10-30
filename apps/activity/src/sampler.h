@@ -15,6 +15,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -59,6 +60,8 @@ struct Options {
     bool (*tcpDump)(std::vector<TcpCounters> &out) = dumpTcpSockets;
     // The owner of /proc/<name> under the directory `dir` (fstatat when null); tests give a root-owned directory here.
     bool (*dirOwner)(int dir, const char *name, uint32_t &uid) = nullptr;
+    // hwdata's PCI names (AM47): a GPU's name; read once per GPU, "" reads none.
+    std::string pciIds = "/usr/share/hwdata/pci.ids";
 };
 
 // Options for this machine: getuid(), /etc/login.defs, the clock tick, and a kept-descriptor budget from the soft
@@ -79,7 +82,8 @@ enum class PressureLevel { Normal, Warning, Critical };
 
 PressureLevel pressureLevel(const Meminfo &m, const Pressure &p);
 
-struct ProcessRow {
+// A row's numbers and flags: a plain value, so a row of the last sample is reset in one copy (2b, the Disk tab's cost).
+struct ProcessValues {
     int pid = 0;
     uint64_t start = 0;  // stat field 22: with the pid, the row's identity
     int ppid = 0;
@@ -90,14 +94,9 @@ struct ProcessRow {
     char state = '?';
     long nice = 0;
     int threads = 0;
-    std::string name;    // sanitized (AM17); refreshed after an exec
-    std::string command; // own processes with ReadCommand, sanitized (AM28); "" otherwise
     // No cgroup path: another owner's is never read (AD25), and an action on one of the user's units reads it again at the
     // time of the action (step 4). What the table needs of it is below.
     Kind kind = Kind::Background;
-    // Own processes in a launch's unit (A7): its app, a desktop id without ".desktop" or a command's basename; the window
-    // takes the app's icon from it (AM10, AM17). "" otherwise.
-    std::string appId;
     bool session = false;            // AM54
     bool efficiencyEligible = false; // AM68
     // CPU (AM20 to AM22): ticks since start; the share of one core since the previous sample, -1 at the first.
@@ -115,11 +114,10 @@ struct ProcessRow {
     double wakeRate = -1;
     // Descriptors (AM25): -1 until the process's descriptor list was read.
     int openFiles = -1;
-    // GPU (AM45, AM46); the devices it is a client of, for Processes, by GPU (AM49).
+    // GPU (AM45, AM46).
     bool hasGpu = false;
     uint64_t gpuNs = 0;
     double gpuPercent = -1;
-    std::vector<std::string> gpuDevices; // drm-pdev, sorted
     // Network (AM43): TCP only, since the app opened.
     bool hasNet = false;
     uint64_t tcpSent = 0, tcpReceived = 0, tcpSegsOut = 0, tcpSegsIn = 0;
@@ -128,6 +126,20 @@ struct ProcessRow {
     // time over the samples that computed it.
     double energyImpact = -1, averageEnergyImpact = -1;
 };
+
+// One process of a sample: its values, then its texts.
+struct ProcessRow : ProcessValues {
+    std::string name;    // sanitized (AM17); refreshed after an exec
+    std::string command; // own processes with ReadCommand, sanitized (AM28); "" otherwise
+    // Own processes in a launch's unit (A7): its app, a desktop id without ".desktop" or a command's basename; the window
+    // takes the app's icon from it (AM10, AM17). "" otherwise.
+    std::string appId;
+    std::vector<std::string> gpuDevices; // the GPUs it is a client of (drm-pdev, sorted), for Processes, by GPU (AM49)
+};
+// The sampler empties a row of the last sample to fill it again (recycle in sampler.cpp): a member added here is cleared
+// there too.
+static_assert(std::is_trivially_copyable_v<ProcessValues>);
+static_assert(sizeof(ProcessRow) == sizeof(ProcessValues) + 3 * sizeof(std::string) + sizeof(std::vector<std::string>));
 
 // Every kernel thread summed (AM20a, AD25).
 struct KernelRow {
@@ -170,6 +182,10 @@ struct GpuDevice {
     std::string driver;
     std::vector<GpuEngine> engines;
     uint64_t memoryBytes = 0;
+    // AM47: the DRM card whose device is this pdev (/sys/class/drm/card<n>), -1 when none is; its name from pci.ids ("Intel
+    // UHD Graphics"), "" when pci.ids does not name it.
+    int card = -1;
+    std::string model;
 };
 
 struct SystemSnapshot {
@@ -191,6 +207,7 @@ struct Counters {
     uint64_t listed = 0, statReads = 0, statusReads = 0, ioReads = 0, threadStatusReads = 0, fdListReads = 0, fdLinks = 0,
              fdinfoReads = 0, sockDumps = 0, cmdlineReads = 0, cgroupReads = 0, exeLinks = 0, systemReads = 0,
              statmReads = 0, ownerStats = 0;
+    uint64_t statParses = 0, ioParses = 0; // lines parsed: an unchanged one is not (2b)
     size_t keptFiles = 0;
 };
 
@@ -237,32 +254,40 @@ private:
         uint64_t sent = 0, received = 0, segsOut = 0, segsIn = 0;
     };
     struct Proc {
+        // Read or written at every sample, first: they share a few cache lines (the Disk tab's cost, 2b).
         uint64_t start = 0;
         uint64_t seen = 0; // index_ + 1 of the last sample that listed it
         uint64_t turn = 0; // its place in the turns (AM23, AM43): given in order of arrival, so every turn is as full
         int statFd = -1, statusFd = -1, ioFd = -1, statmFd = -1;
-        bool haveSwap = false;                // status read for the Memory tab (AD32): its last VmSwap and VmHWM
-        uint64_t vmSwapKb = 0, vmHwmKb = 0;
+        uint32_t uid = 0;
+        uint32_t dirUid = 0;   // the /proc/<pid> directory's owner, read again in its turn and after an exec
         bool kthread = false;
         bool uidKnown = false;
-        uint32_t uid = 0;
-        std::string comm, exe; // stat's name and the exe link at the last identification
-        uint64_t startCode = 0, endCode = 0; // stat's code addresses: a change is an exec (review of 949fc98)
-        uint32_t dirUid = 0;   // the /proc/<pid> directory's owner, read again in its turn and after an exec
-        int cgroupTurns = 0;   // descriptor turns that read its unit again
-        std::string name, command;
-        bool haveCommand = false;
-        std::string cgroup; // own processes only (AD25)
-        std::string appId;  // parseAppUnit's name, own processes only
-        Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
-        bool sessionUnit = false, eligible = false;
         bool haveTicks = false;
+        bool haveIo = false;
+        bool haveSwap = false;                // status read for the Memory tab (AD32): its last VmSwap and VmHWM
+        bool sessionUnit = false, eligible = false;
+        bool haveCommand = false;
+        Kind kindAlone = Kind::Background, kindWithWindow = Kind::Background; // classify() of an own process
+        uint64_t startCode = 0, endCode = 0; // stat's code addresses: a change is an exec (review of 949fc98)
         uint64_t ticks = 0;
         double ticksTime = 0;
-        bool haveIo = false;
         uint64_t ioRead = 0, ioWrite = 0;
         double ioTime = 0;
         double readRate = -1, writeRate = -1;
+        std::string comm, name; // stat's name at the last identification; the name shown
+        // The last stat and io read, and what they gave: a line identical to the last one is not parsed again (most
+        // processes are idle between two samples; 2b, the Disk tab's cost).
+        std::string statText, ioText;
+        StatFields stat;
+        bool statParsed = false, statCode = false, ioParsed = false;
+        // The rest: read in turns, on some tabs, or once.
+        uint64_t vmSwapKb = 0, vmHwmKb = 0;
+        std::string exe; // the exe link at the last identification
+        int cgroupTurns = 0;   // descriptor turns that read its unit again
+        std::string command;
+        std::string cgroup; // own processes only (AD25)
+        std::string appId;  // parseAppUnit's name, own processes only
         bool haveCtx = false;
         uint64_t ctx = 0;
         double ctxTime = 0;
@@ -299,6 +324,7 @@ private:
     void readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::string, GpuDevice> &devices,
                  std::unordered_set<std::string> &clientsSeen);
     void readSystem(unsigned reads, double now, SystemSnapshot &out, Counters &c);
+    void nameGpu(GpuDevice &dev, Counters &c);
 
     Options opt_;
     std::unordered_map<int, Proc> procs_;
@@ -327,6 +353,11 @@ private:
     double lastDiskTime_ = -1, lastNetTime_ = -1;
     std::vector<std::string> physicalDisks_, zramDevices_;
     double devicesListedAt_ = -1e9;
+    struct GpuName {
+        int card = -1;
+        std::string model;
+    };
+    std::map<std::string, GpuName> gpuNames_; // by drm-pdev: read once (AM47)
 };
 
 } // namespace activity
