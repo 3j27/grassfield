@@ -35,15 +35,16 @@ FocusScope {
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Choose a window for this zone")
 
-    Component.onCompleted: root.current = WindowTiling.keptSelection(root.current, root.windows.length, true)
+    // `windows` is not evaluated yet when `suggestion` changes at creation: keptSelection takes it as it is (#48's merge note).
+    Component.onCompleted: root.current = WindowTiling.keptSelection(root.current, root.windows, true)
     onSuggestionChanged: {
         root.picked = false;
-        root.current = WindowTiling.keptSelection(root.current, root.windows.length, true);
+        root.current = WindowTiling.keptSelection(root.current, root.windows, true);
     }
     // Every window offered closed meanwhile: the suggestions end.
     onWindowsChanged: {
-        root.current = WindowTiling.keptSelection(root.current, root.windows.length, false);
-        if (root.windows.length === 0)
+        root.current = WindowTiling.keptSelection(root.current, root.windows, false);
+        if (root.current < 0)
             Qt.callLater(TilingSuggest.dismiss);
     }
 

@@ -125,15 +125,17 @@ TestCase {
     // ---- The surface's own action chose a window (the tiling suggestions' pick, #48 nested pass MINOR E) ----
 
     function test_aChosenWindowIsFocusedWhereItIsNow() {
-        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: false}, 7), {kind: "window", address: "b2"}, "on the focused Desktop: it becomes key");
+        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: false}, [7]), {kind: "window", address: "b2"}, "on the Desktop shown: it becomes key");
+        compare(FR.chosenTarget("b2", {workspaceId: 9, parked: false}, [7, 9]), {kind: "window", address: "b2"},
+                "on another output's Desktop (the focused one follows the pointer): it becomes key too");
     }
 
     function test_aChosenWindowNotShownIsNotPulledBack() {
-        compare(FR.chosenTarget("b2", null, 7), null, "gone");
-        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: true}, 7), null, "minimized or hidden");
-        compare(FR.chosenTarget("b2", {workspaceId: -98, parked: false}, 7), null, "on a special workspace");
-        compare(FR.chosenTarget("b2", {workspaceId: -1, parked: false}, -1), null, "on no Desktop, none focused");
-        compare(FR.chosenTarget("b2", {workspaceId: 3, parked: false}, 7), null, "on a Desktop not shown: the user moved on");
-        compare(FR.chosenTarget("", {workspaceId: 7, parked: false}, 7), null, "nothing chosen");
+        compare(FR.chosenTarget("b2", null, [7]), null, "gone");
+        compare(FR.chosenTarget("b2", {workspaceId: 7, parked: true}, [7]), null, "minimized or hidden");
+        compare(FR.chosenTarget("b2", {workspaceId: -98, parked: false}, [7, -98]), null, "on a special workspace");
+        compare(FR.chosenTarget("b2", {workspaceId: 3, parked: false}, [7, 9]), null, "on a Desktop no output shows: the user moved on");
+        compare(FR.chosenTarget("b2", {workspaceId: 3, parked: false}, null), null, "no output known");
+        compare(FR.chosenTarget("", {workspaceId: 7, parked: false}, [7]), null, "nothing chosen");
     }
 }

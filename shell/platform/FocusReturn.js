@@ -90,10 +90,11 @@ function changesFront(name, data, remembered) {
 }
 
 // The target of a close after the surface's own action chose a window (the tiling suggestions' pick; macOS: the window just
-// chosen becomes key): that window where it is now (`placement` {workspaceId, parked}, null: gone), when it is shown on the
-// focused Desktop (`focusedWorkspaceId`); else null (nothing is requested).
-function chosenTarget(address, placement, focusedWorkspaceId) {
-    if (!address || !placement || placement.parked || !(placement.workspaceId > 0) || placement.workspaceId !== focusedWorkspaceId)
+// chosen becomes key): that window where it is now (`placement` {workspaceId, parked}, null: gone), when its Desktop is shown
+// on an output (`shownWorkspaceIds`: the Desktop each output shows; not only the focused one, which follows the pointer's
+// output: integrator merge note on #48); else null (nothing is requested).
+function chosenTarget(address, placement, shownWorkspaceIds) {
+    if (!address || !placement || placement.parked || !(placement.workspaceId > 0) || (shownWorkspaceIds || []).indexOf(placement.workspaceId) < 0)
         return null;
     return {kind: "window", address: address};
 }

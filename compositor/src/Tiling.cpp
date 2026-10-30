@@ -82,6 +82,12 @@ namespace gf::tiler {
             uint8_t                     sides = 0;
             gf::titlebar::CClickTracker clicks{}; // braces: its default constructor is explicit
         };
+        // TL33 (step 6b): the presses on a Split View Desktop's separator (the shared edge between its two members), for its
+        // double-click: equal halves again.
+        struct SSeparatorClicks {
+            int64_t                     workspace = 0;
+            gf::titlebar::CClickTracker clicks{}; // braces: its default constructor is explicit
+        };
         struct SExtend {
             PHLWINDOWREF window;
             uint8_t      sides = 0; // with Alt's opposite sides (core extendedSides)
@@ -146,6 +152,8 @@ namespace gf::tiler {
             uint32_t                         pressMs = 0;
             std::optional<SMoveRelease>      moveRelease;
             SBorderClicks                    border;
+            SSeparatorClicks                 separator;
+            PHLWINDOWREF                     memberDrag; // TL33 (step 6b): the member whose titlebar drag is under way (reconcile keeps it)
             std::optional<SExtend>           extend;
             std::optional<tiling::Suggestion> suggestion; // TL28: valid while the book is at its generation
             std::optional<SEdgeDrag>          edge;            // TL30: a shared edge being dragged
@@ -470,13 +478,13 @@ namespace gf::tiler {
         // Records of closed windows are dropped; a Tiled window whose box is not the one the plugin gave it (an app's own
         // configure, a keyboard move or resize, a rule) becomes Free (TL10).
         void reconcile() {
-            auto&                 s = st();
+            auto&                 s       = st();
+            const auto            dragged = s.memberDrag.lock();
             std::vector<uint64_t> gone;
             for (const auto& r : s.book.records()) {
                 const auto w      = windowById(r.id);
                 const auto target = w && w->m_isMapped ? w->layoutTarget() : nullptr;
-                const bool moved  = target && r.state == tiling::TileState::Tiled && !r.relayout && !sameBox(target->position(), toCBox(r.box));
-                if (!target || moved)
+                if (tiling::staleRecord(r, target != nullptr, target && sameBox(target->position(), toCBox(r.box)), dragged ? idOf(dragged) : 0))
                     gone.push_back(r.id);
             }
             for (const auto id : gone)
@@ -964,6 +972,35 @@ namespace gf::tiler {
             return tiling::zoneFrame(lr->zones[static_cast<size_t>(zone == 1 ? 1 : 0)], area);
         }
 
+        // TL33 (step 6b): the separator's double-click: the two members of `d` back to their halves of the whole output (their
+        // zones of "left-right", fitted as the split placed them; TL8). Nothing while locked, nor when a member is not Tiled in its
+        // half (full screen or zoomed: Suspended, it comes back to its half anyway).
+        void splitHalvesAgain(const tiling::SplitDesk& d) {
+            auto&       s      = st();
+            const auto  m      = splitMonitor(d);
+            const auto* layout = tiling::layoutById("left-right");
+            if (!m || !layout || d.members.size() != 2 || gf::deferredFocus::sessionLocked())
+                return;
+            std::vector<tiling::Zone> zones;
+            std::vector<PHLWINDOW>    windows;
+            for (const auto id : d.members) {
+                const auto w = windowById(id);
+                const auto r = s.book.find(id);
+                if (!w || !r || r->state != tiling::TileState::Tiled || r->where.layout != layout->id || r->where.zone < 0 || r->where.zone > 1)
+                    return;
+                zones.push_back(layout->zones[static_cast<size_t>(r->where.zone)]);
+                windows.push_back(w);
+            }
+            const auto frames = fitted(zones, windows, areaFor(m, d.workspace));
+            for (size_t i = 0; i < windows.size(); ++i) {
+                const CBox surface = toCBox(tiling::surfaceOf(frames[i], gf::chrome::bandOf(windows[i])));
+                applySurface(windows[i], surface);
+                s.book.setBox(d.members[i], toRect(surface), m->m_name);
+            }
+            logRequest(Log::DEBUG, "split: the separator of Desktop {} double-clicked: equal halves again", d.workspace);
+            notify(tiling::Reason::Resized);
+        }
+
         // The suggestion of the Split View that window `id` started is still pending (published, nothing changed since): its
         // picker may still give it its second window.
         bool picking(uint64_t id) {
@@ -1405,8 +1442,10 @@ namespace gf::tiler {
                        d.windows.size(), d.delta, d.steps, d.held, nowMs() - d.beganMs, d.workUs, d.maxWorkUs, why);
         }
 
-        // A plain left press on a handle: the drag begins (every window of the edge Resizing), the press is the plugin's.
-        bool edgePress(const Vector2D& p) {
+        // A plain left press on a handle: the drag begins (every window of the edge Resizing), the press is the plugin's. The
+        // second press of a double-click on a Split View Desktop's separator puts its two members back to equal halves instead
+        // (TL33, step 6b; the press and its release stay the plugin's, nothing is dragged).
+        bool edgePress(const Vector2D& p, uint32_t timeMs) {
             auto& s = st();
             // Hyprland's held buttons before this press is recorded: another device holding one would make the release
             // this press owes ambiguous (the bus names no device; FR13, as P6).
@@ -1419,6 +1458,19 @@ namespace gf::tiler {
             const auto                      edge = handleAt(p, &windows, &grid);
             if (!edge)
                 return false;
+            if (const auto* d = tiling::splitOfEdge(s.splits, *edge)) {
+                if (s.separator.workspace != d->workspace) {
+                    s.separator.workspace = d->workspace;
+                    s.separator.clicks.reset();
+                }
+                if (s.separator.clicks.press(timeMs, p.x, p.y)) {
+                    splitHalvesAgain(*d);
+                    s.edgeReleaseOwed = true;
+                    return true;
+                }
+            } else {
+                s.separator.workspace = 0;
+            }
             std::erase_if(windows, [&](const tiling::EdgeWindow& w) {
                 return std::ranges::find(edge->before, w.id) == edge->before.end() && std::ranges::find(edge->after, w.id) == edge->after.end();
             });
@@ -1497,6 +1549,8 @@ namespace gf::tiler {
         s.edgeReleaseOwed = false;
         s.edgeCursor      = false;
         s.edgeHoverScene  = {};
+        s.separator       = {};
+        s.memberDrag.reset();
         s.splits.clear(); // TL33: a Split View Desktop of a previous load is an ordinary Desktop now
         s.splitHomes.clear();
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
@@ -2043,6 +2097,58 @@ namespace gf::tiler {
         return w && tiling::splitOfWindow(st().splits, idOf(w)) != nullptr;
     }
 
+    void memberDragBegin(const PHLWINDOW& w) {
+        auto& s = st();
+        if (s.ready && w && tiling::splitOfWindow(s.splits, idOf(w)))
+            s.memberDrag = w;
+    }
+
+    void memberDragForget() {
+        st().memberDrag.reset();
+    }
+
+    void memberDrop(const PHLWINDOW& w, std::optional<Vector2D> at) {
+        auto& s = st();
+        s.memberDrag.reset(); // first: from here the record is checked as any other (nothing below reconciles before it is placed)
+        if (!s.ready || !w || !g_layoutManager)
+            return;
+        const auto* d = tiling::splitOfWindow(s.splits, idOf(w));
+        if (!d || !w->m_workspace || w->m_workspace->m_id != d->workspace)
+            return; // it left the Split View meanwhile (splitCheck)
+        const auto* r = s.book.find(idOf(w));
+        if (!r)
+            return;
+        const auto       m       = splitMonitor(*d);
+        const uint64_t   otherId = d->members.size() == 2 ? (d->members[0] == idOf(w) ? d->members[1] : d->members[0]) : 0;
+        const auto*      ro      = otherId ? s.book.find(otherId) : nullptr;
+        const auto       ow      = otherId ? windowById(otherId) : nullptr;
+        const auto*      layout  = tiling::layoutById("left-right");
+        std::optional<int> zone;
+        if (at && m && ro && ow && layout && !gf::deferredFocus::sessionLocked() && r->state == tiling::TileState::Tiled && ro->state == tiling::TileState::Tiled &&
+            r->where.layout == layout->id && ro->where.layout == layout->id && ow->m_workspace == w->m_workspace)
+            zone = tiling::splitDropZone(splitHalf(m, 0), splitHalf(m, 1), r->where.zone, at->x, at->y);
+        if (!zone) {
+            applySurface(w, toCBox(r->box)); // back in its half (the state from before the drag, also under the lock)
+            return;
+        }
+        // The two swap halves (macOS): each takes the other's zone, fitted together on the whole output (TL8), in its group.
+        const std::array<PHLWINDOW, 2> windows{w, ow};
+        const std::array<int, 2>       zones{*zone, r->where.zone};
+        const std::array<uint64_t, 2>  groups{r->group, ro->group};
+        const auto frames = fitted({layout->zones[static_cast<size_t>(zones[0])], layout->zones[static_cast<size_t>(zones[1])]}, {windows[0], windows[1]},
+                                   areaFor(m, d->workspace));
+        for (size_t i = 0; i < windows.size(); ++i) {
+            const CBox current = windows[i]->layoutTarget()->position();
+            const auto band    = gf::chrome::bandOf(windows[i]);
+            const CBox surface = toCBox(tiling::surfaceOf(frames[i], band));
+            applySurface(windows[i], surface);
+            s.book.placed(idOf(windows[i]), toRect(current), toRect(surface), band,
+                          tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zones[i]}, m->m_name, d->workspace, groups[i]);
+        }
+        logRequest(Log::DEBUG, "split: {:x} dropped on the other half of Desktop {}: the two windows swapped halves", idOf(w), d->workspace);
+        notify(tiling::Reason::Placed);
+    }
+
     bool leaveSplit(const PHLWINDOW& w) {
         if (!inSplit(w) || gf::deferredFocus::sessionLocked())
             return false;
@@ -2275,7 +2381,15 @@ namespace gf::tiler {
             if (State::workspaceState() && State::workspaceState()->query().id(d.workspace).run())
                 splits.push_back(d);
         }
-        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits);
+        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile).
+        std::vector<uint64_t> unfit;
+        if (Desktop::windowState()) {
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (w && placeable(w) && !splittable(w))
+                    unfit.push_back(idOf(w));
+            }
+        }
+        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit);
     }
 
     void beforePointerMotion() {
@@ -2323,8 +2437,11 @@ namespace gf::tiler {
             edgeEnd("released");
             return true;
         }
-        if (button == BTN_LEFT && pressed && edgePress(pointer))
-            return true;
+        if (button == BTN_LEFT && pressed) {
+            if (edgePress(pointer, timeMs))
+                return true;
+            s.separator = {}; // a press anywhere else ends a separator's double-click
+        }
         if (pressed) {
             if (button == BTN_LEFT) {
                 s.press   = pointer;

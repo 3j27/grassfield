@@ -420,6 +420,7 @@
  {"path": "tests/shell/icon_svg_qt.sh", "layer": "logic"},
  {"path": "tests/shell/launch_keys.sh", "layer": "logic"},
  {"path": "tests/security/foreign_locker_guard.sh", "layer": "logic"},
+ {"path": "tests/shell/shell_failures.sh", "layer": "logic"},
  {"path": "tests/shell/shell_version.sh", "layer": "headless"},
  {"path": "tests/shell/icons_compose.sh", "layer": "data"},
  {"path": "tests/shell/icons_real_pins.sh", "layer": "data"},

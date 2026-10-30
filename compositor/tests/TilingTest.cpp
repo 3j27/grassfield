@@ -680,7 +680,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"suggestion":null})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"unfit":[],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -1098,9 +1098,9 @@ TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
     sg.windows    = {0xd1, 0xd2};
     const std::array<StateOutput, 0> none{};
     EXPECT_EQ(stateJson(12, none, &sg),
-              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
               R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
-    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"suggestion":null})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"suggestion":null})");
     // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
     for (uint64_t i = 0; i < 20; ++i)
         sg.windows.push_back(0x100 + i);
@@ -1421,7 +1421,14 @@ TEST(TilingSplit, TheReplyListsTheSplitDesktops) {
                                           SplitDesk{.workspace = 9, .output = "A\"B", .home = 4, .members = {0xc3}, .waiting = true}};
     EXPECT_EQ(stateJson(5, none, nullptr, splits),
               R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2,"windows":["a1","b2"],"waiting":false},)"
-              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"suggestion":null})");
+              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"unfit":[],"suggestion":null})");
+}
+
+// D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.
+TEST(TilingSplit, TheReplyListsTheWindowsThatDoNotFitAHalf) {
+    const std::array<StateOutput, 0> none{};
+    const std::array<uint64_t, 2>    unfit{0xa1, 0xbeef};
+    EXPECT_EQ(stateJson(5, none, nullptr, {}, unfit), R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":["a1","beef"],"suggestion":null})");
 }
 
 // TL33, ADR-0036 D50, D52: the members are the Split View's two windows, whatever their state; a window that left its
@@ -1454,6 +1461,63 @@ TEST(TilingSplit, AWindowTooWideForAHalfDoesNotFit) {
     EXPECT_FALSE(fitsFrame(Constraints{.minW = 400, .minH = 1060, .band = 30}, half)) << "the band takes height";
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, true, true),
               R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true})");
+}
+
+// Step 6b (TL33): the separator is the shared edge between the two members of a Split View Desktop, one on each side.
+TEST(TilingSplit, TheSeparatorIsTheEdgeBetweenTheTwoMembers) {
+    const std::array<SplitDesk, 2> splits{SplitDesk{.workspace = 7, .output = "GF-REF", .home = 2, .members = {0xa1, 0xb2}},
+                                          SplitDesk{.workspace = 9, .output = "GF-REF", .home = 2, .members = {0xc3}, .waiting = true}};
+    const auto edge = [](std::vector<uint64_t> before, std::vector<uint64_t> after) {
+        return SharedEdge{.vertical = true, .group = 1, .at = 960, .gap = 8, .before = std::move(before), .after = std::move(after), .handles = {}};
+    };
+    ASSERT_NE(splitOfEdge(splits, edge({0xa1}, {0xb2})), nullptr);
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xb2}))->workspace, 7);
+    EXPECT_EQ(splitOfEdge(splits, edge({0xb2}, {0xa1}))->workspace, 7) << "either member on either side";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xd4})), nullptr) << "a member and another window";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xd4}, {0xe5})), nullptr) << "an ordinary tile group";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1, 0xd4}, {0xb2})), nullptr) << "more than the two members";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xa1}, {0xb2, 0xd4})), nullptr) << "more than one window after it";
+    EXPECT_EQ(splitOfEdge(splits, edge({0xc3}, {0xc3})), nullptr) << "a Split View with one member has no separator";
+    EXPECT_EQ(splitOfEdge(splits, edge({}, {0xb2})), nullptr);
+}
+
+// Step 6b (TL33): a member's titlebar drag released over the other half swaps the two; anywhere else it goes back.
+TEST(TilingSplit, ADropOnTheOtherHalfSwapsTheMembers) {
+    const Rect left{0, 0, 956, 1080};
+    const Rect right{964, 0, 956, 1080};
+    EXPECT_EQ(splitDropZone(left, right, 0, 1400, 500), 1) << "the left member dropped on the right half";
+    EXPECT_EQ(splitDropZone(left, right, 1, 100, 500), 0) << "the right member dropped on the left half";
+    EXPECT_EQ(splitDropZone(left, right, 0, 100, 500), std::nullopt) << "on its own half: back in it";
+    EXPECT_EQ(splitDropZone(left, right, 0, 960, 500), std::nullopt) << "on the separator: back";
+    EXPECT_EQ(splitDropZone(left, right, 0, 964, 0), 1) << "the other half's top-left corner";
+    EXPECT_EQ(splitDropZone(left, right, 0, 1920, 500), std::nullopt) << "past its right side";
+    EXPECT_EQ(splitDropZone(left, right, 0, 1400, 1080), std::nullopt) << "below it";
+    EXPECT_EQ(splitDropZone(left, right, 0, 1400, -0.5), std::nullopt) << "above it";
+    EXPECT_EQ(splitDropZone(left, right, 0, 963.5, 500), std::nullopt) << "left of it (on the separator)";
+    EXPECT_EQ(splitDropZone(left, right, 1, 955.9, 1079.9), 0);
+    EXPECT_EQ(splitDropZone(left, right, 2, 1400, 500), std::nullopt) << "no half of a Split View";
+    EXPECT_EQ(splitDropZone(left, right, -1, 100, 500), std::nullopt);
+}
+
+// TL10, and the integrator review of e352f7c (step 6b): reconcile forgets a record whose window is gone, or a Tiled one moved
+// by other means, but never the Split View member whose titlebar drag is under way (it is placed at its drop).
+TEST(TilingBook, AStaleRecordIsForgottenButNotTheDraggedMember) {
+    TileRecord r;
+    r.id    = 0xa1;
+    r.state = TileState::Tiled;
+    EXPECT_TRUE(staleRecord(r, false, true, 0)) << "its window gone or unmapped";
+    EXPECT_TRUE(staleRecord(r, false, true, 0xa1)) << "gone, even while dragged";
+    EXPECT_FALSE(staleRecord(r, true, true, 0)) << "at its box";
+    EXPECT_TRUE(staleRecord(r, true, false, 0)) << "moved by other means";
+    EXPECT_TRUE(staleRecord(r, true, false, 0xb2)) << "another window is dragged";
+    EXPECT_FALSE(staleRecord(r, true, false, 0xa1)) << "the member being dragged keeps its record";
+    r.relayout = true;
+    EXPECT_FALSE(staleRecord(r, true, false, 0)) << "it waits for a relayout";
+    r.relayout = false;
+    for (const auto state : {TileState::Moving, TileState::Resizing, TileState::Suspended}) {
+        r.state = state;
+        EXPECT_FALSE(staleRecord(r, true, false, 0)) << "only a Tiled record is checked against its box";
+    }
 }
 
 // D43: two members stay; one fills alone unless it is still choosing its second window; none ends the Desktop.

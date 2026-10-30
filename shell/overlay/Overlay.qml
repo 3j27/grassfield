@@ -24,7 +24,14 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool open: Popups.active && Popups.screenName === (modelData ? modelData.name : "")
+        readonly property bool open: Popups.openOn(modelData ? modelData.name : "")
+        // A popup is loaded and shown here. Only then does this surface hold the keyboard and take the output's input: whatever
+        // leaves `open` true with no popup (a stale value, an unknown kind), the mapped surface lets every key and click through
+        // (integrator, from an owner report on #56: the overlay mapped with no popup held Exclusive keyboard focus over the
+        // whole output, and the session looked stuck in full screen). The mapping itself follows `open`: tied to the popup's
+        // item, the surface mapped while that item was created and resized the window under the popup's x and y bindings (a
+        // binding loop, integrator nested pass of 12e3dd3).
+        readonly property bool hasPopup: open && holder.item !== null
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -39,13 +46,13 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: open && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: hasPopup && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
         // The whole output receives input while a popup is open (the bar strip is handed to the bar, below); nothing once
         // it closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
         // window under it.
         // qmllint disable missing-type
-        mask: win.open && !Popups.pointerHeld ? openMask : passThrough
+        mask: win.hasPopup && !Popups.pointerHeld ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && !(Popups.kind === "dockstack" && ((holder.item as StackPopup)?.fan ?? false)) ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
@@ -68,12 +75,28 @@ Variants {
             shown: win.open
         }
 
+        // While mapped or open: `open` is computed again when it disagrees with Popups (a value left stale by a binding loop would keep
+        // this surface over every click and key; integrator PASS on 8316ed2).
+        Timer {
+            interval: 1000
+            repeat: true
+            running: win.visible || win.open
+            onTriggered: {
+                if (Popups.verify())
+                    Popups.verifyOpen(win.open, win.modelData ? win.modelData.name : "");
+                if (win.open && !win.hasPopup)
+                    console.warn("grassfield: overlay on \"" + (win.modelData ? win.modelData.name : "") + "\": open with no popup (kind \"" + Popups.kind
+                                 + "\"): the keyboard and the output's input are let through");
+                // (mapped while `open`: the check runs then; the surface takes nothing without a popup)
+            }
+        }
+
         // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
         // the GUI thread was busy) is swallowed here, never handled by the menu item under it.
         MouseArea {
             anchors.fill: parent
             z: 1000
-            visible: !win.open
+            visible: !win.hasPopup
             acceptedButtons: Qt.AllButtons
         }
 
@@ -178,7 +201,7 @@ Variants {
         Item {
             width: win.width
             height: Tokens.menubarHeight
-            visible: win.open
+            visible: win.hasPopup
 
             HoverHandler {
                 onPointChanged: {
