@@ -107,26 +107,55 @@ void AppChooser::handle(const QDBusObjectPath &handle, const QString &appId, con
     const QString token = stringOption(options, QStringLiteral("activation_token"));
     if (!token.isEmpty() && token.size() <= 1024)
         m_tokens.insert(id, token);
+    m_callers.insert(id, message.service());
     if (!startUi(id))
         return;
     emit opened(id, toQml(appId, parentWindow, choices, options));
 }
 
-void AppChooser::updateChoices(const QDBusObjectPath &handle, const QStringList &choices)
+void AppChooser::updateChoices(const QDBusObjectPath &handle, const QStringList &choices, const QString &sender)
 {
     const int id = requestId(handle.path());
     if (id == 0)
         return;
+    if (sender != m_callers.value(id)) {
+        qWarning("grassfield-portal: UpdateChoices from another caller than the request's; ignored");
+        return;
+    }
+    const QStringList checked = desktopIds(choices);
     if (isOpen(id)) {
-        emit applicationsChanged(id, desktopIds(choices));
+        m_updated.insert(id, {handle, checked});
+        emit applicationsChanged(id, checked);
         return;
     }
     // Forwarded: x-d-p-gtk's dialog shows the frontend's new candidates.
+    sendUpdate(handle, checked);
+}
+
+void AppChooser::forwarded(int id)
+{
+    // The forward carries the call's first candidates: an UpdateChoices the panel had follows them to x-d-p-gtk (on the same
+    // connection, so after the call).
+    if (m_updated.contains(id)) {
+        const QPair<QDBusObjectPath, QStringList> update = m_updated.take(id);
+        sendUpdate(update.first, update.second);
+    }
+}
+
+void AppChooser::sendUpdate(const QDBusObjectPath &handle, const QStringList &choices)
+{
     QDBusMessage call = QDBusMessage::createMethodCall(m_gtkService, QStringLiteral("/org/freedesktop/portal/desktop"),
                                                        QStringLiteral("org.freedesktop.impl.portal.AppChooser"),
                                                        QStringLiteral("UpdateChoices"));
     call.setArguments({QVariant::fromValue(handle), choices});
     m_bus.call(call, QDBus::NoBlock);
+}
+
+void AppChooser::ended(int id)
+{
+    m_tokens.remove(id);
+    m_callers.remove(id);
+    m_updated.remove(id);
 }
 
 void AppChooser::answer(int id, int response, const QVariantMap &answer)
@@ -161,6 +190,10 @@ QVariantMap AppChooser::relayed(const QVariantMap &gtkResults) const
         if (value.metaType() == QMetaType::fromType<QString>())
             out.insert(key, value.toString());
     }
+    // A choice that is no desktop id is none, as the panel's own (the frontend starts what it is given; integrator review of
+    // f9a25ce, NIT).
+    if (out.contains(QStringLiteral("choice")) && !isDesktopId(out.value(QStringLiteral("choice")).toString()))
+        out.remove(QStringLiteral("choice"));
     return out;
 }
 
@@ -179,9 +212,9 @@ uint AppChooserAdaptor::ChooseApplication(const QDBusObjectPath &handle, const Q
     return 2;
 }
 
-void AppChooserAdaptor::UpdateChoices(const QDBusObjectPath &handle, const QStringList &choices)
+void AppChooserAdaptor::UpdateChoices(const QDBusObjectPath &handle, const QStringList &choices, const QDBusMessage &message)
 {
-    m_chooser->updateChoices(handle, choices);
+    m_chooser->updateChoices(handle, choices, message.service());
 }
 
 } // namespace grassfield::portal
