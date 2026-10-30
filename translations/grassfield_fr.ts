@@ -539,9 +539,9 @@
         <source>Are you sure you want to quit this process?</source>
         <translation>Voulez-vous vraiment quitter ce processus&#xa0;?</translation>
     </message>
-    <message numerus="yes">
-        <source>Are you sure you want to quit these %n processes?</source>
-        <translation><numerusform>Voulez-vous vraiment quitter ce processus&#xa0;?</numerusform><numerusform>Voulez-vous vraiment quitter ces %n processus&#xa0;?</numerusform></translation>
+    <message>
+        <source>Are you sure you want to quit these %1 processes?</source>
+        <translation>Voulez-vous vraiment quitter ces %1 processus&#xa0;?</translation>
     </message>
     <message>
         <source>“%1” (PID %2)</source>

@@ -101,7 +101,7 @@ Item {
         id: quitSheet
         objectName: "quitSheet"
         title: (root.info.count || 1) === 1 ? qsTr("Are you sure you want to quit this process?")
-            : qsTr("Are you sure you want to quit these %n processes?", "", root.info.count)
+            : qsTr("Are you sure you want to quit these %1 processes?").arg(root.info.count) // two or more: plural in English and French
         message: (root.info.count || 1) === 1 ? qsTr("“%1” (PID %2)").arg(root.info.name || "").arg(root.info.pid || 0) : ""
         // AM50: Cancel, Force Quit and Quit (the default); AM52: Force Quit alone once Quit could not be done safely, and
         // then Return does not force it.
