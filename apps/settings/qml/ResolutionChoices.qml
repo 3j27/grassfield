@@ -101,7 +101,7 @@ Item {
                 visible: cellItem.inUse
                 x: picture.x - 1
                 y: picture.y - 1
-                width: picture.width + 2
+                width: picture.width + 2 * (picture.x - x)
                 height: width
                 radius: Tokens.settingsDisplayChoiceRadius + 1
                 color: "transparent"

@@ -171,8 +171,8 @@ T.ComboBox {
 
         // The room the list may take: the window minus a margin on every side. A taller list scrolls (macOS: a pop-up taller
         // than the screen scrolls, it never leaves it).
-        property real maxHeight: 1e6
-        property real maxWidth: 1e6
+        property real maxHeight: Infinity
+        property real maxWidth: Infinity
 
         width: Math.min(menu.width, popup.maxWidth)
         height: Math.min(menu.height, popup.maxHeight)

@@ -158,7 +158,7 @@ Sheet {
                 Rectangle {
                     x: 1
                     y: 1
-                    width: parent.width - 2
+                    width: parent.width - 2 * x
                     height: Tokens.settingsDisplayMenuBarHeight
                     radius: Tokens.settingsDisplayRadius
                     color: Appearance.colors.text

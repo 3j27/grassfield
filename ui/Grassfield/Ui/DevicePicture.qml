@@ -72,7 +72,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         width: Math.round(root.width * 0.36)
-        height: Math.max(2, Math.round(root.height * 0.05))
+        height: Math.max(Tokens.settingsPictureMinimumPart, Math.round(root.height * 0.05))
         radius: height / 2
         color: Tokens.settingsDeviceBody
     }

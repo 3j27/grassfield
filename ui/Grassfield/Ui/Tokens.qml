@@ -607,6 +607,8 @@ QtObject {
     readonly property int controlSegmentDividerHeight: 14
     // the tabs' hairline in the text colour at 0.23 (181 on 236) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property real controlSegmentDividerOpacity: 0.23
+    // the selected pill sits this far inside the track, on whole pixels, with a concentric radius; unchanged value, was a literal in SegmentedControl.qml (ADR-0039 step 3, the literals guard)
+    readonly property int controlSegmentPillInset: 2
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
@@ -674,6 +676,10 @@ QtObject {
     readonly property int panelAboutWidth: 340
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelForceQuitWidth: 380
+    // an app's icon in a Force Quit row: the menu row height less 6, unchanged value, was a literal offset in ForceQuitPanel.qml (ADR-0039 step 3, the literals guard)
+    readonly property int panelForceQuitIconSize: 18
+    // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
+    readonly property int panelAppearanceGlyphSize: 18
     // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelTileHeight: 63
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
@@ -2007,6 +2013,8 @@ QtObject {
     readonly property int settingsDeviceLineWidth: 2
     // the device drawings' line in the text colour at 0.25 (185 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property real settingsDeviceLineOpacity: 0.25
+    // the smallest a drawn part of a picture gets (a device's foot, a thumbnail's window lights), so it never vanishes at a small scale; unchanged value, was a literal in DevicePicture.qml and AppearanceThumbnail.qml (ADR-0039 step 3, the literals guard)
+    readonly property int settingsPictureMinimumPart: 2
     // a finger of the gesture: a dot 9 across [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property int settingsGestureDotSize: 9
     // a finger of the gesture in the accent at about 0.68 (80, 160, 255 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
@@ -2070,6 +2078,8 @@ QtObject {
     readonly property int widgetSizeButtonWidth: 64
     // estimate: widgets v1, analog clock hand width [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetAnalogHandWidth: 3
+    // the analog clock's hour ticks at 12, 3, 6 and 9 (the others a hairline); unchanged value, was a literal in Clock.qml (ADR-0039 step 3, the literals guard)
+    readonly property int widgetAnalogTickWidth: 2
     // task spec: System widget sampling interval [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetSampleMs: 2000
     // estimate: widgets v1, secondary figure size [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
