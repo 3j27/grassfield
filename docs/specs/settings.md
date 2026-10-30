@@ -235,18 +235,28 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
    - Displays (macOS 27, `docs/audits/settings-parity-2026-10-26.md` § Displays; ADR-0031): the shell publishes the monitors (Hyprland's own `monitors` answer through Quickshell), the backlight and the trial's state in `$XDG_RUNTIME_DIR/grassfield-displays.json` (`shell/platform/Displays.qml`, `DisplaysFile.js`); the page reads it (`Backend.displaysStateFile`, watched, and every `settings.systemRefreshMs`). The band (`DisplayHeader.qml`): each display's picture (`DevicePicture`, a laptop for an eDP, LVDS or DSI panel) and name ("Built-in Display", else the model); with several, a click or Space/Return chooses the one the groups set. Resolution (`ResolutionChoices.qml`): `Displays.scaleChoices`, Hyprland's default scale (2 above 200 ppi, 1.5 above 140, else 1) and up to 5 whole-pixel scales from about 1.3 times its text to 1.25 times its room, labelled Larger Text, Default, More Space. Brightness for a built-in panel with a backlight (`LevelRow`, `brightnessctl -q -d <device> set N%`, coalesced). Refresh rate (the modes of the resolution in use) and Rotation (Standard, 90°, 180°, 270°). Arrange… (several displays, `ArrangeSheet.qml`: tiles dragged, or an arrow key to put one on that side of the nearest other, Shift and an arrow to move it along the edge; `Displays.snapBeside`). A change writes the trial file (`Backend.writeDisplayTrial`: the kept lines of the other displays and the new ones, a deadline 15 s ahead) and opens "Keep these display settings?" with the countdown (`DisplayKeepSheet.qml`); the shell reloads the configuration, `config/hypr/grassfield/displays.lua` applies the trial; Keep writes `displays.conf` then marks the trial kept, Revert marks it, the shell takes it back at the deadline (or when it finds one at start); a trial the shell does not acknowledge within `settings.displayAppliedMs` is taken back and said so. A display without a usable description is shown and never written. Every line is checked by `systemguard.h::isDisplayLine` (C++) and again by `displays.lua` (Lua).
    - Dev guard (`GRASSFIELD_DEV=1`): `Backend.act` and `Backend.busAct` never run a command or send a call (one `dev guard: <what> suppressed` line, a "dev: not applied" note in the pane). Underneath, every D-Bus call goes through `GuardedCaller`: in a dev session only `Properties.Get/GetAll`, `ObjectManager.GetManagedObjects`, `GetDevices`, `GetAllAccessPoints`, `ListConnections` and `GetSettings` (no secrets) are sent to NetworkManager and BlueZ, anything else is refused whoever asks (`isReadOnlyCall`, unit-tested and run on a private bus). `Backend.query` runs only the read-only argument vectors of `src/systemguard.cpp` and refuses anything else, so a mutation cannot be smuggled in as a query: now `wpctl status` and `wpctl status -n` (the Sound page) and, for the About pane, `pacman -Q hyprland|quickshell|quickshell-git` and `lspci`; nmcli and bluetoothctl are neither queries nor actions any more. About's commands are queries (off the GUI thread, review of ce69dc6); `Backend.run`, which no page calls any more, uses the same list in every session. `wpctl get-volume` is not used and not allowed. In a real session `act` runs only `wpctl` (and `xdg-open` for links), `busAct` only the validated ops; argument vectors and action maps are built by validated functions (`System.js`, null for invalid values, no shell) and checked again in C++.
    - `--section=<id>` (wifi, bluetooth, sound, displays, ...) opens a section first.
-   - `--about` opens About This Computer alone (ADR-0040 ID-19, step 1b; the shell's Grassfield menu starts it):
-     `AboutWindow.qml`, a window of fixed size (`settings.aboutWindowWidth`, its height from the content) in the
-     titlebar-only style (role "info", close light only). Computer first: `DevicePicture` by hostname1's chassis and the
-     model name (as General > About), Processor, Memory and Graphics (`AboutFacts.qml`, shared with General > About),
+   - One Settings per user (macOS: one Settings window, one About This Computer window; ADR-0040 step 1b, review of
+     ce69dc6; Activity Monitor's AM1 pattern, ADR-0038 AD34; `src/settingsinstance.h`): the running Settings owns
+     `org.grassfield.Settings` on the session bus (a run with its own state directory, a dev session or an isolated test run,
+     adds ".Dev" in a dev session and a digest of that directory, so it never reaches the owner's Settings nor another run's),
+     object `/org/grassfield/Settings`, interface `org.grassfield.Settings`: `Open(s section, s token)` shows the Settings
+     window on `section` (a sidebar id, else the window as it is), `About(s token)` the About This Computer window. A second
+     `grassfield-settings [--section=<id>|--about]` hands its request and its `XDG_ACTIVATION_TOKEN` to it and leaves;
+     without a session bus, or with no answer within 2 s, it runs itself. Both windows live in that one process, each made
+     when first asked for and kept (closing hides it; the app quits when the last shown one closes); a window asked for again
+     comes forward (Qt's activation with the token; the Dock's `reopen` when it is off screen).
+   - `--about` opens About This Computer (ADR-0040 ID-19, step 1b; the shell's Grassfield menu starts it, or brings an open
+     one forward itself): `AboutWindow.qml`, a window of fixed size (`settings.aboutWindowWidth`, its height from the content)
+     in the titlebar-only style (role "info", close light only). Computer first: `DevicePicture` by hostname1's chassis and
+     the model name (as General > About), Processor, Memory and Graphics (`AboutFacts.qml`, shared with General > About),
      Software "Grassfield Desktop <version>" (the compile-time VERSION) after the Grassfield mark in the brand green (the
-     default accent's green, `color.light.accent` / `color.dark.accent`, whatever accent is chosen), More Info… (the
-     Settings window at General > About in the same process; a second press brings it back) and "Built for Omarchy ·
-     based on Arch Linux". It maps once hostname1 has answered, at the latest after `settings.aboutWindowRevealTimeout`
-     ms with what it has ("Computer", the desktop drawing), and logs one line when shown. One per user: a lock file
-     (`settings-about.lock` in the Grassfield state directory, a dev session's own) makes a second `--about` leave at
-     once; the window's closing releases it. Esc and Ctrl+W close it. The appearance bindings are
-     `SettingsAppearance.qml`, shared with the Settings window. Tests: `tests/unit/tst_settingsabout.qml`.
+     default accent's green, `color.light.accent` / `color.dark.accent`, whatever accent is chosen), More Info… (asks the
+     running Settings for its window at General > About) and "Built for Omarchy · based on Arch Linux". Nothing waits on the
+     GUI thread: hostname1 and lspci answer asynchronously (lspci and General > About's `pacman -Q` are shared queries,
+     `settings.aboutQueryTimeout`); the window maps once both have answered, at the latest after
+     `settings.aboutWindowRevealTimeout` ms with what it has ("Computer", the desktop drawing), a late line then filling in,
+     and logs one line when shown. A line with nothing to say is not shown. Esc and Ctrl+W close it. The appearance
+     bindings are `SettingsAppearance.qml`, shared with the Settings window. Tests: `tests/unit/tst_settingsabout.qml`.
    - General's system services (PR #6, ADR-0030; `systembus.cpp`): `host.state` (hostname1), `time.state` (timedate1 + timesync1),
      `time.zones` (timedate1 ListTimezones), `locale.state` (locale1) on the system bus, `user.units` (the user's own services: unit
      files under `$XDG_CONFIG_HOME/systemd/user` and `$XDG_DATA_HOME/systemd/user`, never a package's) on the SESSION bus, a

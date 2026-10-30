@@ -195,9 +195,13 @@ and IQ-B3 here changes the palette only, not which controls read it.
   "Built for Omarchy · based on Arch Linux" (§14 wording). Mockup: `mockups/b3-about.svg`. Its form (step 1b, chosen on
   2026-10-29 when the step started, « Fenêtre de Réglages », the recommended option): Settings' own small window,
   `grassfield-settings --about` (`apps/settings/qml/AboutWindow.qml`), of fixed size, in the titlebar-only style (role
-  "info"), mapped once hostname1 has named the computer, at the latest after `settings.aboutWindowRevealTimeout` (P-2,
-  P-6); one per user (a lock file in the state directory; the shell brings the open one forward); More Info… opens the
-  Settings window in the same process. The shell's sheet (`shell/overlay/AboutPanel.qml`) is retired. Weighed: the
+  "info"), mapped once hostname1 and lspci have answered (asynchronously: nothing waits on the GUI thread), at the latest
+  after `settings.aboutWindowRevealTimeout` (P-2, P-6). Settings becomes one instance per user (the review of ce69dc6,
+  MINOR 3; chosen on 2026-10-29, « Instance unique ici », recommended; Activity Monitor's AM1 pattern, ADR-0038 AD34): the
+  running Settings owns `org.grassfield.Settings` on the session bus, a second launch hands it `--section` or `--about`,
+  so there is one About window and one Settings window, in one process; More Info… brings that Settings window to
+  General > About, and the shell's Settings… and section links bring it to their page instead of opening a second one.
+  The shell's sheet (`shell/overlay/AboutPanel.qml`) and its popup kind are retired. Weighed: the
   shell's own window or sheet (no window of its own in the Dock, the Overview and the switcher; macOS's About This Mac
   is a window).
 - **App icons (IQ-B5, owner: C, own icons where the pack has none).** Grassfield's own icons where the pack has no system app
@@ -541,8 +545,11 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - **NOT VERIFIED (step 1b, nested pass):** About This Computer in the session: the window's look and size, the mark
   in the brand green (the container's offscreen Qt 6.10 renders no `Icon`: MultiEffect draws nothing there), the shell
   bringing an open window forward. That rests on Hyprland's window data carrying `xdgTag`, which
-  `tests/compositor/client_chrome.sh` already reads in the nested session. ASSUMPTION (macOS, from memory): About This
-  Mac has no title on its bar and only its close light enabled.
+  `tests/compositor/client_chrome.sh` already reads in the nested session. The single instance (review of ce69dc6): not
+  built or run in this container (no Qt development files); the nested pass checks Settings… and a section link with
+  Settings open, More Info… with Settings open on another pane, two quick About requests, and the window coming forward
+  without a token from the shell (`misc:focus_on_activate` is on). ASSUMPTION (macOS, from memory): About This Mac has no
+  title on its bar and only its close light enabled.
 - **VERIFY on the owner's machine:** that Arch's tzdata installs `zone1970.tab`, `zone.tab` and `tzdata.zi` under
   `/usr/share/zoneinfo` (they are in this container; IQ-W1 C reads them, and falls back to the fixed hours without
   them).
@@ -623,6 +630,16 @@ this ADR follows it, and any later pull request of either lane that meets one of
     author: not rewritten (no history rewrite), the later commits are authored as the owner.
 - **Opus re-review of 8a75435 (integrator, 2026-10-29): PASS, one NIT** (merged as a5488a6). The NIT, "five checks fail"
   where the first rule (`zone1970.tab` alone) fails Montreal too, is fixed in step 1b: six (section 2 and the line above).
+- **Opus review of ce69dc6 (step 1b, pull request #55; integrator, 2026-10-29): PASS on code, four MINORs, two NITs.**
+  - MINOR 1, any lock failure kept About from opening, MINOR 3, More Info… opened a second Settings window when Settings
+    was open: Settings is one instance per user over the session bus (AM1's pattern), the lock file is gone.
+  - MINOR 2, lspci and `pacman -Q` ran on the GUI thread: shared queries; the window waits for hostname1 and lspci within
+    the same bound.
+  - MINOR 4, the retired `about` popup kind could still map an empty overlay: Popups refuses any kind its Overlay does not
+    draw (`shell/services/PopupKinds.js`, held to the Overlay by `tst_popupkinds.qml`, checked on the real Popups by
+    `lock_surfaces`).
+  - NITs: "Logiciel" in both places; tests for Esc and Ctrl+W, the hidden empty lines and the window lookup
+    (`Minimized.hasTag`).
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.

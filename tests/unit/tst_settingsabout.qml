@@ -6,8 +6,8 @@ import Grassfield.Ui
 // query, off the GUI thread) have answered, or after settings.aboutWindowRevealTimeout with what it has, a late line then
 // filling in (P-2, P-6); computer first (the drawing by chassis, the model name), then processor, memory, graphics and the
 // product line, whose mark keeps the brand green whatever the accent; a line with nothing to say is not shown; a window of
-// fixed size that Esc and Ctrl+W close; More Info… opens Settings at General > About once, then brings that window back.
-// The backend is a fake in a dev session: nothing reaches a bus, a tool or a file.
+// fixed size that Esc and Ctrl+W close; More Info… asks the running Settings (src/settingsinstance.h) for General > About.
+// The backend and the instance are fakes in a dev session: nothing reaches a bus, a tool or a file.
 TestCase {
     id: testCase
     name: "SettingsAbout"
@@ -80,6 +80,16 @@ TestCase {
         }
     }
 
+    Component {
+        id: fakeInstance
+        QtObject {
+            property var asked: []
+            function openSettings(section: string): void {
+                asked.push(section);
+            }
+        }
+    }
+
     readonly property string lspci: "00:02.0 VGA compatible controller: Intel Corporation Raptor Lake-P [Iris Xe Graphics] (rev 04)\n"
 
     // hostname1 and lspci answer.
@@ -94,9 +104,10 @@ TestCase {
         const backend = fakeBackend.createObject(testCase, files ? {config: config ?? "", files: files} : {config: config ?? ""});
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/AboutWindow.qml"));
         compare(comp.status, Component.Ready, comp.errorString());
-        const win = createTemporaryObject(comp, testCase, {backend: backend, globalMenu: false});
+        const instance = fakeInstance.createObject(testCase);
+        const win = createTemporaryObject(comp, testCase, {backend: backend, instance: instance});
         verify(win);
-        return {backend: backend, win: win};
+        return {backend: backend, instance: instance, win: win};
     }
 
     function find(item, pred) {
@@ -124,15 +135,6 @@ TestCase {
     function row(win, label) {
         return find(win.contentItem, i => i.label === label && i.value !== undefined);
     }
-
-    function cleanup() {
-        // The Settings window of More Info… has no parent: close it with the test.
-        for (const w of testCase.settingsWindows)
-            w.destroy();
-        testCase.settingsWindows = [];
-    }
-
-    property var settingsWindows: []
 
     function test_mapsOnceHostname1AndLspciAnswered() {
         const t = make();
@@ -217,19 +219,16 @@ TestCase {
         verify(Qt.colorEqual(mark.color, Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent), String(mark.color));
     }
 
-    function test_moreInfoOpensSettingsOnce() {
+    function test_moreInfoAsksForGeneralAbout() {
         const t = make();
         testCase.answer(t);
         const button = find(t.win.contentItem, i => i.text === "More Info…" && i.clicked !== undefined);
         verify(button);
         button.clicked();
-        const settings = t.win.settingsWindow;
-        verify(settings);
-        testCase.settingsWindows.push(settings);
-        compare(settings.selectedId, "about");
-        settings.select("appearance");
+        compare(t.instance.asked, ["about"]);
+        // Again: the same request (the running Settings brings its one window back, src/main.cpp).
         button.clicked();
-        compare(t.win.settingsWindow, settings);
-        compare(settings.selectedId, "about");
+        compare(t.instance.asked, ["about", "about"]);
+        verify(t.win.visible);
     }
 }

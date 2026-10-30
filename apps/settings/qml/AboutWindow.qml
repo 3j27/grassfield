@@ -3,12 +3,13 @@ import QtQuick
 import Grassfield.Ui
 import "General.js" as General
 
-// About This Computer (ADR-0040 ID-19): a small window of fixed size that `grassfield-settings --about` opens alone (the
-// shell's Grassfield menu starts it, src/main.cpp keeps one per user). Computer first, as macOS 27's About This Mac:
+// About This Computer (ADR-0040 ID-19): a small window of fixed size that `grassfield-settings --about` opens (the shell's
+// Grassfield menu starts it; one Settings per user, src/settingsinstance.h, so one About window and one Settings window,
+// in the same process). Computer first, as macOS 27's About This Mac:
 // Grassfield's drawing of the computer (DevicePicture, by hostname1's chassis) and its model name; processor, memory and
 // graphics (AboutFacts, the lines of Settings > General > About); the product line with the Grassfield mark in the brand
-// green (the default accent's green, whatever accent is chosen; IQ-B1 B); More Info…, which opens Settings at
-// General > About in this process; "Built for Omarchy · based on Arch Linux" (master-prompt §14). Nothing waits on the GUI
+// green (the default accent's green, whatever accent is chosen; IQ-B1 B); More Info…, which brings the one Settings window
+// to General > About; "Built for Omarchy · based on Arch Linux" (master-prompt §14). Nothing waits on the GUI
 // thread (hostname1 and lspci answer asynchronously); the window maps once both have answered, at the latest after
 // settings.aboutWindowRevealTimeout with what it has, a late line then filling in (P-2, P-6), and says so once in the log (P-8).
 Window {
@@ -16,8 +17,8 @@ Window {
 
     // Set by the launcher (src/main.cpp).
     required property var backend
-    // The registrar is there (kept up to date by src/main.cpp): the Settings window opened by More Info… exports its menus.
-    required property bool globalMenu
+    // The running Settings (src/settingsinstance.h): More Info… asks it for the Settings window at General > About.
+    required property var instance
     // ADR-0015: the titlebar-only style of Get Info; the compositor plugin draws no titlebar on it, and the shell finds this
     // window by its role to bring it forward (shell/services/SettingsApp.qml openAbout).
     property string gfChromeRole: "info"
@@ -28,8 +29,6 @@ Window {
     readonly property bool answered: root.hostDone && root.facts.graphicsDone
     // They answered, or the wait ran out: the window maps.
     property bool ready: false
-    // The Settings window of More Info… (null before the first press): shown again rather than a second one.
-    property var settingsWindow: null
 
     readonly property AboutFacts facts: AboutFacts {
         backend: root.backend
@@ -42,25 +41,6 @@ Window {
             return;
         root.ready = true;
         console.info("grassfield-settings: About This Computer shown (" + how + ")");
-    }
-
-    // More Info…: Settings at General > About, in this process.
-    function openSettings(): void {
-        if (!root.settingsWindow) {
-            const component = Qt.createComponent(Qt.resolvedUrl("Main.qml"));
-            if (component.status !== Component.Ready) {
-                console.warn("grassfield-settings: the Settings window could not be made:", component.errorString());
-                return;
-            }
-            root.settingsWindow = component.createObject(null, {backend: root.backend, globalMenu: root.globalMenu, startSection: "about"});
-            if (root.settingsWindow)
-                root.settingsWindow.globalMenu = Qt.binding(() => root.globalMenu);
-            return;
-        }
-        root.settingsWindow.select("about");
-        root.settingsWindow.show();
-        root.settingsWindow.raise();
-        root.settingsWindow.requestActivate();
     }
 
     title: qsTr("About This Computer")
@@ -252,7 +232,7 @@ Window {
             anchors.horizontalCenter: parent.horizontalCenter
             push: true
             text: qsTr("More Info…")
-            onClicked: root.openSettings()
+            onClicked: root.instance.openSettings("about")
         }
 
         Item {
