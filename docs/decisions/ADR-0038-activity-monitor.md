@@ -643,7 +643,10 @@ Answer: A (see "Answers").
   cannot tell a process's windows: Quit of a process of an app unit (under `app-graphical.slice`) sends nothing and the
   sheet says "The process couldn't be quit safely." with Cancel (now the default) and Force Quit only, as AM75 says for a
   session without the shell. A process outside an app unit gets `SIGTERM`. Quit never risks unsaved work by a signal;
-  Send Signal's Terminate stays available.
+  Send Signal's Terminate stays available. **A command run in a terminal** (the integrator's decision on the review of
+  1153365, delegated by the owner on 2026-10-27: the closest to macOS, no technical step for the user): a process with a
+  controlling terminal (stat's `tty_nr`) whose parent is in the same app unit, so not the process that started the unit,
+  gets `SIGTERM` on Quit (`python` in foot); the unit's own process waits for step 3's projection.
 - **AD44. The sheets** (AM50, AM54, AM55; step 2c). Grassfield.Ui's Sheet (as Files and Settings): the quit sheet with
   Force Quit at the leading edge, Cancel and Quit; a session process's warning when the action is chosen, before the quit
   sheet or Send Signal's sheet, Cancel its default; Send Signal's pop-up (Grassfield.Ui's ComboBox) with Terminate chosen
@@ -868,3 +871,14 @@ code loads and passes its checks on Qt 6.11.2 too, and a Qt 6.12 API is used onl
 | MAJOR 2: with transparent huge pages `always`, the changing fixture's stat lines seldom change | its region is `madvise(MADV_NOHUGEPAGE)`; `activity_cost.sh` fails when fewer stat or io lines are parsed a sample than 90 % of the changing processes (shown failing on a huge-page build) |
 | MAJOR 3: the battery's times count to the last battery state, set only when it changes | each sample moves that time; a case checks the time and the graph between two states |
 | NIT: `windowsOf` strips `.desktop` with case; two surviving mutants; the PSS range and 1.60 % at 1 s | without case, with a case; a case each (the vendor's end, the pruning); −12 to +292 kB, and the 1.60 % stated as a miss here |
+
+**Step 2c, pull request #63: the integrator's opus security review of 1153365 (PASS, four MINORs, NITs; 2026-10-30).** Only
+the user's own processes are signalled, the Kernel row is refused twice, session processes get the warning and never Stop,
+no recycled pid can be hit, only the eleven signals are accepted; C++ mutants 23 of 25 killed (one equivalent), QML 7 of 8.
+| Note | Answer |
+|---|---|
+| MINOR 1: Send Signal's dev guard untested (mutant M20) | `TheDevGuard` sends Terminate with no root: refused, nothing sent |
+| MINOR 2: the A-W2 cleanup SIGKILLs pids already reaped | only a child `waitpid` still answers for is signalled |
+| MINOR 3: `activity_actions.sh` keeps `QT_QPA_PLATFORMTHEME` | unset, as `scripts/dev/test.sh` does |
+| MINOR 4: a command run in a terminal is refused by Quit (AD43) | the integrator's decision, built: a controlling terminal and a parent in the same app unit get `SIGTERM`; the unit's own process waits for step 3 (`ATerminalCommandIsQuitBySigterm`, a pseudo-terminal's child) |
+| NITs: an empty `/tmp` directory after the pid-reuse case; the guard's walk from the parent read at the sheet's opening; "can't force quit itself" in Send Signal and its French; mutant Q08 | the test makes and removes the directory; the walk starts from the parent read again through the descriptor; Send Signal says "This app can't send a signal to itself.", the French reads « Cette app ne peut pas forcer sa propre fermeture. »; `test_sendSignal` checks that Cancel releases the processes |

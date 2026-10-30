@@ -283,7 +283,9 @@ items (Settings does it); a background collector; any network access.
 - **AM52** Quit: a process owning windows (projection) → IPC `activity quit <pid>` to the shell (AM61); `ok` → nothing more
   (the app may ask to save); `no-windows` → `SIGTERM` through AM51's descriptor; `refused`, no answer within 1 s, or no projection
   for a process of an app unit → the sheet stays with "The process couldn't be quit safely." and only Cancel and Force
-  Quit. A process without windows → `SIGTERM` through AM51's descriptor.
+  Quit. A process without windows → `SIGTERM` through AM51's descriptor. A command run in a terminal (a controlling
+  terminal, and a parent in the same app unit: not the process that started the unit) → `SIGTERM` (ADR-0038 AD43, the
+  integrator's decision on the review of 1153365).
 - **AM53** Force Quit → `SIGKILL` through AM51's descriptor. ESRCH (it ended) is silent; any other error shows "The process couldn't
   be quit." with the reason in the journal.
 - **AM54** Session processes (AD22): the user's processes in units of `session.slice` or `session-graphical.slice`, in uwsm's
