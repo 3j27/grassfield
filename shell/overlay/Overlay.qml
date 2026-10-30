@@ -188,11 +188,33 @@ Variants {
             }
         }
 
-        // Click outside closes. Right and middle buttons too.
+        // Click outside closes. Right and middle buttons too. A left click on the tiling popover's green light is the light's
+        // (ADR-0036 D64): released over it, it runs the light's action; released elsewhere, the popover closes.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: Popups.close()
+            property bool onGreen: false
+            onPressed: mouse => {
+                const popover = holder.item as TilingPopover;
+                onGreen = win.hasPopup && popover !== null && mouse.button === Qt.LeftButton && popover.onLight(mouse.x, mouse.y);
+                if (!onGreen)
+                    Popups.close();
+            }
+            onReleased: mouse => {
+                if (!onGreen)
+                    return;
+                onGreen = false;
+                const popover = holder.item as TilingPopover;
+                if (popover && popover.onLight(mouse.x, mouse.y))
+                    popover.greenClick((mouse.modifiers & Qt.AltModifier) !== 0);
+                else
+                    Popups.close();
+            }
+            onCanceled: {
+                if (onGreen)
+                    Popups.close();
+                onGreen = false;
+            }
         }
 
         // The menu bar strip while a popup is open: Hyprland sends the pointer to this Exclusive layer, not to the bar under

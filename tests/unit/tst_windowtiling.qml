@@ -141,6 +141,59 @@ TestCase {
             compare(WindowTiling.parseNotice(text), null, text);
     }
 
+    // ADR-0036 D64: the green light clicked while its popover is open does what the plugin's light does.
+    function test_greenActionIsTheLightsOwn() {
+        compare(WindowTiling.greenAction(false, false, false), "toggleZoom");
+        compare(WindowTiling.greenAction(false, false, true), "enterFullscreen");
+        compare(WindowTiling.greenAction(true, false, false), "leaveFullscreen");
+        compare(WindowTiling.greenAction(true, false, true), "leaveFullscreen", "Alt changes nothing in full screen");
+        compare(WindowTiling.greenAction(false, true, false), "unsplit");
+        compare(WindowTiling.greenAction(true, true, true), "unsplit", "a Split View member leaves it, with or without Alt");
+        compare(WindowTiling.greenAction(true, true, false), "unsplit");
+        compare(WindowTiling.greenAction(false, true, true), "unsplit");
+    }
+
+    function test_inLightExcludesTheFarEdges() {
+        const l = {x: 10, y: 20, w: 14, h: 14};
+        verify(WindowTiling.inLight(l, 10, 20), "top left corner");
+        verify(WindowTiling.inLight(l, 23.5, 33.5));
+        verify(!WindowTiling.inLight(l, 24, 25), "right edge");
+        verify(!WindowTiling.inLight(l, 15, 34), "bottom edge");
+        verify(!WindowTiling.inLight(l, 9.5, 25), "left of it");
+        verify(!WindowTiling.inLight(l, 15, 19.5), "above it");
+        verify(!WindowTiling.inLight(null, 15, 25), "no light");
+        compare(WindowTiling.inLight(undefined, 15, 25), false, "a boolean");
+    }
+
+    // ADR-0036 D65: the menu bar comes and goes with a full-screen window's revealed titlebar.
+    function test_parseTitlebarRevealReadsTheEvent() {
+        compare(JSON.stringify(WindowTiling.parseTitlebarReveal('{"v":"gfc/1","type":"titlebar-reveal","output":"GF-REF","revealed":true}')),
+                JSON.stringify({output: "GF-REF", revealed: true}));
+        compare(JSON.stringify(WindowTiling.parseTitlebarReveal('{"v":"gfc/1","type":"titlebar-reveal","output":"DP-2","revealed":false}')),
+                JSON.stringify({output: "DP-2", revealed: false}));
+        for (const text of ["", "x", "null", '{"v":"gfc/2","type":"titlebar-reveal","output":"A","revealed":true}', '{"v":"gfc/1","type":"tiling","output":"A","revealed":true}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","revealed":true}', '{"v":"gfc/1","type":"titlebar-reveal","output":"","revealed":true}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","output":7,"revealed":true}', '{"v":"gfc/1","type":"titlebar-reveal","output":"A"}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","output":"A","revealed":1}', '{"v":"gfc/1","type":"titlebar-reveal","output":"A","revealed":"true"}'])
+            compare(WindowTiling.parseTitlebarReveal(text), null, text);
+    }
+
+    function test_revealsAfterKeepsEachOutputOnce() {
+        compare(JSON.stringify(WindowTiling.revealsAfter([], {output: "A", revealed: true})), JSON.stringify(["A"]));
+        compare(JSON.stringify(WindowTiling.revealsAfter(["A"], {output: "A", revealed: true})), JSON.stringify(["A"]), "once");
+        compare(JSON.stringify(WindowTiling.revealsAfter(["A", "B"], {output: "A", revealed: false})), JSON.stringify(["B"]));
+        compare(JSON.stringify(WindowTiling.revealsAfter(["B"], {output: "A", revealed: false})), JSON.stringify(["B"]), "away from an output not revealed");
+        compare(JSON.stringify(WindowTiling.revealsAfter(null, {output: "A", revealed: true})), JSON.stringify(["A"]), "no list yet");
+        const before = ["A"];
+        verify(WindowTiling.revealsAfter(before, {output: "B", revealed: true}) !== before, "a new list: bindings see the change");
+        compare(JSON.stringify(before), JSON.stringify(["A"]), "the old list is left as it was");
+    }
+
+    function test_suggestionWaitIsGenerous() {
+        // A loaded machine can take seconds to start hyprctl (merge note of #56, ADR-0036 D68).
+        compare(WindowTiling.suggestionWaitMs, 6000);
+    }
+
     function reply(suggestion: var): string {
         return JSON.stringify({v: "gfc/1", type: "tiling", gen: 12, outputs: [], suggestion: suggestion});
     }

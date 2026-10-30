@@ -169,6 +169,20 @@ function reservedHeight(t, autohide) {
     return autohide ? 0 : shelfHeight(t) + t.bottomMargin;
 }
 
+// Whether the Dock hides on an output (the auto-hide machine runs there): the setting (`setting`), an output that does not
+// have the Dock (`dockScreen` false: it stays away), a Dock that just moved there (`pending`, until it slid in), or a
+// full-screen window or Split View Desktop shown there (`fullscreen`, Compositor.fullscreenOn; ADR-0036 D66, macOS: the Dock
+// hides in full screen and comes back at its edge).
+function hides(setting, dockScreen, pending, fullscreen) {
+    return !!(setting || !dockScreen || pending || fullscreen);
+}
+
+// The Dock sits on the overlay layer while a full-screen window is on its output (Hyprland draws full-screen windows above the
+// top layer: its edge strip would get no pointer and the shelf would slide in under the window), the top layer otherwise.
+function overlayLayer(fullscreen) {
+    return !!fullscreen;
+}
+
 // ---- Dock fidelity pass ----
 
 // Notification badge of an app tile: the number of notifications (Notifications.history entries, {appName}) whose app

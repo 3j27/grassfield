@@ -100,7 +100,8 @@ Scope {
                 visible: bar.hideMachine.visible,
                 away: bar.away,
                 overlay: BarHide.overlayLayer(bar.fullscreen),
-                zone: bar.exclusiveZone
+                zone: bar.exclusiveZone,
+                titlebarRevealed: bar.titlebarRevealed
             });
         }
 
@@ -409,10 +410,23 @@ Scope {
             readonly property bool fullscreen: Compositor.fullscreenOn(win.screen.name, Compositor.topologyRevision)
             readonly property bool autoHides: BarHide.hides(hideMode, fullscreen)
             property var hideMachine: AutoHide.create()
-            // A menu of this bar open (or Notification Center from the clock) keeps it in view; the pointer on the bar or its edge strip too.
+            // Over a full-screen window the bar comes and goes with that window's titlebar the plugin reveals at the top edge
+            // (ADR-0036 D65, macOS): in view at once while it is revealed, and leaving with it without the grace.
+            readonly property bool titlebarRevealed: fullscreen && Compositor.titlebarRevealedOn(win.screen ? win.screen.name : "")
+            onTitlebarRevealedChanged: {
+                if (!titlebarRevealed)
+                    Qt.callLater(win.leaveWithTitlebar);
+            }
+            function leaveWithTitlebar(): void {
+                if (!win.titlebarRevealed)
+                    win.hideMachine = AutoHide.leaveNow(win.hideMachine, win.hideInhibitors, win.autoHides);
+            }
+            // A menu of this bar open (or Notification Center from the clock) keeps it in view; the pointer on the bar or its edge
+            // strip too; a revealed full-screen titlebar below it too.
             readonly property var hideInhibitors: ({
                     pointer: winHover.hovered,
-                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : ""))
+                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : "")),
+                    forced: titlebarRevealed
                 })
             readonly property var hideTiming: ({
                     hideGrace: Tokens.menubarHideGrace,

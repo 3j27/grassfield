@@ -779,6 +779,14 @@ Singleton {
     // The plugin's tile-hover event (WindowTiling.parseHover): {address, state: "enter" | "leave" | "open", light, tileable}.
     signal tileHover(var hover)
 
+    // The outputs where a full-screen window's titlebar is revealed at the top edge (the plugin's titlebar-reveal event,
+    // WindowTiling.revealsAfter; ADR-0036 D65): the menu bar there comes and goes with it. Empty without the plugin.
+    property var titlebarReveals: []
+
+    function titlebarRevealedOn(screenName: string): bool {
+        return root.titlebarReveals.indexOf(screenName) >= 0;
+    }
+
     // The window Hyprland names `address` (lower-case hex without 0x), as a foreign-toplevel handle, or null.
     function toplevelByAddress(address: string): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
@@ -837,6 +845,8 @@ Singleton {
 
         function onPluginPresentChanged(): void {
             root.pushPluginConfig();
+            if (!Capabilities.pluginPresent)
+                root.titlebarReveals = []; // a plugin gone (unloaded, Hyprland restarted) reveals nothing any more
         }
     }
 
@@ -1234,6 +1244,9 @@ Singleton {
                 const notice = WindowTiling.parseNotice(event.data);
                 if (notice)
                     root.tilingNotice(notice);
+                const reveal = WindowTiling.parseTitlebarReveal(event.data);
+                if (reveal)
+                    root.titlebarReveals = WindowTiling.revealsAfter(root.titlebarReveals, reveal);
                 return;
             }
             if (event.name === "urgent") {

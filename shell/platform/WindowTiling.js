@@ -35,6 +35,23 @@ function parseHover(data) {
     return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true, splittable: msg.splittable === true};
 }
 
+// What a click on the green light does while its tiling popover is open (ADR-0036 D64: the overlay takes that click, the
+// plugin never sees it), as the plugin's own light (Titlebar.cpp zoomLight, core zoomAction): a Split View member leaves the
+// Split View ("unsplit"), a full-screen window leaves full screen ("leaveFullscreen"), with Alt a window enters it
+// ("enterFullscreen"), else Zoom and back ("toggleZoom").
+function greenAction(fullscreen, inSplit, altHeld) {
+    if (inSplit)
+        return "unsplit";
+    if (fullscreen)
+        return "leaveFullscreen";
+    return altHeld ? "enterFullscreen" : "toggleZoom";
+}
+
+// Whether (x, y) is on the light `light` ({x, y, w, h}, the same coordinates; null: no light): its right and bottom edges excluded.
+function inLight(light, x, y) {
+    return !!light && x >= light.x && x < light.x + light.w && y >= light.y && y < light.y + light.h;
+}
+
 // Where the popover opens for a light (global layout coordinates) among `screens` ([{name, x, y, width, height}], logical):
 // {screen, x, y, flipY, light} in that screen's coordinates: under the light (x its middle, y its bottom), or above it (flipY,
 // its top) when the screen has no room below (the overlay decides, TL22); `light` the light itself there. null when the light's
@@ -130,8 +147,32 @@ function parseNotice(data) {
 }
 
 // How long after asking an arrangement the shell still takes its suggestion (ms): the plugin answers in the same event loop
-// pass, the notice and the fetch of its reply take a few frames; a suggestion later than this was not asked.
-var suggestionWaitMs = 3000;
+// pass, the notice and the fetch of its reply take a few frames; a suggestion later than this was not asked. Generous for a
+// loaded machine, where starting `hyprctl` alone can take seconds (integrator, merge note of #56; ADR-0036 D68): a reply
+// still on its way when it ends is dropped and fetched once more after a third of it.
+var suggestionWaitMs = 6000;
+
+// The plugin's titlebar-reveal event (ADR-0036 D65; ADR-0015 P6): {output, revealed}, the titlebar of a full-screen window
+// on that output revealed at the top edge, or away; null for anything else.
+function parseTitlebarReveal(data) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "titlebar-reveal" || typeof msg.output !== "string" || msg.output === "" || typeof msg.revealed !== "boolean")
+        return null;
+    return {output: msg.output, revealed: msg.revealed};
+}
+
+// The outputs whose full-screen titlebar is revealed (names) after `reveal` (parseTitlebarReveal): a new list, each name once.
+function revealsAfter(reveals, reveal) {
+    const out = (Array.isArray(reveals) ? reveals : []).filter(name => name !== reveal.output);
+    if (reveal.revealed)
+        out.push(reveal.output);
+    return out;
+}
 
 function hexAddress(text) {
     const hex = typeof text === "string" ? /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(text) : null;
