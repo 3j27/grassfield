@@ -168,7 +168,7 @@ QVariantMap ProcessActions::deliver(int sig, const char *what)
     }
     if (!failedOne)
         return done();
-    return failed(sig == SIGTERM || sig == SIGKILL ? tr("The process couldn't be quit.") : tr("The signal couldn't be sent."));
+    return failed(std::strcmp(what, "signal") == 0 ? tr("The signal couldn't be sent.") : tr("The process couldn't be quit."));
 }
 
 QVariantMap ProcessActions::quit()

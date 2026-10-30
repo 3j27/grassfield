@@ -327,6 +327,7 @@ TEST(ProcessActions, AFailedSignalIsShown)
     a.setSelection({{4242, 777, QStringLiteral("fixture"), true, false}});
     a.prepare(QStringLiteral("signal"));
     EXPECT_EQ(a.send(SIGHUP).value(QStringLiteral("error")).toString(), "The signal couldn't be sent.");
+    EXPECT_EQ(a.send(SIGTERM).value(QStringLiteral("error")).toString(), "The signal couldn't be sent."); // the action's words
     // The unit is read through the descriptor: the fixture's session unit names the second sheet's process.
     f.write("proc/4242/cgroup", std::string("0::") + kSession + "\n");
     EXPECT_EQ(a.prepare(QStringLiteral("quit")).value(QStringLiteral("session")).toString(), "fixture");
