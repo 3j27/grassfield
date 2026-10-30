@@ -302,25 +302,62 @@ function findItem(items, id) {
     return null;
 }
 
-// Shortcut text as the menus show it ("Ctrl+Shift+N"); the first shortcut only.
-var keyNames = {
-    Control: "Ctrl",
-    Super: "Super",
-    Alt: "Alt",
-    Shift: "Shift",
-    plus: "+",
-    minus: "-",
-    space: "Space",
-    Return: "Enter",
-    Delete: "Del",
-    BackSpace: "Backspace",
-    Escape: "Esc"
-};
+// Shortcut text as the menus show it ("Ctrl+Shift+N", in French "Ctrl+Maj+N"); the first shortcut only. The key names are the
+// ones the shell's own menus carry (they are translated: AppMenuModel's shortcuts, MenuShortcut.js maps the same names to the
+// macOS symbols on a Mac), so an application's shortcut and the shell's look the same. A key the table does not know keeps the
+// name the application sent.
+function keyName(k) {
+    switch (k) {
+    case "Control":
+        return qsTr("Ctrl");
+    case "Shift":
+        return qsTr("Shift");
+    case "Alt":
+        return qsTr("Alt");
+    case "Super":
+        return qsTr("Super");
+    case "plus":
+        return "+";
+    case "minus":
+        return "-";
+    case "space":
+        return qsTr("Space");
+    case "Return":
+        return qsTr("Enter");
+    case "Delete":
+        return qsTr("Del");
+    case "BackSpace":
+        return qsTr("Backspace");
+    case "Escape":
+        return qsTr("Esc");
+    case "Tab":
+        return qsTr("Tab");
+    case "Left":
+        return qsTr("Left");
+    case "Right":
+        return qsTr("Right");
+    case "Up":
+        return qsTr("Up");
+    case "Down":
+        return qsTr("Down");
+    case "Home":
+        return qsTr("Home");
+    case "End":
+        return qsTr("End");
+    case "Page_Up":
+    case "Prior":
+        return qsTr("PageUp");
+    case "Page_Down":
+    case "Next":
+        return qsTr("PageDown");
+    }
+    return k.length === 1 ? k.toUpperCase() : k;
+}
 
 function shortcutText(shortcut) {
     if (!Array.isArray(shortcut) || shortcut.length === 0)
         return "";
-    return shortcut[0].map(k => keyNames[k] !== undefined ? keyNames[k] : (k.length === 1 ? k.toUpperCase() : k)).join("+");
+    return shortcut[0].map(keyName).join("+");
 }
 
 // PopupMenu model of a menu's children: [{id: "bridge", dbusId, text, shortcut, enabled, checked, separator?,

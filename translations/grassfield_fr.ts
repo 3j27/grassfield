@@ -7042,6 +7042,81 @@
     </message>
 </context>
 <context>
+    <name>MenuBridge</name>
+    <message>
+        <source>Ctrl</source>
+        <translation>Ctrl</translation>
+    </message>
+    <message>
+        <source>Shift</source>
+        <translation>Maj</translation>
+    </message>
+    <message>
+        <source>Alt</source>
+        <translation>Alt</translation>
+    </message>
+    <message>
+        <source>Super</source>
+        <translation>Super</translation>
+    </message>
+    <message>
+        <source>Space</source>
+        <translation>Espace</translation>
+    </message>
+    <message>
+        <source>Enter</source>
+        <translation>Entrée</translation>
+    </message>
+    <message>
+        <source>Del</source>
+        <translation>Suppr</translation>
+    </message>
+    <message>
+        <source>Backspace</source>
+        <translation>Retour arrière</translation>
+    </message>
+    <message>
+        <source>Esc</source>
+        <translation>Échap</translation>
+    </message>
+    <message>
+        <source>Tab</source>
+        <translation>Tab</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Gauche</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Droite</translation>
+    </message>
+    <message>
+        <source>Up</source>
+        <translation>Haut</translation>
+    </message>
+    <message>
+        <source>Down</source>
+        <translation>Bas</translation>
+    </message>
+    <message>
+        <source>Home</source>
+        <translation>Début</translation>
+    </message>
+    <message>
+        <source>End</source>
+        <translation>Fin</translation>
+    </message>
+    <message>
+        <source>PageUp</source>
+        <translation>Page préc.</translation>
+    </message>
+    <message>
+        <source>PageDown</source>
+        <translation>Page suiv.</translation>
+    </message>
+</context>
+<context>
     <name>MenuLayer</name>
     <message>
         <source>Context menu</source>

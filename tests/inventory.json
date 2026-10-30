@@ -313,6 +313,7 @@
  {"path": "tests/shell/apps_panel_perf/shell.qml", "layer": "headless"},
  {"path": "tests/shell/desktop_rename_focus/shell.qml", "layer": "headless"},
  {"path": "tests/shell/i18n_live/shell.qml", "layer": "headless"},
+ {"path": "tests/shell/menu_shortcut_fr/shell.qml", "layer": "headless"},
  {"path": "tests/shell/notif_center_list/shell.qml", "layer": "headless"},
  {"path": "tests/shell/notif_center_random/shell.qml", "layer": "headless"},
  {"path": "tests/shell/notif_center_random2/shell.qml", "layer": "headless"},
