@@ -1063,11 +1063,17 @@ TestCase {
         verify(files !== undefined && apps !== undefined && files !== apps, "two panels");
         compare(files.kind, "open");
         compare(apps.kind, "application");
+        compare(manager.order, ["1", "app:1"], "the order they opened (an object would list FileChooser's integer key first anyway)");
+        fakeHost.opened(2, test.request({currentFolder: "file:///home/u/Documents", places: test.places,
+                                         folderKinds: {"file:///home/u/Documents": 2}}));
+        compare(manager.order, ["1", "app:1", "2"]);
+        fakeHost.closed(2);
         fakeAppHost.applicationsChanged(1, ["org.example.Other"]);
         compare(apps.recommended, ["org.example.Other"]);
         compare(files.recommended, []);
         fakeAppHost.closed(1);
         verify(manager.panels[manager.key(1, true)] === undefined);
+        compare(manager.order, ["1"]);
         verify(manager.panels[manager.key(1, false)] === files, "FileChooser's request 1 keeps its panel");
         fakeHost.closed(1);
         compare(Object.keys(manager.panels).length, 0);

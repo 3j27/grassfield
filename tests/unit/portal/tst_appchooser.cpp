@@ -240,11 +240,12 @@ TEST_F(AppChooserTest, CancelAndAWrongChoice)
     auto cancelled = call(QStringLiteral("/r/a3"), {QStringLiteral("org.gnome.TextEditor")}, {});
     auto wrong = call(QStringLiteral("/r/a4"), {QStringLiteral("org.gnome.TextEditor")}, {});
     ASSERT_TRUE(waitFor([&] { return opened.size() == 2; }));
-    chooser->answer(opened.at(0).first, 1, {});
+    // Cancel with a choice in the map (the panel never sends one; any caller of answer could): still Cancel, and no choice.
+    chooser->answer(opened.at(0).first, 1, {{QStringLiteral("choice"), QStringLiteral("org.gnome.TextEditor")}});
     chooser->answer(opened.at(1).first, 0, {{QStringLiteral("choice"), QStringLiteral("/usr/bin/evil")}});
     ASSERT_TRUE(waitFor([&] { return cancelled->done && wrong->done; }));
     EXPECT_EQ(cancelled->response, 1u);
-    EXPECT_TRUE(cancelled->results.isEmpty());
+    EXPECT_TRUE(cancelled->results.isEmpty()) << "Cancel answers no choice (integrator review of f9a25ce, MINOR)";
     EXPECT_EQ(wrong->response, 2u);
     EXPECT_FALSE(wrong->results.contains("choice"));
 }
@@ -264,6 +265,31 @@ TEST_F(AppChooserTest, UpdateChoicesReachesTheOpenPanel)
     EXPECT_EQ(changed.first().second, (QStringList{QStringLiteral("org.gnome.TextEditor"), QStringLiteral("org.kde.kate")}));
     chooser->answer(opened.first().first, 1, {});
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
+}
+
+// UpdateChoices from another caller than the request's is ignored; an UpdateChoices the open panel had follows the request to
+// x-d-p-gtk when the panel does not draw in time (integrator review of f9a25ce, NITs).
+TEST_F(AppChooserTest, UpdatesComeFromTheCallerAndFollowAForward)
+{
+    chooser->setUiLoader([] { return true; });
+    auto reply = call(QStringLiteral("/r/f1"), {QStringLiteral("org.gnome.TextEditor")}, {});
+    ASSERT_TRUE(waitFor([&] { return opened.size() == 1; }));
+    QDBusMessage other = QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/org/freedesktop/portal/desktop"),
+                                                        QStringLiteral("org.freedesktop.impl.portal.AppChooser"), QStringLiteral("UpdateChoices"));
+    other << QVariant::fromValue(QDBusObjectPath(QStringLiteral("/r/f1"))) << QStringList{QStringLiteral("org.example.Intruder")};
+    gtkBus->asyncCall(other);
+    updateChoices(QStringLiteral("/r/f1"), {QStringLiteral("org.kde.kate")});
+    ASSERT_TRUE(waitFor([&] { return changed.size() == 1; }));
+    QTest::qWait(100);
+    ASSERT_EQ(changed.size(), 1) << "another caller's update is ignored";
+    EXPECT_EQ(changed.first().second, QStringList{QStringLiteral("org.kde.kate")});
+    // No frame within the deadline: the call goes to x-d-p-gtk, and the last candidates after it.
+    ASSERT_TRUE(waitFor([&] { return gtk.held.type() == QDBusMessage::MethodCallMessage; }, 3 * kDeadlineMs));
+    ASSERT_TRUE(waitFor([&] { return gtk.updates.size() == 1; }));
+    EXPECT_EQ(gtk.updates.first(), QStringList{QStringLiteral("org.kde.kate")});
+    gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(0u), QVariantMap{{QStringLiteral("choice"), QStringLiteral("a/b")}}}));
+    ASSERT_TRUE(waitFor([&] { return reply->done; }));
+    EXPECT_FALSE(reply->results.contains("choice")) << "gtk's choice is a desktop id or none";
 }
 
 // Without a UI the call goes to x-d-p-gtk, UpdateChoices after it too, and gtk's answer comes back with only the interface's
