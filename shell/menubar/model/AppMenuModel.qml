@@ -332,15 +332,16 @@ QtObject {
 
         // Full Screen (TL33): on a Split View Desktop Exit Full Screen sends the window back (Compositor.unsplit); else Enter or Exit
         // Full Screen, then with the plugin's tiling-split Full Screen Tile › Left of Screen, Right of Screen (M29), greyed with
-        // the tiling items and while Stages shows its strip (D47).
-        const canSplit = canTile && ctx.splitBlocked !== true;
+        // the tiling items, while Stages shows its strip (D47) and for a window that does not fit half of its output (`splittable`
+        // false, D57).
+        const canSplit = canTile && ctx.splitBlocked !== true && ctx.splittable !== false;
         const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}] : [
             {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct}
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 
         const items = [
-            // A window of a Split View Desktop is not minimized, as in full screen (D56).
-            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true},
+            // A window in full screen or on a Split View Desktop is not minimized (macOS; D56, D61).
+            {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true && ctx.fullscreen !== true},
             {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true}
         ].concat(tiling, fullScreen, [
             {separator: true},

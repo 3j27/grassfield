@@ -295,9 +295,48 @@ close_shell_popup() { # case name
   shell_popup_open || return 0
   say "  $1: a shell popup was open on $out (the overlay is mapped): closed with Esc before the case"
   "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
-  sleep 0.5
-  shell_popup_open && say "  $1: the popup is still open after Esc"
+  wait_popup_closed || say "  $1: the popup is still open after Esc"
   return 0
+}
+# The nested shell answers its IPC (tests/visual/ipc.sh): its popups open and close asynchronously. Asked once.
+shell_running=""
+shell_up() {
+  if [[ -z $shell_running ]]; then
+    local k
+    if k=$(timeout 5 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null) && [[ $k != refused ]]; then shell_running=1; else shell_running=0; fi
+  fi
+  [[ $shell_running == 1 ]]
+}
+# Waits (up to 5 s) until no shell popup shows on GF-REF: no grassfield-overlay layer mapped and, when the shell answers, its
+# open popup kind empty. A fixed wait after Esc raced the overlay's unmap under load: the next click reached the closing popup
+# (integrator nested pass of 12e3dd3).
+wait_popup_closed() {
+  local k=""
+  for _ in $(seq 1 50); do
+    if ! shell_popup_open; then
+      shell_up || return 0
+      k=$(timeout 3 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null || true)
+      [[ -z $k ]] && return 0
+    fi
+    sleep 0.1
+  done
+  say "  a shell popup still showed after 5 s (openKind '${k}')"
+  return 1
+}
+# Waits (up to 3 s, with the shell running) until a popup shows on GF-REF (the popover a tile_popover asked for).
+wait_popup_open() {
+  shell_up || return 0
+  for _ in $(seq 1 30); do
+    shell_popup_open && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# The binding loops the shell has logged so far (.dev/shell.log; the gate Q2 counts one as a failure).
+shell_loops() {
+  local n
+  n=$(grep -ac "Binding loop" "$dev/shell.log" 2>/dev/null)
+  echo "${n:-0}"
 }
 # The plugin's last lines naming PATTERN (Hyprland's in-memory log, then its file), for a failed check.
 plugin_lines() { # pattern
@@ -1072,7 +1111,13 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     [[ $got == "$2" ]]
   }
   keys() { "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
-  close_popover() { keys -k Escape; sleep 0.5; }
+  # The popover a tile_popover or a hover asked for is shown first (with the shell running), then Esc, then nothing shows
+  # any more before the next case clicks (integrator nested pass of 12e3dd3: a fixed 0.5 s raced it).
+  close_popover() {
+    wait_popup_open || say "  no shell popover showed before Esc"
+    keys -k Escape
+    wait_popup_closed || true
+  }
   move_to() { nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$1\")" >>"$log" 2>&1; sleep 0.8; }
   free_foot() {
     nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1
@@ -1497,6 +1542,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "shared-edge: the left window grew with the drag" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
     check "shared-edge: the right window followed, the gap kept" box_of tiling-foot $((rx0 + 60)) "$ry0" $((rw0 - 60)) "$rh0"
     check "shared-edge: both still tiled, in one group" edge_group
+    # D60 (step 6b): only a Split View's separator resets at a double-click; an ordinary group's edge keeps where it was put.
+    pointer abs $((hx + 60)) "$hy" sleep 300 down sleep 40 up sleep 100 down sleep 40 up sleep 500
+    check "shared-edge: a double-click does not reset an ordinary group's edge" box_of tiling-foot3 "$lx" "$ly" $((lw + 60)) "$lh"
     pointer abs $((hx + 60)) "$hy" sleep 300 down drag "$hx" "$hy" sleep 200 up sleep 400
     check "shared-edge: dragged back" box_of tiling-foot3 "$lx" "$ly" "$lw" "$lh"
     check "shared-edge: the right window back too" box_of tiling-foot "$rx0" "$ry0" "$rw0" "$rh0"
@@ -1718,7 +1766,40 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         '$a.layout == "left-right" and $a.zone == 0 and $b.layout == "left-right" and $b.zone == 1 and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
     }
     check "split pick: one tile group (the shared edge resizes both)" split_pair
+    split_pair_swapped() { # the first window in zone 1, the second in zone 0, one group (step 6b's swap)
+      local a b
+      a=$(record_of "$addr")
+      b=$(record_of "$addr2")
+      say "  first: $a; second: $b"
+      jq -e -n --argjson a "$a" --argjson b "$b" \
+        '$a.layout == "left-right" and $a.zone == 1 and $b.layout == "left-right" and $b.zone == 0 and $a.state == "tiled" and $b.state == "tiled" and $a.group > 0 and $a.group == $b.group' >/dev/null
+    }
     check "split pick: the reply lists both members" split_members "$next" "$addr" "$addr2"
+    # Step 6b (TL33): the separator (the shared edge between the two members) dragged 80 px, then double-clicked: both back
+    # to equal halves, still members.
+    if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
+      read -r slx sly slw slh _ < <(geometry_of tiling-foot)
+      read -r srx _ _ _ _ < <(geometry_of tiling-foot2)
+      shx=$((slx + slw + (srx - slx - slw) / 2 - mx)) shy=$((sly - tb + (slh + tb) / 2 - my))
+      say "  separator at $shx,$shy (left member right side $((slx + slw)), right member at $srx)"
+      separator_moved() {
+        local _x _y w _h _a
+        read -r _x _y w _h _a < <(geometry_of tiling-foot)
+        say "  left member ${w:-?} wide (was $slw)"
+        (( ${w:-0} >= slw + 60 ))
+      }
+      pointer abs "$shx" "$shy" sleep 300 down drag $((shx + 80)) "$shy" sleep 200 up sleep 400
+      check "split separator: dragged 80 px, the left member grew" separator_moved
+      mark_events
+      pointer abs $((shx + 80)) "$shy" sleep 300 down sleep 40 up sleep 100 down sleep 40 up sleep 500
+      check "split separator: a double-click puts the left member back in its half" half_of tiling-foot left
+      check "split separator: and the right member in its half" half_of tiling-foot2 right
+      check "split separator: the plugin posts resized" event_came '.type == "tiling" and .reason == "resized"'
+      check "split separator: both still members" split_members "$next" "$addr" "$addr2"
+      pointer abs 20 $((mh / 2)) sleep 200
+    else
+      say "SKIP: split separator (the plugin does not advertise tiling-shared-edge)"
+    fi
     # D50 (integrator review of c7a6b6e, MAJOR 1): an app's own full screen, or a zoom, keeps a member and its half; the other
     # does not fill meanwhile, and the window comes back to its half after.
     for mode in fullscreen maximized; do
@@ -1756,10 +1837,54 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     tile_ipc "$addr" right
     check "split keys: tiling a member is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
     check "split keys: it keeps its half" half_of tiling-foot left
-    # D46: a titlebar drag of a Split View window moves nothing (step 6b swaps the two).
+    # Step 6b (D59): a member's titlebar drag released in its own half puts it back there; released over the other half, the
+    # two swap halves (macOS), still members of one group; dragged back over the other half, they swap again.
     if read -r gx gy < <(grip_of "$addr"); then
       pointer abs "$gx" "$gy" sleep 200 down drag $((gx + 120)) $((gy + 80)) sleep 300 up sleep 600
-      check "split titlebar: a drag moves nothing" half_of tiling-foot left
+      check "split titlebar: released in its own half, back in it" half_of tiling-foot left
+      check "split titlebar: the other member did not move" half_of tiling-foot2 right
+      mark_events
+      pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 up sleep 800
+      check "split swap: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
+      check "split swap: the dragged window takes the right half" half_of tiling-foot right
+      check "split swap: the other window takes the left half" half_of tiling-foot2 left
+      check "split swap: both still members" split_members "$next" "$addr" "$addr2"
+      check "split swap: still one tile group" split_pair_swapped
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
+      fi
+      check "split swap back: the first window in the left half again" half_of tiling-foot left
+      check "split swap back: the second in the right half again" half_of tiling-foot2 right
+      check "split swap back: zones as at the pick" split_pair
+      # A drag over the other half cancelled by a second button (the right one): no swap, back in its half (D59).
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 rdown sleep 100 rup sleep 200 up sleep 800
+      fi
+      check "split cancelled: a second button ends the drag, back in its half" half_of tiling-foot left
+      check "split cancelled: no swap" half_of tiling-foot2 right
+      # The drag exemption (integrator PASS on 12e3dd3, MINOR A): the plugin's state read during a member's drag (the shell's
+      # fetch does so at any notice) keeps the dragged member's record, and the drop still swaps; then back.
+      if read -r gx gy < <(grip_of "$addr"); then
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 3000 up sleep 200 &
+        held_pid=$!
+        sleep 1.8
+        record_mid_drag() {
+          local r
+          r=$(record_of "$addr")
+          say "  during the drag: $r"
+          jq -e '.state == "tiled" and .layout == "left-right" and .zone == 0' <<<"$r" >/dev/null
+        }
+        check "split drag read: a state read during the drag keeps the dragged member's record" record_mid_drag
+        check "split drag read: both still members during the drag" split_members "$next" "$addr" "$addr2"
+        wait "$held_pid"
+        sleep 0.8
+        check "split drag read: the drop after it still swaps" half_of tiling-foot right
+        check "split drag read: the other window in the left half" half_of tiling-foot2 left
+        if read -r gx gy < <(grip_of "$addr"); then
+          pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
+        fi
+        check "split drag read: swapped back" half_of tiling-foot left
+      fi
     else
       check "split titlebar: the first window's grip found" false
     fi
@@ -1933,6 +2058,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       [[ $a == "$1" ]]
     }
     if kind=$(open_kind) && [[ $kind != refused ]]; then
+      split_loops_before=$(shell_loops)
       close_shell_popup "split shell"
       next5=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
       split_ipc "$addr3" left
@@ -1951,7 +2077,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       sleep 1
       check "split shell popover: the tiling popover opens on a member" test "$(open_kind)" = "tiling@$out"
       keys -k Escape
-      sleep 1
+      wait_popup_closed || true
       check "split shell popover: Esc closes it" test -z "$(open_kind)"
       check "split shell popover: no overlay left mapped" overlay_gone
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
@@ -1969,8 +2095,54 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       tile_ipc "$addr3" previous
       tile_ipc "0x$first" previous
       surfaces_state
+      split_loops_after=$(shell_loops)
+      check "split shell: the picker and the popover log no binding loop (${split_loops_before} before, ${split_loops_after} after)" \
+        test "$split_loops_after" = "$split_loops_before"
     else
       say "SKIP: split shell cases (no nested shell answers tests/visual/ipc.sh: run them with the shell)"
+    fi
+
+    # Integrator, from an owner report on #56 (stuck in full screen on rc1-7): a full-screen window's tiling popover opened by
+    # resting on the revealed bar's zoom light, 4 times: the popup is the tiling popover, closing it leaves no overlay mapped,
+    # the zoom light then leaves full screen, and the shell logs no binding loop meanwhile.
+    if kind=$(open_kind) && [[ $kind != refused ]]; then
+      fs_inset=$(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels[][]? | select(.namespace == "grassfield-menubar") | .h] | max // 0')
+      [[ $fs_inset =~ ^[0-9]+$ ]] || fs_inset=0
+      fs_bar_y=$((fs_inset + GF_TB_MID))
+      fs_rest=$(( ${hover_delay:-$(jq -r '.tiling.hoverDelay.value' "$root/ui/tokens/tokens.json")} + 700 ))
+      fs_of() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen'; }
+      fs_reveal() { pointer abs $((mw / 2)) $((mh / 2)) sleep 100 abs $((mw / 2)) 0 sleep 300; }
+      loops_before=$(shell_loops)
+      close_shell_popup "full-screen popover"
+      for round in 1 2 3 4; do
+        nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$addr\" })" >>"$log" 2>&1
+        sleep 1
+        check "full-screen popover $round: the window is in full screen" test "$(fs_of "$addr")" = 2
+        if ((round == 1)); then
+          # D61: Super+M (the shell's windows minimize, as the key binding) does nothing to a window in full screen.
+          timeout 5 "$root/tests/visual/ipc.sh" windows minimize >>"$log" 2>&1
+          sleep 1
+          check "full-screen popover: Super+M leaves the window in full screen" test "$(fs_of "$addr")" = 2
+          check "full-screen popover: and not minimized" test "$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.name')" != special:minimized
+        fi
+        fs_reveal
+        pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep "$fs_rest"
+        check "full-screen popover $round: resting on the revealed zoom light opens the tiling popover" test "$(open_kind)" = "tiling@$out"
+        keys -k Escape
+        wait_popup_closed || true
+        check "full-screen popover $round: Esc closes it" test -z "$(open_kind)"
+        check "full-screen popover $round: no overlay left mapped" overlay_gone
+        fs_reveal
+        pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep 150 click sleep 800
+        check "full-screen popover $round: the zoom light leaves full screen" test "$(fs_of "$addr")" = 0
+        pointer abs 20 $((mh / 2)) sleep 200
+        close_shell_popup "full-screen popover $round"
+      done
+      loops_after=$(shell_loops)
+      check "full-screen popover: no binding loop in the shell's log (${loops_before} before, ${loops_after} after)" test "$loops_after" = "$loops_before"
+      tile_ipc "$addr" previous
+    else
+      say "SKIP: full-screen popover cases (no nested shell answers tests/visual/ipc.sh)"
     fi
   else
     say "SKIP: step 6a cases (the plugin does not advertise tiling-split)"

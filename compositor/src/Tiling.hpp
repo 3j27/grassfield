@@ -126,6 +126,18 @@ namespace gf::tiler {
     // and one of Hyprland's moves (Super+drag) puts it back in its half at the release.
     bool inSplit(const PHLWINDOW& w);
 
+    // The titlebar drag of a member begins (TL33, step 6b, ADR-0036 D59): until memberDrop its record is kept although the
+    // window leaves its box (reconcile would forget it).
+    void memberDragBegin(const PHLWINDOW& w);
+
+    // The titlebar that drove that drag is destroyed mid-drag (its window keeps its place): the exemption ends, nothing moves.
+    void memberDragForget();
+
+    // That drag ends (every end calls it, a click included): released at `at` over the other half the two members swap halves
+    // (macOS); anywhere else, without a move or without a release (`at` nullopt: a cancelled drag) it goes back in its half.
+    // Nothing swaps while the session is locked.
+    void memberDrop(const PHLWINDOW& w, std::optional<Vector2D> at);
+
     // The zoom light of a member (with or without Alt): it leaves its Split View Desktop as unsplit does (macOS: the green
     // button of a window in Split View exits full screen; D49). False when `w` is no member or the session is locked (the
     // light then zooms as usual).

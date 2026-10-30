@@ -26,7 +26,10 @@ Singleton {
     property string align: "left"
     property var data: ({})
 
-    readonly property bool active: kind !== ""
+    // Bumped by verify(): `active` and every binding built on it (the Overlay's `open`) read it, so a value left stale by a
+    // binding loop is computed again (integrator PASS on 8316ed2: an overlay mapped with no popup must never stay).
+    property int revision: 0
+    readonly property bool active: kind !== "" && revision >= 0
 
     // The open folder stack (shell/overlay/StackPopup.qml publishes these) for the test hooks below.
     property string stackView: ""
@@ -154,7 +157,11 @@ Singleton {
         target: Quickshell
 
         function onScreensChanged(): void {
-            root.screenName = ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+            const next = ScreenChoice.afterScreensChanged(root.kind, root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));
+            if (next.close)
+                root.close(); // what it offered is not on any output that remains
+            else
+                root.screenName = next.screen;
         }
     }
 
@@ -181,6 +188,38 @@ Singleton {
         }
         kind = "";
         data = {};
+    }
+
+    // A popup is open on the output `screen`: the Overlay's `open` (a binding on this reads `revision` too: verifyOpen can
+    // compute a stale one again).
+    function openOn(screen: string): bool {
+        return root.active && root.screenName === screen && root.revision >= 0;
+    }
+
+    // `shown`, a binding on openOn(screen) (the Overlay's `open`), disagrees with it now: computed again, logged. True when they
+    // agree.
+    function verifyOpen(shown: bool, screen: string): bool {
+        if (shown === root.openOn(screen))
+            return true;
+        console.warn("grassfield: overlay on \"" + screen + "\": open (" + shown + ") disagreed with Popups; computed again");
+        root.revision++;
+        return false;
+    }
+
+    // True when `active` agrees with `kind`; else it is computed again, logged (the Overlay asks too for its own `open`).
+    function verify(): bool {
+        if (root.active === (root.kind !== ""))
+            return true;
+        console.warn("grassfield: popups: active (" + root.active + ") disagreed with kind \"" + root.kind + "\"; computed again");
+        root.revision++;
+        return false;
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.active || root.kind !== ""
+        onTriggered: root.verify()
     }
 
     function closeLater(count: int): void {

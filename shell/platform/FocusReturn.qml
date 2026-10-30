@@ -126,7 +126,7 @@ Singleton {
             focusedWorkspaceId: focusedWorkspaceId,
             placement: prev ? Compositor.placementOf(prev.address) : null
         };
-        const target = pick !== "" ? FR.chosenTarget(pick, Compositor.placementOf(pick), focusedWorkspaceId) : FR.restoreTarget(prev, Compositor.activeWindow(), now);
+        const target = pick !== "" ? FR.chosenTarget(pick, Compositor.placementOf(pick), Compositor.shownSpaces().map(m => m.workspace)) : FR.restoreTarget(prev, Compositor.activeWindow(), now);
         if (target)
             request(target);
     }
