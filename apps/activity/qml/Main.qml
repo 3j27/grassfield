@@ -2,9 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// Activity Monitor (ADR-0038 step 2a; spec AM1 to AM19): the toolbar (the title with the view as its subtitle, the five tabs,
-// the search field) over the table of the tab's processes. App windows are opaque (master-prompt 5.5). Step 2b adds each
-// tab's summary under the table, 2c Quit, Force Quit and Send Signal, 2d Inspect.
+// Activity Monitor (ADR-0038 steps 2a and 2b; spec AM1 to AM19, AM5): the toolbar (the title with the view as its subtitle,
+// the five tabs, the search field) over the table of the tab's processes, and the tab's summary under it. App windows are
+// opaque (master-prompt 5.5). Step 2c adds Quit, Force Quit and Send Signal, 2d Inspect.
 Window {
     id: root
 
@@ -18,6 +18,8 @@ Window {
     readonly property alias searchField: search
     readonly property alias processList: processList
     readonly property alias tabs: tabs
+    readonly property alias summary: summary
+    readonly property alias networkNote: networkNote
 
     title: qsTr("Activity Monitor")
     width: root.backend.savedWidth > 0 ? root.backend.savedWidth : Tokens.activityWindowWidth
@@ -119,8 +121,38 @@ Window {
         anchors.top: toolbar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: networkNote.visible ? networkNote.top : summary.top
         focus: true
+    }
+
+    // AM43: the Network tab's columns count TCP only; UDP shows in the totals of the summary.
+    Text {
+        id: networkNote
+        objectName: "networkNote"
+        visible: root.backend.tab === "network"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: summary.top
+        leftPadding: Tokens.spacingLg
+        rightPadding: Tokens.spacingLg
+        topPadding: Tokens.spacingXs
+        bottomPadding: Tokens.spacingXs
+        textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        text: qsTr("UDP traffic, such as some video, is counted only in the totals below.")
+        color: Appearance.windowSecondary
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.typographyCaptionSize
+    }
+
+    Summary {
+        id: summary
+        objectName: "summary"
+        backend: root.backend
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: implicitHeight
     }
 
     // AM3: every toolbar control has a tooltip, under it after the shared delay; declared after the list so it shows over it.

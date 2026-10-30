@@ -71,13 +71,37 @@ QtObject {
     function saveSize(width: int, height: int): void {
         backend.record("saveSize");
     }
-
-    function row(name: string, cpu: string, pid: string): var {
-        return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"]};
+    function setGraphMode(graph: string, mode: string): void {
+        backend.record("setGraphMode:" + graph + ":" + mode);
     }
 
-    property var table: {
-        const rows = [backend.row("firefox", "12.3", "1234"), backend.row("Hyprland", "4.0", "812"), backend.row("foot", "0.1", "2001")];
+    // The summary (apps/activity/src/summary.h): the tab's blocks as the backend lists them.
+    readonly property QtObject summary: QtObject {
+        property int capacity: 1
+        property var blocks: [
+            {kind: "figures", rows: [{label: "System:", value: "5.0%", swatch: "activityGraphSystem"},
+                                     {label: "User:", value: "25.0%", swatch: "activityGraphUser"},
+                                     {label: "Idle:", value: "70.0%", swatch: ""}]},
+            {kind: "graph", key: "cpu", title: "CPU Load", style: "stacked", max: 1,
+             series: [{values: [-1, 0.05, 0.1], color: "activityGraphSystem"}, {values: [-1, 0.25, 0.3], color: "activityGraphUser"}]},
+            {kind: "figures", rows: [{label: "Threads:", value: "1734", swatch: ""}, {label: "Processes:", value: "412", swatch: ""}]}
+        ]
+    }
+    readonly property var diskBlocks: [
+        {kind: "figures", rows: [{label: "Reads in:", value: "1000", swatch: ""}]},
+        {kind: "graph", key: "disk", title: "Reads and Writes", style: "mirrored", max: 10,
+         series: [{values: [3, 4], color: "activityGraphRead"}, {values: [9, 1], color: "activityGraphWrite"}],
+         modes: [{key: "io", title: "IO"}, {key: "data", title: "Data"}], mode: "io"},
+        {kind: "figures", rows: [{label: "Data read:", value: "5.00 MB", swatch: ""}]}
+    ]
+
+    function row(name: string, cpu: string, pid: string): var {
+        return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"],
+                depth: 0, expandable: false, expanded: true, group: false};
+    }
+
+    // A table of `rows` with the table's methods, the calls they get recorded in `clicks`.
+    function makeTable(rows: var): var {
         rows.selectedCount = 0;
         rows.currentRow = -1;
         rows.clicks = [];
@@ -97,6 +121,14 @@ QtObject {
         rows.clearSelection = () => {
             rows.selectedCount = 0;
         };
+        rows.setExpanded = (r, expanded) => {
+            rows.clicks.push("expanded:" + r + ":" + expanded);
+        };
+        rows.toggleExpanded = r => {
+            rows.clicks.push("toggle:" + r);
+        };
         return rows;
     }
+    property var table: backend.makeTable([backend.row("firefox", "12.3", "1234"), backend.row("Hyprland", "4.0", "812"),
+                                           backend.row("foot", "0.1", "2001")])
 }

@@ -7,6 +7,7 @@
 #include "translationloader.h"
 
 #include <QClipboard>
+#include <QDBusMessage>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -82,6 +83,9 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
         if (m_state.tab == Tab::Energy)
             requestSample();
     });
+    connect(&m_battery, &BatteryWatch::changed, this, [this] { m_summary.setBattery(m_battery.state()); });
+    m_summary.setDiskMode(m_state.diskGraph);
+    m_summary.setNetworkMode(m_state.networkGraph);
 
     // Appearance follows grassfield.json (read only), like every Grassfield surface (as Preview and the Store).
     m_macDevice = grassfield::apps::macDeviceHere();
@@ -109,6 +113,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
 
     m_table.setView(m_state.view);
     applyTab();
+    m_summary.setTab(m_state.tab);
 }
 
 ActivityApp::~ActivityApp()
@@ -151,6 +156,7 @@ void ActivityApp::setTab(const QString &key)
         return;
     m_state.tab = *tab;
     applyTab();
+    m_summary.setTab(*tab);
     emit tabChanged();
     scheduleSave();
     // The tab reads other files (ADR-0038 d): the next sample comes now, and the interval starts again from it.
@@ -172,10 +178,13 @@ void ActivityApp::setView(const QString &key)
     const std::optional<View> view = viewFromKey(key);
     if (!view || (*view == m_state.view && *view != View::Selected))
         return;
+    const unsigned readsBefore = readsForView(m_state.view);
     m_state.view = *view;
     m_table.setView(*view);
     emit viewChanged();
     scheduleSave();
+    if (readsForView(*view) != readsBefore)
+        requestSample(); // the GPU views read the GPU clients (AM49): a sample now fills them
 }
 
 QVariantList ActivityApp::views() const
@@ -324,6 +333,20 @@ void ActivityApp::saveSize(int width, int height)
     scheduleSave();
 }
 
+void ActivityApp::setGraphMode(const QString &graph, const QString &mode)
+{
+    if (graph == QLatin1String("disk") && (mode == QLatin1String("io") || mode == QLatin1String("data")) && mode != m_state.diskGraph) {
+        m_state.diskGraph = mode;
+        m_summary.setDiskMode(mode);
+        scheduleSave();
+    } else if (graph == QLatin1String("network") && (mode == QLatin1String("packets") || mode == QLatin1String("data"))
+               && mode != m_state.networkGraph) {
+        m_state.networkGraph = mode;
+        m_summary.setNetworkMode(mode);
+        scheduleSave();
+    }
+}
+
 void ActivityApp::setWindowShown(bool shown)
 {
     if (shown == m_shown)
@@ -353,9 +376,11 @@ void ActivityApp::requestSample()
         return;
     }
     m_busy = true;
-    if (m_state.tab == Tab::Energy)
+    if (m_state.tab == Tab::Energy) {
         m_inhibitors.refresh(); // AM38: asked at each sample while the Energy tab is shown
-    emit sampleRequested(readsForColumns(m_state.tab, tabState().columns), m_state.interval, m_forget);
+        m_battery.refresh();    // AM39: the battery's figures and graph, the same way
+    }
+    emit sampleRequested(readsForColumns(m_state.tab, tabState().columns) | readsForView(m_state.view), m_state.interval, m_forget);
     m_forget = false;
 }
 
@@ -370,6 +395,21 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
         m_table.setSwappedMemory(m_swapped);
         emit columnsChanged();
     }
+    m_summary.addSample(*snapshot);
+    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU.
+    bool named = false;
+    for (const GpuDevice &gpu : snapshot->gpus) {
+        const QString pdev = QString::fromStdString(gpu.pdev);
+        const QString name = !gpu.model.empty() ? QString::fromStdString(gpu.model)
+                             : gpu.card >= 0 ? QCoreApplication::translate("ActivityApp", "GPU %1").arg(gpu.card + 1)
+                                             : pdev;
+        if (m_gpuNames.value(pdev) != name) {
+            m_gpuNames.insert(pdev, name);
+            named = true;
+        }
+    }
+    if (named)
+        m_table.setGpuNames(m_gpuNames);
     m_table.setRows(tableRows(*snapshot));
     m_ready = true;
     emit sampled();
@@ -468,6 +508,7 @@ void ActivityApp::readAppearance()
     if (locale != m_formats) {
         m_formats = locale;
         m_table.setLocale(locale);
+        m_summary.setLocale(locale);
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
@@ -495,24 +536,58 @@ QStringList reopenCommand()
         + QStringList{QStringLiteral("dock"), QStringLiteral("reopen"), QStringLiteral("org.grassfield.Activity")};
 }
 
-void askShellToReopen()
+QProcess *runWithTimeout(const QStringList &command, const QProcessEnvironment &env, int timeoutMs, QObject *parent)
 {
-    const QStringList command = reopenCommand();
     if (command.isEmpty())
-        return;
+        return nullptr;
+    auto *process = new QProcess(parent);
+    process->setProcessEnvironment(env);
+    process->setProgram(command.first());
+    process->setArguments(command.mid(1));
+    process->setStandardOutputFile(QProcess::nullDevice());
+    process->setStandardErrorFile(QProcess::nullDevice());
+    QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    QObject::connect(process, &QProcess::errorOccurred, process, [process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            process->deleteLater();
+    });
+    QTimer::singleShot(timeoutMs, process, [process] { process->kill(); });
+    process->start();
+    return process;
+}
+
+void askShellToReopen(QObject *parent)
+{
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     for (const QString &key : env.keys()) {
         if (key.startsWith(QLatin1String("QS_")))
             env.remove(key);
     }
     env.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
-    QProcess process;
-    process.setProcessEnvironment(env);
-    process.setProgram(command.first());
-    process.setArguments(command.mid(1));
-    process.setStandardOutputFile(QProcess::nullDevice());
-    process.setStandardErrorFile(QProcess::nullDevice());
-    process.startDetached();
+    runWithTimeout(reopenCommand(), env, grassfield::apps::runmode::kShellIpcMs, parent);
+}
+
+Launch claimOrHandOver(QDBusConnection &bus, ActivityService *service, const QString &token, int answerMs)
+{
+    const QString name = ActivityService::serviceName();
+    const QString path = QStringLiteral("/org/grassfield/Activity");
+    bus.registerObject(path, service, QDBusConnection::ExportScriptableSlots);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (bus.registerService(name))
+            return Launch::Run;
+        QDBusMessage call = QDBusMessage::createMethodCall(name, path, QStringLiteral("org.grassfield.Activity"), QStringLiteral("Activate"));
+        call << token;
+        const QDBusMessage reply = bus.call(call, QDBus::Block, answerMs);
+        if (reply.type() == QDBusMessage::ReplyMessage)
+            return Launch::Leave;
+        // Only a name left meanwhile is taken; a running app that answers late (still starting) or not at all keeps its
+        // one window, as a busy app on macOS opens nothing more.
+        const QString error = reply.errorName();
+        if (error != QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
+            && error != QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner"))
+            return Launch::Leave;
+    }
+    return Launch::Leave;
 }
 
 QString ActivityService::serviceName()

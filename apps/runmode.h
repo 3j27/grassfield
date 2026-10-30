@@ -109,6 +109,10 @@ inline QString shellIpcRefusal()
     return shellIpcArgs().isEmpty() ? QStringLiteral("This is a development session and GRASSFIELD_SHELL_DIR names no shell: the installed shell is never driven from it.") : QString();
 }
 
+// How long an app waits for a shell call (`qs ipc ... call`) before it kills it: the shell answers at once (Settings'
+// `update check`, whose check runs in the shell; Activity Monitor's `dock reopen`). One value for every app.
+inline constexpr int kShellIpcMs = 5000;
+
 // GRASSFIELD_STATE_HOME as set ("" when unset): the dev sessions' own state directory, honoured in every session like
 // stateDir() (ADR-0019: always honoured). The one reader of the variable besides stateDir().
 inline QString stateHomeOverride()

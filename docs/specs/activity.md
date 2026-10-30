@@ -79,12 +79,22 @@ items (Settings does it); a background collector; any network access.
 - **AM4** The tab chosen is remembered. Each tab has its own columns, sort and summary.
 - **AM5** The summary area at the bottom of the window has the token height `activity.summaryHeight`; it holds the tab's
   figures (label and value pairs, tokens' type scale) and its graph. Its graphs and the table update at the same sample.
+  Step 2b, left to right as macOS: CPU — System, User, Idle | CPU Load | Threads, Processes; Memory — Memory Pressure |
+  Physical Memory, Memory Used, Cached Files, Swap Used | App Memory, Wired Memory, Compressed; Energy — Energy Impact
+  (with a battery: | its figures | Battery (Last 12 hours)); Disk — Reads in, Writes out and their rates | the IO or Data
+  graph | Data read, Data written and their rates; Network — Packets in, Packets out and their rates | the Packets or Data
+  graph | Data received, Data sent and their rates. A figure that the graph draws has a square of its colour
+  (`activity.swatchSize`) before its label (ADR-0038 AD38). Every graph keeps `activity.historySamples` samples, each tab's
+  at every sample whichever tab is shown (AD37); a rate the sampler could not give is a gap, never a zero.
 - **AM6** Menus: the app menu (About, Hide, Quit), File (Close Window), Edit (Copy, Select All, Find), View, Window, Help,
   exported to the menu bar (T1, `apps/globalmenu.h`). There is no settings window: the View menu holds the options (macOS).
 - **AM7** Light and dark appearance and the accent follow the session; table rows alternate with the token fill
-  `activity.rowAlternate`; graphs use tokens only (`activity.graphSystem`, `activity.graphUser`, `activity.graphRead`,
-  `activity.graphWrite`, `activity.graphIn`, `activity.graphOut`, `activity.pressureGreen`, `activity.pressureYellow`,
-  `activity.pressureRed`), each holding A2's 3:1 against the graph's background in both appearances.
+  `activity.rowAlternate`; graphs use tokens only, a colour per appearance (`color.dark` and `color.light`:
+  `activityGraphSystem`, `activityGraphUser`, `activityGraphRead`, `activityGraphWrite`, `activityGraphIn`,
+  `activityGraphOut`, `activityGraphBattery`, `activityPressureGreen`, `activityPressureYellow`, `activityPressureRed`),
+  each holding A2's 3:1 against the graph's background (the group fill) and the window in both appearances
+  (`tests/visual/test_contrast_tokens.py`); sizes `activity.summaryHeight`, `graphWidth`, `figureWidth`, `swatchSize`,
+  `historySamples`, `treeIndent`.
 - **AM8** While the window is hidden or minimized no per-process sample is taken (AM-P3). Back on screen, the next sample
   comes at once; rates restart from it (no rate is drawn from a gap): its rate columns show "—", and the sample after it
   comes one second later rather than a whole interval (ADR-0038 AD35).
@@ -105,7 +115,10 @@ items (Settings does it); a background collector; any network access.
   GPU Processes (with a GPU client); Windowed Processes (owning a window per the projection); Selected Processes (the rows
   selected when chosen, kept until another view); Processes, by Type (AM65); Processes, by GPU (AM49).
 - **AM13** Hierarchically: a tree by parent pid (`stat` field 4); a process whose parent is not listed is a root; rows have
-  disclosure triangles; expansion is kept across samples.
+  disclosure triangles; expansion is kept across samples. Step 2b (ADR-0038 AD40): a parent not older than its child (a
+  reused pid) is not its parent, and a row no root leads to is a root; each level is sorted by the sort column; the
+  search keeps a row that matches and every row above it; the triangle, or Right and Left, open and close a row; a row is
+  indented `activity.treeIndent` per level; every row starts expanded.
 - **AM14** Search: a live filter (no Return needed), case-insensitive, matching the process name, the app name, the user's
   name, the command (own processes only, AD25) or a PID that starts with the digits typed. Ctrl+F focuses the field, Esc clears it. In a grouped view a
   group stays when one of its processes matches.
@@ -195,7 +208,9 @@ items (Settings does it); a background collector; any network access.
   (`TimeToFull`), "Battery Is Charged" when full, Time on battery or Time on AC (from the last state change in UPower's
   history), and Battery (Last 12 hours) (`GetHistory("charge", 43200, 120)`). Without a battery only the graph shows.
   Step 1 gives the graph's sum (`Snapshot::energyImpact`); the battery part is UPower over D-Bus and comes with the window,
-  step 2 (review of 949fc98).
+  step 2 (review of 949fc98). Step 2b (ADR-0038 AD39): the display device at each Energy sample, the history of the first
+  `battery_*` device at most once a minute (and at once when the source changes); "—" for the time on battery or on AC
+  when the twelve hours show no change; the graph takes only the samples that computed Σ EI (the Energy tab's).
 - **AM40** Not built: App Nap, Graphics Card, 12 hr Power (ADR-0038 h).
 
 ### Disk (step 1 data, step 2 window)
@@ -204,7 +219,8 @@ items (Settings does it); a background collector; any network access.
 - **AM42** Summary from `/proc/diskstats`, counting only whole physical disks (a `/sys/block/<name>/device` link exists: no
   loop, zram, dm or md device, no partition): Reads in (field 4), Writes out (field 8), Data read (field 6 × 512), Data
   written (field 10 × 512), each since boot, and per second; the graph shows IO (reads and writes per second) or Data (bytes
-  per second), chosen by a pop-up above it (remembered).
+  per second), chosen by a pop-up above it (remembered: `activity.json` `diskGraph`). Reads and data read go above the
+  graph's middle, writes and data written below it.
 
 ### Network (step 1 data, step 2 window; AQ2)
 - **AM43** (owner, AQ2) Sent Bytes, Rcvd Bytes, Sent Packets, Rcvd Packets per process, headed "(TCP)": a `NETLINK_SOCK_DIAG`
@@ -221,7 +237,8 @@ items (Settings does it); a background collector; any network access.
   and closed sockets: a listener carries no bytes, a TIME_WAIT socket no owner, and a closed one's counters were kept when
   it left the dump (review of f68789c).
 - **AM44** Summary from `/proc/net/dev`, every interface except `lo`: Packets in, Packets out, Data received, Data sent
-  (since boot) and per second; the graph shows Packets or Data (a pop-up, remembered).
+  (since boot) and per second; the graph shows Packets or Data (a pop-up, remembered: `activity.json` `networkGraph`),
+  received above its middle and sent below it.
 
 ### GPU (step 1 data, step 2 window)
 - **AM45** GPU clients: each own process's DRM descriptors (`fd/` links to `/dev/dri/*`), found by the same turn as AM43
@@ -235,12 +252,17 @@ items (Settings does it); a background collector; any network access.
 - **AM47** A system GPU's engine share = Σ over the user's clients on that `drm-pdev`, capped at 100 (the compositor is one of
   them); its name from `/sys/class/drm/card*/device` (vendor and device ids looked up in `/usr/share/hwdata/pci.ids` when
   present, else "GPU <n>"), its driver from the `driver` link. Step 1 gives the shares, `drm-pdev` and the driver; the name
-  comes with the window, step 2, which shows it (review of 949fc98).
+  comes with the window, step 2, which shows it (review of 949fc98). Step 2b (ADR-0038 AD41): the card is the one whose `device` link ends in the
+  pdev, read once per GPU; the name is the vendor's short name and the device's marketing name ("Intel UHD Graphics");
+  "GPU <n>" names card n-1.
 - **AM48** A driver without `drm-engine-*` keys gives "—" in % GPU and GPU Time, and no GPU in GPU History or Performance
   (verified on the owner's i915 at step 1, read-only).
 - **AM49** Processes, by GPU (macOS 27): one group per GPU (`drm-pdev`) with its client processes; processes without a client
   are not listed in this view. Step 1: each row carries the devices it is a client of (`gpuDevices`, sorted); the view is
-  step 2's.
+  step 2's. Step 2b (ADR-0038 AD40): a header row per GPU (its name, AM47; bold, no icon, never
+  selected, passed over by the keyboard, collapsible), in pdev order, then its processes sorted and indented; a process
+  of two GPUs is under both, selected and copied once; a GPU without a process the search keeps is not listed. This view
+  and GPU Processes read the GPU clients on every tab.
 
 ### Quit, Force Quit, signals (step 2c; Quit of windowed processes through the shell at step 3)
 - **AM50** Actions (Quit, Force Quit, Send Signal, Efficiency Mode) apply to own processes only: with another owner's row
@@ -499,7 +521,8 @@ another user), about 1 600 threads, 6 800 descriptors and 220 TCP sockets. Since
 "step 1" plan: `activity_cost.sh` runs A10 before and after the product on the same fixture and takes the worse run, so a
 product more than 1.3 × its own plan fails on any machine. Disk's plan is A10's one pass over the same files in the
 sampler's order (the integrator's second decision of that day): its summed plan, parts measured alone with warm caches,
-is below what any reader of those files pays. The reference machine's figures come from the integrator's run
+is below what any reader of those files pays. Since step 2b Disk's margin is 1.15 (the integrator's decision after #47's
+merge) and a run started at a load average of 2 or more does not count. The reference machine's figures come from the integrator's run
 at idle (load under 2) before step 2a's merge. Before that decision the limits were A10's step-0 plan, worse of two runs
 plus about 30 %, on the reference machine (i5-10400H, 8 threads, kernel 7.2.5, the owner's live session, outside any
 sandbox; pull request #40, the integrator's comment of 18:59 UTC of 2026-10-28): CPU 17, Memory 25, Energy 40, Disk 17 and
@@ -512,7 +535,7 @@ AD33, the owners' turns), so that plan no longer measured the product. Step 0's 
 | CPU | ≤ 1.3 × the plan | the integrator's idle run (16.92 ms at load 3.9) | ≤ 0.5 % of one core | ≤ 1.5 % |
 | Memory | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Energy | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 2 % |
-| Disk | ≤ 1.3 × the plan in one pass | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
+| Disk | ≤ 1.15 × the plan in one pass (step 2b) | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 | Network | ≤ 1.3 × the plan | the integrator's idle run | ≤ 0.5 % | ≤ 1.5 % |
 
 The AM-P1 shares came with step 0's cloud figures. On the reference machine 0.5 % of a core at Normally (5 sec) is 25 ms a
@@ -528,8 +551,11 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   open and re-read with `pread` while their process lives (`stat`; `statm` and `status` on the Memory tab; `io` of the
   user's processes on the Disk and Energy tabs); the app raises its soft `RLIMIT_NOFILE` at start to the hard limit, at most
   16 384 (the session's soft limit is 1 024), and keeps at most that soft limit less 256 open; past that budget a file is
-  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). The limit is 1.3 × the tab's step-1
-  plan (the table above): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
+  opened, read and closed each time, slower and never an error (`tst_sampler.cpp`). A `stat` or `io` line identical to the
+  process's last one is not parsed again, and every tab reads the system files, so each tab's graph keeps its history
+  (step 2b; ADR-0038 AD37). The limit is 1.3 × the tab's step-1 plan, 1.15 × on Disk (the table above), and Disk is
+  measured again with a tenth of the fixture's processes changing their `stat` and `io` lines between two samples
+  (`--changing`, review of PR #53): `activity_cost.sh` runs probe A10 on the same fixture before and after the product, prints
   each tab's plan, limit and ratio, and fails a tab over its limit; the bench prints each sample's user and kernel time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
