@@ -1300,22 +1300,34 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     close_shell_popup "fixed bar"
     # fixed keys (step 1b's review: Super+Alt+F zoomed About to 1918x980, Super+Ctrl+F made it full screen): bindings.lua asks
     # the plugin's window_size, which refuses a window of fixed size; the control still zooms with Super+Alt+F, and back.
+    # The chords go through tests/tools/vkbd (keysyms, the last one tapped with the others held), as tests/visual/flow-lib.sh
+    # fl_chord does: wtype's modifiers reach apps but never Hyprland's binds, and a modifier wtype leaves held turns the next
+    # Escape into Super+Alt+Escape (a first run of this case left Force Quit open over every later case).
+    chord() {
+      local args=() mods=() k last=$# i=0
+      for k in "$@"; do
+        i=$((i + 1))
+        if ((i < last)); then args+=(down "$k" sleep 60); mods=("$k" "${mods[@]}"); else args+=(tap "$k" sleep 60); fi
+      done
+      for k in "${mods[@]}"; do args+=(up "$k"); done
+      timeout 20 "$root/tests/tools/vkbd/vkbd.sh" "${args[@]}" >>"$log" 2>&1
+    }
     nestctl dispatch "hl.dsp.focus({ window = 'address:$fixed_addr' })" >>"$log" 2>&1
     sleep 0.5
-    keys -M logo -M alt -k f -m alt -m logo
+    chord Super_L Alt_L f
     sleep 1
     check "fixed keys: Super+Alt+F leaves the window of fixed size (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
     check "fixed keys: the plugin refused the zoom" plugin_logged "window_size: maximized refused: window ${fixed_addr#0x} is of fixed size"
-    keys -M logo -M ctrl -k f -m ctrl -m logo
+    chord Super_L Control_L f
     sleep 1
     check "fixed keys: Super+Ctrl+F leaves it too (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
     check "fixed keys: the plugin refused the full screen" plugin_logged "window_size: fullscreen refused: window ${fixed_addr#0x} is of fixed size"
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
     sleep 0.5
-    keys -M logo -M alt -k f -m alt -m logo
+    chord Super_L Alt_L f
     sleep 1
-    check "fixed keys: Super+Alt+F zooms the control" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
-    keys -M logo -M alt -k f -m alt -m logo
+    check "fixed keys: Super+Alt+F zooms the control (the bind reaches Hyprland)" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    chord Super_L Alt_L f
     sleep 1
     check "fixed keys: Super+Alt+F again unzooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
     close_shell_popup "fixed keys"
