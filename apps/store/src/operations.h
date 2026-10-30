@@ -52,7 +52,7 @@ struct OperationRecord {
     QStringList packages;         // helper: the names given to it; terminal: the setup's packages
     // helper, terminal: what must be there after an install (name, version: "" for any, an AUR package's), gone after a removal
     QList<PlannedPackage> plan;
-    QString recipe;               // terminal: omarchy-install-… or omarchy-remove-…, or the AUR's command (kAurAdd, kAurDrop)
+    QString recipe;               // terminal: omarchy-install-… or omarchy-remove-…, the AUR's command (kAurAdd, kAurDrop) or kFlatpakAdd
     QStringList args;             // terminal: the recipe's arguments, or the AUR package's name
     // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
     QList<std::pair<QString, QString>> pins;
@@ -73,6 +73,9 @@ bool isRecipeArgs(const QStringList &args);
 // The AUR's two commands (b.2, step 3b2), run with 1 to 4 package names.
 inline const QString kAurAdd = QStringLiteral("omarchy-pkg-aur-add");
 inline const QString kAurDrop = QStringLiteral("omarchy-pkg-drop");
+// Get Flatpak… (step 3c part 3, SD24): Omarchy's omarchy-pkg-add with the one argument flatpak, nothing else.
+inline const QString kFlatpakAdd = QStringLiteral("omarchy-pkg-add");
+inline const QString kFlatpakPackage = QStringLiteral("flatpak");
 bool isAurNames(const QStringList &names);
 // grassfield-store-run's kind for a terminal operation: "setup" (a recipe and its arguments), "aur" (one of the AUR's two
 // commands and package names), "" when neither.
