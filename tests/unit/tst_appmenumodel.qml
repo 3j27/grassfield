@@ -127,6 +127,29 @@ TestCase {
         verify(!zoomed.find(i => i.id === "moveResize").enabled);
     }
 
+    // A window of fixed size (minimum = maximum: About This Computer, ADR-0040 step 1b; nested pass of 85c2c10, scenario 6):
+    // its zoom light is disabled, and the Window menu greys Zoom, Enter Full Screen, Full Screen Tile and the tiling items.
+    function test_windowMenuFixedSize() {
+        const items = model.windowMenu(ctx({canTile: true, canArrange: true, canSplit: true, fixedSize: true,
+                                            outputs: [{name: "DP-1", label: "DELL", current: true}, {name: "HDMI-A-1", label: "LG", current: false}]}));
+        verify(items.find(i => i.id === "minimize").enabled, "it still minimizes");
+        verify(!items.find(i => i.id === "zoom").enabled);
+        verify(!items.find(i => i.id === "fullscreen").enabled);
+        verify(!items.find(i => i.id === "fullScreenTile").enabled);
+        verify(items.filter(i => i.id === "tile" || i.id === "moveToOutput").every(i => !i.enabled));
+        verify(items.find(i => i.id === "moveToOutput") !== undefined, "Move to <display> is there, greyed");
+        const sub = items.find(i => i.id === "moveResize");
+        verify(!sub.enabled);
+        verify(sub.submenu.filter(i => !i.separator && !i.header).every(i => !i.enabled && (!i.alternate || !i.alternate.enabled)));
+        verify(items.find(i => i.id === "moveMenu").enabled, "it still moves to another Desktop");
+        // Brought back by a key or a rule: Unzoom and Exit Full Screen stay.
+        verify(model.windowMenu(ctx({canTile: true, fixedSize: true, maximized: true})).find(i => i.id === "zoom").enabled);
+        verify(model.windowMenu(ctx({canTile: true, fixedSize: true, fullscreen: true})).find(i => i.id === "fullscreen").enabled);
+        // Not of fixed size: as before.
+        const free = model.windowMenu(ctx({canTile: true, fixedSize: false}));
+        verify(free.find(i => i.id === "zoom").enabled && free.find(i => i.id === "fullscreen").enabled && free.find(i => i.place === "fill").enabled);
+    }
+
     // Each tiling row has its glyph (TL25): a place its zone alone, an arrangement its zones with the window's own first.
     function test_windowMenuTilingGlyphs() {
         const items = model.windowMenu(ctx({canTile: true, canArrange: true}));

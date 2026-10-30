@@ -3,8 +3,8 @@ import Grassfield.Ui
 
 // The device picture: Grassfield's own drawing of a laptop or a display with the Grassfield artwork on its screen, in the
 // place and size of the macOS picture (macOS draws Apple artwork there). kind: "laptop" or "desktop" (Settings derives it
-// from hostname1's chassis, General.deviceKind). Shared through Grassfield.Ui (ADR-0040 step 1a): Settings > General > About
-// and Displays draw it, and the shell's About This Computer will (step 1b).
+// from hostname1's chassis, General.deviceKind). Shared through Grassfield.Ui (ADR-0040 step 1a): Settings > General > About,
+// Displays and the About This Computer window (step 1b) draw it.
 Item {
     id: root
 
@@ -72,7 +72,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         width: Math.round(root.width * 0.36)
-        height: Math.max(2, Math.round(root.height * 0.05))
+        height: Math.max(Tokens.settingsPictureMinimumPart, Math.round(root.height * 0.05))
         radius: height / 2
         color: Tokens.settingsDeviceBody
     }

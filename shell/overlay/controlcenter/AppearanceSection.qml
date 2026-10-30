@@ -92,7 +92,7 @@ Column {
 
                             delegate: Icon {
                                 required property string modelData
-                                size: Tokens.menuIconSize + 4
+                                size: Tokens.panelAppearanceGlyphSize
                                 name: modelData
                                 color: choice.selected ? Appearance.colors.selectionText : Appearance.colors.text
                             }

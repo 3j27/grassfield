@@ -163,6 +163,13 @@ ShellRoot {
         Popups.open("controlcenter", "", 0, 0, "right", {});
         check("control: control center opens unlocked", Popups.kind === "controlcenter");
         Popups.close();
+        // A kind the Overlay does not draw stays closed, unlocked too: the retired "about" mapped an empty overlay that took the
+        // keyboard (review of ce69dc6).
+        for (const k of ["about", "nonsense"]) {
+            Popups.open(k, "", 0, 0, "center", {});
+            check("control: the unknown popup kind '" + k + "' is refused", !Popups.active);
+            Popups.close();
+        }
 
         // Lock with everything open (Popups last: opening Search or Apps closes a popup, as on macOS).
         openAll();
@@ -201,7 +208,7 @@ ShellRoot {
         check("locked: overview.show stays closed", !overview.open);
         overview.toggle();
         check("locked: overview.toggle stays closed", !overview.open);
-        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "about", "forcequit", "appabout", "notice", "confirm", "tiling", "tilingSuggest"];
+        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "forcequit", "appabout", "notice", "confirm", "tiling", "tilingSuggest"];
         const opened = [];
         for (const k of kinds) {
             Popups.open(k, "", 0, 0, "left", {});

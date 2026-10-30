@@ -1,24 +1,36 @@
 #!/usr/bin/env python3
-"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 step 2, rule 6).
+"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2 and 3, rule 6).
 
   python3 -I tests/ci/qml_literals.py             scan the tree, exit 1 on any literal outside the allowlist
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples
 
 Scanned: every .qml file of ui/Grassfield/ (Tokens.qml, generated from ui/tokens/tokens.json, excepted), shell/ (shell/security/
-included: it is read, never changed) and apps/. A literal is a number written where a token belongs:
-  radius      `radius: 6`
-  font        `font.pixelSize: 13`, `font.pointSize`, `font.letterSpacing`, `lineHeight`
-  duration    an animation's `duration: 120`
-  opacity     `opacity: 0.5` (0 and 1 are states, not values)
-  geometry    margins, offsets, spacing, width, height and their implicit forms, padding, x, y, border.width
-  colour      "#rrggbb", Qt.rgba/hsla/hsva/rgb of literal numbers, a named colour on color / border.color ("transparent" is
-              not a colour)
-Values from -1 to 1 are allowed for numbers (a hairline, a flag, an off state). `Timer.interval` is not counted: debounces, polls
-and retries are logic, not design (ADR-0039 D7); a timing the user perceives belongs in a token by review, not by this scan.
-Token arithmetic (`Tokens.spacingLg * 3`) is not a literal.
+included: it is read, never changed) and apps/.
 
-Exceptions: ALLOWED below (a file and how many colour literals it may hold, with the reason), or `literal-ok: <reason>` on the
-line for a new, reviewed exception.
+A design property is known by its name (the last part of a dotted name, a group's member, or a declared property's name), so
+`anchors.leftMargin`, `font { pixelSize }`, `Layout.preferredWidth`, `sourceSize.width` and `readonly property int pillInset`
+are all read:
+  radius      ...radius
+  font        pixelSize, pointSize, letterSpacing, wordSpacing, lineHeight, fontSize
+  duration    ...duration (an animation's; `Timer.interval` is not one: debounces, polls and retries are logic, ADR-0039 D7)
+  opacity     ...opacity
+  scale       scale
+  geometry    x, y and ...width, height, size, margin(s), padding, spacing, inset, offset, gap, thickness
+  colour      ...color, and every property declared `property color`
+In such a binding, a number is a literal where it stands as a value: the whole value (`radius: 6`), a ternary's branch
+(`width: major ? 2 : 1`), an added or subtracted offset (`Tokens.menuIconSize + 4`), an argument of Qt.size, Qt.point, Qt.rect,
+Math.max or Math.min, a `||` or `??` fallback. A factor or a divisor (`Tokens.spacingLg * 3`, `width / 2`), a comparison's term,
+an index and an argument of any other function are arithmetic or logic, not design values. Numbers from -1 to 1 are allowed
+(a hairline, a flag, an off state); for opacity and scale, only 0, 1 and -1 (states and a mirror).
+Anywhere in the code, outside comments:
+  colour      "#rrggbb", Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour ("white", "Red";
+              "transparent" is not a colour)
+  opacity     a literal alpha given to withAlpha(), Qt.alpha() or a computed Qt.rgba/hsla/hsva (not 0 or 1)
+Only QML is read as QML: a JavaScript block (a handler, a function, `width: { ... }`) and an object literal (`{x: 0, y: 24}`) are
+code and data; their colours and alphas are still read.
+
+Exceptions: ALLOWED below (a file and how many colour literals it may hold, with the reason), or a comment on the line naming
+the kinds it excepts and why: `// literal-ok radius: concentric with the menu's 12 at a 5 inset (spec)`.
 """
 import os
 import re
@@ -28,25 +40,41 @@ from pathlib import Path
 
 ROOTS = ("ui/Grassfield", "shell", "apps")
 SKIP = {"ui/Grassfield/Ui/Tokens.qml"}
-MARK = re.compile(r"literal-ok:\s*\S.{8,}")
-NUM = r"(-?[0-9]+(?:\.[0-9]+)?)"
-END = r"\s*(?:$|;|//|\})"
-PROPS = {
-    "radius": r"radius",
-    "font": r"font\.(?:pixelSize|pointSize|letterSpacing)|lineHeight",
-    "duration": r"duration",
-    "opacity": r"opacity",
-    "geometry": r"(?:anchors\.)?(?:left|right|top|bottom)?[mM]argins?|(?:anchors\.)?(?:horizontalCenter|verticalCenter)Offset"
-                r"|spacing|(?:implicit)?[wW]idth|(?:implicit)?[hH]eight|(?:left|right|top|bottom)?[pP]adding|[xy]|border\.width",
-}
-NUMBERS = {kind: re.compile(r"(?<![\w.])(?:" + prop + r")\s*:\s*" + NUM + END) for kind, prop in PROPS.items()}
+KINDS = ("radius", "font", "duration", "opacity", "scale", "geometry", "colour")
+MARK = re.compile(r"\bliteral-ok\s+(?P<kinds>[a-z]+(?:\s*,\s*[a-z]+)*)\s*:\s*\S.{8,}")
+
+NAME_KINDS = (
+    ("radius", re.compile(r"[rR]adius$")),
+    ("font", re.compile(r"(?:^|[a-z])(?:[pP]ixelSize|[pP]ointSize|[lL]etterSpacing|[wW]ordSpacing|[lL]ineHeight|[fF]ontSize)$")),
+    ("duration", re.compile(r"[dD]uration$")),
+    ("opacity", re.compile(r"[oO]pacity$")),
+    ("scale", re.compile(r"^scale$")),
+    ("geometry", re.compile(r"^[xy]$|[wW]idth$|[hH]eight$|[sS]ize$|[mM]argins?$|[pP]adding$|[sS]pacing$|[iI]nset$|[oO]ffset$"
+                            r"|[gG]ap$|[tT]hickness$")),
+    ("colour", re.compile(r"[cC]olou?r$")),
+)
+# Names that end like a measure but hold logic.
+LOGIC = {"stepSize", "pageSize", "batchSize", "cacheSize", "fileSize", "totalSize", "maxSize", "minSize", "historySize",
+         "bufferSize", "chunkSize", "fontSizeMode", "fillWidth", "fillHeight"}
+
+STATEMENT = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+(?P<type>[\w.<>]+)\s+)?"
+                       r"(?P<name>[A-Za-z_][\w.]*)\s*:(?P<expr>.*)$", re.S)
+TOKEN = re.compile(r"\s*(?:(?P<num>(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
+                   r"|(?P<str>\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"
+                   r"|(?P<name>[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)"
+                   r"|(?P<op>===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|=>|\.\.\.|[-+*/%?:<>!=&|^~()\[\],{}.;]))")
+MULTIPLY = {"*", "/", "%"}
+COMPARE = {"<", ">", "<=", ">=", "==", "===", "!=", "!==", "&&", "!"}
+# Functions whose arguments are in the unit of the result: a number in them is a value like any other.
+UNIT_CALLS = {"Qt.size", "Qt.point", "Qt.rect", "Math.max", "Math.min", "Math.round", "Math.floor", "Math.ceil", "Math.abs"}
 COLOUR = re.compile(r"\"#[0-9A-Fa-f]{3,8}\""
-                    r"|Qt\.(?:rgba|hsla|hsva|rgb)\(\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*(?:,\s*-?[0-9.]+\s*)?\)"
-                    r"|(?<![\w.])(?:color|border\.color)\s*:\s*\"(?!transparent\")[a-z]+\"")
+                    r"|Qt\.(?:rgba|hsla|hsva|rgb)\(\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*(?:,\s*-?[0-9.]+\s*)?\)")
+ALPHA_CALL = re.compile(r"(?<![\w.])(?:(?:[\w.]+\.)?withAlpha|Qt\.alpha|Qt\.rgba|Qt\.hsla|Qt\.hsva)\s*\(")
+NAMED = re.compile(r"[\"'][A-Za-z]+[\"']")
 
 # Colour literals that stay, by file: {path: (how many, why)}. A file holding more fails, so a new literal there is caught too.
 ALLOWED = {
-    "ui/Grassfield/Ui/GrassfieldArtwork.qml": (8, "the default artwork's own painting (ADR-0040 ID-1 turns it into artwork tokens)"),
+    "ui/Grassfield/Ui/GrassfieldArtwork.qml": (9, "the default artwork's own painting, its 8 colours and the sun's glow alpha (ADR-0040 ID-1 turns it into artwork tokens)"),
     "ui/Grassfield/Ui/Appearance.qml": (3, "the dev-only glyph markers of tests/visual (never drawn in production)"),
     "ui/Grassfield/Ui/TintedIcon.qml": (1, "black as the neutral default of a tint property the host sets"),
     "ui/Grassfield/Ui/IconEffect.qml": (1, "black as the neutral default of a tint property the host sets"),
@@ -59,47 +87,277 @@ ALLOWED = {
 }
 
 
-def code_of(line):
-    """The line without a trailing // comment (a // inside a string is kept)."""
-    out, quote = [], None
-    i = 0
-    while i < len(line):
-        c = line[i]
-        if quote:
-            out.append(c)
-            if c == "\\" and i + 1 < len(line):
-                out.append(line[i + 1])
-                i += 1
-            elif c == quote:
-                quote = None
-        elif c in "\"'`":
-            quote = c
-            out.append(c)
-        elif line.startswith("//", i):
-            break
+def split_comments(text):
+    """(code, comments): the source with its comments blanked (strings and line breaks kept), and each line's comment text."""
+    code, comments = [], {}
+    line, i, n = 1, 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "\"'`":
+            j = i + 1
+            while j < n and text[j] != c:
+                if text[j] == "\\":
+                    j += 1
+                elif text[j] == "\n" and c != "`":
+                    break
+                j += 1
+            chunk = text[i:j + 1]
+            code.append(chunk)
+            line += chunk.count("\n")
+            i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            comments[line] = comments.get(line, "") + text[i:j]
+            code.append(" " * (j - i))
+            i = j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            for k, part in enumerate(text[i:j].split("\n")):
+                comments[line + k] = comments.get(line + k, "") + part
+            code.append("".join("\n" if ch == "\n" else " " for ch in text[i:j]))
+            line += text[i:j].count("\n")
+            i = j
         else:
-            out.append(c)
+            code.append(c)
+            line += c == "\n"
+            i += 1
+    return "".join(code), comments
+
+
+def opening_kind(head):
+    """What a `{` opens in QML, from the statement before it: an object, a group or `X on y` (QML), or a block (JavaScript)."""
+    head = head.strip()
+    if not head or re.search(r"(?:^|[\s:,\[(])[A-Z]\w*(?:\.[A-Z]\w*)*$", head) or re.search(r"\bon\s+[\w.]+$", head) \
+            or re.fullmatch(r"[a-z]\w*(?:\.[a-z]\w*)*", head):
+        return "qml"
+    return "js"
+
+
+def statements(code):
+    """[(text, [line of each character])] of the QML statements of a comment-free source (JavaScript blocks and object
+    literals left out; an object literal inside an expression stands as OBJ)."""
+    out = []
+    stack = []                       # (kind, saved text, saved lines, saved depth)
+    text, lines, depth = [], [], 0
+    line, i, n = 1, 0, len(code)
+
+    def flush():
+        nonlocal text, lines
+        if "".join(text).strip():
+            out.append(("".join(text), lines))
+        text, lines = [], []
+
+    def continues(at):
+        """Does the statement go on after the line break at `at` (an operator at the end, or at the start of the next line)?"""
+        before = "".join(text).rstrip()
+        after = code[at + 1:code.find("\n", at + 1) if code.find("\n", at + 1) >= 0 else n].lstrip()
+        return bool(before) and (before[-1] in "?:+-*/%&|=<>,([.!" or (after[:1] and after[0] in "?:+-*/%&|.)],"))
+
+    while i < n:
+        c = code[i]
+        in_js = bool(stack) and stack[-1][0] == "js"
+        if c in "\"'`":
+            j = i + 1
+            while j < n and code[j] != c:
+                j += 2 if code[j] == "\\" else 1
+            if not in_js:
+                text.extend(code[i:j + 1])
+                lines.extend([line] * (j + 1 - i))
+            line += code[i:j + 1].count("\n")
+            i = j + 1
+            continue
+        if c == "{":
+            if in_js:
+                stack.append(("js", None, None, 0))
+            else:
+                head = "".join(text)
+                inner = depth > 0 and re.search(r"[(\[,:?=]\s*$|^\s*$|return\s*$", head) and not re.search(r"[A-Z]\w*\s*$", head)
+                kind = "js" if inner else opening_kind(head.split(":")[-1] if depth == 0 else re.split(r"[(\[,]", head)[-1])
+                if depth == 0:
+                    stack.append((kind, [], [], 0))
+                else:
+                    stack.append((kind, text + list(" OBJ "), lines + [line] * 5, depth))
+                text, lines, depth = [], [], 0
+        elif c == "}":
+            if not in_js:
+                flush()
+            if stack:
+                _kind, saved, saved_lines, saved_depth = stack.pop()
+                if saved is not None and not (stack and stack[-1][0] == "js"):
+                    text, lines, depth = saved, saved_lines, saved_depth
+        elif in_js:
+            pass
+        elif c in "([":
+            depth += 1
+            text.append(c)
+            lines.append(line)
+        elif c in ")]":
+            depth = max(0, depth - 1)
+            text.append(c)
+            lines.append(line)
+        elif c == ";" and depth == 0:
+            flush()
+        elif c == "\n":
+            if depth == 0 and not continues(i):
+                flush()
+            else:
+                text.append(" ")
+                lines.append(line)
+        else:
+            text.append(c)
+            lines.append(line)
+        line += c == "\n"
         i += 1
-    return "".join(out)
+    flush()
+    return out
 
 
-def scan_text(text):
-    """[(line number, kind, excerpt)] of the literals of one QML source (marked lines excepted)."""
+def kind_of(name, declared, strings=frozenset()):
+    """The kind of a property, or None: a declared colour is a colour; a declared string (an accent's name, a key of a token
+    table such as `tileColor`) is not, wherever it is bound."""
+    if declared == "color":
+        return "colour"
+    last = name.split(".")[-1]
+    if declared == "string" or last in strings or name.startswith("on") and name[2:3].isupper() or last in LOGIC or last == "id":
+        return None
+    for kind, rx in NAME_KINDS:
+        if rx.search(last):
+            return kind
+    return None
+
+
+def tokens_of(expr, lines, offset):
+    out, i = [], 0
+    while i < len(expr):
+        m = TOKEN.match(expr, i)
+        if not m or m.end() == i:
+            i += 1
+            continue
+        kind = m.lastgroup
+        start = m.start(kind)
+        out.append((kind, m.group(kind).replace(" ", ""), lines[min(offset + start, len(lines) - 1)]))
+        i = m.end()
+    return out
+
+
+def enclosures(tokens, i):
+    """The brackets around token i, innermost first: "[" for an index or a list, a function's name for its arguments, or
+    "*" for a parenthesised group that is multiplied or divided, "" for any other group."""
+    out, level = [], 0
+    for j in range(i - 1, -1, -1):
+        value = tokens[j][1]
+        if value in (")", "]"):
+            level += 1
+        elif value in ("(", "["):
+            if level:
+                level -= 1
+                continue
+            if value == "[":
+                out.append("[")
+            elif j > 0 and tokens[j - 1][0] == "name":
+                out.append(tokens[j - 1][1])
+            else:
+                depth, k = 0, j
+                while k < len(tokens):
+                    depth += tokens[k][1] == "(" or -(tokens[k][1] == ")")
+                    if depth == 0:
+                        break
+                    k += 1
+                after = tokens[k + 1][1] if k + 1 < len(tokens) else None
+                before = tokens[j - 1][1] if j > 0 else None
+                out.append("*" if after in MULTIPLY or before in MULTIPLY else "")
+    return out
+
+
+def value_hits(tokens, kind):
+    """[(line, excerpt)] of the numbers (or, in a colour binding, the named colours) that stand as values in an expression."""
     hits = []
-    for number, line in enumerate(text.splitlines(), 1):
-        if MARK.search(line):
+    for i, (tkind, value, line) in enumerate(tokens):
+        if tkind not in ("num", "str"):
             continue
-        code = code_of(line)
-        if not code.strip():
+        prev = tokens[i - 1][1] if i > 0 else None
+        nxt = tokens[i + 1][1] if i + 1 < len(tokens) else None
+        sign = 1
+        if prev in ("-", "+") and (i < 2 or tokens[i - 2][0] == "op" and tokens[i - 2][1] not in (")", "]")):
+            sign = -1 if prev == "-" else 1
+            prev = tokens[i - 2][1] if i >= 2 else None
+        if prev in COMPARE or nxt in COMPARE or prev == ".":
             continue
-        for kind, rx in NUMBERS.items():
-            for m in rx.finditer(code):
-                value = float(m.group(1))
-                if kind == "opacity" and value not in (0.0, 1.0) or kind != "opacity" and abs(value) > 1:
-                    hits.append((number, kind, line.strip()[:120]))
-        for _ in COLOUR.finditer(code):
-            hits.append((number, "colour", line.strip()[:120]))
+        if tkind == "num" and (prev in MULTIPLY or nxt in MULTIPLY):
+            continue
+        # An index, a factor in parentheses, or an argument of a function that changes the unit (Math.sin, a lookup).
+        if any(e in ("[", "*") or e and e not in UNIT_CALLS for e in enclosures(tokens, i)):
+            continue
+        if tkind == "str":
+            if kind == "colour" and NAMED.fullmatch(value) and value[1:-1].lower() != "transparent":
+                hits.append((line, value))
+            continue
+        if kind == "colour":
+            continue
+        number = sign * float(value)
+        if kind in ("opacity", "scale"):
+            if number not in (0.0, 1.0, -1.0):
+                hits.append((line, value))
+        elif abs(number) > 1:
+            hits.append((line, value))
     return hits
+
+
+def alpha_hits(code):
+    """[(line, excerpt)] of the literal alphas given to withAlpha(), Qt.alpha() or a computed Qt.rgba/hsla/hsva."""
+    hits = []
+    for m in ALPHA_CALL.finditer(code):
+        start = m.end()
+        level, j, args, arg_start = 1, start, [], start
+        while j < len(code) and level:
+            ch = code[j]
+            if ch in "([{":
+                level += 1
+            elif ch in ")]}":
+                level -= 1
+            elif ch == "," and level == 1:
+                args.append(code[arg_start:j])
+                arg_start = j + 1
+            j += 1
+        args.append(code[arg_start:j - 1])
+        if len(args) < 2 or COLOUR.match(code, m.start()):
+            continue
+        last = args[-1].strip()
+        if re.fullmatch(r"(?:\d+\.?\d*|\.\d+)", last) and float(last) not in (0.0, 1.0):
+            hits.append((code.count("\n", 0, j) + 1, m.group(0) + "..., " + last + ")"))
+    return hits
+
+
+def scan_text(text, strings=frozenset()):
+    """[(line number, kind, excerpt)] of the literals of one QML source (lines marked for their kind excepted); `strings`
+    are the names declared `property string` in the tree."""
+    code, comments = split_comments(text)
+    source = text.splitlines()
+    hits = []
+    for stmt, lines in statements(code):
+        m = STATEMENT.match(stmt)
+        if not m:
+            continue
+        kind = kind_of(m.group("name"), m.group("type"), strings)
+        if not kind:
+            continue
+        offset = m.start("expr")
+        for line, _value in value_hits(tokens_of(m.group("expr"), lines, offset), kind):
+            hits.append((line, kind, source[line - 1].strip()[:120]))
+    for number, code_line in enumerate(code.split("\n"), 1):
+        for _ in COLOUR.finditer(code_line):
+            hits.append((number, "colour", source[number - 1].strip()[:120]))
+    for line, _excerpt in alpha_hits(code):
+        hits.append((line, "colour", source[line - 1].strip()[:120]))
+    kept = []
+    for line, kind, excerpt in sorted(hits):
+        mark = MARK.search(comments.get(line, ""))
+        if mark and kind in {k.strip() for k in mark.group("kinds").split(",")}:
+            continue
+        kept.append((line, kind, excerpt))
+    return kept
 
 
 def files(root):
@@ -112,11 +370,28 @@ def files(root):
                         yield rel
 
 
+DECLARED = re.compile(r"\bproperty\s+([\w.<>]+)\s+(\w+)")
+BUILT_IN_COLOURS = {"color", "fillColor", "strokeColor", "selectionColor", "selectedTextColor", "placeholderTextColor",
+                    "styleColor", "linkColor"}
+
+
+def string_names(sources):
+    """The names the tree only ever declares `property string` (an accent's name such as `tileColor`): a key, not a colour.
+    A name also declared with another type somewhere (`size`, `color`), or a built-in colour, stays a design property."""
+    types = {}
+    for text in sources:
+        for declared, name in DECLARED.findall(text):
+            types.setdefault(name, set()).add(declared)
+    return frozenset(name for name, kinds in types.items() if kinds == {"string"} and name not in BUILT_IN_COLOURS)
+
+
 def check(root):
     problems, scanned = [], 0
-    for rel in files(root):
+    sources = {rel: (root / rel).read_text(encoding="utf-8") for rel in files(root)}
+    strings = string_names(sources.values())
+    for rel, text in sources.items():
         scanned += 1
-        hits = scan_text((root / rel).read_text(encoding="utf-8"))
+        hits = scan_text(text, strings)
         colours = [h for h in hits if h[1] == "colour"]
         allowed, _why = ALLOWED.get(rel, (0, ""))
         for number, kind, excerpt in hits:
@@ -144,19 +419,60 @@ SAMPLES = {
     "token": ("Rectangle { radius: Tokens.radiusControl; width: Tokens.spacingLg * 3 }", 0),
     "hairline and states": ('Rectangle { border.width: 1; opacity: 0; height: 1; x: 0; color: "transparent" }', 0),
     "timer": ("Timer { interval: 1500 }", 0),
-    "computed rgba": ("Item { property color c: Qt.rgba(t.r, t.g, t.b, 0.5) }", 0),
     "comment": ("Item { // radius: 6 in the old design\n}", 0),
-    "marked": ("Rectangle { radius: 7 // literal-ok: concentric with a 12 menu at a 5 inset, see the spec\n}", 0),
     "url with //": ('Image { source: "file:///x.png"; width: 40 }', 1),
+    # The escapes of step 2's review (ADR-0039 step 3).
+    "ternary": ("Rectangle { width: major ? 2 : 1 }", 1),
+    "token plus an offset": ("Icon { size: Tokens.menuItemHeight - 6 }", 1),
+    "Layout": ("Item { Layout.preferredWidth: 120 }", 1),
+    "custom property": ("Item {\n    readonly property int pillInset: 2\n}", 1),
+    "declared colour": ('Item { property color tint: "black" }', 1),
+    "literal alpha": ("Rectangle { color: Appearance.withAlpha(Appearance.colors.text, 0.37) }", 1),
+    "computed rgba": ("Item { property color c: Qt.rgba(t.r, t.g, t.b, 0.5) }", 1),
+    "font group": ("Text {\n    font {\n        pixelSize: 13\n        weight: Font.Medium\n    }\n}", 1),
+    "anchors group": ("Item { anchors { fill: parent; margins: 8 } }", 1),
+    "scale": ("Item { scale: 0.96 }", 1),
+    "source size": ("Image { sourceSize: Qt.size(32, 32) }", 2),
+    "source size width": ("Image { sourceSize.width: 64 }", 1),
+    "capitalised colour": ('Rectangle { color: "Red" }', 1),
+    "stroke": ('ShapePath { strokeColor: "red"; strokeWidth: 3 }', 2),
+    "ternary colour": ('Text { color: dark ? "white" : Appearance.colors.text }', 1),
+    "multi-line ternary": ("Item {\n    width: wide\n        ? 240\n        : Tokens.settingsPickerWidth\n}", 1),
+    "list of objects": ("Item { transform: [Scale { xScale: 2 }, Translate { x: 12 }] }", 1),
+    "fallback": ("Item { width: given || 24 }", 1),
+    "max": ("Item { width: Math.max(120, label.implicitWidth) }", 1),
+    # Arithmetic, logic and data, not design values.
+    "factor and divisor": ("Item { x: parent.width / 2 - width / 2; height: Tokens.spacingSm * 3 }", 0),
+    "condition": ("Item { width: index % 3 === 0 ? Tokens.spacingSm : Tokens.spacingXs }", 0),
+    "function argument": ("Item { width: Math.round(Tokens.settingsPopupInset * 2) / 2; height: list.itemAt(3).height }", 0),
+    "object literal in a function": ("Item {\n    function corner() {\n        return {x: 0, y: 24};\n    }\n}", 0),
+    "multi-line object literal": ("Item {\n    function corner() {\n        return {\n            x: 0,\n            y: 24\n        };\n    }\n}", 0),
+    "handler": ("Item { onClicked: { width = 24; } }", 0),
+    "model data": ('ListView { model: [{id: "a", width: 120}] }', 0),
+    "step size": ("Slider { stepSize: 5 }", 0),
+    "z order": ("Item { z: 2 }", 0),
+    "alpha token": ("Item { property color c: Appearance.withAlpha(Appearance.colors.text, Tokens.disabledOpacity) }", 0),
+    "behaviour on a value": ("Item { Behavior on width { NumberAnimation { duration: Tokens.motionFast } } }", 0),
+    # The marker excepts the kinds it names, from a comment only.
+    "marked": ("Rectangle { radius: 7 // literal-ok radius: concentric with a 12 menu at a 5 inset, see the spec\n}", 0),
+    "marked for another kind": ("Rectangle { radius: 7; width: 30 // literal-ok radius: concentric with a 12 menu, the spec\n}", 1),
+    "marker in a string": ('Text { text: "literal-ok radius: not a comment at all"; radius: 7 }', 1),
+    # Keys, units and groups the second pass of the review raised.
+    "accent key": ('Item { property string tileColor: "blue" }', 0),
+    "accent key in an index": ('Rectangle { color: Tokens.colorAccentLight[keys[id] || "graphite"] }', 0),
+    "phase in radians": ("Item { y: h * (base - amp * Math.sin(phase + 2.0)) }", 0),
+    "count of paddings": ("Item { implicitWidth: label.width + (actions.length > 0 ? 4 : 3) * Tokens.storeNoticePadding }", 0),
+    "rounded offset": ("Item { width: Math.round(label.implicitWidth + 12) }", 1),
+    "glow alpha": ("GradientStop { color: Qt.alpha(root.art.sun, 0.55) }", 1),
 }
 
 
 def selftest():
     bad = 0
     for name, (src, want) in SAMPLES.items():
-        got = len(scan_text(src))
-        if got != want:
-            print(f"selftest FAIL: {name}: want {want}, got {got}: {src!r}")
+        got = scan_text(src)
+        if len(got) != want:
+            print(f"selftest FAIL: {name}: want {want}, got {len(got)} {got}: {src!r}")
             bad += 1
     if bad:
         return 1
@@ -173,7 +489,7 @@ def main():
         print("qml_literals: no QML file scanned")
         return 1
     if problems:
-        print("qml_literals: a design value written as a literal; use a token (or `literal-ok: <reason>` after review):")
+        print("qml_literals: a design value written as a literal; use a token (or `literal-ok <kind>: <reason>` after review):")
         print("\n".join(problems))
         return 1
     print(f"qml_literals: {scanned} QML files, no literal design value ({sum(n for n, _ in ALLOWED.values())} colour literals allowed in {len(ALLOWED)} files)")

@@ -12,6 +12,19 @@ TestCase {
         return {toplevel: top, address: address ? address : "1a", appId: appId, title: "T " + top};
     }
 
+    // Compositor.taggedToplevel's match (SettingsApp.openAbout brings an open About This Computer window forward): the class
+    // and the xdg tag of Hyprland's window data, both exact; window data not read yet matches nothing.
+    function test_hasTag() {
+        const about = {class: "org.grassfield.Settings", xdgTag: "info", pid: 7};
+        verify(Minimized.hasTag(about, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag({class: "org.grassfield.Settings", xdgTag: "settings"}, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag({class: "org.grassfield.Files", xdgTag: "info"}, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag({class: "org.grassfield.Settings"}, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag({}, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag(null, "org.grassfield.Settings", "info"));
+        verify(!Minimized.hasTag({class: "", xdgTag: ""}, "", ""));
+    }
+
     function test_blurCallIsBuiltFromIntegersInRange() {
         compare(Minimized.blurCall(18, 3), "function() hl.config({ decoration = { blur = { size = 18, passes = 3 } } }) end");
         compare(Minimized.blurCall(0, 3), "");

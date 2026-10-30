@@ -5,7 +5,8 @@ import qs.services
 
 // Grassfield menu (leaf mark): About, Settings, Recent Items (RecentItems), Force Quit, Sleep/Restart/Shut Down, Lock Screen,
 // Log Out.
-// System Settings launches grassfield-settings (GRASSFIELD_SETTINGS_CMD overrides it in dev). Lock Screen engages the session lock.
+// About This Computer and Settings… launch grassfield-settings (`--about` for the first; GRASSFIELD_SETTINGS_CMD overrides the
+// command in dev). Lock Screen engages the session lock.
 PopupMenu {
     id: root
 
@@ -48,7 +49,9 @@ PopupMenu {
             Popups.close();
             break;
         case "about":
-            Popups.openCentered("about", {});
+            // Settings' About This Computer window (ADR-0040 ID-19).
+            SettingsApp.openAbout();
+            Popups.close();
             break;
         case "settings":
             SettingsApp.open();

@@ -14,8 +14,8 @@ Singleton {
 
     readonly property AppMenuModel model: AppMenuModel {}
 
-    // The Window menu opens: whether its window fits half of its output is read again from the plugin (Full Screen Tile,
-    // ADR-0036 D57); the menu follows when the reply comes.
+    // The Window menu opens: whether its window fits half of its output (Full Screen Tile, ADR-0036 D57), and whether it is
+    // of fixed size (ADR-0040 step 1b), is read again from the plugin; the menu follows when the reply comes.
     Connections {
         target: Popups
 
@@ -95,6 +95,7 @@ Singleton {
             canSplit: Compositor.canSplit,
             splitBlocked: Compositor.splitBlocked,
             splittable: focusedHere ? Compositor.fitsHalf(focusedHere) : true,
+            fixedSize: focusedHere ? Compositor.fixedSize(focusedHere) : false,
             outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }

@@ -21,8 +21,6 @@ ShaderEffect {
     // so the plate keeps its look. Not used when "recolor" is false.
     property bool recolor: false
     property color recolorTint: "#000000"
-    // Nominal icon edge in logical pixels.
-    property real nominalSize: 48
 
     readonly property var params: IconModes.effect(root.mode, root.tint)
 

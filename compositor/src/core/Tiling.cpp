@@ -1325,6 +1325,10 @@ namespace gf::tiling {
         return c.minW <= frame.w + kSlack && c.minH + c.band <= frame.h + kSlack;
     }
 
+    bool fixedSize(const Constraints& c) {
+        return c.maxW > 0 && c.maxH > 0 && c.minW >= c.maxW && c.minH >= c.maxH;
+    }
+
     int64_t nextDesktopId(std::span<const int64_t> ids) {
         int64_t top = 0;
         for (const auto id : ids)
@@ -1386,7 +1390,7 @@ namespace gf::tiling {
 
     // gfc1-reply: grassfield-tiling
     // The state, the reply of `hyprctl grassfield-tiling` (tests/ci/gfc_parity.py checks it against the ADR's reply line).
-    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit) {
+    std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion, std::span<const SplitDesk> splits, std::span<const uint64_t> unfit, std::span<const uint64_t> fixed) {
         std::string out{R"({"v":")"};
         out += gf::gfc::jsonEscape(gf::gfc::kVersion);
         out += std::format(R"(","type":"tiling","gen":{},"outputs":[)", generation);
@@ -1425,6 +1429,9 @@ namespace gf::tiling {
         out += R"(],"unfit":[)";
         for (size_t i = 0; i < unfit.size(); ++i)
             out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", unfit[i]);
+        out += R"(],"fixed":[)";
+        for (size_t i = 0; i < fixed.size(); ++i)
+            out += std::format(R"({}"{:x}")", i == 0 ? "" : ",", fixed[i]);
         out += "]";
         if (!suggestion) {
             out += R"(,"suggestion":null})";

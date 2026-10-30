@@ -36,7 +36,7 @@ Item {
         ShapePath {
             fillColor: root.outlineColor
             strokeColor: root.outlineColor
-            strokeWidth: 3
+            strokeWidth: 3 // literal-ok geometry: the cursor source's own stroke, in its 32-unit grid (arrow.svg.in)
             joinStyle: ShapePath.RoundJoin
             PathSvg {
                 path: root.arrow

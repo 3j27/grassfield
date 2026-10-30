@@ -20,6 +20,8 @@ TestCase {
         property int startIndex: 0
         property bool dark: true
         property bool reduceMotion: true
+        property bool increaseContrast: false
+        property real textScale: 1
         property string titlebarDoubleClick: "zoom"
         property bool canMinimize: true
         function inspect(i) {
