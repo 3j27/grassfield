@@ -153,15 +153,13 @@ Variants {
             id: blurRegion
             item: holder
             radius: {
-                switch (Popups.kind) {
-                case "forcequit":
-                case "confirm":
-                case "appabout":
-                case "notice":
-                    return Tokens.radiusAlert;
-                case "nowplaying":
+                // A dialog states the corner it draws (an alert's radius.alert, a sheet's radius.sheet: Force Quit, an app's About):
+                // the blur takes it, so its corners are the glass's own (ADR-0039 step 4, G2).
+                const dialog = holder.item as Dialog;
+                if (dialog)
+                    return dialog.cornerRadius;
+                if (Popups.kind === "nowplaying")
                     return Tokens.quicksettingsRadiusTile;
-                }
                 return Tokens.radiusMenu;
             }
 
