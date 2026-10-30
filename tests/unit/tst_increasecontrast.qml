@@ -6,7 +6,8 @@ import Grassfield.Ui
 // slider's track above its fill, the rimmed capsules of app windows; the settings-row pop-up outlines its chevron disc, never a box
 // around its value (the value starts at the pop-up's edge, so a box cut into its first letter: "Icon theme" read "|con theme").
 // The switches, sliders and capsules are judged on what they render (grabImage), not on their properties: a slider's fill once
-// covered the outline its track drew, and a knobless slider at its end changed no pixel.
+// covered the outline its track drew, and a knobless slider at its end changed no pixel. With the setting off, nothing carries
+// the outline (a slider's overlay or a knob's border left on would read as a heavier control).
 TestCase {
     id: tc
 
@@ -71,6 +72,24 @@ TestCase {
             && Qt.colorEqual(rect.border.color, Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity));
     }
 
+    // Every visible rectangle of `control` (the control itself included: a RimmedCapsule is one) that carries the outline: a
+    // track, a knob, the slider's overlay, a bezel, a disc. The slider's knob is left out: it always draws its own edge in the
+    // shadow colour at the border opacity, which is the outline's colour in the light appearance (Increase Contrast darkens it).
+    function outlines(control) {
+        let n = 0;
+        const stack = [control];
+        while (stack.length > 0) {
+            const it = stack.shift();
+            const rectangle = it.border !== undefined && it.radius !== undefined;
+            const sliderKnob = it.width === Tokens.controlSliderKnobWidth && it.height === Tokens.controlSliderKnob;
+            if (it.visible && rectangle && !sliderKnob && outlined(it))
+                n++;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        return n;
+    }
+
     function changedPixels(a, b, width, height) {
         let n = 0;
         for (let y = 0; y < height; y++) {
@@ -80,6 +99,33 @@ TestCase {
             }
         }
         return n;
+    }
+
+    function test_nothingIsOutlinedWithTheSettingOff_data() {
+        const rows = [];
+        const controls = [
+            {tag: "toggle off", control: toggleOff},
+            {tag: "toggle on", control: toggleOn},
+            {tag: "switch off", control: switchOff},
+            {tag: "slider", control: slider},
+            {tag: "knobless slider", control: knobless},
+            {tag: "knobless slider at its end", control: knoblessFull},
+            {tag: "rimmed capsule", control: capsule},
+            {tag: "form pop-up", control: form},
+            {tag: "row pop-up", control: rowPopUp}
+        ];
+        for (const dark of [false, true]) {
+            for (const c of controls)
+                rows.push({tag: c.tag + (dark ? ", dark" : ", light"), control: c.control, dark: dark});
+        }
+        return rows;
+    }
+
+    function test_nothingIsOutlinedWithTheSettingOff(data) {
+        Appearance.dark = data.dark;
+        compare(outlines(data.control), 0, data.tag + ": an outline with Increase Contrast off");
+        Appearance.increaseContrast = true;
+        verify(outlines(data.control) >= 1, data.tag + ": no outline with Increase Contrast on");
     }
 
     function test_switchesSlidersAndCapsulesShowTheOutline_data() {
@@ -153,15 +199,33 @@ TestCase {
         return [{tag: "toggle", control: toggleOff}, {tag: "switch", control: switchOff}];
     }
 
+    // grabImage(item) crops the window at item.x and item.y, which are relative to the item's parent: a knob inside its control
+    // is judged on the whole scene's image, in its own rectangle mapped to the scene (the knob's edges included).
+    function changedPixelsOf(item, before, after) {
+        const p = item.mapToItem(tc, 0, 0);
+        let n = 0;
+        for (let y = Math.floor(p.y); y < Math.ceil(p.y + item.height); y++) {
+            for (let x = Math.floor(p.x); x < Math.ceil(p.x + item.width); x++) {
+                if (!Qt.colorEqual(before.pixel(x, y), after.pixel(x, y)))
+                    n++;
+            }
+        }
+        return n;
+    }
+
     function test_switchKnobsAreOutlined(data) {
         Appearance.dark = false;
         wait(Tokens.motionSlow);
         const knob = knobOf(data.control);
         verify(knob !== null, "knob of the " + data.tag);
-        const before = grabImage(knob);
+        const p = knob.mapToItem(tc, 0, 0);
+        const c = data.control.mapToItem(tc, 0, 0);
+        verify(p.y >= c.y && p.y + knob.height <= c.y + data.control.height, "the knob lies inside the " + data.tag);
+        verify(p.y + knob.height <= tc.height, "the knob lies inside the scene");
+        const before = grabImage(tc);
         Appearance.increaseContrast = true;
-        const after = grabImage(knob);
-        const n = changedPixels(before, after, Math.floor(knob.width), Math.floor(knob.height));
+        const after = grabImage(tc);
+        const n = changedPixelsOf(knob, before, after);
         verify(n >= knob.width, data.tag + " knob: " + n + " pixels changed");
     }
 
