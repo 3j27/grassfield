@@ -217,8 +217,16 @@ void CupsPrintSystem::capabilities(const QString &printer, QObject *context, Cap
                         caps.media.append(m);
                     }
                 }
+                // The user's own default for this printer (lpoptions), else the printer's (media-default): libcups 2.4's
+                // cupsGetDestMediaDefault reads only the first and falls back to US Letter, whatever the printer says.
+                if (const char *own = cupsGetOption(CUPS_MEDIA, dest->num_options, dest->options))
+                    caps.defaultMedia = fromUtf8(own);
+                if (caps.defaultMedia.isEmpty()) {
+                    if (ipp_attribute_t *given = cupsFindDestDefault(http, dest, info, CUPS_MEDIA))
+                        caps.defaultMedia = fromUtf8(ippGetString(given, 0, nullptr));
+                }
                 cups_size_t size;
-                if (cupsGetDestMediaDefault(http, dest, info, CUPS_MEDIA_FLAGS_DEFAULT, &size))
+                if (caps.defaultMedia.isEmpty() && cupsGetDestMediaDefault(http, dest, info, CUPS_MEDIA_FLAGS_DEFAULT, &size))
                     caps.defaultMedia = fromUtf8(size.media);
                 caps.twoSided = cupsCheckDestSupported(http, dest, info, CUPS_SIDES, CUPS_SIDES_TWO_SIDED_PORTRAIT) != 0;
                 caps.color = cupsCheckDestSupported(http, dest, info, CUPS_PRINT_COLOR_MODE, CUPS_PRINT_COLOR_MODE_COLOR) != 0;

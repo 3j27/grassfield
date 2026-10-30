@@ -22,9 +22,12 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <cups/cups.h>
+
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -713,6 +716,137 @@ TEST_F(PrintTest, CloseTakesTheSheetAway)
     EXPECT_TRUE(printer->answer(chosen.first().id, 0, chosen.first().choices)) << "gone: ignored";
     ASSERT_TRUE(waitFor([&] { return reply->done; }));
     EXPECT_NE(reply->response, 0u);
+}
+
+// The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
+// queue GF_TEST_CUPS_PRINTER writes its jobs to a file, its PPD offering A4, US Letter and A5, two sides and colour; skipped
+// elsewhere. The printers listed (the default flagged, its name and place), what it supports read off the GUI thread, a job sent
+// with its options (the scheduler keeps them on the job), and a printer CUPS does not know refused.
+TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
+{
+    const QString queue = qEnvironmentVariable("GF_TEST_CUPS_PRINTER");
+    if (queue.isEmpty())
+        GTEST_SKIP() << "needs tests/integration/print_cups.sh (a scratch cupsd)";
+    CupsPrintSystem system;
+    QObject context;
+    const auto wait = [](const std::function<bool()> &done) {
+        QDeadlineTimer deadline(20000);
+        while (!done() && !deadline.hasExpired())
+            QTest::qWait(20);
+        return done();
+    };
+
+    bool listed = false, ok = false;
+    QList<print::Destination> found;
+    system.destinations(&context, [&](const QList<print::Destination> &list, bool answered) {
+        found = list;
+        ok = answered;
+        listed = true;
+    });
+    ASSERT_TRUE(wait([&] { return listed; }));
+    EXPECT_TRUE(ok);
+    const auto it = std::find_if(found.cbegin(), found.cend(), [&](const print::Destination &d) { return d.name == queue; });
+    ASSERT_NE(it, found.cend()) << "the queue is listed";
+    EXPECT_TRUE(it->isDefault);
+    EXPECT_EQ(it->displayName, QStringLiteral("Office Printer"));
+    EXPECT_EQ(it->location, QStringLiteral("Hall"));
+
+    bool read = false;
+    print::Capabilities caps;
+    system.capabilities(queue, &context, [&](const print::Capabilities &c) {
+        caps = c;
+        read = true;
+    });
+    ASSERT_TRUE(wait([&] { return read; }));
+    EXPECT_TRUE(caps.known);
+    QStringList names;
+    for (const print::Media &m : caps.media)
+        names << m.name;
+    EXPECT_TRUE(names.contains(QStringLiteral("iso_a4_210x297mm"))) << names.join(QLatin1Char(' ')).toStdString();
+    EXPECT_TRUE(names.contains(QStringLiteral("na_letter_8.5x11in")));
+    EXPECT_TRUE(names.contains(QStringLiteral("iso_a5_148x210mm")));
+    EXPECT_EQ(caps.defaultMedia, QStringLiteral("iso_a4_210x297mm"));
+    const print::Media a4 = print::findMedia(caps.media, QStringLiteral("iso_a4_210x297mm"));
+    EXPECT_NEAR(a4.widthMm, 210, 0.5);
+    EXPECT_NEAR(a4.heightMm, 297, 0.5);
+    EXPECT_GT(a4.leftMm, 0) << "the PPD's printable area";
+    EXPECT_FALSE(a4.displayName.isEmpty());
+    EXPECT_TRUE(caps.twoSided);
+    EXPECT_TRUE(caps.color);
+    EXPECT_GT(caps.maxCopies, 1);
+
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    QFile document(dir.filePath(QStringLiteral("doc.pdf")));
+    ASSERT_TRUE(document.open(QIODevice::WriteOnly));
+    document.write("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n");
+    document.close();
+    const int fd = ::open(QFile::encodeName(document.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(fd, 0);
+    bool sent = false;
+    QString error = QStringLiteral("not answered");
+    const PrintSystem::Options options{{QStringLiteral("copies"), QStringLiteral("2")},
+                                       {QStringLiteral("multiple-document-handling"), QStringLiteral("separate-documents-collated-copies")},
+                                       {QStringLiteral("media"), QStringLiteral("iso_a5_148x210mm")},
+                                       {QStringLiteral("sides"), QStringLiteral("two-sided-long-edge")},
+                                       {QStringLiteral("print-color-mode"), QStringLiteral("monochrome")}};
+    system.submit(queue, QStringLiteral("Grassfield test page"), options, fd, &context, [&](const QString &why) {
+        error = why;
+        sent = true;
+    });
+    ASSERT_TRUE(wait([&] { return sent; }));
+    EXPECT_TRUE(error.isEmpty()) << error.toStdString();
+
+    // The job as the scheduler keeps it (its newest on the queue): the name and the options sent.
+    cups_job_t *jobs = nullptr;
+    const int count = cupsGetJobs2(CUPS_HTTP_DEFAULT, &jobs, queue.toUtf8().constData(), 0, CUPS_WHICHJOBS_ALL);
+    ASSERT_GT(count, 0);
+    int newest = 0;
+    QString title;
+    for (int i = 0; i < count; ++i) {
+        if (jobs[i].id > newest) {
+            newest = jobs[i].id;
+            title = QString::fromUtf8(jobs[i].title);
+        }
+    }
+    cupsFreeJobs(count, jobs);
+    EXPECT_EQ(title, QStringLiteral("Grassfield test page"));
+    char uri[1024];
+    httpAssembleURIf(HTTP_URI_CODING_ALL, uri, sizeof uri, "ipp", nullptr, "localhost", 0, "/printers/%s", queue.toUtf8().constData());
+    ipp_t *request = ippNewRequest(IPP_OP_GET_JOB_ATTRIBUTES);
+    ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_URI, "printer-uri", nullptr, uri);
+    ippAddInteger(request, IPP_TAG_OPERATION, IPP_TAG_INTEGER, "job-id", newest);
+    ipp_t *response = cupsDoRequest(CUPS_HTTP_DEFAULT, request, "/");
+    ASSERT_NE(response, nullptr) << cupsLastErrorString();
+    const auto keyword = [response](const char *name) {
+        ipp_attribute_t *a = ippFindAttribute(response, name, IPP_TAG_ZERO);
+        return a ? QString::fromUtf8(ippGetString(a, 0, nullptr)) : QString();
+    };
+    ipp_attribute_t *copies = ippFindAttribute(response, "copies", IPP_TAG_INTEGER);
+    EXPECT_EQ(copies ? ippGetInteger(copies, 0) : 0, 2);
+    EXPECT_EQ(keyword("sides"), QStringLiteral("two-sided-long-edge"));
+    EXPECT_EQ(keyword("print-color-mode"), QStringLiteral("monochrome"));
+    EXPECT_EQ(keyword("media"), QStringLiteral("iso_a5_148x210mm"));
+    ippDelete(response);
+
+    // A printer CUPS does not know: refused, the document closed.
+    const int other = ::open(QFile::encodeName(document.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    sent = false;
+    system.submit(QStringLiteral("NoSuchPrinter"), QStringLiteral("x"), {}, other, &context, [&](const QString &why) {
+        error = why;
+        sent = true;
+    });
+    ASSERT_TRUE(wait([&] { return sent; }));
+    EXPECT_FALSE(error.isEmpty());
+    EXPECT_EQ(::fcntl(other, F_GETFD), -1) << "the document's descriptor was closed";
+    bool none = false;
+    print::Capabilities unknown;
+    system.capabilities(QStringLiteral("NoSuchPrinter"), &context, [&](const print::Capabilities &c) {
+        unknown = c;
+        none = true;
+    });
+    ASSERT_TRUE(wait([&] { return none; }));
+    EXPECT_FALSE(unknown.known);
 }
 
 #include "tst_print.moc"

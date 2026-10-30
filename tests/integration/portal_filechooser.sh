@@ -42,14 +42,14 @@ name=org.freedesktop.impl.portal.desktop.grassfield
 unit=$pk/systemd/grassfield-portal.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser, Access and AppChooser (D-5)"
-check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;" "$2" && grep -qx "Name=$1" "$3" &&
+desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser, Access, AppChooser (D-5) and Print (D-7)"
+check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.Print;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal" "$3" && grep -qx "SystemdService=grassfield-portal.service" "$3" &&
   grep -qx "BusName=$1" "$4" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-portal" "$4"' _ "$name" \
   "$pk/xdg/xdg-desktop-portal/portals/grassfield.portal" "$pk/dbus/$name.service" "$unit"
-desc="the session's routing sends FileChooser, Access and AppChooser to grassfield, then gtk"
+desc="the session's routing sends FileChooser, Access, AppChooser and Print to grassfield, then gtk"
 check bash -c 'grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Access=grassfield;gtk" "$1" &&
-  grep -qx "org.freedesktop.impl.portal.AppChooser=grassfield;gtk" "$1"' _ \
+  grep -qx "org.freedesktop.impl.portal.AppChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Print=grassfield;gtk" "$1"' _ \
   "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
 desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened, every place the user may write writable (4b-12)"
 check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME" \
