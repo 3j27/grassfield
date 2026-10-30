@@ -55,7 +55,9 @@ CATALOG = {
 def tr(text):
     lang = next((os.environ[v] for v in ("GRASSFIELD_LANG", "LC_ALL", "LC_MESSAGES", "LANG") if os.environ.get(v)), "")
     return CATALOG.get(lang.partition("_")[0].partition(".")[0].partition("@")[0], {}).get(text, text)
-ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
+# Checked with fullmatch: `$` also matches before a trailing newline, so an address "0x1\n" passed into the Lua expression
+# below (tests/fuzz/fuzz_helpers.py session-end, seed 1, iteration 19129 of 20 000).
+ADDRESS = re.compile(r"0x[0-9a-fA-F]{1,16}")
 POLL = 0.25
 TIMED_OUT = 124  # returncode of a helper that did not answer in time
 SETTLE_EMPTY = 2  # consecutive empty window lists before the windows count as gone
@@ -105,7 +107,7 @@ def windows():
 
 def close_windows(open_windows):
     for address, _cls, _title in open_windows:
-        if ADDRESS.match(address):  # interpolated into a Lua expression below: nothing but a hex address passes
+        if ADDRESS.fullmatch(address):  # interpolated into a Lua expression below: nothing but a hex address passes
             run(["hyprctl", "dispatch", 'hl.dsp.window.close({ window = "address:%s" })' % address])
 
 
