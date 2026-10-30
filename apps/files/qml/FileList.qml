@@ -461,7 +461,7 @@ FocusScope {
                     }
                     collapseOnRelease = row.selected && mods === 0;
                     if (!row.selected || mods !== 0)
-                        root.model.select(row.index, mods);
+                        root.model.select(row.index, mods, true);
                 }
                 onPositionChanged: event => {
                     if (mouse.bandStart && pressed && event.buttons === Qt.LeftButton)
@@ -470,13 +470,13 @@ FocusScope {
                 onReleased: event => {
                     if (mouse.bandStart) {
                         if (!root.banding)
-                            root.model.select(row.index, mouse.pressModifiers);
+                            root.model.select(row.index, mouse.pressModifiers, true);
                         root.banding = false;
                         mouse.bandStart = false;
                         return;
                     }
                     if (collapseOnRelease && !drag.active)
-                        root.model.select(row.index, 0);
+                        root.model.select(row.index, 0, true);
                     collapseOnRelease = false;
                 }
                 // A band whose row went away (scrolled far past the cache) or whose press was taken ends there.

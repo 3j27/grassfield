@@ -83,8 +83,8 @@ Item {
             wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
             text: root.info.text ?? ""
             color: Appearance.colors.text
-            selectedTextColor: Appearance.colors.accentText
-            selectionColor: Appearance.colors.accent
+            selectedTextColor: Appearance.highlightText
+            selectionColor: Appearance.highlight
             font.family: Tokens.typographyMonoFamily
             font.pixelSize: Tokens.previewCodeFontSize * root.factor
         }

@@ -106,8 +106,12 @@ TestCase {
                 listing.selectedCount = n;
                 listing.selectionChanged();
             }
-            function select(row: int, modifiers: int): void {
+            function select(row: int, modifiers: int, pointer: bool): void {
                 const single = listing.chooser.single === true;
+                // FolderModel::select: a plain click on a panel's dimmed item does nothing.
+                const plain = single || !(modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                if (pointer && plain && Object.keys(listing.chooser).length > 0 && row >= 0 && row < listing.count && listing.get(row).dimmed)
+                    return;
                 for (let i = 0; i < listing.count; i++) {
                     const on = i === row ? !listing.get(i).dimmed : (!single && (modifiers & Qt.ControlModifier) ? listing.get(i).selected : false);
                     listing.setProperty(i, "selected", on);
@@ -239,6 +243,9 @@ TestCase {
             const s = String(target);
             if (s.startsWith("smb:"))
                 return [{label: "share", url: target}];
+            // FilesApp's one segment for the Applications location.
+            if (s.startsWith("grassfield-apps:"))
+                return [{label: "Applications", url: target}];
             const parts = s.substring("file://".length).split("/").filter(p => p !== "");
             const out = [];
             let at = "file://";
@@ -467,6 +474,7 @@ TestCase {
     // Every test starts with a disk that answers (a test that fails half-way must not leave a folder hung for the next).
     function cleanup(): void {
         fakeManager.testAnswer = "";
+        fakeApp.viewMode = "icons";
         test.slowApplications = false;
         fakeHost.slow = [];
     }
@@ -919,6 +927,39 @@ TestCase {
         compare(sheet.fieldText, "/");
     }
 
+    // The late-focus clock starts at the first frame, not when the window is made visible: a fresh process can take seconds
+    // to draw it, and the panel then got the keyboard "late" though it had just appeared (integrator nested pass of
+    // f9a25ce, follow-up 2).
+    function test_the_late_focus_clock_starts_at_the_first_frame(): void {
+        const request = test.request({currentFolder: "file:///home/u/Documents", folderKinds: {"file:///home/u/Documents": 2}});
+        const panel = createTemporaryObject(panelComponent, test, {request: request});
+        verify(panel !== null);
+        panel.visible = true;
+        compare(panel.shownAt, 0, "not when made visible");
+        verify(waitForRendering(panel.contentItem, 2000));
+        tryVerify(() => panel.shownAt > 0, 2000, "at the first frame");
+    }
+
+    // A click that brings the panel the keyboard (a click to focus: the compositor delivers the press, then the keyboard)
+    // holds nothing, however late: the user is looking at it. Every press in the panel is noted, held or not.
+    function test_a_click_to_focus_holds_nothing(): void {
+        const request = test.request({currentFolder: "file:///home/u/Documents", folderKinds: {"file:///home/u/Documents": 2}});
+        // Shown long ago, a press just now, and not yet active (offscreen Qt activates a window as it shows it).
+        const panel = createTemporaryObject(panelComponent, test, {request: request, shownAt: 1, pressedAt: Date.now()});
+        verify(panel !== null);
+        verify(!panel.everActive);
+        panel.show();
+        panel.requestActivate();
+        // `active` reads true before the activation's handler has run: wait for the handler.
+        tryVerify(() => panel.everActive, 2000, "the panel got the keyboard");
+        verify(!panel.keysHeld, "the click brought it the keyboard");
+        const before = panel.pressedAt;
+        wait(5);
+        mousePress(panel.contentItem, 10, 10);
+        mouseRelease(panel.contentItem, 10, 10);
+        verify(panel.pressedAt > before, "the press is noted while nothing is held");
+    }
+
     function test_a_panel_that_gets_the_keyboard_late_waits_for_a_click(): void {
         const panel = test.openPanel({currentFolder: "file:///home/u/Documents"}, {shownAt: 1});
         verify(panel.keysHeld);
@@ -1039,6 +1080,107 @@ TestCase {
 
     // The Applications listing loads after the panel opened (the real FolderModel lists on a thread): the last choice is
     // selected when it ends (review of step 5b, m7 a).
+    // A long name is cut in its middle to fit the line: its extension and the closing quote stay; an address reads decoded
+    // (integrator nested pass of f9a25ce, NIT).
+    function test_the_message_keeps_the_names_end(): void {
+        const long = "a-very-long-document-name-that-goes-on-and-on-".repeat(6) + "end.txt";
+        const panel = test.openPanel(test.appRequest({filename: long}));
+        compare(panel.message, "Choose an application to open the document “" + long + "”.", "the whole sentence (its accessible name)");
+        verify(panel.shownMessage.endsWith("end.txt”."), panel.shownMessage);
+        verify(panel.shownMessage.startsWith("Choose an application to open the document “a-very"), panel.shownMessage);
+        verify(panel.shownMessage.indexOf("…") > 0, "cut in the middle");
+        verify(panel.shownMessage.length < panel.message.length);
+        const uri = test.openPanel(test.appRequest({filename: "", uri: "https://example.org/My%20Notes/a%E2%80%AEb.txt"}));
+        compare(uri.message, "Choose an application to open “https://example.org/My Notes/a<U+202E>b.txt”.", "decoded, and a bidi control written out");
+        const malformed = test.openPanel(test.appRequest({filename: "", uri: "https://example.org/100%"}));
+        compare(malformed.message, "Choose an application to open “https://example.org/100%”.", "a malformed escape stays as it is");
+    }
+
+    // In the column view, the panel reads the shown column's listing: the click there enables Open, and the last choice is
+    // selected in it (integrator nested pass of f9a25ce, follow-up 1: the column view's active column stayed unset when the
+    // panel started in its location, so the panel read another listing; Open stayed disabled).
+    function test_the_column_view_is_the_panels_listing(): void {
+        // Files' own view setting (a Choose Application panel keeps no view of its own).
+        fakeApp.viewMode = "columns";
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        compare(tab.viewMode, "columns");
+        tryVerify(() => tab.view && tab.view.activeModel !== null, 2000, "the shown column is the active listing");
+        verify(tab.activeFolder === tab.view.activeModel, "the panel reads the column");
+        const m = tab.activeFolder;
+        tryVerify(() => m.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "the last choice is selected in the column");
+        m.select(test.rowOf(m, "org.gnome.TextEditor"), 0);
+        verify(panel.acceptEnabled, "Open");
+        panel.pressDefault();
+        compare(fakeAppHost.answers.length, 1);
+        compare(fakeAppHost.answers[0].map.choice, "org.gnome.TextEditor");
+        fakeApp.viewMode = "icons";
+    }
+
+    // A view chosen in the panel: the column made for it, already listed, takes the last choice (it never loads, so only
+    // the change of listing tells the panel).
+    function test_the_last_choice_in_a_view_chosen_in_the_panel(): void {
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tryVerify(() => tab.folder.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "selected in the icon view");
+        tab.setViewMode("columns");
+        tryVerify(() => tab.view && tab.view.activeModel !== null, 2000, "the column view");
+        const m = tab.activeFolder;
+        verify(m !== tab.folder, "another listing");
+        compare(m.loading, false);
+        tryVerify(() => m.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "the last choice is selected in the column");
+    }
+
+    // In each view, a click and a right-click on a dimmed application keep the application selected (FolderModel::select's
+    // pointer; review of step 5c's PR, NIT 3).
+    function test_a_click_on_a_dimmed_item_in_each_view(): void {
+        const half = {icons: Tokens.filesIconSize / 2, list: Tokens.filesListRowHeight / 2, columns: Tokens.filesColumnRowHeight / 2, gallery: 0};
+        for (const mode of ["icons", "list", "columns", "gallery"]) {
+            const panel = test.openPanel(test.appRequest({}));
+            const tab = test.findTab(panel.contentItem);
+            tryVerify(() => tab.isApplications, 2000);
+            tab.setViewMode(mode);
+            tryVerify(() => tab.view && tab.view.rowPosition && (mode !== "columns" || tab.view.activeModel !== null), 2000, mode);
+            const m = tab.activeFolder;
+            tryVerify(() => test.rowOf(m, "org.example.Other") >= 0, 2000, mode + ": listed");
+            tryVerify(() => tab.view.width > 0 && tab.view.height > 0, 2000, mode + ": laid out");
+            verify(waitForRendering(panel.contentItem, 2000));
+            const other = test.rowOf(m, "org.example.Other");
+            verify(m.get(other).dimmed, mode);
+            const click = (row, button) => {
+                const p = tab.view.rowPosition(m, row);
+                mouseClick(panel.contentItem, p.x, p.y - half[mode], button);
+            };
+            // The click lands on its row: on an application it may open, it selects it.
+            click(test.rowOf(m, "org.kde.kate"), Qt.LeftButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.kde.kate")], mode + ": a click selects");
+            m.select(test.rowOf(m, "org.gnome.TextEditor"), 0);
+            click(other, Qt.LeftButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.gnome.TextEditor")], mode + ": a click on a dimmed one keeps the selection");
+            click(other, Qt.RightButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.gnome.TextEditor")], mode + ": and so does a right-click");
+            panel.menuLayer.close();
+            m.select(other, 0);
+            compare(m.selectedRows(), [], mode + ": a key that lands there selects nothing");
+            panel.cancel();
+        }
+    }
+
+    // The last choice never replaces an application the user selected while the listing loaded.
+    function test_the_last_choice_never_over_a_choice(): void {
+        test.slowApplications = true;
+        const panel = test.openPanel(test.appRequest({}));
+        const tab = test.findTab(panel.contentItem);
+        tryVerify(() => tab.isApplications, 2000);
+        tab.folder.select(test.rowOf(tab.folder, "org.gnome.TextEditor"), 0);
+        compare(tab.folder.selectedCount, 1);
+        tab.folder.loading = false;
+        wait(50);
+        compare(tab.folder.expected.length, 0, "the user's choice stays");
+    }
+
     function test_the_last_choice_once_the_listing_has_loaded(): void {
         test.slowApplications = true;
         const panel = test.openPanel(test.appRequest({}));
@@ -1063,11 +1205,17 @@ TestCase {
         verify(files !== undefined && apps !== undefined && files !== apps, "two panels");
         compare(files.kind, "open");
         compare(apps.kind, "application");
+        compare(manager.order, ["1", "app:1"], "the order they opened (an object would list FileChooser's integer key first anyway)");
+        fakeHost.opened(2, test.request({currentFolder: "file:///home/u/Documents", places: test.places,
+                                         folderKinds: {"file:///home/u/Documents": 2}}));
+        compare(manager.order, ["1", "app:1", "2"]);
+        fakeHost.closed(2);
         fakeAppHost.applicationsChanged(1, ["org.example.Other"]);
         compare(apps.recommended, ["org.example.Other"]);
         compare(files.recommended, []);
         fakeAppHost.closed(1);
         verify(manager.panels[manager.key(1, true)] === undefined);
+        compare(manager.order, ["1"]);
         verify(manager.panels[manager.key(1, false)] === files, "FileChooser's request 1 keeps its panel");
         fakeHost.closed(1);
         compare(Object.keys(manager.panels).length, 0);

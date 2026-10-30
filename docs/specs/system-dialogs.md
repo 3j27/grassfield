@@ -237,7 +237,25 @@ ADR-0035 5b-1 to 5b-7):
   never listed or answered), and `tests/integration/portal_filechooser.sh` scenario 8 through the real frontend's OpenFile: the
   panel answers the type's default application, the frontend starts it with the document and counts the choice; Cancel starts
   nothing.
-- Not yet: Files' own Open With > Other… and KIO's "no application" notice as this panel (step 5c, 5b-7).
+
+Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
+- OW2 Files' Open With, in the item menu and the File menu, lists the applications for the selected files' type, then Other…
+  (Other… alone when none); Other… opens the same Choose Application panel, modal over the Files window the user worked in,
+  for the selection ("Choose an application to open the document “X”.", or "… the N selected documents."); the application
+  chosen opens the documents; Cancel and Esc open nothing. No "Always Open With" box (5c-4).
+- OW3 A document whose type has no application (KIO's question in Files): Finder's alert, "There is no application set to open
+  the document “X”.", with Choose Application… (the default, Return) and Cancel (Esc); Choose Application… opens the panel,
+  and the application chosen opens the document. A job that ends takes its alert or panel away. No store button until
+  Grassfield Store can search by document type (5c-3).
+- The panel's line cuts a long name in its middle (its extension and the closing quote stay) and shows an address decoded,
+  without its password.
+- Every selected document goes to the application chosen, each as one argument (KIO starts it; no shell reads a name).
+- A-OW2: `tests/unit/files/tst_applicationchooser.cpp` (Other… with two documents, one named with a shell's characters, started
+  for real), `tests/unit/files/tst_kiodialogs.cpp` (a real OpenUrlJob for a type
+  with no application: the alert, the panel, the chosen application started with the document; Cancel on either; a job killed
+  under its panel), `tests/unit/tst_filesbrowser.qml` (Other…, the panel over the browser window), `tst_filesglobalmenu.qml`,
+  `tst_fileskiosheets.qml`, `tst_filepanel.qml` (a click and a right-click on a dimmed item in each view); the look in a nested
+  session is the integrator's.
 
 ## 3. Screen-sharing picker (P10; ADR-0035 D-6)
 
@@ -694,8 +712,8 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
     lists the chain as text: subject, issuer, validity, SHA-256, the problems found): Cancel is the default button (Return
     and Esc cancel); Continue accepts for 30 minutes, KIO's "Current Session only"; a permanent rule ("Forever") only when
     the user ticks "Always trust “host”", shown with the certificate and unticked at every opening (ADR-0035 4a-6);
-  - `OpenWithHandlerInterface`: a notice that names the document and points to Open With until step 5's Choose Application
-    sheet (section 2) replaces it (4a-5);
+  - `OpenWithHandlerInterface`: Finder's alert for a type with no application, then the Choose Application panel (section 2,
+    OW3; 4a-5, 5c-3);
   - `UntrustedProgramHandlerInterface`: refuses with a notice (Files' `LaunchGuard` decides first and never hands an
     executable to KIO, `docs/specs/security.md` § Files never runs what it opens; this is the second guard).
     `OpenOrExecuteFileInterface` has no installed header in KIO 6.31: Files never enables the job option that asks it (4a-4).

@@ -109,6 +109,7 @@ Item {
     }
 
     Rectangle {
+        id: headerLine
         y: 1 + Tokens.settingsSoundTableHeaderHeight
         width: parent.width
         height: 1
@@ -130,7 +131,7 @@ Item {
 
     Column {
         id: rows
-        y: 2 + Tokens.settingsSoundTableHeaderHeight
+        y: headerLine.y + headerLine.height
         width: parent.width
 
         Repeater {

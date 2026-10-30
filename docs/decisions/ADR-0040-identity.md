@@ -1,7 +1,7 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c); step 1 under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no
+#46, e16fa8c) and step 1a merged (pull request #52, a5488a6); step 1b under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no
 technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
@@ -127,7 +127,8 @@ and IQ-B3 here changes the palette only, not which controls read it.
     17:57 EDT; Europe/Amsterdam on 2026-12-21 08:47 and 16:28 CET from `zone.tab` (the review's own figures); Africa/Douala
     and Europe/Stockholm from `zone.tab`; America/Montreal through its link to America/Toronto; Arctic/Longyearbyen
     in polar night and polar day (the fixed hours); UTC (no point); and two explicit points for the short-day and
-    short-night rules. Without `zone.tab` (the first rule's behaviour) five checks fail, Amsterdam among them. An
+    short-night rules. With `zone1970.tab` alone (the first rule's behaviour: no `zone.tab`, no links) six checks fail,
+    Amsterdam and Montreal among them (re-checked for step 1b with a scratch zoneinfo directory holding that file only). An
     independent formula agrees within 3 minutes (the integrator's check); agreement with published times is NOT
     VERIFIED (no network here).
   - **Phases.** Dawn from 30 min before sunrise; Day from 90 min after sunrise; Evening from 90 min before sunset; Night
@@ -191,7 +192,18 @@ and IQ-B3 here changes the palette only, not which controls read it.
   About already do: the
   Grassfield-drawn picture of the computer (`DevicePicture`, by chassis), its model name, processor, memory, graphics,
   then "Grassfield Desktop 1.0" with the mark in the brand green, "More Info…" (opens Settings > General > About) and
-  "Built for Omarchy · based on Arch Linux" (§14 wording). Mockup: `mockups/b3-about.svg`.
+  "Built for Omarchy · based on Arch Linux" (§14 wording). Mockup: `mockups/b3-about.svg`. Its form (step 1b, chosen on
+  2026-10-29 when the step started, « Fenêtre de Réglages », the recommended option): Settings' own small window,
+  `grassfield-settings --about` (`apps/settings/qml/AboutWindow.qml`), of fixed size, in the titlebar-only style (role
+  "info"), mapped once hostname1 and lspci have answered (asynchronously: nothing waits on the GUI thread), at the latest
+  after `settings.aboutWindowRevealTimeout` (P-2, P-6). Settings becomes one instance per user (the review of ce69dc6,
+  MINOR 3; chosen on 2026-10-29, « Instance unique ici », recommended; Activity Monitor's AM1 pattern, ADR-0038 AD34): the
+  running Settings owns `org.grassfield.Settings` on the session bus, a second launch hands it `--section` or `--about`,
+  so there is one About window and one Settings window, in one process; More Info… brings that Settings window to
+  General > About, and the shell's Settings… and section links bring it to their page instead of opening a second one.
+  The shell's sheet (`shell/overlay/AboutPanel.qml`) and its popup kind are retired. Weighed: the
+  shell's own window or sheet (no window of its own in the Dock, the Overview and the switcher; macOS's About This Mac
+  is a window).
 - **App icons (IQ-B5, owner: C, own icons where the pack has none).** Grassfield's own icons where the pack has no system app
   of that role: Store, Activity Monitor and the Dock's Apps tile; Files, Settings and Preview keep the pack's drawings,
   as the owner ruled on 2026-10-23. The own icons follow one grammar: one tile (104 on the 128 grid, radius 23.4, which
@@ -504,7 +516,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 |---|---|---|---|
 | 0 | This ADR, the audit, the mockups, E39, STATE | — | integrator |
 | 1a | `DevicePicture` moves from the Settings app into `Grassfield.Ui` (so the shell can draw it), the Settings pages unchanged | — | reviewer; `ui_api.py` and `docs/specs/ui-api.md` |
-| 1b | About This Computer as a small window, computer first (ID-19) | step 1a | reviewer |
+| 1b | About This Computer as a small window, computer first (ID-19): Settings' own window (`grassfield-settings --about`), the shell's sheet retired | step 1a | reviewer |
 | 1c | The accent's name and the second green (IQ-B3 A) with the Settings tiles, the About tile (ID-11) | coordinate with ADR-0039 step 11 | reviewer; A2 |
 | 1d | The mark's places and the dialogs' symbols (IQ-B1 B) | — | reviewer |
 | 2 | Artworks: one component, `artwork.*` tokens (the four artworks, the Grassfield hills in four phases and two sets), the time-of-day rule (IQ-W1 C), the Settings > Wallpaper "Grassfield" section and its Time of Day / Automatic / Light / Dark choice, the Settings > Appearance thumbnail, A2 runs at every phase, the desktop following the appearance (ID-1, ID-14; IQ-W1 C, IQ-W2 C's artworks). Nothing in `shell/security`; the lock's output unchanged: `WallpaperArt` without a parameter keeps today's drawing, so `LockView.qml` (`:80`) is not edited before step 4a (review of ed21d46) | `shell/desktop` merged (today `WallpaperArt.qml` passes no parameter, so the desktop cannot show the choice before) | reviewer; F1 shots |
@@ -530,6 +542,14 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - **VERIFY on Hyprland 0.56.2:** changing `background_color` at run time (ID-2); whether a session lock is confirmed
   while the displays are off (IQ-T4 A with a delay). `misc:lockdead_screen_delay` exists (the integrator's check, review
   of b44d17e); the owner chose IQ-T5 A, so step 5's nested pass shows that only black is drawn during the delay.
+- **NOT VERIFIED (step 1b, nested pass):** About This Computer in the session: the window's look and size, the mark
+  in the brand green (the container's offscreen Qt 6.10 renders no `Icon`: MultiEffect draws nothing there), the shell
+  bringing an open window forward. That rests on Hyprland's window data carrying `xdgTag`, which
+  `tests/compositor/client_chrome.sh` already reads in the nested session. The single instance (review of ce69dc6): not
+  built or run in this container (no Qt development files); the nested pass checks Settings… and a section link with
+  Settings open, More Info… with Settings open on another pane, two quick About requests, and the window coming forward
+  without a token from the shell (`misc:focus_on_activate` is on). ASSUMPTION (macOS, from memory): About This Mac has no
+  title on its bar and only its close light enabled.
 - **VERIFY on the owner's machine:** that Arch's tzdata installs `zone1970.tab`, `zone.tab` and `tzdata.zi` under
   `/usr/share/zoneinfo` (they are in this container; IQ-W1 C reads them, and falls back to the fixed hours without
   them).
@@ -602,12 +622,51 @@ this ADR follows it, and any later pull request of either lane that meets one of
   - MAJOR 1, the time-of-day rule read `zone1970.tab` only, so aliased zones (the owner's Europe/Amsterdam, Africa/Douala,
     Stockholm, Oslo, Copenhagen) fell to the fixed hours: the rule now looks up `zone1970.tab`, then `zone.tab`, then
     the linked zone (`tzdata.zi`), and the probe checks Amsterdam, Douala, Stockholm, a link, the polar branch (which now
-    runs: Longyearbyen has a `zone.tab` row), UTC, and the new short-day and short-night rules (12 checks; without
-    `zone.tab`, 5 fail).
+    runs: Longyearbyen has a `zone.tab` row), UTC, and the new short-day and short-night rules (12 checks; with
+    `zone1970.tab` alone, 6 fail: corrected in step 1b, it said 5).
   - MINOR 2, the R12 argument covered SDDM only: Plymouth is now outside today's allowance and needs the owner's explicit
     go-ahead inside the L1 ADR (section 3, step 10).
   - NIT 3, step 9 says "nothing in `shell/security`"; NIT 4, the stale IQ-T5 wording is fixed; NIT 5, commit 135f0ef's
     author: not rewritten (no history rewrite), the later commits are authored as the owner.
+- **Opus re-review of 8a75435 (integrator, 2026-10-29): PASS, one NIT** (merged as a5488a6). The NIT, "five checks fail"
+  where the first rule (`zone1970.tab` alone) fails Montreal too, is fixed in step 1b: six (section 2 and the line above).
+- **Opus review of ce69dc6 (step 1b, pull request #55; integrator, 2026-10-29): PASS on code, four MINORs, two NITs.**
+  - MINOR 1, any lock failure kept About from opening, MINOR 3, More Info… opened a second Settings window when Settings
+    was open: Settings is one instance per user over the session bus (AM1's pattern), the lock file is gone.
+  - MINOR 2, lspci and `pacman -Q` ran on the GUI thread: shared queries; the window waits for hostname1 and lspci within
+    the same bound.
+  - MINOR 4, the retired `about` popup kind could still map an empty overlay: Popups refuses any kind its Overlay does not
+    draw (`shell/services/PopupKinds.js`, held to the Overlay by `tst_popupkinds.qml`, checked on the real Popups by
+    `lock_surfaces`).
+  - NITs: "Logiciel" in both places; tests for Esc and Ctrl+W, the hidden empty lines and the window lookup
+    (`Minimized.hasTag`).
+- **Opus re-review of c6cf328 (integrator, 2026-10-30): FAIL, one MAJOR, one MINOR, one NIT.** The four MINORs above
+  confirmed fixed.
+  - MAJOR 1, a second launch gave up after 2 s and opened its own Settings while the first was still starting (3.7 to
+    7.7 s under load): the hand-over is Activity Monitor's `claimOrHandOver` (up to 25 s; a launch leaves whatever the
+    answer and runs only when the name has no owner left). Reproduced with the real binary and a Settings window that takes
+    5 s to start: the old hand-over left two instances, the new one one.
+  - MINOR 2, nothing tested the single instance: `tests/unit/settings/tst_settingsinstance.cpp` (the name and its suffix,
+    the cleaning, the hand-over on a private dbus-daemon, a dev run beside the owner's), built by `build-direct.sh --tests`.
+  - NIT 3, `Backend::query` checks its allow-list only in dev: About's commands go through `Backend::readOnlyQuery`, which
+    checks it in every session (`tst_backend.cpp`).
+- **Opus re-review of 85c2c10 (integrator, 2026-10-30): PASS** (6 races on a private bus at load 8 to 13.5, no second
+  instance; a frozen Settings bounds a launch at 25 s per attempt). A MINOR left for a follow-up: a Settings that dies while
+  a launch waits on it answers NoReply, not "no owner", so that click was lost; the launch now retries whenever the name has
+  no owner after any error (`tst_settingsinstance.cpp`: the owner, this test binary run again, killed during the call).
+- **Nested pass of 85c2c10 (integrator, 2026-10-30): single instance PASS; FAIL scenario 6, one MINOR.**
+  - Scenario 6, the pointer resting on About's disabled (grey) zoom light opened the full tiling popover: the plugin posted
+    `tile-hover` for every `org.grassfield.*` window with app-drawn lights. A window of fixed size (minimum = maximum on both
+    axes, core `tiling::fixedSize`) now posts no `tile-hover` from its zoom light and `tile_popover` (Super+Ctrl+L) is
+    refused for it, on hover or click; the `hyprctl grassfield-tiling` reply lists such windows (`fixed`), and the Window
+    menu greys their Zoom, Enter Full Screen, Full Screen Tile and tiling items (Unzoom and Exit Full Screen stay); the
+    tiling keys refused them already (TL9). Tests: `TilingFixed` (core), `tst_windowtiling.qml`, `tst_appmenumodel.qml`
+    and the nested case `fixed` of `tests/compositor/tiling.sh` (About's hover and click: no event, no popup, its box kept).
+  - MINOR, in French About's processor wrapped to three lines: the window shows the processor's name alone (About This Mac
+    names the chip alone; the French thread count alone cut the model), shortened (`SysInfo.cpuShortName`: no "(R)",
+    "(TM)", "CPU", clock, generation prefix, integrated graphics or trailing "Processor"), on one line cut in the middle,
+    the full model name in a tooltip while the pointer rests on it when it was shortened or cut. General > About keeps the
+    thread count after the same short name.
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.

@@ -607,6 +607,8 @@ QtObject {
     readonly property int controlSegmentDividerHeight: 14
     // the tabs' hairline in the text colour at 0.23 (181 on 236) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property real controlSegmentDividerOpacity: 0.23
+    // the selected pill sits this far inside the track, on whole pixels, with a concentric radius; unchanged value, was a literal in SegmentedControl.qml (ADR-0039 step 3, the literals guard)
+    readonly property int controlSegmentPillInset: 2
     // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
@@ -674,14 +676,16 @@ QtObject {
     readonly property int panelAboutWidth: 340
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelForceQuitWidth: 380
+    // an app's icon in a Force Quit row: the menu row height less 6, unchanged value, was a literal offset in ForceQuitPanel.qml (ADR-0039 step 3, the literals guard)
+    readonly property int panelForceQuitIconSize: 18
+    // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
+    readonly property int panelAppearanceGlyphSize: 18
     // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelTileHeight: 63
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelPopupMargin: 6
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelStatusPopupWidth: 260
-    // estimate [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
-    readonly property int panelAboutLabelWidth: 100
     // F1 gap 6: 36-pt icon disk of a 2x1 module [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcIconButton: 36
     // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
@@ -1463,6 +1467,24 @@ QtObject {
     readonly property int settingsAboutNameSize: 26
     // the model name's baseline below the header's top (macOS 15 capture: 217.5 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
     readonly property real settingsAboutNameBaseline: 153.5
+    // estimate: About This Computer, a window of fixed size (ADR-0040 ID-19): macOS 26's About This Mac is about 280 wide (from memory, no capture); processor and graphics names on Linux run longer, so the width of the shell's former About sheet (panel.aboutWidth) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowWidth: 340
+    // estimate: the device picture below the title bar [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowPictureTop: 12
+    // estimate: the device picture at the mockup's share of the window (150 of 380), in the 101 x 61.5 proportion of settings.aboutPictureWidth [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowPictureWidth: 136
+    // estimate: 136 x 61.5 / 101 [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowPictureHeight: 83
+    // estimate: the model name below the picture, bold (the mockup: 20 in a 380 window) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowNameSize: Math.round(22 * Appearance.textScale)
+    // the labels end at this share of the width, right-aligned, and the values start a spacing.sm after it (the mockup; About This Mac's two columns) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property real settingsAboutWindowLabelColumn: 0.42
+    // estimate: the Grassfield mark before the product line, beside 11-pt text (the mockup: 14 beside 12) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowMarkSize: Math.round(14 * Appearance.textScale)
+    // estimate: About This Computer maps once hostname1 has named the computer and its chassis (ADR-0040 P-2), at the latest after this long with what it has (P-6), ms; hostnamed starts on demand, a few hundred ms when cold [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/audits/identity-2026-10-29/mockups/b3-about.svg]
+    readonly property int settingsAboutWindowRevealTimeout: 800
+    // lspci and pacman -Q for About This Computer and General > About, run as queries off the GUI thread (review of ce69dc6): the Backend's default query bound, ms (Backend::run, which they used, waited 3 s on the GUI thread) [ref: docs/decisions/ADR-0040-identity.md ID-19; docs/specs/settings.md]
+    readonly property int settingsAboutQueryTimeout: 5000
     // estimate: the screen bezel of About's device picture (Grassfield's own drawing; the macOS picture is Apple artwork) [ref: docs/audits/settings-parity-2026-10-26.md § About]
     readonly property string settingsDeviceBezel: "#1D1D1F"
     // estimate: the aluminium of About's device picture (Grassfield's own drawing) [ref: docs/audits/settings-parity-2026-10-26.md § About]
@@ -2007,6 +2029,8 @@ QtObject {
     readonly property int settingsDeviceLineWidth: 2
     // the device drawings' line in the text colour at 0.25 (185 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property real settingsDeviceLineOpacity: 0.25
+    // the smallest a drawn part of a picture gets (a device's foot, a thumbnail's window lights), so it never vanishes at a small scale; unchanged value, was a literal in DevicePicture.qml and AppearanceThumbnail.qml (ADR-0039 step 3, the literals guard)
+    readonly property int settingsPictureMinimumPart: 2
     // a finger of the gesture: a dot 9 across [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
     readonly property int settingsGestureDotSize: 9
     // a finger of the gesture in the accent at about 0.68 (80, 160, 255 on 247) [ref: docs/audits/settings-parity-2026-10-26.md § Mouse and Trackpad]
@@ -2070,6 +2094,8 @@ QtObject {
     readonly property int widgetSizeButtonWidth: 64
     // estimate: widgets v1, analog clock hand width [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetAnalogHandWidth: 3
+    // the analog clock's hour ticks at 12, 3, 6 and 9 (the others a hairline); unchanged value, was a literal in Clock.qml (ADR-0039 step 3, the literals guard)
+    readonly property int widgetAnalogTickWidth: 2
     // task spec: System widget sampling interval [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetSampleMs: 2000
     // estimate: widgets v1, secondary figure size [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]

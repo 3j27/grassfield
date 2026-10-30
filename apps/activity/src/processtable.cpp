@@ -206,6 +206,19 @@ std::vector<TableRow> ProcessTable::shownRows() const
     return rows;
 }
 
+std::vector<TableRow> ProcessTable::selectedRows() const
+{
+    std::vector<TableRow> rows;
+    QSet<RowId> taken;
+    for (const Entry &e : m_shown) {
+        if (!e.row || !m_selected.contains(rowId(*e.row)) || taken.contains(rowId(*e.row)))
+            continue;
+        taken.insert(rowId(*e.row));
+        rows.push_back(*e.row);
+    }
+    return rows;
+}
+
 int ProcessTable::currentRow() const
 {
     return m_current ? indexOf(*m_current) : -1;

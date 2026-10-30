@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Grassfield Store, steps 3b1 and 3b2: grassfield-store-run, the script the Store starts in Omarchy's terminal (ADR-0037
-# b.2; spec A6b's grassfield-store-run part): Omarchy's setups, and the AUR's two commands with their plan checked again. Never on a real machine: inside, it refuses to run unless it is root in a container with
+# Grassfield Store, steps 3b1, 3b2 and 3c part 3: grassfield-store-run, the script the Store starts in Omarchy's terminal
+# (ADR-0037 b.2; spec A6b's grassfield-store-run part): Omarchy's setups, the AUR's two commands with their plan checked
+# again, and Get Flatpak's omarchy-pkg-add flatpak (SD24). Never on a real machine: inside, it refuses to run unless it is root in a container with
 # the repository mounted at /src.
 #
 #   tests/integration/store_run.sh
@@ -451,6 +452,42 @@ mv "$O/install/base.away" "$O/install/omarchy-base.packages"
 op=$(newop); aurpins "$op"
 run "$op" "$(soon)" aur omarchy-pkg-drop example-tool; rc=$?
 expect "  and once they are back, example-tool -> exit 0" test "$rc" == 0
+
+say "Get Flatpak (step 3c part 3): omarchy-pkg-add flatpak only, pinned with omarchy-pkg-missing"
+recipe omarchy-pkg-add 'echo "pkg-add $*" >>"$HOME/marks/pkgadd"'
+flatpakpins() { # op [extra lines]
+  (cd "$O" && sha256sum bin/omarchy-pkg-add bin/omarchy-pkg-missing) >"$D/$1.pins"
+  (($# > 1)) && printf '%s\n' "${@:2}" >>"$D/$1.pins"
+  chown carol: "$D/$1.pins" && chmod 600 "$D/$1.pins"
+}
+for args in "flatpak omarchy-pkg-add" "flatpak omarchy-pkg-add gimp" "flatpak omarchy-pkg-add flatpak gimp" "flatpak omarchy-pkg-add -flatpak" \
+  "flatpak omarchy-pkg-add Flatpak" "flatpak omarchy-pkg-aur-add flatpak" "flatpak omarchy-install-game flatpak" \
+  "setup omarchy-pkg-add flatpak" "aur omarchy-pkg-add flatpak"; do
+  op=$(newop); flatpakpins "$op"
+  # shellcheck disable=SC2086 # the cases are word lists
+  run "$op" "$(soon)" $args; rc=$?
+  expect "refused: '$args' -> exit 2" test "$rc" == 2
+done
+expect "  none of them ran omarchy-pkg-add" test ! -e "$M/pkgadd"
+op=$(newop); flatpakpins "$op"
+run "$op" "$(soon)" flatpak omarchy-pkg-add flatpak; rc=$?
+expect "flatpak omarchy-pkg-add flatpak -> exit 0, the command ran with flatpak" \
+  bash -c "test $rc:$(exitfile "$op") == 0:0 && grep -qx 'pkg-add flatpak' $M/pkgadd"
+op=$(newop); (cd "$O" && sha256sum bin/omarchy-pkg-add) >"$D/$op.pins"; chown carol: "$D/$op.pins"; chmod 600 "$D/$op.pins"
+run "$op" "$(soon)" flatpak omarchy-pkg-add flatpak; rc=$?
+expect "pins without the omarchy-pkg-missing it calls -> exit 5, not run" bash -c "test $rc == 5 && test \$(wc -l <$M/pkgadd) == 1"
+op=$(newop); flatpakpins "$op"
+echo '# changed' >>"$O/bin/omarchy-pkg-add"
+run "$op" "$(soon)" flatpak omarchy-pkg-add flatpak; rc=$?
+expect "omarchy-pkg-add differs from its pin -> exit 5, Get Flatpak named, not run" \
+  bash -c "test $rc == 5 && test \$(wc -l <$M/pkgadd) == 1 && grep -q 'Getting Flatpak was checked against another version of Omarchy (bin/omarchy-pkg-add differs)' /tmp/run.out"
+sed -i '$d' "$O/bin/omarchy-pkg-add"
+qu list
+printf 'linux 6.17.1-1 -> 6.17.4-1\n' >"$T/qu-lines"
+op=$(newop); flatpakpins "$op"
+run "$op" "$(soon)" flatpak omarchy-pkg-add flatpak; rc=$?
+expect "pacman -Qu lists linux -> exit 4, not run" bash -c "test $rc:$(exitfile "$op") == 4:4 && test \$(wc -l <$M/pkgadd) == 1"
+rm -f "$T/qu"
 
 # The deny list: the helper's case list as it is (only the array of Omarchy's lists named otherwise), and the same answers
 # on the vectors the helper and the Store's C++ rule are held to.

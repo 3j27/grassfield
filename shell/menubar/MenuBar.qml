@@ -41,7 +41,7 @@ Scope {
                 bar.popup(kind);
         }
 
-        // Centered panels without a bar anchor: about, forcequit.
+        // Centered panels without a bar anchor: forcequit (Popups refuses a kind its Overlay does not draw).
         function panel(kind: string, screen: string): void {
             Popups.open(kind, screen, 0, 0, "center", {});
         }

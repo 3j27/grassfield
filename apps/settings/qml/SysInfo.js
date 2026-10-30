@@ -31,6 +31,25 @@ function cpu(text) {
     return {model: model, threads: model === "" ? 0 : threads};
 }
 
+// The processor's name as About This Computer shows it, on one line (integrator nested pass of 85c2c10: the full name
+// wrapped to three lines in French): the model name without the marks "(R)" and "(TM)", the word "CPU", the clock
+// ("@ 2.80GHz"), the generation prefix ("11th Gen"), the integrated graphics ("with Radeon Graphics", "w/ Radeon 780M
+// Graphics") and a trailing "Processor" ("8-Core Processor"). "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz" -> "Intel
+// Core i7-1165G7". The model name itself when nothing would be left.
+function cpuShortName(model) {
+    const full = String(model).trim().replace(/\s+/g, " ");
+    const short = full
+        .replace(/\((?:R|TM)\)/gi, "")
+        .replace(/^\d+(?:st|nd|rd|th) Gen\s+/i, "")
+        .replace(/\s*@\s*[\d.]+\s*[GM]Hz\b/i, "")
+        .replace(/\s+(?:with|w\/)\s.*\bGraphics\b.*$/i, "")
+        .replace(/\s+(?:\d+-Core\s+)?Processor$/i, "")
+        .replace(/\bCPU\b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    return short !== "" ? short : full;
+}
+
 // MemTotal of /proc/meminfo in bytes; 0 when absent. The page formats it with the UI locale (Qt.locale()).
 function memoryBytes(text) {
     const m = /^MemTotal:\s*(\d+)\s*kB/m.exec(String(text));

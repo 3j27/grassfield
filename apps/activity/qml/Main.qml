@@ -4,7 +4,8 @@ import Grassfield.Ui
 
 // Activity Monitor (ADR-0038 steps 2a and 2b; spec AM1 to AM19, AM5): the toolbar (the title with the view as its subtitle,
 // the five tabs, the search field) over the table of the tab's processes, and the tab's summary under it. App windows are
-// opaque (master-prompt 5.5). Step 2c adds Quit, Force Quit and Send Signal, 2d Inspect.
+// opaque (master-prompt 5.5). Step 2c: the Stop button and the action menu, Quit, Force Quit and Send Signal (AM50 to
+// AM56); 2d adds Inspect.
 Window {
     id: root
 
@@ -20,6 +21,10 @@ Window {
     readonly property alias tabs: tabs
     readonly property alias summary: summary
     readonly property alias networkNote: networkNote
+    readonly property alias stopButton: stopButton
+    readonly property alias moreButton: moreButton
+    readonly property alias actionMenu: actionMenu
+    readonly property alias sheets: sheets
 
     title: qsTr("Activity Monitor")
     width: root.backend.savedWidth > 0 ? root.backend.savedWidth : Tokens.activityWindowWidth
@@ -45,6 +50,32 @@ Window {
         root.backend.table.selectAll();
     }
 
+    // AM3, AM50, AM55: the action menu's items, as the row's context menu shows them.
+    function actionItems(): var {
+        const actions = root.backend.actions;
+        return [
+            {id: "quit", text: qsTr("Quit Process"), shortcut: "Ctrl+Alt+Q", enabled: actions.canQuit},
+            {id: "signal", text: qsTr("Send Signal to Process…"), enabled: actions.canSignal},
+            {separator: true},
+            {id: "copy", text: qsTr("Copy"), enabled: root.backend.table.selectedCount > 0}
+        ];
+    }
+
+    function runAction(id: string): void {
+        if (id === "quit")
+            sheets.openQuit();
+        else if (id === "signal")
+            sheets.openSignal();
+        else if (id === "copy")
+            root.copy();
+    }
+
+    // The action menu under its button, or the context menu at the pointer (`x`, `y` in the window).
+    function openActionMenu(x: real, y: real): void {
+        actionMenu.items = root.actionItems();
+        actionMenu.openAt(x, y);
+    }
+
     UnifiedToolbar {
         id: toolbar
         width: parent.width
@@ -54,6 +85,60 @@ Window {
         doubleClickAction: root.backend.titlebarDoubleClick
 
         trailing: [
+            // AM3: Stop (Quit Process) and the action menu, one glass capsule with a hairline between them (macOS 27).
+            RimmedCapsule {
+                id: actionGroup
+                width: actionRow.width + Tokens.spacingXs
+                height: Tokens.filesToolbarCapsule
+                anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                fillOpacity: Tokens.settingsToolbarFillOpacity
+                Accessible.role: Accessible.Grouping
+                Accessible.name: qsTr("Process actions")
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.hairline
+                    height: Tokens.settingsToolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                }
+
+                Row {
+                    id: actionRow
+                    anchors.centerIn: parent
+
+                    ToolButton {
+                        id: stopButton
+                        objectName: "stopButton"
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "xmark-octagon"
+                        enabled: root.backend.actions.canQuit
+                        accessibleName: qsTr("Quit Process")
+                        onClicked: sheets.openQuit()
+
+                        HoverHandler {
+                            id: stopHover
+                        }
+                    }
+
+                    ToolButton {
+                        id: moreButton
+                        objectName: "moreButton"
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "ellipsis-circle"
+                        accessibleName: qsTr("Actions")
+                        onClicked: {
+                            const p = moreButton.mapToItem(root.contentItem, 0, moreButton.height + Tokens.spacingXs);
+                            root.openActionMenu(p.x, p.y);
+                        }
+
+                        HoverHandler {
+                            id: moreHover
+                        }
+                    }
+                }
+            },
             SegmentedControl {
                 id: tabs
                 objectName: "tabs"
@@ -123,6 +208,10 @@ Window {
         anchors.right: parent.right
         anchors.bottom: networkNote.visible ? networkNote.top : summary.top
         focus: true
+        onContextMenuRequested: (x, y) => {
+            const p = processList.mapToItem(root.contentItem, x, y);
+            root.openActionMenu(p.x, p.y);
+        }
     }
 
     // AM43: the Network tab's columns count TCP only; UDP shows in the totals of the summary.
@@ -159,13 +248,43 @@ Window {
     Tooltip {
         id: toolbarTip
         objectName: "toolbarTip"
-        readonly property Item over: tabsHover.hovered ? tabs : searchHover.hovered ? search : null
+        readonly property Item over: tabsHover.hovered ? tabs : searchHover.hovered ? search : stopHover.hovered ? stopButton
+            : moreHover.hovered ? moreButton : null
         readonly property point place: over ? over.mapToItem(root.contentItem, 0, over.height) : Qt.point(0, 0)
-        text: over === tabs ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID") : ""
+        // AM50: with another owner's process or the Kernel row selected, the Stop button says why it is off.
+        text: over === tabs ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID")
+            : over === stopButton ? (root.backend.actions.refusal !== "" ? root.backend.actions.refusal : qsTr("Quit the selected processes"))
+            : over === moreButton ? qsTr("Act on the selected processes") : ""
         shown: over !== null
         x: Math.round(Math.max(Tokens.spacingXs, Math.min(root.width - width - Tokens.spacingXs, place.x + ((over ? over.width : 0) - width) / 2)))
         y: Math.round(place.y + Tokens.spacingXs)
         z: 10
+    }
+
+    // The action menu (the "…" button) and the rows' context menu.
+    MenuPopup {
+        id: actionMenu
+        objectName: "actionMenu"
+        accessibleName: qsTr("Actions")
+        focusBack: processList
+        onChosen: id => root.runAction(id)
+    }
+
+    // AM50 to AM56: the sheets, over everything else.
+    ActionSheets {
+        id: sheets
+        objectName: "actionSheets"
+        actions: root.backend.actions
+        focusBack: processList
+        z: 20
+    }
+
+    // AM54: the app's own row was quit: its window closes.
+    Connections {
+        target: root.backend.actions
+        function onCloseWindowRequested(): void {
+            root.close();
+        }
     }
 
     // ---- Appearance (grassfield.json, read by the backend) and the window's own surface.
@@ -250,6 +369,10 @@ Window {
     Key {
         sequences: [StandardKey.SelectAll]
         run: root.selectAll
+    }
+    Key {
+        sequence: "Ctrl+Alt+Q"
+        run: () => sheets.openQuit()
     }
     Key {
         sequence: "Ctrl+W"

@@ -29,7 +29,6 @@ Singleton {
     readonly property bool active: Mode.fixtures
     readonly property string network: "Grassfield"
     readonly property string user: "grassfield"
-    readonly property string hostname: "grassfield"
 
     property string glyphMode: ""
 

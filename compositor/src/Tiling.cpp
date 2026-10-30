@@ -1724,6 +1724,10 @@ namespace gf::tiler {
         return placeable(w);
     }
 
+    bool fixedSize(const PHLWINDOW& w) {
+        return w && tiling::fixedSize(constraintsOf(w));
+    }
+
     bool splittable(const PHLWINDOW& w) {
         const auto m = placeable(w) ? monitorOf(w) : nullptr;
         return m && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 0)) && tiling::fitsFrame(constraintsOf(w), splitHalf(m, 1));
@@ -2381,15 +2385,19 @@ namespace gf::tiler {
             if (State::workspaceState() && State::workspaceState()->query().id(d.workspace).run())
                 splits.push_back(d);
         }
-        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile).
+        // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile); the windows of
+        // fixed size (the Window menu greys their Zoom and tiling items, ADR-0040 step 1b).
         std::vector<uint64_t> unfit;
+        std::vector<uint64_t> fixed;
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
                 if (w && placeable(w) && !splittable(w))
                     unfit.push_back(idOf(w));
+                if (w && w->m_isMapped && fixedSize(w))
+                    fixed.push_back(idOf(w));
             }
         }
-        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit);
+        return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit, fixed);
     }
 
     void beforePointerMotion() {

@@ -1,7 +1,9 @@
 // A-W1 (spec "Acceptance criteria"; ADR-0038 step 2a): the window and its real backend on a fixture tree, offscreen. The
 // rows of the tab, the tabs, a header click that sorts, the columns chooser, typing in the search field, the views, Copy as
 // text, no sample while the window is hidden, suspended by the compositor or minimized (AM8, AD35), and the size it keeps
-// (AM2).
+// (AM2). A-W2 (step 2c, AM50 to AM56; tests/apps/activity_actions.sh): the window on the real /proc and real children:
+// Stop and its sheet's Quit send SIGTERM, Force Quit SIGKILL, a process that ends meanwhile is silent, a session process
+// gets the warning first and no Stop, and the dev guard refuses a process outside its roots.
 #include "../fixture.h"
 #include "activityapp.h"
 #include "iconprovider.h"
@@ -9,6 +11,7 @@
 
 #include <QAccessible>
 #include <QClipboard>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -25,6 +28,11 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
+
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #ifndef ACTIVITY_ROOT
 #error "ACTIVITY_ROOT: the repository's root (build-direct.sh and CMakeLists.txt define it)"
@@ -144,7 +152,8 @@ struct Window {
     std::unique_ptr<QQmlApplicationEngine> engine;
     QQuickWindow *win = nullptr;
 
-    Window()
+    // `realProc`: the machine's /proc as the app reads it (A-W2), else the fixture tree.
+    explicit Window(bool realProc = false)
     {
         f.process(100, "alpha", kMe, 300, 1, nul({"alpha"}), "/");
         f.process(101, "beta", kMe, 200, 1, nul({"beta"}), "/");
@@ -160,6 +169,8 @@ struct Window {
         o.uid = kMe;
         o.clockTicks = 100;
         o.maxKeptFiles = 4096;
+        if (realProc)
+            o = defaultOptions();
         backend = std::make_unique<ActivityApp>(o, statePath());
         engine = std::make_unique<QQmlApplicationEngine>();
         engine->addImportPath(QStringLiteral(ACTIVITY_ROOT "/ui"));
@@ -423,4 +434,247 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+// ---- A-W2 (step 2c) ------------------------------------------------------------------------------------------------------
+namespace {
+
+constexpr const char *kPlainUnit = "/user.slice/user-1000.slice/user@1000.service/app.slice/fixture.service";
+constexpr const char *kSessionUnit = "/user.slice/user-1000.slice/user@1000.service/session.slice/wayland-wm@hyprland.desktop.service";
+
+// A child that waits for a signal.
+pid_t idleChild()
+{
+    const pid_t pid = fork();
+    if (pid == 0) {
+        for (;;)
+            pause();
+    }
+    return pid;
+}
+
+// How a child ended: its signal, 0 for an exit; -1 while it still runs after `ms` (0: not waited for).
+int ending(pid_t pid, int ms = 5000)
+{
+    int status = 0;
+    pid_t r = 0;
+    QElapsedTimer t;
+    t.start();
+    while ((r = waitpid(pid, &status, WNOHANG)) == 0 && t.elapsed() < ms)
+        QTest::qWait(20);
+    if (r != pid)
+        return -1;
+    return WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+}
+
+// The test's children: whatever a failed case left running is killed and reaped when it ends (a child left alive keeps
+// the test's output open). Only a child not reaped yet is signalled: waitpid answers 0 for it alone, so a pid the case
+// already reaped, which another process may have taken since, is never hit (AM51's rule, in the tests too; the
+// integrator's review of 1153365).
+struct Children {
+    pid_t add()
+    {
+        const pid_t pid = idleChild();
+        pids.push_back(pid);
+        return pid;
+    }
+    ~Children()
+    {
+        for (pid_t pid : pids) {
+            if (waitpid(pid, nullptr, WNOHANG) == 0) {
+                kill(pid, SIGKILL);
+                waitpid(pid, nullptr, 0);
+            }
+        }
+    }
+    std::vector<pid_t> pids;
+};
+
+int rowOf(ProcessTable &t, pid_t pid)
+{
+    for (int i = 0; i < t.count(); ++i) {
+        if (t.data(t.index(i), ProcessTable::PidRole).toInt() == pid)
+            return i;
+    }
+    return -1;
+}
+
+// A visible button of a sheet, by its text, in the item tree (a Repeater's buttons are not the sheet's QObject children).
+QQuickItem *button(QQuickItem *item, const QString &text)
+{
+    if (item->inherits("QQuickAbstractButton") && item->isVisible() && item->property("text").toString() == text)
+        return item;
+    for (QQuickItem *child : item->childItems()) {
+        if (QQuickItem *found = button(child, text))
+            return found;
+    }
+    return nullptr;
+}
+
+// A dev session whose one root is this test's process (the children descend from it), or none: restored after.
+struct DevRoots {
+    explicit DevRoots(bool rooted)
+        : saved{qgetenv("GRASSFIELD_DEV"), qgetenv("GRASSFIELD_SESSION"), qgetenv("GRASSFIELD_ACTIVITY_DEV_ROOTS")}
+    {
+        qputenv("GRASSFIELD_DEV", "1");
+        qunsetenv("GRASSFIELD_SESSION");
+        QByteArray roots;
+        if (rooted) {
+            QFile stat(QStringLiteral("/proc/self/stat"));
+            const QByteArray line = stat.open(QIODevice::ReadOnly) ? stat.readAll() : QByteArray();
+            const QList<QByteArray> fields = line.mid(line.lastIndexOf(')') + 2).split(' ');
+            const QString record = dir.filePath(QStringLiteral("test.pid"));
+            QFile pid(record), start(record + QStringLiteral(".start"));
+            if (pid.open(QIODevice::WriteOnly) && start.open(QIODevice::WriteOnly)) {
+                pid.write(QByteArray::number(getpid()) + '\n');
+                start.write(fields.value(19) + '\n'); // stat field 22
+            }
+            roots = record.toLocal8Bit();
+        }
+        qputenv("GRASSFIELD_ACTIVITY_DEV_ROOTS", roots);
+    }
+    ~DevRoots()
+    {
+        const char *names[] = {"GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_ACTIVITY_DEV_ROOTS"};
+        for (int i = 0; i < 3; ++i)
+            saved[i].isNull() ? qunsetenv(names[i]) : qputenv(names[i], saved[i]);
+    }
+    QByteArray saved[3];
+    QTemporaryDir dir;
+};
+
+// The window on the real /proc, sampling every second, every process in `unit` (a test's children are in the unit of
+// whatever runs the tests); `children` shown in its table.
+::testing::AssertionResult open(Window &w, const char *unit, std::initializer_list<pid_t> children)
+{
+    if (!w.win || !QTest::qWaitForWindowExposed(w.win))
+        return ::testing::AssertionFailure() << "no window";
+    const std::string path = unit;
+    w.backend->processActions().setUnitReader([path](int) { return path; });
+    w.backend->setInterval(1);
+    return becomes(
+        [&] {
+            for (pid_t c : children) {
+                if (rowOf(w.backend->processTable(), c) < 0)
+                    return false;
+            }
+            return true;
+        },
+        true, 6000);
+}
+
+void select(Window &w, pid_t pid)
+{
+    ProcessTable &t = w.backend->processTable();
+    t.click(rowOf(t, pid), Qt::NoModifier);
+}
+
+} // namespace
+
+// AM50, AM52, AM53: Stop opens the sheet; Quit (Return) sends SIGTERM; View > Quit Process's key and Force Quit, SIGKILL.
+TEST(ActivityActions, QuitAndForceQuitAWindowlessChild)
+{
+    DevRoots dev(true);
+    Window w(true);
+    Children kids;
+    const pid_t a = kids.add(), b = kids.add();
+    ASSERT_TRUE(open(w, kPlainUnit, {a, b}));
+    QQuickItem *stop = named(w.win, "stopButton");
+    QQuickItem *sheet = named(w.win, "quitSheet");
+    ASSERT_TRUE(stop && sheet);
+    select(w, a);
+    ASSERT_TRUE(becomes([&] { return stop->isEnabled(); }, true));
+    settledClick(w.win, [&] { return centre(stop); });
+    ASSERT_TRUE(becomes([&] { return sheet->isVisible(); }, true));
+    EXPECT_EQ(sheet->property("title").toString(), "Are you sure you want to quit this process?");
+    QTest::keyClick(w.win, Qt::Key_Return);
+    EXPECT_EQ(ending(a), SIGTERM);
+    EXPECT_FALSE(sheet->isVisible());
+
+    select(w, b);
+    QTest::keyClick(w.win, Qt::Key_Q, Qt::ControlModifier | Qt::AltModifier);
+    ASSERT_TRUE(becomes([&] { return sheet->isVisible(); }, true));
+    QQuickItem *force = button(sheet, QStringLiteral("Force Quit"));
+    ASSERT_NE(force, nullptr);
+    settledClick(w.win, [&] { return centre(force); });
+    EXPECT_EQ(ending(b), SIGKILL);
+    EXPECT_FALSE(sheet->isVisible());
+}
+
+// AM51, AM53: the sheet's process ends and is reaped while the sheet is open: Force Quit is silent and closes the sheet.
+TEST(ActivityActions, AProcessThatEndsMeanwhileIsSilent)
+{
+    DevRoots dev(true);
+    Window w(true);
+    Children kids;
+    const pid_t c = kids.add();
+    ASSERT_TRUE(open(w, kPlainUnit, {c}));
+    select(w, c);
+    QQuickItem *sheet = named(w.win, "quitSheet");
+    ASSERT_TRUE(becomes([&] { return named(w.win, "stopButton")->isEnabled(); }, true));
+    QTest::keyClick(w.win, Qt::Key_Q, Qt::ControlModifier | Qt::AltModifier);
+    ASSERT_TRUE(becomes([&] { return sheet->isVisible(); }, true));
+    kill(c, SIGKILL);
+    ASSERT_EQ(ending(c), SIGKILL);
+    QQuickItem *force = button(sheet, QStringLiteral("Force Quit"));
+    ASSERT_NE(force, nullptr);
+    settledClick(w.win, [&] { return centre(force); });
+    EXPECT_FALSE(sheet->isVisible());
+    EXPECT_EQ(sheet->property("errorText").toString(), "");
+}
+
+// AM54, AM55: Send Signal to a session process: the warning first (Continue), then the pop-up without Stop, Terminate first.
+TEST(ActivityActions, ASessionProcessWarnsFirstAndOffersNoStop)
+{
+    DevRoots dev(true);
+    Window w(true);
+    Children kids;
+    const pid_t c = kids.add();
+    ASSERT_TRUE(open(w, kSessionUnit, {c}));
+    select(w, c);
+    QQuickItem *sheets = named(w.win, "actionSheets");
+    QQuickItem *warning = named(w.win, "sessionSheet");
+    QQuickItem *signalSheet = named(w.win, "signalSheet");
+    QQuickItem *picker = named(w.win, "signalPicker");
+    ASSERT_TRUE(sheets && warning && signalSheet && picker);
+    ASSERT_TRUE(becomes([&] { return w.backend->processActions().canSignal(); }, true));
+    QMetaObject::invokeMethod(sheets, "openSignal");
+    ASSERT_TRUE(becomes([&] { return warning->isVisible(); }, true));
+    EXPECT_TRUE(warning->property("title").toString().startsWith("Sending a signal to “"));
+    QQuickItem *cont = button(warning, QStringLiteral("Continue"));
+    ASSERT_NE(cont, nullptr);
+    settledClick(w.win, [&] { return centre(cont); });
+    ASSERT_TRUE(becomes([&] { return signalSheet->isVisible(); }, true));
+    QStringList offered;
+    for (const QVariant &v : picker->property("model").toList())
+        offered << v.toMap().value(QStringLiteral("text")).toString();
+    EXPECT_EQ(offered.size(), 10);
+    EXPECT_FALSE(offered.contains(QStringLiteral("Stop (SIGSTOP)")));
+    EXPECT_EQ(picker->property("displayText").toString(), "Terminate (SIGTERM)");
+    QQuickItem *send = button(signalSheet, QStringLiteral("Send"));
+    ASSERT_NE(send, nullptr);
+    settledClick(w.win, [&] { return centre(send); });
+    EXPECT_EQ(ending(c), SIGTERM);
+    EXPECT_FALSE(signalSheet->isVisible());
+}
+
+// AM56: a dev session without a root for this process: the sheet says so and nothing is sent.
+TEST(ActivityActions, TheDevGuardRefusesAProcessOutsideItsRoots)
+{
+    DevRoots dev(false);
+    Window w(true);
+    Children kids;
+    const pid_t c = kids.add();
+    ASSERT_TRUE(open(w, kPlainUnit, {c}));
+    select(w, c);
+    QQuickItem *sheet = named(w.win, "quitSheet");
+    ASSERT_TRUE(becomes([&] { return named(w.win, "stopButton")->isEnabled(); }, true));
+    QTest::keyClick(w.win, Qt::Key_Q, Qt::ControlModifier | Qt::AltModifier);
+    ASSERT_TRUE(becomes([&] { return sheet->isVisible(); }, true));
+    QTest::keyClick(w.win, Qt::Key_Return);
+    EXPECT_TRUE(sheet->isVisible());
+    EXPECT_EQ(sheet->property("errorText").toString(), "Development session: only the nested session's processes can be quit.");
+    EXPECT_EQ(ending(c, 0), -1);
+    QTest::keyClick(w.win, Qt::Key_Escape);
+    EXPECT_FALSE(sheet->isVisible());
 }

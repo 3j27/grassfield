@@ -32,6 +32,9 @@ class PreviewApp : public QObject
     Q_PROPERTY(QStringList errors READ errors CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    // accessibility.increaseContrast and accessibility.textSize (1 to 1.3) of grassfield.json, as every app reads them.
+    Q_PROPERTY(bool increaseContrast READ increaseContrast NOTIFY appearanceChanged)
+    Q_PROPERTY(qreal textScale READ textScale NOTIFY appearanceChanged)
     // windows.titlebarDoubleClick of grassfield.json: zoom (default), minimize or none (the toolbar's double-click).
     Q_PROPERTY(QString titlebarDoubleClick READ titlebarDoubleClick NOTIFY appearanceChanged)
     // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b, chromecaps.h).
@@ -60,6 +63,8 @@ public:
     QStringList errors() const { return m_errors; }
     bool dark() const { return m_dark; }
     bool reduceMotion() const { return m_reduceMotion; }
+    bool increaseContrast() const { return m_increaseContrast; }
+    qreal textScale() const { return m_textScale; }
     QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
     bool canMinimize() const { return m_canMinimize; }
     QString accentColor() const { return m_accentColor; }
@@ -106,6 +111,8 @@ private:
     bool m_autoAppearance = false;
     QTimer m_autoTimer;
     bool m_reduceMotion = false;
+    bool m_increaseContrast = false;
+    qreal m_textScale = 1;
     QString m_titlebarDoubleClick = QStringLiteral("zoom");
     bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");

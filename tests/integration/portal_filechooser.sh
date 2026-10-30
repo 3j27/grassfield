@@ -58,7 +58,7 @@ check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "Uns
   ! grep -q "^\(UMask\|ReadOnlyPaths\|ProtectHome\)=" "$1"' _ "$unit"
 desc="the PKGBUILD builds and installs the backend, its unit, .portal and D-Bus service files, and depends on KWindowSystem"
 check bash -c 'grep -q "cmake -S \"\$(_root)/apps/portal\"" "$1" && grep -q "cmake --install \"\$srcdir/portal-build\"" "$1" &&
-  grep -q "for unit in .* portal; do" "$1" && grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal" "$1" &&
+  grep -qE "for unit in .* portal( .*)?; do" "$1" && grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield.portal" "$1" &&
   grep -q "usr/share/dbus-1/services/$2.service" "$1" && grep -q " kwindowsystem " "$1"' _ "$pk/arch/PKGBUILD" "$name"
 desc="the session's window rules give a panel's and an alert's xdg tags (gfChromeRole) the client-chrome tag"
 check bash -c 'for qml in "$1" "$2"; do role=$(sed -n "s/^ *property string gfChromeRole: \"\(.*\)\"$/\1/p" "$qml") && [[ -n $role ]] &&
