@@ -2,7 +2,7 @@
 Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner
 answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
 rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
-under the owner's rule" (AD1 to AD41). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
+under the owner's rule" (AD1 to AD44). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
 MINORs, all answered in "Review history"; each changed place says "review of e3882de"). Step 0 merged (pull request #37, opus
 PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
@@ -12,7 +12,9 @@ f68789c (FAIL: one MAJOR, four MINORs), each changed place saying "review of f68
 opus PASS on 19f5d4c, main 9bb1422); its follow-ups are answered in "Review history", the CPU tab's headroom first. Step 2
 is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is built in its own pull request
 (`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36), merged (pull request #47, main b345334); 2b, the summaries,
-graphs and grouped views, in its own (`docs/audits/activity-2026-10-28/step2b.md`; AD37 to AD41). · Date: 2026-10-28 ·
+graphs and grouped views, in its own (`docs/audits/activity-2026-10-28/step2b.md`; AD37 to AD41), merged (pull request
+#53, main 0a2b52b); 2c, Quit, Force Quit and Send Signal, in its own (`docs/audits/activity-2026-10-28/step2c.md`; AD42
+to AD44). · Date: 2026-10-28 ·
 Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
@@ -378,9 +380,9 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
   decision 3-14); the Dock tile file holds numbers. Both live in the display's 0700 runtime folder (AD29) and go when their
   writer stops.
 - Dev sessions (ADR-0019): the app runs in the owner's account and sees the owner's real processes. In a dev session every
-  action (signals, Quit, Efficiency Mode) is refused for a process that does not descend from the nested compositor or a
-  test fixture, with a "dev guard" journal line (as Settings' guard); efficiency mode is refused for every unit not named
-  by a test. The nested session's runtime folder is its own display's (AD29).
+  action (signals, Quit, Efficiency Mode) is refused for a process that does not descend from a dev root (AD42: a pid
+  record named by `GRASSFIELD_ACTIVITY_DEV_ROOTS`, a test fixture's; none named, everything is refused), with a "dev
+  guard" journal line (as Settings' guard); efficiency mode is refused for every unit not named by a test. The nested session's runtime folder is its own display's (AD29).
 
 ### j. Files (rows added to ADR-0020 in the step that writes them)
 - `activity.json` (state, version 1, the app only): window frames, tab, view, columns and sort per tab, update frequency,
@@ -628,6 +630,29 @@ Answer: A (see "Answers").
   short name (its bracket's first part, "[AMD/ATI]": AMD; else its name without a company suffix) and the device's
   marketing name (its last bracket, else its name): "Intel UHD Graphics", "AMD Radeon RX 6600/6600 XT/6600M", "NVIDIA
   GeForce RTX 3060 Lite Hash Rate". Without a name, "GPU <n>" for card n-1; without a card, the pdev.
+- **AD42. The dev guard's roots are named pid records** (AM56; step 2c). In a dev session an action reaches only a
+  process that a root names or one of its descendants. A root is a record of `scripts/dev/pidfile.sh` (the pid, and its
+  start time in `<file>.start`), named by `GRASSFIELD_ACTIVITY_DEV_ROOTS` (dev plumbing, ADR-0019); none named, every
+  action is refused. The spec's first wording ("descending from the nested compositor") cannot hold: an app the nested
+  shell starts is detached (Quickshell's `execDetached` is `QProcess::startDetached`, which leaves the child under init:
+  measured, its parent pid 1), and Hyprland's `exec` detaches the same way, so a nested app descends from neither. A test
+  names its fixture's record; a nested pass that quits processes starts them as such a fixture. Fails closed: a record
+  whose process ended, or whose pid another process took, names nothing. Step 3's projection names the nested display's
+  windows, which may widen it then.
+- **AD43. Quit before the shell's projection** (AM52, AM75; step 2c). Until step 3 there is no projection, so the app
+  cannot tell a process's windows: Quit of a process of an app unit (under `app-graphical.slice`) sends nothing and the
+  sheet says "The process couldn't be quit safely." with Cancel (now the default) and Force Quit only, as AM75 says for a
+  session without the shell. A process outside an app unit gets `SIGTERM`. Quit never risks unsaved work by a signal;
+  Send Signal's Terminate stays available. **A command run in a terminal** (the integrator's decision on the review of
+  1153365, delegated by the owner on 2026-10-27: the closest to macOS, no technical step for the user): a process with a
+  controlling terminal (stat's `tty_nr`) whose parent is in the same app unit, so not the process that started the unit,
+  gets `SIGTERM` on Quit (`python` in foot); the unit's own process waits for step 3's projection.
+- **AD44. The sheets** (AM50, AM54, AM55; step 2c). Grassfield.Ui's Sheet (as Files and Settings): the quit sheet with
+  Force Quit at the leading edge, Cancel and Quit; a session process's warning when the action is chosen, before the quit
+  sheet or Send Signal's sheet, Cancel its default; Send Signal's pop-up (Grassfield.Ui's ComboBox) with Terminate chosen
+  first. The processes of a sheet are fixed when it opens (a descriptor each, AM51) and released when it closes. The Stop
+  button and the action menu share one glass capsule in the toolbar (macOS 27); the Stop glyph, an octagon with a cross,
+  is our own drawing (`branding/LICENSES.md`).
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
@@ -647,7 +672,8 @@ Each step is one pull request to main, reviewed by the integrator (opus), with i
      All Processes, Hierarchically (AM13), Processes, by GPU (AM49). Built (AD37 to AD41;
      `docs/audits/activity-2026-10-28/step2b.md`).
    - **2c. Quit, Force Quit, Send Signal** (AM50 to AM56): the sheets, the `/proc/<pid>` descriptor and
-     `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu.
+     `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu. Built
+     (AD42 to AD44; `docs/audits/activity-2026-10-28/step2c.md`).
    - **2d. Inspect** (AM57 to AM59): the Info button and its windows.
 3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
    tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
@@ -845,3 +871,14 @@ code loads and passes its checks on Qt 6.11.2 too, and a Qt 6.12 API is used onl
 | MAJOR 2: with transparent huge pages `always`, the changing fixture's stat lines seldom change | its region is `madvise(MADV_NOHUGEPAGE)`; `activity_cost.sh` fails when fewer stat or io lines are parsed a sample than 90 % of the changing processes (shown failing on a huge-page build) |
 | MAJOR 3: the battery's times count to the last battery state, set only when it changes | each sample moves that time; a case checks the time and the graph between two states |
 | NIT: `windowsOf` strips `.desktop` with case; two surviving mutants; the PSS range and 1.60 % at 1 s | without case, with a case; a case each (the vendor's end, the pruning); −12 to +292 kB, and the 1.60 % stated as a miss here |
+
+**Step 2c, pull request #63: the integrator's opus security review of 1153365 (PASS, four MINORs, NITs; 2026-10-30).** Only
+the user's own processes are signalled, the Kernel row is refused twice, session processes get the warning and never Stop,
+no recycled pid can be hit, only the eleven signals are accepted; C++ mutants 23 of 25 killed (one equivalent), QML 7 of 8.
+| Note | Answer |
+|---|---|
+| MINOR 1: Send Signal's dev guard untested (mutant M20) | `TheDevGuard` sends Terminate with no root: refused, nothing sent |
+| MINOR 2: the A-W2 cleanup SIGKILLs pids already reaped | only a child `waitpid` still answers for is signalled |
+| MINOR 3: `activity_actions.sh` keeps `QT_QPA_PLATFORMTHEME` | unset, as `scripts/dev/test.sh` does |
+| MINOR 4: a command run in a terminal is refused by Quit (AD43) | the integrator's decision, built: a controlling terminal and a parent in the same app unit get `SIGTERM`; the unit's own process waits for step 3 (`ATerminalCommandIsQuitBySigterm`, a pseudo-terminal's child) |
+| NITs: an empty `/tmp` directory after the pid-reuse case; the guard's walk from the parent read at the sheet's opening; "can't force quit itself" in Send Signal and its French; mutant Q08 | the test makes and removes the directory; the walk starts from the parent read again through the descriptor; Send Signal says "This app can't send a signal to itself.", the French reads « Cette app ne peut pas forcer sa propre fermeture. »; `test_sendSignal` checks that Cancel releases the processes |

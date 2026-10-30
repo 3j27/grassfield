@@ -518,6 +518,57 @@
     </message>
 </context>
 <context>
+    <name>ActionSheets</name>
+    <message>
+        <source>This app can&apos;t send a signal to itself.</source>
+        <translation>Cette app ne peut pas s’envoyer de signal.</translation>
+    </message>
+    <message>
+        <source>Sending a signal to “%1” may end your session or stop part of it.</source>
+        <translation>Envoyer un signal à «&#xa0;%1&#xa0;» peut fermer votre session ou en arrêter une partie.</translation>
+    </message>
+    <message>
+        <source>Quitting “%1” may end your session or stop part of it.</source>
+        <translation>Quitter «&#xa0;%1&#xa0;» peut fermer votre session ou en arrêter une partie.</translation>
+    </message>
+    <message>
+        <source>Continue</source>
+        <translation>Continuer</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to quit this process?</source>
+        <translation>Voulez-vous vraiment quitter ce processus&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to quit these %1 processes?</source>
+        <translation>Voulez-vous vraiment quitter ces %1 processus&#xa0;?</translation>
+    </message>
+    <message>
+        <source>“%1” (PID %2)</source>
+        <translation>«&#xa0;%1&#xa0;» (PID %2)</translation>
+    </message>
+    <message>
+        <source>Force Quit</source>
+        <translation>Forcer à quitter</translation>
+    </message>
+    <message>
+        <source>Quit</source>
+        <translation>Quitter</translation>
+    </message>
+    <message>
+        <source>Choose a signal to send to “%1” (PID %2).</source>
+        <translation>Choisissez le signal à envoyer à «&#xa0;%1&#xa0;» (PID %2).</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Envoyer</translation>
+    </message>
+    <message>
+        <source>Signal</source>
+        <translation>Signal</translation>
+    </message>
+</context>
+<context>
     <name>ActivityApp</name>
     <message>
         <source>CPU</source>
@@ -4902,6 +4953,14 @@
         <translation>Normalement (5 s)</translation>
     </message>
     <message>
+        <source>Quit Process</source>
+        <translation>Quitter le processus</translation>
+    </message>
+    <message>
+        <source>Send Signal to Process…</source>
+        <translation>Envoyer un signal au processus…</translation>
+    </message>
+    <message>
         <source>Copy %1 Items</source>
         <translation>Copier %1 éléments</translation>
     </message>
@@ -6817,6 +6876,26 @@
         <translation>Moniteur d’activité</translation>
     </message>
     <message>
+        <source>Quit Process</source>
+        <translation>Quitter le processus</translation>
+    </message>
+    <message>
+        <source>Send Signal to Process…</source>
+        <translation>Envoyer un signal au processus…</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Copier</translation>
+    </message>
+    <message>
+        <source>Process actions</source>
+        <translation>Actions sur les processus</translation>
+    </message>
+    <message>
+        <source>Actions</source>
+        <translation>Actions</translation>
+    </message>
+    <message>
         <source>Resource</source>
         <translation>Ressource</translation>
     </message>
@@ -6835,6 +6914,14 @@
     <message>
         <source>Search processes by name, user, command or PID</source>
         <translation>Rechercher des processus par nom, utilisateur, commande ou PID</translation>
+    </message>
+    <message>
+        <source>Quit the selected processes</source>
+        <translation>Quitter les processus sélectionnés</translation>
+    </message>
+    <message>
+        <source>Act on the selected processes</source>
+        <translation>Agir sur les processus sélectionnés</translation>
     </message>
 </context>
 <context>
@@ -12867,6 +12954,85 @@
     <message>
         <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
         <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
+    </message>
+</context>
+<context>
+    <name>activity::ProcessActions</name>
+    <message>
+        <source>You can only quit your own processes.</source>
+        <translation>Vous ne pouvez quitter que vos propres processus.</translation>
+    </message>
+    <message>
+        <source>Hangup (SIGHUP)</source>
+        <translation>Raccrocher (SIGHUP)</translation>
+    </message>
+    <message>
+        <source>Interrupt (SIGINT)</source>
+        <translation>Interrompre (SIGINT)</translation>
+    </message>
+    <message>
+        <source>Quit (SIGQUIT)</source>
+        <translation>Quitter (SIGQUIT)</translation>
+    </message>
+    <message>
+        <source>Abort (SIGABRT)</source>
+        <translation>Abandonner (SIGABRT)</translation>
+    </message>
+    <message>
+        <source>Kill (SIGKILL)</source>
+        <translation>Tuer (SIGKILL)</translation>
+    </message>
+    <message>
+        <source>Alarm (SIGALRM)</source>
+        <translation>Alarme (SIGALRM)</translation>
+    </message>
+    <message>
+        <source>Terminate (SIGTERM)</source>
+        <translation>Terminer (SIGTERM)</translation>
+    </message>
+    <message>
+        <source>User Defined 1 (SIGUSR1)</source>
+        <translation>Défini par l’utilisateur 1 (SIGUSR1)</translation>
+    </message>
+    <message>
+        <source>User Defined 2 (SIGUSR2)</source>
+        <translation>Défini par l’utilisateur 2 (SIGUSR2)</translation>
+    </message>
+    <message>
+        <source>Stop (SIGSTOP)</source>
+        <translation>Arrêter (SIGSTOP)</translation>
+    </message>
+    <message>
+        <source>Continue (SIGCONT)</source>
+        <translation>Continuer (SIGCONT)</translation>
+    </message>
+    <message>
+        <source>Development session: only the nested session&apos;s processes can be quit.</source>
+        <translation>Session de développement&#xa0;: seuls les processus de la session imbriquée peuvent être quittés.</translation>
+    </message>
+    <message>
+        <source>The process couldn&apos;t be quit.</source>
+        <translation>Le processus n’a pas pu être quitté.</translation>
+    </message>
+    <message>
+        <source>The signal couldn&apos;t be sent.</source>
+        <translation>Le signal n’a pas pu être envoyé.</translation>
+    </message>
+    <message>
+        <source>The process couldn&apos;t be quit safely.</source>
+        <translation>Le processus n’a pas pu être quitté sans risque.</translation>
+    </message>
+    <message>
+        <source>These processes couldn&apos;t all be quit safely.</source>
+        <translation>Ces processus n’ont pas tous pu être quittés sans risque.</translation>
+    </message>
+    <message>
+        <source>This app can&apos;t force quit itself.</source>
+        <translation>Cette app ne peut pas forcer sa propre fermeture.</translation>
+    </message>
+    <message>
+        <source>This app can&apos;t send a signal to itself.</source>
+        <translation>Cette app ne peut pas s’envoyer de signal.</translation>
     </message>
 </context>
 <context>

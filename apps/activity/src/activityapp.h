@@ -4,6 +4,7 @@
 // remembers.
 #pragma once
 
+#include "actions.h"
 #include "activitystate.h"
 #include "battery.h"
 #include "desktopapps.h"
@@ -51,6 +52,8 @@ class ActivityApp : public QObject
     Q_PROPERTY(QObject *table READ table CONSTANT)
     // The summary under the table: the tab's figures and graphs (AM5).
     Q_PROPERTY(QObject *summary READ summary CONSTANT)
+    // Quit, Force Quit and Send Signal on the selection (step 2c, AM50 to AM56).
+    Q_PROPERTY(QObject *actions READ actions CONSTANT)
     // Every column of the tab, in the table's order ({key, title, shown, optional, numeric, width}): View > Columns and the
     // header's menu (AM15). `shownColumns` is the shown ones alone, in order; a width of 0 is the token width.
     Q_PROPERTY(QVariantList columns READ columns NOTIFY columnsChanged)
@@ -96,6 +99,8 @@ public:
     QObject *table() { return &m_table; }
     ProcessTable &processTable() { return m_table; }
     QObject *summary() { return &m_summary; }
+    QObject *actions() { return &m_actions; }
+    ProcessActions &processActions() { return m_actions; }
     Summary &summaryModel() { return m_summary; }
     QVariantList columns() const;
     QVariantList shownColumns() const;
@@ -143,6 +148,7 @@ private:
     void requestSample();
     void scheduleSave();
     void readAppearance();
+    void updateActionTargets();
     QString userName(uint32_t uid);
 
     Options m_options;
@@ -150,6 +156,7 @@ private:
     ActivityState m_state;
     ProcessTable m_table;
     Summary m_summary;
+    ProcessActions m_actions;
     BatteryWatch m_battery;
     QThread m_thread;
     SamplerWorker *m_worker = nullptr; // lives on m_thread

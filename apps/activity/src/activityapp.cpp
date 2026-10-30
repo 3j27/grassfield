@@ -57,6 +57,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     , m_options(std::move(options))
     , m_statePath(std::move(statePath))
     , m_state(readState(m_statePath))
+    , m_actions(m_options.procRoot)
     , m_apps(DesktopApps::fromEnvironment())
 {
     qRegisterMetaType<SnapshotPtr>();
@@ -84,6 +85,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
             requestSample();
     });
     connect(&m_battery, &BatteryWatch::changed, this, [this] { m_summary.setBattery(m_battery.state()); });
+    connect(&m_table, &ProcessTable::selectionChanged, this, &ActivityApp::updateActionTargets);
     m_summary.setDiskMode(m_state.diskGraph);
     m_summary.setNetworkMode(m_state.networkGraph);
 
@@ -324,6 +326,15 @@ void ActivityApp::copySelection()
         app->clipboard()->setText(m_table.copyText());
 }
 
+// AM50: the actions follow the selection, and the rows' owners as the last sample gave them.
+void ActivityApp::updateActionTargets()
+{
+    std::vector<ProcessActions::Target> targets;
+    for (const TableRow &r : m_table.selectedRows())
+        targets.push_back({r.process.pid, r.process.start, r.name, r.process.own, r.kernel});
+    m_actions.setSelection(std::move(targets));
+}
+
 void ActivityApp::saveSize(int width, int height)
 {
     if (width == m_state.width && height == m_state.height)
@@ -411,6 +422,7 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
     if (named)
         m_table.setGpuNames(m_gpuNames);
     m_table.setRows(tableRows(*snapshot));
+    updateActionTargets();
     m_ready = true;
     emit sampled();
     if (m_again) {
