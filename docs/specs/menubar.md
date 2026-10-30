@@ -36,11 +36,11 @@ Per-screen top bar with the system menu, the application menus (T0: app, File, W
 8. Every string uses `qsTr()`; every control has `Accessible.name`/role and a visible focus ring.
 
 ## Acceptance criteria
-- Screenshots of the system menu, app menu, volume menu and About panel (L2). `qmllint.sh` 0 warnings (L0). `tests/unit/tst_menunav.qml`, `tst_popupmenu.qml` (L0).
+- Screenshots of the system menu, app menu, volume menu and an app's About panel (L2; About This Computer is Settings' window, docs/specs/settings.md). `qmllint.sh` 0 warnings (L0). `tests/unit/tst_menunav.qml`, `tst_popupmenu.qml` (L0).
 - Dev guard: Shut Down confirmation in the nested session logs `suppressed systemctl poweroff` and shows the notice (L2).
 
 ## Interfaces / contracts (versions)
-Reads `Compositor` (toplevels, focused app, pid, hide, close, exitSession), `MenuBridge` (T1/T2 menus, menu/1), `Settings`, `Appearance`, `Audio`, `Connectivity`, `Power`, `Popups`, `Media`, `TrayHost`. Test hooks (IpcHandler): `menubar open <system|app|appfile|appwindow|nowplaying|...> <output>`, `menubar panel <about|forcequit> <output>`, `menubar close`, `menubar bridgeState <output>` (JSON: shown window, bridge state, left titles and open bridge menu rows in output coordinates), `menubar statusState <output>` (JSON: right edge of the application menus and the visible status buttons, name and x, w), `controlcenter <transparency|appearance|reduceTransparency|reduceMotion>`.
+Reads `Compositor` (toplevels, focused app, pid, hide, close, exitSession), `MenuBridge` (T1/T2 menus, menu/1), `Settings`, `Appearance`, `Audio`, `Connectivity`, `Power`, `Popups`, `Media`, `TrayHost`. Test hooks (IpcHandler): `menubar open <system|app|appfile|appwindow|nowplaying|...> <output>`, `menubar panel forcequit <output>` (Popups refuses a kind its Overlay does not draw, `shell/services/PopupKinds.js`), `menubar close`, `menubar bridgeState <output>` (JSON: shown window, bridge state, left titles and open bridge menu rows in output coordinates), `menubar statusState <output>` (JSON: right edge of the application menus and the visible status buttons, name and x, w), `controlcenter <transparency|appearance|reduceTransparency|reduceMotion>`.
 
 `windows` IPC (platform, for key bindings): `windows minimize` (focused window), `windows hide` (focused app).
 

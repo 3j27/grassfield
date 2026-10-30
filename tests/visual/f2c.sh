@@ -90,10 +90,6 @@ case $surface in
       vs_sleep 4
       shot "alerts-$tag-$ap-forcequit"
       vs_ipc menubar close >/dev/null
-      vs_ipc menubar panel about GF-REF >/dev/null
-      vs_sleep 4
-      shot "alerts-$tag-$ap-about"
-      vs_ipc menubar close >/dev/null
     done ;;
   gallery)
     # The Center, and the gallery that opens on it, stay open between iterations (vs_reset does not close them): the dark run
