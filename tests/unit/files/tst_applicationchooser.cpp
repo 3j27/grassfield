@@ -16,6 +16,7 @@
 #include <QTimer>
 
 #include <KJob>
+#include <KService>
 #include <KSycoca>
 
 #include <gtest/gtest.h>
@@ -231,6 +232,9 @@ TEST(ApplicationChooser, AnAddressAndNoPanel)
     chooser.ask({QUrl(QStringLiteral("https://example.org/"))}, QStringLiteral("text/html"), nullptr, [](const QString &) {});
     EXPECT_EQ(request.value(QStringLiteral("filename")).toString(), QString());
     EXPECT_EQ(request.value(QStringLiteral("uri")).toString(), QStringLiteral("https://example.org/"));
+    // An address's password is never shown (integrator review of step 5c's PR, NIT 4).
+    chooser.ask({QUrl(QStringLiteral("ftp://user:secret@host.example/"))}, QStringLiteral("text/html"), nullptr, [](const QString &) {});
+    EXPECT_EQ(request.value(QStringLiteral("uri")).toString(), QStringLiteral("ftp://user@host.example/"));
 }
 
 // Open With > Other… (FilesApp::chooseApplication): the panel for the selection; the application chosen opens it
@@ -273,4 +277,79 @@ TEST(ApplicationChooser, OtherOpensWithTheChosenOne)
     spin();
     EXPECT_TRUE(failures.isEmpty());
     qunsetenv("GRASSFIELD_FILES_NO_LAUNCH");
+}
+
+// Other… with two documents, one named with a shell's characters: the application chosen (not the type's default one)
+// gets both, as two arguments, and no shell reads their names (integrator review of step 5c's PR, MINOR 1).
+TEST(ApplicationChooser, OtherGivesEveryDocumentToTheChosenOne)
+{
+    installApplications();
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/other-docs");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString out = dir + QStringLiteral("/received");
+    const QStringList names{QStringLiteral("a b.txt"), QStringLiteral("c;$(touch pwned).txt")};
+    QList<QUrl> docs;
+    for (const QString &name : names) {
+        QFile doc(dir + QLatin1Char('/') + name);
+        ASSERT_TRUE(doc.open(QIODevice::WriteOnly));
+        doc.write("text\n");
+        docs << QUrl::fromLocalFile(doc.fileName());
+    }
+    // An application that writes each argument it is given on a line; listed for no type (All Applications).
+    const QString script = dir + QStringLiteral("/record");
+    {
+        QFile f(script);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(QStringLiteral("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done >> '%1'\n").arg(out).toUtf8());
+        f.close();
+        ASSERT_TRUE(f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+    }
+    const QString recorder = QStringLiteral("org.example.GfChooseRecord");
+    const QString apps = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    {
+        QFile entry(apps + QLatin1Char('/') + recorder + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=Record\nExec=\"%1\" %F\n").arg(script).toUtf8());
+    }
+    QDeadlineTimer cache(15000);
+    while (!KService::serviceByMenuId(recorder + QStringLiteral(".desktop")) && !cache.hasExpired()) {
+        QEventLoop loop;
+        QTimer::singleShot(200, &loop, &QEventLoop::quit);
+        loop.exec();
+        KSycoca::self()->ensureCacheValid();
+    }
+    ASSERT_TRUE(KService::serviceByMenuId(recorder + QStringLiteral(".desktop")));
+    ASSERT_EQ(ApplicationChooser::defaultApplication(QStringLiteral("text/plain")), kB) << "the type's default is another one";
+
+    qunsetenv("GRASSFIELD_FILES_NO_LAUNCH");
+    FilesApp app(QList<QUrl>{});
+    auto *chooser = qobject_cast<ApplicationChooser *>(app.applicationChooser());
+    ASSERT_NE(chooser, nullptr);
+    QStringList failures;
+    QObject::connect(&app, &FilesApp::operationFailed, &app, [&failures](const QString &message) {
+        failures << message;
+    });
+    int asked = 0;
+    QObject::connect(chooser, &ApplicationChooser::opened, chooser, [&](int id, const QVariantMap &request) {
+        ++asked;
+        EXPECT_EQ(request.value(QStringLiteral("count")).toInt(), 2);
+        chooser->answer(id, 0, {{QStringLiteral("choice"), recorder}});
+    });
+    app.chooseApplication(docs);
+    EXPECT_EQ(asked, 1);
+    QDeadlineTimer deadline(15000);
+    QStringList received;
+    while (received.size() < 2 && !deadline.hasExpired()) {
+        QEventLoop loop;
+        QTimer::singleShot(100, &loop, &QEventLoop::quit);
+        loop.exec();
+        QFile f(out);
+        if (f.open(QIODevice::ReadOnly))
+            received = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    }
+    EXPECT_TRUE(failures.isEmpty()) << failures.join(QLatin1Char(' ')).toStdString();
+    EXPECT_EQ(received, QStringList({docs.at(0).toLocalFile(), docs.at(1).toLocalFile()})) << "both documents, to the chosen application";
+    EXPECT_FALSE(QFile::exists(dir + QStringLiteral("/pwned")));
+    EXPECT_FALSE(QFile::exists(QDir::homePath() + QStringLiteral("/pwned")));
+    EXPECT_FALSE(QFile::exists(QDir::currentPath() + QStringLiteral("/pwned")));
 }

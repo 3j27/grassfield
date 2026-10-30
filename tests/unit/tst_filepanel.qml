@@ -106,8 +106,12 @@ TestCase {
                 listing.selectedCount = n;
                 listing.selectionChanged();
             }
-            function select(row: int, modifiers: int): void {
+            function select(row: int, modifiers: int, pointer: bool): void {
                 const single = listing.chooser.single === true;
+                // FolderModel::select: a plain click on a panel's dimmed item does nothing.
+                const plain = single || !(modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                if (pointer && plain && Object.keys(listing.chooser).length > 0 && row >= 0 && row < listing.count && listing.get(row).dimmed)
+                    return;
                 for (let i = 0; i < listing.count; i++) {
                     const on = i === row ? !listing.get(i).dimmed : (!single && (modifiers & Qt.ControlModifier) ? listing.get(i).selected : false);
                     listing.setProperty(i, "selected", on);
@@ -1127,6 +1131,41 @@ TestCase {
         verify(m !== tab.folder, "another listing");
         compare(m.loading, false);
         tryVerify(() => m.expected.indexOf("grassfield-app:/org.kde.kate") >= 0, 2000, "the last choice is selected in the column");
+    }
+
+    // In each view, a click and a right-click on a dimmed application keep the application selected (FolderModel::select's
+    // pointer; review of step 5c's PR, NIT 3).
+    function test_a_click_on_a_dimmed_item_in_each_view(): void {
+        const half = {icons: Tokens.filesIconSize / 2, list: Tokens.filesListRowHeight / 2, columns: Tokens.filesColumnRowHeight / 2, gallery: 0};
+        for (const mode of ["icons", "list", "columns", "gallery"]) {
+            const panel = test.openPanel(test.appRequest({}));
+            const tab = test.findTab(panel.contentItem);
+            tryVerify(() => tab.isApplications, 2000);
+            tab.setViewMode(mode);
+            tryVerify(() => tab.view && tab.view.rowPosition && (mode !== "columns" || tab.view.activeModel !== null), 2000, mode);
+            const m = tab.activeFolder;
+            tryVerify(() => test.rowOf(m, "org.example.Other") >= 0, 2000, mode + ": listed");
+            tryVerify(() => tab.view.width > 0 && tab.view.height > 0, 2000, mode + ": laid out");
+            verify(waitForRendering(panel.contentItem, 2000));
+            const other = test.rowOf(m, "org.example.Other");
+            verify(m.get(other).dimmed, mode);
+            const click = (row, button) => {
+                const p = tab.view.rowPosition(m, row);
+                mouseClick(panel.contentItem, p.x, p.y - half[mode], button);
+            };
+            // The click lands on its row: on an application it may open, it selects it.
+            click(test.rowOf(m, "org.kde.kate"), Qt.LeftButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.kde.kate")], mode + ": a click selects");
+            m.select(test.rowOf(m, "org.gnome.TextEditor"), 0);
+            click(other, Qt.LeftButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.gnome.TextEditor")], mode + ": a click on a dimmed one keeps the selection");
+            click(other, Qt.RightButton);
+            compare(m.selectedRows(), [test.rowOf(m, "org.gnome.TextEditor")], mode + ": and so does a right-click");
+            panel.menuLayer.close();
+            m.select(other, 0);
+            compare(m.selectedRows(), [], mode + ": a key that lands there selects nothing");
+            panel.cancel();
+        }
     }
 
     // The last choice never replaces an application the user selected while the listing loaded.

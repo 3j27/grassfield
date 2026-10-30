@@ -731,8 +731,9 @@ FocusScope {
 
     // Context menu for `row` of `model` (-1: the folder background) at window coordinates.
     function contextMenu(model: var, row: int, x: real, y: real, keyboard: bool): void {
+        // A right-click is a click: on a panel's dimmed item it keeps the selection (review of step 5c's PR, NIT 3).
         if (row >= 0 && !model.isSelected(row))
-            model.select(row, 0);
+            model.select(row, 0, !keyboard);
         if (row < 0)
             model.clearSelection();
         const items = root.chooser ? root.chooserMenu(model, row >= 0) : row >= 0 ? root.itemMenu(model) : root.backgroundMenu(model);

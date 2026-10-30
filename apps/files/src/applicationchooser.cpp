@@ -88,9 +88,10 @@ int ApplicationChooser::ask(const QList<QUrl> &urls, const QString &mimeType, QO
     }
     const QString name = urls.isEmpty() ? QString() : urls.first().adjusted(QUrl::StripTrailingSlash).fileName();
     QVariantMap r = request(FileLogic::displayName(name), int(urls.size()), candidates(type), defaultApplication(type));
-    // One document with no file name (a server's root): the panel names its address (review of step 5c, NIT).
+    // One document with no file name (a server's root): the panel names its address (review of step 5c, NIT), never its
+    // password (integrator review of step 5c's PR, NIT 4).
     if (urls.size() == 1 && name.isEmpty())
-        r.insert(QStringLiteral("uri"), urls.first().toString());
+        r.insert(QStringLiteral("uri"), urls.first().toDisplayString());
 
     Pending pending{answer, owner, owner != nullptr, std::make_shared<bool>(false), {}};
     if (owner) {
