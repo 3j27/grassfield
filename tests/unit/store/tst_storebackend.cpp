@@ -1070,7 +1070,8 @@ TEST(StoreBackend, Flathub)
     }
     EXPECT_EQ(facts.value(QStringLiteral("version")).toString(), QStringLiteral("1.2"));
     EXPECT_EQ(facts.value(QStringLiteral("license")).toString(), QStringLiteral("MIT"));
-    EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login")}));
+    EXPECT_EQ(facts.value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login"),
+                                                                                    QStringLiteral("outside")}));
     EXPECT_FALSE(facts.value(QStringLiteral("download")).toString().isEmpty());
     // Its metadata unread: its facts without "access", so the page says nothing of what it can reach (PR #58).
     storetest::writeFile(s.path(QStringLiteral("fixture/nometa")), "");
@@ -1093,7 +1094,8 @@ TEST(StoreBackend, Flathub)
     const QVariantList refs = plans.last().value(QStringLiteral("packages")).toList();
     ASSERT_EQ(refs.size(), 2);
     EXPECT_EQ(refs.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("org.gnome.Platform"));
-    EXPECT_EQ(plans.last().value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login")}));
+    EXPECT_EQ(plans.last().value(QStringLiteral("access")).toStringList(), (QStringList{QStringLiteral("network"), QStringLiteral("home"), QStringLiteral("login"),
+                                                                                    QStringLiteral("outside")}));
 
     // Installed by the queue: then in Installed's Flatpak group, beside the user's other Flatpak.
     ASSERT_TRUE(backend.install(QStringLiteral("org.example.Notes")));
