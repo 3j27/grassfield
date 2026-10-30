@@ -50,6 +50,25 @@ ShellRoot {
             root.check("mac: super arrow", mac(["Super", "Control", "Left"]), "⌃⌘←");
             root.check("mac: page up", mac(["Control", "Page_Up"]), "⌃⇞");
             root.check("mac: home", mac(["Home"]), "↖");
+            // Qt applications (Grassfield's own, apps/globalmenu.h) send Qt's names: the strings of QKeySequence::toString(PortableText),
+            // from Qt's key name table (qkeysequence.cpp: Space, Esc, Tab, Backtab, Backspace, Return, Enter, Ins, Del, Print, Home,
+            // End, Left, Up, Right, Down, PgUp, PgDown), in any case.
+            root.check("fr qt: trash", root.text(["Ctrl", "Backspace"]), "Ctrl+Retour arrière");
+            root.check("fr qt: delete", root.text(["Del"]), "Suppr");
+            root.check("fr qt: esc", root.text(["Esc"]), "Échap");
+            root.check("fr qt: pgup", root.text(["Ctrl", "PgUp"]), "Ctrl+Page préc.");
+            root.check("fr qt: pgdown", root.text(["Ctrl", "PgDown"]), "Ctrl+Page suiv.");
+            root.check("fr qt: ins", root.text(["Ins"]), "Inser");
+            root.check("fr qt: space", root.text(["Space"]), "Espace");
+            root.check("fr qt: print", root.text(["Print"]), "Impr. écran");
+            root.check("fr qt: return", root.text(["Ctrl", "Return"]), "Ctrl+Entrée");
+            root.check("fr qt: enter", root.text(["Enter"]), "Entrée");
+            root.check("fr qt: arrows", root.text(["Alt", "Left"]), "Alt+Gauche");
+            root.check("fr qt: meta", root.text(["Meta", "L"]), "Super+L");
+            root.check("fr qt: f5", root.text(["f5"]), "F5");
+            root.check("fr qt: lower case", root.text(["ctrl", "backspace"]), "Ctrl+Retour arrière");
+            root.check("mac qt: trash", mac(["Ctrl", "Backspace"]), "⌃⌫");
+            root.check("mac qt: pgdown", mac(["Ctrl", "PgDown"]), "⌃⇟");
             // The shell's own menus carry the same words: the same shortcut written either way is the same label.
             root.check("shell and app agree", MenuShortcut.label(qsTranslate("AppMenuModel", "Super+Ctrl+Left"), "mac"), mac(["Super", "Control", "Left"]));
             if (root.failures.length === 0) {
