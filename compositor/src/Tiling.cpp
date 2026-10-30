@@ -2442,11 +2442,9 @@ namespace gf::tiler {
         std::vector<tiling::WindowFit> fits;
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
-                if (!w || !placeable(w))
-                    continue;
-                if (!splittable(w))
+                if (w && placeable(w) && !splittable(w))
                     unfit.push_back(idOf(w));
-                if (auto zones = unfitZones(w); !zones.empty())
+                if (auto zones = w && placeable(w) ? unfitZones(w) : std::vector<std::string>{}; !zones.empty())
                     fits.push_back(tiling::WindowFit{.address = idOf(w), .zones = std::move(zones)});
             }
         }

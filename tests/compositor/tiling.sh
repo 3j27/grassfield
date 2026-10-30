@@ -1731,6 +1731,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         and ([.[] | select(.zone == 1 or .zone == 3) | [.x, .w]] | unique | length <= 1)' <<<"$q" >/dev/null
     }
     check "fit wide: the quarters placed share their rows and columns" quarters_aligned
+    "$root/scripts/dev/shot.sh" tiling-fit-wide-quarters "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-fit-wide-quarters.png" "$run/" 2>/dev/null
     reply_lists_wide() {
       local z
       z=$(tiling_state | jq -c --arg a "${xdg_addr#0x}" '[.unfitZones[] | select(.address == $a) | .zones][0] // null')
