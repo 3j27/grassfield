@@ -101,9 +101,33 @@ check() { # check <description> <seconds> <command...>
   local what=$1; shift
   if wait_until "$@"; then pass "$what"; else fail "$what"; fi
 }
-type_keys() { "$keys" "$@"; sleep 0.4; }
-ctrl() { "$keys" -M ctrl "$@" -m ctrl; sleep 0.6; }
-ctrl_shift() { "$keys" -M ctrl -M shift "$@" -m shift -m ctrl; sleep 0.6; }
+# The keyboard goes to the app of this script, or nowhere. Under load the window maps late and without the keyboard, and the
+# keys of a fixed `sleep 3` went to the nested desktop: they renamed and trashed its Archive.zip fixture. Every key below is
+# sent only while the window with the keyboard belongs to the app started here (its pid, or a process of its session:
+# setsid made $app the session leader); otherwise the scenario stops before the key.
+ours() { # <pid>: a process of the app started here
+  [[ -n $1 && -n $app ]] || return 1
+  [[ $1 == "$app" || $(ps -o sid= -p "$1" 2>/dev/null | tr -d ' ') == "$app" ]]
+}
+app_window() { # prints the address of a mapped Files window of the app started here
+  local addr pid
+  while IFS=$'\t' read -r addr pid; do
+    ours "$pid" && { echo "$addr"; return 0; }
+  done < <("$root/scripts/nestctl" clients -j 2>/dev/null | jq -r '.[] | select(.mapped and .class == "org.grassfield.Files") | "\(.address)\t\(.pid)"')
+  return 1
+}
+app_has_keyboard() { ours "$("$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -r '.pid // empty')"; }
+guard() {
+  app_has_keyboard && return 0
+  local active
+  active=$("$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c '{class, title, pid}')
+  fail "refusing to type: the keyboard is not in the app started here (active window: ${active:-none})"
+  echo "files_sandbox: $fails failure(s)"
+  exit 1
+}
+type_keys() { guard; "$keys" "$@"; sleep 0.4; }
+ctrl() { guard; "$keys" -M ctrl "$@" -m ctrl; sleep 0.6; }
+ctrl_shift() { guard; "$keys" -M ctrl -M shift "$@" -m shift -m ctrl; sleep 0.6; }
 shot() { "$root/scripts/dev/shot.sh" "files-scenario-$1" "$output" >/dev/null; }
 
 # The window opens on the output under the pointer.
@@ -114,11 +138,23 @@ env DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH
   QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$sock" \
   setsid "$root/scripts/dev/isolated.sh" --name "$iso_name" -- "$bin" "$scenario/src" >"$log" 2>&1 </dev/null &
 app=$!
-sleep 3
-kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
-# Focus the window: click on empty space inside it (below the two icons).
-"$pointer" output "$output" abs 1050 600 sleep 200 click >/dev/null
-sleep 0.5
+# Wait for the window to map (60 s: a loaded machine took more than the 3 s this script used to give it).
+win=""
+for _ in $(seq 1 600); do
+  kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
+  win=$(app_window) && break
+  sleep 0.1
+done
+[[ -n $win ]] || { echo "FAIL: no window of the app mapped within 60 s (nothing typed)"; exit 1; }
+echo "files_sandbox: window $win mapped"
+# Give it the keyboard (the compositor's focus), then click on empty space inside it (below the two icons: the view takes the
+# keys) at a point taken from its geometry; wait until it has the keyboard.
+"$root/scripts/nestctl" dispatch "hl.dsp.focus({ window = 'address:$win' })" >/dev/null 2>&1 || true
+wait_until 5 app_has_keyboard || true
+read -r wx wy <<<"$("$root/scripts/nestctl" clients -j 2>/dev/null | jq -r --arg a "$win" '.[] | select(.address == $a) | "\(.at[0] + (.size[0] * 0.6 | floor)) \(.at[1] + (.size[1] * 0.75 | floor))"')"
+read -r ox oy <<<"$("$root/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$output" '.[] | select(.name == $n) | "\(.x) \(.y)"')"
+[[ -n ${wx:-} && -n ${ox:-} ]] && "$pointer" output "$output" abs "$((wx - ox))" "$((wy - oy))" sleep 200 click >/dev/null
+if wait_until 10 app_has_keyboard; then pass "the window of the app has the keyboard before any key is sent"; else guard; fi
 "$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c "{class, title, focus: .focusHistoryID}" | sed "s/^/files_sandbox: active window: /"
 
 # 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Ctrl+O: Return renames, as in
@@ -161,7 +197,7 @@ ctrl -k d
 check "Ctrl+D duplicates gamma.txt as 'gamma copy.txt'" 5 test -f "$scenario/dest/gamma copy.txt"
 
 # 5. Move gamma.txt to the sandbox Trash (Ctrl+Backspace).
-"$keys" -k Escape; sleep 0.3
+guard; "$keys" -k Escape; sleep 0.3
 sleep 1.1   # let the type-to-select buffer expire
 type_keys gamma.
 ctrl -k BackSpace
