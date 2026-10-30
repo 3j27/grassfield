@@ -126,8 +126,21 @@ grep -qE '^StartLimitIntervalSec=[0-9]+$' <<<"$active" && grep -qE '^StartLimitB
   && pass "shell: start limit set (a crash loop ends)" || bad "shell: no start limit"
 grep -qx 'Requisite=graphical-session.target' <<<"$active" && grep -qx 'PartOf=graphical-session.target' <<<"$active" \
   && pass "shell: tied to the session target (logout is not fought)" || bad "shell: Requisite/PartOf missing"
-awk '/^\[Unit\]/{u=1;next} /^\[/{u=0} u && /^OnFailure=omarchy-sleep-lock\.service$/{found=1} END{exit !found}' "$unit" \
+awk '/^\[Unit\]/{u=1;next} /^\[/{u=0} u && /^OnFailure=omarchy-sleep-lock\.service( |$)/{found=1} END{exit !found}' "$unit" \
   && pass "shell: a shell failed for good starts Omarchy's sleep-lock (fail-safe, [Unit] OnFailure=)" || bad "shell: no OnFailure=omarchy-sleep-lock.service in [Unit]"
+# ADR-0041 step 1a (owner decision SQ-2 A): the failure counter is the second OnFailure= unit; it stops a crash loop of any pace
+# at the third failure within 10 minutes and never unlocks (tests/shell/shell_failures.sh has its decisions); the start limit
+# is the backstop (10 starts in 5 minutes). The counter, like the gate, asks session-gone whether the compositor is certainly
+# gone, so a logout's exit 255 counts nothing.
+grep -qx 'OnFailure=omarchy-sleep-lock.service grassfield-shell-failed.service' "$unit" \
+  && pass "shell: the failure counter (grassfield-shell-failed.service) is started after every failure as well" || bad "shell: OnFailure= does not name grassfield-shell-failed.service"
+grep -qx 'StartLimitIntervalSec=300' "$unit" && grep -qx 'StartLimitBurst=10' "$unit" \
+  && pass "shell: the start limit is the backstop, 10 starts in 5 minutes (SQ-2 A)" || bad "shell: the start limit is not 10 in 300 s"
+[[ -x packaging/systemd/session-gone ]] && grep -q 'dirname "\$0")/session-gone' packaging/systemd/sleep-lock-gate && grep -q 'dirname "\$0")/session-gone' packaging/bin/grassfield-shell-failed \
+  && pass "session-gone: one shared test of 'the compositor is certainly gone', used by the gate and by the counter" || bad "session-gone: not shared by the gate and the counter"
+if grep -v '^[[:space:]]*#' packaging/systemd/session-gone | grep -q "graphical-session.target\|systemctl"; then bad "session-gone: reads the session target or systemd (it must decide from files only)"; else pass "session-gone: decides from the socket and the instance directory only"; fi
+grep -q 'install -Dm755 "$root/packaging/systemd/session-gone" "$pkgdir/usr/lib/grassfield/session-gone"' packaging/arch/PKGBUILD && grep -q 'for unit in .*shell-failed' packaging/arch/PKGBUILD \
+  && pass "package: session-gone is installed next to the gate and the counter's unit is installed" || bad "package: session-gone or grassfield-shell-failed.service not installed"
 grep -q 'stop omarchy-sleep-lock' <<<"$active" && bad "shell: stops Omarchy's sleep-lock (could cut a sleep it is delaying)" \
   || pass "shell: never stops Omarchy's sleep-lock"
 awk '/^\[Unit\]/{u=1;next} /^\[/{u=0} u && /^StartLimit/{found=1} END{exit !found}' "$unit" \

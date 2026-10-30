@@ -3,9 +3,9 @@ import QtTest
 import Grassfield.Ui
 import "activity"
 
-// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 step 2a) with a fake backend: the title with the view
-// as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the keyboard and
-// the accessible names. The backend's own logic has its gtest cases (tests/unit/activity/window).
+// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a and 2b) with a fake backend: the title with
+// the view as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the
+// keyboard and the accessible names, the summary's figures and graphs, the Disk pop-up and the Network tab's line. The backend's own logic has its gtest cases (tests/unit/activity/window).
 TestCase {
     id: testCase
     name: "ActivityMain"
@@ -31,11 +31,12 @@ TestCase {
         return {backend: backend, win: win};
     }
 
+    // Each item once: a ListView's rows are reached through its children and through its contentItem.
     function findAll(item, pred, out) {
         out = out || [];
         if (!item)
             return out;
-        if (pred(item))
+        if (pred(item) && out.indexOf(item) < 0)
             out.push(item);
         const kids = item.children || [];
         for (let i = 0; i < kids.length; i++)
@@ -111,6 +112,108 @@ TestCase {
         menu.chosen("wakeUps");
         verify(t.backend.calls.indexOf("setColumnShown:wakeUps:true") >= 0);
         tryVerify(() => texts(t.win.contentItem).indexOf("Wake Ups") >= 0);
+    }
+
+    // AM5: the tab's figures under the table, the graphs between them; a figure a graph draws has its colour's square.
+    function test_summaryFiguresAndGraphs() {
+        const t = make();
+        const shown = texts(t.win.summary);
+        for (const text of ["System:", "5.0%", "User:", "Idle:", "70.0%", "Threads:", "1734", "Processes:", "412", "CPU Load"])
+            verify(shown.indexOf(text) >= 0, text + " in the summary");
+        compare(t.backend.summary.capacity, Tokens.activityHistorySamples);
+        const graphs = findAll(t.win.summary, i => i.visible && i.Accessible && i.Accessible.role === Accessible.Graphic);
+        compare(graphs.length, 1);
+        compare(graphs[0].Accessible.name, "CPU Load");
+        verify(t.win.summary.y + t.win.summary.height <= t.win.height + 0.5, "the summary is at the bottom");
+        compare(t.win.summary.height, Tokens.activitySummaryHeight);
+        verify(t.win.processList.y + t.win.processList.height <= t.win.summary.y + 0.5, "the table ends above it");
+        const squares = findAll(t.win.summary, i => i.width === Tokens.activitySwatchSize && i.height === Tokens.activitySwatchSize && i.visible);
+        compare(squares.length, 2); // System and User, not Idle
+        verify(Qt.colorEqual(squares[0].color, Appearance.colors.activityGraphSystem));
+    }
+
+    // AM5, AM8: a value below 0 is a gap: the fill stops there and starts again after it, never drawn as zero.
+    function test_graphGaps() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/activity/qml/Graph.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const g = createTemporaryObject(comp, testCase, {width: 100, height: 50, capacity: 5,
+            graph: {style: "area", max: 1, series: [{values: [0.5, -1, 0.2, 0.4, -1], color: "activityGraphUser"}]}});
+        verify(g);
+        compare(g.lower.length, 2); // [0.5] and [0.2, 0.4]
+        const second = g.lower[1];
+        verify(second.every(p => p.y >= 0 && p.y <= 50));
+        g.graph = {style: "mirrored", max: 10, series: [{values: [5, 10], color: "activityGraphRead"}, {values: [-1, 5], color: "activityGraphWrite"}]};
+        compare(g.lower.length, 1);
+        compare(g.upper.length, 1);
+        verify(g.lower[0].every(p => p.y <= 25.001), "reads above the middle");
+        verify(g.upper[0].every(p => p.y >= 24.999), "writes below it");
+    }
+
+    // AM42: the pop-up above the Disk graph; a new sample leaves it in place (the delegates are kept, not rebuilt).
+    function test_graphModePopUp() {
+        const t = make();
+        t.backend.summary.blocks = t.backend.diskBlocks;
+        const combo = findAll(t.win.summary, i => i.objectName === "graphMode-disk")[0];
+        verify(combo && combo.visible);
+        compare(combo.value, "io");
+        combo.picked("data");
+        verify(t.backend.calls.indexOf("setGraphMode:disk:data") >= 0);
+        // Open, then the next sample: the same pop-up, still open (a rebuilt delegate would close it).
+        combo.popup.open();
+        tryVerify(() => combo.popup.opened);
+        t.backend.summary.blocks = t.backend.diskBlocks.map(b => Object.assign({}, b));
+        wait(50); // a delegate replaced would be gone by now
+        const now = findAll(t.win.summary, i => i.objectName === "graphMode-disk");
+        compare(now.length, 1);
+        compare(now[0], combo);
+        verify(combo.popup.opened);
+        combo.popup.close();
+    }
+
+    // AM43: the Network tab's line under the table, on that tab only.
+    function test_networkNote() {
+        const t = make();
+        verify(!t.win.networkNote.visible);
+        t.backend.tab = "network";
+        verify(t.win.networkNote.visible);
+        compare(t.win.networkNote.text, "UDP traffic, such as some video, is counted only in the totals below.");
+        verify(t.win.processList.y + t.win.processList.height <= t.win.networkNote.y + 0.5);
+    }
+
+    // AM13, AM49: an outline's rows are indented by level; the triangle and Right/Left open and close a row; a GPU's header
+    // has no icon.
+    function test_outlineRows() {
+        const t = make();
+        const r = (name, depth, expandable, group) => Object.assign(t.backend.row(name, "1.0", group ? "" : "10"), {depth: depth, expandable: expandable, expanded: true, group: group});
+        t.backend.view = "tree";
+        t.backend.table = t.backend.makeTable([r("systemd", 0, true, false), r("Hyprland", 1, false, false), r("Intel UHD Graphics", 0, true, true)]);
+        const rowsNow = () => findAll(t.win.contentItem, i => i.Accessible && i.Accessible.role === Accessible.Row);
+        tryVerify(() => rowsNow().length === 3 && rowsNow()[2].Accessible.name.startsWith("Intel"));
+        const rows = rowsNow().sort((a, b) => a.y - b.y);
+        // Qt 6.12 states the disclosure to a screen reader, Qt 6.11.2 cannot (ProcessList sets it only where it exists, and
+        // A-W1 checks it on 6.12): the rows load either way. The guard's test sees a state Qt has and not one it lacks.
+        verify("checked" in rows[0].Accessible && !("disclosed" in rows[0].Accessible));
+        if ("expanded" in rows[0].Accessible) {
+            verify(rows[0].Accessible.expandable);
+            verify(rows[0].Accessible.expanded);
+            verify(!rows[1].Accessible.expandable);
+        }
+        verify(!rows[2].Accessible.selectable, "a GPU's header is not a process");
+        const triangles = findAll(t.win.contentItem, i => i.objectName === "disclosure" && i.visible);
+        compare(triangles.length, 2); // systemd's and the header's
+        const glyphs = findAll(rows[1], i => i.source !== undefined && String(i.source).startsWith("image://icon/") && i.visible);
+        const first = findAll(rows[0], i => i.source !== undefined && String(i.source).startsWith("image://icon/") && i.visible);
+        compare(glyphs[0].x - first[0].x, Tokens.activityTreeIndent, "one level further in");
+        compare(findAll(rows[2], i => i.source !== undefined && String(i.source).startsWith("image://icon/") && i.visible).length, 0);
+        const p = triangles[0].mapToItem(rows[0], triangles[0].width / 2, triangles[0].height / 2);
+        mouseClick(rows[0], p.x, p.y);
+        verify(t.backend.table.clicks.indexOf("toggle:0") >= 0);
+        compare(t.backend.table.clicks.filter(c => c.startsWith("0:")).length, 0, "the triangle does not select");
+        mouseClick(rows[1], 120, 5);
+        keyClick(Qt.Key_Left);
+        verify(t.backend.table.clicks.indexOf("expanded:1:false") >= 0);
+        keyClick(Qt.Key_Right);
+        verify(t.backend.table.clicks.indexOf("expanded:1:true") >= 0);
     }
 
     function test_rowsAndKeyboard() {

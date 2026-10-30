@@ -31,6 +31,7 @@ Options options(const Fixture &f, uint32_t uid = kMe)
     o.uidMin = 1000;
     o.clockTicks = 100;
     o.maxKeptFiles = 4096;
+    o.pciIds = f.sys() + "/../hwdata/pci.ids"; // the fixture's, when a test writes one
     return o;
 }
 
@@ -500,6 +501,68 @@ TEST(Sampler, GpuSharesPerProcessAndPerDevice)
     EXPECT_DOUBLE_EQ(render, 80.0); // the two clients summed (AM47)
     EXPECT_DOUBLE_EQ(video, 50.0);
     EXPECT_EQ(snap.counters.fdinfoReads, 4u);
+    EXPECT_EQ(gpu.card, -1); // no /sys/class/drm in this fixture: no card, no name
+    EXPECT_EQ(gpu.model, "");
+}
+
+// AM47: a GPU's name is its card's PCI ids looked up in pci.ids, read once; another card's links and the connectors
+// (card1-eDP-1) are not it.
+TEST(Sampler, AGpuIsNamedFromItsCardsPciIds)
+{
+    Fixture f;
+    f.process(100, "game", kMe, 1, 1, nul({"game"}), "/");
+    f.link("/dev/dri/renderD129", "proc/100/fd/7");
+    f.write("proc/100/fdinfo/7", "pos:\t0\ndrm-driver:\ti915\ndrm-pdev:\t0000:00:02.0\ndrm-client-id:\t3\ndrm-engine-render:\t5 ns\n");
+    f.link("../../../devices/pci0000:00/0000:03:00.0", "sys/class/drm/card0/device");
+    f.link("../../../devices/pci0000:00/0000:00:02.0", "sys/class/drm/card1/device");
+    f.link("../../../devices/pci0000:00/0000:00:02.0", "sys/class/drm/card1-eDP-1/device");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/vendor", "0x8086\n");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/device", "0x9bc4\n");
+    f.write("hwdata/pci.ids", "# comment\n8086  Intel Corporation\n\t9bc4  CometLake-H GT2 [UHD Graphics]\n\t\t1028 09be  "
+                              "Subsystem\n");
+    Options o = options(f);
+    o.descriptorTurns = 1;
+    Sampler s(o);
+    const unsigned reads = readsForTab(Tab::Cpu);
+    const Snapshot first = s.sample(reads, 1.0);
+    ASSERT_EQ(first.gpus.size(), 1u);
+    EXPECT_EQ(first.gpus[0].card, 1);
+    EXPECT_EQ(first.gpus[0].model, "Intel UHD Graphics");
+    const uint64_t once = first.counters.systemReads;
+    f.write("hwdata/pci.ids", "8086  Intel Corporation\n\t9bc4  Renamed\n");
+    const Snapshot again = s.sample(reads, 2.0);
+    EXPECT_EQ(again.gpus[0].model, "Intel UHD Graphics"); // read once
+    EXPECT_EQ(again.counters.systemReads + 3, once);      // vendor, device and pci.ids, the first time only
+}
+
+// AM47: a connector (card1-eDP-1) is not a card, even one whose device link ends in the GPU's pdev.
+TEST(Sampler, AConnectorIsNotACard)
+{
+    Fixture f;
+    f.process(100, "game", kMe, 1, 1, nul({"game"}), "/");
+    f.link("/dev/dri/renderD129", "proc/100/fd/7");
+    f.write("proc/100/fdinfo/7", "pos:\t0\ndrm-driver:\ti915\ndrm-pdev:\t0000:00:02.0\ndrm-client-id:\t3\ndrm-engine-render:\t5 ns\n");
+    f.link("../../../devices/pci0000:00/0000:00:02.0", "sys/class/drm/card7-eDP-1/device");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/vendor", "0x8086\n");
+    f.write("sys/devices/pci0000:00/0000:00:02.0/device", "0x9bc4\n");
+    f.write("hwdata/pci.ids", "8086  Intel Corporation\n\t9bc4  CometLake-H GT2 [UHD Graphics]\n");
+    Options o = options(f);
+    o.descriptorTurns = 1;
+    Sampler s(o);
+    const Snapshot snap = s.sample(readsForTab(Tab::Cpu), 1.0);
+    ASSERT_EQ(snap.gpus.size(), 1u);
+    EXPECT_EQ(snap.gpus[0].card, -1);
+    EXPECT_EQ(snap.gpus[0].model, "");
+}
+
+// 2b: every tab reads the four system groups, so each tab's graph keeps its history whichever tab is shown (macOS).
+TEST(Sampler, EveryTabReadsTheSystemFiles)
+{
+    for (Tab tab : {Tab::Cpu, Tab::Memory, Tab::Energy, Tab::Disk, Tab::Network}) {
+        const unsigned reads = readsForTab(tab);
+        for (unsigned r : {ReadSystemCpu, ReadSystemMemory, ReadSystemDisk, ReadSystemNet})
+            EXPECT_TRUE(reads & r) << static_cast<int>(tab) << " " << r;
+    }
 }
 
 // AM45: a client is read through one of its descriptors between two descriptor turns (the integrator's AM-P2 run of
@@ -590,6 +653,121 @@ TEST(Sampler, AClientIdleAtItsTurnIsPickedAndItsWorkShows)
     snap = s.sample(reads, 4.0);
     EXPECT_EQ(snap.counters.fdinfoReads, 1u);
     EXPECT_DOUBLE_EQ(row(snap, 100)->gpuPercent, 50.0);
+}
+
+// 2b, the Disk tab's cost: a stat or io line identical to the last one is not parsed again, and the row is the same; a
+// changed line is, whatever its length, and so is a line whose code addresses are wanted again.
+// 2b: the rows of the last sample are emptied and filled again in place; a row takes nothing from the one it reuses.
+TEST(Sampler, ARowTakesNothingFromTheRowItReuses)
+{
+    Fixture f;
+    f.process(100, "foot", kMe, 10, 5000, nul({"/usr/bin/foot", "--server"}),
+              user + "/app.slice/app-graphical.slice/app-Hyprland-org.codeberg.dnkl.foot-1a2b3c4d.scope");
+    f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 4096\nwrite_bytes: 0\ncancelled_write_bytes: 0\n");
+    f.process(300, "a-process-with-a-long-name", kMe, 10, 5000, nul({"/usr/bin/a-process-with-a-long-name"}), "/");
+    Sampler s(options(f));
+    const unsigned reads = ReadProcesses | ReadStatus | ReadCommand | ReadIo;
+    const Snapshot first = s.sample(reads, 1.0);
+    ASSERT_EQ(first.rows.size(), 2u);
+    EXPECT_EQ(first.rows[0].command, "/usr/bin/foot --server");
+    EXPECT_FALSE(first.rows[0].appId.empty());
+    EXPECT_TRUE(first.rows[0].hasIo);
+
+    f.remove("proc/100");
+    f.process(50, "sshd", 1001, 10, 6000, nul({"sshd: bob@pts/0"}), "/user.slice/user-1001.slice/session-4.scope");
+    const Snapshot second = s.sample(reads, 2.0);
+    ASSERT_EQ(second.rows.size(), 2u);
+    const ProcessRow &other = second.rows[0]; // the slot foot's row had
+    EXPECT_EQ(other.pid, 50);
+    EXPECT_FALSE(other.own);
+    EXPECT_EQ(other.name, "sshd");
+    EXPECT_EQ(other.command, "");
+    EXPECT_EQ(other.appId, "");
+    EXPECT_EQ(other.kind, Kind::OtherUser);
+    EXPECT_FALSE(other.hasIo);
+    EXPECT_EQ(other.bytesRead, 0u);
+    EXPECT_LT(other.cpuPercent, 0);
+    EXPECT_TRUE(other.gpuDevices.empty());
+    EXPECT_EQ(second.rows[1].name, "a-process-with-a-long-name");
+
+    f.remove("proc/50");
+    const Snapshot third = s.sample(reads, 3.0);
+    ASSERT_EQ(third.rows.size(), 1u); // the rows that went are dropped
+    EXPECT_EQ(third.rows[0].pid, 300);
+}
+
+TEST(Sampler, AnUnchangedLineIsNotParsedAgain)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    f.process(101, "other", kMe + 1, 50, 1, nul({"other"}), "/");
+    auto io = [&](unsigned long long read, unsigned long long written) {
+        f.write("proc/100/io", "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: " + std::to_string(read)
+                                   + "\nwrite_bytes: " + std::to_string(written) + "\ncancelled_write_bytes: 0\n");
+    };
+    io(1000, 3000);
+    Sampler s(options(f));
+    const unsigned reads = readsForTab(Tab::Disk);
+    Snapshot first = s.sample(reads, 1.0);
+    EXPECT_EQ(first.counters.statParses, 2u);
+    EXPECT_EQ(first.counters.ioParses, 1u);
+    Snapshot same = s.sample(reads, 2.0);
+    EXPECT_EQ(same.counters.statParses, 0u);
+    EXPECT_EQ(same.counters.ioParses, 0u);
+    ASSERT_NE(row(same, 100), nullptr);
+    EXPECT_EQ(row(same, 100)->name, "mine");
+    // A cache hit gives both counters back, so both rates are 0, not "—" (review of PR #53: the write side).
+    EXPECT_EQ(row(same, 100)->bytesRead, 1000u);
+    EXPECT_EQ(row(same, 100)->bytesWritten, 3000u);
+    EXPECT_DOUBLE_EQ(row(same, 100)->readRate, 0.0);
+    EXPECT_DOUBLE_EQ(row(same, 100)->writeRate, 0.0);
+    EXPECT_EQ(row(same, 101)->name, "other");
+
+    // Same lengths, other bytes: parsed, and the rates follow.
+    f.write("proc/100/stat", Fixture::statLine(100, "mine", 'S', 1, 0, 200, 0, 1, 1));
+    io(5000, 4000);
+    Snapshot changed = s.sample(reads, 3.0);
+    EXPECT_EQ(changed.counters.statParses, 1u);
+    EXPECT_EQ(changed.counters.ioParses, 1u);
+    EXPECT_DOUBLE_EQ(row(changed, 100)->readRate, 4000.0);
+    EXPECT_DOUBLE_EQ(row(changed, 100)->writeRate, 1000.0);
+    EXPECT_DOUBLE_EQ(row(changed, 100)->cpuPercent, 100.0);
+}
+
+// Review of PR #53 (surviving mutants of the line cache): the start time is part of the cached line, so a pid reused by a
+// process whose stat differs only there is another process; the reuse stores its line, so the sample after it parses
+// nothing; the code-address flag is part of the cache.
+TEST(Sampler, AReusedPidWithTheSameLineButItsStartIsAnotherProcess)
+{
+    Fixture f;
+    f.process(100, "same", kMe, 500, 5000, nul({"same"}), "/");
+    Sampler s(options(f));
+    s.sample(ReadProcesses, 1.0);
+    EXPECT_GE(row(s.sample(ReadProcesses, 2.0), 100)->cpuPercent, 0);
+    f.write("proc/100/stat", Fixture::statLine(100, "same", 'S', 1, 0, 500, 0, 1, 9000)); // only the start time differs
+    const Snapshot reused = s.sample(ReadProcesses, 3.0);
+    EXPECT_EQ(row(reused, 100)->start, 9000u);
+    EXPECT_LT(row(reused, 100)->cpuPercent, 0); // another process: no rate from the old one's ticks
+    const Snapshot after = s.sample(ReadProcesses, 4.0);
+    EXPECT_EQ(after.counters.statParses, 0u); // the reuse kept its line
+    EXPECT_EQ(row(after, 100)->start, 9000u);
+    EXPECT_GE(row(after, 100)->cpuPercent, 0);
+}
+
+// The processes that ended are swept when some did, a kernel thread among those listed (its entry counts as seen).
+TEST(Sampler, AnEndedProcessIsSweptBesideAKernelThread)
+{
+    Fixture f;
+    f.process(2, "kthreadd", 0, 40, 1, "", "/", kPfKthread);
+    f.process(100, "a", kMe, 1, 5000, nul({"a"}), "/");
+    f.process(101, "b", kMe, 1, 5000, nul({"b"}), "/");
+    Sampler s(options(f));
+    EXPECT_EQ(s.sample(ReadProcesses, 1.0).counters.keptFiles, 3u); // each one's stat
+    EXPECT_EQ(s.sample(ReadProcesses, 2.0).counters.keptFiles, 3u);
+    f.remove("proc/101");
+    const Snapshot after = s.sample(ReadProcesses, 3.0);
+    EXPECT_EQ(after.counters.keptFiles, 2u); // b's descriptor closed
+    EXPECT_EQ(after.rows.size(), 1u);
 }
 
 // AM8: back on screen after a time hidden, no rate is drawn across the gap; the next sample starts every rate again.
@@ -971,7 +1149,7 @@ TEST(Sampler, AFailedListingWipesNothing)
 TEST(Sampler, WholePhysicalDisksAndInterfacesButLo)
 {
     Fixture f;
-    f.link("../../devices/pci0000:00/nvme0", "sys/block/nvme0n1/device"); // a link, as sysfs has it (dangling here)
+    f.link("../../../devices/pci0000:00/nvme0", "sys/block/nvme0n1/device"); // a link, as sysfs has it (dangling here)
     f.write("sys/block/loop0/size", "0\n"); // no device link: not counted (AM42)
     f.write("proc/diskstats", " 259 0 nvme0n1 100 0 2000 50 200 0 4000 100 0 300 150 0 0 0 0\n"
                               " 259 1 nvme0n1p1 100 0 2000 50 200 0 4000 100 0 300 150 0 0 0 0\n"
@@ -1036,4 +1214,19 @@ TEST(Sampler, TheRealProcIsReadable)
     EXPECT_TRUE(snap.system.memory.ok);
     EXPECT_GT(snap.system.processes, 0);
     EXPECT_GE(snap.cpuMs, 0.0);
+}
+
+// Review of PR #53: the code-address flag is part of the line cache.
+TEST(Sampler, TheCodeAddressFlagIsPartOfTheCache)
+{
+    // A directory owned by root (a non-dumpable process): its stat is read without code addresses after the first sample.
+    Fixture f;
+    f.process(100, "agent", kMe, 1, 5000, nul({"agent"}), "/");
+    f.write("proc/100/stat", Fixture::statLine(100, "agent", 'S', 1, 0, 1, 0, 1, 5000, 0, 4096, 8192));
+    Options o = options(f);
+    o.dirOwner = rootOwnsPid100;
+    Sampler s(o);
+    EXPECT_EQ(s.sample(ReadProcesses, 1.0).counters.statParses, 1u); // new: with its code addresses
+    EXPECT_EQ(s.sample(ReadProcesses, 2.0).counters.statParses, 1u); // the same line, read without them now
+    EXPECT_EQ(s.sample(ReadProcesses, 3.0).counters.statParses, 0u);
 }

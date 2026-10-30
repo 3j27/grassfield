@@ -29,12 +29,14 @@ find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 add_library(grassfield-activity-window STATIC
     src/activityapp.cpp src/activityapp.h
     src/activitystate.cpp src/activitystate.h
+    src/battery.cpp src/battery.h
     src/columns.cpp src/columns.h
     src/desktopapps.cpp src/desktopapps.h
     src/format.cpp src/format.h
     src/inhibitors.cpp src/inhibitors.h
     src/processtable.cpp src/processtable.h
-    src/samplerworker.cpp src/samplerworker.h)
+    src/samplerworker.cpp src/samplerworker.h
+    src/summary.cpp src/summary.h)
 target_include_directories(grassfield-activity-window PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
 target_link_libraries(grassfield-activity-window PUBLIC grassfield-activity-sampler Qt6::Core Qt6::Gui Qt6::DBus pthread)
@@ -73,7 +75,8 @@ if(GTest_FOUND)
         ../../tests/unit/activity/window/tst_activityapp.cpp
         ../../tests/unit/activity/window/tst_format.cpp
         ../../tests/unit/activity/window/tst_main.cpp
-        ../../tests/unit/activity/window/tst_processtable.cpp)
+        ../../tests/unit/activity/window/tst_processtable.cpp
+        ../../tests/unit/activity/window/tst_summary.cpp)
     target_include_directories(activity-window-tests PRIVATE ../../tests/unit/activity)
     target_link_libraries(activity-window-tests PRIVATE grassfield-activity-window Qt6::Test GTest::gtest)
     add_test(NAME activity-window-tests COMMAND activity-window-tests)

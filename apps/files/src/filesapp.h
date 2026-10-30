@@ -387,6 +387,7 @@ private:
 
     // id -> .desktop path of the rows the Applications location listed last (built by a FolderModel on its thread).
     QVariantMap m_applicationPaths;
+    QVariantMap m_applicationNames; // id -> the name the Applications location shows (the disambiguated one)
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).

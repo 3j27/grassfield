@@ -1,7 +1,9 @@
-// The table of processes (spec AM10 to AM19): one row per process of the last sample and the Kernel row, filtered by the
-// view and the search, sorted by one column. A new sample keeps each row's identity (pid and start time): rows of ended
-// processes go, new ones come in, the others change in place and move to their sorted place, so the list view keeps its
-// scroll position (no model reset) and the selection follows its processes (AM11).
+// The table of processes (spec AM10 to AM19, AM13, AM49): one row per process of the last sample and the Kernel row, filtered
+// by the view and the search, sorted by one column. A new sample keeps each row's identity (pid and start time): rows of
+// ended processes go, new ones come in, the others change in place and move to their sorted place, so the list view keeps
+// its scroll position (no model reset) and the selection follows its processes (AM11). Two views group the rows (step 2b):
+// All Processes, Hierarchically (a tree by parent, each level sorted) and Processes, by GPU (a header row per GPU, its
+// client processes under it); a row of either can be collapsed, and stays so across samples.
 #pragma once
 
 #include "columns.h"
@@ -17,14 +19,16 @@
 
 namespace activity {
 
-// AM12's views of step 2a (Hierarchically and Processes, by GPU come with step 2b; Windowed Processes with the shell's
-// projection, step 3; Processes, by Type with step 4).
-enum class View { All, Mine, System, OtherUsers, Active, Inactive, Gpu, Selected };
+// AM12's views of steps 2a and 2b (Windowed Processes comes with the shell's projection, step 3; Processes, by Type with
+// step 4).
+enum class View { All, Tree, Mine, System, OtherUsers, Active, Inactive, Gpu, Selected, ByGpu };
 
 QString viewKey(View view);
 std::optional<View> viewFromKey(const QString &key);
 QString viewTitle(View view);
 const std::vector<View> &views();
+// What a view reads beyond its tab's files: the GPU views read the processes' GPU clients on every tab (AM45, AM49).
+unsigned readsForView(View view);
 
 // A row as the table needs it: the sampler's row and what the window adds to it.
 struct TableRow {
@@ -50,6 +54,27 @@ inline size_t qHash(const RowId &id, size_t seed = 0)
 {
     return qHashMulti(seed, id.pid, id.start);
 }
+
+// A row as the table lists it: a process (or the Kernel row) at its depth, or a group's header (Processes, by GPU).
+struct Entry {
+    const TableRow *row = nullptr; // nullptr: a group's header
+    int depth = 0;                 // the tree's level, or 1 under a group's header
+    bool expandable = false;       // a disclosure triangle: children in the tree, processes under a header
+    bool expanded = true;
+    quint64 group = 0;             // the group it heads or is in (a GPU), 0 outside Processes, by GPU
+    QString title;                 // a header's: the GPU's name
+};
+// An entry's identity across samples: its process's (or none for a header) and its group's, since a process that uses two
+// GPUs is listed under both.
+struct EntryKey {
+    RowId id;
+    quint64 group = 0;
+    bool operator==(const EntryKey &other) const { return id == other.id && group == other.group; }
+};
+inline size_t qHash(const EntryKey &key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.id.pid, key.id.start, key.group);
+}
 RowId rowId(const TableRow &row);
 // The identity as text ("<pid>:<start>", "kernel"), for the KeyRole.
 QString rowKey(const TableRow &row);
@@ -74,6 +99,10 @@ public:
         KernelRole,
         OwnRole,
         AccessibleRole, // the name and the values with their headers (spec "Accessibility")
+        DepthRole,      // the tree's level (AM13), 1 under a group's header
+        ExpandableRole, // a disclosure triangle shows
+        ExpandedRole,
+        GroupRole,      // a group's header (AM49): not a process, never selected
     };
 
     explicit ProcessTable(QObject *parent = nullptr);
@@ -84,6 +113,8 @@ public:
     void setView(View view);
     void setSearch(const QString &text);
     void setSwappedMemory(bool swapped);
+    // AM47: the GPUs' names by drm-pdev, for the headers of Processes, by GPU (the pdev itself when none is known).
+    void setGpuNames(const QHash<QString, QString> &names);
     // The formats' locale (grassfield.json region.formats, as the Store): sizes, decimals and counts (AM16).
     void setLocale(const QLocale &locale);
     // A new sample's rows: every process and the Kernel row.
@@ -107,6 +138,9 @@ public:
     Q_INVOKABLE void clearSelection();
     // AM19: the shown columns' headers, then one line per selected row in the table's order, values as shown, tab-separated.
     Q_INVOKABLE QString copyText() const;
+    // AM13, AM49: a row's children (the tree) or a header's processes shown or hidden; kept across samples.
+    Q_INVOKABLE void setExpanded(int row, bool expanded);
+    Q_INVOKABLE void toggleExpanded(int row);
 
     QString cellText(const TableRow &row, Column column) const;
 
@@ -116,13 +150,18 @@ signals:
 
 private:
     bool accepts(const TableRow &row) const;
+    bool matches(const TableRow &row) const; // the search alone (AM14)
     bool less(const TableRow &a, const TableRow &b) const;
+    std::vector<Entry> tree() const;
+    std::vector<Entry> byGpu();
+    EntryKey keyOf(const Entry &entry) const;
     double sortValue(const TableRow &row, Column column) const;
     QString sortText(const TableRow &row, Column column) const;
     void rebuild();
     void pruneSelection();
     int indexOf(const RowId &id) const;
     void selectRange(int from, int to);
+    const TableRow *processAt(int row) const; // nullptr for a header
 
     std::vector<Column> m_columns;
     Column m_sort = Column::CpuPercent;
@@ -133,8 +172,12 @@ private:
     QLocale m_locale;
     std::vector<TableRow> m_all;      // the last sample
     std::vector<TableRow> m_previous; // the sample before, alive while a new one's changes are signalled
-    // What the view and the search keep, sorted: rows of m_all (of m_previous while a new sample comes in), never copied.
-    std::vector<const TableRow *> m_shown;
+    // What the view and the search keep, sorted (and grouped): rows of m_all (of m_previous while a new sample comes in),
+    // never copied.
+    std::vector<Entry> m_shown;
+    QSet<EntryKey> m_collapsed;           // the tree's rows and the GPU headers collapsed (AM13)
+    QHash<QString, QString> m_gpuNames;   // by drm-pdev
+    QHash<QString, quint64> m_groupIds;   // by drm-pdev, from 1: a group's identity for the run
     QSet<RowId> m_selected;
     QSet<RowId> m_selectedView; // Selected Processes: the rows selected when the view was chosen
     std::optional<RowId> m_anchor, m_current;

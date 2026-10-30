@@ -1,6 +1,7 @@
 // $XDG_STATE_HOME/grassfield/activity.json (spec AM74, ADR-0020): version 1, written by the app only. What the window
-// remembers: its size, the tab, the view, the update frequency, and per tab the columns shown (in order), their widths and
-// the sort. A broken file or another version is set aside (renamed .bad) and the defaults are used.
+// remembers: its size, the tab, the view, the update frequency, per tab the columns shown (in order), their widths and
+// the sort, and what the Disk and Network graphs show (step 2b). A broken file or another version is set aside (renamed
+// .bad) and the defaults are used.
 #pragma once
 
 #include "columns.h"
@@ -27,6 +28,8 @@ struct ActivityState {
     View view = View::All;
     int interval = 5; // AM9: 1, 2 or 5 seconds (AD3: Normally)
     std::map<Tab, TabState> tabs;
+    QString diskGraph = QStringLiteral("io");          // AM42: "io" or "data"
+    QString networkGraph = QStringLiteral("packets");  // AM44: "packets" or "data"
 };
 
 // The defaults: every tab with its default columns and sort.

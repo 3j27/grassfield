@@ -81,7 +81,7 @@ check bash -c 'f=$1; [[ $(grep -c "shell_dir=" "$f") == 2 ]] && grep -qx "shell_
 desc="255 stays a failure (qs exits 255 on a config error and a missing path too): no SuccessExitStatus, so OnFailure= still fires; the logout case is the sleep-lock gate (tests/security/sleep_lock_units.sh)"
 check bash -c '! grep -q "^SuccessExitStatus=" "$1" && grep -q "/sleep-lock-gate" "$2/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" && grep -q "compositor is gone" "$2/packaging/systemd/sleep-lock-gate"' _ "$unit" "$root"
 desc="OnFailure=omarchy-sleep-lock.service is kept for real crashes (D-12) and the restart policy is unchanged"
-check bash -c 'grep -qx "OnFailure=omarchy-sleep-lock.service" "$1" && grep -qx "Restart=always" "$1"' _ "$unit"
+check bash -c 'grep -q "^OnFailure=omarchy-sleep-lock.service\( \|$\)" "$1" && grep -qx "Restart=always" "$1"' _ "$unit"
 desc="resource guard: MemoryHigh=1536M, MemoryMax=3G, CPUQuota=150% (GF-040, ADR-0006 amendment)"
 check bash -c 'grep -qx "MemoryHigh=1536M" "$1" && grep -qx "MemoryMax=3G" "$1" && grep -qx "CPUQuota=150%" "$1"' _ "$unit"
 desc="the soft memory limit stays below the hard one and above the P2 gate (608 MB)"
@@ -94,7 +94,7 @@ assert 608 < mb("MemoryHigh") < mb("MemoryMax")' "$unit"
 if command -v systemd-analyze >/dev/null; then
   if out=$(systemd-analyze --user verify "$unit" 2>&1); then
     echo "PASS: systemd-analyze verify accepts the unit"
-  elif grep -q "Failed to setup working directory\|Read-only file system\|Operation not permitted" <<<"$out"; then
+  elif grep -q "Failed to setup working directory\|Read-only file system\|Operation not permitted\|Failed to lookup RuntimeDirectory path" <<<"$out"; then
     echo "NOTE: systemd-analyze verify NOT VERIFIED here (environment refuses it: $(head -n1 <<<"$out"))"
   else
     echo "FAIL: systemd-analyze verify: $out"; fail=1

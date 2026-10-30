@@ -31,8 +31,8 @@ hits=$(grep -nE 'replace\(/\[\\r\\n\]' "${files[@]}" shell/desktop/*.qml | grep 
 desc="no view replaces line breaks by hand${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"
 
-hits=$(grep -nE 'tr\("[^"]*“%1”[^"]*"\)\.arg\(' apps/files/src/filesapp.cpp | grep -v "displayName" | grep -vE 'tr\("[^"]*%1[^"]*%2' || true)
-hits+=$(grep -nE 'tr\("[^"]*%[12][^"]*"\)\.arg\([^)]*fileName\(\)' apps/files/src/filesapp.cpp | grep -v displayName || true)
+hits=$(grep -nE 'tr\("[^"]*“%1”[^"]*"\)\.arg\(' apps/files/src/filesapp.cpp | grep -v "FileLogic::displayName(" | grep -vE 'tr\("[^"]*%1[^"]*%2' || true)
+hits+=$(grep -nE 'tr\("[^"]*%[12][^"]*"\)\.arg\([^)]*fileName\(\)' apps/files/src/filesapp.cpp | grep -v "FileLogic::displayName(" || true)
 desc="no Files message names a file without FileLogic::displayName${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"
 

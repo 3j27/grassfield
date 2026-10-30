@@ -240,8 +240,23 @@ does not check its gate.
 ## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
 macOS model: the screen always locks before sleep, and the lock never silently goes away.
 - `grassfield-shell.service`: `Restart=always` (was `on-failure`: systemd does not restart a unit that exits 0 or is
-  stopped by SIGTERM/SIGINT/SIGHUP/SIGPIPE), `RestartSec=1`, start limit 10 starts in 30 s (a crash loop ends in
-  `failed`). A stop through systemd is never restarted (systemd semantics): logout stops `graphical-session.target`,
+  stopped by SIGTERM/SIGINT/SIGHUP/SIGPIPE), `RestartSec=1`, start limit 10 starts in 5 minutes (ADR-0041 step 1a: the
+  backstop of a crash loop; the first limit, 10 in 30 s, needed a crash within 2 s of each start and never tripped the
+  loop of 2026-10-29, a crash 5 s after every start). The loop detector `grassfield-shell-failed.service`, started by
+  `OnFailure=` after every failure next to Omarchy's sleep lock, counts the failures of the last 10 minutes
+  (`$XDG_RUNTIME_DIR/grassfield/shell-failures`) and at the third cancels the pending restart (`systemctl --user stop`)
+  and writes `$XDG_RUNTIME_DIR/grassfield/shell-safe-mode`, the state the security process of ADR-0041 step 1 reads from
+  S4 on; a logout counts nothing (`session-gone`, the test the gate uses); a counter that cannot count (no runtime
+  directory, no clock, an unwritable ledger) counts nothing and the restarts go on. The stop never unlocks: the
+  compositor keeps the lock (below, "Lock survival"), and until S4 ships a stopped UI is what the start limit gave. Locked:
+  the session stays locked and out of reach from itself (a lid close or a sleep brings the shell back through the
+  stand-in, which asks it to lock; otherwise a TTY). Unlocked: no idle lock, and the lock key does nothing (SUPER+CTRL+Q
+  is `qs ipc` to the shell, `config/hypr/grassfield/bindings.lua:148`); only a sleep or the lid locks, because Omarchy's
+  sleep lock stays armed and its stand-in, like `grassfield-lid`'s fallback, starts the shell again and asks it to lock.
+  Acceptable until S4 (the old start limit gave the same state; opus security review of b1d826b), written here so that
+  nobody takes a stopped shell for a locked one. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
+  model: a 10 s loop must end), `tests/security/sleep_lock_units.sh`. A stop through systemd is never restarted (systemd
+  semantics): logout stops `graphical-session.target`,
   which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,
   so a real logout is not fought. `systemctl --user stop grassfield-shell` stays a deliberate stop.
 - Omarchy's `omarchy-sleep-lock.service` (a logind delay inhibitor and a `PrepareForSleep` monitor; before sleep its

@@ -4,11 +4,16 @@
 #include "activityapp.h"
 #include "samplerworker.h"
 
+#include <QDBusConnection>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QMutex>
+#include <QPointer>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
 
 #include <gtest/gtest.h>
 
@@ -226,6 +231,30 @@ TEST(ActivityApp, ColumnsAndSortPerTab)
     EXPECT_EQ(again.view(), "mine");
 }
 
+// AM42, AM44: the pop-ups above the Disk and Network graphs reach the summary and are remembered; anything else is refused.
+TEST(ActivityApp, TheGraphsPopUpsAreRemembered)
+{
+    Fixture f;
+    Isolated iso;
+    {
+        ActivityApp app(fixtureOptions(f), iso.statePath());
+        app.setTab(QStringLiteral("network"));
+        app.setGraphMode(QStringLiteral("network"), QStringLiteral("data"));
+        app.setGraphMode(QStringLiteral("disk"), QStringLiteral("data"));
+        app.setGraphMode(QStringLiteral("disk"), QStringLiteral("packets")); // not a Disk mode
+        app.setGraphMode(QStringLiteral("cpu"), QStringLiteral("data"));     // no pop-up there
+        QString mode;
+        for (const QVariant &b : app.summaryModel().blocks()) {
+            if (b.toMap().value(QStringLiteral("key")).toString() == QLatin1String("network"))
+                mode = b.toMap().value(QStringLiteral("mode")).toString();
+        }
+        EXPECT_EQ(mode, "data");
+    }
+    const ActivityState s = readState(iso.statePath());
+    EXPECT_EQ(s.networkGraph, "data");
+    EXPECT_EQ(s.diskGraph, "data");
+}
+
 TEST(ActivityState, ABrokenFileIsSetAside)
 {
     QTemporaryDir dir;
@@ -294,4 +323,85 @@ TEST(ActivityService, ReopenAsksTheShellsDock)
     restore("GRASSFIELD_DEV", dev);
     restore("GRASSFIELD_SESSION", session);
     restore("GRASSFIELD_SHELL_DIR", shell);
+}
+
+namespace {
+
+// A private session bus for one case (dbus-daemon --session), stopped with it; empty where there is no dbus-daemon.
+struct PrivateBus {
+    QProcess daemon;
+    QString address;
+    PrivateBus()
+    {
+        daemon.start(QStringLiteral("dbus-daemon"), {QStringLiteral("--session"), QStringLiteral("--nofork"), QStringLiteral("--print-address=1")});
+        if (daemon.waitForStarted(3000) && daemon.waitForReadyRead(3000))
+            address = QString::fromUtf8(daemon.readLine()).trimmed();
+    }
+    ~PrivateBus()
+    {
+        daemon.kill();
+        daemon.waitForFinished(3000);
+    }
+};
+
+} // namespace
+
+// AM1 (the review of PR #47): a launch takes the bus name, or hands its token over to the app that holds it and leaves,
+// even when that app answers late (still starting: it answers from its event loop, once its window exists); it runs only
+// when the name has no owner left.
+TEST(ActivityService, ALaunchTakesTheNameOrHandsItsTokenOverAndLeaves)
+{
+    PrivateBus pb;
+    if (pb.address.isEmpty())
+        GTEST_SKIP() << "no dbus-daemon here";
+    QDBusConnection first = QDBusConnection::connectToBus(pb.address, QStringLiteral("first"));
+    QDBusConnection second = QDBusConnection::connectToBus(pb.address, QStringLiteral("second"));
+    ASSERT_TRUE(first.isConnected() && second.isConnected());
+
+    ActivityService a, b;
+    EXPECT_EQ(claimOrHandOver(first, &a, QString(), 1000), Launch::Run);
+    // The running app is busy (its thread does not run its event loop, as during a slow start): the launch leaves anyway.
+    EXPECT_EQ(claimOrHandOver(second, &b, QStringLiteral("token-2"), 300), Launch::Leave);
+
+    // The running app answers: the token reaches it, and the launch leaves.
+    first.unregisterService(ActivityService::serviceName());
+    first.unregisterObject(QStringLiteral("/org/grassfield/Activity"));
+    QThread owner;
+    owner.start();
+    auto *c = new ActivityService;
+    c->moveToThread(&owner);
+    QMutex mutex;
+    QString got;
+    QObject::connect(c, &ActivityService::activateRequested, c, [&](const QString &token) {
+        QMutexLocker lock(&mutex);
+        got = token;
+    }, Qt::DirectConnection);
+    EXPECT_EQ(claimOrHandOver(first, c, QString(), 1000), Launch::Run);
+    EXPECT_EQ(claimOrHandOver(second, &b, QStringLiteral("token-3"), 3000), Launch::Leave);
+    {
+        QMutexLocker lock(&mutex);
+        EXPECT_EQ(got, QStringLiteral("token-3"));
+    }
+    // The running app quits: the name has no owner left, and the next launch takes it and runs.
+    first.unregisterObject(QStringLiteral("/org/grassfield/Activity"));
+    first.unregisterService(ActivityService::serviceName());
+    owner.quit();
+    owner.wait();
+    delete c;
+    EXPECT_EQ(claimOrHandOver(second, &b, QString(), 1000), Launch::Run);
+    second.unregisterService(ActivityService::serviceName());
+    second.unregisterObject(QStringLiteral("/org/grassfield/Activity"));
+}
+
+// The shell's IPC is killed after its time, as Settings' (the review of PR #47); the process deletes itself.
+TEST(ActivityService, AShellCallIsKilledAfterItsTime)
+{
+    QObject parent;
+    QElapsedTimer t;
+    t.start();
+    QPointer<QProcess> p = runWithTimeout({QStringLiteral("sleep"), QStringLiteral("10")}, QProcessEnvironment::systemEnvironment(), 200, &parent);
+    ASSERT_FALSE(p.isNull());
+    EXPECT_TRUE(QTest::qWaitFor([&] { return p.isNull(); }, 5000));
+    EXPECT_LT(t.elapsed(), 5000);
+    EXPECT_EQ(runWithTimeout({}, QProcessEnvironment::systemEnvironment(), 200, &parent), nullptr);
 }

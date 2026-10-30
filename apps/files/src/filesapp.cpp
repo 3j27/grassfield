@@ -652,7 +652,7 @@ QObject *FilesApp::createFolderModel(QObject *parent)
 {
     auto *model = new FolderModel(parent ? parent : this);
     connect(model, &FolderModel::tagsSeen, this, &FilesApp::noteTags);
-    connect(model, &FolderModel::applicationsListed, this, [this](const QVariantMap &paths) { m_applicationPaths = paths; });
+    connect(model, &FolderModel::applicationsListed, this, [this](const QVariantMap &paths, const QVariantMap &names) { m_applicationPaths = paths; m_applicationNames = names; });
     connect(this, &FilesApp::tagsChanged, model, &FolderModel::tagsChanged);
     model->setStyleStore(&m_folderStyles);
     connect(this, &FilesApp::folderStylesChanged, model, &FolderModel::folderStylesChanged);
@@ -920,7 +920,7 @@ void FilesApp::launchApplication(const QUrl &url)
         if (!service->workingDirectory().isEmpty())
             process.setWorkingDirectory(service->workingDirectory());
         if (!process.startDetached())
-            emit operationFailed(tr("“%1” could not be started.").arg(service->name()));
+            emit operationFailed(tr("“%1” could not be started.").arg(FileLogic::displayName(m_applicationNames.value(id).toString().isEmpty() ? service->name() : m_applicationNames.value(id).toString())));
         return;
     }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
