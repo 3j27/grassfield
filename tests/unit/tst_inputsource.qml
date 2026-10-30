@@ -71,6 +71,28 @@ TestCase {
         verify(!InputSource.named(undefined));
     }
 
+    // Capture defect 10: the name is shown in the shell's language through the xkeyboard-config catalog (layout-names.py).
+    function test_lookupIsNeededOutsideEnglish() {
+        verify(!InputSource.needsLookup("en"));
+        verify(!InputSource.needsLookup("en_US"));
+        verify(!InputSource.needsLookup("en-GB.UTF-8"));
+        verify(!InputSource.needsLookup(""));
+        verify(!InputSource.needsLookup(undefined));
+        verify(InputSource.needsLookup("fr"));
+        verify(InputSource.needsLookup("fr_FR"));
+        verify(InputSource.needsLookup("de_DE.UTF-8"));
+        verify(InputSource.needsLookup("eng_X"), "a language that only starts with en");
+    }
+
+    function test_lookupResultFallsBackToEnglish() {
+        compare(InputSource.lookupResult("Anglais (US)\n", "English (US)"), "Anglais (US)");
+        compare(InputSource.lookupResult("", "English (US)"), "English (US)");
+        compare(InputSource.lookupResult("\n", "English (US)"), "English (US)");
+        compare(InputSource.lookupResult(undefined, "German"), "German");
+        compare(InputSource.lookupResult("x".repeat(200), "German"), "German");
+        compare(InputSource.lookupResult("Allemand\nignored", "German"), "Allemand");
+    }
+
     function test_stepDoesNotModifyItsInput() {
         const s = {last: {k: "x"}};
         InputSource.step(s, {keyboard: "k", layout: "y"});

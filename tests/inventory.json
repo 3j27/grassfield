@@ -358,6 +358,7 @@
  {"path": "tests/shell/displays_publish.sh", "layer": "headless"},
  {"path": "tests/shell/displays_trial.sh", "layer": "headless"},
  {"path": "tests/shell/osd_keyboard.sh", "layer": "headless"},
+ {"path": "tests/shell/input_source_names.sh", "layer": "headless"},
  {"path": "tests/shell/stack_watch.sh", "layer": "headless"},
  {"path": "tests/shell/stack_helper.sh", "layer": "headless"},
  {"path": "tests/shell/clipboard_helper.sh", "layer": "headless"},

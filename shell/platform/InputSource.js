@@ -29,6 +29,18 @@ function named(layout) {
     return text !== "" && !/^(error|unknown|none|\(unknown\))$/i.test(text);
 }
 
+// English needs no lookup (the names are English already); so does an empty language.
+function needsLookup(language) {
+    const text = String(language === undefined || language === null ? "" : language).trim();
+    return text !== "" && !/^en([_.@-]|$)/i.test(text);
+}
+
+// The helper's answer for one name: its first line, the English name when there is none (the helper prints one line per name).
+function lookupResult(output, english) {
+    const line = String(output === undefined || output === null ? "" : output).split("\n")[0].trim();
+    return line === "" || line.length > 128 ? english : line;
+}
+
 // Next state and whether to show the HUD. state: {last: {keyboard: layout}}. Show when the keyboard had a different layout.
 // An event without a readable layout name changes nothing and shows nothing.
 function step(state, event) {
