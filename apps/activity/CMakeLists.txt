@@ -7,13 +7,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt), its unit tests and its bench
-# (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt Core, Gui and DBus) and the app with its QML, its desktop
-# entry and its icon, packaged in grassfield-desktop (AD2).
+# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt; step 2c's signal path with it), its unit
+# tests and its bench (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt Core, Gui and DBus) and the app with
+# its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
 add_library(grassfield-activity-sampler STATIC
     src/netdiag.cpp src/netdiag.h
     src/procparse.cpp src/procparse.h
     src/sampler.cpp src/sampler.h
+    src/signals.cpp src/signals.h
     src/textclean.cpp src/textclean.h
     src/units.cpp src/units.h)
 target_include_directories(grassfield-activity-sampler PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -64,6 +65,7 @@ if(GTest_FOUND)
         ../../tests/unit/activity/tst_netdiag.cpp
         ../../tests/unit/activity/tst_procparse.cpp
         ../../tests/unit/activity/tst_sampler.cpp
+        ../../tests/unit/activity/tst_signals.cpp
         ../../tests/unit/activity/tst_textclean.cpp
         ../../tests/unit/activity/tst_units.cpp)
     target_link_libraries(activity-unit-tests PRIVATE grassfield-activity-sampler GTest::gtest GTest::gtest_main)
