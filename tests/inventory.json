@@ -238,6 +238,7 @@
  {"path": "tests/unit/portal/tst_panelstate.cpp", "layer": "logic"},
  {"path": "tests/unit/portal/tst_filechooser.cpp", "layer": "logic"},
  {"path": "tests/unit/portal/tst_access.cpp", "layer": "logic"},
+ {"path": "tests/unit/portal/tst_appchooser.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_systembus.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_busjobs.cpp", "layer": "logic"},
  {"path": "tests/unit/settings/tst_backend.cpp", "layer": "logic"},

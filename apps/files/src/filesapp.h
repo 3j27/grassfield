@@ -215,6 +215,10 @@ public:
     // launchApplication starts the application of a grassfield-app:/<id> item (nothing else) the way the shell's
     // Apps grid does (ApplicationsLogic::launchCommand: xdg-terminal-exec for Terminal=true, uwsm-app scope in a session).
     Q_INVOKABLE QUrl applicationsUrl() const;
+    // An application's item in that location (grassfield-app:/<desktop id>), and the desktop id of such an item ("" for any
+    // other URL): grassfield-portal's Choose Application panel answers with it.
+    Q_INVOKABLE QUrl applicationUrl(const QString &id) const;
+    Q_INVOKABLE QString applicationId(const QUrl &url) const;
     // True (and operationFailed with the permission message) when `urls` hold an item of the Applications location or the
     // location itself: nothing can be done to them but opening.
     bool refuseApplicationItems(const QList<QUrl> &urls);
