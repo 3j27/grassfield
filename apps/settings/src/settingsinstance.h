@@ -16,6 +16,7 @@
 
 #include <QCryptographicHash>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDir>
 #include <QObject>
@@ -99,11 +100,15 @@ inline Launch claimOrHandOver(QDBusConnection &bus, SettingsInstance *instance, 
         const QDBusMessage reply = bus.call(call, QDBus::Block, answerMs);
         if (reply.type() == QDBusMessage::ReplyMessage)
             return Launch::Leave;
-        // Only a name left meanwhile is taken; a running Settings that answers late (still starting) or not at all keeps its
-        // one window, as a busy app on macOS opens nothing more.
+        // Only a name left meanwhile is taken: the bus said it has no owner, or, whatever the error, it has none now (the
+        // running Settings died while it was asked: the bus answers NoReply; the re-review of 85c2c10, whose click was lost).
+        // A running Settings that answers late (still starting) or not at all keeps its one window, as a busy app on macOS
+        // opens nothing more.
         const QString error = reply.errorName();
-        if (error != QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
-            && error != QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner"))
+        const bool noOwner = error == QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
+            || error == QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner")
+            || (bus.interface() && !bus.interface()->isServiceRegistered(SettingsInstance::serviceName()).value());
+        if (!noOwner)
             return Launch::Leave;
     }
     return Launch::Leave;

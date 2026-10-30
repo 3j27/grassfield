@@ -650,6 +650,10 @@ this ADR follows it, and any later pull request of either lane that meets one of
     the cleaning, the hand-over on a private dbus-daemon, a dev run beside the owner's), built by `build-direct.sh --tests`.
   - NIT 3, `Backend::query` checks its allow-list only in dev: About's commands go through `Backend::readOnlyQuery`, which
     checks it in every session (`tst_backend.cpp`).
+- **Opus re-review of 85c2c10 (integrator, 2026-10-30): PASS** (6 races on a private bus at load 8 to 13.5, no second
+  instance; a frozen Settings bounds a launch at 25 s per attempt). A MINOR left for a follow-up: a Settings that dies while
+  a launch waits on it answers NoReply, not "no owner", so that click was lost; the launch now retries whenever the name has
+  no owner after any error (`tst_settingsinstance.cpp`: the owner, this test binary run again, killed during the call).
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.

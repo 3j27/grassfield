@@ -9,7 +9,15 @@
 #include <QDBusConnection>
 #include <QMutex>
 #include <QProcess>
+#include <QElapsedTimer>
 #include <QThread>
+
+#include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <thread>
+
+#include <unistd.h>
 
 #include "settingsinstance.h"
 
@@ -101,6 +109,27 @@ struct Requests {
         return seen;
     }
 };
+
+// Owner mode (ALaunchWhoseOwnerDiesWhileAskedRuns): run with GF_SETTINGS_TEST_OWNER set to a private bus's address, this
+// binary is a Settings that took the name and never answers (its thread sleeps), until it is killed. Before main: no test
+// of the binary runs in that process.
+const bool ownerMode = [] {
+    const QByteArray address = qgetenv("GF_SETTINGS_TEST_OWNER");
+    if (address.isEmpty())
+        return false;
+    static int argc = 1;
+    static char name[] = "tst_settingsinstance-owner";
+    static char *argv[] = {name, nullptr};
+    QCoreApplication owner(argc, argv);
+    QDBusConnection bus = QDBusConnection::connectToBus(QString::fromUtf8(address), QStringLiteral("owner"));
+    // The object lives on this thread, which never runs its event loop: a call reaches it and is never answered.
+    static SettingsInstance instance;
+    bus.registerObject(SettingsInstance::objectPath(), &instance, QDBusConnection::ExportScriptableSlots);
+    std::printf(bus.registerService(SettingsInstance::serviceName()) ? "owned\n" : "refused\n");
+    std::fflush(stdout);
+    std::this_thread::sleep_for(std::chrono::seconds(30));
+    _exit(0);
+}();
 
 void release(QDBusConnection &bus)
 {
@@ -212,6 +241,40 @@ TEST(SettingsInstance, ALaunchTakesTheNameOrHandsItsRequestOverAndLeaves)
     delete c;
     EXPECT_EQ(claimOrHandOver(second, &b, QStringLiteral("About"), QVariantList{QString()}, 1000), Launch::Run);
     release(second);
+}
+
+// The running Settings dies while a launch waits on it (the re-review of 85c2c10: the bus answers NoReply, not "no owner",
+// and that click was lost): the name has no owner left, so the launch takes it and runs. The owner is this test binary run
+// again (ownerMode, above): it takes the name, never answers, and is killed 800 ms into the call.
+TEST(SettingsInstance, ALaunchWhoseOwnerDiesWhileAskedRuns)
+{
+    app();
+    RunModeGuard guard;
+    PrivateBus pb;
+    if (pb.address.isEmpty())
+        GTEST_SKIP() << "no dbus-daemon here";
+    QProcess owner;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("GF_SETTINGS_TEST_OWNER"), pb.address);
+    owner.setProcessEnvironment(env);
+    owner.start(QCoreApplication::applicationFilePath(), {});
+    ASSERT_TRUE(owner.waitForReadyRead(5000));
+    ASSERT_EQ(owner.readLine().trimmed(), QByteArray("owned"));
+    const qint64 pid = owner.processId();
+    std::thread killer([pid] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        ::kill(static_cast<pid_t>(pid), SIGKILL);
+    });
+    QDBusConnection launch = QDBusConnection::connectToBus(pb.address, QStringLiteral("settings-launch"));
+    ASSERT_TRUE(launch.isConnected());
+    SettingsInstance b;
+    QElapsedTimer t;
+    t.start();
+    EXPECT_EQ(claimOrHandOver(launch, &b, QStringLiteral("About"), QVariantList{QString()}, 10000), Launch::Run);
+    EXPECT_LT(t.elapsed(), 5000); // at the owner's death, not at the end of the wait
+    killer.join();
+    owner.waitForFinished(3000);
+    release(launch);
 }
 
 // A dev run and the owner's Settings on one bus (a dev session shares the owner's): the dev launch takes its own name and

@@ -243,7 +243,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      window on `section` (a sidebar id, else the window as it is), `About(s token)` the About This Computer window. A second
      `grassfield-settings [--section=<id>|--about]` hands its request and its `XDG_ACTIVATION_TOKEN` to it and leaves,
      however late the running one answers (still starting: it answers from its event loop; up to 25 s, then the request
-     stays queued for it), and runs itself only when the name has no owner left or there is no session bus
+     stays queued for it), and runs itself only when the name has no owner left (the bus says so, or, after any error, it
+     has none now: a running Settings that died while it was asked, the re-review of 85c2c10) or there is no session bus
      (`claimOrHandOver`, Activity Monitor's, the re-review of c6cf328). Tests: `tests/unit/settings/tst_settingsinstance.cpp`
      (the name, the cleaning, the hand-over on a private dbus-daemon). Both windows live in that one process, each made
      when first asked for and kept (closing hides it; the app quits when the last shown one closes); a window asked for again
