@@ -56,7 +56,7 @@ TestCase {
                 spacing: 16
                 Toggle { checked: true }
                 Switch { checked: false }
-                CheckBox { checked: true; text: "Check" }
+                CheckBox { id: check; checked: true; text: "Check" }
                 RadioButton { checked: true; text: "Radio" }
             }
             SegmentedControl {
@@ -66,6 +66,8 @@ TestCase {
             TextField { width: 220; text: "Field text" }
             SearchField { width: 220 }
             ComboBox { width: 180; model: [{id: "a", text: "Automatic"}]; value: "a" }
+            // The settings-row pop-up at its own width: its disc's measured inset (3.5) is rounded onto the grid (ADR-0039 step 1).
+            ComboBox { inline: true; model: [{id: "a", text: "Icon theme"}]; value: "a" }
             Row {
                 spacing: 12
                 WindowControls { style: "unified" }
@@ -114,6 +116,14 @@ TestCase {
 
     function test_menuWidthIsWhole() {
         verify(!frac(menu.width), "menu width " + menu.width);
+    }
+
+    // Text is not checked by the walk above, but a left-aligned label whose origin has a fraction moves the whole line half a pixel:
+    // the check box label (box 16 + measured gap 5.5) starts on a whole pixel. (A menu's right-aligned shortcut column keeps a whole
+    // right edge instead, tst_popupmenu's test_shortcutsAlignRight: its origin follows the text width.)
+    function test_checkBoxLabelStartsOnAWholePixel() {
+        const p = check.contentItem.mapToItem(scene, 0, 0);
+        verify(!frac(p.x), "check box label at " + p.x);
     }
 
     function test_unifiedLightsAreWhole() {

@@ -78,6 +78,19 @@ inline constexpr int kMaxFilterPatternLength = 4096;
 
 void registerTypes();
 
+// A string an application gave, as a window shows it (spec common rule 5): one line, plain, capped at kMaxTextLength.
+// Control characters become spaces; the bidi embedding, override and isolate controls go.
+QString oneLine(const QString &text);
+// GTK's mnemonic marker removed ("_Open" is "Open"; "__" is "_"): Grassfield's buttons show none (macOS has none).
+QString withoutMnemonic(const QString &label);
+// The choices of an options vardict (D-Bus a(ssa(ss)s), FileChooser's and Access's), checked: at most kMaxChoices, unique
+// ids, labels as one line; a pop-up's initial value one of its options (else the first), a check box's "true" or "false".
+QList<Choice> parseChoices(const QVariant &given);
+// For the QML: [{id, label, options: [{id, label}], initial}].
+QVariantList choicesToQml(const QList<Choice> &choices);
+// The answer to every choice asked (a(ss)): the window's value ([{id, value}]) when the choice allows it, else its initial.
+QList<Pair> answerChoices(const QList<Choice> &choices, const QVariantList &answer);
+
 Request parse(Kind kind, const QString &appId, const QString &parentWindow, const QString &title, const QVariantMap &options);
 
 // The request as the panel's QML reads it: {kind: "open"|"save"|"saveFiles", appId, title, acceptLabel, modal, parented (a

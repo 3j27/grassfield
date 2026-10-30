@@ -696,6 +696,8 @@ QtObject {
     readonly property int panelSheetFooterHeight: 64
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertWidth: 260
+    // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
+    readonly property int panelAlertArmMs: 500
 
     // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63

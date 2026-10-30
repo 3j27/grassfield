@@ -31,16 +31,21 @@ read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick
 read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client)"
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
+"$moc" "${kf_includes[@]}" "$here/src/requesthost.h" -o "$out/moc_portal_requesthost.cpp"
 "$moc" "${kf_includes[@]}" "$here/src/filechooser.h" -o "$out/moc_portal_filechooser.cpp"
+"$moc" "${kf_includes[@]}" "$here/src/access.h" -o "$out/moc_portal_access.cpp"
 
 defs=()
-sources=("$here/src/filechooser.cpp" "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp" "$out/moc_portal_filechooser.cpp")
+sources=("$here/src/requesthost.cpp" "$here/src/filechooser.cpp" "$here/src/access.cpp" "$here/src/chooserlogic.cpp"
+         "$here/src/panelstate.cpp" "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp" "$out/moc_portal_access.cpp")
 target=$out/grassfield-portal
 case $mode in
   --tests)
     # tst_filechooser.cpp declares its fakes in the file itself (its own moc, included at its end).
     "$moc" "$root/tests/unit/portal/tst_filechooser.cpp" -o "$out/tst_filechooser.moc"
-    sources+=("$root/tests/unit/portal/tst_chooserlogic.cpp" "$root/tests/unit/portal/tst_panelstate.cpp" "$root/tests/unit/portal/tst_filechooser.cpp")
+    "$moc" "$root/tests/unit/portal/tst_access.cpp" -o "$out/tst_access.moc"
+    sources+=("$root/tests/unit/portal/tst_chooserlogic.cpp" "$root/tests/unit/portal/tst_panelstate.cpp" "$root/tests/unit/portal/tst_filechooser.cpp"
+              "$root/tests/unit/portal/tst_access.cpp")
     target=$out/portal-unit-tests$suffix ;;
   --install-paths) sources+=("$here/src/main.cpp") ;;
   "") sources+=("$here/src/main.cpp"); defs+=("-DGRASSFIELD_FILES_QML_DIR=\"$root/apps/files/qml\"") ;;

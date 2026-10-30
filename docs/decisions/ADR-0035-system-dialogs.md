@@ -488,9 +488,9 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
   the next, and a call asking a path another call's thread is reading waits for that read instead of starting one (one read
   per path: 30 calls on one hung path are one thread, re-review of 24bdf58, MINOR 3). A read still running when a call
   waiting for it ends is stuck: until it returns, a later call gets "not responding" for that path at once; when it returns,
-  its answer is given late (`answeredLate`). At most 32 threads live at once (a burst, the sidebar's seven calls and a
-  panel's six, is far below it; with 32, a new call's paths are not responding at once), well under the unit's `TasksMax` of
-  128. A panel's start folders are a call each, all at once (the application's folder, the remembered one, Home, Documents,
+  its answer is given late (`answeredLate`). At most 32 threads live at once per DiskProbe (a burst, the sidebar's seven calls
+  and a panel's six, is far below it; with 32, a new call's paths are not responding at once); the portal has two, the panels'
+  and their sidebar model's, so 64 at most, still under the unit's `TasksMax` of 128 (step 4b's integrator status, MINOR). A panel's start folders are a call each, all at once (the application's folder, the remembered one, Home, Documents,
   Desktop, Downloads), and where calls answer about the same folder a real answer wins over "not responding", whichever
   comes first: no hung folder hides another (re-reviews of 65311e0 and 24bdf58, MAJOR 1: a hung remembered folder, then a
   hung Documents in the places' one call, hid the application's ~/Downloads; the places were read in a hash's order, which
@@ -517,6 +517,97 @@ real frontend on a private bus: A-FC1, A-FC4, A-FC6, A-FC7).
     frontend, which stores it in the permission store that Settings > Privacy & Security reads (PR #10, ADR-0030 amendment).
 - Fallback: as D-4 (forward to gtk).
 - Cost: medium (two QML surfaces on the D-4 process). Risk: low.
+
+**Delivered in step 5a (the permission alerts).** `apps/portal/src/requesthost.{h,cpp}`: the request lifecycle FileChooser had
+(a Request object per call, the delayed reply, the bound on open requests, the UI made at the first request, the 3-s forward to
+x-d-p-gtk with its answer relayed and Close sent on, the idle quit), now shared (5a-2). `access.{h,cpp}`: the backend interface
+(`AccessDialog`: the frontend's strings as plain lines, its labels without mnemonics, a symbolic icon name or none, the choices
+through chooserlogic's functions, no default button for the camera and screen capture), on the same exported
+object as FileChooser; `main.cpp` makes both roots of the UI at the first request of either and quits once both are idle.
+`apps/files/qml/AccessAlerts.qml` and `AccessAlert.qml` (the alert). Packaging: `grassfield.portal` lists Access, the
+session's `hyprland-portals.conf` routes `Access=grassfield;gtk`, `config/hypr/grassfield/windows.lua` gives the alert's tag
+(`access-alert`) the client-chrome tag. Tests: `tests/unit/portal/tst_access.cpp` (the backend on
+the run's private dbus-daemon with a fake frontend and a fake x-d-p-gtk), `tests/unit/tst_accessalert.qml` (the alert over a
+stand-in), `tests/integration/portal_filechooser.sh` scenario 7 (the camera asked through the real frontend: the alert's
+answer reaches the application and the frontend's permission store keeps "yes" or "no").
+
+**Decisions of step 5a** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **5a-1. Step 5 in two pull requests.** Question: deliver Open With and the permission alerts together, or apart? Options:
+  (a) one pull request; (b) **5a** the permission alerts, **5b** Open With. **Choice: (b).** Rule applied: the smallest slice
+  that a user meets first; the alerts are one window and one rule set, Open With is a panel of its own (the Applications
+  location, "All Applications", "Always Open With") and gains nothing from waiting for the alerts' review.
+- **5a-2. One request lifecycle for the portal's interfaces.** Options: (a) Access with its own copy of FileChooser's request
+  handling; (b) that handling moved to a base class, `RequestHost`, that FileChooser, Access and later AppChooser build on.
+  **Choice: (b)**: one place for the forward, Close and the idle quit, reviewed once (four review rounds went into them in
+  step 4b); FileChooser keeps its API and its tests unchanged.
+- **5a-3. An alert asked while the session is locked waits for the user** (replaces AC3's "refused with response 2").
+  Question: what does a permission question asked behind the lock get? What xdg-desktop-portal 1.22.1 does with the answer:
+  for a permission not decided yet, any response but 0 is kept as "no" (`src/camera.c:150-157`, `screenshot.c`,
+  `wallpaper.c`); only a failed call keeps nothing; and it waits on the Access backend without a timeout
+  (`src/xdp-context.c:379-383`). Options: (a) response 2 at once (AC3 as first written): a "no" the user never gave, which only
+  Settings > Privacy & Security undoes; (b) a D-Bus error: nothing kept, the application told it failed, and it must ask
+  again; (c) the alert opens under the lock as a panel does (FC8) and waits there; the lock hides it and takes the keyboard;
+  after the unlock it takes keys only after a click (the hold rule). **Choice: (c).** Rule applied: macOS first (the alert is
+  there when the user is back, as a macOS alert waits on the screen), no technical intervention (no decision made in the
+  user's absence that only Settings can undo). For the same reason a request that ends without the user's answer (Close,
+  over the bound, a forward that failed, the process going) ends with a D-Bus error, never a response the frontend would keep
+  as "no" (review of step 5a, MINOR 1).
+- **5a-4. The alert's shape and window.** Options: (a) the shell's alert (`shell/overlay/Dialog.qml`) moved into Grassfield.Ui
+  and shared; (b) the same shape built in the portal from the same tokens; (c) a sheet like the panels'. **Choice: (b)**: macOS
+  asks for a permission with the same alert as every other alert, so the shape is the shell's (the application's icon in a 64-pt
+  frame at the top left, the title in bold, the message under it, capsule buttons of one width); moving the shell's Dialog into
+  the library would change the shell's alerts in a portal step (a later step that needs the alert in a third process does that,
+  with its review). A window of its own, opaque like the panels and every application window (ADR-0002), with every window's
+  radius (20, ADR-0024 C-1: a window rule cannot go past `decoration.rounding`, so the shell's 24 is not available to a window;
+  `Hyprland --verify-config` refuses it); the application's icon from its desktop entry, the frontend's symbolic icon for an
+  application it cannot name, drawn in the text colour (its theme's grey was 1.2:1 on the dark window; A2 asserts 3:1). Two
+  buttons that do not fit side by side (French: "Ne pas autoriser" and "Autoriser") stack at the row's width, the default button
+  on top as macOS (11 and later) stacks an alert's buttons, "Don't Allow" on top where neither is the default (the camera, AC2;
+  re-review of a4740a2, MINOR 1). An alert that stops being the active window is disarmed until it is active again (re-review of
+  a4740a2, NIT 2). One alert at a time, as macOS shows them: the others wait in the order they came, with no 3-s deadline while
+  they wait (`RequestHost::queue`), and the next shows when the one on screen goes (integrator nested pass of 1745c0c: MAJOR 1,
+  MINOR 3, MINOR 5).
+- **5a-5. No answer by accident.** Question: what keeps a click or a key meant for something else from answering an alert that
+  appears under it? Options: (a) nothing more than macOS shows; (b) each time the alert becomes the active window, no click, key
+  or close answers it for `panelAlertArmMs` (500 ms), a key pressed meanwhile starts that time again (typing on for the window
+  before never arms it), the keyboard starts on the alert and never on a button, again each time it becomes active (Space acts
+  only on a button reached with Tab; Return is the default button's), and the panels' hold rule for an alert that gets the
+  keyboard late, the first time or after more than `filesPanelLateFocusMs` (1.5 s) away (the lock, the screen saver or another
+  window came in front of it; integrator review of e24ea5c, MINOR 1: a Return after the unlock granted a location alert), whose
+  ending click is not an answer: the first press in the alert ends the hold even before it is armed, the press that made it
+  active included (it may come just before the activation), the alert is armed again from that press (a double click never
+  answers), and the hint takes the buttons' place meanwhile, so the alert keeps one size and nothing moves under the pointer
+  (integrator nested pass of 1745c0c, MINOR 2: it took three clicks after the unlock; MINOR 4: the hint resized the window,
+  which Hyprland centred again). **Choice: (b)** (review of step 5a, M1 and M2: an alert armed under the lock took the first
+  click after the unlock, and a Space typed for another window pressed the focused Allow). Rule applied: no technical
+  intervention: the frontend keeps the answer, and an "Allow" given by a stray click or key would need Settings to undo; the
+  alert looks and answers as macOS's otherwise. With AC2, neither button is the default for the camera and screen capture, as on
+  macOS 15 and later (macOS's microphone question has no xdg-desktop-portal 1.22.1 counterpart, and no icon names it here). For
+  location, the wallpaper and running in the background "Allow" stays the default, so Return grants once the alert is armed and
+  not held: that is AC2's choice, as macOS's location alert has "Allow" as its default, not the safer button made the default;
+  the arm and the hold are what keep a Return meant for something else from granting (integrator review of e24ea5c, NIT 4).
+- **5a-6. Esc and the window closed are "Don't Allow".** The alert has no Cancel: the frontend reads any answer but 0 as "no",
+  so Esc and a close by the compositor say it plainly, as macOS's Esc does (a close before the alert is armed is refused,
+  5a-5). The application's name is in the frontend's title ("Allow Example to Use the Camera?"), not on a line of its own.
+- **5a-7. The forward.** xdg-desktop-portal uses one Access backend (no fallback at runtime), so an alert that cannot show is
+  forwarded to x-d-p-gtk's Access by the backend itself, as the panels are (FC7); its answer and its choices are relayed. A
+  forwarded request the application or the frontend closes ends with a D-Bus error, not x-d-p-gtk's answer to its closed dialog,
+  which the frontend would keep as "no" (counter-review of step 5a).
+- **5a-8. Who may call.** Any process on the session bus can call the backend directly (as for the panels). Options: (a) only
+  the owner of `org.freedesktop.portal.Desktop`; (b) any caller. **Choice: (b)** for now: such a process can draw any window
+  of its own already, its answer goes only to itself, and the integrator's nested passes call the backend directly
+  (`tests/fixtures/portal-client.py`); a check of the caller is a follow-up for both interfaces together (review of step 5a,
+  MINOR 6).
+- **5a-9. The frontend's wording in Grassfield's language.** xdg-desktop-portal 1.22.1 sends its title, question and note in
+  English whatever the language: its installed French catalog is empty (integrator nested pass of 1745c0c, MINOR 6; D-5 had
+  assumed the text arrives translated). Options: (a) show it as it comes; (b) give the frontend's known wording (`src/camera.c`,
+  `location.c`, `screenshot.c`, `wallpaper.c`, `background.c` of 1.22.1, matched whole, the application's name kept) in
+  Grassfield's language from Grassfield's catalog, any other wording as it comes; (c) write Grassfield's own sentences per
+  question. **Choice: (b)**, and the frontend's own button labels ("Deny Access"/"Grant Access", "Deny"/"Allow", "Don't
+  allow"/"Allow") become the alert's "Don't Allow" and "Allow", the words macOS gives every privacy alert. Rule applied: macOS
+  first (an alert in the user's language, the same two buttons on every privacy question), no technical intervention (nothing to
+  install or set). (c) would rewrite the questions the frontend asks and break with its wording ("Allow Apps to …" for an
+  application it cannot name) on its next version; with (b) a new wording shows in English until it is added.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
@@ -1434,7 +1525,8 @@ requests #8, #9 and #10 are merged (owner).
    extensions for Files and the panel, `grassfield-portal` with the FileChooser interface. Coordinated with the open Files pull
    request #7 (views). In two pull requests (decision 4a-1): **4a**, the delegates and sheets in Files; **4b**, the library
    split and the portal.
-5. **Open With and permission alerts** (D-5).
+5. **Open With and permission alerts** (D-5), in two pull requests (decision 5a-1): **5a**, the permission alerts (Access);
+   **5b**, Open With (AppChooser).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording
