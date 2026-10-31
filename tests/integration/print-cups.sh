@@ -8,8 +8,15 @@ cups_ready() {
   [[ -x ${GF_TEST_CUPSD:-/usr/sbin/cupsd} ]] && command -v lpadmin >/dev/null && command -v lpstat >/dev/null && command -v python3 >/dev/null
 }
 
-start_cups() { # start_cups <dir>: sets cups_port and cups_pid; the queue Office ready and the default
+# lpstat -r exits 0 whether the scheduler runs or not ("scheduler is not running"): its words say which. Waiting on its exit
+# status did not wait, and lpadmin then raced the scheduler's start (scenario 9 failed or skipped in 2 of 7 full runs).
+cups_running() {
+  [[ $(LC_ALL=C CUPS_SERVER=localhost:$cups_port lpstat -r 2>/dev/null) == "scheduler is running" ]]
+}
+
+start_cups() { # start_cups <dir>: sets cups_port and cups_pid; the queue Office ready and the default; cups_error on failure
   local dir=$1
+  cups_error=
   mkdir -p "$dir"/{etc,spool,cache,state,log,tmp,out}
   cups_port=$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
   cat >"$dir/etc/cupsd.conf" <<CONF
@@ -48,13 +55,18 @@ CONF
   cups_pid=$!
   local _
   for _ in $(seq 50); do
-    CUPS_SERVER=localhost:$cups_port lpstat -r >/dev/null 2>&1 && break
+    cups_running && break
     timeout 0.1 tail -f /dev/null
   done
-  CUPS_SERVER=localhost:$cups_port lpstat -r >/dev/null 2>&1 || return 1
-  CUPS_SERVER=localhost:$cups_port lpadmin -p Office -E -v "file://$dir/out/office.pdf" -P "$root/tests/fixtures/print/office.ppd" \
-    -D "Office Printer" -L "Hall" 2>/dev/null || return 1
-  CUPS_SERVER=localhost:$cups_port lpadmin -d Office
+  cups_running || { cups_error="no answer on localhost:$cups_port in 5 s"; return 1; }
+  cups_error=$(CUPS_SERVER=localhost:$cups_port lpadmin -p Office -E -v "file://$dir/out/office.pdf" \
+    -P "$root/tests/fixtures/print/office.ppd" -D "Office Printer" -L "Hall" 2>&1) || { cups_error="lpadmin: $cups_error"; return 1; }
+  cups_error=$(CUPS_SERVER=localhost:$cups_port lpadmin -d Office 2>&1) || { cups_error="lpadmin -d: $cups_error"; return 1; }
+}
+
+# Why start_cups failed (cups_error), then the scheduler's own errors: its output and the error log's E lines.
+cups_failure() { # cups_failure <dir>
+  { echo "$cups_error"; cat "$1/log/cupsd.out" 2>/dev/null; grep -E '^[EC] ' "$1/log/error_log" 2>/dev/null; } | head -n 4 | tr '\n' ' '
 }
 
 stop_cups() {

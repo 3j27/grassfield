@@ -307,7 +307,15 @@ fi
 # Print (D-7, step 6a): an application's Print… through the frontend as GTK makes it: PreparePrint shows the print sheet over the
 # scratch scheduler's default queue, the sheet prints (its test answer), the application gets GTK's settings and a token, and
 # Print with the token sends the document to that queue with the copies asked.
-if cups_ready && start_cups "$tmp/cups"; then
+# A scheduler that is there but does not start fails the scenario with why; only a missing one skips it.
+cupsdir=$tmp/cups
+if ! cups_ready; then
+  echo "SKIP: 9 needs a cupsd the user can run (GF_TEST_CUPSD), lpadmin and python3"
+elif ! start_cups "$cupsdir"; then
+  desc="9 the scratch scheduler starts [$(cups_failure "$cupsdir")]"
+  check false
+  stop_cups
+else
   scenario print accept "" "" real "CUPS_SERVER=localhost:$cups_port" || exit 1
   printf '%%PDF-1.4\n%% a page\n%%%%EOF\n' >"$d/document.pdf"
   out=$(printdoc "$d/document.pdf" 30)
@@ -322,13 +330,11 @@ if cups_ready && start_cups "$tmp/cups"; then
   job=$(CUPS_SERVER=localhost:$cups_port lpstat -W completed -o Office | awk 'NR == 1 {print $1}')
   copies=$(CUPS_SERVER=localhost:$cups_port ipptool -tv "ipp://localhost:$cups_port/jobs/${job##*-}" get-job-attributes.test 2>/dev/null |
     sed -n 's/^ *copies (integer) = //p')
-  document=$(ls "$tmp/cups/spool"/d*-001 2>/dev/null | head -1)
+  document=$(ls "$cupsdir/spool"/d*-001 2>/dev/null | head -1)
   desc="9 ... the scheduler has the job ($job) with its two copies and the document the application made [copies $copies]"
   check bash -c '[[ -n $1 && $2 == 2 && -n $3 ]] && cmp -s "$3" "$4"' _ "$job" "$copies" "$document" "$d/document.pdf"
   stop_bus
   stop_cups
-else
-  echo "SKIP: 9 needs a cupsd the user can run (GF_TEST_CUPSD), lpadmin and python3"
 fi
 
 exit "$fail"
