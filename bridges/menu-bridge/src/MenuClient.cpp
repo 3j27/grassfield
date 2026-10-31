@@ -16,12 +16,15 @@ namespace gf::menubridge {
         constexpr int kCallTimeoutMs = 3000;
         // Bursts of LayoutUpdated / ItemsPropertiesUpdated collapse into one GetLayout.
         constexpr int kRefetchDelayMs = 40;
-        // Consecutive failed reads before the bridge gives up on a menu, the first read included. A failed read is tried
-        // again after kRetryDelayMs, doubled each time (0.5, 1, 2 s), and a menu shown before stays shown meanwhile: an
-        // application busy for longer than a call's timeout (Files drawing the Applications location on a loaded machine:
-        // GetLayout NoReply) or whose menu object is not exported yet gets its menu once it answers, about 15 s at most.
-        constexpr int kMaxFailures  = 4;
-        constexpr int kRetryDelayMs = 500;
+        // A first read that fails is tried again after kRetryDelayMs, doubled each time (0.5, 1, 2 s): an application busy
+        // for longer than a call's timeout (Files drawing the Applications location on a loaded machine: GetLayout NoReply)
+        // or whose menu object is not exported yet gets its menu once it answers; the fourth failed first read is given up.
+        constexpr int kFirstReadTries = 4;
+        constexpr int kRetryDelayMs   = 500;
+        // A menu shown before keeps its last layout when a re-read fails (macOS keeps a busy application's menus): the bridge
+        // does not read it again by itself, the application's next signal does, and it is given up only after this many
+        // failed re-reads in a row.
+        constexpr int kMaxRereadFailures = 3;
     } // namespace
 
     MenuClient::MenuClient(const QDBusConnection& bus, QString window, QString service, QString path, QObject* parent) :
@@ -120,17 +123,29 @@ namespace gf::menubridge {
     }
 
     void MenuClient::fail(const QString& code, const QString& why) {
-        // Read again later (a menu shown before stays shown), until the application keeps failing. The first read used
-        // to fail at once: a window whose application was busy past the timeout showed the T0 menus until its next focus.
-        if (++m_failures >= kMaxFailures) {
-            m_stopped = true;
-            m_refetch.stop();
-            m_retry.stop();
-            emit failed(m_window, code, why);
+        ++m_failures;
+        if (m_ready) {
+            // A re-read: the last good layout stays shown; the application's next signal reads it again.
+            if (m_failures >= kMaxRereadFailures)
+                giveUp(code, why);
             return;
         }
-        log(QStringLiteral("window %1: reading its menu again in %2 ms (%3 of %4)").arg(m_window).arg(kRetryDelayMs << (m_failures - 1)).arg(m_failures).arg(kMaxFailures));
-        m_retry.start(kRetryDelayMs << (m_failures - 1));
+        // The first read: tried again later. It used to fail at once, and a window whose application was busy past the
+        // timeout showed the T0 menus until its next focus.
+        if (m_failures >= kFirstReadTries) {
+            giveUp(code, why);
+            return;
+        }
+        const int delay = kRetryDelayMs << (m_failures - 1);
+        log(QStringLiteral("window %1: reading its menu again in %2 ms (%3 of %4)").arg(m_window).arg(delay).arg(m_failures).arg(kFirstReadTries));
+        m_retry.start(delay);
+    }
+
+    void MenuClient::giveUp(const QString& code, const QString& why) {
+        m_stopped = true;
+        m_refetch.stop();
+        m_retry.stop();
+        emit failed(m_window, code, why);
     }
 
     void MenuClient::track(const QDBusMessage& message, std::function<void(const QDBusMessage&)> handler) {

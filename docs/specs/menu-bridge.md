@@ -50,10 +50,12 @@ top-level menus (Left/Right).
   as [])`, `AboutToShow(int32)`, `Event(int32 id, "clicked", variant<int32 0>, uint32 0)`. `LayoutUpdated` and
   `ItemsPropertiesUpdated` trigger one coalesced `GetLayout` (40 ms); `AboutToShow` returning `needUpdate` too. The
   menu is dropped (`gone`) when the unique name leaves the bus (NameOwnerChanged) and on `close`. Calls time out after
-  3 s; at most 16 windows have an open menu (least recently opened dropped). A failed `GetLayout`, the first one too, is
-  read again after 0.5, 1 and 2 s (a menu shown before stays shown); the fourth failure in a row is `layout-failed`. An
-  application busy past the timeout (Files drawing the Applications location on a loaded machine answered NoReply and its
-  window kept T0, website captures of 2026-10-30) gets its menus once it answers.
+  3 s; at most 16 windows have an open menu (least recently opened dropped). A failed first `GetLayout` is read again
+  after 0.5, 1 and 2 s, and the fourth failure is `layout-failed`: an application busy past the timeout (Files drawing the
+  Applications location on a loaded machine answered NoReply and its window kept T0, website captures of 2026-10-30) gets
+  its menus once it answers. A menu shown before keeps its last good layout when a re-read fails (macOS keeps a busy
+  application's menus): the bridge reads it again only at the application's next signal and gives it up after three failed
+  re-reads in a row.
 - **MB7 Mapping (untrusted application).** Only known properties are read (`label`, `enabled`, `visible`, `type`,
   `toggle-type`, `toggle-state`, `children-display`, `icon-name`, `shortcut`); wrong types fall back to the DBusMenu
   defaults. Labels: `_x` mnemonic markers removed (`__` → `_`), control and bidirectional formatting characters
