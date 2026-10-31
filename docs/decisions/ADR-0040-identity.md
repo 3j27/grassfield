@@ -566,6 +566,17 @@ licence, date, changes made), the install path and the package weight come with 
 | 15 | `Waving grass under mountains (Unsplash).jpg` | Thomas Rohlfs (Unsplash) | CC0 | 4608 × 2592, 9.2 MB |
 | 16 | `Milky Way over Cronan Ranch (52321033535).jpg` | Bureau of Land Management California | public domain (PD-USGov-BLM) | 6965 × 4752, 25.0 MB |
 
+**The rest in one pull request (2026-10-31).** With the integrator away, the owner asked for every remaining step in one
+pull request (« Fait tout jusqu'à la fin dans une même PR ... sauf s'il te demande d'arrêter de travailler »): pull request
+#79 carries #73's GTK follow-up, step 7, step 2c and then steps 2, 3, 4a, 4b, 5, 6, 8, 9 and 10, one commit series per step
+in the delivery plan's order, each pushed when its checks pass, so the integrator can stop the work at any commit. The
+owner lifted, for this chantier, the rule that kept `shell/desktop`, `shell/menubar`, `shell/dock`, `Appearance.qml`,
+`apps/store` and `apps/activity` to their own lanes (« Oui, touche-les »; no open pull request worked there that day). IQ-L1
+C: the owner's explicit go-ahead for Plymouth as well as SDDM (« SDDM et Plymouth »), given with the conditions as asked:
+plymouthd runs as root in the boot image and draws the disk-password prompt; a broken theme must never hide it (a fallback
+to the text prompt, which this container cannot test); every root step is the owner's command. The security steps (4a,
+4b, 5, 10) keep their opus security review before any merge; the review of each is recorded in "Review history".
+
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
 - **W1 C, the time of day** (section 2, "The time-of-day rule"): the times from the time zone with no location and no
