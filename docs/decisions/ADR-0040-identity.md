@@ -456,6 +456,14 @@ Settings window): « B en clair seulement, et neutres chauds ». The brand green
 was 4.5:1 on the window, 5.2:1 under its dark text). The neutrals turn warm in both appearances, an explicit choice over
 the "closest to macOS 27" rule; they come in their own pull request (they cross ADR-0039's neutrals and glass and the
 plugin's title bar), measured first in a scratch copy: every A2 role holds, three pinned values move.
+As built (after pull request #71): 34 neutral tokens move to hue 85, chroma 0.0075 in OKLCH, each keeping its lightness
+(so each contrast stays), the pure white to `#FDFCF9`: `color.light` and `color.dark` text, secondary texts, window,
+group, sidebar, field, chip and material tint; the plugin's `titlebar.*` (background, title, inactive buttons, the
+preview tint); `window.inactiveLight*`; `folderIcon.plateBackdrop*`; `menu.swatchMark`, `preview.paperInk`,
+`store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders,
+knob), the Graphite accent and its selection, Files' Gray tag and the drawing of the computer (`settings.device*`).
+Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
+themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
 
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
@@ -530,6 +538,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | Overlap | Owner | The other lane |
 |---|---|---|
 | The greens: ADR-0039 Q4 and its step 11 ↔ IQ-B3 | ADR-0040: the accent palette (`color.accent*`, the default's name and swatch) | ADR-0039: which controls read the accent and which the selection fill |
+| The neutrals: the owner's warm neutrals of 2026-10-30 ↔ ADR-0024's greys, ADR-0039 Q3 (dark secondary text), Q8 and step 21 (third-party title bars on the window tokens) | ADR-0040: the neutrals' warmth (`color.light` and `color.dark` surfaces and text, `titlebar.*`, `window.inactiveLight*`, the icon plates' backdrop; hue 85, chroma 0.0075, each lightness kept) | ADR-0039: which roles read them, the glass classes and their alphas; its values read warm now (#FFFFFF and #292929 are `#FDFCF9` and `#2B2925`) |
 | About: ADR-0039 steps 4 and 10 ↔ ID-19; IQ-B1's dialog glyphs | ADR-0040: About This Computer's form, the glyphs of `NoticeDialog` and `ConfirmDialog` | ADR-0039: `Dialog`'s and `Sheet`'s grammar (radius, buttons, blur radius) |
 | `looknfeel.lua`, `windows.lua`, `Compositor.qml`: ADR-0039 steps 6 and 20 ↔ ID-2, ID-4, IQ-T5 | ADR-0040: the ground colour, the first frame and the transitions | ADR-0039: the window border colour per appearance and the compositor's animation curves |
 | Motion tokens: ADR-0039 Q6 ↔ the session and lock fades | ADR-0039: `motion.*` | ADR-0040: `session.*` and `lock.*` fades, naming a `motion` role where one fits |
