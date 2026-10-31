@@ -134,13 +134,34 @@ few files), M (a surface family).
 | 24 | **Store finish:** buttons with hover and pressed states and the shared disabled opacity, the shared progress indicators (D4), menu host and search field (28), an empty state on the category page, the hairline token, rings on keyboard focus, native text (Q5) | `apps/store` | **after step 3c merges** | renders (store shots), unit tests | M | G16, G22 (Store), G7 |
 | 25 | **Dock, desktop and menu bar:** the Dock shelf's darker outer edge (ADR-0024 §2.5), the Dock menu's "Recent Documents" as a header, one bar-button ring on keyboard focus, the Dock's auto-hide jumping under Reduce Motion, the desktop widgets' scale too (`DesktopWidgets.qml`, the review of step 5), its easings per role, the menu bar's band under Reduce Transparency and Increase Contrast; the desktop icon labels follow the wallpaper tone under them as the menu bar does (dark text without the heavy halo on a bright wallpaper, as macOS; dark labels need a new A2 role over the light wallpapers the tone is chosen for, as the menu bar's dark foreground has, beside today's white-label roles; the integrator's finding of 2026-10-29 on #45, a capture on the owner's machine) | `shell/dock`, `shell/desktop`, `shell/menubar`, `shell/overlay/DockMenu.qml` | **after their fixes merge** | nested | M | G1, G7, G10, G17 |
 | 26 | **Software Update panel:** step 15's Settings rules on its three files | `apps/settings/qml/SoftwareUpdate*.qml` | free now (#44 merged) | renders (`settings.py --update`) | S | G22 |
-| 27 | **Activity Monitor:** its window built on these rules from the start (a checklist in its step, ADR-0038) | `apps/activity` | at its window step | its own review | — | — |
+| 27 | **Activity Monitor:** its window built on these rules from the start (a checklist in its step, ADR-0038) | `apps/activity` | at its window step (step 27: the checklist below, "Activity Monitor checklist", with its state on main; into ADR-0038 once #86 merges) | its own review | — | — |
 | 28 | **The switch knob's edge with Increase Contrast off** (G9, from the review of step 2): the knob of Toggle and Switch gets the drop shadow that sets the macOS 27 knob apart from a light off track, measured on the reference (a real shadow, in tokens). Until then a white knob is 1.25:1 against its off track on opaque material, and Increase Contrast outlines it (steps 1 and 2) | `ui/Grassfield/Ui/Toggle.qml`, `Switch.qml`, `ui/tokens/tokens.json` | needs the reference measure (F1) | a render on the material, a unit test of the knob's edge | S | G9 (setting off) |
 
 Step 0b and steps 1 to 8 need neither an answer nor a merge (the review's clashes of steps 6 and 20 with #43, and of steps
 14, 15 and 17 with #44, are gone: both merged before these steps start). Steps 9 to 11 and 18 to 21 follow the owner's answers of 2026-10-29
 ("Owner decisions (2026-10-29)" below): step 10's buttons and step 11's colour start with a measurement of the macOS 27
 reference the owner named (Q1, Q4); every other answered step can start in this order.
+
+### Activity Monitor checklist (step 27)
+
+Activity Monitor's window follows these rules from its first step (ADR-0038). The checklist goes into ADR-0038's step once #86,
+which edits that ADR and the app, merges; until then it lives here. State on main, 2026-10-31 (`apps/activity/qml`):
+
+| Rule | Where it comes from | State |
+|---|---|---|
+| The window's neutrals and secondary colour (`Appearance.windowSecondary`), never the glass `colors.textSecondary` | Q3, step 9; G13 | three uses left: `Main.qml:198`, `ProcessList.qml:113, :127` (after #86) |
+| The shared toolbar: `UnifiedToolbar`, `RimmedCapsule` on `toolbar.*`, `SearchField` 28 with its clear button | step 14; G16 | done |
+| Icon-only toolbar buttons name themselves (`ToolButton.tooltip`), unless the window's own tooltip says more | step 14 | done (Quit Process and the action button carry AM3's richer tooltip) |
+| Increase Contrast and Text size read from `accessibility.*` and bound to `Appearance` | Q7, step 18; G12 | done |
+| Static text rendered natively | Q5, step 19; G21 | done |
+| A window that is not key: the toolbar title and glyphs dim, the selection turns neutral | step 17; G18 | done (`UnifiedToolbar`; the list's selection is emphasized only while the list has the focus) |
+| One focus ring, outside the shape, for the keyboard only (`FocusRing`, `KeyFocus`) | step 7; G7 | the shared controls only; check each new focusable item |
+| One menu host (`MenuPopup` of `Grassfield.Ui`) | step 24 | its own identical copy: delete `apps/activity/qml/MenuPopup.qml` after #86 |
+| One indeterminate and one determinate indicator (`Spinner`, `ProgressRing`, `ProgressBar`) | D4, steps 23 and 24 | none needed yet |
+| Hairlines are one point through `apps.borderWidth` | D5 | done |
+| An empty list says so (centred, secondary, inside the list) | step 15 | to add with the search's "no results" |
+| Motion on the roles' curves (`Appearance.curve`, `curveEnter`, `curveExit`) and crossfades under Reduce Motion | Q6, D2, steps 5 and 20 | no motion of its own yet |
+| Tokens only, no literal; A2 for every new text role | master-prompt 5.5; G24 | `just check-literals`, `check-contrast` hold |
 
 ## Questions for the owner (answered on 2026-10-29)
 
