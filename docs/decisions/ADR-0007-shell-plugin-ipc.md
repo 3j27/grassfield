@@ -195,6 +195,16 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   revealed while the session is locked (`revealable()`), so no `true` is posted then. No new verb or reply field:
   the Split View, the green light under an open popover (the shell runs `unsplit` or its own full-screen and Zoom
   requests) and the gathering of windows left off every output after an unplug (the plugin's own move) use what exists.
+- Window tiling, step 6d (2026-10-31, additive, ADR-0036 D70-D72, docs/specs/tiling.md TL33): `unsplit(address[, how])`
+  takes an optional second argument, `how` ∈ desktop|fullscreen|replace (no argument, or `desktop`: Exit Full Screen as
+  before, the popover's Move Window to Desktop). `fullscreen` (Make Window Full Screen) sends the window back to its home
+  Desktop as before and puts it in full screen there. `replace` (Replace Tiled Window) moves it to its home Desktop without
+  showing it: the Split View Desktop stays shown, its other member keeps its half and waits again, and the `hyprctl
+  grassfield-tiling` reply's `suggestion` offers that half with the windows of the home Desktop but the one replaced (none:
+  the other fills alone, D43); refused (`reason:"invalid"`) for a Split View with one member. Any other `how`:
+  `reason:"invalid"`; refused while locked (`reason:"locked"`) as every `unsplit`. A plugin before 6d takes one argument and
+  ignores a second, so a 6d plugin advertises feature `tiling-split-rows`, always right after `tiling-split`, and the shell
+  offers the rows (and sends the argument) only with it.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -238,7 +248,7 @@ enum tiling.reason: placed moved resized suspended restored forgotten relaid inv
 enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
-feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split
+feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split tiling-split-rows
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit
 ```
 
