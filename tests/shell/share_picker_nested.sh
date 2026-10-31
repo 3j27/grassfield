@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Nested scenario (L1) for the screen-sharing picker (ADR-0035 D-6, step 7a; docs/specs/system-dialogs.md section 3). Bare
+# command, nested session only. xdph is the real session's and is not run here: the test runs the repository's stand-in as
+# xdph would (the window list in XDPH_WINDOW_SHARING_LIST: one foot window, app id gf-share, with its Hyprland address), with
+# this nested instance's signature, and the stand-in asks the nested dev shell through GRASSFIELD_SHELL_DIR (dev plumbing).
+# Checks:
+#   1 the shell shows the panel on the nested display (`picker status`, a dev hook: shown, popup kind sharePicker, the window
+#     listed); the test then waits SHARE_PICKER_LOOK seconds (default 0) for a screenshot (`just shot`) or a look;
+#   2 the user's choice of the window (made with `picker choose`, as the panel's Share does) is what xdph reads:
+#     `[SELECTION]/window:<handle>`;
+#   3 Entire Screen with Remember this choice: `[SELECTION]r/screen:<the nested display>`;
+#   4 the stand-in killed while the panel is open (xdph gave up): the panel goes within 1 s.
+# The panel's look (live thumbnails, both appearances, French), Esc, Return and a click are the integrator's, by hand while
+# step 1 waits. The test closes the window it opened. Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is
+# read-only; clients get the nested socket only.
+# Expected: "share_picker: 0 failure(s)" after PASS lines for every check. Exit 0 PASS, 1 FAIL, 2 environment error.
+set -uo pipefail
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+dev=$root/.dev
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_nested_target "$dev" || { echo "SKIP share_picker_nested: no nested session of this tree (scripts/dev/nested-up.sh, as a bare command)"; exit 0; }
+sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
+main=$(cat "$dev/main.instance" 2>/dev/null || true)
+[[ $sig != "$main" && $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "share_picker: refusing the main session"; exit 2; }
+shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
+[[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "share_picker: grassfield-shell is not running (scripts/dev/shell-run.sh)"; exit 2; }
+command -v foot >/dev/null && command -v jq >/dev/null || { echo "share_picker: foot and jq are needed"; exit 2; }
+
+fails=0
+pass() { echo "PASS: $*"; }
+fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
+hq() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$@"; }
+ipc() { WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 qs ipc --pid "$shell_pid" call picker "$@" 2>/dev/null; }
+wait_for() { local secs=$1 n; shift; for ((n = 0; n < secs * 5; n++)); do "$@" && return 0; sleep 0.2; done; return 1; }
+[[ $(ipc status) == "{"* ]] || { echo "share_picker: the dev shell has no picker target or refused its status (run this tree's shell)"; exit 2; }
+
+foot_pid=""
+standin=""
+tmp=$(mktemp -d)
+cleanup() {
+  [[ -n $standin ]] && kill "$standin" 2>/dev/null
+  [[ -n $foot_pid ]] && kill "$foot_pid" 2>/dev/null
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot --app-id gf-share --title "Shared window" >/dev/null 2>&1 </dev/null &
+foot_pid=$!
+address=""
+for ((n = 0; n < 30; n++)); do
+  sleep 0.2
+  address=$(hq clients | jq -r '[.[] | select(.class == "gf-share") | .address] | first // empty')
+  [[ -n $address ]] && break
+done
+[[ -n $address ]] || { echo "share_picker: the foot window did not appear"; exit 2; }
+display=$(hq monitors | jq -r '.[0].name')
+handle=4242
+list="$handle[HC>]gf-share[HT>]Shared window[HE>]$(printf '%d' "$address")[HA>]"
+
+share() { # runs the stand-in as xdph does; sets `standin`
+  : >"$tmp/out"
+  WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GRASSFIELD_DEV=1 GRASSFIELD_SHELL_DIR="$root/shell" \
+    XDPH_WINDOW_SHARING_LIST="$list" "$root/packaging/session-bin/hyprland-share-picker" --allow-token >"$tmp/out" 2>/dev/null &
+  standin=$!
+}
+shown() { [[ $(ipc status | jq -r '"\(.shown) \(.popup) \(.windows | map(.handle) | join(","))"') == "true sharePicker $handle" ]]; }
+idle() { [[ $(ipc status | jq -r '"\(.open) \(.shown)"') == "false false" ]]; }
+answered() { ! kill -0 "$standin" 2>/dev/null; }
+
+# 1.
+share
+if wait_for 5 shown; then pass "1 the panel is shown on the nested display with the window xdph listed"; else fail "1 the panel did not show [$(ipc status)]"; fi
+sleep "${SHARE_PICKER_LOOK:-0}"
+
+# 2.
+[[ $(ipc choose window "$handle" no) == ok ]] && wait_for 3 answered
+out=$(cat "$tmp/out")
+if [[ $out == "[SELECTION]/window:$handle" ]]; then pass "2 the window's choice is what xdph reads [$out]"; else fail "2 the window's choice [$out]"; fi
+wait_for 2 idle || fail "2 the panel stayed open"
+
+# 3.
+share
+wait_for 5 shown
+[[ $(ipc choose screen "$display" remember) == ok ]] && wait_for 3 answered
+out=$(cat "$tmp/out")
+if [[ $out == "[SELECTION]r/screen:$display" ]]; then pass "3 Entire Screen with Remember this choice [$out]"; else fail "3 Entire Screen [$out]"; fi
+
+# 4.
+share
+wait_for 5 shown
+kill -TERM "$standin"
+if wait_for 1 idle; then pass "4 the stand-in killed while the panel is open: the panel goes within 1 s"; else fail "4 the panel stayed [$(ipc status)]"; fi
+standin=""
+
+echo "share_picker: $fails failure(s)"
+((fails == 0))
