@@ -1035,8 +1035,9 @@ delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes a
     run): memory, the descriptors it has, time, futexes, `getdents64`, stat, `openat` read-only, `eventfd2`, `pipe2`,
     `sigaltstack`; `clone` only with `CLONE_THREAD` and no `CLONE_NEW*` (`clone3` answers ENOSYS, so glibc falls back to
     `clone`; a thread of its own still starts); `fcntl` for descriptor flags only (no lock, lease or notification); `prctl` for a
-    thread's or a mapping's name only; `kill`, `tgkill`, `rt_tgsigqueueinfo` for itself only; `prlimit64` and
-    `sched_getaffinity` for itself only. Anything else answers EPERM: `fork`, `vfork`, `execve`, sockets, `ioctl` (TIOCSTI and
+    thread's or a mapping's name only; `kill`, `tgkill`, `rt_tgsigqueueinfo` and `prlimit64` for itself only;
+    `sched_getaffinity` for any task, read only (glibc's `pthread_getattr_np` asks it with a thread's id, which a filter cannot
+    tell from another process's). Anything else answers EPERM: `fork`, `vfork`, `execve`, sockets, `ioctl` (TIOCSTI and
     TIOCLINUX among them), `flock`, `inotify`, `setpriority`, `sched_set*`, `ioprio_set`, `migrate_pages`, `move_pages`,
     `process_madvise`, `kcmp`, `pidfd_open`, `ptrace`, mounts and namespaces. Installed for every thread (TSYNC); a TSYNC that
     fails, or a kernel without `seccomp()`, is no filter (no fallback to the calling thread alone: the review's NIT).

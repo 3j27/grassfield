@@ -340,12 +340,14 @@ bool installFilter()
     allowWhen(SYS_fcntl, 1, {F_GETFD, F_SETFD, F_GETFL, F_SETFL});
     // A thread's name and an anonymous mapping's name.
     allowWhen(SYS_prctl, 0, {PR_SET_NAME, PR_GET_NAME, 0x53564d41u /* PR_SET_VMA */});
-    // A signal, a resource limit or the processors only for itself (0: itself).
+    // A signal or a resource limit only for itself (0: itself).
     allowWhen(SYS_kill, 0, {self});
     allowWhen(SYS_tgkill, 0, {self});
     allowWhen(SYS_rt_tgsigqueueinfo, 0, {self});
     allowWhen(SYS_prlimit64, 0, {0, self});
-    allowWhen(SYS_sched_getaffinity, 0, {0, self});
+    // The processors a task may run on, read only: glibc's pthread_getattr_np asks it with a thread's own id, which no filter can
+    // tell from another process's (AddressSanitizer does it for every thread it starts); it changes nothing.
+    allow(SYS_sched_getaffinity);
     // Anything else: refused.
     add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
     sock_fprog program{static_cast<unsigned short>(f.size()), f.data()};
