@@ -362,8 +362,8 @@ ShellRoot {
                 Notifications.postInternalAction(qsTr("Grassfield %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
             else if (kind === "omarchy")
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
-            else if (kind === "toolkit")   // ADR-0041 step 2b (U31): `version` lists the packages, as "qt6-base 6.12.0"
-                Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("The system libraries Grassfield runs on were updated (%1). Log out and back in to use them.").arg(version), open);
+            else if (kind === "toolkit")   // ADR-0041 step 2b (U31): no package name in the sentence (the service logs them)
+                Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("Some updates finish when you log out. Log out and back in to use them."), open);
         }
     }
 

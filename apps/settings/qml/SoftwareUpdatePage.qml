@@ -227,7 +227,7 @@ SettingsPage {
                 : root.updates.restartNeeded ? qsTr("Restart to finish updating") : qsTr("Log out to finish updating Grassfield")
             subtitle: root.updates.restartBlocked ? qsTr("The update could not prepare the computer's startup files. Get help before restarting.")
                 : root.updates.restartNeeded ? qsTr("Part of the update is used only after the computer restarts.")
-                : root.updates.toolkitMoved ? qsTr("Grassfield and the system libraries it runs on start fresh when you log in again.")
+                : root.updates.toolkitLogout ? qsTr("Some of the update is used only after you log in again.")
                 : qsTr("The new version of Grassfield starts when you log in again.")
 
             Button {

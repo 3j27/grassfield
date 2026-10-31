@@ -51,7 +51,7 @@ QtObject {
     // A Grassfield update in this session waits for a log out (GF-083, written to the file by the shell), or a toolkit
     // package replaced under it (ADR-0041 step 2b, U31: the shell writes the same flag; the list says which).
     readonly property bool logoutPending: root.file.logoutPending === true
-    readonly property bool toolkitMoved: SoftwareUpdateLogic.toolkitMoved(root.file).length > 0
+    readonly property bool toolkitLogout: root.file.toolkitLogout === true
     // ...or the last run says so (s3.7: Grassfield's packages changed, nothing that asks for a restart).
     readonly property bool logoutNeeded: root.logoutPending || (root.run.result === "done" && root.run.restart === "logout")
     // Omarchy's marker or the kernel's modules (readRestart), or the last run's own answer (s3.7); never while the run says

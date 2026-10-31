@@ -36,8 +36,9 @@ Singleton {
     readonly property bool waiting: waitProc.running
     // GF-083's updatePending, bound by shell.qml: written to the file for the pane's "Log out to finish updating" (U14).
     property bool logoutPending: false
-    // ADR-0041 step 2b (U31): a toolkit package was replaced under this session (the checker's toolkitMoved, installed at or
-    // after startedAt); once due, a log out stays due until the session ends.
+    // ADR-0041 step 2b (U31): a toolkit package was replaced under this session (installed at or after the session's start,
+    // whatever the build's record says); once due, a log out stays due until the session ends, through a restart of the
+    // shell (re-read from the file at load). A test seam too.
     property bool toolkitLogout: false
     readonly property bool logoutDue: logoutPending || toolkitLogout
 
@@ -53,6 +54,9 @@ Singleton {
         "XDG_CACHE_HOME": Mode.stateDir + "/cache"
     } : ({})
     readonly property double startedAt: Date.now()
+    // The session's start (U31): Hyprland's, from HYPRLAND_INSTANCE_SIGNATURE, the same across a restart of the shell; the
+    // shell's own start without a signature. A test seam too.
+    property double sessionStartedAt: SoftwareUpdateLogic.sessionStart(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE"), startedAt)
     // A user asked for the running check (Settings, the Store): its findings are not announced (U20).
     property bool userAsked: false
     // An automatic check waits for the connectivity to come back.
@@ -128,10 +132,13 @@ Singleton {
                 busyTimer.restart();
             return;
         }
-        const items = SoftwareUpdateLogic.news(file, answer, startedAt);
-        if (SoftwareUpdateLogic.toolkitLogout(answer, startedAt))
+        const items = SoftwareUpdateLogic.news(file, answer, sessionStartedAt);
+        if (SoftwareUpdateLogic.toolkitLogout(answer, sessionStartedAt)) {
+            if (!toolkitLogout)
+                console.info("software update: a toolkit package was replaced under this session (log out due): " + SoftwareUpdateLogic.toolkitReplaced(answer, sessionStartedAt).map(p => p.name + " " + p.installed + (p.moved ? " (not the version Grassfield was built with: " + p.built + ")" : "")).join(", "));
             toolkitLogout = true;
-        save(SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items), logoutDue));
+        }
+        save(SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items), logoutDue, toolkitLogout));
         console.info("software update: " + answer.state + (answer.error ? " (" + answer.error + ")" : "") + (items.length > 0 ? ", new: " + items.map(n => n.id).join(", ") : ""));
         if (!user) {
             for (const n of items)
@@ -163,7 +170,16 @@ Singleton {
 
     onLogoutDueChanged: {
         if (loaded && (file.logoutPending === true) !== logoutDue)
-            save(SoftwareUpdateLogic.withLogoutPending(file, logoutDue));
+            save(SoftwareUpdateLogic.withLogoutPending(file, logoutDue, toolkitLogout));
+    }
+
+    // At load: a log out an earlier shell found due for the toolkit (a crash and Restart=always in between) is still due:
+    // the file's list against the session's start, not this shell's (the integrator's review of 9043ac4, major 2).
+    function adopt(f: var): var {
+        const n = SoftwareUpdateLogic.normalize(f);
+        if (SoftwareUpdateLogic.toolkitLogout(n, sessionStartedAt))
+            toolkitLogout = true;
+        return SoftwareUpdateLogic.withLogoutPending(n, logoutDue, toolkitLogout);
     }
 
     // ---- automatic checks (U7) ----
@@ -431,7 +447,7 @@ Singleton {
             } catch (e) {
                 f = null;
             }
-            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(f), root.logoutPending);
+            root.file = root.adopt(f);
             root.loaded = true;
             root.reschedule();
             root.resume();
@@ -439,7 +455,7 @@ Singleton {
         onLoadFailed: {
             if (root.loaded)
                 return;
-            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(null), root.logoutPending);
+            root.file = root.adopt(null);
             root.loaded = true;
             root.reschedule();
         }
