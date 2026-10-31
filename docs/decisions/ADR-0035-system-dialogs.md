@@ -776,13 +776,15 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph.
 - The shell's picker: a panel on the active display with "Entire Screen" (one live thumbnail per display, from the
   ScreencopyView already used by the Overview), "Window" (live thumbnails of the listed windows, by app, with their titles)
-  and "Selection" (a crosshair, D-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
+  and "Selection" (a crosshair, D-10; step 7b draws the area on the display's live preview in the panel instead, decision
+  7-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
   decision Q14, 2026-10-27; Omarchy's `xdph.conf` sets `allow_token_by_default = true`, which would tick it), Cancel / Share.
   Windows that hide themselves from capture (`no_screen_share`, `config/hypr/grassfield/privacy.lua`) are listed but greyed
   with "This window can't be shared".
 - The picker cannot name the app that asks: xdph receives the app id but passes the picker only `--allow-token` and the window
   list (`ScreencopyShared.cpp:42-62`). The panel says "An app wants to share your screen." (known limitation).
-- While a share runs, the menu bar shows the screen-recording indicator (Hyprland's `screencast` event,
+- While a share runs, the menu bar shows the screen-recording indicator (step 7b follows xdph's PipeWire streams instead of
+  this event, which every capture raises, the shell's own thumbnails too: decision 7-9) (Hyprland's `screencast` event,
   `src/managers/screenshare/ScreenshareSession.cpp:140-147`). The event names only the source (a display or a window), not
   the app (review of PR #13, minor), so the indicator's menu says what is shared, not by whom; stopping belongs to the app.
 - A user `xdph.conf` that names another picker (another name, an absolute path) is not intercepted (known limitation; the
@@ -819,7 +821,7 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
 Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
 - **7-1. Two pull requests.**
   - Question: deliver D-6 in one pull request, or split it?
-  - Options: (a) one; (b) **7a**, the stand-ins, the channel, the lock and the panel with Entire Screen and Window; then **7b**, Selection (a crosshair, which D-10's screenshots need too) and the menu bar's recording indicator.
+  - Options: (a) one; (b) **7a**, the stand-ins, the channel, the lock and the panel with Entire Screen and Window; then **7b**, Selection (a crosshair, which D-10's screenshots need too; 7-10 drew it on the panel's preview instead) and the menu bar's recording indicator. Both in pull request #83: the owner asked on 2026-10-31 for 7b in the same pull request while the integrator was away.
   - **Choice: (b).**
   - Rule applied: the channel, the part that touches security, is reviewed on its own in the smallest change. The system picker leads with the screen and the window. Selection waits for the crosshair that steps 7b and 8 share. Until 7b no region is offered, though the stand-in already checks a `region:` answer (SP3).
 - **7-2. How the window list reaches the shell.**
@@ -861,6 +863,48 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
   - **Choice: (b).**
   - Rule applied: one rule for every Grassfield surface that asks the user to grant something; keys typed on for another
     window never arm it. Esc and Cancel always cancel (cancelling shares nothing).
+
+**Delivered in step 7b (Selection, windows that hide from capture, the indicator), in the same pull request as 7a.**
+- **Selection:** `SharePickerPanel.qml` gains a third tab, Selection (Cmd-3).
+  - It shows the chosen display's live preview, with a display chooser when there are several.
+  - A drag on the preview marks an area, at least `panel.sharePickerMinArea` either way.
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels (`SharePicker.js` `regionFor`, `regionKey`, `parseRegion`).
+  - The shell refuses an area past its display; the stand-in checks it again (SP3).
+- **Windows that hide from capture:**
+  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, in one process with 1 s per window (`blockedHandles`).
+  - Such a window is greyed with "This window can't be shared" and is never answered.
+- **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
+  - It shows while xdph has a stream (`sharingStreams`: PipeWire nodes named `xdph-streaming-…`) and never gives way when the status area is crowded.
+  - Its menu has one row per stream, named by the choice the picker answered just before it (10 s, `streamLabels`), or "Screen or window" when there was none (a share restored with a token), plus "To stop sharing, use the app that shares."
+- **Tests:**
+  - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
+  - `share_picker_ipc.sh`, cases 9-11:
+    - an area answered and one past its display refused;
+    - a window that hides from capture never answered (a fake getprop);
+    - with a private PipeWire, a node named as xdph names its streams counted and labelled, then gone.
+  - `share_picker_nested.sh`, check 5: an area of the nested display.
+
+Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user):
+- **7-9. What lights the screen-sharing indicator.**
+  - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
+  - Options:
+    - (a) the event, minus the shell's own captures (every capturing surface would have to declare itself);
+    - (b) xdph's PipeWire streams, which exist only while an app shares through the portal (xdph 1.4.1 names each `xdph-streaming-<random>`, `src/portals/Screencopy.cpp:1015-1017`; Quickshell's PipeWire service lists the nodes);
+    - (c) a compositor plugin hook that reports the client.
+  - **Choice: (b).**
+  - Rule applied: the indicator must never light for the system's own previews, and it must light for every app that shares through the portal. A recorder that captures without the portal (wf-recorder, OBS's Wayland capture) is not shown: a known limitation, which (c) could close later.
+- **7-10. Where the area is chosen.**
+  - Options: (a) a full-screen crosshair over the displays, as screenshots will have (D-10, step 8); (b) dragging on the chosen display's live preview inside the panel.
+  - **Choice: (b).**
+  - Rule applied:
+    - one surface and one keyboard grab, with no second exclusive layer over the panel;
+    - the area is relative to its display, as xdph wants it;
+    - the system picker shares a screen or a window, not an area, so this tab is Grassfield's extra and stays inside the panel.
+    - The cost is precision: a preview pixel is about 3 logical pixels of a 1920-pixel display.
+- **7-11. How a window that hides from capture is known.**
+  - Options: (a) read `config/hypr/grassfield/privacy.lua`'s rules in the shell (7-4's second copy); (b) ask Hyprland for each listed window's effective rule (`getprop … no_screen_share`, `HyprCtl.cpp:1621`).
+  - **Choice: (b).**
+  - Rule applied: Hyprland's own answer, whatever rule set it, with no second copy of a privacy rule. An answer that does not read (a window gone, an older Hyprland) leaves the window ungreyed: Hyprland still leaves it out of every capture.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.

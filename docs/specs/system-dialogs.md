@@ -293,8 +293,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   picker cannot know which app); "Remember this choice" unticked at every opening, whatever `--allow-token` says (owner
   decision Q14); Cancel / Share (default once something is selected); double-click shares at once.
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
-- SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
-  display or a window), not which app shares it (Hyprland's events carry only the source).
+- SP8 the recording indicator in the menu bar while an app shares through the portal (xdph's PipeWire streams, ADR-0035 7-9:
+  Hyprland's screencast event comes from every capture, the shell's thumbnails too); its menu says what is shared (the
+  picker's choice for that stream when it made one), not which app shares it.
 - SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
   picker (a late `accepted` finds no socket and shows nothing).
 
@@ -340,21 +341,35 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   - when another popup takes the panel's place or a click lands outside it (7-5);
   - when the session locks;
   - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
-- **Not in 7a:**
-  - Selection (`region:`) and the recording indicator (SP8) are step 7b (7-1).
-  - Protected windows are listed but not greyed yet (7-4).
+- **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
 - **Tests:**
   - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
   - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms.
   - `tests/unit/tst_sharepicker.qml`.
   - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
 
+### Built in step 7b (ADR-0035 7-9 to 7-11)
+- **Selection (SP6):** a third tab (Cmd-3).
+  - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
+  - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels. An area past the display is never answered, by the shell or by the stand-in.
+- **Windows that hide from capture (SP6):** Hyprland's effective `no_screen_share`, asked with `hyprctl -j getprop` when the panel opens. Such a window is greyed with "This window can't be shared" and never answered.
+- **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream; it never gives way when the status area is crowded.
+  - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), or "Screen or window" for a share an app restored with its token.
+  - Then "To stop sharing, use the app that shares."
+- **Tests:**
+  - `tst_sharepicker.qml`.
+  - `share_picker_ipc.sh`, cases 9-11 (11 with a private PipeWire).
+  - `share_picker_nested.sh`, check 5.
+  - The indicator in a real share (Chromium) is the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
 4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
 requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
-app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). Until step 7b: no Selection tab, no recording indicator, and a window that hides itself from capture is listed
-like any other (Hyprland still leaves it out of the stream).
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). The indicator shows shares
+made through the portal only: a recorder that captures without it (wf-recorder, OBS's own Wayland capture) is not shown
+(7-9). An area is drawn on a preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
