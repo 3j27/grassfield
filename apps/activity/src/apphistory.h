@@ -20,7 +20,7 @@ namespace activity
 
 // SD_MESSAGE_UNIT_RESOURCES (systemd's sd-messages.h).
 inline constexpr const char *kUnitResourcesMessage = "ae8f7b866b0347b9af31fe1c80b127c0";
-// The most journal output read (about 50 000 records); a longer answer is cut there.
+// The most journal output read (about 50 000 records, newest first); a longer answer loses its oldest records.
 constexpr qint64 kHistoryOutputMax = 16 * 1024 * 1024;
 
 // One record: a unit that ended, what it used and when (µs since the epoch).

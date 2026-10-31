@@ -77,13 +77,14 @@ Window {
             columns: root.gpu ? 1 : Math.max(1, Math.floor((pane.width + Tokens.spacingXs) / (Tokens.activityPerformanceTileMinWidth + Tokens.spacingXs)))
             spacing: Tokens.spacingXs
 
+            // Repeated by count, not by model: the list is new at each sample and its graphs stay.
             Repeater {
-                model: root.graphs
+                model: root.graphs.length
 
                 Column {
                     id: tile
-                    required property var modelData
                     required property int index
+                    readonly property var modelData: root.graphs[tile.index] ?? ({title: "", graph: ({})})
                     width: (tiles.width - (tiles.columns - 1) * tiles.spacing) / tiles.columns
                     spacing: Tokens.spacingXs
                     Accessible.role: Accessible.Graphic

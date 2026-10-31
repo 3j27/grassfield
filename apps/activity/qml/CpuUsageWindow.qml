@@ -54,13 +54,14 @@ Window {
         Accessible.role: Accessible.Graphic
         Accessible.name: root.title
 
+        // Repeated by count, not by model: the list is new at each sample and its bars stay (as the summary's blocks).
         Repeater {
-            model: root.processors
+            model: root.processors.length
 
             Column {
                 id: bar
-                required property var modelData
                 required property int index
+                readonly property var modelData: root.processors[bar.index] ?? ({busy: -1, user: -1, system: -1})
                 // Segments lit from the bottom: System's first, then User's.
                 readonly property int segments: Tokens.activityCpuUsageSegments
                 readonly property int systemLit: bar.modelData.system > 0 ? Math.round(bar.modelData.system * bar.segments) : 0

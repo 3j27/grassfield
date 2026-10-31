@@ -165,7 +165,11 @@ Platform.MenuBar {
             checkable: true
             checked: bar.backend.efficiency.on
             enabled: bar.backend.efficiency.available && !bar.backend.efficiency.busy
-            onTriggered: bar.win.toggleEfficiency()
+            onTriggered: {
+                // The item checks itself when chosen; the unit's state decides (a Cancel on the first sheet leaves it off).
+                checked = Qt.binding(() => bar.backend.efficiency.on);
+                bar.win.toggleEfficiency();
+            }
         }
 
         // The Window menu is the shell's (T0): the app's own window items close the View menu, as Files' (F-10).

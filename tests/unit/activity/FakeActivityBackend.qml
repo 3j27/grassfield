@@ -211,9 +211,13 @@ QtObject {
         property string reason: ""
         property string appName: "Foot"
         property bool busy: false
+        // An answer given at once, from inside the call (the real one does so for an ended process).
+        property string nextError: ""
         signal finished(string error)
         function set(on: bool): void {
             backend.record("efficiency:" + on);
+            if (nextError !== "")
+                finished(nextError);
         }
     }
 

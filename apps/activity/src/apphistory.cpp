@@ -200,7 +200,9 @@ void AppHistory::reload()
     auto *process = new QProcess(this);
     m_process = process;
     process->setProgram(QStringLiteral("journalctl"));
+    // Newest first (--reverse): an answer cut at kHistoryOutputMax loses the oldest records, not the last days'.
     process->setArguments({QStringLiteral("--user"), QStringLiteral("--output=json"), QStringLiteral("--no-pager"), QStringLiteral("--quiet"),
+                           QStringLiteral("--reverse"),
                            QStringLiteral("--output-fields=MESSAGE_ID,USER_UNIT,CPU_USAGE_NSEC,MEMORY_PEAK"),
                            QStringLiteral("--since=@") + QString::number(m_sinceUs / 1000000),
                            QStringLiteral("MESSAGE_ID=") + QLatin1String(kUnitResourcesMessage)});
@@ -208,7 +210,7 @@ void AppHistory::reload()
     process->setStandardErrorFile(QProcess::nullDevice());
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process] {
         m_output += process->readAllStandardOutput();
-        if (m_output.size() > kHistoryOutputMax) { // the oldest records first: what was read is kept, cut at a whole line
+        if (m_output.size() > kHistoryOutputMax) { // newest first: what was read is kept, cut at a whole line
             m_output.truncate(m_output.lastIndexOf('\n', kHistoryOutputMax) + 1);
             process->disconnect(this);
             process->kill();
@@ -270,6 +272,9 @@ void AppHistory::finish(const QByteArray &output, bool ok, qint64 nowUs)
                         .arg(m_locale.toString(QDateTime::fromMSecsSinceEpoch(m_sinceUs / 1000), QLocale::ShortFormat), m_user);
         sortRows();
     }
+    // The journal's text is not kept once read (up to 16 MiB).
+    m_output.clear();
+    m_output.squeeze();
     endResetModel();
     emit loaded();
 }

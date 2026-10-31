@@ -136,7 +136,19 @@ void Summary::addSample(const Snapshot &snapshot, const QDateTime &now)
     m_netPacketsOut.add(s.netTotal.packetsOutPerSec);
     m_netBytesIn.add(s.netTotal.bytesInPerSec);
     m_netBytesOut.add(s.netTotal.bytesOutPerSec);
-    rebuild();
+    if (m_live)
+        rebuild();
+    else
+        m_stale = true;
+}
+
+void Summary::setLive(bool live)
+{
+    m_live = live;
+    if (live && m_stale) {
+        m_stale = false;
+        rebuild();
+    }
 }
 
 void Summary::setBattery(const BatteryState &battery, const QDateTime &now)

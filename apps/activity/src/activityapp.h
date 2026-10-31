@@ -212,6 +212,8 @@ private:
     void applyProjection();
     // AM62: the Dock tile's graph from the last sample, or no file for the application icon.
     void writeDockTile();
+    // AM47: the GPUs' names, for the table and the Performance windows.
+    void nameGpus(const Snapshot &snapshot);
     QString userName(uint32_t uid);
     // AM67: the live app units of the last sample, their cgroup's CPU time and memory peak now.
     std::vector<LiveUnit> liveUnits();

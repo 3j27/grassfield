@@ -454,10 +454,21 @@ TestCase {
         verify(!item().enabled);
         e.busy = false;
         e.finished("Efficiency Mode couldn't be turned off.");
-        verify(t.win.sheets.efficiencyError.shown);
+        tryVerify(() => t.win.sheets.efficiencyError.shown);
         compare(t.win.sheets.efficiencyError.title, "Efficiency Mode couldn't be turned off.");
         keyClick(Qt.Key_Return);
         verify(!t.win.sheets.efficiencyError.shown);
+        // An answer from inside Turn On (the process ended meanwhile) shows once the first sheet has closed.
+        e.on = false;
+        t.backend.askEfficiency = true;
+        e.nextError = "The process has ended.";
+        t.win.runAction("efficiency");
+        verify(sheet.shown);
+        keyClick(Qt.Key_Return);
+        tryVerify(() => t.win.sheets.efficiencyError.shown);
+        compare(t.win.sheets.efficiencyError.title, "The process has ended.");
+        keyClick(Qt.Key_Return);
+        e.nextError = "";
         e.supported = false;
         compare(item(), undefined);
     }

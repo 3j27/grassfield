@@ -55,6 +55,9 @@ public:
     void setCapacity(int capacity);
 
     void setTab(Tab tab);
+    // While the window is off screen the histories still take the samples (the Dock tile's graph reads them) but the blocks
+    // are built again only when it shows.
+    void setLive(bool live);
     void setLocale(const QLocale &locale);
     // AM42, AM44: what the Disk ("io" or "data") and Network ("packets" or "data") graphs show.
     void setDiskMode(const QString &mode);
@@ -90,6 +93,8 @@ private:
     bool m_haveSample = false;
     BatteryState m_battery;
     QDateTime m_now; // the last sample's or battery state's
+    bool m_live = true;
+    bool m_stale = false;
     History m_cpuSystem, m_cpuUser, m_memInUse, m_memLevel, m_energy;
     History m_diskReads, m_diskWrites, m_diskReadBytes, m_diskWriteBytes;
     History m_netPacketsIn, m_netPacketsOut, m_netBytesIn, m_netBytesOut;

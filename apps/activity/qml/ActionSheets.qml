@@ -192,11 +192,16 @@ Item {
     Connections {
         target: root.backend ? root.backend.efficiency : null
 
+        // An answer can come from inside Turn On's handler, before its sheet has closed: shown once the sheets settle.
         function onFinished(error: string): void {
-            if (error === "" || root.shown)
+            if (error === "")
                 return;
-            efficiencyError.title = error;
-            efficiencyError.open();
+            Qt.callLater(() => {
+                if (root.shown)
+                    return;
+                efficiencyError.title = error;
+                efficiencyError.open();
+            });
         }
     }
 

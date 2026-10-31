@@ -557,6 +557,8 @@ void ActivityApp::setWindowShown(bool shown)
     if (shown == m_shown)
         return;
     m_shown = shown;
+    // Off screen, the summary keeps its histories and builds its blocks again when the window shows (nothing draws them).
+    m_summary.setLive(shown);
     if (!shown) {
         // AM8, AM-P3: no per-process sample while the window is not on screen; a Dock graph, or a Performance or CPU
         // window, keeps the system's files read.
@@ -616,21 +618,51 @@ void ActivityApp::requestSample()
     // file, and the GPU clients for Performance and GPU History (AM66, AM72). AM68: the app units' weights while the main
     // window shows (the Status column and the View menu's checked item).
     unsigned reads = ReadSystemCpu | ReadSystemDisk | ReadSystemNet;
+    const bool gpuWindow = m_performance.shown(QStringLiteral("performance")) || m_performance.shown(QStringLiteral("gpuHistory"));
     if (m_shown) {
+        // AM68: the units' weights at every sample (the Status column and the menu item's check mark follow a change made
+        // elsewhere at once; about 4 µs per app unit, step3-5.md).
         reads = readsForColumns(m_state.tab, tabState().columns) | readsForView(m_state.view) | ReadEfficiency;
+        // AM66, AM72: the GPU clients for those windows whatever the tab.
+        if (gpuWindow)
+            reads |= ReadDescriptors | ReadGpu;
     } else if (m_performance.anyShown()) {
         reads |= ReadSystemMemory;
-        if (m_performance.shown(QStringLiteral("performance")) || m_performance.shown(QStringLiteral("gpuHistory")))
+        if (gpuWindow)
             reads |= ReadProcesses | ReadDescriptors | ReadGpu;
     }
     emit sampleRequested(reads, m_state.interval, m_forget);
     m_forget = false;
 }
 
+void ActivityApp::nameGpus(const Snapshot &snapshot)
+{
+    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU and
+    // the Performance and GPU History windows.
+    bool named = false;
+    for (const GpuDevice &gpu : snapshot.gpus) {
+        const QString pdev = QString::fromStdString(gpu.pdev);
+        const QString name = !gpu.model.empty() ? QString::fromStdString(gpu.model)
+                             : gpu.card >= 0 ? QCoreApplication::translate("ActivityApp", "GPU %1").arg(gpu.card + 1)
+                                             : pdev;
+        if (m_gpuNames.value(pdev) != name) {
+            m_gpuNames.insert(pdev, name);
+            named = true;
+        }
+    }
+    if (named) {
+        m_table.setGpuNames(m_gpuNames);
+        m_performance.setGpuNames(m_gpuNames);
+    }
+}
+
 void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
 {
     m_busy = false;
-    if (!(reads & ReadProcesses)) { // off screen, for the Dock graph and the CPU windows: their histories alone
+    nameGpus(*snapshot);
+    // Off screen, for the Dock graph and the Performance and CPU windows: their histories alone. The table, the actions and
+    // the inspections wait for the main window (a sample comes at once when it shows, AM8).
+    if (!(reads & ReadProcesses) || !m_shown) {
         m_summary.addSample(*snapshot);
         m_performance.take(*snapshot);
         writeDockTile();
@@ -655,22 +687,6 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
         emit columnsChanged();
     }
     m_summary.addSample(*snapshot);
-    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU.
-    bool named = false;
-    for (const GpuDevice &gpu : snapshot->gpus) {
-        const QString pdev = QString::fromStdString(gpu.pdev);
-        const QString name = !gpu.model.empty() ? QString::fromStdString(gpu.model)
-                             : gpu.card >= 0 ? QCoreApplication::translate("ActivityApp", "GPU %1").arg(gpu.card + 1)
-                                             : pdev;
-        if (m_gpuNames.value(pdev) != name) {
-            m_gpuNames.insert(pdev, name);
-            named = true;
-        }
-    }
-    if (named) {
-        m_table.setGpuNames(m_gpuNames);
-        m_performance.setGpuNames(m_gpuNames);
-    }
     m_performance.take(*snapshot);
     m_table.setRows(tableRows(*snapshot));
     updateActionTargets();

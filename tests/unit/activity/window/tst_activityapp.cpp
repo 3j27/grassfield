@@ -152,6 +152,36 @@ TEST(ActivityApp, RequestsWhileASampleRunsMakeOneMore)
     EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults) | ReadEfficiency);
 }
 
+// AM66, AM72 (review of steps 3 to 5): with Performance or GPU History on screen the GPU clients are read whatever the main
+// window's tab; with the main window hidden, the system's files and the GPU clients alone, and the table waits.
+TEST(ActivityApp, ThePerformanceWindowsReadWhatTheyDraw)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    Isolated iso;
+    ActivityApp app(fixtureOptions(f), iso.statePath());
+    QSignalSpy requests(&app, &ActivityApp::sampleRequested);
+    QSignalSpy samples(&app, &ActivityApp::sampled);
+    app.setTab(QStringLiteral("memory")); // a tab that reads no GPU client
+    app.setWindowShown(true);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return samples.count() >= 1; }, 5000));
+    EXPECT_EQ(requests.last().at(0).toUInt() & ReadGpu, 0u);
+    app.setAuxShown(QStringLiteral("gpuHistory"), true);
+    app.setTab(QStringLiteral("disk")); // a request with the window's reads
+    ASSERT_TRUE(QTest::qWaitFor([&] { return samples.count() >= 2; }, 5000));
+    EXPECT_EQ(requests.last().at(0).toUInt() & (ReadGpu | ReadDescriptors), static_cast<unsigned>(ReadGpu | ReadDescriptors));
+    const int rows = app.processTable().count();
+    app.setWindowShown(false);
+    f.process(101, "later", kMe, 100, 1, nul({"later"}), "/");
+    app.setAuxShown(QStringLiteral("performance"), true);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return requests.count() >= 3; }, 5000));
+    const unsigned hidden = requests.last().at(0).toUInt();
+    EXPECT_EQ(hidden & (ReadSystemCpu | ReadSystemMemory | ReadGpu), static_cast<unsigned>(ReadSystemCpu | ReadSystemMemory | ReadGpu));
+    EXPECT_EQ(hidden & (ReadStatus | ReadIo | ReadEfficiency), 0u);
+    QTest::qWait(500);
+    EXPECT_EQ(app.processTable().count(), rows); // the table waits for its window
+}
+
 // Follow-up 2 (AD32): a pause is told by the update interval set in the window, which reaches the sampler.
 TEST(ActivityApp, ThePauseIsToldByTheIntervalSet)
 {

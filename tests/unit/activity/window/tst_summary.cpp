@@ -69,6 +69,29 @@ Snapshot cpuSample(double system, double user, double idle)
 
 } // namespace
 
+// Review of steps 3 to 5: off screen the histories take the samples (the Dock's graph reads them) and the blocks are built
+// again only when the window shows.
+TEST(Summary, OffScreenTheBlocksWait)
+{
+    Summary s;
+    s.setCapacity(10);
+    Snapshot snap;
+    snap.system.cpuOk = true;
+    snap.system.userShare = 0.2;
+    snap.system.systemShare = 0.1;
+    s.addSample(snap);
+    QSignalSpy changed(&s, &Summary::changed);
+    s.setLive(false);
+    s.addSample(snap);
+    s.addSample(snap);
+    EXPECT_EQ(changed.count(), 0);
+    EXPECT_EQ(s.dockTileSamples(QStringLiteral("cpu-history"), 32).size(), 3);
+    s.setLive(true);
+    EXPECT_EQ(changed.count(), 1);
+    s.setLive(true); // nothing new: nothing built
+    EXPECT_EQ(changed.count(), 1);
+}
+
 TEST(Summary, AHistoryKeepsItsLastSamplesAndItsGaps)
 {
     History h;

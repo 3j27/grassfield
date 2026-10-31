@@ -63,7 +63,8 @@ Window {
         boundsBehavior: Flickable.StopAtBounds
         focus: true
         activeFocusOnTab: true
-        model: root.performance.resources
+        // Rows by count, not by model: the list is new at each sample and its rows (and their graphs) stay.
+        model: root.performance.resources.length
         Accessible.role: Accessible.List
         Accessible.name: qsTr("Resources")
 
@@ -72,8 +73,9 @@ Window {
 
         delegate: Item {
             id: resource
-            required property var modelData
             required property int index
+            readonly property var modelData: root.performance.resources[resource.index] ?? ({key: "", title: "", subtitle: "", value: "", graph: ({})})
+            readonly property var lines: [resource.modelData.title, resource.modelData.subtitle, resource.modelData.value]
             readonly property bool chosen: root.performance.selected === resource.modelData.key
             width: sidebar.width
             height: Tokens.activityPerformanceSidebarRowHeight
@@ -115,11 +117,11 @@ Window {
                 anchors.verticalCenter: parent.verticalCenter
 
                 Repeater {
-                    model: [resource.modelData.title, resource.modelData.subtitle, resource.modelData.value]
+                    model: 3
 
                     Text {
-                        required property string modelData
                         required property int index
+                        readonly property string modelData: resource.lines[index] ?? ""
                         visible: modelData !== ""
                         width: parent.width
                         textFormat: Text.PlainText
@@ -229,11 +231,12 @@ Window {
 
             // The large graphs (one, or Disk's two, or a GPU's engines); CPU's logical processors as small graphs.
             Repeater {
-                model: root.detail.logical ? [] : (root.detail.graphs || [])
+                model: root.detail.logical ? 0 : (root.detail.graphs || []).length
 
                 Column {
                     id: big
-                    required property var modelData
+                    required property int index
+                    readonly property var modelData: (root.detail.graphs || [])[big.index] ?? ({title: "", graph: ({})})
                     width: content.width
                     spacing: Tokens.spacingXs
 
@@ -261,13 +264,14 @@ Window {
                 spacing: Tokens.spacingXs
 
                 Repeater {
-                    model: tiles.visible ? root.performance.processors : []
+                    model: tiles.visible ? root.performance.processors.length : 0
 
                     GraphFrame {
-                        required property var modelData
+                        id: tile
+                        required property int index
                         width: (tiles.width - (tiles.columns - 1) * tiles.spacing) / tiles.columns
                         height: Tokens.activityPerformanceTileHeight
-                        graph: modelData.graph
+                        graph: (root.performance.processors[tile.index] ?? ({graph: ({})})).graph
                     }
                 }
             }
@@ -280,10 +284,11 @@ Window {
                 height: Tokens.activityPerformanceBarHeight
 
                 Repeater {
-                    model: root.detail.bar || []
+                    model: (root.detail.bar || []).length
 
                     Rectangle {
-                        required property var modelData
+                        required property int index
+                        readonly property var modelData: (root.detail.bar || [])[index] ?? ({label: "", fraction: 0, color: ""})
                         width: bar.width * Math.max(0, modelData.fraction)
                         height: bar.height
                         color: modelData.color !== "" && Appearance.colors[modelData.color] !== undefined ? Appearance.colors[modelData.color]
@@ -303,11 +308,12 @@ Window {
                 spacing: Tokens.spacingSm
 
                 Repeater {
-                    model: root.detail.figures || []
+                    model: (root.detail.figures || []).length
 
                     Row {
                         id: pair
-                        required property var modelData
+                        required property int index
+                        readonly property var modelData: (root.detail.figures || [])[pair.index] ?? ({label: "", value: ""})
                         width: (figures.width - (figures.columns - 1) * figures.spacing) / figures.columns
                         spacing: Tokens.spacingSm
                         Accessible.role: Accessible.StaticText
