@@ -292,13 +292,17 @@ and IQ-B3 here changes the palette only, not which controls read it.
   - **The data.** The desktop's record of what each output shows (`wallpaper.json` `shown`, step 3) is what the lock draws:
     `WallpaperState.lockBackdrop` (`WallpaperConfig.lockBackdropOf`) gives a picture only as a plain cache name in the
     prepared or the video folder (the video's poster), else the colour, else the artwork and variant (also every picture's
-    fallback). Read from that record rather than from the desktop's live objects, so that it survives ADR-0041 S2 (the lock
-    moving into the security process reads the same file).
-  - **Ready before it is needed (ID-7).** `shell/security/lock/LockStill.qml`, one per output in `Lock.qml`, decides the
-    backdrop while the session is unlocked, when the wallpaper changes: a picture is checked again (`/usr/bin/realpath -e`:
-    still a plain cache name in one of the two folders; `/usr/bin/stat`: a regular file of at most
-    `wallpaper.lockStillMaxBytes`; absolute paths, argument vectors, one process per step and request, a superseded answer
-    dropped) and decoded by a hidden `Image` into Qt's pixmap cache (no `sourceSize`: the helper wrote it at the output's
+    fallback). Read from that record rather than from the desktop's live objects; at ADR-0041 S2 the security process needs
+    its own watched reader of `shown` (WallpaperState reads the file once and is a desktop store with side effects), with
+    the pure `lockBackdropOf` (noted in ADR-0041 S2).
+  - **Ready before it is needed (ID-7).** `shell/security/lock/LockStill.qml`, one per output in `LockStills.qml` (which
+    `Lock.qml` creates at run time, last in its `Component.onCompleted`, never as a declared child: a display file that fails
+    to load costs the surfaces their backdrop and picture, never the lock), decides the backdrop while the session is
+    unlocked, when the wallpaper changes: a picture is checked again (`/usr/bin/realpath -m` with the two cache folders: the
+    file's real path a plain cache name directly in one of their real paths, `WallpaperConfig.lockStillReal`;
+    `/usr/bin/stat --printf %f|%s`: the raw mode, which no locale translates, a regular file of at most
+    `wallpaper.lockStillMaxBytes`, `lockStillStatOk`; absolute paths, argument vectors, one process per step and request, a
+    superseded answer dropped) and decoded by a hidden `Image` into Qt's pixmap cache (no `sourceSize`: the helper wrote it at the output's
     physical size, and a `sourceSize` would key the cache on each window's scale). The account picture is decoded the same
     way (`avatarPreload`, the shell's PNG copy of at most 256 x 256). A lock surface takes its backdrop when created, or
     when first decided (a hotplugged output, a wallpaper changed just before), at most `wallpaper.firstShowTimeoutMs` later,
@@ -312,8 +316,25 @@ and IQ-B3 here changes the palette only, not which controls read it.
     0.25 between them, `lock.scrimFeather` 48 px ramps on the clear side, bound to the two columns' geometry so every text
     line lies on 0.6 at every text scale; without room for a clear band the whole surface stays at 0.6. A2: the text roles
     are unchanged (`contrast-roles.json`, `test_contrast_tokens.py` reads the scrim's lines and the columns).
+  - **Opus security review of cbd6ef05: FAIL, no BLOCKER** (fail closed intact; the reviewer confirmed on Qt 6.10 that the
+    committed `LockView.qml` loads, that its still is Ready synchronously from the windowless preload, and that the field
+    has focus). MAJOR 1 `tst_lockbackdrop.qml` failed under `scripts/dev/test.sh` (no `QML_XHR_ALLOW_FILE_READ` for
+    `tests/security`) → set there. MAJOR 2 `stat %F` is translated by the locale (the artwork always on a French session) →
+    `%f`, the raw mode. MAJOR 3 no evidence that `Lock.qml` with a `Variants` and an `Image` still loads in Quickshell → the
+    display data moved to `LockStills.qml`, created at run time and caught; what is left in `Lock.qml` is one function. Still
+    required before the merge (NOT VERIFIED here, no Quickshell): `tests/security/lock_monitor_model.sh`, `dev_gate.sh`,
+    `reload_locked.sh`, nested L1 to L5. MINOR 1 (the decoded file can differ from the checked one, for a process of the
+    same user writing the 0700 cache): Qt's `@2x` lookup is off for the shell (`QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1` in
+    `grassfield-shell.service`); the rename race and the format sniffing (every installed image plugin reachable) are
+    bounded (64 MiB, Qt's 256 MiB allocation limit, `wallpaper.toolTimeoutMs`) and go to S2 (only the JPEG plugin, a file
+    the process opened itself). MINOR 2 S2's reader (above, ADR-0041). MINOR 3 tests shallow → the pure checks are tested
+    (`tst_wallpaper.qml` `test_lockStillChecks`), and an offscreen probe with stand-in Quickshell types (simulated
+    processes, a real PNG) showed: nothing shown, undecided; a picture checked and decoded; a colour at once; a directory,
+    a path outside the cache and a missing file, the artwork. NITs: focus first in `LockView`, the surface colour taken
+    once, a failed check clears the image, the folders canonicalized.
   - Tests: `tests/security/tst_lockbackdrop.qml` (the checks, the same pixmap options on both sides, taken once, the
-    clock on resume, the ground, nothing on the lock path; four planted mutants each fail it), `tst_wallpaper.qml`
+    clock on resume, the ground, nothing on the lock path, the display data created at run time; four planted mutants each
+    fail it), `tst_wallpaper.qml`
     (`lockBackdropOf`), `test_contrast_tokens.py`, `lock_surfaces.sh` (the clock's one refresh, and a mutant). An offscreen
     render of the real `LockView.qml` with stand-in modules (white and the light Day artwork, 1280 x 800; text layers off,
     since offscreen Qt draws no `MultiEffect`) shows every text line on the dark bands; it also caught `top` and `bottom`,

@@ -938,14 +938,20 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   (`WallpaperState.setShown`); `WallpaperState.lockBackdrop(output)` (`WallpaperConfig.lockBackdropOf`) gives the lock a
   picture only as a plain cache name (`<32 hex>.jpg|png`) directly in the prepared or the video folder (a video's poster),
   else the colour, else the artwork and variant the output draws (the artwork is also every picture's fallback).
-  `LockStill.qml` (one per output, in `Lock.qml`) decides it while the session is unlocked, when the wallpaper changes: a
-  picture is checked again by absolute path and argument vector (`/usr/bin/realpath -e --`: the real path must still be a
-  plain cache name in one of the two folders; `/usr/bin/stat --printf %F|%s --`: a regular file of at most
-  `wallpaper.lockStillMaxBytes`), one process per step and request, an answer of a superseded request dropped, then
+  `LockStill.qml` (one per output, in `LockStills.qml`, which `Lock.qml` creates at run time, last, never as a declared
+  child: a display file that fails to load costs the backdrop and the picture, never the lock) decides it while the
+  session is unlocked, when the wallpaper changes: a picture is checked again by absolute path and argument vector
+  (`/usr/bin/realpath -m -- <prepared> <video> <file>`: the file's real path must be a plain cache name directly in one of
+  the two folders' real paths; `/usr/bin/stat --printf %f|%s --`: the raw mode, which no locale translates, a regular file
+  of at most `wallpaper.lockStillMaxBytes`), one process per step and request, an answer of a superseded request dropped, then
   decoded by a hidden `Image` (`cache: true`, no `sourceSize`: the helper wrote it at the output's physical size, and a
   `sourceSize` would key Qt's pixmap cache on each window's scale; Qt's image allocation limit bounds a file that is not
-  what it should be). Any failure (gone, outside the cache, too large, not decodable, `wallpaper.toolTimeoutMs` without an
-  answer) gives the artwork, logged. No user original and no video decoder enters the module.
+  what it should be; Qt's `@2x` lookup is off for the shell, `QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1` in its unit, so the
+  decoded path is the checked one). Any failure (gone, outside the cache, too large, not decodable,
+  `wallpaper.toolTimeoutMs` without an answer) gives the artwork, logged. No user original and no video decoder enters the
+  module. Known limit (opus review of cbd6ef05, MINOR 1): a process of the same user writing the 0700 cache can still swap
+  the file between the check and the decode, or give another image format under the cache name; bounded by the size cap,
+  Qt's allocation limit and the timeout, and the lock itself is unaffected; ADR-0041 S2 narrows it.
 - **Taken once.** A lock surface (`LockView`) adopts its output's backdrop when it is created, or when it is first decided
   (a hotplugged output, a wallpaper that changed just before the lock), at most `wallpaper.firstShowTimeoutMs` later, then
   the artwork; until then the surface's own colour shows: the output's ground (`Ground.of`, ID-2, ID-15), under the scrim
@@ -957,9 +963,11 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
 - **Scrim** (IQ-W4 A): see "Lock screen contrast" above; A2 holds per band by the same argument as before: every text line
   lies on `lock.dimOpacity`.
 - Tests: `tst_wallpaper.qml` (`lockBackdropOf`, `withShown`), `test_contrast_tokens.py` (the model matches the scrim's lines,
-  the clear band below the text bands), `lock_surfaces.sh` (the clock's one refresh). NOT VERIFIED (nested): the still in the
-  lock's first frame (the pixmap cache hit), a hotplugged output while locked, the clock after a real sleep, the A2 lock run
-  over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
+  the clear band below the text bands), `lock_surfaces.sh` (the clock's one refresh), `tst_wallpaper.qml`
+  (`lockStillReal`, `lockStillStatOk`). The pixmap cache hit was checked offscreen on Qt 6.10 by the reviewer. NOT VERIFIED
+  (no Quickshell or nested session here; required before the merge): the real `Lock.qml` loading
+  (`tests/security/lock_monitor_model.sh`, `dev_gate.sh`, `reload_locked.sh`), L1 to L5, a hotplugged output while
+  locked, the clock after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
 
 ## Known limitations
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
@@ -1034,7 +1042,8 @@ same directory and the modules move without moving a file), one step at a time u
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
 | `shell/security/lock/LockView.qml` | Lock surface (display only): the output's wallpaper, sharp (the still LockStill decoded, else its colour or `WallpaperArt`), the banded scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions); backdrop, name and picture taken once (ADR-0040 step 4a) |
-| `shell/security/lock/LockStill.qml` | Per output (display only): the lock's backdrop decided while unlocked from `WallpaperState.lockBackdrop`; a picture checked (`/usr/bin/realpath -e`: a plain cache name in the prepared or video folder; `/usr/bin/stat`: a regular file of at most `wallpaper.lockStillMaxBytes`) and decoded into Qt's pixmap cache before any lock (ADR-0040 ID-7, ADR-0016 W8) |
+| `shell/security/lock/LockStill.qml` | Per output (display only): the lock's backdrop decided while unlocked from `WallpaperState.lockBackdrop`; a picture checked (`/usr/bin/realpath -m`: a plain cache name in the real prepared or video folder; `/usr/bin/stat %f`: a regular file of at most `wallpaper.lockStillMaxBytes`) and decoded into Qt's pixmap cache before any lock (ADR-0040 ID-7, ADR-0016 W8) |
+| `shell/security/lock/LockStills.qml` | The display data the lock surfaces take (one LockStill per output, the account picture decoded ahead), created by `Lock.qml` at run time so that it can never keep the lock from loading |
 | `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
 | `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, display power-off on the lock screen, IPC `idle`), `SleepInhibitor` (delay inhibitor, PrepareForSleep watcher, retry and notice, logind budget), `IdleModel.js` |
 | `config/hypr/grassfield/privacy.lua` | Omarchy's `no_screen_share` rules read from Omarchy's own files (SEC-01) |

@@ -1073,6 +1073,30 @@ TestCase {
         compare(WallpaperConfig.lockBackdropOf(undefined, "o", prep, vid), null);
     }
 
+    // The lock's checks of a still (ADR-0040 step 4a; review of cbd6ef05: the real folders, a mode no locale translates).
+    function test_lockStillChecks() {
+        const vid = "/home/u/.cache/grassfield/wallpapers/video";
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const real = (a, b, f) => WallpaperConfig.lockStillReal(a + "\n" + b + "\n" + f + "\n");
+        compare(real(prep, vid, prep + "/" + name), prep + "/" + name);
+        compare(real(prep, vid, vid + "/" + name), vid + "/" + name);
+        // The folders as realpath printed them (a cache reached through a symbolic link): the file is checked against those.
+        compare(real("/data/cache/prepared", vid, "/data/cache/prepared/" + name), "/data/cache/prepared/" + name);
+        for (const f of ["/etc/passwd", prep + "/sub/" + name, "/tmp/" + name, prep + "/" + name + ".svg", prep + "/x.jpg"])
+            compare(real(prep, vid, f), "", f);
+        // Anything but three lines (realpath failed, a newline in a path) is refused.
+        compare(WallpaperConfig.lockStillReal(prep + "\n" + prep + "/" + name + "\n"), "");
+        compare(WallpaperConfig.lockStillReal(prep + "\n" + vid + "\n" + prep + "/" + name + "\nx\n"), "");
+        compare(WallpaperConfig.lockStillReal(""), "");
+        compare(WallpaperConfig.lockStillReal(undefined), "");
+        // stat --printf %f|%s: a regular file (0x8000) of 1 to max bytes.
+        const max = 64 * 1024 * 1024;
+        verify(WallpaperConfig.lockStillStatOk("81a4|123456", max));
+        verify(WallpaperConfig.lockStillStatOk("8180|" + max + "\n", max));
+        for (const t of ["41ed|4096", "a1ff|12", "11b6|0", "61b0|0", "81a4|0", "81a4|" + (max + 1), "regular file|12", "fichier|12", "81a4", "", "81a4|12|x", "zz|12"])
+            verify(!WallpaperConfig.lockStillStatOk(t, max), t);
+    }
+
     function test_groundOf() {
         compare(WallpaperConfig.groundOf({kind: "picture", mean: "#a0b0c0"}, "#2F6D5F", "#000000"), "#A0B0C0");
         compare(WallpaperConfig.groundOf({kind: "color", color: "#ff8800"}, "#2F6D5F", "#000000"), "#FF8800");

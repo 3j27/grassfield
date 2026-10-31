@@ -89,19 +89,33 @@ Singleton {
     readonly property string avatarSource: Machine.avatarSource(facePath, Machine.accountsIconPath(loginName), path => ThemeIcons.fileSource(path), path => ThemeIcons.fileState(path))
 
     // ---- ready before it is needed (ADR-0040 step 4a, ID-7; display only) ----
-    // The account picture, decoded while the session is unlocked (Qt's pixmap cache; LockView asks for the same url with the
-    // same options and gets it at once): a lock surface shows it only when it is already decoded, else the initials, and
-    // keeps what it took. Nothing here can unlock or keep the lock from engaging.
-    readonly property string avatarReady: avatarPreload.status === Image.Ready ? String(avatarPreload.source) : ""
-    // One LockStill per output: the backdrop each lock surface adopts (null while undecided). `backdrops` counts the
-    // decisions so that a surface's binding is evaluated again.
-    property int backdrops: 0
+    // LockStills.qml, created at run time at the end of Component.onCompleted (never a declared child: if it cannot be
+    // loaded, the lock is unaffected and the surfaces show the artwork and the initials): one backdrop per output and the
+    // account picture, decoded while the session is unlocked (Qt's pixmap cache; LockView asks for the same urls with the
+    // same options and gets them at once). A surface takes them once. Nothing here can unlock or keep the lock from engaging.
+    property var stills: null
+    readonly property string avatarReady: root.stills ? root.stills.avatarReady : ""
+    readonly property int backdrops: root.stills ? root.stills.revision : 0
     function backdropOf(output: string): var {
-        for (const s of stills.instances) {
-            if (s.output === output)
-                return s.backdrop;
+        return root.stills ? root.stills.backdropOf(output) : null;
+    }
+    function prepareStills(): void {
+        try {
+            const c = Qt.createComponent(Qt.resolvedUrl("LockStills.qml"));
+            if (c.status !== Component.Ready) {
+                console.warn("grassfield-lock: the lock's display data cannot be prepared (" + c.errorString() + "); the lock shows the artwork and the initials");
+                return;
+            }
+            const o = c.createObject(root);
+            if (o === null) {
+                console.warn("grassfield-lock: the lock's display data cannot be created; the lock shows the artwork and the initials");
+                return;
+            }
+            o.avatarSource = Qt.binding(() => root.avatarSource);
+            root.stills = o;
+        } catch (e) {
+            console.warn("grassfield-lock: the lock's display data failed (" + e + "); the lock shows the artwork and the initials");
         }
-        return null;
     }
     // Counts the resumes from sleep (SleepInhibitor.afterResume): each lock surface refreshes its clock (ID-7, T-14).
     property int resumes: 0
@@ -504,8 +518,9 @@ Singleton {
             id: surface
 
             // The ground under the scrim (ADR-0040 ID-2, ID-15): what shows before the content and until the backdrop is
-            // decided, on a hotplugged output too.
-            color: Ground.of(surface.screen ? surface.screen.name : "")
+            // decided, on a hotplugged output too. Taken once, when the surface is created (the shadow colour until then).
+            color: Tokens.colorDark.shadow
+            Component.onCompleted: surface.color = Ground.of(surface.screen ? surface.screen.name : "")
 
             // Keyboard focus left this lock surface: on Hyprland that also happens when another
             // client takes the session lock over or the session is unlocked under it. Ask now
@@ -736,24 +751,6 @@ Singleton {
         onLoadFailed: readable = false
     }
 
-    Variants {
-        id: stills
-        model: Quickshell.screens
-
-        LockStill {
-            onBackdropChanged: root.backdrops += 1
-        }
-    }
-
-    Image {
-        id: avatarPreload
-        visible: false
-        source: VisualFixtures.active ? "" : root.avatarSource
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
-        cache: true
-    }
-
     FileView {
         path: "/etc/passwd"
         printErrors: false
@@ -785,6 +782,8 @@ Singleton {
             strandedUndecided = true;
             strandedProbe.start();
         }
+        // Last, after everything the lock itself needs (ADR-0040 step 4a): the display data.
+        prepareStills();
     }
 
     // Dev hooks (dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of

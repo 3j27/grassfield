@@ -38,16 +38,18 @@ TestCase {
     function test_theStillIsCheckedBeforeItIsDecoded() {
         const s = source("shell/security/lock/LockStill.qml");
         // Absolute paths, an argument vector, `--` before the path; nothing else is run.
-        verify(s.indexOf('root.run("real", ["/usr/bin/realpath", "-e", "--", w.file]);') >= 0);
-        verify(s.indexOf('root.run("stat", ["/usr/bin/stat", "--printf", "%F|%s", "--", real]);') >= 0);
+        // The two cache folders' own real paths with the file's (a cache behind a symbolic link), and the raw mode, which no
+        // locale translates (review of cbd6ef05).
+        verify(s.indexOf('root.run("real", ["/usr/bin/realpath", "-m", "--", WallpaperState.preparedDir, WallpaperState.videoDir, w.file]);') >= 0);
+        verify(s.indexOf('root.run("stat", ["/usr/bin/stat", "--printf", "%f|%s", "--", real]);') >= 0);
         compare((s.match(/root\.run\(/g) || []).length, 2);
         verify(!/"(sh|bash)"|execDetached|Quickshell\.exec/.test(s), "no shell");
         // The real path must still be a plain cache name of one of the two folders, and the file regular and bounded.
-        verify(/WallpaperConfig\.lockBackdropOf\(\{shown: \{o: \{kind: "picture", file: real\}\}\}, "o", WallpaperState\.preparedDir, WallpaperState\.videoDir\)\.file !== real/.test(s));
-        verify(/match\(\/\^regular file\\\|\(\\d\+\)\$\/\)/.test(s));
-        verify(/parseInt\(m\[1\]\) > Tokens\.wallpaperLockStillMaxBytes/.test(s));
+        verify(/const real = WallpaperConfig\.lockStillReal\(text\);\s*if \(real === ""\) \{\s*root\.fail\(/.test(s));
+        verify(/if \(!WallpaperConfig\.lockStillStatOk\(text, Tokens\.wallpaperLockStillMaxBytes\)\) \{\s*root\.fail\(/.test(s));
         // The decode is only ever of the checked real path.
-        compare((s.match(/image\.source = /g) || []).length, 2);
+        // Set to the checked path, cleared on a new request and on a failure (a late decode is not kept).
+        compare((s.match(/image\.source = /g) || []).length, 3);
         verify(s.indexOf('image.source = "file://" + root.pending;') >= 0 && s.indexOf('image.source = "";') >= 0);
         // An answer of a superseded request is dropped.
         verify(/function realChecked\(text: string, gen: int\): void \{\s*if \(gen !== root\.generation\)\s*return;/.test(s));
@@ -66,18 +68,20 @@ TestCase {
             verify(!/sourceSize/.test(b), "no sourceSize: the cache key must not depend on the window's scale");
         }
         verify(/source: root\.backdrop !== null && root\.backdrop\.kind === "picture" \? root\.backdrop\.still : ""/.test(view));
-        // The account picture: the same options as Lock.qml's preload, and only once it is decoded.
+        // The account picture: the same options as LockStills.qml's preload, and only once it is decoded.
         const lock = source("shell/security/lock/Lock.qml");
-        const preload = block(lock, "Image {\n        id: avatarPreload");
+        const holder = source("shell/security/lock/LockStills.qml");
+        const preload = block(holder, "Image {\n        id: avatarPreload");
         const picture = block(viewText, "Image {\n                id: picture");
         for (const b of [preload, picture]) {
             verify(/cache: true/.test(b) && /fillMode: Image\.PreserveAspectCrop/.test(b) && !/sourceSize/.test(b), b);
         }
         verify(/source: VisualFixtures\.active \? "" : root\.frozenAvatar/.test(picture));
-        verify(/readonly property string avatarReady: avatarPreload\.status === Image\.Ready \? String\(avatarPreload\.source\) : ""/.test(lock));
+        verify(/readonly property string avatarReady: avatarPreload\.status === Image\.Ready \? String\(avatarPreload\.source\) : ""/.test(holder));
+        verify(/readonly property string avatarReady: root\.stills \? root\.stills\.avatarReady : ""/.test(lock));
         verify(/avatarSource: root\.avatarReady/.test(lock));
         // No video decoder in the security modules (ADR-0016 section 6).
-        for (const f of ["shell/security/lock/Lock.qml", "shell/security/lock/LockView.qml", "shell/security/lock/LockStill.qml"])
+        for (const f of ["shell/security/lock/Lock.qml", "shell/security/lock/LockView.qml", "shell/security/lock/LockStill.qml", "shell/security/lock/LockStills.qml"])
             verify(!/QtMultimedia|MediaPlayer|VideoOutput/.test(source(f)), f);
     }
 
@@ -95,15 +99,28 @@ TestCase {
         verify(/onResumesChanged: clock\.refresh\(\)/.test(v));
         const inhibitor = source("shell/security/idle/SleepInhibitor.qml");
         verify(/function afterResume\(\): void \{[\s\S]*?Lock\.resumed\(\);[\s\S]*?\n    \}/.test(inhibitor));
-        // The surface's own colour is the ground (ID-2, ID-15).
-        verify(/color: Ground\.of\(surface\.screen \? surface\.screen\.name : ""\)/.test(source("shell/security/lock/Lock.qml")));
+        // The surface's own colour is the ground (ID-2, ID-15), taken once.
+        verify(/Component\.onCompleted: surface\.color = Ground\.of\(surface\.screen \? surface\.screen\.name : ""\)/.test(source("shell/security/lock/Lock.qml")));
+        // Focus first in the view (review of cbd6ef05).
+        verify(/Component\.onCompleted: \{\s*focusField\(\);/.test(v));
+    }
+
+    // Review of cbd6ef05 (MAJOR 3): the display data is created at run time, last, never declared in the singleton that owns
+    // WlSessionLock: a file of it that fails to load cannot keep the lock from existing.
+    function test_theDisplayDataCannotBreakTheLock() {
+        const lock = source("shell/security/lock/Lock.qml");
+        verify(!/\bLockStills?\s*\{/.test(lock), "no LockStill or LockStills declared in Lock.qml");
+        verify(!/\bVariants\s*\{/.test(lock) && !/\bImage\s*\{/.test(lock));
+        verify(/Qt\.createComponent\(Qt\.resolvedUrl\("LockStills\.qml"\)\)/.test(lock));
+        verify(/function prepareStills\(\): void \{\s*try \{/.test(lock), "every failure is caught and logged");
+        verify(/strandedProbe\.start\(\);\s*\}\s*\/\/[^\n]*\n\s*prepareStills\(\);\s*\}/.test(source("shell/security/lock/Lock.qml").replace(/\r/g, "")) || /prepareStills\(\);\s*\}\s*$/m.test(lock), "last in Component.onCompleted");
     }
 
     function test_engagingTheLockReadsNoneOfIt() {
         const lock = source("shell/security/lock/Lock.qml");
         for (const fn of ["function lock(reason: string): string {", "function engage(): void {", "function release(): void {", "function restore(intent: bool, when: string): void {"]) {
             const b = block(lock, fn);
-            verify(!/backdrop|stills|avatarPreload|avatarReady|resumes/.test(b), fn);
+            verify(!/backdrop|stills|Stills|avatarPreload|avatarReady|resumes/.test(b), fn);
         }
         // The backdrops only feed the view.
         compare((lock.match(/root\.backdropOf\(/g) || []).length, 1);

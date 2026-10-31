@@ -10,8 +10,9 @@ import qs.services
 //
 // What the desktop last showed on the output (WallpaperState.lockBackdrop: wallpaper.json `shown`, a plain cache name in the
 // prepared or video folder for a picture) is decided while the session is unlocked, when the wallpaper changes, never when it
-// locks: a picture is checked here (its real path, `realpath -e`, in the wallpaper cache; a regular file of at most
-// wallpaper.lockStillMaxBytes, `stat`; both run by absolute path, by argument vector, never a shell) and then decoded by the
+// locks: a picture is checked here (its real path, `realpath -m` with the two cache folders' own real paths, a plain cache
+// name directly in one of them; a regular file of at most wallpaper.lockStillMaxBytes, `stat %f|%s`, the raw mode, which
+// no locale translates; both run by absolute path, by argument vector, never a shell) and then decoded by the
 // Image below, which keeps the decoded picture in Qt's pixmap cache: a lock surface asking for the same url gets it at once,
 // already decoded. No sourceSize on either side: the helper prepared the picture at the output's physical size, and a
 // sourceSize would key the cache on each window's scale; Qt's image allocation limit bounds a file that is not what it should
@@ -61,7 +62,7 @@ Item {
         root.reset();
         root.requested = w.file;
         root.pending = w.file;
-        root.run("real", ["/usr/bin/realpath", "-e", "--", w.file]);
+        root.run("real", ["/usr/bin/realpath", "-m", "--", WallpaperState.preparedDir, WallpaperState.videoDir, w.file]);
         checkTimeout.restart();
     }
 
@@ -79,28 +80,29 @@ Item {
         console.warn("grassfield-lock: " + root.output + ": no wallpaper still on the lock (" + why + "); the artwork shows");
         const w = root.wanted;
         checkTimeout.stop();
+        // A decode that ends after this is not kept.
+        image.source = "";
         root.backdrop = {kind: "art", still: "", color: "", artwork: w ? w.artwork : "grassfield", variant: w ? w.variant : "evening.dark"};
     }
 
-    // Its real path must still be a plain cache name directly in the prepared or the video folder.
+    // Its real path must still be a plain cache name directly in the real prepared or video folder (WallpaperConfig.lockStillReal).
     function realChecked(text: string, gen: int): void {
         if (gen !== root.generation)
             return;
-        const real = text.trim();
-        if (WallpaperConfig.lockBackdropOf({shown: {o: {kind: "picture", file: real}}}, "o", WallpaperState.preparedDir, WallpaperState.videoDir).file !== real) {
+        const real = WallpaperConfig.lockStillReal(text);
+        if (real === "") {
             root.fail("not a picture of the wallpaper cache");
             return;
         }
         root.pending = real;
-        root.run("stat", ["/usr/bin/stat", "--printf", "%F|%s", "--", real]);
+        root.run("stat", ["/usr/bin/stat", "--printf", "%f|%s", "--", real]);
     }
 
-    // A regular file of at most wallpaper.lockStillMaxBytes: then it is decoded.
+    // A regular file of at most wallpaper.lockStillMaxBytes (WallpaperConfig.lockStillStatOk): then it is decoded.
     function statChecked(text: string, gen: int): void {
         if (gen !== root.generation)
             return;
-        const m = text.trim().match(/^regular file\|(\d+)$/);
-        if (!m || parseInt(m[1]) <= 0 || parseInt(m[1]) > Tokens.wallpaperLockStillMaxBytes) {
+        if (!WallpaperConfig.lockStillStatOk(text, Tokens.wallpaperLockStillMaxBytes)) {
             root.fail("not a regular file of at most " + Tokens.wallpaperLockStillMaxBytes + " bytes");
             return;
         }

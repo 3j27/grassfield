@@ -116,7 +116,8 @@ if want headless && compgen -G "tests/security/tst_*.qml" >/dev/null; then
   qs_root=$(mktemp -d)
   ln -s "$root/shell" "$qs_root/qs"
   rc=0
-  QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
+  # QML_XHR_ALLOW_FILE_READ: tst_lockbackdrop.qml reads the module's sources (as tests/unit does).
+  QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
   rm -rf "$qs_root"
   ((rc == 0)) || status=1
   record_run headless "tests/security (qmltestrunner)" "$rc" "PASS"

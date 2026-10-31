@@ -1102,6 +1102,26 @@ function lockBackdropOf(saved, output, preparedDir, videoDir) {
     return out;
 }
 
+// The lock's check of a still (ADR-0040 step 4a, shell/security/lock/LockStill.qml), pure. `text` is what
+// `realpath -m -- <preparedDir> <videoDir> <file>` printed: three lines, each path with its symbolic links resolved. The
+// file's real path when it is a plain cache name directly in the real prepared or video folder, else "".
+function lockStillReal(text) {
+    const lines = typeof text === "string" ? text.split("\n").filter(l => l !== "") : [];
+    if (lines.length !== 3)
+        return "";
+    return cacheFile(lines[2], [lines[0], lines[1]]);
+}
+
+// `stat --printf %f|%s`: the raw mode in hexadecimal and the size (no word, so no locale changes it). True for a regular
+// file of 1 to `maxBytes` bytes.
+function lockStillStatOk(text, maxBytes) {
+    const m = typeof text === "string" ? text.trim().match(/^([0-9a-fA-F]{1,8})\|(\d{1,20})$/) : null;
+    if (!m)
+        return false;
+    const size = Number(m[2]);
+    return (parseInt(m[1], 16) & 0xF000) === 0x8000 && size > 0 && size <= maxBytes;
+}
+
 // What a wallpaper window shows as its first frame, before it maps (ADR-0040 ID-3): "feed" (the feed's first result, final:
 // it carries the phase and the appearance too), "still" (the output's last picture from wallpaper.json, until that result),
 // or "wait" (nothing yet: the window stays unmapped, at most wallpaper.firstShowTimeoutMs, then the artwork). A phase or an

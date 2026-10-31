@@ -194,6 +194,13 @@ down, how sleep behaves) is written in the table at the end of this step.
   lost push with the compositor's signal set, and a stopped security unit (mutants on each); a scan that no `Lock.lock`
   caller is left in the UI tree (`ipc_inventory.sh`). Owner, real session: DT-01 and DT-21 re-run (kill the UI while
   locked, kill the security process while locked), L3 (lock before sleep) and the lid. Review: opus security.
+  ADR-0040 step 4a (2026-10-31; opus review of cbd6ef05, MINOR 1 and 2) leaves S2 three things: the lock's backdrop reads
+  `wallpaper.json` `shown` through the desktop's `WallpaperState`, which reads the file once and is a desktop store with
+  side effects (it starts processes and writes `wallpaper-state.json`): the security process needs its own watched reader
+  of `shown` with the pure `WallpaperConfig.lockBackdropOf`. The preloaded stills are decoded at full size, one per output
+  (about 33 MB per 4K output, up to Qt's 256 MiB allocation limit for a hostile file): measure them against
+  `MemoryHigh=320M`. And the decode: only the JPEG image plugin (PNG is built in) and a file the process opened itself
+  (`O_NOFOLLOW`, `fstat`), so that the checked file is the decoded one.
 - **S3. The polkit agent moves.** `AuthAgent` and its dialog run in the security process, drawn with `Grassfield.Ui`
   only; exactly one agent in the session (L5: registration, action id and program shown, cancel works, never
   auto-approves); the UI's `polkit status` dev hook moves with it. Tests: `authagent_flows.sh`, `tst_authdialog*`,

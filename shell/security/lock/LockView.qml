@@ -86,10 +86,11 @@ Item {
     onResumesChanged: clock.refresh()
 
     Component.onCompleted: {
+        // Focus first: no display statement ever comes before it.
+        focusField();
         root.frozenName = root.userName;
         root.frozenAvatar = root.avatarSource;
         root.adopt(root.offeredBackdrop);
-        focusField();
     }
 
     // Nothing decided in time (a still that is still being checked, an output that showed no wallpaper yet): the artwork.
