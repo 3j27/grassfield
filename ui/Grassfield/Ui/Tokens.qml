@@ -2552,8 +2552,6 @@ QtObject {
     readonly property int previewCodeFontSize: 12
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewControlsHeight: 40
-    // gs-092-232: toolbar capsule groups about 38 tall (meas-B ~38 +-2); 36 = 28-pt buttons + 2 x spacing xs, same as the Files capsules [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
-    readonly property int previewToolbarCapsuleHeight: 36
     // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewToolbarIconSize: 16
     // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]

@@ -47,6 +47,9 @@ Item {
     function goToPage(page: int): void {
     }
 
+    // The content has scrolled under the window's toolbar: the toolbar draws its rule (ADR-0039 D3, step 16).
+    readonly property bool scrolled: flick.contentY > flick.originY
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -56,6 +59,9 @@ Item {
         contentHeight: edit.height + 2 * Tokens.spacingMd
         flickableDirection: Flickable.VerticalFlick
         focus: true
+
+        // The overlay scroll bar every scrolling view of the apps shows (ADR-0039 step 16).
+        ScrollBar.vertical: ScrollBar {}
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {

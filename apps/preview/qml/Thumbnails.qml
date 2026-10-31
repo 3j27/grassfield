@@ -20,6 +20,9 @@ ListView {
 
     onCurrentIndexChanged: root.positionViewAtIndex(root.currentIndex, ListView.Contain)
 
+    // The overlay scroll bar every list of the apps shows (ADR-0039 step 16).
+    ScrollBar.vertical: ScrollBar {}
+
     delegate: Item {
         id: cell
 

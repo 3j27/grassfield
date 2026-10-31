@@ -132,4 +132,57 @@ TestCase {
             console.log("b2-viewer.png not saved: " + e);
         }
     }
+
+    function findIn(item, test) {
+        const stack = [item];
+        while (stack.length > 0) {
+            const it = stack.shift();
+            if (test(it))
+                return it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        return null;
+    }
+
+    // The window's structure as every app's (ADR-0039 step 16): an edge-to-edge sidebar in the sidebar fill, toolbar groups on
+    // the toolbar's rimmed capsules with 34-pt buttons, and the toolbar's rule once the view's content has scrolled under it.
+    function test_theSidebarIsEdgeToEdge() {
+        viewer.sidebarOpen = true;
+        wait(50);
+        const fill = findIn(viewer.contentItem, it => String(it).indexOf("QQuickRectangle") === 0 && it.visible
+                            && Qt.colorEqual(it.color, Appearance.colors.sidebarFill) && it.width === Tokens.previewSidebarWidth);
+        verify(fill !== null, "the sidebar fill, as wide as the sidebar");
+        const at = fill.mapToItem(viewer.contentItem, 0, 0);
+        compare(at.x, 0, "flush with the window's left edge");
+        compare(at.y + fill.height, viewer.contentItem.height, "down to the window's bottom edge");
+        compare(fill.radius, 0, "no floating panel");
+        viewer.sidebarOpen = false;
+    }
+
+    function test_theToolbarGroupsAreTheSharedCapsules() {
+        const groups = [];
+        const stack = [viewer.contentItem];
+        while (stack.length > 0) {
+            const it = stack.shift();
+            if (it.fillOpacity !== undefined && it.hairline !== undefined && it.visible && it.height === Tokens.toolbarCapsule)
+                groups.push(it);
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        verify(groups.length >= 3, "the toolbar's groups: " + groups.length);
+        for (const g of groups) {
+            const button = findIn(g, it => it !== g && it.buttonSize !== undefined && it.visible);
+            if (button)
+                compare(button.buttonSize, Tokens.toolbarGroupButton, "a group button is 34");
+        }
+    }
+
+    function test_theToolbarRuleShowsOnceScrolled() {
+        const rule = findIn(viewer.contentItem, it => it.objectName === "toolbarRule");
+        verify(rule !== null);
+        compare(rule.height, Tokens.appsBorderWidth);
+        verify(viewer.view !== null && viewer.view.scrolled !== undefined, "the view says whether it has scrolled");
+        tryVerify(() => rule.visible === (viewer.view.scrolled === true), 1000, "the rule follows the view");
+    }
 }

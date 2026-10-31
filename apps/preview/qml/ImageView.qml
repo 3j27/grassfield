@@ -76,6 +76,9 @@ Item {
         root.currentPage = Math.max(0, Math.min(root.pageCount - 1, page));
     }
 
+    // The content has scrolled under the window's toolbar: the toolbar draws its rule (ADR-0039 D3, step 16).
+    readonly property bool scrolled: flick.contentY > flick.originY
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -83,6 +86,10 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         contentWidth: Math.max(width, holder.width)
         contentHeight: Math.max(height, holder.height)
+
+        // A zoomed picture shows where it is, as every scrolling view of the apps (ADR-0039 step 16).
+        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.horizontal: ScrollBar {}
 
         Item {
             id: holder
@@ -162,8 +169,8 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Tokens.spacingLg
-        width: Tokens.previewToolbarCapsuleHeight
-        height: Tokens.previewToolbarCapsuleHeight
+        width: Tokens.toolbarCapsule
+        height: Tokens.toolbarCapsule
 
         Material {
             anchors.fill: parent
