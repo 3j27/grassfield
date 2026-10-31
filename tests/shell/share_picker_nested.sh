@@ -77,7 +77,9 @@ if wait_for 5 shown; then pass "1 the panel is shown on the nested display with 
 if [[ $(sources) == 1 ]]; then pass "1 the window's live thumbnail has its source (the toplevel at its address)"; else fail "1 no capture source for the window [$(ipc status)]"; fi
 sleep "${SHARE_PICKER_LOOK:-0}"
 
-# 2.
+# 2. No window is answered before Hyprland has said which hide from capture (its getprop answers).
+known() { ipc status | jq -e '.blocked != null' >/dev/null; }
+wait_for 3 known || fail "2 Hyprland's answers on the windows did not arrive [$(ipc status)]"
 [[ $(ipc choose window "$handle" no) == ok ]] && wait_for 3 answered
 out=$(cat "$tmp/out")
 if [[ $out == "[SELECTION]/window:$handle" ]]; then pass "2 the window's choice is what xdph reads [$out]"; else fail "2 the window's choice [$out]"; fi

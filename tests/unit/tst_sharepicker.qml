@@ -138,20 +138,22 @@ TestCase {
             {id: 9, name: "chromium", video: true}, {id: 10}, null]), [5]);
         compare(Logic.sharingStreams(undefined), []);
         const screen = {kind: "screen", value: "DP-1", title: ""}, win = {kind: "window", value: "777", title: "A page"};
-        let r = Logic.streamLabels({}, [5], [{at: 1000, what: screen}], 3000, 10000);
+        let r = Logic.streamLabels({}, [5], [{at: 1000, what: screen}], 3000, 3000);
         compare(r.labels, {"5": screen}, "one new stream, one choice waiting: that choice");
         compare(r.pending, []);
-        r = Logic.streamLabels(r.labels, [5, 6], [{at: 3500, what: win}], 4000, 10000);
+        r = Logic.streamLabels(r.labels, [5, 6], [{at: 3500, what: win}], 4000, 3000);
         compare(r.labels, {"5": screen, "6": win}, "a stream keeps its label; the next one new takes the next choice");
-        r = Logic.streamLabels(r.labels, [6], [], 5000, 10000);
+        r = Logic.streamLabels(r.labels, [6], [], 5000, 3000);
         compare(r.labels, {"6": win}, "a stream that ends takes its label away");
-        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 20000, 10000);
-        compare(r.labels, {"7": null}, "a choice older than 10 s names nothing: a share restored with a token");
+        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 3001, 3000);
+        compare(r.labels, {"7": null}, "a choice older than the window (SharePicker: 3 s) names nothing: a share restored with a token");
         compare(r.pending, []);
-        r = Logic.streamLabels({}, [8], [{at: 1000, what: screen}, {at: 2000, what: win}], 3000, 10000);
+        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 3000, 3000);
+        compare(r.labels, {"7": screen}, "a choice answered just within the window still names its stream");
+        r = Logic.streamLabels({}, [8], [{at: 1000, what: screen}, {at: 2000, what: win}], 3000, 3000);
         compare(r.labels, {"8": null}, "two choices waiting for one stream: no guess");
         compare(r.pending.length, 2);
-        r = Logic.streamLabels({}, [8, 9], [{at: 1000, what: screen}], 3000, 10000);
+        r = Logic.streamLabels({}, [8, 9], [{at: 1000, what: screen}], 3000, 3000);
         compare(r.labels, {"8": null, "9": null}, "two new streams for one choice: no guess");
     }
 

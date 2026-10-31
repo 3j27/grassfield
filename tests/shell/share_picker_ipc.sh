@@ -15,10 +15,12 @@
 # Step 7b:
 #   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
 #  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
-#  12 a request shown while the last one's getprop query still runs: its own query runs when that one ends;
+#  12 a request shown while the last one's getprop query is held (gate files): no window is answered while its own answers
+#     are not in (not even when the last one's arrive: they are not its), its own query runs when that one ends, then its
+#     windows are answered;
 #  11 the indicator: with a private PipeWire, a stream made as xdph makes it (share_picker_ipc.d/fake-xdph-stream.c, built
 #     as a program of xdph's name) makes the shell count a share, labelled by the one choice it answered just before (older
-#     ones expired after 10 s); another program's video node and an audio node of xdph's name are not; the stream ended, the
+#     ones expired after 3 s); another program's video node and an audio node of xdph's name are not; the stream ended, the
 #     share is gone (skipped without pipewire, pw-cli, a C compiler or libpipewire's headers).
 # The probe runs as a dev session (status and choose are dev hooks) and the stand-in reaches it through GRASSFIELD_SHELL_DIR
 # (honoured in a dev session only). Nothing here can reach a real Hyprland or shell: HYPRLAND_INSTANCE_SIGNATURE and
@@ -87,8 +89,17 @@ fi
 mkdir -p "$tmp/fake"
 cat >"$tmp/fake/hyprctl" <<'SH'
 #!/bin/sh
-# Case 12: a slow Hyprland (under the 1 s each answer is given), while the file `slow` is there.
-[ -e "$(dirname "$0")/slow" ] && [ "$2" = getprop ] && sleep 0.8
+# Case 12: a getprop that starts while the file gateA (else gateB) is there answers when that file goes, then logs its address.
+d=$(dirname "$0")
+if [ "$2" = getprop ]; then
+  for g in gateA gateB; do
+    if [ -e "$d/$g" ]; then
+      while [ -e "$d/$g" ]; do sleep 0.05; done
+      echo "$3" >>"$d/getprop.done"
+      break
+    fi
+  done
+fi
 case "$1 $2 $3 $4" in
 "-j monitors  ") cat "$(dirname "$0")/monitors.json" ;;
 "-j getprop address:0x2000 no_screen_share") echo '{"no_screen_share": true}' ;;
@@ -97,6 +108,14 @@ case "$1 $2 $3 $4" in
 esac
 SH
 chmod +x "$tmp/fake/hyprctl"
+# The shell's `timeout 1` on each getprop: no limit while a gate holds them (case 12).
+cat >"$tmp/fake/timeout" <<'SH'
+#!/bin/sh
+d=$(dirname "$0")
+if [ -e "$d/gateA" ] || [ -e "$d/gateB" ]; then shift; exec "$@"; fi
+exec /usr/bin/timeout "$@"
+SH
+chmod +x "$tmp/fake/timeout"
 
 base_env=(-u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST
   GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig"
@@ -242,21 +261,35 @@ ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
 
 # 12.
-desc="12 a request shown while the last one's query still runs (a slow Hyprland): its own query runs after, and marks its windows"
-touch "$tmp/fake/slow"
+done_count() { if [[ -e $tmp/fake/getprop.done ]]; then wc -l <"$tmp/fake/getprop.done"; else echo 0; fi; }
+not_answered() { sleep 0.5; kill -0 "$standin" && [[ ! -s $tmp/standin.out ]]; }
+rm -f "$tmp/fake/getprop.done"
+touch "$tmp/fake/gateA" "$tmp/fake/gateB"
 share
 shown_within || true
 ipc picker choose screen DP-1 no >/dev/null
 ended_within "$standin" 3 || true
 share
 shown_within || true
-check test "$(state '%(blocked)s')" == None
-known_within && known_within
-check test "$(state '%(blocked)s')" == "['777']"
+desc="12 a request shown while the last one's query is held: its windows are not known"
+check test "$(state '%(blocked)s')/$(done_count)" == "None/0"
+desc="12 a window chosen meanwhile is not answered, the protected one or not"
+check test "$(ipc picker choose window 777 no)/$(ipc picker choose window 123456 no)" == ok/ok
+check not_answered
+desc="12 the last request's answers arrive: they are not this one's, its windows are still not known"
+rm -f "$tmp/fake/gateA"
+for ((i = 0; i < 60; i++)); do (($(done_count) >= 2)) && break; sleep 0.05; done
+sleep 0.3
+check test "$(state '%(blocked)s')/$(done_count)" == "None/2"
+check test "$(ipc picker choose window 123456 no)" == ok
+check not_answered
+desc="12 its own query runs after that one, and marks its windows"
+rm -f "$tmp/fake/gateB"
+known_within || true
+check test "$(state '%(blocked)s')/$(done_count)" == "['777']/4"
 check test "$(ipc picker choose window 123456 no)" == ok
 ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
-rm -f "$tmp/fake/slow"
 
 # 11.
 # The stream as xdph makes it, from a program of xdph's name (share_picker_ipc.d/fake-xdph-stream.c): PipeWire gives its node
@@ -278,7 +311,7 @@ if [[ -n $xdph_bin ]]; then
   sleep 0.5
   check streams_are 0
   desc="11 a stream made as xdph makes it: one share, labelled by the one choice answered just before it (older ones expired)"
-  sleep 10.5
+  sleep 3.5
   share
   shown_within || true
   ipc picker choose screen DP-1 no >/dev/null
