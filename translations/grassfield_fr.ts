@@ -3393,8 +3393,12 @@
         <translation>Aucune app n’utilise de GPU.</translation>
     </message>
     <message>
-        <source>Processor %1</source>
-        <translation>Processeur %1</translation>
+        <source>%1: %2%</source>
+        <translation>%1&#xa0;: %2&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Processor %1: %2%</source>
+        <translation>Processeur %1&#xa0;: %2&#xa0;%</translation>
     </message>
 </context>
 <context>
@@ -8321,6 +8325,10 @@
     <message>
         <source>Logical Processors</source>
         <translation>Processeurs logiques</translation>
+    </message>
+    <message>
+        <source>Processor %1: %2%</source>
+        <translation>Processeur %1&#xa0;: %2&#xa0;%</translation>
     </message>
 </context>
 <context>
