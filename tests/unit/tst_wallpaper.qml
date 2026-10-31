@@ -885,4 +885,52 @@ TestCase {
         compare(both[0].source, "color");
         compare(WallpaperConfig.withoutSource(null, A), []);
     }
+
+    // ADR-0040 step 2c: the shipped photographs' list. An entry of the wrong shape is left out, never shown half, and an id
+    // is a plain name: it becomes a file name in the folder.
+    function photoEntry(over) {
+        return Object.assign({id: "golden-mist", name: {en: "Golden Mist", fr: "Brume dorée"}, author: "A", credit: "A, CC BY 4.0",
+            licenseShort: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg"}, over || {});
+    }
+
+    function test_photosParse() {
+        const dir = "/usr/share/grassfield/wallpapers/photos";
+        const one = WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir);
+        compare(one.length, 1);
+        compare(one[0].path, dir + "/golden-mist.jpg");
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir + "/")[0].path, dir + "/golden-mist.jpg");
+        compare(WallpaperConfig.photoName(one[0], "fr_FR"), "Brume dorée");
+        compare(WallpaperConfig.photoName(one[0], "fr"), "Brume dorée");
+        compare(WallpaperConfig.photoName(one[0], "en_US"), "Golden Mist");
+        compare(WallpaperConfig.photoName(one[0], "fy_NL"), "Golden Mist");
+        compare(WallpaperConfig.photoAt(one, dir + "/golden-mist.jpg").id, "golden-mist");
+        compare(WallpaperConfig.photoAt(one, dir + "/other.jpg"), null);
+        compare(WallpaperConfig.photoAbout(one[0], "en").title, "Golden Mist");
+        compare(WallpaperConfig.photoAbout(null, "en"), null);
+        for (const text of ["", "{", "[]", "null", JSON.stringify({photos: {}}), JSON.stringify({photos: [null, 3, "x"]})])
+            compare(WallpaperConfig.parsePhotos(text, dir), [], text);
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), "relative/dir"), []);
+        const bad = [{id: "../etc/passwd"}, {id: "a/b"}, {id: "Golden"}, {id: ""}, {id: 3}, {name: {en: "x"}}, {name: {en: "x\u202ey", fr: "y"}},
+            {author: ""}, {credit: undefined}, {licenseUrl: "http://creativecommons.org/"}, {sourceUrl: "file:///etc/passwd"},
+            {licenseShort: "x".repeat(600)}];
+        for (const over of bad)
+            compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry(over)]}), dir), [], JSON.stringify(over));
+        // Each id once: the second is left out.
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry(), photoEntry({author: "B"})]}), dir).map(p => p.author), ["A"]);
+        // At most 64.
+        const many = [];
+        for (let i = 0; i < 80; i++)
+            many.push(photoEntry({id: "p" + i}));
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: many}), dir).length, 64);
+    }
+
+    // The list the package installs: every photograph reads, sixteen of them (the owner's call of 2026-10-31).
+    function test_photosShippedList() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../packaging/arch/wallpaper-photos.json"), false);
+        xhr.send();
+        const photos = WallpaperConfig.parsePhotos(xhr.responseText, "/usr/share/grassfield/wallpapers/photos");
+        compare(photos.length, 16);
+        compare(photos.length, JSON.parse(xhr.responseText).photos.length, "no entry is left out");
+    }
 }

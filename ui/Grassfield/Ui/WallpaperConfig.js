@@ -910,3 +910,62 @@ function displayUrl(url) {
     }
     return HIDDEN.test(decoded) ? bare : decoded;
 }
+
+// ---- the shipped photographs (ADR-0040 step 2c) ----
+// photos.json beside the pictures (packaging/arch/wallpaper-photos.json, installed under /usr/share/grassfield/wallpapers/photos):
+// read by Settings > Wallpaper, later by the desktop's About This Wallpaper. A file installed by the package, still read as
+// untrusted: an entry with a field missing or of the wrong shape is left out, never shown half.
+const PHOTO_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_PHOTOS = 64;
+const MAX_PHOTO_TEXT = 512;
+
+function photoText(s) {
+    return typeof s === "string" && s.length > 0 && s.length <= MAX_PHOTO_TEXT && !HIDDEN.test(s);
+}
+
+// [{id, path, name: {en, fr}, author, credit, licenseShort, licenseUrl, sourceUrl}] from the manifest's text, the pictures at
+// `dir` + "/" + id + ".jpg"; [] for anything that is not a manifest. Each id once, at most MAX_PHOTOS.
+function parsePhotos(text, dir) {
+    let doc = null;
+    try {
+        doc = JSON.parse(text);
+    } catch (e) {
+        return [];
+    }
+    if (!doc || !Array.isArray(doc.photos) || validPath(dir) === false)
+        return [];
+    const out = [];
+    const seen = {};
+    for (const p of doc.photos) {
+        if (out.length >= MAX_PHOTOS)
+            break;
+        if (!p || typeof p.id !== "string" || !PHOTO_ID.test(p.id) || p.id.length > 64 || seen[p.id])
+            continue;
+        if (!p.name || !photoText(p.name.en) || !photoText(p.name.fr))
+            continue;
+        if (!photoText(p.author) || !photoText(p.credit) || !photoText(p.licenseShort))
+            continue;
+        if (linkOf(p.licenseUrl) === "" || linkOf(p.sourceUrl) === "")
+            continue;
+        seen[p.id] = true;
+        out.push({id: p.id, path: dir.replace(/\/+$/, "") + "/" + p.id + ".jpg", name: {en: p.name.en, fr: p.name.fr}, author: p.author, credit: p.credit,
+            licenseShort: p.licenseShort, licenseUrl: p.licenseUrl, sourceUrl: p.sourceUrl});
+    }
+    return out;
+}
+
+// A photograph's name in the language of `lang` (a locale name such as "fr_FR"): French for French, English otherwise.
+function photoName(photo, lang) {
+    return typeof lang === "string" && /^fr(?:[_-]|$)/.test(lang) ? photo.name.fr : photo.name.en;
+}
+
+// The photograph shown from `path`, or null.
+function photoAt(photos, path) {
+    return Array.isArray(photos) ? (photos.find(p => p.path === path) || null) : null;
+}
+
+// What "About This Wallpaper" shows for a photograph: the fields of an online entry (title, author, sourceUrl, licenseShort,
+// licenseUrl), so one view serves both.
+function photoAbout(photo, lang) {
+    return photo ? {title: photoName(photo, lang), author: photo.author, sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort, licenseUrl: photo.licenseUrl} : null;
+}

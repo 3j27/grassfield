@@ -67,6 +67,20 @@ SettingsPage {
     // The opt-in disclosure is open (the tile was chosen, the source is not on yet).
     property bool disclosing: false
     readonly property var onlineEntry: root.online.entry || null
+
+    // The shipped photographs (ADR-0040 step 2c): their list beside them (photos.json), read once; none when the package did
+    // not install them. A photograph is a picture for the shell (source "file").
+    property var photos: []
+    readonly property string photosDir: root.backend.wallpaperPhotosDir || ""
+    readonly property string language: Qt.uiLanguage !== "" ? Qt.uiLanguage : Qt.locale().name
+    readonly property var currentPhoto: root.source === "file" ? WallpaperConfig.photoAt(root.photos, root.path) : null
+    // What About This Wallpaper shows: the picture of the day's attribution, or the photograph's.
+    readonly property var aboutEntry: root.source === "online" ? root.onlineEntry : WallpaperConfig.photoAbout(root.currentPhoto, root.language)
+
+    function loadPhotos(): void {
+        const r = root.photosDir !== "" ? root.backend.readText(root.photosDir + "/photos.json") : null;
+        root.photos = r && r.ok && r.exists ? WallpaperConfig.parsePhotos(r.text, root.photosDir) : [];
+    }
     // The refusal of a choice (outside the dev folder, bad path): shown under the grids.
     property string refusal: ""
     property var pictures: []
@@ -192,6 +206,8 @@ SettingsPage {
             return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : root.providerName(root.provider);
         if (root.source === "folder")
             return root.baseName(root.path);
+        if (root.currentPhoto)
+            return WallpaperConfig.photoName(root.currentPhoto, root.language);
         return root.displayName(root.path);
     }
 
@@ -245,14 +261,17 @@ SettingsPage {
         return WallpaperConfig.sourceProblem(p, root.backend.devSession, root.backend.devRoot);
     }
 
+    // False, with the refusal shown, for a path the dev guard or the path rules refuse.
+    function allowed(p: string): bool {
+        const why = root.problem(p);
+        if (why !== "")
+            root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(p));
+        return why === "";
+    }
+
     function choose(entries: var, recentKind: string, recentPath: string): bool {
-        if (recentKind !== "") {
-            const why = root.problem(recentPath);
-            if (why !== "") {
-                root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(recentPath));
-                return false;
-            }
-        }
+        if (recentKind !== "" && !root.allowed(recentPath))
+            return false;
         root.refusal = "";
         if (!root.writeFields(entries))
             return false;
@@ -360,6 +379,14 @@ SettingsPage {
 
     function usePicture(p: string): void {
         root.choose({"wallpaper.source": "file", "wallpaper.path": p}, "file", p);
+    }
+
+    // A shipped photograph: shown like a picture, not added to Folders and Pictures (it has its own section).
+    function usePhoto(p: string): void {
+        if (!root.allowed(p))
+            return;
+        root.refusal = "";
+        root.writeFields({"wallpaper.source": "file", "wallpaper.path": p});
     }
 
     function useFolder(p: string): void {
@@ -566,6 +593,7 @@ SettingsPage {
         root.loadStatus();
         root.loadRecents();
         root.refreshPictures();
+        root.loadPhotos();
         root.backend.query([root.backend.wallpaperTool, "formats"], "wp.formats", 5000);
     }
 
@@ -826,6 +854,19 @@ SettingsPage {
             onActivated: root.useArtwork()
         }
 
+        // The shipped photographs (ADR-0040 step 2c), named in the session's language; the section is absent without them.
+        WallpaperSection {
+            id: photosSection
+            visible: root.photos.length > 0
+            title: qsTr("Photographs")
+            model: root.photos.map(p => ({kind: "image", label: WallpaperConfig.photoName(p, root.language), thumb: root.thumbs[p.path] || "", selected: root.source === "file" && root.path === p.path}))
+            onActivated: index => root.usePhoto(root.photos[index].path)
+
+            // The thumbnails of the tiles drawn (the row, or all of them once shown).
+            readonly property var drawn: root.photos.slice(0, photosSection.grid.shown).map(p => p.path)
+            onDrawnChanged: root.requestThumbs(photosSection.drawn)
+        }
+
         // Pictures and folders added here, after the tiles that add them: a picture shows its thumbnail, a folder reads
         // "Shuffle <name>" (macOS wording).
         WallpaperSection {
@@ -938,10 +979,10 @@ SettingsPage {
             }
         }
 
-        // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper"): a group, its
-        // title where the next section's would be.
+        // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper"): the picture of
+        // the day's, or a shipped photograph's (ADR-0040 step 2c); a group, its title where the next section's would be.
         Item {
-            visible: root.source === "online" && root.onlineEntry !== null
+            visible: root.aboutEntry !== null
             width: parent.width
             height: visible ? aboutGroup.y + aboutGroup.height : 0
 
@@ -952,28 +993,28 @@ SettingsPage {
                 caption: qsTr("About This Wallpaper")
 
                 SettingsRow {
-                    visible: !!(root.onlineEntry && root.onlineEntry.title)
+                    visible: !!(root.aboutEntry && root.aboutEntry.title)
                     title: qsTr("Title")
-                    valueText: root.onlineEntry ? root.onlineEntry.title : ""
+                    valueText: root.aboutEntry ? root.aboutEntry.title : ""
                 }
 
                 SettingsRow {
-                    visible: !!(root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit))
+                    visible: !!(root.aboutEntry && (root.aboutEntry.author || root.aboutEntry.credit))
                     title: qsTr("Author")
-                    valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
+                    valueText: root.aboutEntry ? (root.aboutEntry.author || root.aboutEntry.credit) : ""
                 }
 
                 SettingsRow {
                     id: sourceRow
-                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
+                    readonly property string link: root.aboutEntry ? WallpaperConfig.linkOf(root.aboutEntry.sourceUrl) : ""
                     title: qsTr("Source")
-                    subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                    subtitle: sourceRow.link === "" && root.aboutEntry ? root.sourceText(root.aboutEntry.sourceUrl) : ""
                     valueText: sourceRow.link === "" ? (root.provider === "apod" ? qsTr("NASA APOD") : qsTr("Wikimedia Commons")) : ""
 
                     LinkText {
                         visible: sourceRow.link !== ""
                         width: Math.min(implicitWidth, sourceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                        text: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                        text: root.aboutEntry ? root.sourceText(root.aboutEntry.sourceUrl) : ""
                         target: sourceRow.link
                         maximumLineCount: 3
                         onActivated: root.openLink(sourceRow.link)
@@ -982,24 +1023,24 @@ SettingsPage {
 
                 SettingsRow {
                     id: licenceRow
-                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.licenseUrl) : ""
-                    visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
+                    readonly property string link: root.aboutEntry ? WallpaperConfig.linkOf(root.aboutEntry.licenseUrl) : ""
+                    visible: !!(root.aboutEntry && root.aboutEntry.licenseShort)
                     title: qsTr("Licence")
-                    valueText: licenceRow.link === "" && root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                    valueText: licenceRow.link === "" && root.aboutEntry ? root.aboutEntry.licenseShort : ""
 
                     LinkText {
                         visible: licenceRow.link !== ""
                         width: Math.min(implicitWidth, licenceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                        text: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                        text: root.aboutEntry ? root.aboutEntry.licenseShort : ""
                         target: licenceRow.link
                         onActivated: root.openLink(licenceRow.link)
                     }
                 }
 
                 SettingsRow {
-                    visible: !!root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
+                    visible: !!root.aboutEntry && root.formatUpdated(root.aboutEntry.fetchedAt) !== ""
                     title: qsTr("Last updated")
-                    valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
+                    valueText: root.aboutEntry ? root.formatUpdated(root.aboutEntry.fetchedAt) : ""
                 }
             }
         }
