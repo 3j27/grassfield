@@ -139,6 +139,39 @@ TestCase {
         verify(!rule.visible);
     }
 
+    Component {
+        id: otherWindow
+        Window {
+            width: 60
+            height: 60
+            visible: true
+        }
+    }
+
+    // A window that is not key (ADR-0039 step 17): its sidebar selection turns neutral, the hover ink at the inactive opacity
+    // with the label in the text colour, and takes the accent back when the window is key.
+    function test_theSelectionTurnsNeutralWhileNotKey() {
+        const t = make(touchpad);
+        t.win.select("desktop");
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        wait(50);
+        const fillOf = () => find(t.win.contentItem, i => String(i).indexOf("QQuickRectangle") === 0 && i.visible
+                                  && (Qt.colorEqual(i.color, Appearance.colors.selection)
+                                      || Qt.colorEqual(i.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity))));
+        let fill = fillOf();
+        verify(fill !== null, "the selected row's fill");
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "key: the accent");
+        const other = createTemporaryObject(otherWindow, null);
+        other.requestActivate();
+        tryVerify(() => !t.win.active, 2000);
+        verify(Qt.colorEqual(fill.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "not key: neutral");
+        other.close();
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "key again: the accent");
+    }
+
     function test_hasBattery() {
         const t = make(testCase.touchpad);
         compare(t.backend.busQueries.filter(q => q.tag === "main.power").map(q => q.what), ["power.state"]);

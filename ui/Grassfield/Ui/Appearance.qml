@@ -70,6 +70,12 @@ QtObject {
     // menus, sheets, tooltips and combo popups that Grassfield.Ui draws in an app, keep `colors.materialTint` (ADR-0024 lot 1).
     readonly property color windowFill: windowSurface ? colors.windowBackground : colors.materialTint
 
+    // A window that is not key (ADR-0039 step 17, measured on macOS 27): its selection turns neutral (the hover ink at
+    // inactiveSelectionOpacity over its background, the label in the text colour), its toolbar title and glyphs dim (the text
+    // colour at inactiveTextOpacity). Read with the item's Window.active.
+    readonly property real inactiveSelectionOpacity: dark ? Tokens.windowInactiveSelectionOpacityDark : Tokens.windowInactiveSelectionOpacityLight
+    readonly property real inactiveTextOpacity: dark ? Tokens.windowInactiveTextOpacityDark : Tokens.windowInactiveTextOpacityLight
+
     // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
     // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an
     // app window this is textSecondary, and Increase Contrast makes it the primary text colour.

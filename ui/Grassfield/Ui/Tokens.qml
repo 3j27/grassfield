@@ -2908,6 +2908,14 @@ QtObject {
     readonly property real windowEdgeActiveOpacityLight: 0.25
     // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     readonly property real windowEdgeInactiveOpacityLight: 0.13
+    // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveTextOpacityLight: 0.28
+    // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveTextOpacityDark: 0.32
+    // a window that is not key, light appearance: its selection turns neutral, the hover ink at this opacity over its background with the label in the text colour (macOS 27's inactive Settings: #E8E7E6 on its #F3F2F1 sidebar, black at 0.045; 512 Pixels release capture Finder-App-Switcher) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveSelectionOpacityLight: 0.045
+    // estimate: the same, dark appearance (macOS's unemphasized dark selection, about #464646 on a #2B2B2B sidebar, white at 0.11; no dark macOS 27 inactive selection measured) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveSelectionOpacityDark: 0.11
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160

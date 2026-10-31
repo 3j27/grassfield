@@ -446,7 +446,8 @@ Window {
                     Rectangle {
                         anchors.fill: parent
                         radius: Tokens.settingsSidebarItemRadius
-                        color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                        // The accent while the window is key; neutral, the hover ink, while it is not (macOS 27; ADR-0039 step 17).
+                        color: entry.selected ? (root.active ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)) : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                     }
 
                     // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
@@ -489,7 +490,7 @@ Window {
                         }
                         text: entry.modelData.title
                         elide: Text.ElideRight
-                        color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
+                        color: entry.selected && root.active ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                         font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight

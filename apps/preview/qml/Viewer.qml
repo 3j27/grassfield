@@ -293,7 +293,8 @@ Window {
                 elide: Text.ElideMiddle
                 textFormat: Text.PlainText
                 text: win.title
-                color: Appearance.colors.text
+                // Dimmed while the window is not key (macOS 27; ADR-0039 step 17).
+                color: win.active ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: Tokens.typographyMenuBoldWeight
@@ -687,7 +688,7 @@ Window {
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
                         color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.colors.accent
+                        border.color: win.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
 
                     Item {
@@ -749,7 +750,7 @@ Window {
                             color: "transparent"
                             radius: Tokens.radiusControl
                             border.width: Tokens.controlFocusOutline
-                            border.color: Appearance.colors.accent
+                            border.color: win.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                         }
                     }
 
