@@ -9,9 +9,12 @@
 #   2 the user's choice of the window (made with `picker choose`, as the panel's Share does) is what xdph reads:
 #     `[SELECTION]/window:<handle>`;
 #   3 Entire Screen with Remember this choice: `[SELECTION]r/screen:<the nested display>`;
-#   4 the stand-in killed while the panel is open (xdph gave up): the panel goes within 1 s.
-# The panel's look (live thumbnails, both appearances, French), Esc, Return and a click are the integrator's, by hand while
-# step 1 waits. The test closes the window it opened. Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is
+#   4 the stand-in killed while the panel is open (xdph gave up): the panel goes within 1 s;
+#   5 (step 7b) Selection: an area of the nested display is what xdph reads, `[SELECTION]/region:<display>@x,y,w,h`; an area
+#     past the display is not answered.
+# The panel's look (live thumbnails, both appearances, French), Esc, Return and a click, dragging an area on the Selection
+# tab's preview, and the menu bar's screen-sharing indicator (a real share: Chromium's "Share screen") are the integrator's,
+# by hand while step 1 waits. The test closes the window it opened. Only this tree's nested instance (scripts/dev/pidfile.sh); hyprctl is
 # read-only; clients get the nested socket only.
 # Expected: "share_picker: 0 failure(s)" after PASS lines for every check. Exit 0 PASS, 1 FAIL, 2 environment error.
 set -uo pipefail
@@ -93,6 +96,18 @@ wait_for 5 shown
 kill -TERM "$standin"
 if wait_for 1 idle; then pass "4 the stand-in killed while the panel is open: the panel goes within 1 s"; else fail "4 the panel stayed [$(ipc status)]"; fi
 standin=""
+
+# 5.
+share
+wait_for 5 shown
+size=$(hq monitors | jq -r '.[0] | "\((.width / .scale) | floor) \((.height / .scale) | floor)"')
+w=${size% *} h=${size#* }
+[[ $(ipc choose region "$display@$((w - 1)),0,2,2" no) == ok ]]
+sleep 0.5
+if kill -0 "$standin" 2>/dev/null; then pass "5 an area past the display's edge is not answered"; else fail "5 an area past the display was answered [$(cat "$tmp/out")]"; fi
+[[ $(ipc choose region "$display@10,10,$((w / 2)),$((h / 2))" no) == ok ]] && wait_for 3 answered
+out=$(cat "$tmp/out")
+if [[ $out == "[SELECTION]/region:$display@10,10,$((w / 2)),$((h / 2))" ]]; then pass "5 an area of the display is what xdph reads [$out]"; else fail "5 the area [$out]"; fi
 
 echo "share_picker: $fails failure(s)"
 ((fails == 0))

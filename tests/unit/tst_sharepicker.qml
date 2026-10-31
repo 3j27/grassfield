@@ -83,8 +83,65 @@ TestCase {
         compare(Logic.selection("screen", "DP-2", false, ["DP-1"], windows), "", "a display that is not there");
         compare(Logic.selection("screen", "DP-1\n/window:1", false, ["DP-1\n/window:1"], windows), "", "a name with a line break");
         compare(Logic.selection("window", "999", false, [], windows), "", "a window xdph did not list");
-        compare(Logic.selection("region", "DP-1@0,0,1,1", false, ["DP-1"], windows), "", "no region in step 7a");
+        compare(Logic.selection("region", "DP-1@0,0,1,1", false, ["DP-1"], windows), "", "an area without its display's size");
         compare(Logic.selection("screen", "DP-1", "yes", ["DP-1"], windows), "/screen:DP-1", "only true ticks Remember");
+    }
+
+    // Step 7b, Selection (7-10): an area dragged on a display's preview, in that display's logical pixels, inside it, at
+    // least panel.sharePickerMinArea either way; the answer xdph reads.
+    function test_anAreaDraggedOnThePreview() {
+        const preview = {width: 400, height: 225}, display = {width: 1920, height: 1080};
+        compare(Logic.regionFor({x1: 10, y1: 10, x2: 110, y2: 60}, preview, display, 16), {x: 48, y: 48, w: 480, h: 240});
+        compare(Logic.regionFor({x1: 110, y1: 60, x2: 10, y2: 10}, preview, display, 16), {x: 48, y: 48, w: 480, h: 240}, "dragged up and left");
+        compare(Logic.regionFor({x1: 110, y1: 60, x2: -50, y2: 900}, preview, display, 16), {x: 0, y: 288, w: 528, h: 792}, "kept inside the preview");
+        compare(Logic.regionFor({x1: 0, y1: 0, x2: 400, y2: 225}, preview, display, 16), {x: 0, y: 0, w: 1920, h: 1080}, "the whole display");
+        compare(Logic.regionFor({x1: 10, y1: 10, x2: 12, y2: 12}, preview, display, 16), null, "a click is no area");
+        compare(Logic.regionFor({x1: 10, y1: 10, x2: 300, y2: 13}, preview, display, 16), null, "too thin");
+        compare(Logic.regionFor(null, preview, display, 16), null);
+        compare(Logic.regionFor({x1: 0, y1: 0, x2: 10, y2: 10}, {width: 0, height: 0}, display, 1), null, "no preview yet");
+        compare(Logic.regionKey("DP-1", {x: 48, y: 48, w: 480, h: 240}), "DP-1@48,48,480,240");
+        compare(Logic.parseRegion("DP-1@48,48,480,240"), {output: "DP-1", x: 48, y: 48, w: 480, h: 240});
+        compare(Logic.parseRegion("DP-1@48,48,0,240"), null, "an empty area");
+        compare(Logic.parseRegion("DP-1@-1,48,10,10"), null);
+        compare(Logic.parseRegion("DP 1@1,1,10,10"), null);
+        compare(Logic.parseRegion("DP-1@1,1,10,10\n"), null);
+        const sizes = {"DP-1": {width: 1920, height: 1080}};
+        compare(Logic.selection("region", "DP-1@1872,1032,48,48", true, ["DP-1"], [], sizes), "r/region:DP-1@1872,1032,48,48", "at the display's corner");
+        compare(Logic.selection("region", "DP-1@1873,1032,48,48", false, ["DP-1"], [], sizes), "", "past the display's width");
+        compare(Logic.selection("region", "DP-1@0,1033,48,48", false, ["DP-1"], [], sizes), "", "past its height");
+        compare(Logic.selection("region", "DP-2@0,0,48,48", false, ["DP-1"], [], {"DP-2": {width: 100, height: 100}}), "", "a display that is not there");
+        compare(Logic.selection("region", "DP-1", false, ["DP-1"], [], sizes), "", "a display, not an area");
+    }
+
+    // Step 7b (7-11): a window that hides itself from capture is greyed and never answered; Hyprland's getprop answers, one
+    // line per window with an address, in order.
+    function test_aWindowThatHidesFromCaptureIsNeverShared() {
+        const windows = [{handle: "1", appId: "a", title: "", address: "55aa"}, {handle: "2", appId: "b", title: "", address: ""},
+            {handle: "3", appId: "c", title: "", address: "55bb"}, {handle: "4", appId: "d", title: "", address: "55cc"}];
+        compare(Logic.blockedHandles(windows, '{"no_screen_share": false}\n{"no_screen_share": true}\nwindow not found\n'), ["3"]);
+        compare(Logic.blockedHandles(windows, '{"no_screen_share": true}\n'), ["1"], "the rest not answered: not hidden");
+        compare(Logic.blockedHandles(windows, '{"no_screen_share": "true"}\n{"no_screen_share": 1}\n'), [], "only the boolean true");
+        compare(Logic.blockedHandles(windows, ""), []);
+        compare(Logic.selection("window", "3", false, [], windows, {}, ["3"]), "", "a hidden window is not answered");
+        compare(Logic.selection("window", "1", false, [], windows, {}, ["3"]), "/window:1");
+    }
+
+    // Step 7b (7-9), the indicator: xdph's streams among PipeWire's nodes, and what each shares by the picker's choices.
+    function test_theIndicatorFollowsXdphsStreams() {
+        compare(Logic.sharingStreams([{id: 5, name: "xdph-streaming-ab12"}, {id: 6, name: "alsa_output.pci"}, {id: 7, name: "xdph-stream"},
+            {id: 8}, null, {id: 9, name: "XDPH-streaming-x"}]), [5]);
+        compare(Logic.sharingStreams(undefined), []);
+        const screen = {kind: "screen", value: "DP-1", title: ""}, win = {kind: "window", value: "777", title: "A page"};
+        let r = Logic.streamLabels({}, [5], [{at: 1000, what: screen}, {at: 2000, what: win}], 3000, 60000);
+        compare(r.labels, {"5": screen}, "the oldest choice to the first stream");
+        compare(r.pending, [{at: 2000, what: win}]);
+        r = Logic.streamLabels(r.labels, [5, 6], r.pending, 4000, 60000);
+        compare(r.labels, {"5": screen, "6": win}, "a stream keeps its label; the next takes the next choice");
+        r = Logic.streamLabels(r.labels, [6], r.pending, 5000, 60000);
+        compare(r.labels, {"6": win}, "a stream that ends takes its label away");
+        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 70000, 60000);
+        compare(r.labels, {"7": null}, "a choice older than a minute names nothing: a share restored with a token");
+        compare(r.pending, []);
     }
 
     // The selection is what a tile stands for: when the tiles are listed again in another order (a display plugged in, app
@@ -103,6 +160,7 @@ TestCase {
         compare(Logic.indexOfKey("screen", [{name: "777"}], "777"), 0);
         compare(Logic.indexOfKey("window", [{name: "777"}], "777"), -1, "a key of the other tab names nothing");
         compare(Logic.keyOf("screen", null), "");
+        compare(Logic.keyOf("region", {name: "DP-1"}), "DP-1", "Selection's display chooser keeps the display's name");
     }
 
     function test_theArrowsMoveInTheGrid() {

@@ -12,6 +12,12 @@
 #   6 the session locks while the panel is open: cancelled; a request while locked: "locked", nothing shows;
 #   7 requests not of the stand-in's form (an id that is not 128-bit hex, a socket elsewhere): "refused", nothing shows.
 #   8 a request whose socket is not there (a stand-in that gave up): accepted, the connection fails, no panel ever shows.
+# Step 7b:
+#   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
+#  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
+#  11 the indicator: with a private PipeWire, a node named as xdph names its streams makes the shell count a share, labelled by
+#     the choice it answered just before (older ones expired after 10 s); destroyed, the share is gone (skipped without pipewire
+#     and pw-cli).
 # The probe runs as a dev session (status and choose are dev hooks) and the stand-in reaches it through GRASSFIELD_SHELL_DIR
 # (honoured in a dev session only). Nothing here can reach a real Hyprland or shell: HYPRLAND_INSTANCE_SIGNATURE and
 # XDG_RUNTIME_DIR point at the test's own directory. Prints PASS/FAIL, exits non-zero on failure.
@@ -29,7 +35,7 @@ tmp=$(mktemp -d "$root/.dev/share-picker-ipc.XXXXXX" 2>/dev/null || { mkdir -p "
 fake="" shell="" standin="" runtime=""
 cleanup() {
   local p
-  for p in $fake $shell $standin; do kill "$p" 2>/dev/null || true; done
+  for p in $fake $shell $standin ${pw:-}; do kill "$p" 2>/dev/null || true; done
   rm -rf "$tmp" "$runtime"
 }
 trap cleanup EXIT
@@ -68,14 +74,34 @@ python3 -I "$tmp/fake.py" "$runtime/hypr/$sig" &
 fake=$!
 for _ in $(seq 50); do [[ -S $runtime/hypr/$sig/.socket.sock && -S $runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
+# A private PipeWire, for the indicator (case 11), when it is installed.
+pw=""
+if command -v pipewire >/dev/null && command -v pw-cli >/dev/null; then
+  XDG_RUNTIME_DIR="$runtime" pipewire >"$tmp/pipewire.log" 2>&1 &
+  pw=$!
+  for _ in $(seq 50); do [[ -S $runtime/pipewire-0 ]] && break; sleep 0.1; done
+fi
+# hyprctl for the shell and the stand-in: the displays, unlocked; getprop says the window at 0x2000 hides from capture.
+mkdir -p "$tmp/fake"
+cat >"$tmp/fake/hyprctl" <<'SH'
+#!/bin/sh
+case "$1 $2 $3" in
+"-j monitors "*) cat "$(dirname "$0")/monitors.json" ;;
+"-j getprop address:0x2000") echo '{"no_screen_share": true}' ;;
+"-j getprop "*) echo '{"no_screen_share": false}' ;;
+*) exit 1 ;;
+esac
+SH
+chmod +x "$tmp/fake/hyprctl"
+
 base_env=(-u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST
   GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig"
   XDG_RUNTIME_DIR="$runtime" XDG_CACHE_HOME="$tmp/cache")
 # Qt's offscreen platform names its screen only through its configuration file: two displays, as Hyprland names them.
 printf '{"screens": [{"name": "DP-1", "x": 0, "y": 0, "width": 800, "height": 600, "logicalDpi": 96, "dpr": 1},
   {"name": "HDMI-A-1", "x": 800, "y": 0, "width": 640, "height": 480, "logicalDpi": 96, "dpr": 1}]}\n' >"$tmp/screens.json"
-env "${base_env[@]}" QT_QPA_PLATFORM="offscreen:configfile=$tmp/screens.json" QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" \
-  timeout 300 qs -p "$tmp/cfg" --no-color >"$tmp/shell.log" 2>&1 &
+env "${base_env[@]}" PATH="$tmp/fake:$PATH" QT_QPA_PLATFORM="offscreen:configfile=$tmp/screens.json" \
+  QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" timeout 300 qs -p "$tmp/cfg" --no-color >"$tmp/shell.log" 2>&1 &
 shell=$!
 for _ in $(seq 150); do grep -q 'picker-probe: ready' "$tmp/shell.log" && break; sleep 0.1; done
 ready=$(grep -o 'picker-probe: ready .*' "$tmp/shell.log" | head -1 || true)
@@ -92,9 +118,11 @@ state() { ipc picker status | python3 -I -c 'import json, sys; d = json.load(sys
 sed "s|^STOCK_DIR = \"/usr/bin\"\$|STOCK_DIR = \"$tmp/stock\"|" packaging/session-bin/hyprland-share-picker >"$tmp/bin/hyprland-share-picker"
 chmod +x "$tmp/bin/hyprland-share-picker"
 printf '#!/bin/sh\necho ran >"%s/stock.ran"\n' "$tmp" >"$tmp/stock/hyprland-share-picker"
-printf '#!/bin/sh\n[ "$1 $2" = "-j monitors" ] && printf %s\n' "'[{\"name\": \"$display\", \"width\": 800, \"height\": 600, \"scale\": 1, \"transform\": 0, \"solitaryBlockedBy\": []}]'" >"$tmp/fake/hyprctl"
-chmod +x "$tmp/stock/hyprland-share-picker" "$tmp/fake/hyprctl"
-windows='123456[HC>]org.gnome.TextEditor[HT>]notes.txt[HE>]0[HA>]777[HC>]firefox[HT>]A page[HE>]0[HA>]'
+printf '[{"name": "DP-1", "width": 800, "height": 600, "scale": 1, "transform": 0, "solitaryBlockedBy": []},
+  {"name": "HDMI-A-1", "width": 640, "height": 480, "scale": 1, "transform": 0, "solitaryBlockedBy": []}]\n' >"$tmp/fake/monitors.json"
+chmod +x "$tmp/stock/hyprland-share-picker"
+# Two windows with Hyprland addresses (4096 = 0x1000, 8192 = 0x2000: the one that hides from capture).
+windows='123456[HC>]org.gnome.TextEditor[HT>]notes.txt[HE>]4096[HA>]777[HC>]firefox[HT>]A page[HE>]8192[HA>]'
 share() { # runs the stand-in as xdph does; sets `standin`
   rm -f "$tmp/stock.ran" "$tmp/standin.out"
   env "${base_env[@]}" GRASSFIELD_SHELL_DIR="$tmp/cfg" PATH="$tmp/fake:$PATH" XDPH_WINDOW_SHARING_LIST="$windows" \
@@ -110,7 +138,7 @@ share
 desc="1 the shell accepts, connects, gets xdph's two windows and opens the panel"
 check shown_within
 desc="1 the windows the shell holds are xdph's, with their handles"
-check test "$(state '%(windows)s')" == "[{'handle': '123456', 'appId': 'org.gnome.TextEditor', 'title': 'notes.txt', 'address': ''}, {'handle': '777', 'appId': 'firefox', 'title': 'A page', 'address': ''}]"
+check test "$(state '%(windows)s')" == "[{'handle': '123456', 'appId': 'org.gnome.TextEditor', 'title': 'notes.txt', 'address': '1000'}, {'handle': '777', 'appId': 'firefox', 'title': 'A page', 'address': '2000'}]"
 desc="1 the user's choice of the display with Remember this choice reaches xdph"
 check test "$(ipc picker choose screen "$display" remember)" == ok
 ended_within "$standin" 3 || true
@@ -125,9 +153,9 @@ shown_within || true
 desc="2 a second request while the panel is open: busy"
 check test "$(ipc picker request "$(printf '%032x' 1)" "$runtime/grassfield/picker/$(printf '%032x' 2).sock")" == busy
 desc="2 a window's choice reaches xdph as its handle"
-check test "$(ipc picker choose window 777 no)" == ok
+check test "$(ipc picker choose window 123456 no)" == ok
 ended_within "$standin" 3 || true
-check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:777"
+check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
 
 # 3.
 share
@@ -178,6 +206,61 @@ check test "$(ipc picker request "$(printf '%032x' 7)" "$runtime/grassfield/pick
 check test "$(state '%(popup)s')" == ""
 check idle_within
 check test "$(state '%(popup)s')" == ""
+
+# 9.
+share
+shown_within || true
+desc="9 Selection: an area past its display's logical size (640 x 480) is not answered, the panel stays"
+check test "$(ipc picker choose region "HDMI-A-1@0,0,700,500" no)" == ok
+sleep 0.5
+check bash -c 'kill -0 "$1" && [[ ! -s $2/standin.out ]]' _ "$standin" "$tmp"
+check test "$(state '%(shown)s')" == True
+desc="9 an area inside it reaches xdph as the region of that display"
+check test "$(ipc picker choose region "HDMI-A-1@10,20,300,200" no)" == ok
+ended_within "$standin" 3 || true
+check test "$(cat "$tmp/standin.out")" == "[SELECTION]/region:HDMI-A-1@10,20,300,200"
+
+# 10.
+blocked_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(blocked)s') == "['777']" ]] && return 0; sleep 0.05; done; return 1; }
+share
+shown_within || true
+desc="10 the window at 0x2000 hides itself from capture (Hyprland's getprop): the shell marks it"
+check blocked_within
+desc="10 its choice is not answered; another window's is"
+check test "$(ipc picker choose window 777 no)" == ok
+sleep 0.5
+check bash -c 'kill -0 "$1" && [[ ! -s $2/standin.out ]]' _ "$standin" "$tmp"
+check test "$(ipc picker choose window 123456 no)" == ok
+ended_within "$standin" 3 || true
+check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
+
+# 11.
+if [[ -n $pw ]]; then
+  streams_are() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(streams)s') == "$1" ]] && return 0; sleep 0.05; done; return 1; }
+  pwcli() { XDG_RUNTIME_DIR="$runtime" timeout 5 pw-cli "$@" 2>&1; }
+  desc="11 no stream of xdph: no share"
+  check streams_are 0
+  desc="11 a node named as xdph names its streams: one share, labelled by the choice answered just before it (older ones expired)"
+  sleep 10.5
+  share
+  shown_within || true
+  ipc picker choose screen DP-1 no >/dev/null
+  ended_within "$standin" 3 || true
+  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=xdph-streaming-test1 media.class=Video/Source object.linger=true }' >/dev/null
+  check streams_are 1
+  check test "$(ipc picker status | python3 -I -c 'import json, sys; d = json.load(sys.stdin); print(list(d["labels"].values()))')" == "[{'kind': 'screen', 'value': 'DP-1', 'title': ''}]"
+  desc="11 another node of PipeWire is no share"
+  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=alsa_output.test media.class=Audio/Sink object.linger=true }' >/dev/null
+  sleep 0.5
+  check streams_are 1
+  desc="11 the stream destroyed: no share, no label"
+  id=$(pwcli ls Node | python3 -I -c 'import re, sys; t = sys.stdin.read(); print(next((m.group(1) for m in re.finditer(r"id (\d+), type PipeWire:Interface:Node.*?node.name = \"([^\"]+)\"", t, re.S) if m.group(2) == "xdph-streaming-test1"), ""))')
+  pwcli destroy "$id" >/dev/null
+  check streams_are 0
+  check test "$(state '%(labels)s')" == "{}"
+else
+  echo "SKIP: 11 the indicator needs pipewire and pw-cli"
+fi
 
 if ((fail)); then tail -20 "$tmp/shell.log"; fi
 exit $fail
