@@ -1,7 +1,7 @@
 # packaging/bin/grassfield-capture against fakes (run by tests/shell/capture.sh as `python3 -I check.py <root> <tmp>`).
-# The fakes answer as the real tools do (review of step 8): slurp gives a fed box for a click inside it and a 1x1 area for a
-# click elsewhere (its minimum), notify-send prints the notice's id then the action and, sent SIGINT while it waits, closes its
-# notice and ends.
+# The fakes answer as the real tools do (reviews of step 8): slurp 1.5.0 (Arch's) gives the smallest fed box for a click
+# inside one and cancels a click outside every box; notify-send prints the notice's id then the action, ends its output before
+# it ends and, sent SIGINT while it waits, closes its notice and ends; it shows as `notify-send` in /proc, as the real one.
 import json
 import os
 import re
@@ -38,15 +38,18 @@ write(short, re.sub(r"^WAIT_SECONDS = [0-9]+$", "WAIT_SECONDS = 2", source, flag
 tokens = json.load(open(os.path.join(root, "ui/tokens/tokens.json")))["capture"]
 m = re.search(r"^COLOURS = (\{.*\})$", source, re.M)
 colours = json.loads(m.group(1)) if m else {}
-check(colours == {k: tokens[k]["value"] for k in ("veil", "selection", "border", "box")}
+check(colours == {k: tokens[k]["value"] for k in ("veil", "selection", "border")}
       and re.search(r"^BORDER_WIDTH = %d$" % tokens["borderWidth"]["value"], source, re.M) is not None,
       "the crosshair's colours and width are ui/tokens/tokens.json's capture.* [%r]" % colours)
-slurp_argv = ["-b", colours["veil"], "-s", colours["selection"], "-c", colours["border"], "-B", colours["box"],
+slurp_argv = ["-b", colours["veil"], "-s", colours["selection"], "-c", colours["border"], "-B", colours["veil"],
               "-w", str(tokens["borderWidth"]["value"])]
 
-# Fakes: each records its argv (and stdin) as one JSON line; behaviour from FAKE_* variables.
+# Fakes: each records its argv (and stdin) as one JSON line; behaviour from FAKE_* variables. notify-send runs under its
+# own name (exec -a), so the helper finds it in /proc as it finds the real one.
+os.makedirs(os.path.join(fake, "impl"))
+write(os.path.join(fake, "notify-send"), '#!/bin/bash\nexec -a notify-send /usr/bin/python3 -I "$(dirname "$0")/impl/notify-send" "$@"\n')
 for name in ("grim", "slurp", "wl-copy", "notify-send", "hyprctl", "xdg-user-dir", "pkill", "systemd-run", "uwsm-app", "gdbus"):
-    write(os.path.join(fake, name), r'''#!/usr/bin/python3 -I
+    write(os.path.join(fake, "impl" if name == "notify-send" else "", name), r'''#!/usr/bin/python3 -I
 import json, os, re, signal, sys, time
 name = os.path.basename(sys.argv[0])
 data = sys.stdin.buffer.read().decode("utf-8", "replace") if name in ("slurp", "wl-copy") else ""
@@ -65,7 +68,8 @@ elif name == "slurp":
         sys.exit(1)  # Esc
     click = re.fullmatch(r"click:(-?\d+),(-?\d+)", answer)
     if click:
-        # As slurp: the smallest fed box under the point, else a 1x1 area there.
+        # As slurp 1.5.0: the smallest fed box under the point; outside every box, a click selects nothing and slurp
+        # prints "selection cancelled" and exits 1 (main.c handle_selection_end).
         px, py = int(click[1]), int(click[2])
         boxes = []
         for line in data.splitlines():
@@ -73,11 +77,19 @@ elif name == "slurp":
             if b:
                 x, y, w, h = map(int, b.groups())
                 if x <= px < x + w and y <= py < y + h:
-                    boxes.append((w * h, line))
-        answer = min(boxes)[1] if boxes else "%d,%d 1x1" % (px, py)
+                    boxes.append((w * h, len(boxes), line))
+        if not boxes:
+            print("selection cancelled", file=sys.stderr)
+            sys.exit(1)
+        answer = min(boxes)[2]
     print(answer)
 elif name == "hyprctl":
-    print(env.get("FAKE_MONITORS" if sys.argv[2] == "monitors" else "FAKE_CLIENTS", "[]"))
+    if sys.argv[2] == "cursorpos":
+        if "FAKE_CURSOR" not in env:
+            sys.exit(1)
+        print(env["FAKE_CURSOR"])
+    else:
+        print(env.get("FAKE_MONITORS" if sys.argv[2] == "monitors" else "FAKE_CLIENTS", "[]"))
 elif name == "xdg-user-dir":
     if "FAKE_DESKTOP" in env:
         print(env["FAKE_DESKTOP"])
@@ -102,7 +114,7 @@ elif name == "notify-send":
     time.sleep(0.2)
 ''')
 for name in os.listdir(fake):
-    if name != "notify-send":
+    if name not in ("notify-send", "impl"):
         os.symlink(os.path.join(fake, name), os.path.join(quiet, name))
 
 MONITORS = json.dumps([
@@ -113,15 +125,23 @@ MONITORS = json.dumps([
     {"name": "DP-2", "x": 0, "y": 0, "width": 1920, "height": 1080, "scale": 1.0, "transform": 0, "disabled": True,
      "activeWorkspace": {"id": 3}, "specialWorkspace": {"id": 0}}])
 CLIENTS = json.dumps([
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 0},
-    {"mapped": True, "hidden": True, "workspace": {"id": 1}, "at": [0, 0], "size": [500, 500], "fullscreen": 0},
-    {"mapped": True, "hidden": False, "workspace": {"id": 9}, "at": [0, 0], "size": [400, 400], "fullscreen": 0},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0}])
-# Workspace 2 with a fullscreen window over the tiled one (and a maximized one elsewhere, which hides nothing).
+    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 0, "focusHistoryID": 1},
+    {"mapped": True, "hidden": True, "workspace": {"id": 1}, "at": [0, 0], "size": [500, 500], "fullscreen": 0, "focusHistoryID": 2},
+    {"mapped": True, "hidden": False, "workspace": {"id": 9}, "at": [0, 0], "size": [400, 400], "fullscreen": 0, "focusHistoryID": 3},
+    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0, "focusHistoryID": 0}])
+# Workspace 2: a fullscreen window over a window behind it, and a pinned one over it; workspace 1: a zoomed (maximized) window
+# over another.
 FULL = json.dumps([
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 1},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [1920, 0], "size": [1920, 1080], "fullscreen": 2}])
+    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [0, 0], "size": [1920, 1080], "fullscreen": 1, "focusHistoryID": 1},
+    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 0, "focusHistoryID": 4},
+    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0, "focusHistoryID": 2},
+    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [1920, 0], "size": [1920, 1080], "fullscreen": 2, "focusHistoryID": 0},
+    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2500, 500], "size": [300, 200], "fullscreen": 0, "focusHistoryID": 3,
+     "pinned": True}])
+# Workspace 1: a large window in front (focused last) of a smaller one behind it; Grassfield floats every window.
+STACK = json.dumps([
+    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [0, 0], "size": [1000, 800], "fullscreen": 0, "focusHistoryID": 0},
+    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 100], "size": [200, 200], "fullscreen": 0, "focusHistoryID": 1}])
 
 
 def calls(name=None):
@@ -196,12 +216,14 @@ check(opened == 40, "a click on the notice opens Preview every time (%d of 40)" 
 r, _ = capture("selection", FAKE_SLURP="10,20 300x200", FAKE_ANSWER="open")
 check(len(calls("systemd-run")) == 1, "its Open in Preview button opens Preview")
 
-# The selection: slurp in the tokens' colours, the shown workspaces' visible windows as boxes (the displays are the veil's).
+# The selection: slurp in the tokens' colours (its boxes filled with the veil itself, so the veil is even), the shown
+# workspaces' visible windows then the displays as boxes (slurp 1.5.0 cancels a click outside every box).
 r, _ = capture("selection", FAKE_SLURP="10,20 300x200")
 slurp = calls("slurp")
-check(slurp and slurp[0]["argv"] == slurp_argv, "the crosshair in Grassfield's colours [%r]" % (slurp[0]["argv"] if slurp else None))
-check(slurp and slurp[0]["stdin"] == "100,50 800x600\n2000,100 600x400\n",
-      "boxes: the shown workspaces' visible windows only, so the veil shows everywhere else [%r]"
+check(slurp and slurp[0]["argv"] == slurp_argv and slurp_argv[slurp_argv.index("-B") + 1] == colours["veil"],
+      "the crosshair in Grassfield's colours, its boxes the veil's [%r]" % (slurp[0]["argv"] if slurp else None))
+check(slurp and slurp[0]["stdin"] == "100,50 800x600\n2000,100 600x400\n1920,0 1920x1080\n0,0 1920x1080\n",
+      "boxes: the shown workspaces' visible windows, then each display's logical rectangle (scale, rotation), the focused first [%r]"
       % (slurp[0]["stdin"] if slurp else None))
 grim = calls("grim")
 check(grim and grim[0]["argv"][:2] == ["-g", "10,20 300x200"], "a drag: that area [%r]" % (grim[0]["argv"] if grim else None))
@@ -214,11 +236,25 @@ check(grim and grim[0]["argv"][:2] == ["-g", "1920,0 1920x1080"], "a click outsi
       "rotated [%r]" % (grim[0]["argv"] if grim else None))
 r, _ = capture("selection", FAKE_SLURP="click:5000,5000")
 check(calls("grim") == [], "a click outside every display: nothing")
-r, _ = capture("selection", FAKE_SLURP="click:2100,200", FAKE_CLIENTS=FULL)
+# A click on a window behind a larger one in front: slurp answers the smaller box; the helper takes the window on top under
+# the pointer (the last focused, as Grassfield raises a window when it takes focus).
+r, _ = capture("selection", FAKE_SLURP="click:150,150", FAKE_CLIENTS=STACK, FAKE_CURSOR='{"x": 150, "y": 150}')
+grim = calls("grim")
+check(grim and grim[0]["argv"][:2] == ["-g", "0,0 1000x800"], "a click where a window in front covers a smaller one: the "
+      "one in front [%r]" % (grim[0]["argv"] if grim else None))
+r, _ = capture("selection", FAKE_SLURP="click:150,150", FAKE_CLIENTS=STACK)
+grim = calls("grim")
+check(grim and grim[0]["argv"][:2] == ["-g", "100,100 200x200"], "the pointer unread: slurp's answer [%r]" % (grim[0]["argv"] if grim else None))
+r, _ = capture("selection", FAKE_SLURP="click:2100,200", FAKE_CLIENTS=FULL, FAKE_CURSOR='{"x": 2100, "y": 200}')
 slurp, grim = calls("slurp"), calls("grim")
-check(slurp and slurp[0]["stdin"] == "100,50 800x600\n1920,0 1920x1080\n" and grim and grim[0]["argv"][:2] == ["-g", "1920,0 1920x1080"],
-      "a fullscreen window: the only box of its workspace, so a click on it never picks the window behind [%r %r]"
+check(slurp and slurp[0]["stdin"].split("\n")[:3] == ["0,0 1920x1080", "1920,0 1920x1080", "2500,500 300x200"]
+      and grim and grim[0]["argv"][:2] == ["-g", "1920,0 1920x1080"],
+      "a fullscreen or zoomed window and the pinned one over it are their workspace's boxes, never the windows behind [%r %r]"
       % (slurp[0]["stdin"] if slurp else None, grim[0]["argv"] if grim else None))
+r, _ = capture("selection", FAKE_SLURP="click:2600,550", FAKE_CLIENTS=FULL, FAKE_CURSOR='{"x": 2600, "y": 550}')
+grim = calls("grim")
+check(grim and grim[0]["argv"][:2] == ["-g", "2500,500 300x200"], "a click on a pinned window over a fullscreen one: the pinned "
+      "one [%r]" % (grim[0]["argv"] if grim else None))
 count = len(files(desktop))
 r, _ = capture("selection", FAKE_SLURP="")
 check(r.returncode == 0 and calls("grim") == [] and calls("notify-send") == [] and len(files(desktop)) == count,
@@ -237,6 +273,35 @@ r, took = capture("selection", program=short, FAKE_SLURP="10,20 300x200", FAKE_A
 note = calls("notify-send")
 check(r.returncode == 0 and any(c.get("signal") == "INT" for c in note) and calls("systemd-run") == [] and calls("gdbus") == []
       and took < 10, "no click within the wait: notify-send closes its notice, Preview does not open (%.1f s)" % took)
+# The previous capture's notice is closed before the next one (its banner in no picture): capture A waits on its notice,
+# capture B asks A's notify-send to close it (SIGINT) before grim runs; A's helper then ends without opening Preview.
+runtime = os.path.join(tmp, "run")
+os.makedirs(runtime, mode=0o700)
+for f in ("calls",):
+    if os.path.exists(os.path.join(log, f)):
+        os.unlink(os.path.join(log, f))
+env = {"PATH": fake + ":/usr/bin:/bin", "HOME": home, "FAKE_LOG": log, "FAKE_MONITORS": MONITORS, "FAKE_CLIENTS": CLIENTS,
+       "XDG_RUNTIME_DIR": runtime}
+first = subprocess.Popen([helper, "screen"], env=dict(env, FAKE_ANSWER="hang"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+for _ in range(100):
+    if calls("notify-send"):
+        break
+    time.sleep(0.05)
+time.sleep(0.2)
+began = len(calls())
+second = subprocess.run([helper, "screen"], env=dict(env, FAKE_ANSWER=""), capture_output=True, timeout=60)
+try:
+    first.wait(timeout=10)
+except subprocess.TimeoutExpired:
+    first.kill()
+after = calls()[began:]
+order = [c["name"] + (":INT" if c.get("signal") else "") for c in after]
+check(second.returncode == 0 and first.returncode == 0 and "notify-send:INT" in order and "grim" in order
+      and order.index("notify-send:INT") < order.index("grim") and calls("systemd-run") == [],
+      "the last capture's notice is closed before the next capture (SIGINT to its notify-send), and Preview does not open [%r]"
+      % order)
+check(oct(os.stat(os.path.join(runtime, "grassfield")).st_mode & 0o777) == "0o700",
+      "the notice's pid is kept in $XDG_RUNTIME_DIR/grassfield (0700)")
 # No click: no Preview.
 r, _ = capture("screen", FAKE_ANSWER="")
 check(calls("systemd-run") == [], "the notice closed without a click: Preview does not open")
@@ -255,11 +320,14 @@ check(r.returncode != 0 and len(files(desktop)) == count and calls("notify-send"
       and not any(f.startswith(".") for f in os.listdir(desktop)), "grim failing: no file left, no notice")
 r, _ = capture("screen", FAKE_MONITORS="[]")
 check(r.returncode != 0 and calls("grim") == [], "no display: nothing")
-os.chmod(desktop, 0o555)
-r, _ = capture("screen")
-os.chmod(desktop, 0o755)
-check(r.returncode == 1 and b"Traceback" not in r.stderr and len(files(desktop)) == count and calls("notify-send") == [],
-      "a Desktop that cannot be written: nothing, and no traceback [%r]" % r.stderr[-200:])
+if os.geteuid() == 0:
+    print("SKIP: a Desktop that cannot be written (root writes anywhere)")
+else:
+    os.chmod(desktop, 0o555)
+    r, _ = capture("screen")
+    os.chmod(desktop, 0o755)
+    check(r.returncode == 1 and b"Traceback" not in r.stderr and len(files(desktop)) == count and calls("notify-send") == [],
+          "a Desktop that cannot be written: nothing, and no traceback [%r]" % r.stderr[-200:])
 r, _ = capture(None)
 check(r.returncode == 2 and calls() == [], "no mode: usage, nothing run")
 r, _ = capture("fullscreen")
