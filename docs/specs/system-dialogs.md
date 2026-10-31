@@ -814,6 +814,6 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
 A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
 own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
 (8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
-which can be a window behind a larger one; the picture is the window on top (the most recently focused under the pointer). The notification settings list the helper under its translated
+which can be a window behind a larger one; the picture is the window drawn on top under the pointer, as Hyprland draws them. The notification settings list the helper under its translated
 name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
 the toolbar's options are the later chantier's.
