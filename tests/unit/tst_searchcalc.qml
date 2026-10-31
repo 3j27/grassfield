@@ -80,4 +80,39 @@ TestCase {
         compare(Calc.answer("1/3").text, "0.333333333333");
         compare(Calc.answer("pi").text, "3.14159265359");
     }
+
+    // Capture defect 5: the decimal comma is read and the answer is written the way the language does (grouping included).
+    readonly property var fr: Qt.locale("fr_FR")
+    readonly property var en: Qt.locale("en_US")
+
+    function test_frenchAnswersAreGroupedWithADecimalComma() {
+        const g = fr.groupSeparator;
+        compare(Calc.answer("120*163", fr).text, "19" + g + "560");
+        compare(Calc.answer("1/3", fr).text, "0,333333333333");
+        compare(Calc.answer("pi", fr).text, "3,14159265359");
+        compare(Calc.answer("1000000*3", fr).text, "3" + g + "000" + g + "000");
+        compare(Calc.answer("0,1+0,2", fr).text, "0,3");
+        compare(Calc.answer("1,5*2", fr).text, "3");
+        compare(Calc.answer("12345,678*10", fr).text, "123" + g + "456,78");
+        compare(Calc.answer("-2000*3", fr).text, "-6" + g + "000");
+        compare(Calc.answer("1 000 + 5", fr).text, "1" + g + "005");
+    }
+
+    function test_englishAnswersAreGroupedWithAPoint() {
+        compare(Calc.answer("120*163", en).text, "19,560");
+        compare(Calc.answer("1/3", en).text, "0.333333333333");
+        compare(Calc.answer("1,000+5", en).text, "1,005");
+        compare(Calc.answer("1e20", en), null, "a bare number is not an expression");
+        compare(Calc.answer("10^20", en).text, "1e+20");
+    }
+
+    function test_smallAndLargeKeepTheirExponent() {
+        compare(Calc.answer("10^-12", fr).text, "1e-12");
+        compare(Calc.answer("10^16/3", fr).text.indexOf("e") > 0, true);
+    }
+
+    function test_withoutALocaleTheAnswerIsPlain() {
+        compare(Calc.answer("120*163").text, "19560");
+        compare(Calc.format(19560), "19560");
+    }
 }
