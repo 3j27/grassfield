@@ -188,9 +188,14 @@ and IQ-B3 here changes the palette only, not which controls read it.
   symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
   The owner replaced the drawing on 2026-10-30 (see "Rules this ADR works under"); the full mark itself stays untouched,
   and the places above draw `grassfield-logo.svg`, its optical version (menu bar 16 px, About This Computer's product line 14,
-  Settings rows 15, Search 25), and `grassfield-logo-full.svg` (the full mark, 32 px and more) has no surface under B; the
-  shell dialogs keep showing the mark until step 1d gives them their subject's symbol (a 48 px full mark there was
-  reverted for that reason, 1bdd69e3).
+  Settings rows 15, Search 25), and `grassfield-logo-full.svg` (the full mark, 32 px and more) has no surface under B (a
+  48 px full mark in the dialogs was reverted for that reason, 1bdd69e3).
+  Step 1d as built: the shell dialogs show their subject's symbol. `Popups.notice(title, message, symbol)` names it (Sleep's
+  dev notice the moon, Restart's and Shut Down's the power symbol, an app already quit the Force Quit cross, a document
+  that cannot be opened the document), `NoticeDialog` falls back to the information symbol and `ConfirmDialog` to power
+  (destructive) or information; neither draws the mark. `tests/ci/mark_places.py` (logic layer) holds the places: the
+  menu bar, About This Computer, General > About, Software Update's Grassfield row and Search draw the mark, nothing else
+  does, and every notice names a symbol.
 - **The name (ID-12, IQ-B2).** "Grassfield" names the product in running UI ("Grassfield menu", "Grassfield
   Settings"); "Grassfield Desktop" where the product and its version are stated (About, the session's comment);
   "Grassfield OS" only from M6 (§14). App names keep the owner's decisions (L1, ADR-0038 AQ1). The greeter's "Grassfield
@@ -209,7 +214,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   brand green `#26763F` and 0.29 from the deeper `#195E3F` of 2026-10-30, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
   text, so its dark-appearance selection pair is its light pair (`color.selectionDark.green`, the rule that a selection
   is never darker than the light accent), its focus ring falls back to the text colour on light grounds
-  (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.48:1 (`tests/ci/gtk_themes.py`), and
+  (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.46:1 (2.48:1 before the warm neutrals; `tests/ci/gtk_themes.py`), and
   the white glyphs of the Settings tiles drawn in it are 2.5:1, as macOS draws them. General > About's Grassfield row
   draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11), and so does Software Update's
   Grassfield release row. Text and glyphs drawn in the accent colour read `colors.accentInk`: in the light appearance a
@@ -473,8 +478,9 @@ As built (after pull request #71): 34 neutral tokens move to hue 85, chroma 0.00
 (so each contrast stays), the pure white to `#FDFCF9`: `color.light` and `color.dark` text, secondary texts, window,
 group, sidebar, field, chip and material tint; the plugin's `titlebar.*` (background, title, inactive buttons, the
 preview tint); `window.inactiveLight*`; `folderIcon.plateBackdrop*`; `menu.swatchMark`, `preview.paperInk`,
-`store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders,
-knob), the Graphite accent and its selection, Files' Gray tag and the drawing of the computer (`settings.device*`).
+`store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders),
+the opaque white knob, the Graphite accent and its selection, Files' Gray tag and the drawing of the computer
+(`settings.device*`).
 Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
 themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
 
