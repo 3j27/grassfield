@@ -1,12 +1,19 @@
-// org.freedesktop.impl.portal.Print for the Grassfield session (ADR-0035 D-7, step 6a; docs/specs/system-dialogs.md section 7,
-// PR1-PR5): an application's Print… becomes Grassfield's print sheet (apps/files/qml/PrintSheet.qml) on its window.
+// org.freedesktop.impl.portal.Print for the Grassfield session (ADR-0035 D-7, steps 6a and 6b; docs/specs/system-dialogs.md
+// section 7, PR1-PR5): an application's Print… becomes Grassfield's print sheet (apps/files/qml/PrintSheet.qml) on its window.
 //
 // GTK's flow (gtk/print/gtkprintoperation-portal.c): PreparePrint shows the sheet and answers GTK's settings, page setup and a
 // token; GTK renders the document with them and sends it to Print with the token, which prints it with no sheet: the job goes
-// to the CUPS printer chosen (PrintSystem), or Save as PDF writes it to the file chosen in the Save panel. A token is good once,
-// for the application that got it, for five minutes (x-d-p-gtk's rule, src/print.c). A Print with no token, or one this backend
-// did not give (x-d-p-gtk's, after a PreparePrint it served), goes to x-d-p-gtk: its dialog with a preview of the document
-// (step 6b brings Grassfield's).
+// to the CUPS printer chosen (PrintSystem), Save as PDF writes it to the file chosen in the Save panel, Open in Preview to a
+// private copy that Preview opens. A token is good once, for the application that got it, for five minutes (x-d-p-gtk's rule,
+// src/print.c); one this backend did not give (x-d-p-gtk's, after a PreparePrint it served) goes to x-d-p-gtk.
+//
+// A Print with no token (an application that sends the document first: libportal's callers) shows the same sheet with the
+// document's preview on the left (step 6b): the document is read into a private file (printpreview.h), its pages drawn by a
+// confined child, and the sheet's answer prints that file at once, or saves it, or opens it in Preview. A document that is not
+// a PDF goes to x-d-p-gtk as it came, as before step 6b (only a PDF reaches a printer through Grassfield, decision 6-4).
+//
+// The Presets (Default Settings, Last Used Settings) and the printer's own options (Media & Quality, Printer Options) are the
+// sheet's in both flows; Last Used Settings is kept in grassfield-portal's state (Options::stateFile).
 //
 // The request lifecycle is RequestHost's (a Request object at the frontend's handle, Close, the 3-s forward to x-d-p-gtk when
 // the sheet cannot show, the idle quit).
@@ -23,6 +30,8 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <tuple>
 
 namespace grassfield::portal {
 
@@ -44,6 +53,19 @@ public:
         int fileIdleMs = 30000;
         // How Settings > Printers opens (Add Printer…): the program and its arguments.
         QStringList addPrinterCommand{QStringLiteral("grassfield-settings"), QStringLiteral("--section=printers")};
+        // Last Used Settings (a JSON file of grassfield-portal's state); "": none kept.
+        QString stateFile;
+        // Where a document sent first is kept while its sheet is up (an unlinked file); "": the temporary folder.
+        QString spoolFolder;
+        // The private folder Open in Preview's copies go to (made 0700, this user's); "": no Open in Preview.
+        QString previewFolder;
+        // How Preview opens a copy: the program and its arguments, the copy's path added last; empty: in the session, as the Dock
+        // starts an application, from a unit of the user manager (systemd-run --user, then uwsm-app where it is, then
+        // grassfield-preview); in a dev session, grassfield-preview as a child of this process.
+        QStringList previewCommand;
+        // The child that draws a page (printpreview.h): this binary and "--print-preview" when empty; its deadline.
+        QStringList rendererCommand;
+        int renderDeadlineMs = 8000;
     };
 
     Print(const QDBusConnection &bus, PrintSystem *system, const Options &options, QObject *parent = nullptr);
@@ -67,9 +89,15 @@ public:
     Q_INVOKABLE void choosePrinter(int id, const QString &printer, const QVariantMap &choices);
     // Whether `ranges` (as typed, 1-based) are pages the sheet can print, and their tidy form ("" when not).
     Q_INVOKABLE QString tidyRanges(const QString &ranges) const;
-    // The sheet's answer: response 0 with its choices (to print, or Save as PDF when outputUri is set), or 1 (Cancel). False
-    // (and the sheet stays) when the choices cannot be printed; an answer for a request that is gone is ignored (true).
+    // The sheet's answer: response 0 with its choices (to print; Save as PDF when outputUri is set; Open in Preview when preview
+    // is true), or 1 (Cancel). False (and the sheet stays) when the choices cannot be printed; an answer for a request that is
+    // gone is ignored (true). For a document sent first, the job goes now (the sheet goes at once: dismissed).
     Q_INVOKABLE bool answer(int id, int response, const QVariantMap &choices = {});
+    // The Presets pop-up: "default" or "last", applied to `choices` (the sheet's current ones); printerChosen answers with them.
+    Q_INVOKABLE void choosePreset(int id, const QString &preset, const QVariantMap &choices);
+    // The preview of a document sent first: page `page` (0-based) drawn within width x height pixels; pageRendered answers (the
+    // latest asked wins while one is drawn).
+    Q_INVOKABLE void renderPage(int id, int page, int width, int height);
     // Add Printer…: Settings > Printers.
     Q_INVOKABLE void addPrinter();
     // Not quiet while a token waits for its Print (GTK may take a while to render the document): the process quitting would
@@ -82,7 +110,8 @@ public:
 
     // What the sheet is given first (pure; the tests read it): {appId, title (one line), modal, parented, acceptLabel,
     // hasCurrentPage, hasSelection, canSavePdf (the application can make a PDF), outputBasename (the name the application
-    // gives a file it prints to, a plain name or ""), choices (print::toQml, the printer not known yet)}.
+    // gives a file it prints to, a plain name or ""), choices (print::toQml, the printer not known yet), document (false: the
+    // sheet of PreparePrint), hasLastUsed (false here; handlePrepare sets it)}.
     static QVariantMap toQml(const QString &appId, const QString &parentWindow, const QString &title, const QVariantMap &settings,
                              const QVariantMap &pageSetup, const QVariantMap &options);
 
@@ -97,12 +126,24 @@ signals:
     // Save as PDF's answer: the file chosen (a local file:// URI), or none.
     void pdfChosen(int id, const QString &uri);
     void pdfCancelled(int id);
+    // A document sent first is read (its pages; 0 when they cannot be drawn: no preview, the document still prints).
+    void documentReady(int id, int pages);
+    // A page of its preview: an image://printpreview/ URL, "" when it could not be drawn.
+    void pageRendered(int id, int page, const QString &source);
+    // The sheet of request `id` goes now (a document's job is being sent; the request ends when it is).
+    void dismissed(int id);
 
 protected:
     QVariantMap relayed(const QVariantMap &gtkResults) const override;
     void ended(int id) override;
+    void forwarded(int id) override;
 
 private:
+    // The private file of a document sent first, closed when the last of its users (the request, a page being drawn) lets go.
+    struct SpoolFile {
+        int fd = -1;
+        ~SpoolFile();
+    };
     struct Pending {
         QString appId;
         QString parentWindow;
@@ -124,6 +165,18 @@ private:
         QString pdfName;
         // The Save panel last opened (its handle): only its answer is the sheet's.
         QString saveHandle;
+        // A document sent first (Print with no token): its private file once read, its pages; what reads or draws it stops when
+        // the request ends (stop).
+        bool document = false;
+        std::shared_ptr<SpoolFile> spool;
+        int pages = 0;
+        std::shared_ptr<std::atomic<bool>> stop = std::make_shared<std::atomic<bool>>(false);
+        // A page being drawn, and the latest asked meanwhile (page, width, height); the pages drawn (PreviewImages' keys).
+        bool rendering = false;
+        std::optional<std::tuple<int, int, int>> wanted;
+        QStringList images;
+        // The preset is applied when the printer's options are read (the sheet's first printer, or a preset chosen meanwhile).
+        bool applyPresetOnRead = false;
     };
     struct Ticket {
         QString appId;
@@ -133,6 +186,10 @@ private:
         // Save as PDF's file (Pending's), empty to print.
         QString pdfFolder;
         QString pdfName;
+        // A document sent first (its page ranges go to the printer: print::documentOptions).
+        bool document = false;
+        // The name the document is known by (the application's file name, else its name): Open in Preview's copy.
+        QString documentName;
         QElapsedTimer age;
     };
     // A new token for `ticket`: random, not 0, not one in use.
@@ -140,6 +197,17 @@ private:
     // Drops the expired tokens; true when it dropped one.
     bool dropExpired();
     void printWithTicket(int id, const Ticket &ticket, const QString &title, int fd);
+    // Open in Preview: `fd` (taken) written to a private copy, which Preview opens; the request ends with 0, or 2 when it could not.
+    void openInPreview(int id, const Ticket &ticket, int fd);
+    // Print with no token: the sheet over the document `fd` (taken), read into a private file meanwhile.
+    void showDocument(int id, const QString &appId, const QString &parentWindow, const QString &title, int fd);
+    void startRender(int id, int page, int width, int height);
+    // The choices with the preset they name applied (Default Settings: the application's and the printer's; Last Used Settings:
+    // those, then the last print's), what belongs to the document kept as chosen.
+    print::Choices presetChoices(const Pending &pending, const print::Choices &current);
+    // Last Used Settings: read once from Options::stateFile, kept there at each print.
+    std::optional<print::Preset> lastUsed();
+    void rememberLastUsed(const print::Choices &choices);
 
     PrintSystem *m_system;
     Options m_options;
@@ -151,6 +219,8 @@ private:
     std::shared_ptr<std::atomic<bool>> m_stopWriting = std::make_shared<std::atomic<bool>>(false);
     int m_saves = 0;
     std::unique_ptr<QDBusConnection> m_panelBus;
+    bool m_lastUsedRead = false;
+    std::optional<print::Preset> m_lastUsed;
 };
 
 // The interface on /org/freedesktop/portal/desktop (the object FileChooser is exported as; this adaptor is its child and

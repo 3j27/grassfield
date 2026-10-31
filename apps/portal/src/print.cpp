@@ -1,23 +1,36 @@
 #include "print.h"
 
 #include "chooserlogic.h"
+#include "printpreview.h"
 #include "printsystem.h"
+#include "runmode.h"
 
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
-#include <QDeadlineTimer>
-#include <QFileInfo>
-#include <QRandomGenerator>
 #include <QCoreApplication>
+#include <QDeadlineTimer>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QProcess>
+#include <QRandomGenerator>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 
 #include <KIO/CommandLauncherJob>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
 
 #include <algorithm>
 #include <limits>
@@ -62,7 +75,80 @@ QString plainName(const QVariant &value)
     return name.contains(QLatin1Char('/')) || name == QLatin1String(".") || name == QLatin1String("..") ? QString() : name;
 }
 
+// The name a document is known by, as a file name: the first of `names` that is one, else "Document"; ".pdf" added.
+QString pdfFileName(const QStringList &names)
+{
+    QString file;
+    for (const QString &name : names) {
+        file = plainName(name).trimmed();
+        if (!file.isEmpty())
+            break;
+    }
+    if (file.isEmpty())
+        file = QStringLiteral("Document");
+    if (!file.endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive))
+        file += QStringLiteral(".pdf");
+    return file;
+}
+
+// A new private folder for one copy, in `base` (made 0700 when missing; refused when it is not a folder of this user's that
+// no one else may enter): its path with the links resolved, "" and `error` set on failure.
+QString privateFolder(const QString &base, QString *error)
+{
+    const QByteArray b = QFile::encodeName(base);
+    if (b.isEmpty() || !b.startsWith('/')) {
+        *error = QStringLiteral("no private folder for Open in Preview");
+        return {};
+    }
+    if (::mkdir(b.constData(), 0700) != 0 && errno != EEXIST) {
+        *error = QStringLiteral("cannot make “%1”: %2").arg(base, QString::fromLocal8Bit(std::strerror(errno)));
+        return {};
+    }
+    struct stat st;
+    if (::lstat(b.constData(), &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != ::getuid() || (st.st_mode & 077) != 0) {
+        *error = QStringLiteral("“%1” is not a private folder").arg(base);
+        return {};
+    }
+    QByteArray made = b + "/print-XXXXXX";
+    if (!::mkdtemp(made.data())) {
+        *error = QStringLiteral("cannot make a folder in “%1”: %2").arg(base, QString::fromLocal8Bit(std::strerror(errno)));
+        return {};
+    }
+    const QString folder = QFileInfo(QFile::decodeName(made)).canonicalFilePath();
+    if (folder.isEmpty())
+        *error = QStringLiteral("cannot resolve “%1”").arg(QFile::decodeName(made));
+    return folder;
+}
+
+// How Preview opens a copy when nothing else is set (Options::previewCommand empty), the copy's path added last. In the session:
+// as the Dock starts an application (uwsm-app: a scope of its own), from a transient unit of the user manager (systemd-run
+// --user), so that Preview inherits neither this unit's limits nor its sandbox and outlives it (grassfield-crash-watch's Reopen
+// does the same). In a dev session: a child of this process, on its display (the user manager's display is the owner's own
+// session, which a dev run never touches: runmode.h), the grassfield-preview next to this binary first.
+QStringList defaultPreviewCommand()
+{
+    if (grassfield::apps::runmode::session()) {
+        QStringList command{QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
+                            QStringLiteral("--")};
+        if (!QStandardPaths::findExecutable(QStringLiteral("uwsm-app")).isEmpty())
+            command << QStringLiteral("uwsm-app") << QStringLiteral("--");
+        return command << QStringLiteral("grassfield-preview") << QStringLiteral("--");
+    }
+    const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-preview");
+    return {QFileInfo(sibling).isExecutable() ? sibling : QStringLiteral("grassfield-preview"), QStringLiteral("--")};
+}
+
+constexpr qint64 kMaxStateBytes = 64 * 1024;
+// Pages drawn kept for each sheet (the one shown and the ones around it).
+constexpr int kKeptPages = 4;
+
 } // namespace
+
+Print::SpoolFile::~SpoolFile()
+{
+    if (fd >= 0)
+        ::close(fd);
+}
 
 Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &options, QObject *parent)
     : RequestHost(bus, QStringLiteral("org.freedesktop.impl.portal.Print"),
@@ -111,6 +197,8 @@ QVariantMap Print::toQml(const QString &appId, const QString &parentWindow, cons
         {QStringLiteral("canSavePdf"), o.value(QStringLiteral("formats")).toStringList().contains(QStringLiteral("pdf"))},
         {QStringLiteral("outputBasename"), plainName(settings.value(QStringLiteral("output-basename")))},
         {QStringLiteral("choices"), print::toQml(choices)},
+        {QStringLiteral("document"), false},
+        {QStringLiteral("hasLastUsed"), false},
     };
 }
 
@@ -121,7 +209,7 @@ void Print::handlePrepare(const QDBusObjectPath &handle, const QString &appId, c
     const int id = begin(handle, message, appId, parentWindow);
     if (id == 0)
         return;
-    const QVariantMap sheet = toQml(appId, parentWindow, title, settings, pageSetup, options);
+    QVariantMap sheet = toQml(appId, parentWindow, title, settings, pageSetup, options);
     Pending p;
     p.appId = appId;
     p.parentWindow = parentWindow;
@@ -132,6 +220,12 @@ void Print::handlePrepare(const QDBusObjectPath &handle, const QString &appId, c
     p.hasSelection = sheet.value(QStringLiteral("hasSelection")).toBool();
     p.canSavePdf = sheet.value(QStringLiteral("canSavePdf")).toBool();
     p.choices = print::fromQml(sheet.value(QStringLiteral("choices")).toMap(), print::Choices{});
+    // Last Used Settings when there are some (macOS opens its panel on them), applied once the printer's options are read.
+    const bool last = lastUsed().has_value();
+    p.choices.preset = last ? QStringLiteral("last") : QStringLiteral("default");
+    p.applyPresetOnRead = last;
+    sheet.insert(QStringLiteral("hasLastUsed"), last);
+    sheet.insert(QStringLiteral("choices"), print::toQml(p.choices));
     m_pending.insert(id, p);
     if (!startUi(id))
         return;
@@ -208,6 +302,13 @@ void Print::choosePrinter(int id, const QString &printer, const QVariantMap &cho
         // The copies are the job's, not GTK's (GTK gets one): carried as chosen, within the printer's limit.
         carried.copies = std::clamp(current.copies, 1, std::clamp(caps.known ? caps.maxCopies : print::kMaxCopies, 1, print::kMaxCopies));
         carried.collate = current.collate;
+        // The printer's own options chosen so far where it lists them, its defaults for the rest; the preset as chosen.
+        carried.options = print::optionChoices(caps, current.options);
+        carried.preset = current.preset;
+        if (p->applyPresetOnRead && caps.known) {
+            p->applyPresetOnRead = false;
+            carried = presetChoices(*p, carried);
+        }
         p->choices = carried;
         emit printerChosen(id, printer, print::toQml(caps), print::toQml(carried));
     });
@@ -234,10 +335,19 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
         if (!it->canSavePdf || it->pdfName.isEmpty() || print::localPdfPath(c.outputUri) != print::localPdfPath(it->pdfUri))
             return false;
         c.printer.clear();
+        c.preview = false;
+    } else if (c.preview) {
+        // Open in Preview: a PDF too.
+        if (!it->canSavePdf)
+            return false;
+        c.printer.clear();
     } else if (c.printer.isEmpty() || c.printer != it->printer || it->reading) {
         // To print, the printer the sheet chose (choosePrinter), once its options are read.
         return false;
     }
+    // A document sent first: only once it is read.
+    if (it->document && !it->spool)
+        return false;
     QVariantMap settings, pageSetup;
     if (!print::toGtk(c, &settings, &pageSetup))
         return false;
@@ -246,13 +356,102 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
     t.printer = c.printer;
     t.capabilities = it->capabilities;
     t.choices = c;
+    t.document = it->document;
+    t.documentName = pdfFileName({it->settings.value(QStringLiteral("output-basename")).toString(), it->document ? it->title : QString(),
+                                  appName(it->appId), it->title});
     if (!c.outputUri.isEmpty()) {
         t.pdfFolder = it->pdfFolder;
         t.pdfName = it->pdfName;
     }
+    // What this print was printed with is Last Used Settings from now on (macOS keeps them when Print is clicked).
+    if (c.outputUri.isEmpty() && !c.preview)
+        rememberLastUsed(c);
+    if (it->document) {
+        // The document is here: the job goes now, from the private file; the sheet goes at once, the request when the job is sent.
+        const int fd = reopenSpool(it->spool->fd);
+        const QString title = it->title;
+        emit dismissed(id);
+        if (fd < 0) {
+            qWarning("grassfield-portal: cannot read the document kept for the print");
+            finish(id, 2, {});
+            return true;
+        }
+        printWithTicket(id, t, title, fd);
+        return true;
+    }
     const uint token = issue(t);
     finish(id, 0, {{QStringLiteral("settings"), settings}, {QStringLiteral("page-setup"), pageSetup}, {QStringLiteral("token"), QVariant::fromValue(token)}});
     return true;
+}
+
+void Print::choosePreset(int id, const QString &preset, const QVariantMap &choices)
+{
+    const auto it = m_pending.find(id);
+    if (it == m_pending.end() || !isOpen(id))
+        return;
+    print::Choices current = print::fromQml(choices, it->choices);
+    current.preset = preset == QLatin1String("last") && lastUsed() ? QStringLiteral("last") : QStringLiteral("default");
+    if (it->reading || !it->capabilities.known) {
+        // Applied once the printer's options are read.
+        it->choices = current;
+        it->applyPresetOnRead = true;
+        return;
+    }
+    it->choices = presetChoices(*it, current);
+    emit printerChosen(id, it->printer, print::toQml(it->capabilities), print::toQml(it->choices));
+}
+
+print::Choices Print::presetChoices(const Pending &p, const print::Choices &current)
+{
+    const print::Choices base = print::initialChoices(p.printer, p.capabilities, p.settings, p.pageSetup, p.hasCurrentPage, p.hasSelection);
+    print::Choices out = current;
+    out.collate = base.collate;
+    out.duplex = base.duplex;
+    out.color = base.color;
+    out.options = base.options;
+    if (current.preset == QLatin1String("last")) {
+        if (const auto last = lastUsed())
+            out = print::withPreset(out, *last, p.capabilities);
+    }
+    return out;
+}
+
+std::optional<print::Preset> Print::lastUsed()
+{
+    if (m_lastUsedRead)
+        return m_lastUsed;
+    m_lastUsedRead = true;
+    QFile f(m_options.stateFile);
+    if (m_options.stateFile.isEmpty() || !f.exists())
+        return m_lastUsed;
+    if (f.size() > kMaxStateBytes || !f.open(QIODevice::ReadOnly)) {
+        qWarning("grassfield-portal: Last Used Settings are not readable or too large; Default Settings apply");
+        return m_lastUsed;
+    }
+    QJsonParseError error{};
+    const QJsonDocument doc = QJsonDocument::fromJson(f.read(kMaxStateBytes), &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject() || doc.object().value(QLatin1String("version")).toInt() != 1) {
+        qWarning("grassfield-portal: Last Used Settings are malformed; Default Settings apply");
+        return m_lastUsed;
+    }
+    m_lastUsed = print::presetFromJson(doc.object().value(QLatin1String("lastUsed")).toObject());
+    return m_lastUsed;
+}
+
+void Print::rememberLastUsed(const print::Choices &choices)
+{
+    lastUsed();
+    m_lastUsed = print::presetOf(choices);
+    if (m_options.stateFile.isEmpty())
+        return;
+    const QJsonObject root{{QLatin1String("version"), 1}, {QLatin1String("lastUsed"), print::toJson(*m_lastUsed)}};
+    if (!QDir().mkpath(QFileInfo(m_options.stateFile).absolutePath())) {
+        qWarning("grassfield-portal: cannot create the state directory; Last Used Settings are not kept");
+        return;
+    }
+    QSaveFile out(m_options.stateFile);
+    if (!out.open(QIODevice::WriteOnly) || out.write(QJsonDocument(root).toJson(QJsonDocument::Compact)) < 0 || !out.commit())
+        qWarning("grassfield-portal: cannot write Last Used Settings");
 }
 
 void Print::addPrinter()
@@ -384,8 +583,20 @@ void Print::handlePrint(const QDBusObjectPath &handle, const QString &appId, con
     const QVariant given = options.value(QStringLiteral("token"));
     const uint token = given.metaType() == QMetaType::fromType<uint>() ? given.toUInt() : 0;
     const auto it = m_tickets.find(token);
-    if (token == 0 || it == m_tickets.end() || it->appId != appId) {
-        // No sheet of ours before it (x-d-p-gtk's token, or none): x-d-p-gtk prints it, with its own dialog if it must ask.
+    if (token == 0) {
+        // No sheet before it (an application that sends the document first): the sheet with the document's preview.
+        const int document = fd.isValid() ? ::fcntl(fd.fileDescriptor(), F_DUPFD_CLOEXEC, 3) : -1;
+        if (document < 0) {
+            qWarning("grassfield-portal: Print came without a readable document");
+            finish(id, 2, {});
+            return;
+        }
+        showDocument(id, appId, parentWindow, title, document);
+        return;
+    }
+    if (it == m_tickets.end() || it->appId != appId) {
+        // A token this backend did not give (x-d-p-gtk's, after a PreparePrint it served), another application's, or one that
+        // expired: x-d-p-gtk prints it, with its own dialog if it must ask.
         forward(id);
         return;
     }
@@ -402,6 +613,10 @@ void Print::handlePrint(const QDBusObjectPath &handle, const QString &appId, con
 
 void Print::printWithTicket(int id, const Ticket &ticket, const QString &title, int fd)
 {
+    if (ticket.choices.preview) {
+        openInPreview(id, ticket, fd);
+        return;
+    }
     if (!ticket.choices.outputUri.isEmpty()) {
         if (ticket.pdfFolder.isEmpty() || ticket.pdfName.isEmpty()) {
             ::close(fd);
@@ -433,15 +648,211 @@ void Print::printWithTicket(int id, const Ticket &ticket, const QString &title, 
     // The job's name in the printer's queue: the application's (GTK's title is "Print" for every job).
     const QString app = appName(ticket.appId);
     const QString name = !app.isEmpty() ? app : !title.isEmpty() ? title : QStringLiteral("Document");
-    m_system->submit(ticket.printer, name, print::cupsOptions(ticket.choices, ticket.capabilities), fd, this, [this, id](const QString &error) {
+    const PrintSystem::Options options = ticket.document ? print::documentOptions(ticket.choices, ticket.capabilities)
+                                                         : print::cupsOptions(ticket.choices, ticket.capabilities);
+    m_system->submit(ticket.printer, name, options, fd, this, [this, id](const QString &error) {
         if (!error.isEmpty())
             qWarning("grassfield-portal: the print job did not go: %s", qPrintable(error));
         finish(id, error.isEmpty() ? 0 : 2, {});
     });
 }
 
+void Print::openInPreview(int id, const Ticket &ticket, int fd)
+{
+    if (m_options.previewFolder.isEmpty()) {
+        ::close(fd);
+        finish(id, 2, {});
+        return;
+    }
+    auto error = std::make_shared<QString>();
+    auto path = std::make_shared<QString>();
+    const QString base = m_options.previewFolder, file = ticket.documentName;
+    const int idle = m_options.fileIdleMs;
+    const auto stop = m_stopWriting;
+    // A folder of its own in the private folder, then the copy written there as Save as PDF writes (only a PDF, never through
+    // a link): off this thread.
+    QThread *writer = QThread::create([fd, base, file, idle, error, path, stop] {
+        const QString folder = privateFolder(base, error.get());
+        if (folder.isEmpty()) {
+            ::close(fd);
+            return;
+        }
+        *error = writePdf(fd, folder, file, idle, print::kMaxDocumentBytes, [stop] { return stop->load(); });
+        if (error->isEmpty())
+            *path = QDir(folder).filePath(file);
+    });
+    writer->setParent(this);
+    connect(writer, &QThread::finished, this, [this, id, writer, error, path] {
+        writer->deleteLater();
+        if (!error->isEmpty()) {
+            qWarning("grassfield-portal: Open in Preview: %s", qPrintable(*error));
+            finish(id, 2, {});
+            return;
+        }
+        QStringList command = m_options.previewCommand.isEmpty() ? defaultPreviewCommand() : m_options.previewCommand;
+        const QString program = command.takeFirst();
+        const bool started = QProcess::startDetached(program, command << *path);
+        if (!started)
+            qWarning("grassfield-portal: Open in Preview: %s could not be started", qPrintable(program));
+        finish(id, started ? 0 : 2, {});
+    });
+    writer->start();
+}
+
+void Print::showDocument(int id, const QString &appId, const QString &parentWindow, const QString &title, int fd)
+{
+    if (!startUi(id)) {
+        ::close(fd);
+        return;
+    }
+    QVariantMap sheet = toQml(appId, parentWindow, title, {}, {}, {});
+    Pending p;
+    p.appId = appId;
+    p.parentWindow = parentWindow;
+    p.title = sheet.value(QStringLiteral("title")).toString();
+    p.document = true;
+    // The document is a PDF (nothing else is kept): it can be saved and opened in Preview.
+    p.canSavePdf = true;
+    p.choices = print::fromQml(sheet.value(QStringLiteral("choices")).toMap(), print::Choices{});
+    const bool last = lastUsed().has_value();
+    p.choices.preset = last ? QStringLiteral("last") : QStringLiteral("default");
+    p.applyPresetOnRead = last;
+    sheet.insert(QStringLiteral("document"), true);
+    sheet.insert(QStringLiteral("canSavePdf"), true);
+    sheet.insert(QStringLiteral("hasLastUsed"), last);
+    sheet.insert(QStringLiteral("outputBasename"), plainName(QVariant(p.title)));
+    sheet.insert(QStringLiteral("choices"), print::toQml(p.choices));
+    const auto stop = p.stop;
+    m_pending.insert(id, p);
+    emit opened(id, sheet);
+
+    // The document read into a private file, then its page count and first page's size (the paper it asks for) from the child
+    // that draws it: off this thread.
+    auto spooled = std::make_shared<Spooled>();
+    auto info = std::make_shared<Rendered>();
+    const QString folder = m_options.spoolFolder;
+    const int idle = m_options.fileIdleMs, deadline = m_options.renderDeadlineMs;
+    const QStringList renderer = m_options.rendererCommand.isEmpty()
+        ? QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--print-preview")}
+        : m_options.rendererCommand;
+    const auto stopAll = m_stopWriting;
+    const auto stopped = [stop, stopAll] { return stop->load() || stopAll->load(); };
+    QThread *reader = QThread::create([fd, folder, idle, deadline, renderer, spooled, info, stopped] {
+        *spooled = spoolDocument(fd, folder, idle, print::kMaxDocumentBytes, stopped);
+        if (spooled->fd >= 0)
+            *info = renderPreview(renderer, spooled->fd, 0, {}, deadline, stopped);
+    });
+    reader->setParent(this);
+    connect(reader, &QThread::finished, this, [this, id, reader, spooled, info] {
+        reader->deleteLater();
+        auto file = std::make_shared<SpoolFile>();
+        file->fd = spooled->fd;
+        const auto p = m_pending.find(id);
+        if (p == m_pending.end() || !isOpen(id))
+            return;
+        if (spooled->notPdf) {
+            // Not a PDF: x-d-p-gtk prints it as before step 6b when the document is still as it came (a file read in place),
+            // else the print fails (only a PDF reaches a printer through Grassfield, decision 6-4).
+            qWarning("grassfield-portal: the document sent to print is not a PDF; %s", spooled->consumed ? "it is not printed" : "it goes to x-d-p-gtk");
+            if (spooled->consumed)
+                finish(id, 2, {});
+            else
+                forward(id);
+            return;
+        }
+        if (file->fd < 0) {
+            qWarning("grassfield-portal: the document sent to print could not be read: %s", qPrintable(spooled->error));
+            finish(id, 2, {});
+            return;
+        }
+        p->spool = file;
+        p->pages = info->ok ? info->pages : 0;
+        if (info->ok) {
+            // The paper of its first page (portrait, in millimetres) is the one first chosen where the printer has it.
+            const double w = info->pageSize.width() * 25.4 / 72, h = info->pageSize.height() * 25.4 / 72;
+            p->pageSetup = {{QStringLiteral("Width"), std::min(w, h)}, {QStringLiteral("Height"), std::max(w, h)}};
+        }
+        qInfo("grassfield-portal: a document of %d pages to print", p->pages);
+        emit documentReady(id, p->pages);
+        listPrinters(id);
+    });
+    reader->start();
+}
+
+void Print::renderPage(int id, int page, int width, int height)
+{
+    const auto it = m_pending.find(id);
+    if (it == m_pending.end() || !isOpen(id) || !it->spool || page < 0 || page >= it->pages || width <= 0 || height <= 0) {
+        emit pageRendered(id, page, QString());
+        return;
+    }
+    if (it->rendering) {
+        it->wanted = std::make_tuple(page, width, height);
+        return;
+    }
+    startRender(id, page, width, height);
+}
+
+void Print::startRender(int id, int page, int width, int height)
+{
+    const auto it = m_pending.find(id);
+    if (it == m_pending.end())
+        return;
+    it->rendering = true;
+    const auto spool = it->spool;
+    const auto stop = it->stop;
+    const auto stopAll = m_stopWriting;
+    const QStringList renderer = m_options.rendererCommand.isEmpty()
+        ? QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--print-preview")}
+        : m_options.rendererCommand;
+    const int deadline = m_options.renderDeadlineMs;
+    const QSize size = QSize(width, height).boundedTo(QSize(kMaxPreviewSide, kMaxPreviewSide));
+    auto result = std::make_shared<Rendered>();
+    QThread *drawer = QThread::create([spool, page, size, deadline, renderer, result, stop, stopAll] {
+        *result = renderPreview(renderer, spool->fd, page, size, deadline, [stop, stopAll] { return stop->load() || stopAll->load(); });
+    });
+    drawer->setParent(this);
+    connect(drawer, &QThread::finished, this, [this, id, page, width, height, drawer, result] {
+        drawer->deleteLater();
+        const auto p = m_pending.find(id);
+        if (p == m_pending.end() || !isOpen(id))
+            return;
+        p->rendering = false;
+        QString source;
+        if (result->ok && !result->image.isNull()) {
+            const QString key = PreviewImages::insert(result->image);
+            p->images << key;
+            while (p->images.size() > kKeptPages)
+                PreviewImages::remove(p->images.takeFirst());
+            source = QStringLiteral("image://printpreview/") + key;
+        }
+        emit pageRendered(id, page, source);
+        if (p->wanted) {
+            const auto [nextPage, nextWidth, nextHeight] = *p->wanted;
+            p->wanted.reset();
+            if (nextPage != page || nextWidth != width || nextHeight != height)
+                startRender(id, nextPage, nextWidth, nextHeight);
+        }
+    });
+    drawer->start();
+}
+
+void Print::forwarded(int id)
+{
+    // Gone to x-d-p-gtk (the sheet could not show, or the document is not a PDF): what reads or draws its document stops.
+    if (const auto it = m_pending.find(id); it != m_pending.end())
+        it->stop->store(true);
+}
+
 void Print::ended(int id)
 {
+    const auto it = m_pending.find(id);
+    if (it != m_pending.end()) {
+        // What reads or draws its document stops; the pages drawn go.
+        it->stop->store(true);
+        for (const QString &key : std::as_const(it->images))
+            PreviewImages::remove(key);
+    }
     m_pending.remove(id);
     // Its Save panel goes too (the application closed the request meanwhile).
     const QString saving = m_saving.take(id);
