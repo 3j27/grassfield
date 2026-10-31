@@ -1,8 +1,9 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c) and step 1a merged (pull request #52, a5488a6); step 1b under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to macOS 27, no
-technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
+#46, e16fa8c), steps 1a, 1b and 1c merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b); the owner's brand green
+and warm neutrals of 2026-10-30 under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
+macOS 27, no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
 NITs), and after the review of step 1a's 6c310a8 (FAIL: one MAJOR, one MINOR, three NITs), answered in "Review
@@ -36,6 +37,14 @@ and IQ-B3 here changes the palette only, not which controls read it.
 - **The Grassfield logo is the owner's mark, all rights reserved (decision of 2026-10-27).** Nothing here changes it:
   every mockup uses the path of `branding/icons/symbolic/grassfield-logo.svg` unchanged, and the proposals concern only
   where it appears and in which colour, which the owner decides (IQ-B1, IQ-B2). This ADR calls it "the Grassfield mark".
+  **2026-10-30: the owner replaced the drawing** with a new mark of their own, an AI-assisted concept
+  (`branding/concepts/grassfields-original-refined/`) redrawn as SVG in the proposed brand kit (`branding/brandkit-proposal/`,
+  1342d2d9); its final adoption and legal clearance are the owner's, pending (`docs/legal/visual-review.md` E33). It now
+  lives in two files on the 24 grid: `grassfield-logo-full.svg`, the full mark, unchanged, for 32 px and more (the brand
+  kit, the website, future large About surfaces; no shell or app surface draws it today, and `tests/unit/tst_visualaudit.qml`
+  keeps it loadable), and `grassfield-logo.svg`, its optical version for 16-24 px (the same blades over the same base, fewer
+  and wider gaps), which every place listed under IQ-B1 draws at run time (14-25 px). The step 0 mockups show the old
+  drawing (a grass tuft); they are dated design documents and were not redrawn.
 - Every illustration is made here or under a compatible licence, documented in `docs/legal` (E39). No Apple asset and
   no Apple trademark name (master-prompt §14).
 - The lock screen (`shell/security/lock`) and idle handling are security modules: only `WlSessionLock`,
@@ -175,8 +184,20 @@ and IQ-B3 here changes the palette only, not which controls read it.
 - **The mark (IQ-B1, owner: B, few places, green; the file is not touched).** Where it appears, in what colour, and the rules of its
   use (clear space, smallest size, what is never done to it) are the owner's to set, so all three are in IQ-B1 (review
   of b44d17e). Places under B: the menu bar's system button (monochrome, the bar's text colour), About This Computer and
-  Settings > General > About (the Grassfield green), the Search result for About; shell dialogs show their subject's
-  symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
+  Settings > General > About (the Grassfield green), Software Update's Grassfield release row (the brand green, as About's,
+  since 9903e56d), the Search result for About; shell dialogs show their subject's symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
+  The owner replaced the drawing on 2026-10-30 (see "Rules this ADR works under"); the full mark itself stays untouched,
+  and the places above draw `grassfield-logo.svg`, its optical version (menu bar 16 px, About This Computer's product line 14,
+  Settings rows 15, Search 25), and `grassfield-logo-full.svg` (the full mark, 32 px and more) has no surface under B (a
+  48 px full mark in the dialogs was reverted for that reason, 1bdd69e3).
+  Step 1d as built: the shell dialogs show their subject's symbol. `Popups.notice(title, message, symbol)` names it (Sleep's
+  dev notice the moon, Restart's and Shut Down's the power symbol, an app already quit the Force Quit cross, a document
+  that cannot be opened the document); a notice without one shows the information symbol (`PopupKinds.noticeSymbol`: a
+  missing symbol through a string-typed parameter arrived as "undefined" and drew an empty frame, the review of 52b2bec),
+  and so does a confirmation whose action has no symbol; neither dialog draws the mark. `tests/ci/mark_places.py` (logic
+  layer) holds the places: the menu bar, About This Computer, General > About, Software Update's Grassfield row and Search
+  draw the mark, in any string that names it, a file path included; nothing else does; every notice names a symbol that
+  `ui/Grassfield/Ui/icons` holds.
 - **The name (ID-12, IQ-B2).** "Grassfield" names the product in running UI ("Grassfield menu", "Grassfield
   Settings"); "Grassfield Desktop" where the product and its version are stated (About, the session's comment);
   "Grassfield OS" only from M6 (§14). App names keep the owner's decisions (L1, ADR-0038 AQ1). The greeter's "Grassfield
@@ -184,10 +205,23 @@ and IQ-B3 here changes the palette only, not which controls read it.
   (IQ-B2, owner: A, "no logotype"); the mark alone is the symbol.
 - **The accent (IQ-B3, owner: A, "Grassfield").** The default is named "Grassfield" (a green swatch first in the row, in place
   of the Multicolour wheel), the pickable Green moves to a value clearly apart from the brand green with its own 4.5:1
-  text, and the brand green is the existing default-accent tokens (`color.light.accent` `#26763F`, `color.dark.accent`
-  `#4FB36B`; no new brand token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
+  text, and the brand green is the existing default-accent tokens (`color.light.accent`, `#26763F` until the owner's
+  choice of 2026-10-30 made it the deeper `#195E3F`, white text 7.7:1; `color.dark.accent` `#4FB36B`; no new brand
+  token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
   tiles (the sidebar's Battery and Motion, `apps/settings/qml/Main.qml:27, 32`; rows of Accessibility, Menu Bar, Software
   Update and Storage): moving it moves them (review of b44d17e). Mockup: `mockups/b2-accent.svg`.
+  Step 1c as built: Settings > Appearance's first swatch is "Grassfield", one disc of the brand green (the colour wheel is
+  gone); the stored value stays `multicolor` (no grassfield.json to migrate). The pickable Green is `#6DB53C` with dark
+  text `#10240A` (6.5:1) in the light appearance, the owner's choice B of 2026-10-30 (below): OKLab distance 0.21 from the
+  brand green `#26763F` and 0.29 from the deeper `#195E3F` of 2026-10-30, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
+  text, so its dark-appearance selection pair is its light pair (`color.selectionDark.green`, the rule that a selection
+  is never darker than the light accent), its focus ring falls back to the text colour on light grounds
+  (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.46:1 (2.48:1 before the warm neutrals; `tests/ci/gtk_themes.py`), and
+  the white glyphs of the Settings tiles drawn in it are 2.5:1, as macOS draws them. General > About's Grassfield row
+  draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11), and so does Software Update's
+  Grassfield release row. Text and glyphs drawn in the accent colour read `colors.accentInk`: in the light appearance a
+  light accent's darker shade (`color.accentInkLight`: yellow, green and pink, 4.5:1 on an app window; macOS draws a light
+  accent's text darker), the accent itself elsewhere (the integrator's review of 5391761, below).
 - **About This Computer (ID-19, the macOS model; review of b44d17e).** Computer first, as macOS 27 and as Settings >
   About already do: the
   Grassfield-drawn picture of the computer (`DevicePicture`, by chassis), its model name, processor, memory, graphics,
@@ -429,6 +463,29 @@ Asked by the integrator from this ADR's options, with the recommendations shown;
 | IQ-T5 red lock-died screen | « Le retarder » | **A** (recommended) |
 | B-5 trademark record | « J'ai vérifié le nom » | The owner checked the **name** "Grassfield" on 2026-10-18 and **not the logo** (no logo clearance, 2026-10-27). The legal dossier is corrected (E33, Q7, section 7); STATE stays. |
 
+**Step 1c's Green (2026-10-30).** Asked when step 1c started, the brand green and the pickable Green being 0.04 apart
+(OKLab) in the light appearance; two values shown against today's (a capture of the accent row and the tiles in both
+appearances): « B : vert clair, comme macOS » (`#6DB53C`, dark text; not the recommended A, a dark green `#2D5A04` with
+white text). The costs named in the question and taken: the white glyphs of the green Settings tiles at 2.5:1, and green
+joins yellow among the light accents with dark marks (its selection pair; ADR-0039 step 11's knob on the "on" fill).
+
+**The brand green and the neutrals (2026-10-30).** Shown a comparison board (the current brand green and a deeper,
+calmer one, each with today's cool neutrals and with warm ones, in both appearances, on the default artwork with a
+Settings window): « B en clair seulement, et neutres chauds ». The brand green of the light appearance becomes `#195E3F`
+(white text 7.7:1, where `#26763F` gave 5.6:1); the dark appearance keeps `#4FB36B` (its deeper candidate `#4F9F77`
+was 4.5:1 on the window, 5.2:1 under its dark text). The neutrals turn warm in both appearances, an explicit choice over
+the "closest to macOS 27" rule; they come in their own pull request (they cross ADR-0039's neutrals and glass and the
+plugin's title bar), measured first in a scratch copy: every A2 role holds, three pinned values move.
+As built (after pull request #71): 34 neutral tokens move to hue 85, chroma 0.0075 in OKLCH, each keeping its lightness
+(so each contrast stays), the pure white to `#FDFCF9`: `color.light` and `color.dark` text, secondary texts, window,
+group, sidebar, field, chip and material tint; the plugin's `titlebar.*` (background, title, inactive buttons, the
+preview tint); `window.inactiveLight*`; `folderIcon.plateBackdrop*`; `menu.swatchMark`, `preview.paperInk`,
+`store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders),
+the opaque white knob, the Graphite accent and its selection, Files' Gray tag and the drawing of the computer
+(`settings.device*`).
+Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
+themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
+
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
 - **W1 C, the time of day** (section 2, "The time-of-day rule"): the times from the time zone with no location and no
@@ -502,6 +559,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | Overlap | Owner | The other lane |
 |---|---|---|
 | The greens: ADR-0039 Q4 and its step 11 ↔ IQ-B3 | ADR-0040: the accent palette (`color.accent*`, the default's name and swatch) | ADR-0039: which controls read the accent and which the selection fill |
+| The neutrals: the owner's warm neutrals of 2026-10-30 ↔ ADR-0024's greys, ADR-0039 Q3 (dark secondary text), Q8 and step 21 (third-party title bars on the window tokens) | ADR-0040: the neutrals' warmth (`color.light` and `color.dark` surfaces and text, `titlebar.*`, `window.inactiveLight*`, the icon plates' backdrop; hue 85, chroma 0.0075, each lightness kept) | ADR-0039: which roles read them, the glass classes and their alphas; its values read warm now (#FFFFFF and #292929 are `#FDFCF9` and `#2B2925`) |
 | About: ADR-0039 steps 4 and 10 ↔ ID-19; IQ-B1's dialog glyphs | ADR-0040: About This Computer's form, the glyphs of `NoticeDialog` and `ConfirmDialog` | ADR-0039: `Dialog`'s and `Sheet`'s grammar (radius, buttons, blur radius) |
 | `looknfeel.lua`, `windows.lua`, `Compositor.qml`: ADR-0039 steps 6 and 20 ↔ ID-2, ID-4, IQ-T5 | ADR-0040: the ground colour, the first frame and the transitions | ADR-0039: the window border colour per appearance and the compositor's animation curves |
 | Motion tokens: ADR-0039 Q6 ↔ the session and lock fades | ADR-0039: `motion.*` | ADR-0040: `session.*` and `lock.*` fades, naming a `motion` role where one fits |
@@ -542,6 +600,9 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - **VERIFY on Hyprland 0.56.2:** changing `background_color` at run time (ID-2); whether a session lock is confirmed
   while the displays are off (IQ-T4 A with a delay). `misc:lockdead_screen_delay` exists (the integrator's check, review
   of b44d17e); the owner chose IQ-T5 A, so step 5's nested pass shows that only black is drawn during the delay.
+- **NOT VERIFIED (step 1c, nested pass):** the accent row, the green tiles' white glyphs and the brand-green tile of
+  General > About in the session (offscreen Qt 6.10 draws no `Icon` here); a GTK app with the Green accent (the pinned
+  thin marks); the shell's surfaces with the Green accent (menu highlights, focus rings falling back to the text colour).
 - **NOT VERIFIED (step 1b, nested pass):** About This Computer in the session: the window's look and size, the mark
   in the brand green (the container's offscreen Qt 6.10 renders no `Icon`: MultiEffect draws nothing there), the shell
   bringing an open window forward. That rests on Hyprland's window data carrying `xdgTag`, which
@@ -667,6 +728,25 @@ this ADR follows it, and any later pull request of either lane that meets one of
     "(TM)", "CPU", clock, generation prefix, integrated graphics or trailing "Processor"), on one line cut in the middle,
     the full model name in a tooltip while the pointer rests on it when it was shortened or cut. General > About keeps the
     thread count after the same short name.
+
+- **Opus review of 5391761 (step 1c, pull request #69; integrator, 2026-10-30): FAIL, one MAJOR, two MINORs, NITs.** The
+  design held; the nested pass (French, light and dark, the accent row, About, the controls, the Dock and the menu bar in
+  Green) was legible.
+  - MAJOR 1, the new About test's fake system had `act()` alone: three TypeErrors in the full unit run, which gate Q2
+    (`tests/ci/qml_warnings.py`) counts. The fake now has what AboutPage and DevNote read (`queryBus`, `errors`,
+    `suppressedNote`); Q2 exits 0 on the full run.
+  - MINOR 2, Software Update's Grassfield release row drew the mark's tile in the pickable Green: it uses the brand green.
+  - MINOR 3, text drawn in the accent colour fell to 2.1-2.5:1 with the light Green (yellow already had it). The
+    integrator's decision, under the owner's rule of 2026-10-27: as macOS, a light accent's text is drawn darker. A role,
+    `colors.accentInk`: `color.accentInkLight` gives yellow `#816500`, green `#467427` and pink `#BD2F6C` (pink was 4.34:1
+    under a rimmed capsule), each the lightest shade of its accent with 4.5:1 on an app window; every other accent and the
+    dark appearance draw in the accent itself. Two A2 roles: on an app window (4.5:1, every accent, both appearances) and
+    on glass (exempt: no accent holds 4.5:1 over the worst wallpaper, the Grassfield green 2.36:1; every ink keeps 2.2:1,
+    tested). Ten texts and glyphs moved to it (the widgets' weekday, a Control Center checkmark, the alert glyph, Files'
+    Show All and Show More and sidebar glyphs, the Store button label and its sidebar and category glyphs); a test fails
+    when a text or glyph reads the bare accent.
+  - NITs: ADR-0039's knob wording and the comments of `RadioRow.qml` and `StoragePage.qml` now name green beside yellow;
+    main merged (STATE only).
 
 ## Consequences
 - The owner's answers of 2026-10-29 decide steps 1c to 10 (section "Owner decisions (2026-10-29)"); step 1 starts first.

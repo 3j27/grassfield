@@ -7,24 +7,24 @@
 #include <string_view>
 
 namespace gf::theme::tokens {
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundDark = 0x28282C;
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundLight = 0xECECEE;
-    // window title on the dark titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarTitleDark = 0xECECEE;
-    // window title on the light titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarTitleLight = 0x28282C;
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarBackgroundDark = 0x2A2824;
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarBackgroundLight = 0xEFECE7;
+    // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarTitleDark = 0xEFECE7;
+    // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarTitleLight = 0x2A2824;
     // estimate: the title a little softer than full ink, both appearances [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr double kTitlebarTitleOpacity = 0.85;
-    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarInactiveButtonDark = 0x5A5A5E;
-    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarInactiveButtonLight = 0xD1D1D3;
-    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarPreviewTintDark = 0x1D1F24;
-    // the same, light appearance (color.light.materialTint) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarPreviewTintLight = 0xF3F4F6;
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #5A5A5E at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarInactiveButtonDark = 0x5C5A56;
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #D1D1D3 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarInactiveButtonLight = 0xD4D1CC;
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1D1F24 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarPreviewTintDark = 0x211F1B;
+    // the same, light appearance (color.light.materialTint); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F3F4F6 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    inline constexpr uint32_t kTitlebarPreviewTintLight = 0xF6F4EF;
     // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr double kTitlebarPreviewTintAlpha = 0.45;
     // the preview's edge, dark appearance (color.dark.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -63,10 +63,10 @@ namespace gf::theme::tokens {
     inline constexpr uint32_t kWindowMinimizeColor = 0xD9A93B;
     // plugin kZoomColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowZoomColor = 0x4FA64F;
-    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    inline constexpr uint32_t kWindowInactiveLightDark = 0x5A5A5E;
-    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    inline constexpr uint32_t kWindowInactiveLightLight = 0xD1D1D3;
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #5A5A5E at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowInactiveLightDark = 0x5C5A56;
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #D1D1D3 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowInactiveLightLight = 0xD4D1CC;
     // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
     inline constexpr double kWindowLightBorderOpacity = 0.18;
     // estimate: a pressed light darkens by this much

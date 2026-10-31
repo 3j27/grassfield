@@ -112,12 +112,20 @@ desc="an address ending in a newline never reaches the Lua expression either (th
 run '[{"address":"0x1\n","class":"x","title":"y"}]' logout
 check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
 
+desc="an address is at most 16 hex digits (a 64-bit pointer): 16 digits are closed, 17 never reach the Lua expression"
+run '[{"address":"0xffffffffffffffff","class":"x","title":"y"}]' logout
+check bash -c 'grep -q "address:0xffffffffffffffff" "$1/hyprctl.log" && grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+run '[{"address":"0x1ffffffffffffffff","class":"x","title":"y"}]' logout
+check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
+
 desc="GF-025 review: ONE failed window query while waiting is not 'no windows': it is retried, the window is still there, nothing is ended"
 FAKE_REFUSE="0x1" FAKE_FAIL_CALLS="2" run '[{"address":"0x1","class":"editor","title":"Save changes?"}]' logout
 check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]] && [[ $(cat "$1/clients.calls") -ge 3 ]]' _ "$tmp" "$status"
 
 desc="a failed FIRST query is retried too: the window is found and closed, the session ends only after it is gone"
-FAKE_FAIL_CALLS="1 2" SESSION_END_TIMEOUT=3 run '[{"address":"0x1","class":"editor","title":"d"}]' logout
+# The timeout only bounds the wait for the retries: the run ends as soon as the window is gone, so a wide one costs
+# nothing at normal load and holds at load 35 (the integrator's merge review of #62).
+FAKE_FAIL_CALLS="1 2" SESSION_END_TIMEOUT=15 run '[{"address":"0x1","class":"editor","title":"d"}]' logout
 check bash -c 'grep -q "address:0x1" "$1/hyprctl.log" && grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
 
 desc="no compositor to ask, ever: nothing is closed or ended, a notice says the list could not be read (exit 3)"
@@ -131,9 +139,9 @@ FAKE_NOTIFY_ANSWER=force FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_RUNTIME_DIR
 check bash -c 'grep -qx "systemctl poweroff --no-wall" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
 
 desc="GF-025 review: a second run while one waits exits quietly and touches nothing (it would answer the Save sheet with Cancel)"
-( flock "$tmp/grassfield-session-end.lock" sleep 4 ) &
+( flock "$tmp/grassfield-session-end.lock" sleep 6 ) &
 holder=$!
-sleep 0.5
+for _ in $(seq 50); do flock -n "$tmp/grassfield-session-end.lock" true || break; sleep 0.1; done   # until the holder has it, at most 5 s
 FAKE_REFUSE="0x2" run "$two" logout
 check bash -c '[[ $2 == 0 ]] && [[ ! -s "$1/calls.log" ]] && [[ ! -s "$1/hyprctl.log" ]]' _ "$tmp" "$status"
 wait "$holder" || true

@@ -51,7 +51,10 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <optional>
+#include <set>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -135,6 +138,37 @@ namespace {
     SPointerInput& pointerInput() {
         static SPointerInput input;
         return input;
+    }
+
+    // ADR-0036 D65: the outputs the shell was last told have a revealed full-screen titlebar (its menu bar comes and goes
+    // with it there). Posted on each change, from the decorations' own state.
+    std::set<std::string>& postedReveals() {
+        static std::set<std::string> outputs;
+        return outputs;
+    }
+
+    void postReveals() {
+        std::set<std::string> now;
+        for (auto* deco : gf::state().titlebars) {
+            const auto w   = deco->revealed() ? deco->window() : nullptr;
+            const auto mon = w ? w->m_monitor.lock() : nullptr;
+            if (mon)
+                now.insert(mon->m_name);
+        }
+        auto&      last = postedReveals();
+        const auto post = [](const std::string& output, bool revealed) {
+            gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::TitlebarReveal, .id = std::hash<std::string>{}(output)},
+                               gf::gfc::titlebarRevealJson(output, revealed));
+        };
+        for (const auto& output : last) {
+            if (!now.contains(output))
+                post(output, false);
+        }
+        for (const auto& output : now) {
+            if (!last.contains(output))
+                post(output, true);
+        }
+        last = std::move(now);
     }
 
     bool isLive(const CGrassfieldTitlebar* deco) {
@@ -562,6 +596,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
     gf::forgetRegisteredDecoration(this);
     gf::guarded("titlebar destructor", [this] {
         auto& input = pointerInput();
+        if (m_revealed)
+            postReveals(); // closed while revealed: its output's menu bar no longer follows it
         if (input.hovered == this)
             input.hovered = nullptr;
         if (input.revealArmed == this) {
@@ -729,6 +765,7 @@ void CGrassfieldTitlebar::refresh() {
     if (m_revealed && !revealable()) {
         damageRevealed(); // the window left full screen (or its workspace): the revealed bar goes with it
         m_revealed = false;
+        postReveals();
     }
     const bool show = shouldShow();
     if (show == m_lastShown)
@@ -1334,6 +1371,7 @@ void CGrassfieldTitlebar::cancelPointerGrab() {
             deco->damageRevealed();
             deco->m_revealed = false;
         }
+        postReveals(); // the shell's menu bars no longer follow a revealed titlebar
     });
 }
 
@@ -1342,6 +1380,7 @@ void CGrassfieldTitlebar::updateReveal() {
         return;
     const Vector2D pos      = g_pInputManager->getMouseCoordsInternal();
     const bool     pressing = pointerInput().revealPresses.pressing();
+    bool           changed  = false;
     for (auto* deco : gf::state().titlebars) {
         gf::chrome::RevealInput in;
         const auto              w   = deco->window();
@@ -1364,9 +1403,12 @@ void CGrassfieldTitlebar::updateReveal() {
         deco->damageRevealed(); // where it was
         deco->m_revealed = next;
         deco->damageRevealed(); // where it is
+        changed = true;
         if (!sessionLocked())
             gf::logRequest(Log::DEBUG, "titlebar of a full-screen window {}", next ? "revealed" : "away");
     }
+    if (changed)
+        postReveals();
 }
 
 void CGrassfieldTitlebar::drawRevealed() {

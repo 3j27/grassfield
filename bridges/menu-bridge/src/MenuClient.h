@@ -6,8 +6,9 @@
 //   GetLayout(int32 0, int32 -1, as [])  ->  (uint32 revision, (ia{sv}av) layout)
 //   AboutToShow(int32 id)                ->  bool needUpdate
 //   Event(int32 id, "clicked", variant<int32 0>, uint32 timestamp)
-// LayoutUpdated and ItemsPropertiesUpdated trigger a (coalesced) new GetLayout. The menu is dropped when the
-// service leaves the bus (NameOwnerChanged). Only ids present in the latest layout are ever sent to the app.
+// LayoutUpdated and ItemsPropertiesUpdated trigger a (coalesced) new GetLayout. A failed first GetLayout is tried again a
+// few times; a menu shown before keeps its last layout when a re-read fails. The menu is dropped when the service leaves
+// the bus (NameOwnerChanged). Only ids present in the latest layout are ever sent to the app.
 
 #include "Layout.h"
 
@@ -78,7 +79,9 @@ namespace gf::menubridge {
       private:
         void fetch();
         void scheduleRefetch();
-        void fail(const QString& code, const QString& why);
+        // `retry`: the first read may be tried again (the application did not answer; a malformed answer is final).
+        void fail(const QString& code, const QString& why, bool retry);
+        void giveUp(const QString& code, const QString& why);
         void handleLayout(const QDBusMessage& reply);
         // Sends `message`, announces it and runs `handler` with the reply.
         void track(const QDBusMessage& message, std::function<void(const QDBusMessage&)> handler);
@@ -89,6 +92,7 @@ namespace gf::menubridge {
         QString             m_path;
         QDBusServiceWatcher m_watcher;
         QTimer              m_refetch;
+        QTimer              m_retry; // the next first read after a failed one
         QJsonArray          m_items;
         ItemIndex           m_index;
         bool                m_ready    = false;
@@ -96,7 +100,7 @@ namespace gf::menubridge {
         bool                m_again    = false;
         bool                m_gone     = false;
         bool                m_stopped  = false; // gave up (failure or oversized layout): no further GetLayout
-        int                 m_failures = 0;     // consecutive failed re-reads
+        int                 m_failures = 0;     // consecutive failed reads (first reads, or re-reads once shown)
         int                 m_outstanding = 0;
     };
 

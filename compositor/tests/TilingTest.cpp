@@ -1009,6 +1009,37 @@ TEST(TilingMoveTo, AFreeWindowKeepsItsPlaceOnTheOtherOutput) {
     EXPECT_EQ(moveToArea(Rect{0, 24, 0.4, 0.4}, from, to).h, 1) << "never smaller than 1 x 1";
 }
 
+// ADR-0036 D67: an output unplugged left a window off every output (integrator nested pass of 12e3dd3: x = -2919).
+TEST(TilingGather, AFrameThatMeetsNoOutputIsStray) {
+    const std::array<Rect, 2> outputs{Rect{0, 0, 1440, 900}, Rect{1440, 0, 1920, 1080}};
+    EXPECT_TRUE(strayFrame(Rect{-2919, 40, 800, 500}, outputs)) << "the reported window";
+    EXPECT_FALSE(strayFrame(Rect{100, 100, 800, 500}, outputs));
+    EXPECT_FALSE(strayFrame(Rect{3000, 100, 800, 500}, outputs)) << "the second output counts";
+    EXPECT_FALSE(strayFrame(Rect{-799, 100, 800, 500}, outputs)) << "1 px on the left edge";
+    EXPECT_TRUE(strayFrame(Rect{-800, 100, 800, 500}, outputs)) << "touching the left edge: no area";
+    EXPECT_FALSE(strayFrame(Rect{3359, 100, 800, 500}, outputs)) << "1 px on the right edge";
+    EXPECT_TRUE(strayFrame(Rect{3360, 100, 800, 500}, outputs)) << "touching the right edge";
+    EXPECT_FALSE(strayFrame(Rect{100, -499, 800, 500}, outputs)) << "1 px on the top edge";
+    EXPECT_TRUE(strayFrame(Rect{100, -500, 800, 500}, outputs)) << "touching the top edge";
+    EXPECT_FALSE(strayFrame(Rect{100, 899, 800, 500}, outputs)) << "1 px on the first output's bottom";
+    EXPECT_TRUE(strayFrame(Rect{100, 900, 800, 500}, outputs)) << "under the first output, beside nothing";
+    EXPECT_TRUE(strayFrame(Rect{1500, 1080, 800, 500}, outputs)) << "under the second output";
+    EXPECT_TRUE(strayFrame(Rect{-900, 1000, 800, 500}, outputs)) << "off on both axes";
+    EXPECT_TRUE(strayFrame(Rect{100, 2000, 800, 500}, outputs)) << "in an output's columns, below every row";
+    EXPECT_TRUE(strayFrame(Rect{100, 100, 800, 500}, std::span<const Rect>{})) << "no output";
+}
+
+TEST(TilingGather, AStrayWindowComesBackCentredAtItsSize) {
+    const Rect area{1440, 32, 1920, 1048};
+    EXPECT_EQ(gatheredFrame(Rect{-2919, 40, 800, 500}, area), (Rect{1440 + 560, 32 + 274, 800, 500}));
+    EXPECT_EQ(gatheredFrame(Rect{-2919, 40, 2400, 500}, area), (Rect{1440, 32 + 274, 1920, 500})) << "at most the area's width";
+    EXPECT_EQ(gatheredFrame(Rect{-2919, 40, 800, 1300}, area), (Rect{1440 + 560, 32, 800, 1048})) << "at most the area's height";
+    EXPECT_EQ(gatheredFrame(Rect{-2919, 40, 801, 501}, area), (Rect{1440 + 560, 32 + 274, 801, 501})) << "whole px: 559.5 and 273.5 round";
+    EXPECT_EQ(gatheredFrame(Rect{-2919, 40, 800.4, 500.4}, area), (Rect{1440 + 560, 32 + 274, 800, 500})) << "whole px sizes";
+    EXPECT_EQ(gatheredFrame(Rect{0, 0, 0.2, 0.2}, area).w, 1) << "never smaller than 1 x 1";
+    EXPECT_EQ(gatheredFrame(Rect{0, 0, 0.2, 0.2}, area).h, 1) << "never smaller than 1 x 1";
+}
+
 TEST(TilingMoveTo, OutputNamesAreStrict) {
     EXPECT_TRUE(outputNameOk("GF-REF"));
     EXPECT_TRUE(outputNameOk("DP-1.2_a"));

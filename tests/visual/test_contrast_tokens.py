@@ -175,6 +175,10 @@ class Tokens:
             if fixed.get(palette, appearance) == "light":
                 return self.color("lightColors", "light", "accent" if name == "selection" else "accentText")
             return hex_rgb(self.path("color.selectionDark.%s%s" % (self.accent_name(), "Text" if name == "selectionText" else "")))
+        if name == "accentInk":
+            # Text and glyphs drawn in the accent colour (mirror of Accent.resolve): the palette's accent (the Grassfield
+            # green holds 4.5:1 on its grounds).
+            return self.color(palette, appearance, "accent")
         return hex_rgb(self.path("color.%s.%s" % (fixed.get(palette, appearance), name)))
 
     def accent_name(self):
@@ -386,9 +390,12 @@ class AccentTokens(Tokens):
         return self.accent
 
     def color(self, palette, appearance, name):
-        if self.accent != "multicolor" and name in ("accent", "accentText"):
+        if self.accent != "multicolor" and name in ("accent", "accentText", "accentInk"):
             fixed = {"darkColors": "dark", "lightColors": "light"}
             ap = fixed.get(palette, appearance)
+            # accentInk: in the light appearance the accent's shade in color.accentInkLight where it has one, else the accent.
+            if name == "accentInk" and ap == "light" and self.accent in self.data["color"].get("accentInkLight", {}):
+                return hex_rgb(self.path("color.accentInkLight.%s" % self.accent))
             key = self.accent + ("Text" if name == "accentText" else "")
             return hex_rgb(self.path("color.accent%s.%s" % (ap.capitalize(), key)))
         return super().color(palette, appearance, name)
@@ -601,7 +608,7 @@ class ContrastTokens(unittest.TestCase):
         # (text 4.5:1, the lock band 3:1 against its field) over every wallpaper colour and transparency.
         ids = ("accent text on accent", "apps selected chip text",
                "lock password selection (dots on the accent band)", "lock password selection band against the field",
-               "selection text on selection")
+               "selection text on selection", "text and glyphs in the accent colour on an app window")
         roles = [r for r in self.roles if r["id"] in ids]
         self.assertEqual(len(roles), len(ids))
         for accent in self.ACCENTS:
@@ -614,6 +621,65 @@ class ContrastTokens(unittest.TestCase):
                             r = role_ratio(tok, role, ap, t, wp)
                             if r is not None:
                                 self.assertGreaterEqual(r, need, "%s / %s / %s t=%s wp=%s: %.2f:1" % (accent, role["id"], ap, t, wp, r))
+
+    # Text and glyphs drawn in the accent colour (Appearance.colors.accentInk; the integrator's review of 5391761): on glass
+    # no accent holds 4.5:1 at the worst wallpaper and transparency (the role is exempt, its reason says why), but none is
+    # worse than the others there: every accent's ink keeps 2.2:1, where the light yellow and green drawn as themselves
+    # fell to 1.01:1 and 1.11:1.
+    def test_accent_ink_on_glass_is_no_worse_than_the_other_accents(self):
+        role = next(r for r in self.roles if r["id"] == "text and glyphs in the accent colour on material")
+        self.assertIn("exempt", role)
+        worst = {}
+        for accent in self.ACCENTS:
+            tok = AccentTokens(self.tok.data, accent)
+            worst[accent] = min(r for ap in APPEARANCES for t in TRANSPARENCIES for wp in WALLPAPER_COLORS
+                                for r in [role_ratio(tok, role, ap, t, wp)] if r is not None)
+            self.assertGreaterEqual(worst[accent], 2.2, "%s: %.2f:1" % (accent, worst[accent]))
+        # Negative control: the light yellow and green drawn as their own accent colour are far below it.
+        for accent in ("yellow", "green"):
+            light = AccentTokens(self.tok.data, accent).color("lightColors", "light", "accent")
+            self.assertNotEqual(light, AccentTokens(self.tok.data, accent).color("lightColors", "light", "accentInk"))
+            self.assertLess(wcag(light, hex_rgb("#FFFFFF")), 3.0, accent)
+
+    # Text and glyphs never draw in the bare accent colour (a light accent is under 4.5:1 there; the integrator's review of
+    # 5391761): they read Appearance.colors.accentInk. Fills, rings, tracks, dots and selections keep the accent.
+    BARE_ACCENT = re.compile(r"(?:^|[;\s])color\s*:[^;\n]*\bcolors\.accent\b(?!Text|Ink)")
+
+    def bare_accent_text(self, code, kinds):
+        return [o.type for o in qml_scan.parse_objects(qml_scan.strip(code, True))
+                if o.type.split(".")[-1] in kinds and self.BARE_ACCENT.search(o.own)]
+
+    def test_text_and_glyphs_read_the_accent_ink(self):
+        subdirs = ("shell", "ui/Grassfield", "apps")
+        kinds = set(qml_scan.TEXT_TYPES) | {"Icon", "WidgetLabel"} | qml_scan.text_components(ROOT, subdirs)
+        # The forms it must catch, and those it must leave.
+        self.assertEqual(self.bare_accent_text('Text { color: Appearance.colors.accent }', kinds), ["Text"])
+        self.assertEqual(self.bare_accent_text('Icon { name: "x"; color: Appearance.withAlpha(Appearance.colors.accent, 0.5) }', kinds), ["Icon"])
+        self.assertEqual(self.bare_accent_text('Text { color: Appearance.colors.accentInk }\nRectangle { color: Appearance.colors.accent }\n'
+                                               'Text { color: Appearance.colors.accentText }', kinds), [])
+        found = []
+        for sub in subdirs:
+            for d, _, files in os.walk(os.path.join(ROOT, sub)):
+                for name in sorted(files):
+                    path = os.path.join(d, name)
+                    rel = os.path.relpath(path, ROOT)
+                    if not name.endswith(".qml") or rel.startswith("shell/security/"):
+                        continue  # shell/security draws no text in the accent; it changes only under its own review (R12)
+                    with open(path, encoding="utf-8") as f:
+                        found += ["%s: %s" % (rel, t) for t in self.bare_accent_text(f.read(), kinds)]
+        self.assertEqual(found, [])
+
+    # The ink exists only where an accent needs it: a light accent under 4.5:1 on the light app window (yellow, green, pink);
+    # the others draw text in themselves.
+    def test_accent_ink_only_where_needed(self):
+        inks = self.tok.data["color"]["accentInkLight"]
+        role = next(r for r in self.roles if r["id"] == "text and glyphs in the accent colour on an app window")
+        for accent in self.ACCENTS[1:]:
+            plain = Tokens(self.tok.data)
+            light = hex_rgb(self.tok.path("color.accentLight.%s" % accent))
+            grounds = backdrops(plain, role, "light", 0.0, (128, 128, 128))
+            needs = min(wcag(light, g) for g in grounds) < 4.5
+            self.assertEqual(accent in inks, needs, accent)
 
     def test_accent_token_groups_are_complete(self):
         for group in ("accentDark", "accentLight"):
@@ -682,7 +748,8 @@ class ContrastTokens(unittest.TestCase):
     def test_glass_worst_case_matches_the_qml_test(self):
         # tests/unit/tst_glasstint.qml asserts the same two numbers for GlassTint.js.
         d = self.tok.path("material.defaultTransparency")
-        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.78)
+        # light 0.79 since the warm neutrals of 2026-10-30 (ADR-0040; 0.78 with the cool ones)
+        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.79)
         self.assertEqual(glass_alpha(self.tok, "dark", self.tok.path("glass.menu"), d, None), 0.82)
 
     def test_search_selection_is_inside_the_material_fill_overlay(self):

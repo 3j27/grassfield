@@ -345,6 +345,13 @@ namespace {
       public:
         QStringList calls;
         RawItem     layout;
+        // GetLayout calls still to answer with an error (an application busy past the timeout: NoReply).
+        int         busyGetLayouts = 0;
+        // GetLayout answered with a reply of the wrong signature (a string).
+        bool        wrongSignature = false;
+        // When each GetLayout came (ms on one clock).
+        QList<qint64>  getLayoutTimes;
+        QElapsedTimer  clock;
 
         QString     introspect(const QString&) const override {
             return {};
@@ -352,7 +359,17 @@ namespace {
 
         bool handleMessage(const QDBusMessage& msg, const QDBusConnection& conn) override {
             calls << msg.member() + u':' + msg.signature();
-            if (msg.member() == QLatin1String("GetLayout"))
+            if (msg.member() == QLatin1String("GetLayout")) {
+                if (!clock.isValid())
+                    clock.start();
+                getLayoutTimes << clock.elapsed();
+            }
+            if (msg.member() == QLatin1String("GetLayout") && wrongSignature) {
+                conn.send(msg.createReply(QVariant(QStringLiteral("not a layout"))));
+            } else if (msg.member() == QLatin1String("GetLayout") && busyGetLayouts > 0) {
+                --busyGetLayouts;
+                conn.send(msg.createErrorReply(QStringLiteral("org.freedesktop.DBus.Error.NoReply"), QStringLiteral("busy")));
+            } else if (msg.member() == QLatin1String("GetLayout"))
                 conn.send(msg.createReply(QVariantList{QVariant::fromValue<uint>(7), QVariant::fromValue(marshal(layout))}));
             else if (msg.member() == QLatin1String("AboutToShow"))
                 conn.send(msg.createReply(QVariant(false)));
@@ -519,6 +536,165 @@ TEST(MenuClientRefetch, OversizedLayoutIsRefusedAndNeverReread) {
         QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
     pump(200);
     EXPECT_EQ(peer.getLayoutCalls(), 1);
+}
+
+// The first read of a menu fails while its application is busy past the call timeout (Files drawing the Applications location
+// on a loaded machine: GetLayout NoReply, and the bar kept the T0 menus "Files Window" until the window's next focus): it is
+// read again, and the menu comes once the application answers; nothing is reported as failed meanwhile.
+TEST(MenuClientRetry, AFirstReadThatFailsIsTriedAgain) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-busy"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    peer.menu.busyGetLayouts = 2;
+    MenuClient client(peer.client, QStringLiteral("4"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    int        menus = 0;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    QObject::connect(&client, &MenuClient::menuChanged, [&](const QString&) { ++menus; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (!client.ready() && code.isEmpty() && timer.elapsed() < 6000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_TRUE(client.ready()) << "the menu arrives once the application answers";
+    EXPECT_EQ(code, QString()) << "no failure reported while it is retried";
+    EXPECT_EQ(menus, 1);
+    EXPECT_EQ(peer.getLayoutCalls(), 3);
+    ASSERT_EQ(client.items().size(), 1);
+    EXPECT_EQ(client.items().at(0).toObject().value(QStringLiteral("label")).toString(), QStringLiteral("File"));
+}
+
+// A first read that keeps failing is given up after four tries (layout-failed: the Bridge's short back-off), and nothing is
+// read after that however many signals come.
+TEST(MenuClientRetry, AFirstReadThatKeepsFailingIsGivenUpAfterFourTries) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-failing"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    peer.menu.busyGetLayouts = 1000;
+    MenuClient client(peer.client, QStringLiteral("5"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (code.isEmpty() && timer.elapsed() < 8000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(code, QStringLiteral("layout-failed"));
+    EXPECT_EQ(peer.getLayoutCalls(), 4) << "the first read and three tries again";
+    EXPECT_FALSE(client.ready());
+    for (int i = 0; i < 20; ++i)
+        QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    EXPECT_EQ(peer.getLayoutCalls(), 4) << "nothing is read after it was given up";
+}
+
+// A menu shown before keeps its last good layout when a re-read fails (an application busy past the timeout after a
+// LayoutUpdated: a long filter in GIMP; macOS keeps a busy app's menus): the bridge reads it again by itself never, the
+// application's next signal does, and only three failed re-reads in a row give it up (review of fac5bff3: the retries had
+// dropped a shown menu to T0 after 15 s of a busy app).
+TEST(MenuClientRetry, AShownMenuKeepsItsLayoutWhenARefreshFails) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-refresh"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    MenuClient client(peer.client, QStringLiteral("6"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (!client.ready() && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    ASSERT_TRUE(client.ready());
+    peer.menu.busyGetLayouts = 1000;
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(4000);
+    EXPECT_EQ(code, QString()) << "the menu stays";
+    EXPECT_EQ(peer.getLayoutCalls(), 2) << "no read of the bridge's own after a failed refresh";
+    ASSERT_EQ(client.items().size(), 1);
+    EXPECT_EQ(client.items().at(0).toObject().value(QStringLiteral("label")).toString(), QStringLiteral("File"));
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    EXPECT_EQ(code, QString()) << "two failed re-reads keep it too";
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    EXPECT_EQ(code, QStringLiteral("layout-failed")) << "the third failed re-read in a row gives it up";
+    EXPECT_EQ(peer.getLayoutCalls(), 4);
+}
+
+// A first read answered with a reply of the wrong shape is not tried again (review of fac5bff3, NIT): only a read the
+// application did not answer may succeed later.
+TEST(MenuClientRetry, AFirstReadOfTheWrongShapeIsNotTriedAgain) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-shape"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.wrongSignature = true;
+    MenuClient client(peer.client, QStringLiteral("7"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (code.isEmpty() && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(code, QStringLiteral("layout-failed"));
+    pump(1200);
+    EXPECT_EQ(peer.getLayoutCalls(), 1) << "read once";
+}
+
+// The tries of a first read wait longer each time (0.5, 1, 2 s): a busy application is not asked again and again (review
+// of fac5bff3, NIT: a constant delay survived the tests).
+TEST(MenuClientRetry, TheTriesOfAFirstReadWaitLongerEachTime) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-backoff"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    peer.menu.busyGetLayouts = 3;
+    MenuClient client(peer.client, QStringLiteral("8"), QString(), QStringLiteral("/MenuBar/1"));
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (!client.ready() && timer.elapsed() < 8000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    ASSERT_TRUE(client.ready());
+    const QList<qint64>& t = peer.menu.getLayoutTimes;
+    ASSERT_EQ(t.size(), 4);
+    const qint64 g1 = t[1] - t[0], g2 = t[2] - t[1], g3 = t[3] - t[2];
+    EXPECT_GE(g1, 400) << "the first wait is about 0.5 s";
+    EXPECT_GE(g2 * 10, g1 * 16) << "then about twice as long: " << g1 << " then " << g2 << " ms";
+    EXPECT_GE(g3 * 10, g2 * 16) << "and twice again: " << g2 << " then " << g3 << " ms";
+}
+
+// The failures of a first read do not count against the menu once it is shown (review of fac5bff3, NIT: a mutant without
+// the reset survived): two tries before the first layout, then two failed re-reads, and the menu stays.
+TEST(MenuClientRetry, AShownMenuCountsOnlyItsOwnFailedReReads) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-reset"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    peer.menu.busyGetLayouts = 2;
+    MenuClient client(peer.client, QStringLiteral("9"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (!client.ready() && timer.elapsed() < 6000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    ASSERT_TRUE(client.ready());
+    peer.menu.busyGetLayouts = 2;
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    EXPECT_EQ(code, QString()) << "two failed re-reads keep the menu";
+    EXPECT_EQ(client.items().size(), 1);
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(300);
+    EXPECT_EQ(code, QString()) << "and a successful one starts the count again";
+    EXPECT_EQ(peer.getLayoutCalls(), 6);
 }
 
 TEST(DBusMenuWire, NonLayoutArgumentsAreRefused) {

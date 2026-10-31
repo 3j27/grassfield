@@ -87,7 +87,9 @@ PanelWindow {
         width: Tokens.notificationBannerWidth
         spacing: Tokens.notificationBannerGap
 
+        // The banners make room for the OSD; under Reduce Motion they jump (ADR-0039 step 5).
         Behavior on y {
+            enabled: !Appearance.reduceMotion
             NumberAnimation {
                 duration: Appearance.duration(Tokens.motionNormal)
             }

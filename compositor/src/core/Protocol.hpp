@@ -192,6 +192,12 @@ namespace gf::gfc {
     // {"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}
     std::string keyboardFocusJson(std::string_view windowAddress);
 
+    // The titlebar the plugin draws over a full-screen window on the output `output` was revealed at the top edge or went away
+    // (ADR-0015 P6; tiling.md TL33 step 6c, ADR-0036 D65: the menu bar reveals and hides with it). No feature: an older plugin
+    // never sends it and the menu bar keeps its own auto-hide.
+    // {"v":"gfc/1","type":"titlebar-reveal","output":"<name>","revealed":true}
+    std::string titlebarRevealJson(std::string_view output, bool revealed);
+
     // The line a socket2 subscriber receives for a given payload (without the trailing newline).
     std::string socket2Line(std::string_view json);
 

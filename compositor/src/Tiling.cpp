@@ -142,6 +142,7 @@ namespace gf::tiler {
             uint64_t                         posted = 0; // generation of the latest notice
             PHLWINDOWREF                     resizing;   // a tiled window one of Hyprland's resizes holds
             bool                             relayoutPending = false;
+            bool                             gatherPending   = false; // an output went away: windows left off every output come back (D67)
             std::vector<SResume>             resuming;
             gf::deferredFocus::CLater        later; // after Hyprland's own handling (its callback is code of this library)
             std::vector<CHyprSignalListener> listeners;
@@ -773,6 +774,7 @@ namespace gf::tiler {
         // ---- drags (TL16-TL20) ----
 
         void scheduleAfter(); // below: its callback is afterEvents
+        void gatherStrays();  // below, with onMonitorRemoved
 
         uint64_t nowMs() {
             return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -1118,6 +1120,10 @@ namespace gf::tiler {
                 finishResize();
             if (std::exchange(s.relayoutPending, false))
                 relayout(ERelayout::OutputGone);
+            if (s.gatherPending && !gf::deferredFocus::sessionLocked()) { // behind the lock screen: at the unlock (D55, D67)
+                s.gatherPending = false;
+                gatherStrays();
+            }
             for (const auto& resume : std::exchange(s.resuming, {}))
                 resumeNow(resume);
             if (const auto rel = std::exchange(s.moveRelease, std::nullopt))
@@ -1185,12 +1191,54 @@ namespace gf::tiler {
             s.book.setWorkspace(idOf(w), ws->m_id); // the state reply carries no Desktop: no notice
         }
 
+        // ADR-0036 D67: after an output went away (the tiled windows placed again first, TL11), a floating window Hyprland
+        // left off every output (it moves them by the offset between the outputs, WorkspacePlacementController.cpp:311)
+        // comes back centred on the work area of its Desktop's output, at its size (core strayFrame, gatheredFrame). Not
+        // a full-screen window (Hyprland gives it its new output), one in a Stages strip (its place is the strip's) or one
+        // on a special workspace (a minimized window: restore() plans its own display, Minimize.cpp D-1). Never behind the
+        // lock screen: afterEvents keeps it pending until the unlock (D55).
+        void gatherStrays() {
+            if (!g_layoutManager || !Desktop::windowState())
+                return;
+            const auto                all = monitors();
+            std::vector<tiling::Rect> outputs;
+            outputs.reserve(all.size());
+            for (const auto& m : all)
+                outputs.push_back(toRect(m->logicalBox()));
+            if (outputs.empty())
+                return; // no output enabled: every window would count as stray, and there is nowhere to gather them (review of 7096305)
+            for (const auto& w : Desktop::windowState()->windows()) {
+                if (!w || !w->m_isMapped || !w->m_isFloating || w->isHidden() || fullscreenNow(w) || gf::stager::inStripStage(w))
+                    continue;
+                const auto ws     = w->m_workspace;
+                const auto target = w->layoutTarget();
+                if (!ws || ws->m_isSpecialWorkspace || !target || !target->space())
+                    continue;
+                const double band  = gf::chrome::bandOf(w);
+                const auto   frame = tiling::frameOf(toRect(target->position()), band);
+                if (!tiling::strayFrame(frame, outputs))
+                    continue;
+                auto m = ws->m_monitor.lock();
+                if ((!m || !m->m_enabled) && Desktop::focusState())
+                    m = Desktop::focusState()->monitor();
+                if (!m || !m->m_enabled)
+                    continue;
+                const auto surface = toCBox(tiling::surfaceOf(tiling::gatheredFrame(frame, toRect(m->logicalBoxMinusReserved())), band));
+                g_layoutManager->setTargetGeom(surface, target);
+                logRequest(Log::INFO, "window {:x} was off every output after an output went away: gathered on {} at {:.0f},{:.0f}", idOf(w), m->m_name, surface.x,
+                           surface.y);
+            }
+        }
+
         // TL11: Hyprland moves the windows of a removed output to another one (its workspaces); the tiled ones are placed
-        // into the same zone there once it did. Not checked meanwhile (markRelayout).
+        // into the same zone there once it did. Not checked meanwhile (markRelayout). D67: then the floating windows left
+        // off every output are gathered (gatherStrays).
         void onMonitorRemoved(const PHLMONITOR& m) {
             auto& s = st();
             if (!m)
                 return;
+            s.gatherPending = true;
+            scheduleAfter();
             bool any = false;
             for (const auto& r : s.book.records()) {
                 if (r.output == m->m_name) {
@@ -1198,10 +1246,8 @@ namespace gf::tiler {
                     any = true;
                 }
             }
-            if (!any)
-                return;
-            s.relayoutPending = true;
-            scheduleAfter();
+            if (any)
+                s.relayoutPending = true;
         }
         // ---- shared edge (TL30) ----
 
@@ -1554,6 +1600,7 @@ namespace gf::tiler {
         s.posted = s.book.generation();
         s.resizing.reset();
         s.relayoutPending = false;
+        s.gatherPending   = false;
         s.resuming.clear();
         s.later.clear(); // a previous stop() cancelled it
         s.drag = {};
@@ -1587,9 +1634,10 @@ namespace gf::tiler {
                 });
             }));
             // TL33: a Split View settles at the unlock: its one member fills, one emptied ends (nothing behind the lock screen).
+            // D67: the windows an unplug left off every output while locked are gathered then too.
             l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
                 gf::guarded("tiling session unlock", [] {
-                    if (!st().splits.empty())
+                    if (!st().splits.empty() || st().gatherPending)
                         scheduleAfter();
                 });
             }));
@@ -1615,6 +1663,7 @@ namespace gf::tiler {
         s.extend.reset();
         s.resizing.reset();
         s.relayoutPending = false;
+        s.gatherPending   = false;
         s.resuming.clear();
         s.book.clear(); // windows keep their boxes; groups are forgotten
         s.suggestion.reset();

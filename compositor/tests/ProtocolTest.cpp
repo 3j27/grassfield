@@ -96,6 +96,9 @@ TEST(Protocol, AppmenuJsonEscapesEveryField) {
 TEST(Protocol, KeyboardFocusEventAndFeature) {
     EXPECT_EQ(keyboardFocusJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"keyboard-focus","address":"55d3c2a0b1f0"})");
     EXPECT_EQ(keyboardFocusJson(R"(a"b)"), R"({"v":"gfc/1","type":"keyboard-focus","address":"a\"b"})");
+    // Step 6c (ADR-0036 D65): a full-screen window's titlebar revealed or away on an output.
+    EXPECT_EQ(titlebarRevealJson("GF-REF", true), R"({"v":"gfc/1","type":"titlebar-reveal","output":"GF-REF","revealed":true})");
+    EXPECT_EQ(titlebarRevealJson(R"(A"B)", false), R"({"v":"gfc/1","type":"titlebar-reveal","output":"A\"B","revealed":false})");
     EXPECT_EQ(kFeatureKeyboardFocus, "keyboard-focus");
     EXPECT_EQ(capabilitiesJson(features(false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","appmenu","keyboard-focus"]})");

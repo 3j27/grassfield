@@ -5,7 +5,9 @@ Contrast (36), each with its GTK 3 and GTK 4 stylesheet; every theme name the Se
 the library's resources and copies none of it; no colour function (the owner's GTK 4.22 must read them as GTK 4.24 does); the colour pairs hold their
 contrast (WCAG 2.x): selected and highlighted text 4.5:1; links 4.5:1, the focus ring and the thin marks 3:1 against the
 Grassfield window and GTK's own window and view backgrounds, except the light yellow accent's thin marks (1.86:1 on GTK's
-window, 1.99:1 under high contrast, 2.0:1 on the shell's: the shell's own yellow, pinned, not hidden).
+window, 1.97:1 under high contrast since the warm neutrals of 2026-10-30, 2.0:1 on the shell's: the shell's own yellow,
+pinned, not hidden) and, since the owner's choice B of 2026-10-30 (ADR-0040 step 1c: a light Green, as macOS's), the light
+green accent's (2.32:1 and 2.46:1, pinned).
 The rendering itself is tests/integration/gtk_themes.sh.
 """
 import importlib.util
@@ -65,6 +67,8 @@ with tempfile.TemporaryDirectory() as out:
 # each stylesheet (theme_bg_color, theme_base_color of GTK 3.24.52 and GTK 4.24.1: the same in both versions).
 GTK_BACKGROUNDS = {(False, False): ["#f6f5f4", "#ffffff"], (True, False): ["#353535", "#2d2d2d"],
                    (False, True): ["#fdfdfc", "#ffffff"], (True, True): ["#303030", "#2d2d2d"]}
+# The light accents whose thin marks stay under 3:1 in the light appearance, as the shell's own: the floor each must hold.
+LIGHT_MARK_FLOOR = {"yellow": 1.8, "green": 2.3}
 low = []
 worst = {}
 for name in gen.accent_names(tokens):
@@ -78,7 +82,7 @@ for name in gen.accent_names(tokens):
                      ("highlight", gen.contrast(p["highlight"], p["highlightText"]), 4.5),
                      ("link", on(p["link"]), 4.5),
                      ("focus", on(p["focus"]), 3.0),
-                     ("accent", on(p["accent"]), 1.8 if name == "yellow" and not dark else 3.0)]
+                     ("accent", on(p["accent"]), LIGHT_MARK_FLOOR.get(name, 3.0) if not dark else 3.0)]
             low += [f"{theme} {what} {ratio:.2f} < {need}" for what, ratio, need in pairs if ratio < need]
             worst[theme] = on(p["accent"])
 check(not low, f"colour pairs hold their contrast on the Grassfield window and GTK's backgrounds {low}")
@@ -89,8 +93,14 @@ check(gen.value(tokens["control"]["focusOutlineOpacity"]) == 1.0 and all(r.endsw
 yellow = gen.palette(tokens, "yellow", False)
 check(gen.contrast(yellow["accent"], yellow["window"]) < 3.0 and yellow["focus"] == yellow["text"],
       "the light yellow accent: thin marks under 3:1 (the shell's own yellow), its focus ring the text colour (Accent.js focusRing)")
-check(round(worst["Grassfield-yellow"], 2) == 1.86 and round(worst["Grassfield-yellow-hc"], 2) == 1.99,
-      f"the light yellow thin marks: 1.86:1 at worst on GTK's window, 1.99:1 under high contrast (pinned) "
+check(round(worst["Grassfield-yellow"], 2) == 1.86 and round(worst["Grassfield-yellow-hc"], 2) == 1.97,
+      f"the light yellow thin marks: 1.86:1 at worst on GTK's window, 1.97:1 under high contrast (pinned) "
       f"[{worst['Grassfield-yellow']:.2f}, {worst['Grassfield-yellow-hc']:.2f}]")
+green = gen.palette(tokens, "green", False)
+check(gen.contrast(green["accent"], green["window"]) < 3.0 and green["focus"] == green["text"],
+      "the light green accent (ADR-0040 step 1c): thin marks under 3:1 (the shell's own green), its focus ring the text colour")
+check(round(worst["Grassfield-green"], 2) == 2.32 and round(worst["Grassfield-green-hc"], 2) == 2.46,
+      f"the light green thin marks: 2.32:1 at worst on GTK's window, 2.46:1 under high contrast (pinned) "
+      f"[{worst['Grassfield-green']:.2f}, {worst['Grassfield-green-hc']:.2f}]")
 
 sys.exit(1 if failures else 0)

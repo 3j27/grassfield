@@ -33,7 +33,7 @@ Singleton {
 
     function sleepNow(): void {
         if (dev)
-            Popups.notice(qsTr("Sleep"), qsTr("Development session: Sleep is disabled here so it cannot suspend your real computer."));
+            Popups.notice(qsTr("Sleep"), qsTr("Development session: Sleep is disabled here so it cannot suspend your real computer."), "moon");
         systemctl("suspend");
     }
 
@@ -42,12 +42,12 @@ Singleton {
         switch (action) {
         case "restart":
             if (dev)
-                Popups.notice(qsTr("Restart"), qsTr("Development session: Restart is disabled here so it cannot reboot your real computer."));
+                Popups.notice(qsTr("Restart"), qsTr("Development session: Restart is disabled here so it cannot reboot your real computer."), "power");
             endSession("restart");
             return;
         case "shutdown":
             if (dev)
-                Popups.notice(qsTr("Shut Down"), qsTr("Development session: Shut Down is disabled here so it cannot power off your real computer."));
+                Popups.notice(qsTr("Shut Down"), qsTr("Development session: Shut Down is disabled here so it cannot power off your real computer."), "power");
             endSession("shutdown");
             return;
         case "logout":
@@ -66,7 +66,7 @@ Singleton {
             const owned = pids.filter(p => NotResponding.stillOwns(p, args.cls ?? ""));
             if (owned.length < pids.length) {
                 console.warn("grassfield-shell: force quit refused for a process that no longer owns the app's window");
-                Popups.notice(qsTr("Force Quit"), qsTr("The application had already quit."));
+                Popups.notice(qsTr("Force Quit"), qsTr("The application had already quit."), "close-glyph");
             }
             owned.forEach(p => forceQuit(p));
             return;

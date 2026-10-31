@@ -26,7 +26,7 @@ if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; the
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
   exit 1
 fi
-pkgrel=${GRASSFIELD_PKGREL:-13}
+pkgrel=${GRASSFIELD_PKGREL:-14}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -200,7 +200,7 @@ package_grassfield-desktop() {
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
   conflicts=('quickshell=0.3.2')
-  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo.svg:
+  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo*.svg:
   # all rights reserved, the owner's mark, owner decision 2026-10-27: LicenseRef-Grassfield-logo-all-rights-reserved); Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
   license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause LicenseRef-Grassfield-logo-all-rights-reserved)
@@ -295,7 +295,7 @@ package_grassfield-desktop() {
   find "$root/packaging/session-bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/session-bin/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed security; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do

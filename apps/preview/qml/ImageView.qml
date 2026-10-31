@@ -105,7 +105,8 @@ Item {
                 rotation: root.turns * 90
                 visible: root.info.animated ?? false
                 source: root.info.url && root.info.animated ? root.info.url : ""
-                playing: visible
+                // Under Reduce Motion an animated image shows its first frame (ADR-0039 step 5).
+                playing: visible && !Appearance.reduceMotion
                 cache: false
                 smooth: true
                 fillMode: Image.Stretch

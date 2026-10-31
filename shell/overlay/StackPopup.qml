@@ -167,8 +167,10 @@ FocusScope {
         }
     }
 
-    // The fan springs out of the tile; the other views fade in with the host.
+    // The fan springs out of the tile; the other views fade in with the host. Under Reduce Motion the fan's items stand at
+    // their places and only fade in (ADR-0039 step 5).
     property real progress: 0
+    readonly property real spread: Appearance.reduceMotion ? 1 : progress
 
     NumberAnimation {
         id: reveal
@@ -231,8 +233,8 @@ FocusScope {
                 readonly property bool isOpen: index === root.fanCount
                 readonly property var entry: isOpen ? null : root.entries[index]
                 readonly property var at: root.fanSlots[index] ? root.fanSlots[index] : ({out: 0, side: 0})
-                readonly property real out: at.out * root.progress
-                readonly property real side: at.side * root.progress
+                readonly property real out: at.out * root.spread
+                readonly property real side: at.side * root.spread
                 readonly property bool current: root.currentIndex === (isOpen ? root.entries.length : index)
                 // Centre of the icon in the fan's box.
                 readonly property real cx: root.align === "above" ? root.width / 2 + side : (root.align === "rightOf" ? root.iconSize / 2 + out : root.width - root.iconSize / 2 - out)
@@ -407,15 +409,22 @@ FocusScope {
                     size: root.iconSize
                 }
 
+                FontMetrics {
+                    id: labelMetrics
+                    font: nameLabel.font
+                }
+
+                // Two lines at most, wrapped at words, the end cut in the middle of the second line (Stacks.labelLines): Qt's own
+                // elide does not cut wrapped text, and would drop the extension.
                 Text {
+                    id: nameLabel
                     textFormat: Text.PlainText
                     x: Tokens.spacingXs
                     y: Tokens.spacingSm + root.iconSize + Tokens.spacingXs
                     width: parent.width - 2 * Tokens.spacingXs
-                    text: DisplayName.text(cell.modelData.name)
-                    elide: Text.ElideMiddle
+                    text: Stacks.labelLines(DisplayName.text(cell.modelData.name), t => labelMetrics.advanceWidth(t) <= nameLabel.width, t => labelMetrics.elidedText(t, Qt.ElideMiddle, nameLabel.width))
                     maximumLineCount: 2
-                    wrapMode: Text.WrapAnywhere
+                    wrapMode: Text.NoWrap
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
