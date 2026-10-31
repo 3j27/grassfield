@@ -320,9 +320,10 @@ shell_up() {
 # open popup kind empty. A fixed wait after Esc raced the overlay's unmap under load: the next click reached the closing popup
 # (integrator nested pass of 12e3dd3).
 # An IPC call that fails or times out (the shell busy under load) says nothing: it is not "no popup" (PR #70 review: openKind ''
-# was such a timeout while the overlay showed a real popover). Argument: how many 100 ms polls (default 50).
+# was such a timeout while the overlay showed a real popover). Argument: how many polls (default 50; 100 ms apart, longer when the
+# IPC times out).
 wait_popup_closed() {
-  local k="" n=${1:-50} rc
+  local k="" n=${1:-50} rc t0=$SECONDS
   for _ in $(seq 1 "$n"); do
     if ! shell_popup_open; then
       shell_up || return 0
@@ -333,7 +334,7 @@ wait_popup_closed() {
     fi
     sleep 0.1
   done
-  say "  a shell popup still showed after $((n / 10)) s (openKind '${k}')"
+  say "  a shell popup still showed after $((SECONDS - t0)) s (openKind '${k}')"
   return 1
 }
 # Waits (up to 3 s, with the shell running) until a popup shows on GF-REF (the popover a tile_popover asked for).
