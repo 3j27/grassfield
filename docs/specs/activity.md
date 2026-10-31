@@ -422,8 +422,9 @@ items (Settings does it); a background collector; any network access.
   turn it off. The first time, a sheet "Turn on Efficiency Mode for “%1”?" explains that the whole app runs at the lowest
   priority when the computer is busy, with "Don't ask again" (remembered), Cancel and Turn On. Status shows "Efficiency
   Mode" for every process of that unit while the unit's `cpu.weight` (read from its cgroup) is the low value, so a change
-  made elsewhere shows too. Unavailable items are disabled with the reason in their tooltip ("This process isn't running as
-  an app.", "This process is part of your session."). Side effect (ADR-0038 g): the first weight set makes systemd enable
+  made elsewhere shows too. Unavailable items are disabled, as macOS's menu items are, with no reason shown
+  (no menu here shows a tooltip; decided under the owner's rule, ADR-0038 AD54); choosing the item when the unit no longer
+  applies says why in a sheet ("This process isn't running as an app.", "This process is part of your session."). Side effect (ADR-0038 g): the first weight set makes systemd enable
   the `cpu` controller in `app.slice` and `app-graphical.slice`, so contended apps then share the processor app by app;
   step 4 records whether systemd turns it off again when no weight is set.
 - **AM69** Window > Login Items… opens Settings on General > Login Items (`grassfield-settings --section=login` through the

@@ -734,8 +734,9 @@ Answer: A (see "Answers").
   is AM56's. The sampler reads each eligible unit's `cpu.idle`, then `cpu.weight`, once per sample while the main window
   shows (`ReadEfficiency`), so Status and the check mark follow a change made elsewhere. The first time, the sheet; its
   "Don't ask again" is `askEfficiency` in activity.json. No user manager on the bus at start: the items are absent.
-  Deviation: the menus have no tooltips here (the menu bar's are the shell's, the window's PopupMenu has none), so a
-  disabled item's reason is kept by the backend (`reason`) and not shown; asked of the integrator.
+  Disabled items show no reason (decided 2026-10-31 under the owner's rule, closest to macOS, whose menu items are
+  greyed without one; no menu here shows a tooltip, the menu bar's being the shell's): AM68's tooltip is dropped. The
+  backend keeps the reason (`reason`) for an accessibility description if a menu row ever carries one.
 - **AD55. App History, as built** (AM67; step 4). `journalctl --user --output=json --output-fields=MESSAGE_ID,USER_UNIT,
   CPU_USAGE_NSEC,MEMORY_PEAK --since=@<start> MESSAGE_ID=ae8f7b866b0347b9af31fe1c80b127c0`, read when the window opens and
   when the period changes, at most 16 MiB, 30 s at most (else "not available"); a record counts when its `USER_UNIT` is a
