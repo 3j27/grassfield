@@ -447,6 +447,13 @@ shell no longer relies on that alone:
   Desktop waits for the unlock (integrator re-review of e5bd9d2). The Split View Desktops the shell reads from the
   `hyprctl grassfield-tiling` reply are Desktop ids, output names and window addresses only. lock_surfaces.sh checks the
   four refusals and the fill path, each with a mutation; tests/shell/split_view checks them on the real singletons.
+  Tiling step 6c (ADR-0036 D64-D68) adds no IPC function, verb or popup kind. The plugin's `titlebar-reveal` event carries
+  an output name and a boolean only, and is never posted `true` while the session is locked (a full-screen titlebar is
+  not revealed then); the shell only keeps the menu bar of that output in view with it. A click on the green light under the
+  tiling popover runs `Compositor.unsplit` (which asks `SessionState.refuses` first) or Hyprland's own full-screen and Zoom
+  requests, from the popover, a surface the lock closes and refuses. The plugin's gathering of a window left off every
+  output after an unplug moves only that window, shows no surface, and waits for the unlock when the session is locked (as
+  a Split View's settling, D55).
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

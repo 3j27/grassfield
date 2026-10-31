@@ -103,21 +103,31 @@ Item {
     }
 
     // The large thumbnail of the shown item is asked for while it is shown (the gallery's own pipeline). Not in the
-    // gallery, whose own pages ask for it (a cancel here would drop their request).
+    // gallery, whose own pages ask for it (a cancel here would drop their request). Asked when the pane is made too: the
+    // column view makes its preview column only once a file is selected, so the first row (0, the int's default) never
+    // changed and a picture showed its type icon (website captures of 2026-10-30; tst_filescolumns); and again when the
+    // listing changes (the column view's active column). The request is cancelled in the listing it was made in.
     property url requested
-    onRowChanged: {
+    // A listing that is destroyed reads as null here (the column view's columns come and go).
+    property var requestedIn: null
+    function askPreview(): void {
+        if (root.requestedIn && String(root.requested) !== "")
+            root.requestedIn.cancelPreview(root.requested, true);
+        root.requested = "";
+        root.requestedIn = null;
         const m = root.model;
-        if (!m || !root.large)
+        if (!m || !root.large || root.row < 0)
             return;
-        if (String(root.requested) !== "")
-            m.cancelPreview(root.requested, true);
-        root.requested = root.row >= 0 ? m.urlAt(root.row) : "";
-        if (root.row >= 0)
-            m.requestPreview(root.row, true);
+        root.requested = m.urlAt(root.row);
+        root.requestedIn = m;
+        m.requestPreview(root.row, true);
     }
+    onRowChanged: root.askPreview()
+    onModelChanged: root.askPreview()
+    Component.onCompleted: root.askPreview()
     Component.onDestruction: {
-        if (root.model && String(root.requested) !== "")
-            root.model.cancelPreview(root.requested, true);
+        if (root.requestedIn && String(root.requested) !== "")
+            root.requestedIn.cancelPreview(root.requested, true);
     }
 
     Rectangle {

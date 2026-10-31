@@ -141,6 +141,67 @@ TestCase {
             compare(WindowTiling.parseNotice(text), null, text);
     }
 
+    // ADR-0036 D64: the green light clicked while its popover is open does what the plugin's light does.
+    function test_greenActionIsTheLightsOwn() {
+        compare(WindowTiling.greenAction(false, false, false), "toggleZoom");
+        compare(WindowTiling.greenAction(false, false, true), "enterFullscreen");
+        compare(WindowTiling.greenAction(true, false, false), "leaveFullscreen");
+        compare(WindowTiling.greenAction(true, false, true), "leaveFullscreen", "Alt changes nothing in full screen");
+        compare(WindowTiling.greenAction(false, true, false), "unsplit");
+        compare(WindowTiling.greenAction(true, true, true), "unsplit", "a Split View member leaves it, with or without Alt");
+        compare(WindowTiling.greenAction(true, true, false), "unsplit");
+        compare(WindowTiling.greenAction(false, true, true), "unsplit");
+    }
+
+    // Integrator review of 7096305, MAJOR 1: a Split View member's light lies under the menu bar's strip.
+    function test_stripPressGoesToTheBarOnlyInView() {
+        compare(WindowTiling.stripPress(true, false), "bar");
+        compare(WindowTiling.stripPress(true, true), "bar", "a bar in view covers the light under it");
+        compare(WindowTiling.stripPress(false, true), "green", "the bar away: the light under the strip is the light's");
+        compare(WindowTiling.stripPress(false, false), "close", "the bar away: any click outside");
+    }
+
+    function test_inLightExcludesTheFarEdges() {
+        const l = {x: 10, y: 20, w: 14, h: 14};
+        verify(WindowTiling.inLight(l, 10, 20), "top left corner");
+        verify(WindowTiling.inLight(l, 23.5, 33.5));
+        verify(!WindowTiling.inLight(l, 24, 25), "right edge");
+        verify(!WindowTiling.inLight(l, 15, 34), "bottom edge");
+        verify(!WindowTiling.inLight(l, 9.5, 25), "left of it");
+        verify(!WindowTiling.inLight(l, 15, 19.5), "above it");
+        verify(!WindowTiling.inLight(null, 15, 25), "no light");
+        compare(WindowTiling.inLight(undefined, 15, 25), false, "a boolean");
+    }
+
+    // ADR-0036 D65: the menu bar comes and goes with a full-screen window's revealed titlebar.
+    function test_parseTitlebarRevealReadsTheEvent() {
+        compare(JSON.stringify(WindowTiling.parseTitlebarReveal('{"v":"gfc/1","type":"titlebar-reveal","output":"GF-REF","revealed":true}')),
+                JSON.stringify({output: "GF-REF", revealed: true}));
+        compare(JSON.stringify(WindowTiling.parseTitlebarReveal('{"v":"gfc/1","type":"titlebar-reveal","output":"DP-2","revealed":false}')),
+                JSON.stringify({output: "DP-2", revealed: false}));
+        for (const text of ["", "x", "null", '{"v":"gfc/2","type":"titlebar-reveal","output":"A","revealed":true}', '{"v":"gfc/1","type":"tiling","output":"A","revealed":true}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","revealed":true}', '{"v":"gfc/1","type":"titlebar-reveal","output":"","revealed":true}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","output":7,"revealed":true}', '{"v":"gfc/1","type":"titlebar-reveal","output":"A"}',
+                 '{"v":"gfc/1","type":"titlebar-reveal","output":"A","revealed":1}', '{"v":"gfc/1","type":"titlebar-reveal","output":"A","revealed":"true"}'])
+            compare(WindowTiling.parseTitlebarReveal(text), null, text);
+    }
+
+    function test_revealsAfterKeepsEachOutputOnce() {
+        compare(JSON.stringify(WindowTiling.revealsAfter([], {output: "A", revealed: true})), JSON.stringify(["A"]));
+        compare(JSON.stringify(WindowTiling.revealsAfter(["A"], {output: "A", revealed: true})), JSON.stringify(["A"]), "once");
+        compare(JSON.stringify(WindowTiling.revealsAfter(["A", "B"], {output: "A", revealed: false})), JSON.stringify(["B"]));
+        compare(JSON.stringify(WindowTiling.revealsAfter(["B"], {output: "A", revealed: false})), JSON.stringify(["B"]), "away from an output not revealed");
+        compare(JSON.stringify(WindowTiling.revealsAfter(null, {output: "A", revealed: true})), JSON.stringify(["A"]), "no list yet");
+        const before = ["A"];
+        verify(WindowTiling.revealsAfter(before, {output: "B", revealed: true}) !== before, "a new list: bindings see the change");
+        compare(JSON.stringify(before), JSON.stringify(["A"]), "the old list is left as it was");
+    }
+
+    function test_suggestionWaitIsGenerous() {
+        // A loaded machine can take seconds to start hyprctl (merge note of #56, ADR-0036 D68).
+        compare(WindowTiling.suggestionWaitMs, 6000);
+    }
+
     function reply(suggestion: var): string {
         return JSON.stringify({v: "gfc/1", type: "tiling", gen: 12, outputs: [], suggestion: suggestion});
     }
@@ -383,6 +444,36 @@ TestCase {
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "0xa1", gen: 3}), null, "dismissed: not shown again (its window fills)");
         compare(WindowTiling.splitPicker(waiting, sg("a1", 4), {address: "a1", gen: 3}), sg("a1", 4), "a later Split View of the same window has its own picker");
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
+    }
+
+    // Integrator re-review of 29db357, MAJOR 1: a notice names no window; within an earlier ask's deadline (6 s, D68) a new
+    // Split View's notice was taken as that ask's answer and its picker never showed.
+    function test_answersAskedIsTheAwaitedSuggestionOnly() {
+        const sg = (address, gen) => ({gen: gen, address: address, layout: "left-right"});
+        verify(WindowTiling.answersAsked(20, {address: "b2", until: 0}, sg("b2", 20)));
+        verify(WindowTiling.answersAsked(20, {address: "0xB2", until: 0}, sg("b2", 20)), "the address in any case");
+        verify(!WindowTiling.answersAsked(20, {address: "a1", until: 0}, sg("b2", 20)), "another window's suggestion");
+        verify(!WindowTiling.answersAsked(20, {address: "b2", until: 0}, sg("b2", 21)), "another generation");
+        verify(!WindowTiling.answersAsked(-1, {address: "b2", until: 0}, sg("b2", 20)), "no notice awaited");
+        verify(!WindowTiling.answersAsked(-1, {address: "b2", until: 0}, sg("b2", -1)), "no notice awaited, whatever generation the reply states");
+        verify(!WindowTiling.answersAsked(20, null, sg("b2", 20)), "nothing asked");
+        verify(!WindowTiling.answersAsked(20, {address: "b2", until: 0}, null), "no suggestion");
+        compare(WindowTiling.answersAsked(20, null, null), false, "a boolean");
+    }
+
+    function test_replyPickerShowsASecondSplitViewWhileAnEarlierAskIsOpen() {
+        const split = (workspace, windows, waiting) => ({workspace: workspace, output: "DP-1", home: 1, windows: windows, waiting: waiting});
+        const sg = (address, gen) => ({gen: gen, address: address, layout: "left-right", output: "DP-1", zones: [{zone: 1, x: 0, y: 0, w: 9, h: 9}], windows: ["c3"]});
+        // a1's picker was adopted a second ago (asked: a1 for 6 s, its Split View now full); a key makes b2's Split View; its
+        // `placed` notice (gen 20) was taken as a1's answer (wantedGen 20); the reply's suggestion is b2's.
+        const asked = {address: "a1", until: Date.now() + 5000};
+        const splits = [split(4, ["a1", "c3"], false), split(5, ["b2"], true)];
+        compare(WindowTiling.replyPicker(20, asked, splits, sg("b2", 20), null), sg("b2", 20), "the second Split View's picker shows");
+        compare(WindowTiling.replyPicker(20, {address: "b2", until: 0}, splits, sg("b2", 20), null), null, "the shell's own ask: shown as asked, not adopted");
+        compare(WindowTiling.replyPicker(-1, null, splits, sg("b2", 20), null), sg("b2", 20), "nothing asked: adopted as before (D48)");
+        compare(WindowTiling.replyPicker(20, asked, splits, sg("b2", 20), {address: "b2", gen: 20}), null, "dismissed: not shown again");
+        compare(WindowTiling.replyPicker(20, asked, [split(5, ["b2"], false)], sg("b2", 20), null), null, "not waiting: the plugin fills it");
+        compare(WindowTiling.replyPicker(20, asked, splits, null, null), null, "no suggestion");
     }
 
     // D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.

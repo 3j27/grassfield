@@ -303,6 +303,14 @@ namespace gf::tiling {
     // most `to`'s; whole logical px.
     Rect moveToArea(const Rect& frame, const Rect& from, const Rect& to);
 
+    // An output went away (TL11): Hyprland moves a floating window of its Desktops by the offset between the two outputs,
+    // and a window can end off every output (integrator nested pass of 6b's 12e3dd3: x = -2919). `strayFrame`: the frame
+    // (titlebar included) shares no area with any of `outputs` (their logical boxes). `gatheredFrame`: where such a window
+    // comes back (ADR-0036 D67, macOS gathers a disconnected display's windows): centred in `area` (the work area of its
+    // Desktop's output) at its size, at most the area's; whole logical px.
+    bool strayFrame(const Rect& frame, std::span<const Rect> outputs);
+    Rect gatheredFrame(const Rect& frame, const Rect& area);
+
     // The frame (titlebar included) of a surface box: what the preview draws; and back.
     Rect frameOf(const Rect& surface, double titlebar);
     Rect surfaceOf(const Rect& frame, double titlebar);

@@ -326,6 +326,38 @@ TestCase {
         verify(!AutoHide.active(m, none, false));
     }
 
+    // ADR-0036 D65: the menu bar leaves with a full-screen window's titlebar, without its grace.
+    function test_leaveNowSkipsTheGrace() {
+        const shown = AutoHide.create();
+        const left = AutoHide.leaveNow(shown, none, true);
+        compare(left.state, "hiding");
+        compare(left.visible, 1);
+        compare(left.timer, 0);
+        verify(AutoHide.active(left, none, true));
+        const graced = advance(shown, none, timing.hideGrace - 2 * frame);
+        verify(graced.timer > 0);
+        compare(AutoHide.leaveNow(graced, none, true).timer, 0, "the grace spent so far is dropped");
+        // Coming into view: it turns back from where it is.
+        let rising = advance(advance(shown, none, timing.hideGrace + timing.hideDuration + 5 * frame), only("forced"), 3 * frame);
+        compare(rising.state, "revealing");
+        const back = AutoHide.leaveNow(rising, none, true);
+        compare(back.state, "hiding");
+        compare(back.visible, rising.visible);
+        const next = AutoHide.step(back, none, true, timing, frame);
+        verify(next.visible < back.visible && back.visible - next.visible <= frame / timing.hideDuration + 1e-9, "slides away without a jump");
+    }
+
+    function test_leaveNowKeepsWhatElseHolds() {
+        const shown = AutoHide.create();
+        for (let k = 0; k < kinds.length; k++)
+            verify(AutoHide.leaveNow(shown, only(kinds[k]), true) === shown, kinds[k] + " still holds it");
+        verify(AutoHide.leaveNow(shown, none, false) === shown, "auto-hide off: shown");
+        const hiding = advance(shown, none, timing.hideGrace + timing.hideDuration / 2);
+        verify(AutoHide.leaveNow(hiding, none, true) === hiding, "already hiding");
+        const hidden = advance(shown, none, timing.hideGrace + timing.hideDuration + 5 * frame);
+        verify(AutoHide.leaveNow(hidden, none, true) === hidden, "already hidden");
+    }
+
     function test_clockStopsOnlyWhenNothingCanChange() {
         const shown = AutoHide.create();
         verify(AutoHide.active(shown, none, true));

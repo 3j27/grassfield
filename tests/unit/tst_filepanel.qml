@@ -988,6 +988,11 @@ TestCase {
         const all = PanelLogic.applicationFilter(["a"], "", 1);
         verify(all.allApplications);
         compare(all.applications, []);
+        // The location lists the candidates and the last choice under both filters, even those the Apps grid hides (imv,
+        // NoDisplay=true, the default image viewer the Open With submenu offers).
+        compare(recommended.listed, ["org.gnome.TextEditor", "org.kde.kate"]);
+        compare(all.listed, ["a"], "All Applications lists them too");
+        compare(PanelLogic.applicationFilter(["a"], "imv", 1).listed, ["a", "imv"], "the last choice as well");
     }
 
     // The macOS panel: an Open panel in the Applications location, the document named over it, "Recommended Applications"

@@ -142,9 +142,10 @@ Singleton {
                 // Desktops; a reply read lets a later deadline retry again.
                 const splits = WindowTiling.parseSplits(text);
                 const sg = WindowTiling.parseSuggestion(text);
-                // A Split View the shell did not start still shows its picker (D48): its suggestion is taken as if asked. Its
-                // member counts as waiting for it from now (awaiting) so that it is not filled meanwhile (TilingSuggest).
-                let adopted = root.wantedGen < 0 && Compositor.canLayouts && Compositor.canSplit ? WindowTiling.splitPicker(splits, sg, root.declined) : null;
+                // A Split View the shell did not start still shows its picker (D48): its suggestion is taken as if asked, also
+                // while an earlier ask is still open (WindowTiling.replyPicker; re-review of 29db357, MAJOR 1). Its member counts
+                // as waiting for it from now (awaiting) so that it is not filled meanwhile (TilingSuggest).
+                let adopted = Compositor.canLayouts && Compositor.canSplit ? WindowTiling.replyPicker(root.wantedGen, Compositor.suggestionAsked, splits, sg, root.declined) : null;
                 if (adopted !== null && root.suggestion !== null && root.suggestion.address === adopted.address && root.suggestion.gen === adopted.gen)
                     adopted = null; // already the one shown: kept as it is
                 if (adopted !== null) {
@@ -163,6 +164,7 @@ Singleton {
                     root.retried = false;
                 if (adopted !== null) {
                     root.suggestion = adopted;
+                    root.wantedGen = -1; // an earlier ask's notice is answered by this picker: a later read keeps it shown
                     root.awaiting = false;
                     return;
                 }

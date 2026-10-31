@@ -102,6 +102,19 @@ function step(m, inh, enabled, timing, dt) {
     return out;
 }
 
+// The reason to stay went away all at once (over a full-screen window, that window's titlebar hid: the menu bar goes with it,
+// ADR-0036 D65): a machine shown or coming into view that nothing else holds starts hiding now, without its grace, from
+// where it is (no jump). Otherwise, or with auto-hide off, the machine as it is.
+function leaveNow(m, inh, enabled) {
+    if (!enabled || inhibited(inh) || (m.state !== "shown" && m.state !== "revealing"))
+        return m;
+    return {
+        state: "hiding",
+        visible: m.visible,
+        timer: 0
+    };
+}
+
 // Whether the machine still needs time to advance (the Dock stops its frame clock otherwise).
 function active(m, inh, enabled) {
     if (!enabled)
