@@ -80,6 +80,7 @@
   {"id": "desktop label (white on opaque shadow core: ceiling)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
   {"id": "menu bar text and glyphs, light foreground (bare bar over a dark wallpaper)", "fg": "darkColors.barText", "backdrop": "bar-light-tone", "kind": "text", "sites": []},
   {"id": "menu bar text and glyphs, dark foreground (bare bar over a light wallpaper)", "fg": "lightColors.barText", "backdrop": "bar-dark-tone", "kind": "text", "sites": []},
+  {"id": "desktop label, dark foreground (over a light wallpaper: the menu bar's rule, ADR-0039 step 25)", "fg": "lightColors.barText", "backdrop": "bar-dark-tone", "kind": "text", "sites": []},
   {"id": "desktop label error (opaque shadow core: ceiling)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
    {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
   ]},

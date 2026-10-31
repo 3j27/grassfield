@@ -423,8 +423,6 @@ QtObject {
     readonly property real dockDotHaloOpacity: 0.5
     // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockHighlightOpacity: 0.34
-    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
-    readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRecentMax: 3
     // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]

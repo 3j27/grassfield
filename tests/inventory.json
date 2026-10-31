@@ -165,6 +165,7 @@
  {"path": "tests/unit/tst_glassclasses.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesfinish.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storefinish.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_dockdesktopfinish.qml", "layer": "logic"},
  {"path": "tests/unit/tst_popupkinds.qml", "layer": "logic"},
  {"path": "tests/unit/tst_runmode.qml", "layer": "headless"},
  {"path": "tests/shell/run_mode_import/shell.qml", "layer": "headless"},

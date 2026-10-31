@@ -63,8 +63,6 @@ Item {
         radius: height / 2
         color: Appearance.withAlpha(root.tint, root.active ? Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor : Tokens.materialHoverOpacity)
         opacity: tap.pressed || root.active ? 1 : 0
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
 
         // The highlight appears at once with its menu and fades only when it goes (macOS, audit F6, C-23).
         Behavior on opacity {
@@ -76,8 +74,10 @@ Item {
         }
     }
 
-    // Focus ring stays visible even without hover.
-    Rectangle {
+    // One ring, the shared controls' (outside the highlight's capsule), for the keyboard only (ADR-0039 step 25, G7): it was
+    // two rings inside the capsule, shown on any focus.
+    Item {
+        id: ringBox
         anchors {
             fill: parent
             topMargin: Tokens.menubarHoverInsetTop
@@ -85,11 +85,15 @@ Item {
             leftMargin: -root.highlightOutset
             rightMargin: -root.highlightOutset
         }
-        radius: height / 2
-        color: "transparent"
-        visible: root.activeFocus
-        border.width: Tokens.controlFocusOutline
-        border.color: Appearance.focusRingColor
+
+        FocusRing {
+            shapeRadius: ringBox.height / 2
+            visible: barFocus.active
+        }
+    }
+
+    KeyFocus {
+        id: barFocus
     }
 
     // Content with a faint soft shadow (gate A2) while the bar is drawn straight on the wallpaper: dark under light text, light

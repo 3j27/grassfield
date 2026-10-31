@@ -1062,12 +1062,14 @@ Scope {
                 collapseAnim.start();
             }
 
+            // Sizes and places that change in place: the move curve (ADR-0039 step 25, the roles of step 20).
             NumberAnimation {
                 id: collapseAnim
                 target: win
                 property: "dragCollapse"
                 duration: Appearance.duration(Tokens.motionFast)
-                easing.type: Easing.OutQuad
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
             }
 
             // A folder dragged over the shelf (macOS: dropped in the right section it becomes a stack): the slot it would take
@@ -1090,7 +1092,8 @@ Scope {
                 target: win
                 property: "gapGrow"
                 duration: Appearance.duration(Tokens.motionFast)
-                easing.type: Easing.OutQuad
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
             }
 
             // Layout transition (DockModel.layoutTransition): position along the Dock of every tile (window coordinates) before a rebuild.
@@ -1153,7 +1156,9 @@ Scope {
                 from: 0
                 to: 1
                 duration: Appearance.duration(Tokens.dockPoofDuration)
-                easing.type: Easing.OutQuad
+                // Leaving: the exit curve (ADR-0039 step 25).
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curveExit
             }
             // This output has the Dock (modelData is null while the window is destroyed: the name is kept in screenName).
             readonly property bool isDockScreen: screenName !== "" && screenName === root.dockScreen
@@ -1544,16 +1549,20 @@ Scope {
                 Material {
                     id: shelf
                     // Centred along the Dock, a margin off the screen edge, slid toward the edge while the Dock hides (any edge).
-                    readonly property var r: Geometry.shelfRect(win.edge, win.width, win.height, win.shelfWidth, win.shelfHeight, Tokens.dockBottomMargin, (1 - AutoHide.ease(win.hideMachine.visible)) * (win.shelfHeight + Tokens.dockBottomMargin + shadowMargin))
+                    // Under Reduce Motion the Dock fades where it stands instead of sliding (ADR-0039 D2, step 25): in place while
+                    // any of it shows, out of the window once hidden (its blur region and input with it).
+                    readonly property real hidden: Appearance.reduceMotion ? (win.hideMachine.visible > 0 ? 0 : 1) : 1 - AutoHide.ease(win.hideMachine.visible)
+                    readonly property var r: Geometry.shelfRect(win.edge, win.width, win.height, win.shelfWidth, win.shelfHeight, Tokens.dockBottomMargin, shelf.hidden * (win.shelfHeight + Tokens.dockBottomMargin + shadowMargin))
                     x: r.x
                     y: r.y
                     width: r.w
                     height: r.h
+                    opacity: Appearance.reduceMotion ? AutoHide.ease(win.hideMachine.visible) : 1
                     radius: Tokens.radiusDock
                     tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
+                    // The glass edge of every surface (ADR-0024 section 2.5, ADR-0039 step 25): Material's darker outer edge,
+                    // then the bright inner rim; the shelf's light outer rim (dock.rimOpacity) goes.
                     highlightOpacity: Tokens.dockHighlightOpacity
-                    borderOpacity: Tokens.dockRimOpacity
-                    borderColor: Appearance.colors.materialHighlight
 
                     // Folders dragged from Files, the desktop or anywhere that offers text/uri-list: dropped in the right section
                     // (after the divider) they are kept in the Dock as stacks, at the slot where the gap opened. Under the tiles:
@@ -1709,7 +1718,8 @@ Scope {
                                     enabled: win.reveal && !tile.dragging && !win.dragSnap
                                     NumberAnimation {
                                         duration: Appearance.duration(Tokens.motionFast)
-                                        easing.type: Easing.OutQuad
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.curve
                                     }
                                 }
                                 function glideFrom(dx: real, dy: real): void {
@@ -1749,7 +1759,9 @@ Scope {
                                     property: "opacity"
                                     to: 1
                                     duration: Appearance.duration(Tokens.motionNormal)
-                                    easing.type: Easing.OutQuad
+                                    // Arriving: the enter curve (ADR-0039 step 25).
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.curveEnter
                                 }
 
                                 width: win.vertical ? win.tileCross : (isSeparator ? win.separatorWidth : iconPx)
@@ -2429,7 +2441,7 @@ Scope {
                                         tile.menuByHold = true;
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-hold", Date.now());
-                                        win.openMenu(tile.index);
+                                        Popups.withPointer(true, () => win.openMenu(tile.index));
                                     }
                                     onTapped: {
                                         if (tile.menuByHold || !tile.ownsPress)
@@ -2450,7 +2462,8 @@ Scope {
                                         }
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: tap", Date.now(), "tile", tile.tileId);
-                                        root.activateItem(tile.modelData);
+                                        // A click: a stack or menu it opens shows its ring only after a key (ADR-0039 steps 8 and 25).
+                                        Popups.withPointer(true, () => root.activateItem(tile.modelData));
                                     }
                                 }
 
@@ -2462,7 +2475,7 @@ Scope {
                                     onPressedChanged: if (pressed && win.tileOwningPress(point.scenePosition) === tile.index) {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-right-press", Date.now());
-                                        win.openMenu(tile.index);
+                                        Popups.withPointer(true, () => win.openMenu(tile.index));
                                     }
                                 }
                             }

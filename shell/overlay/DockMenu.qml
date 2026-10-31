@@ -121,7 +121,8 @@ PopupMenu {
         }
         // macOS: the documents the app used come next, under their own header.
         if (recentDocs.length > 0) {
-            items.push({id: "recentHeader", text: qsTr("Recent Documents"), enabled: false});
+            // A section title (MenuHeader), not a greyed row (ADR-0039 step 25, the menu grammar of step 8).
+            items.push({id: "recentHeader", text: qsTr("Recent Documents"), header: true});
             for (const d of recentDocs)
                 items.push({id: "recentDocument", path: d.path, text: DisplayName.text(Stacks.baseName(d.path)), enabled: entry !== null});
             items.push({separator: true});
