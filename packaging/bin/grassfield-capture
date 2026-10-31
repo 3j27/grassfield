@@ -16,20 +16,29 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import time
 
 # capture.* of ui/tokens/tokens.json, as slurp takes them (#rrggbbaa): the veil over the screen, the selection's fill and
-# border, the windows a click can pick, the border's width in pixels.
-COLOURS = {"veil": "#0000002E", "selection": "#FFFFFF24", "border": "#FFFFFFE6", "box": "#FFFFFF14"}
+# border, the border's width in pixels. The boxes a click can pick (the windows, then the displays) are filled with the veil
+# itself, so the veil stays even: slurp paints them over it, and the one under the pointer takes the selection's fill and
+# border (review of step 8: displays left out of the boxes made slurp 1.5.0 cancel a click outside every window).
+COLOURS = {"veil": "#0000002E", "selection": "#FFFFFF24", "border": "#FFFFFFE6"}
 BORDER_WIDTH = 1
-SLURP = ["slurp", "-b", COLOURS["veil"], "-s", COLOURS["selection"], "-c", COLOURS["border"], "-B", COLOURS["box"],
+SLURP = ["slurp", "-b", COLOURS["veil"], "-s", COLOURS["selection"], "-c", COLOURS["border"], "-B", COLOURS["veil"],
          "-w", str(BORDER_WIDTH)]
-# A selection smaller than this many square pixels is a click outside every window (slurp answers 1x1 there): the display.
+# A selection smaller than this many square pixels is a click that slurp answered as a point (a newer slurp, outside every
+# box): the rectangle under it.
 CLICK_AREA = 20
-# Hyprland 0.56's clients JSON: "fullscreen" is the window's mode, 2 for fullscreen (FullscreenController.hpp).
+# Hyprland 0.56's clients JSON: "fullscreen" is the window's mode, 1 maximized (Zoom), 2 fullscreen (FullscreenController.hpp);
+# either covers the other windows of its workspace, except the pinned ones and those allowed over it.
 FULLSCREEN = 2
 WAIT_SECONDS = 120
+# The previous capture's notice is closed before a capture, then this long is left for its banner to go (the shell's
+# motion.normal, 220 ms, and a margin): a picture never shows the notice of the one before.
+BANNER_GONE_SECONDS = 0.4
 PREVIEW = "org.grassfield.Preview.desktop"
 PREVIEW_ICON = "org.grassfield.Preview"
 
@@ -93,8 +102,8 @@ def displays(monitors):
 
 
 def windows(monitors):
-    # What a click can pick: the windows on the displays' shown workspaces. On a workspace with a fullscreen window, only that
-    # window: slurp picks the smallest box under the pointer, and the windows behind it are mapped too.
+    # What a click can pick: the windows on the displays' shown workspaces, as {rect, focus, over}. On a workspace with a
+    # fullscreen or zoomed window, that window and the windows drawn over it (pinned, or allowed over it), not those behind.
     shown = set()
     for m in monitors or []:
         if not isinstance(m, dict) or m.get("disabled"):
@@ -110,12 +119,38 @@ def windows(monitors):
                 continue
             (x, y), (w, h) = c["at"], c["size"]
             if w > 0 and h > 0:
-                found.append((c["workspace"]["id"], c.get("fullscreen") == FULLSCREEN,
-                              {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}))
+                mode = c.get("fullscreen")
+                focus = c.get("focusHistoryID")
+                found.append({"ws": c["workspace"]["id"], "full": isinstance(mode, int) and 1 <= mode <= FULLSCREEN,
+                              "over": c.get("pinned") is True or c.get("allowedOverFullscreen") is True,
+                              "focus": focus if isinstance(focus, int) and focus >= 0 else 1 << 30,
+                              "rect": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}})
         except (KeyError, TypeError, ValueError):
             continue
-    covered = {ws for ws, full, _ in found if full}
-    return [r for ws, full, r in found if full or ws not in covered]
+    covered = {e["ws"] for e in found if e["full"]}
+    return [e for e in found if e["ws"] not in covered or e["full"] or e["over"]]
+
+
+def contains(r, px, py):
+    return r["x"] <= px < r["x"] + r["w"] and r["y"] <= py < r["y"] + r["h"]
+
+
+def topmost(wins, sel):
+    # A click on a window: slurp answers the smallest box under the pointer, which may be a window behind a larger one in
+    # front. The window under the pointer that is drawn on top is taken instead: one drawn over a fullscreen window first,
+    # then the most recently focused (Grassfield raises a window when it takes focus, config/hypr/grassfield/stacking.lua).
+    # Anything unread: slurp's answer.
+    if not any(e["rect"] == sel for e in wins):
+        return sel
+    pos = hyprctl("cursorpos")
+    try:
+        px, py = int(pos["x"]), int(pos["y"])
+    except (KeyError, TypeError, ValueError):
+        return sel
+    under = [e for e in wins if contains(e["rect"], px, py)]
+    if not under:
+        return sel
+    return min(under, key=lambda e: (not e["over"], e["focus"]))["rect"]
 
 
 def parse_geometry(text):
@@ -128,9 +163,8 @@ def snapped(sel, rects):
     # displays; else nothing. A click on a window is that window's box already (slurp's own answer).
     if sel["w"] * sel["h"] >= CLICK_AREA:
         return sel
-    px, py = sel["x"], sel["y"]
     for r in rects:
-        if r["x"] <= px < r["x"] + r["w"] and r["y"] <= py < r["y"] + r["h"]:
+        if contains(r, sel["x"], sel["y"]):
             return r
     return None
 
@@ -183,13 +217,18 @@ def save(folder, stem, grim):
             except FileExistsError:
                 continue
             except OSError:
-                # A file system without hard links (a Desktop on FAT): a new file of that name, then a copy.
+                # A file system without hard links (a Desktop on FAT): a new file of that name, then a copy; a copy that
+                # fails (a full disk) leaves no file behind.
                 try:
                     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
                 except FileExistsError:
                     continue
-                with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
-                    shutil.copyfileobj(src, out)
+                try:
+                    with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
+                        shutil.copyfileobj(src, out)
+                except OSError:
+                    os.unlink(path)
+                    return None
                 return path
         return None
     except OSError:
@@ -212,12 +251,66 @@ def selecting():
 
 
 def choose(monitors):
-    boxes = windows(monitors)
+    wins = windows(monitors)
+    boxes = [e["rect"] for e in wins] + [rect for _, rect in displays(monitors)]
     r = run(SLURP, timeout=3600, input="".join(geometry_text(b) + "\n" for b in boxes).encode())
     if r is None or r.returncode != 0:
         return None  # Esc, or cancelled by a second press
     sel = parse_geometry(r.stdout.decode("utf-8", "replace"))
-    return snapped(sel, boxes + [rect for _, rect in displays(monitors)]) if sel else None
+    return snapped(topmost(wins, sel), boxes) if sel else None
+
+
+def notice_file():
+    # $XDG_RUNTIME_DIR/grassfield/capture-notice: the pid of the notify-send showing the last capture's notice. The folder is
+    # the user's own (0700, not a link), as the share picker's.
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime):
+        return None
+    folder = os.path.join(runtime, "grassfield")
+    try:
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        st = os.lstat(folder)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        return None
+    return os.path.join(folder, "capture-notice")
+
+
+def close_previous():
+    # The last capture's notice goes before this capture (macOS: the thumbnail of the last screenshot is put away), so its
+    # banner is in no picture. Only a notify-send of this user started by this helper (its command line) is told to close.
+    path = notice_file()
+    if path is None:
+        return
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd) as f:
+            pid = int(f.read(16).strip())
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            argv = f.read().split(b"\0")
+        if os.stat("/proc/%d" % pid).st_uid != os.getuid() or argv[0] != b"notify-send" or b"-p" not in argv:
+            return
+        os.kill(pid, signal.SIGINT)
+    except (OSError, ValueError):
+        return
+    for _ in range(20):
+        if not os.path.exists("/proc/%d" % pid):
+            break
+        time.sleep(0.05)
+    time.sleep(BANNER_GONE_SECONDS)
+
+
+def remember(pid):
+    path = notice_file()
+    if path is None:
+        return
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write("%d\n" % pid)
+    except OSError:
+        pass
 
 
 def notify(paths):
@@ -236,6 +329,7 @@ def notify(paths):
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError:
         return
+    remember(proc.pid)
     try:
         out, _ = proc.communicate(timeout=WAIT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -263,10 +357,13 @@ def main():
     if mode not in ("screen", "selection"):
         sys.stderr.write("usage: grassfield-capture screen|selection\n")
         return 2
+    # A signal (the session ending) still runs the clean-up of save(): no hidden file is left on the Desktop.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     monitors = hyprctl("monitors")
     if mode == "selection":
         if selecting():
             return 0
+        close_previous()
         sel = choose(monitors)
         if sel is None:
             return 0
@@ -275,6 +372,7 @@ def main():
         shots = [["grim", "-o", name] for name, _ in displays(monitors)]
         if not shots:
             return 1
+        close_previous()
     folder = desktop()
     if folder is None:
         return 1

@@ -3270,14 +3270,12 @@ QtObject {
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
 
-    // the light dimming slurp lays over the screen while the crosshair shows, read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
+    // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
     readonly property string captureVeil: "#0000002E"
     // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
     readonly property string captureSelection: "#FFFFFF24"
     // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
     readonly property string captureBorder: "#FFFFFFE6"
-    // the windows a click can pick, a faint light fill (ADR-0035 D-10, step 8); estimate
-    readonly property string captureBox: "#FFFFFF14"
     // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
     readonly property int captureBorderWidth: 1
 
