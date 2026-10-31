@@ -623,9 +623,12 @@ Scope {
                     b.activated();
             }
 
+            // The entrance's key for this output, taken once (the screen is gone when a removed output destroys the window).
+            property string entranceKey: ""
             Component.onCompleted: {
                 Popups.registerBar(win.screen.name, win);
-                Entrance.expect("menubar:" + win.screen.name);
+                win.entranceKey = "menubar:" + win.screen.name;
+                Entrance.expect(win.entranceKey);
                 if (win.barFinal)
                     win.settleBar();
                 if (win.entered)
@@ -636,7 +639,7 @@ Scope {
                 if (win.entered)
                     Journal.hidden("menubar", win.screen ? win.screen.name : "");
                 else
-                    Entrance.forget("menubar:" + (win.screen ? win.screen.name : ""));
+                    Entrance.forget(win.entranceKey);
             }
 
             // ---- the entrance (ADR-0040 step 6, ID-20, ID-5, ID-6) ----
@@ -650,7 +653,7 @@ Scope {
             }
             function settleBar(): void {
                 win.hideMachine = AutoHide.initial(win.autoHides);
-                Entrance.ready("menubar:" + win.screen.name);
+                Entrance.ready(win.entranceKey);
             }
             readonly property bool entered: Entrance.revealed
             onEnteredChanged: {

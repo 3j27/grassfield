@@ -241,9 +241,12 @@ Scope {
             }
             onImageFileChanged: Qt.callLater(measure)
             onHeightChanged: Qt.callLater(measure)
+            // The entrance's key for this output, taken once (modelData is already null when a removed screen destroys the window).
+            property string entranceKey: ""
             Component.onCompleted: {
                 // The entrance waits for this output's first frame (ADR-0040 step 6: the wallpaper first).
-                Entrance.expect("wallpaper:" + (win.modelData ? win.modelData.name : ""));
+                win.entranceKey = "wallpaper:" + (win.modelData ? win.modelData.name : "");
+                Entrance.expect(win.entranceKey);
                 Qt.callLater(measure);
                 Qt.callLater(win.begin);
             }
@@ -402,7 +405,7 @@ Scope {
                 Qt.callLater(win.measure);
                 console.info("grassfield-shell: wallpaper first " + win.shownDesc.kind + (win.shownDesc.kind === "art" ? " " + (win.shownDesc.artwork || "grassfield") + " " + (win.shownDesc.variant || "evening.dark") : "") + " source=" + feed.cfg.source + " output=" + (win.modelData ? win.modelData.name : ""));
                 Journal.shown("wallpaper", win.modelData ? win.modelData.name : "");
-                Entrance.ready("wallpaper:" + (win.modelData ? win.modelData.name : ""));
+                Entrance.ready(win.entranceKey);
             }
             // What is on screen now is final: its ground (ADR-0040 ID-2) and its record in wallpaper.json (`shown`: the first frame
             // of the next start, ID-3, and the lock's backdrop, ID-7; with the artwork it would draw instead).
@@ -434,7 +437,7 @@ Scope {
                 if (win.firstReady)
                     Journal.hidden("wallpaper", win.modelData ? win.modelData.name : "");
                 else
-                    Entrance.forget("wallpaper:" + (win.modelData ? win.modelData.name : ""));
+                    Entrance.forget(win.entranceKey);
             }
 
             // The output's height: the window's own is not known before it maps (the first frame's tone is reported before).

@@ -113,7 +113,8 @@ FocusScope {
 
     // ---- the entrance (ADR-0040 step 6, ID-20): the icons appear with the menu bar and the Dock, in one fade, once their
     // first layout is final (`ready`) ----
-    readonly property string entranceKey: "icons:" + (screen ? screen.name : "")
+    // Taken once, at creation (the screen is gone when a removed output destroys the view).
+    property string entranceKey: ""
     property real entrance: Entrance.revealed ? 1 : 0
     Behavior on entrance {
         NumberAnimation {
@@ -121,14 +122,16 @@ FocusScope {
         }
     }
     opacity: entrance
-    onReadyChanged: {
-        if (ready)
+    // Final: the first layout is, or the icons are turned off in Settings (nothing to wait for).
+    readonly property bool entranceFinal: ready || (Settings.loaded && !Settings.desktopShowIcons)
+    onEntranceFinalChanged: {
+        if (entranceFinal && root.entranceKey !== "")
             Entrance.ready(root.entranceKey);
     }
     Component.onCompleted: {
+        root.entranceKey = "icons:" + (screen ? screen.name : "");
         Entrance.expect(root.entranceKey);
-        // Icons turned off in Settings: nothing to wait for.
-        if (ready || !Settings.desktopShowIcons)
+        if (entranceFinal)
             Entrance.ready(root.entranceKey);
     }
     Component.onDestruction: {

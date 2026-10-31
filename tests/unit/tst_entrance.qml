@@ -57,11 +57,11 @@ TestCase {
         verify(/interval: Tokens\.sessionRevealTimeoutMs\s*onTriggered: \{\s*root\.timedOut = true;\s*root\.check\(\);/.test(e));
         verify(/readonly property bool settingsFinal: Settings\.loaded \|\| root\.settingsWaited/.test(e));
         const w = source("shell/desktop/Wallpaper.qml");
-        verify(/Entrance\.expect\("wallpaper:"/.test(w) && /Entrance\.ready\("wallpaper:"/.test(w) && /Entrance\.begin\(\);/.test(w));
+        verify(/win\.entranceKey = "wallpaper:"/.test(w) && /Entrance\.begin\(\);/.test(w));
         const bar = source("shell/menubar/MenuBar.qml");
-        verify(/Entrance\.expect\("menubar:" \+ win\.screen\.name\);/.test(bar));
+        verify(/win\.entranceKey = "menubar:" \+ win\.screen\.name;/.test(bar));
         // ID-6: the auto-hide starts where it rests, once the settings are final.
-        verify(/function settleBar\(\): void \{\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);\s*Entrance\.ready\("menubar:" \+ win\.screen\.name\);/.test(bar));
+        verify(/function settleBar\(\): void \{\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);\s*Entrance\.ready\(win\.entranceKey\);/.test(bar));
         compare((bar.match(/opacity: win\.dimOpacity \* win\.entrance/g) || []).length, 2, "the band and the content fade in");
         verify(/armed: win\.entered/.test(bar), "P5 counts the entrance");
         const dock = source("shell/dock/Dock.qml");
@@ -76,6 +76,13 @@ TestCase {
         verify(/onAutoHidesChanged: \{\s*if \(!win\.entered && win\.barFinal\)\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);/.test(bar));
         // On its bound the latch waits for the wallpapers' own bound.
         verify(/else if \(root\.timedOut && !Logic\.wallpaperPending\(root\.expected\)\)/.test(e));
+        // And a hard bound past both (re-check of 89390113: a leaked key never holds the entrance for good).
+        verify(/interval: Tokens\.sessionRevealTimeoutMs \+ Tokens\.wallpaperFirstShowTimeoutMs\s*onTriggered: root\.reveal\("timeout"\)/.test(e));
+        // Each surface takes its key once, at creation, and forgets that same key.
+        for (const t of [w, bar]) {
+            verify(/Entrance\.expect\(win\.entranceKey\);/.test(t) && /Entrance\.forget\(win\.entranceKey\);/.test(t) && /Entrance\.ready\(win\.entranceKey\);/.test(t));
+            verify(!/Entrance\.(ready|forget|expect)\("/.test(t), "no key rebuilt from the screen");
+        }
         const icons = source("shell/desktop/IconsView.qml");
         verify(/opacity: entrance/.test(icons) && /Entrance\.expect\(root\.entranceKey\);/.test(icons) && /Entrance\.ready\(root\.entranceKey\);/.test(icons));
         verify(/enabled: !Entrance\.revealed/.test(icons), "no pointer input on the invisible icons");

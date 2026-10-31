@@ -24,8 +24,10 @@ Singleton {
     readonly property bool settingsFinal: Settings.loaded || root.settingsWaited
 
     function begin(): void {
-        if (!revealTimer.running && !root.revealed)
+        if (!revealTimer.running && !root.revealed) {
             revealTimer.start();
+            hardTimer.start();
+        }
         if (!settingsTimer.running && !root.settingsWaited)
             settingsTimer.start();
     }
@@ -67,6 +69,7 @@ Singleton {
         const waited = Logic.pending(root.expected);
         root.revealed = true;
         revealTimer.stop();
+        hardTimer.stop();
         console.info("grassfield-shell: entrance (" + why + (waited.length > 0 ? "; waited for " + waited.join(" ") : "") + ")");
     }
 
@@ -77,6 +80,14 @@ Singleton {
             root.timedOut = true;
             root.check();
         }
+    }
+
+    // The hard bound, whatever is pending (a key that leaked, a surface that never answers): the wallpaper's own bound past
+    // the entrance's.
+    Timer {
+        id: hardTimer
+        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs
+        onTriggered: root.reveal("timeout")
     }
 
     Timer {
