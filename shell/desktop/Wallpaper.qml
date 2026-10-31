@@ -16,6 +16,9 @@ Scope {
     // The session is locked (set from shell.qml, as Overview and the switcher get it): a video wallpaper pauses.
     property bool locked: false
 
+    // The measurement's clock starts with the desktop (ADR-0040 ID-16): its `shown` lines count from here.
+    Component.onCompleted: Journal.begin()
+
     // Dev-only wallpaper override for tests/visual (contrast on worst-case wallpapers): with
     // GRASSFIELD_DEV=1, GRASSFIELD_WALLPAPER_FILE (initial, trusted: set by the dev scripts) or
     // `qs ipc call wallpaper set <path>` covers the artwork with that image; an empty path restores the artwork.
@@ -312,28 +315,34 @@ Scope {
             WallpaperFeed {
                 id: feed
                 screenInfo: win.modelData
-                onDisplayChanged: win.show(win.withArt(feed.display), "normal")
+                onDisplayChanged: {
+                    win.feedSeen = true;
+                    win.show(win.withArt(feed.display), "normal");
+                }
             }
 
             // ---- the first frame (ADR-0040 step 3, ID-3) ----
             // The window maps with its final first frame: the output's last picture (its still from wallpaper.json, its tone from
             // the stored statistics, so the bar is right before anything shows), once decoded; the artwork or a colour at once; at
-            // most wallpaper.firstShowTimeoutMs, then the artwork. Until then every description goes straight into slot A, no fade;
-            // a feed result that is the still's file changes nothing.
+            // most wallpaper.firstShowTimeoutMs, then the artwork. Until then the feed's result goes straight into slot A, no fade;
+            // a feed result that is the still's file changes nothing; a phase or an appearance known before that result changes
+            // nothing either (WallpaperConfig.firstFrameChoice: the result carries them).
             property bool firstReady: false
+            // The feed has given its first result (its initial `display` is a placeholder, never shown).
             property bool feedSeen: false
             function stillDesc(): var {
                 const st = win.modelData ? WallpaperState.stillOf(win.modelData.name) : null;
                 return st ? {kind: "picture", color: "", url: "file://" + st.file, strip: st.strip, image: st.image, mean: st.mean, video: ""} : null;
             }
             function begin(): void {
-                if (win.firstReady || !WallpaperState.stateReady)
+                if (win.firstReady)
                     return;
                 const still = win.stillDesc();
-                if (still !== null && !win.feedSeen)
-                    win.showFirst(still);
-                else if (win.feedSeen)
+                const choice = WallpaperConfig.firstFrameChoice(win.feedSeen, WallpaperState.stateReady, still !== null);
+                if (choice === "feed")
                     win.showFirst(win.withArt(feed.display));
+                else if (choice === "still")
+                    win.showFirst(still);
             }
             function showFirst(desc: var): void {
                 // The feed's result is the still already in slot A: nothing changes (its description is the fuller one).
@@ -385,12 +394,13 @@ Scope {
                 console.info("grassfield-shell: wallpaper first " + win.shownDesc.kind + (win.shownDesc.kind === "art" ? " " + (win.shownDesc.artwork || "grassfield") + " " + (win.shownDesc.variant || "evening.dark") : "") + " source=" + feed.cfg.source + " output=" + (win.modelData ? win.modelData.name : ""));
                 Journal.shown("wallpaper", win.modelData ? win.modelData.name : "");
             }
-            // What is on screen now is final: its ground (ADR-0040 ID-2) and, for a picture, the still of the next start (ID-3).
+            // What is on screen now is final: its ground (ADR-0040 ID-2) and its record in wallpaper.json (`shown`: the first frame
+            // of the next start, ID-3, and the lock's backdrop, ID-7; with the artwork it would draw instead).
             function settled(desc: var, slot: WallpaperSlot): void {
                 if (!win.modelData)
                     return;
                 Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.palette.ground, Tokens.sessionGround));
-                WallpaperState.setShown(win.modelData.name, desc);
+                WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant});
             }
             Timer {
                 id: firstTimer
@@ -409,7 +419,10 @@ Scope {
                     win.begin();
                 }
             }
-            Component.onDestruction: Journal.hidden("wallpaper", win.modelData ? win.modelData.name : "")
+            Component.onDestruction: {
+                if (win.firstReady)
+                    Journal.hidden("wallpaper", win.modelData ? win.modelData.name : "");
+            }
 
             // The output's height: the window's own is not known before it maps (the first frame's tone is reported before).
             readonly property real fullHeight: win.modelData ? win.modelData.height : win.height
@@ -521,11 +534,9 @@ Scope {
             // Nothing has been shown yet: the first content cuts in (no fade from the default artwork).
             property bool shownOnce: false
             function show(desc: var, mode: string): void {
-                // Before the first frame: straight into slot A (once the stored still could be read).
+                // Before the first frame: the first-frame choice decides (a phase or an appearance alone changes nothing).
                 if (!win.firstReady) {
-                    win.feedSeen = true;
-                    if (WallpaperState.stateReady)
-                        win.showFirst(desc);
+                    win.begin();
                     return;
                 }
                 // A fade in flight is complete at once: its content is ready (a fade only starts then).
@@ -535,6 +546,12 @@ Scope {
                     cancelPending();
                     // The output's first wallpaper is already on screen: later changes fade.
                     shownOnce = true;
+                    // The feed's own description of the still on screen (its statistics are the helper's, fresh): tone, ground, record.
+                    if (desc.kind === "picture" && desc !== shownDesc) {
+                        shownDesc = desc;
+                        reportTone(desc);
+                        win.settled(desc, shown);
+                    }
                     return;
                 }
                 if (incoming === null) {

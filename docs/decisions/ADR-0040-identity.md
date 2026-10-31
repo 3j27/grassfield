@@ -229,36 +229,45 @@ and IQ-B3 here changes the palette only, not which controls read it.
   the shell decodes only the helper's own output.
 - **Step 3 as built** (in the one pull request of 2026-10-31; nothing in `shell/security`):
   - **First frame (ID-3).** Each output's wallpaper window maps only with its first frame (`visible: win.firstReady`).
-    Once a picture without a video is on screen its still is recorded in `wallpaper.json` (`stills`, per output: the
-    prepared file, the strip and whole-picture statistics, the mean colour; ADR-0020 row), and at the next start
-    `WallpaperConfig.stillOf` reads it back only when it is one of the helper's own pictures (a 32-hex cache name directly in
-    the prepared folder: the shell still decodes nothing else). The still goes into slot A with the bar tone of its stored
-    strip, and the window maps once it is decoded; the artwork and a colour map at once. Before that frame every result of
-    the feed goes straight into slot A (no fade); when the feed's result is the still's file nothing changes. A still that
-    cannot be decoded, or nothing within `wallpaper.firstShowTimeoutMs` (1500 ms), gives the artwork. A video has no still
-    (its poster lives in the video cache): it waits for the feed within the same bound. The bar's tone is never reported
-    from the default artwork before the first frame.
+    What each output shows is recorded in `wallpaper.json` once it is on screen (`shown`, per output: a picture with its
+    prepared file, strip and whole-picture statistics and mean colour, or a video's poster marked as one; the artwork and
+    variant; a colour; each with the artwork and variant the output would draw instead, the lock's fallback; ADR-0020 row),
+    and at the next start `WallpaperConfig.stillOf` reads a picture back only when it is one of the helper's own (a 32-hex
+    cache name directly in the prepared folder: the shell still decodes nothing else). The first frame is chosen by
+    `WallpaperConfig.firstFrameChoice`: nothing before `wallpaper.json` was read; then the stored still until the feed's
+    first result, which decides (it carries the phase and the appearance: a phase or an appearance known before it changes
+    nothing, review of 4457edc1). The still goes into slot A with the bar tone of its stored strip, and the window maps once
+    it is decoded; the artwork and a colour map at once; when the feed's result is the still's file nothing changes but its
+    statistics (the helper's, fresh). A still that cannot be decoded, or nothing within `wallpaper.firstShowTimeoutMs`
+    (1500 ms), gives the artwork. A video has no still for the desktop (its poster lives in the video cache): it waits for
+    the feed within the same bound. The bar's tone is never reported from the default artwork before the first frame.
   - **Ground (ID-2).** `Artwork.ground` (the sRGB mean of the sky's middle and the middle of the land, in whole channel
     values) gives each palette a ground; the default artwork's, `#2F6D5F`, is now `session.ground` and `looknfeel.lua`'s
     `background_color` (`tst_artwork.qml` and `tst_sessionexit.qml` hold the three equal). `WallpaperConfig.groundOf` gives
     the ground of what an output shows (a picture's mean colour from the helper, a colour, the artwork's), reported to the
-    `Ground` service when it is on screen. The wallpaper window's own colour is its output's ground, the exit cover's is
-    `Ground.current` (the first screen's), and `Compositor.qml` sets Hyprland's `misc.background_color` to that one through
-    the request socket like the blur (`Minimized.groundCall`): at start, on each change (debounced), after a config reload;
-    an error answer stops the pushes until the next change and the static default stays. VERIFY on 0.56.2 (section
-    "Not verified"): that the call is accepted at run time and repaints the background.
+    `Ground` service when it is on screen. The wallpaper window's own colour is its output's ground, and `Compositor.qml`
+    sets Hyprland's `misc.background_color` to the first screen's (`Ground.current`) through the request socket like the
+    blur (`Minimized.groundCall`): once the first screen has reported (`Ground.known`: at a shell restart the compositor
+    keeps the previous run's ground until then, no flash to the default), on each change (debounced), after a config
+    reload; an error answer stops the pushes until the next change and the static default stays. The exit cover fades to
+    the colour Hyprland last answered "ok" to (`Ground.accepted`, the static default before), which is what shows once the
+    shell has stopped. VERIFY on 0.56.2 (section "Not verified"): that the call is accepted at run time and repaints the
+    background.
   - **No compositor fade (ID-4).** `gf-wallpaper-no-anim` in `windows.lua`.
   - **Hotplug (ID-15, the wallpaper's part).** A new output's window takes the same path: unmapped (the compositor's
     ground shows) until its still or its feed's first result, then mapped once; `Ground.of` gives an output without a
     report the compositor's ground.
-  - **Measurement (ID-16).** `Journal` logs `grassfield-shell: shown wallpaper <output> <ms>` when a window maps and
-    `hidden` when it goes, plus `grassfield-shell: wallpaper first <kind> [<artwork> <variant>] source=<source>
+  - **Measurement (ID-16).** `Journal` starts its clock with the desktop (`grassfield-shell: journal starts`) and logs
+    `grassfield-shell: shown wallpaper <output> <ms>` when a window maps and `hidden` when a mapped one goes, plus `grassfield-shell: wallpaper first <kind> [<artwork> <variant>] source=<source>
     output=<output>`; `tests/visual/appear-once.sh` comes with step 6, which adds the bars' lines.
-  - Tests: `tst_wallpaper.qml` (`stillOf` refuses any file but a cache name in the prepared folder, `withStill`,
-    `groundOf`, the window's contract from its source), `tst_artwork.qml` (every palette's ground, the default's equal to
-    `session.ground`), `tst_minimized.qml` (`groundCall` interpolates only `#rrggbb`), `tst_sessionexit.qml` (the cover and
-    the compositor read `Ground.current`). NOT VERIFIED (nested): the first frame at start and at a shell restart, the
-    hotplug, the background colour after a change and a reload.
+  - Tests: `tst_wallpaper.qml` (`stillOf` refuses any file but a cache name in the prepared folder, `withShown`,
+    `firstFrameChoice`, `groundOf`, `groundFor`, `withCarousel` and `stateText` keep every part of `wallpaper.json`, the
+    window's wiring from its source), `tst_artwork.qml` (every palette's ground, the default's equal to `session.ground`),
+    `tst_minimized.qml` (`groundCall` interpolates only `#rrggbb`), `tst_sessionexit.qml` (the cover on `Ground.accepted`,
+    the compositor's push only once known). Review of 4457edc1 (FAIL: M1 the phase or appearance before the feed; m1 the
+    flash at a restart; m2 the cover's colour; m3 the journal's clock; m4 the write path untested; two NITs): all fixed.
+    NOT VERIFIED (nested): the first frame at start and at a shell restart, the hotplug, the background colour after a
+    change and a reload.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.

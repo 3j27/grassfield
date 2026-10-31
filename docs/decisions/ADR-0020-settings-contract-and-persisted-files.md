@@ -39,7 +39,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `wallpaper-recent.json` | config (`backend.cpp:110`) | Settings (top-level array) | none | state, `{version, recents}` |
 | `recent-items.json` | state | shell | none | add v1 |
 | `wallpaper-online.json` | state | shell | none | add v1 |
-| `wallpaper.json` (carousel; `stills` since ADR-0040 step 3) | state | shell | none | add v1 (`stills`: per output, the last picture shown, `{file, strip, image, mean}`, the first frame of the next start; additive, ignored by an older shell; a file that is not one of the helper's prepared pictures is not read; at most 16 outputs) |
+| `wallpaper.json` (carousel; `shown` since ADR-0040 step 3) | state | shell | none | add v1 (`shown`: per output, the last wallpaper shown, `{kind: picture, file, video, strip, image, mean}` or `{kind: art}` or `{kind: color, color}`, each with `artwork` and `variant`: the desktop's first frame at the next start and the lock's backdrop; additive, ignored by an older shell; a file that is not a plain cache name of the helper is not read; at most 16 outputs) |
 | `airplane.json` | state (`Airplane.js:82`) | shell | none | add v1 |
 | `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
 | `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |

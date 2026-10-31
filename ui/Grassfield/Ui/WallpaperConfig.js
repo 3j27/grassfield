@@ -998,40 +998,147 @@ function artworkVariantFor(artwork, choice, dark, phase) {
     return (["dawn", "day", "evening", "night"].indexOf(phase) >= 0 ? phase : "evening") + "." + set;
 }
 
-// ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3) ----
+// ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3), the lock's backdrop (step 4a, ID-7) ----
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const STILL_NAME = /^[0-9a-f]{32}\.(jpg|png)$/;
+const ART_VARIANT = /^((dawn|day|evening|night)\.)?(light|dark)$/;
 
-// The last picture shown on `output` ({file, strip, image, mean}) from the stored state (wallpaper.json "stills"), or null. The
-// file must be one of the helper's own prepared pictures (a plain cache name in `preparedDir`): the shell decodes nothing else
-// (ADR-0016). The statistics are kept only when they have the helper's shape.
+// wallpaper.json "shown": per output, the last wallpaper that output showed. A picture {kind: "picture", file, strip, image,
+// mean, video} (`file` the prepared picture, or a video's poster with `video` true), the artwork {kind: "art"} or a colour
+// {kind: "color", color}; every record also names the artwork and variant the output would draw instead (`artwork`,
+// `variant`): the lock's fallback. Written by the desktop when a wallpaper is on screen; read back by the desktop's first
+// frame (stillOf) and by the lock (lockBackdropOf). At most 16 outputs.
+function shownRecord(saved, output) {
+    const all = isPlainObject(saved) && isPlainObject(saved.shown) ? saved.shown : {};
+    const r = typeof output === "string" && Object.prototype.hasOwnProperty.call(all, output) ? all[output] : null;
+    return isPlainObject(r) ? r : null;
+}
+
+// `file` when it is a plain cache name ("<32 hex>.jpg|png") directly in one of `dirs` (each an absolute path), else "".
+function cacheFile(file, dirs) {
+    if (typeof file !== "string")
+        return "";
+    const slash = file.lastIndexOf("/");
+    if (slash < 0 || !STILL_NAME.test(file.substring(slash + 1)))
+        return "";
+    const dir = file.substring(0, slash);
+    return dirs.some(d => validPath(d) && d.replace(/\/+$/, "") === dir) ? file : "";
+}
+
+// The last picture shown on `output` ({file, strip, image, mean}) for the desktop's first frame, or null. The file must be one
+// of the helper's own prepared pictures (a plain cache name in `preparedDir`): the shell decodes nothing else (ADR-0016). A
+// video's poster is not one (it waits for the feed). The statistics are kept only when they have the helper's shape.
 function stillOf(saved, output, preparedDir) {
-    const all = isPlainObject(saved) && isPlainObject(saved.stills) ? saved.stills : {};
-    const s = typeof output === "string" && Object.prototype.hasOwnProperty.call(all, output) ? all[output] : null;
-    if (!isPlainObject(s) || typeof s.file !== "string" || !validPath(preparedDir))
+    const s = shownRecord(saved, output);
+    if (s === null || s.kind !== "picture" || s.video === true)
         return null;
-    const dir = preparedDir.replace(/\/+$/, "");
-    const slash = s.file.lastIndexOf("/");
-    if (s.file.substring(0, slash) !== dir || !STILL_NAME.test(s.file.substring(slash + 1)))
+    const file = cacheFile(s.file, [preparedDir]);
+    if (file === "")
         return null;
     const stats = v => isPlainObject(v) && typeof v.mean === "number" && typeof v.p5 === "number" && typeof v.p95 === "number" ? v : null;
     const strip = isPlainObject(s.strip) && stats(s.strip.all) ? s.strip : null;
-    return {file: s.file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
+    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
 }
 
-// The stored state with output's still set from the description now on screen (a picture without a video), or removed (any
-// other kind: the artwork and a colour need no still). A new object; at most 16 outputs are kept.
-function withStill(saved, output, desc) {
+// The stored state with `output`'s record set from the description now on screen (`art`: {artwork, variant}, what the output
+// would draw instead). A new object; at most 16 outputs are kept (the newest).
+function withShown(saved, output, desc, art) {
     const base = isPlainObject(saved) ? saved : {};
-    const stills = Object.assign({}, isPlainObject(base.stills) ? base.stills : {});
-    if (desc && desc.kind === "picture" && !desc.video && typeof desc.url === "string" && desc.url.indexOf("file://") === 0)
-        stills[output] = {file: desc.url.substring(7), strip: desc.strip || null, image: desc.image || null, mean: typeof desc.mean === "string" ? desc.mean : ""};
-    else
-        delete stills[output];
-    const names = Object.keys(stills);
-    for (let i = 0; i < names.length - 16; i++)
-        delete stills[names[i]];
-    return Object.assign({}, base, {stills: stills});
+    const a = isPlainObject(art) ? art : {};
+    const r = {kind: "art", artwork: typeof a.artwork === "string" ? a.artwork : "grassfield", variant: typeof a.variant === "string" ? a.variant : "evening.dark"};
+    let keep = true;
+    if (desc && desc.kind === "picture" && typeof desc.url === "string" && desc.url.indexOf("file://") === 0) {
+        r.kind = "picture";
+        r.file = desc.url.substring(7);
+        r.video = typeof desc.video === "string" && desc.video !== "";
+        r.strip = desc.strip || null;
+        r.image = desc.image || null;
+        r.mean = typeof desc.mean === "string" ? desc.mean : "";
+    } else if (desc && desc.kind === "color" && validColor(desc.color)) {
+        r.kind = "color";
+        r.color = desc.color;
+    } else if (desc && desc.kind === "art") {
+        if (typeof desc.artwork === "string")
+            r.artwork = desc.artwork;
+        if (typeof desc.variant === "string")
+            r.variant = desc.variant;
+    } else {
+        keep = false;
+    }
+    // A fresh object, `output` last (the engine keeps a deleted key's place when it is added again): the oldest go first.
+    const old = isPlainObject(base.shown) ? base.shown : {};
+    const names = Object.keys(old).filter(n => n !== output);
+    const shown = {};
+    for (const n of names.slice(Math.max(0, names.length - (keep ? 15 : 16))))
+        shown[n] = old[n];
+    if (keep)
+        shown[output] = r;
+    return Object.assign({}, base, {shown: shown});
+}
+
+// What the lock draws behind its scrim on `output` (ADR-0040 step 4a, ID-7): {kind: "picture", file} (the prepared picture or a
+// video's poster: a plain cache name in `preparedDir` or `videoDir`), {kind: "color", color} or {kind: "art"}, each with the
+// artwork and variant to draw when the picture cannot be (the default for anything unknown); null when the output never showed
+// anything. The lock still checks the file itself (a regular file of bounded size whose real path is in the cache).
+function lockBackdropOf(saved, output, preparedDir, videoDir) {
+    const r = shownRecord(saved, output);
+    if (r === null)
+        return null;
+    const out = {kind: "art", file: "", color: "", artwork: ARTWORKS.indexOf(r.artwork) >= 0 ? r.artwork : "grassfield", variant: typeof r.variant === "string" && ART_VARIANT.test(r.variant) ? r.variant : "evening.dark"};
+    if (r.kind === "picture") {
+        out.file = cacheFile(r.file, [preparedDir, videoDir]);
+        if (out.file !== "")
+            out.kind = "picture";
+    } else if (r.kind === "color" && validColor(r.color)) {
+        out.kind = "color";
+        out.color = r.color;
+    }
+    return out;
+}
+
+// What a wallpaper window shows as its first frame, before it maps (ADR-0040 ID-3): "feed" (the feed's first result, final:
+// it carries the phase and the appearance too), "still" (the output's last picture from wallpaper.json, until that result),
+// or "wait" (nothing yet: the window stays unmapped, at most wallpaper.firstShowTimeoutMs, then the artwork). A phase or an
+// appearance known before the feed's first result changes nothing; nothing is chosen before wallpaper.json was read.
+function firstFrameChoice(feedSeen, stateReady, hasStill) {
+    if (!stateReady)
+        return "wait";
+    if (feedSeen)
+        return "feed";
+    return hasStill ? "still" : "wait";
+}
+
+// The ground of `output` in `grounds` ({output name: "#RRGGBB"}), else `fallback`.
+function groundFor(grounds, output, fallback) {
+    return isPlainObject(grounds) && typeof output === "string" && Object.prototype.hasOwnProperty.call(grounds, output) && HEX.test(grounds[output]) ? grounds[output] : fallback;
+}
+
+// The stored state with display `key`'s carousel position set; every other key (the last wallpaper shown) kept. A new object.
+function withCarousel(saved, key, state) {
+    const base = isPlainObject(saved) ? saved : {};
+    const all = Object.assign({}, isPlainObject(base.displays) ? base.displays : {});
+    all[key] = state;
+    return Object.assign({}, base, {displays: all});
+}
+
+// The text of wallpaper.json: the carousel positions, the last wallpaper shown per output, the video crash markers
+// ([{path, at}], one per path) and the blocked videos; the empty ones left out.
+function stateText(saved, startingBy, blocked, now) {
+    const s = isPlainObject(saved) ? saved : {};
+    const o = {displays: isPlainObject(s.displays) ? s.displays : {}};
+    if (isPlainObject(s.shown) && Object.keys(s.shown).length > 0)
+        o.shown = s.shown;
+    const starting = [];
+    const by = isPlainObject(startingBy) ? startingBy : {};
+    for (const owner of Object.keys(by)) {
+        if (!starting.some(m => m.path === by[owner]))
+            starting.push({path: by[owner], at: now});
+    }
+    if (starting.length > 0)
+        o.videoStarting = starting;
+    if (Array.isArray(blocked) && blocked.length > 0)
+        o.videoBlocked = blocked;
+    return JSON.stringify(o, null, 2) + "\n";
 }
 
 // The ground of a description (ADR-0040 ID-2): a picture's mean colour, a colour itself, the artwork's ground; `fallback` (the

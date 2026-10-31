@@ -43,11 +43,15 @@ TestCase {
         verify(/WlrLayershell\.layer: WlrLayer\.Overlay/.test(cover), "above the menu bar, the Dock and the popups");
         // The ground of what is on screen (ADR-0040 step 3), the compositor's background colour too (Compositor.qml pushes it);
         // the static session.ground until a wallpaper reports one.
-        verify(/color: Ground\.current/.test(cover));
+        // The cover fades to the colour Hyprland accepted (review of 4457edc1, m2): what shows once the shell has stopped.
+        verify(/color: Ground\.accepted/.test(cover));
         const ground = source("shell/services/Ground.qml");
-        verify(/\?\? Tokens\.sessionGround;/.test(ground), "the static default without a report");
+        verify(/property string accepted: Tokens\.sessionGround/.test(ground), "the config's static default until Hyprland accepted another");
+        verify(/readonly property string current: WallpaperConfig\.groundFor\(root\.grounds, root\.firstScreen, Tokens\.sessionGround\)/.test(ground));
         const comp = source("shell/platform/Compositor.qml");
-        verify(/readonly property string ground: Ground\.current/.test(comp) && /Minimized\.groundCall\(root\.ground\)/.test(comp), "the compositor gets the same ground");
+        verify(/readonly property string ground: Ground\.current/.test(comp) && /Minimized\.groundCall\(root\.ground\)/.test(comp), "the compositor gets the shown ground");
+        verify(/if \(answer === "ok"\)\s*Ground\.accepted = sock\.value;/.test(comp), "only an accepted ground is the cover's");
+        verify(/if \(!root\.groundKnown \|\| root\.groundRejected/.test(comp), "nothing pushed before the first screen reported (no flash at a restart)");
         verify(/duration: root\.fadeMs/.test(cover) && /readonly property int fadeMs: Appearance\.duration\(Tokens\.sessionExitFadeMs\)/.test(cover));
         // The compositor neither fades it (one owner of motion, ID-4) nor blurs it (it is opaque).
         const lua = source("config/hypr/grassfield/windows.lua");

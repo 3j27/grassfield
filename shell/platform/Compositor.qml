@@ -435,19 +435,28 @@ Singleton {
     // screen's; Hyprland holds one), sent the same way as the blur: at start, on each change (debounced) and after a config
     // reload (which restores looknfeel.lua's static default, session.ground). An error answer (a Hyprland that cannot set it at
     // run time) stops the pushes until the next change: the static default stays, as ID-2's fallback says.
+    // Nothing is pushed before the first screen reported its ground (Ground.known): at a shell restart the compositor keeps
+    // the previous run's ground until then, instead of flashing the static default. The colour Hyprland answers "ok" to is
+    // recorded (Ground.accepted): the exit cover fades to it.
     readonly property string ground: Ground.current
+    readonly property bool groundKnown: Ground.known
     property bool groundRejected: false
     onGroundChanged: {
         root.groundRejected = false;
-        groundDebounce.restart();
+        if (root.groundKnown)
+            groundDebounce.restart();
+    }
+    onGroundKnownChanged: {
+        if (root.groundKnown)
+            groundDebounce.restart();
     }
     function pushGround(): void {
         const call = Minimized.groundCall(root.ground);
         const path = Hyprland.requestSocketPath || "";
-        if (root.groundRejected || call === "" || path === "")
+        if (!root.groundKnown || root.groundRejected || call === "" || path === "")
             return;
         console.info("grassfield-shell: push ground " + root.ground);
-        blurSocket.createObject(root, {"path": path, "line": "dispatch " + call, "kind": "ground"});
+        blurSocket.createObject(root, {"path": path, "line": "dispatch " + call, "kind": "ground", "value": root.ground});
     }
     Timer {
         id: groundDebounce
@@ -464,8 +473,9 @@ Singleton {
         Socket {
             id: sock
             property string line: ""
-            // "blur" | "ground": which push this answers.
+            // "blur" | "ground": which push this answers, and the ground it sent.
             property string kind: "blur"
+            property string value: ""
             property string reply: ""
             property bool judged: false
 
@@ -475,7 +485,10 @@ Singleton {
                 sock.judged = true;
                 sock.answerTimeout.stop();
                 if (sock.kind === "ground") {
-                    if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.groundRejected) {
+                    const answer = Minimized.blurAnswer(sock.reply);
+                    if (answer === "ok")
+                        Ground.accepted = sock.value;
+                    if (answer === "rejected" && !root.groundRejected) {
                         root.groundRejected = true;
                         console.info("grassfield-shell: Hyprland rejected the ground request (" + sock.reply.trim() + "); the background stays as configured until the next change");
                     }
@@ -535,7 +548,8 @@ Singleton {
             // A reload restores the config's blur. Neither push emits an event (captured on Hyprland 0.56.2), so a reload is
             // always a real one: no echo, no loop (tests/compositor/blur_events.sh).
             root.pushBlur();
-            // And the config's ground (ADR-0040 ID-2).
+            // And the ground (ADR-0040 ID-2): the reload put back the config's static default.
+            Ground.accepted = Tokens.sessionGround;
             root.pushGround();
         }
     }
@@ -916,7 +930,7 @@ Singleton {
         pushMotion();
         // The same for the blur: the compositor keeps the values of the previous run.
         pushBlur();
-        // And the ground: the previous run's, or the config's static default (ADR-0040 ID-2).
+        // And the ground, once known (ADR-0040 ID-2; onGroundKnownChanged otherwise).
         pushGround();
     }
 

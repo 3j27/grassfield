@@ -974,7 +974,7 @@ TestCase {
 
     function test_stillOfReadsOnlyTheHelpersOwnPictures() {
         const name = "0123456789abcdef0123456789abcdef.jpg";
-        const good = {stills: {"eDP-1": {file: prep + "/" + name, strip: stripStats, image: {mean: 0.3, p5: 0.1, p95: 0.6}, mean: "#336699"}}};
+        const good = {shown: {"eDP-1": {kind: "picture", file: prep + "/" + name, strip: stripStats, image: {mean: 0.3, p5: 0.1, p95: 0.6}, mean: "#336699"}}};
         const s = WallpaperConfig.stillOf(good, "eDP-1", prep);
         compare(s.file, prep + "/" + name);
         compare(s.strip.all.mean, 0.4);
@@ -982,45 +982,78 @@ TestCase {
         compare(s.mean, "#336699");
         // The prepared folder may carry a trailing slash.
         compare(WallpaperConfig.stillOf(good, "eDP-1", prep + "/").file, prep + "/" + name);
-        // Another output, no stills, nothing stored: null.
+        // Another output, nothing shown, nothing stored: null.
         compare(WallpaperConfig.stillOf(good, "DP-3", prep), null);
         compare(WallpaperConfig.stillOf({}, "eDP-1", prep), null);
         compare(WallpaperConfig.stillOf(null, "eDP-1", prep), null);
-        compare(WallpaperConfig.stillOf({stills: []}, "0", prep), null);
+        compare(WallpaperConfig.stillOf({shown: []}, "0", prep), null);
         // Anything that is not a cache name directly in the prepared folder is never decoded (ADR-0016).
         for (const f of [prep + "/sub/" + name, prep + "/../" + name, "/etc/passwd", prep + "/" + name + ".png", prep + "/0123456789ABCDEF0123456789ABCDEF.jpg", prep + "/x.jpg", "/tmp/" + name, prep + name, 12])
-            compare(WallpaperConfig.stillOf({stills: {o: {file: f}}}, "o", prep), null, String(f));
+            compare(WallpaperConfig.stillOf({shown: {o: {kind: "picture", file: f}}}, "o", prep), null, String(f));
+        // Not a picture, or a video's poster: no still (the poster lives in the video cache; the desktop waits for the feed).
+        compare(WallpaperConfig.stillOf({shown: {o: {kind: "art", file: prep + "/" + name}}}, "o", prep), null);
+        compare(WallpaperConfig.stillOf({shown: {o: {kind: "picture", video: true, file: prep + "/" + name}}}, "o", prep), null);
         // No usable prepared folder: nothing is read.
         compare(WallpaperConfig.stillOf(good, "eDP-1", ""), null);
         compare(WallpaperConfig.stillOf(good, "eDP-1", "relative/prepared"), null);
         // Statistics of another shape are dropped, the picture stays.
-        const odd = WallpaperConfig.stillOf({stills: {o: {file: prep + "/" + name, strip: {all: {mean: "x"}}, image: [1], mean: "red"}}}, "o", prep);
+        const odd = WallpaperConfig.stillOf({shown: {o: {kind: "picture", file: prep + "/" + name, strip: {all: {mean: "x"}}, image: [1], mean: "red"}}}, "o", prep);
         compare(odd.strip, null);
         compare(odd.image, null);
         compare(odd.mean, "");
         // An inherited key is not a stored output.
-        compare(WallpaperConfig.stillOf({stills: {}}, "constructor", prep), null);
+        compare(WallpaperConfig.stillOf({shown: {}}, "constructor", prep), null);
     }
 
-    function test_withStillKeepsThePictureOnScreen() {
+    function test_withShownRecordsWhatIsOnScreen() {
         const url = "file://" + prep + "/0123456789abcdef0123456789abcdef.jpg";
         const pic = {kind: "picture", color: "", url: url, strip: stripStats, image: null, mean: "#112233", video: ""};
+        const art = {artwork: "meadow", variant: "dark"};
         const saved = {displays: {k: {seed: 1}}};
-        const a = WallpaperConfig.withStill(saved, "eDP-1", pic);
+        const a = WallpaperConfig.withShown(saved, "eDP-1", pic, art);
         compare(a.displays, saved.displays, "the carousel is kept");
-        compare(a.stills["eDP-1"], {file: prep + "/0123456789abcdef0123456789abcdef.jpg", strip: stripStats, image: null, mean: "#112233"});
-        verify(saved.stills === undefined, "a new object: the stored state is not changed in place");
+        compare(a.shown["eDP-1"], {kind: "picture", artwork: "meadow", variant: "dark", file: prep + "/0123456789abcdef0123456789abcdef.jpg", video: false, strip: stripStats, image: null, mean: "#112233"});
+        verify(saved.shown === undefined, "a new object: the stored state is not changed in place");
         // What is written reads back.
         compare(WallpaperConfig.stillOf(a, "eDP-1", prep).file, prep + "/0123456789abcdef0123456789abcdef.jpg");
-        // The artwork, a colour, a video: the still goes.
-        for (const d of [{kind: "art"}, {kind: "color", color: "#000000"}, Object.assign({}, pic, {video: "file:///v.mp4"}), null])
-            verify(!("eDP-1" in WallpaperConfig.withStill(a, "eDP-1", d).stills), JSON.stringify(d));
-        // At most 16 outputs.
+        // The artwork and a colour replace the picture; a video keeps its poster, marked.
+        compare(WallpaperConfig.withShown(a, "eDP-1", {kind: "art", artwork: "rows", variant: "light"}, art).shown["eDP-1"], {kind: "art", artwork: "rows", variant: "light"});
+        compare(WallpaperConfig.withShown(a, "eDP-1", {kind: "color", color: "#102030"}, art).shown["eDP-1"], {kind: "color", artwork: "meadow", variant: "dark", color: "#102030"});
+        compare(WallpaperConfig.withShown(a, "eDP-1", Object.assign({}, pic, {video: "file:///v.mp4"}), art).shown["eDP-1"].video, true);
+        // Nothing usable: the record goes.
+        verify(!("eDP-1" in WallpaperConfig.withShown(a, "eDP-1", null, art).shown));
+        verify(!("eDP-1" in WallpaperConfig.withShown(a, "eDP-1", {kind: "color", color: "red"}, art).shown));
+        // At most 16 outputs, the newest kept (a rewrite moves an output to the end).
         let many = {};
         for (let i = 0; i < 20; i++)
-            many = WallpaperConfig.withStill(many, "out-" + i, pic);
-        compare(Object.keys(many.stills).length, 16);
-        verify("out-19" in many.stills, "the newest is kept");
+            many = WallpaperConfig.withShown(many, "out-" + i, pic, art);
+        compare(Object.keys(many.shown).length, 16);
+        verify("out-19" in many.shown && !("out-3" in many.shown));
+        many = WallpaperConfig.withShown(many, "out-4", pic, art);
+        many = WallpaperConfig.withShown(many, "out-20", pic, art);
+        verify("out-4" in many.shown && !("out-5" in many.shown));
+    }
+
+    // ADR-0040 step 4a (ID-7): what the lock draws, from the same record.
+    function test_lockBackdropOf() {
+        const vid = "/home/u/.cache/grassfield/wallpapers/video";
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const of = r => WallpaperConfig.lockBackdropOf({shown: {o: r}}, "o", prep, vid);
+        compare(of({kind: "picture", file: prep + "/" + name, artwork: "rows", variant: "light"}), {kind: "picture", file: prep + "/" + name, color: "", artwork: "rows", variant: "light"});
+        // A video's poster is in the video cache.
+        compare(of({kind: "picture", video: true, file: vid + "/" + name}).file, vid + "/" + name);
+        // Any other file: the artwork (the lock never decodes it).
+        for (const f of ["/etc/passwd", prep + "/../" + name, vid + "/sub/" + name, "/tmp/" + name, prep + "/" + name + ".gif", null])
+            compare(of({kind: "picture", file: f}), {kind: "art", file: "", color: "", artwork: "grassfield", variant: "evening.dark"}, String(f));
+        compare(of({kind: "color", color: "#ABCDEF"}).color, "#ABCDEF");
+        compare(of({kind: "color", color: "#ABCDEF"}).kind, "color");
+        compare(of({kind: "color", color: "url(x)"}).kind, "art");
+        // Unknown names read as the default artwork.
+        compare(of({kind: "art", artwork: "nope", variant: "noon.light"}), {kind: "art", file: "", color: "", artwork: "grassfield", variant: "evening.dark"});
+        compare(of({kind: "art", artwork: "grassfield", variant: "night.dark"}).variant, "night.dark");
+        // Never shown: null (the lock waits for it, bounded).
+        compare(WallpaperConfig.lockBackdropOf({shown: {}}, "o", prep, vid), null);
+        compare(WallpaperConfig.lockBackdropOf(undefined, "o", prep, vid), null);
     }
 
     function test_groundOf() {
@@ -1032,6 +1065,53 @@ TestCase {
         compare(WallpaperConfig.groundOf({kind: "color", color: "red"}, "#2F6D5F", "#000001"), "#000001");
         compare(WallpaperConfig.groundOf({kind: "art"}, "", "#000001"), "#000001");
         compare(WallpaperConfig.groundOf(null, "#2F6D5F", "#000001"), "#000001");
+    }
+
+    // Review of 4457edc1 (M1): a phase or an appearance known before the feed's first result never chooses the first frame.
+    function test_firstFrameChoice() {
+        const c = WallpaperConfig.firstFrameChoice;
+        // Before wallpaper.json was read: nothing (the stored still is not known yet).
+        compare(c(false, false, false), "wait");
+        compare(c(true, false, true), "wait");
+        // The stored still until the feed's first result, which then decides.
+        compare(c(false, true, true), "still");
+        compare(c(true, true, true), "feed");
+        compare(c(true, true, false), "feed");
+        // No still and no result yet: the window stays unmapped (bounded by the timeout).
+        compare(c(false, true, false), "wait");
+        // The window's wiring: only the feed marks its first result; a phase or appearance event goes through the choice.
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/Wallpaper.qml"), false);
+        xhr.send();
+        const w = xhr.responseText;
+        compare((w.match(/win\.feedSeen = true;/g) || []).length, 1);
+        verify(/onDisplayChanged: \{\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
+        verify(/if \(!win\.firstReady\) \{\s*win\.begin\(\);\s*return;\s*\}/.test(w), "show() before the first frame only asks the choice");
+    }
+
+    function test_groundFor() {
+        compare(WallpaperConfig.groundFor({a: "#102030"}, "a", "#000000"), "#102030");
+        compare(WallpaperConfig.groundFor({a: "#102030"}, "b", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor({a: "red"}, "a", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor({}, "constructor", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor(null, "a", ""), "");
+    }
+
+    // wallpaper.json keeps every part: the carousel, the last wallpaper shown, the video markers.
+    function test_stateTextKeepsEveryPart() {
+        const shown = {o: {kind: "art", artwork: "rows", variant: "dark"}};
+        let saved = {displays: {k: {seed: 1}}, shown: shown};
+        saved = WallpaperConfig.withCarousel(saved, "k2", {seed: 2});
+        compare(saved.shown, shown, "a carousel step keeps the record");
+        compare(saved.displays.k2.seed, 2);
+        const o = JSON.parse(WallpaperConfig.stateText(saved, {"eDP-1": "/v.mp4", "DP-1": "/v.mp4"}, ["/b.mp4"], 42));
+        compare(o.displays.k.seed, 1);
+        compare(o.shown, shown);
+        compare(o.videoStarting, [{path: "/v.mp4", at: 42}]);
+        compare(o.videoBlocked, ["/b.mp4"]);
+        // The empty parts are left out.
+        compare(JSON.parse(WallpaperConfig.stateText({displays: {}}, {}, [], 1)), {displays: {}});
+        compare(JSON.parse(WallpaperConfig.stateText(null, null, null, 1)), {displays: {}});
     }
 
     // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
