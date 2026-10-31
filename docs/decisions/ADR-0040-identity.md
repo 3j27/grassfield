@@ -115,6 +115,22 @@ and IQ-B3 here changes the palette only, not which controls read it.
     ships.
   - The pull request states the total package weight. They install under `/usr/share/grassfield/wallpapers/` and go
     through the helper like any picture (ADR-0016: the shell decodes only the helper's output).
+  - **Step 2c as built** (after the owner's call of 2026-10-31, "Owner decisions", and the owner's « Au build » for where
+    the files live): `packaging/arch/wallpaper-photos.json` is the one list (names in English and French, author, credit,
+    licence, Commons page, original, SHA-1); the PKGBUILD downloads the originals from `upload.wikimedia.org` (the ids
+    and addresses in `wallpaper-pins.sh`), checks each by the SHA-1 Commons publishes, shrinks them with the build-only
+    `grassfield-wallpaper-shrink` (at most 5120 px wide, JPEG quality 90, the EXIF orientation applied, no metadata kept;
+    the installed helper still writes only into its cache) and installs them with `photos.json` under
+    `/usr/share/grassfield/wallpapers/photos/` in a split package, `grassfield-wallpapers`, which `grassfield-desktop`
+    depends on, as it does on the icon theme (so it is downloaded again with each release, like the icons). Settings >
+    Wallpaper lists them in a Photographs section after the Grassfield artwork (`WallpaperConfig.parsePhotos`; an entry of
+    the wrong shape is left out, an id is a plain file name); one is chosen as a picture (source `file`, through the
+    helper like any other) and About This Wallpaper names its author, source and licence. The desktop's own About This
+    Wallpaper card shows them once `shell/desktop` has merged. Legal: E40 and `THIRD_PARTY.md` "5c";
+    `tests/ci/wallpaper_photos.py` holds the list, the pins, the PKGBUILD and the legal texts together. The package weight:
+    estimated at about 70 MB from the 960 px thumbnails at the same quality (the originals could not be downloaded in the
+    container that built it); the build gives the real figure. `scripts/dev/photos.sh` prepares them under `.dev/photos`
+    for a dev session.
 - **Default (IQ-W1, owner: C, the time of day).** The Grassfield hills through the day: **Dawn**, **Day**, **Evening**
   and **Night**, like macOS's dynamic desktop. Light and dark still choose the variant set: four light palettes in the
   light appearance, four dark ones in the dark appearance (the same scenes, darker; the dark Evening is today's
