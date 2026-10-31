@@ -327,6 +327,7 @@ state` a dev hook. Until step 3 the ground is `session.ground`, the session's
 Hyprland background colour (`tests/unit/tst_sessionexit.qml` holds them equal). Tests: `tst_popupkinds.qml`,
 `tst_sessionexit.qml`, `tests/shell/session_end.sh` (the helper against a stand-in `qs`: the real one would reach the
 session's shell), `tests/fuzz/fuzz_helpers.py` session-end (the wait stays within `EXIT_WAIT` whatever the shell answers).
+Legal (ID-17): E2 of `docs/legal/visual-review.md` adds the countdown, its macOS-like sentences and the exit fade.
 
 ### 6. Tokens and contract (proposed; every value an estimate until F1 and P3)
 | Token or key | Value | Note |
