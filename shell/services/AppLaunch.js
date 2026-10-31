@@ -122,6 +122,14 @@ function autostartDir(devSession, appsHome, xdgConfigHome, home) {
     return (xdgConfigHome ? xdgConfigHome : home + "/.config") + "/autostart";
 }
 
+// The XDG data home the shell itself reads (recently-used.xbel): `<appsHome>/data` in a dev session (never the owner's
+// own recent files; the place isolatedEnvironment gives the apps), else `$XDG_DATA_HOME` or `~/.local/share`.
+function dataHome(devSession, appsHome, xdgDataHome, home) {
+    if (devSession)
+        return appsHome + "/data";
+    return xdgDataHome ? xdgDataHome : home + "/.local/share";
+}
+
 // A control character (C0, DEL, C1) anywhere in `v`.
 function hasControl(v) {
     return /[\u0000-\u001f\u007f-\u009f]/.test(String(v));

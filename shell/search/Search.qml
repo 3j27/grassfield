@@ -128,10 +128,8 @@ Scope {
     // another database, so tests do not depend on the owner's index.
     readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
     readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
-    readonly property string dataHome: {
-        const xdg = Quickshell.env("XDG_DATA_HOME");
-        return xdg ? xdg : home + "/.local/share";
-    }
+    // Dev session: the dev apps-home, never the owner's recent files.
+    readonly property string dataHome: Apps.dataHome
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
     readonly property string stateDir: Mode.stateDir
     readonly property string usagePath: stateDir + "/search-usage.json"

@@ -217,6 +217,8 @@ Singleton {
     // scopedLaunch).
     readonly property bool devSession: Mode.dev
     readonly property string appsHome: AppLaunch.appsHomeFor(Mode.stateHome, Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    // XDG data home the shell reads recent documents from: the dev apps-home in a dev session, never the owner's.
+    readonly property string dataHome: AppLaunch.dataHome(devSession, appsHome, Quickshell.env("XDG_DATA_HOME"), Quickshell.env("HOME"))
 
     // A real Grassfield session (uwsm, GRASSFIELD_SESSION=1, not a dev session) with uwsm's app launcher: every
     // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
