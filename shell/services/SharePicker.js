@@ -70,12 +70,12 @@ function ordered(windows, nameFor) {
 // `<flags>/region:<output>@x,y,w,h`, flag "r" when the user ticked Remember this choice (owner decision Q14: unticked at every
 // opening). "" for anything that is not a listed choice: a display that is not there, a window xdph did not list or that
 // hides itself from capture (`blocked`, step 7b), an area that is not inside its display's logical size (`sizes`: name ->
-// {width, height}).
+// {width, height}). `blocked` null: Hyprland has not said yet which windows hide from capture, so no window is answered.
 function selection(kind, value, remember, outputs, windows, sizes, blocked) {
     const flags = remember === true ? "r" : "";
     if (kind === "screen" && typeof value === "string" && OUTPUT.test(value) && outputs.indexOf(value) >= 0)
         return flags + "/screen:" + value;
-    if (kind === "window" && typeof value === "string" && windows.some(w => w.handle === value) && !(blocked || []).includes(value))
+    if (kind === "window" && typeof value === "string" && windows.some(w => w.handle === value) && Array.isArray(blocked) && !blocked.includes(value))
         return flags + "/window:" + value;
     if (kind === "region") {
         const r = parseRegion(value);
@@ -115,49 +115,60 @@ function regionFor(drag, preview, logical, minSize) {
     return w >= minSize && h >= minSize ? {x: x, y: y, w: w, h: h} : null;
 }
 
-// The windows that hide themselves from capture (step 7b): `answers` holds one line per window that has an address, in the
-// order of `windows`, each `hyprctl -j getprop address:0x<address> no_screen_share` ({"no_screen_share": true}). A line that
-// does not read (the window is gone, an older Hyprland) counts as not hidden: Hyprland still leaves such a window out of every
+// The windows that hide themselves from capture (step 7b): `answers` holds one line per window asked, in any order,
+// `<address> <hyprctl -j getprop address:0x<address> no_screen_share>` (`<address> {"no_screen_share": true}`). Lines are
+// matched by address, never by place, so an answer meant for another request's windows marks none of these. A line that does
+// not read (the window is gone, an older Hyprland) counts as not hidden: Hyprland still leaves such a window out of every
 // capture, so the greying only tells the user beforehand.
 function blockedHandles(windows, answers) {
-    const lines = String(answers).split("\n");
-    const asked = windows.filter(w => w.address !== "");
-    const out = [];
-    for (let i = 0; i < asked.length && i < lines.length; i++) {
+    const hidden = {};
+    for (const line of String(answers).split("\n")) {
+        const m = /^([0-9a-f]{1,16}) (.*)$/.exec(line);
+        if (!m)
+            continue;
         let v = null;
         try {
-            v = JSON.parse(lines[i]);
+            v = JSON.parse(m[2]);
         } catch (e) {
             v = null;
         }
         if (v && typeof v === "object" && v.no_screen_share === true)
-            out.push(asked[i].handle);
+            hidden[m[1]] = true;
     }
-    return out;
+    return windows.filter(w => w.address !== "" && hidden[w.address] === true).map(w => w.handle);
 }
 
-// xdph's screen-sharing streams among PipeWire's nodes (step 7b, the recording indicator): xdph names each one
-// "xdph-streaming-<random>" (xdph 1.4.1 src/portals/Screencopy.cpp:1015). Hyprland's own `screencast` event cannot say this:
-// every capture, the shell's own thumbnails too, raises it (Hyprland 0.56.2 ScreenshareFrame.cpp:170). Their ids.
+// xdph's screen-sharing streams among PipeWire's nodes (step 7b, the recording indicator): video nodes whose node.name is
+// xdph's program name. xdph names each stream "xdph-streaming-<random>" (xdph 1.4.1 src/portals/Screencopy.cpp:1015), but
+// PipeWire keeps that in media.name, which a node's registry entry does not carry, and takes node.name from the program
+// (application.name: "xdg-desktop-portal-hyprland"; review of step 7b, BLOCKER 1, measured with a stream made as xdph makes
+// it). Hyprland's own `screencast` event cannot say this: every capture, the shell's own thumbnails too, raises it (Hyprland
+// 0.56.2 ScreenshareFrame.cpp:170). `nodes`: {id, name, video}. Their ids.
 function sharingStreams(nodes) {
     const out = [];
     for (const n of nodes || []) {
-        if (n && typeof n.name === "string" && n.name.startsWith("xdph-streaming-"))
+        if (n && n.name === "xdg-desktop-portal-hyprland" && n.video === true)
             out.push(n.id);
     }
     return out;
 }
 
-// What each stream shares, for the indicator's menu: a stream that appears takes the oldest choice the picker answered within
-// `maxAgeMs` (SharePicker: 10 s; a share the app restored with a token had no picker: none). `labels`: stream id -> {kind, value, title}.
+// What each stream shares, for the indicator's menu: a stream that appears takes the choice the picker answered within
+// `maxAgeMs` (SharePicker: 10 s) only when it is the one new stream and that the one choice waiting; anything else is no
+// label ("Screen or window"), never a guess that could name less than is shared (review of step 7b, MINOR 2). A share an app
+// restored with its token had no picker. `labels`: stream id -> {kind, value, title} or null.
 function streamLabels(labels, streams, pending, now, maxAgeMs) {
     const kept = {};
-    const left = pending.filter(g => now - g.at <= maxAgeMs);
+    let left = pending.filter(g => now - g.at <= maxAgeMs);
+    const fresh = streams.filter(id => labels[id] === undefined);
     for (const id of streams) {
         if (labels[id] !== undefined)
             kept[id] = labels[id];
-        else
-            kept[id] = left.length > 0 ? left.shift().what : null;
+        else if (fresh.length === 1 && left.length === 1) {
+            kept[id] = left[0].what;
+            left = [];
+        } else
+            kept[id] = null;
     }
     return {labels: kept, pending: left};
 }

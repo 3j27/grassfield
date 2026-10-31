@@ -34,7 +34,7 @@ Dialog {
     readonly property int current: Logic.indexOfKey(root.tab, root.tiles, root.chosen)
     // The choice can be shared: a display that is there, a listed window that does not hide from capture, an area inside its
     // display (the service checks the same before it answers).
-    readonly property bool hasChoice: Logic.selection(root.tab, root.chosen, false, root.screens.map(s => s.name), SharePicker.windows, SharePicker.sizes(), SharePicker.blocked) !== ""
+    readonly property bool hasChoice: Logic.selection(root.tab, root.chosen, false, root.screens.map(s => s.name), SharePicker.windows, SharePicker.sizes(), SharePicker.blockedKnown ? SharePicker.blocked : null) !== "" && (root.tab !== "region" || (regionView.area !== null && regionView.screen !== null && regionView.area.output === regionView.screen.name))
     // The display the Selection tab shows ("" for the first).
     property string regionOutput: ""
     readonly property int columns: Logic.columnsFor(grid.width, Tokens.panelSharePickerTileWidth, Tokens.spacingMd)
@@ -280,13 +280,17 @@ Dialog {
                 readonly property var area: Logic.parseRegion(root.chosen)
                 readonly property var marked: {
                     const d = regionView.drag;
-                    if (d)
+                    if (d) {
+                        // Kept inside the preview, as the area it gives (SharePicker.js regionFor).
+                        const cx = v => Math.max(0, Math.min(preview.width, v));
+                        const cy = v => Math.max(0, Math.min(preview.height, v));
                         return {
-                            x: Math.min(d.x1, d.x2),
-                            y: Math.min(d.y1, d.y2),
-                            w: Math.abs(d.x2 - d.x1),
-                            h: Math.abs(d.y2 - d.y1)
+                            x: Math.min(cx(d.x1), cx(d.x2)),
+                            y: Math.min(cy(d.y1), cy(d.y2)),
+                            w: Math.abs(cx(d.x2) - cx(d.x1)),
+                            h: Math.abs(cy(d.y2) - cy(d.y1))
                         };
+                    }
                     const a = regionView.area;
                     const s = regionView.screen;
                     if (!a || !s || a.output !== s.name || s.width <= 0 || s.height <= 0)
@@ -399,6 +403,8 @@ Dialog {
                                 width: s.width,
                                 height: s.height
                             }, Tokens.panelSharePickerMinArea);
+                            // The display shown stays the one chosen, whatever order the displays come in later.
+                            root.regionOutput = s.name;
                             root.chosen = r ? Logic.regionKey(s.name, r) : "";
                         }
                     }

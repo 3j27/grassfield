@@ -26,11 +26,20 @@ Singleton {
     // The panel was shown for the current request.
     property bool shown: false
     // The handles of the listed windows that hide themselves from capture (no_screen_share; step 7b): greyed, never chosen.
+    // No window is answered until Hyprland has said which (blockedKnown).
     property var blocked: []
+    property bool blockedKnown: false
+    // The windows' query: one per shown request (`blockedFor`, the request it runs for); Quickshell's Process does not start
+    // again while it runs, so a newer request's query starts when the older one ends.
+    property string blockedFor: ""
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") ?? ""
 
     // The recording indicator (step 7b): xdph's screen-sharing streams, and what each shares when the picker chose it.
-    readonly property var streams: Logic.sharingStreams(Pipewire.nodes ? Pipewire.nodes.values : [])
+    readonly property var streams: Logic.sharingStreams((Pipewire.nodes ? Pipewire.nodes.values : []).map(n => ({
+                id: n.id,
+                name: n.name,
+                video: (n.type & PwNodeType.Video) !== 0
+            })))
     readonly property bool sharing: root.streams.length > 0
     // Stream id -> {kind, value, title} or null; the choices answered that no stream has taken yet ({at, what}). An app starts
     // its stream as soon as the portal answers it: a choice older than 10 s names no stream (it may never have started one).
@@ -61,7 +70,7 @@ Singleton {
     // The user's choice: a display's name, a window's handle or an area (`<display>@x,y,w,h`); `remember` for Remember this
     // choice.
     function share(kind: string, value: string, remember: bool): void {
-        const line = Logic.selection(kind, value, remember, root.outputs(), root.windows, root.sizes(), root.blocked);
+        const line = Logic.selection(kind, value, remember, root.outputs(), root.windows, root.sizes(), root.blockedKnown ? root.blocked : null);
         if (line === "" || root.current === null)
             return;
         const w = kind === "window" ? root.windows.find(x => x.handle === value) : null;
@@ -91,6 +100,7 @@ Singleton {
         root.current = null;
         root.windows = [];
         root.blocked = [];
+        root.blockedKnown = false;
         root.shown = false;
         connectDeadline.stop();
         channel.connected = false;
@@ -107,15 +117,27 @@ Singleton {
         root.windows = listed;
         root.shown = true;
         connectDeadline.stop();
-        // Which of them hide themselves from capture: Hyprland's rule, one getprop per window with an address, 1 s each.
-        const addresses = listed.filter(w => w.address !== "").map(w => w.address);
-        if (addresses.length > 0) {
-            blockedQuery.command = ["sh", "-c", "for a; do timeout 1 hyprctl -j getprop \"address:0x$a\" no_screen_share 2>/dev/null | tr -d '\\n'; echo; done", "sh"].concat(addresses);
-            blockedQuery.running = true;
-        }
+        root.askBlocked();
         Popups.openCentered("sharePicker", {}, "");
         if (Popups.kind !== "sharePicker")
             root.cancel();
+    }
+
+    // Which listed windows hide themselves from capture: Hyprland's effective rule, one getprop per window with an address, all
+    // at once, 1 s each at most, each answer on its own line after its address.
+    function askBlocked(): void {
+        if (root.current === null || !root.shown || blockedQuery.running)
+            return;
+        const addresses = root.windows.filter(w => w.address !== "").map(w => w.address);
+        if (addresses.length === 0) {
+            root.blocked = [];
+            root.blockedKnown = true;
+            return;
+        }
+        root.blockedFor = root.current.id;
+        // Each answer goes out as one write of one line (under PIPE_BUF: atomic), so the parallel answers never interleave.
+        blockedQuery.command = ["sh", "-c", "for a; do (r=$(timeout 1 hyprctl -j getprop \"address:0x$a\" no_screen_share 2>/dev/null | tr -d '\\n'); printf '%s %s\\n' \"$a\" \"$r\") & done; wait", "sh"].concat(addresses);
+        blockedQuery.running = true;
     }
 
     // The connection failed, or ended: the stand-in gave up (2 s without a connection) or xdph ended.
@@ -128,9 +150,16 @@ Singleton {
         id: blockedQuery
         stdout: StdioCollector {
             onStreamFinished: {
-                if (root.shown)
+                if (root.current !== null && root.shown && root.blockedFor === root.current.id) {
                     root.blocked = Logic.blockedHandles(root.windows, text);
+                    root.blockedKnown = true;
+                }
             }
+        }
+        // A newer request's query waited for this one.
+        onRunningChanged: {
+            if (!running && root.current !== null && root.shown && !root.blockedKnown && root.blockedFor !== root.current.id)
+                Qt.callLater(root.askBlocked);
         }
     }
 
@@ -217,7 +246,7 @@ Singleton {
                 popup: Popups.kind,
                 outputs: root.outputs(),
                 windows: root.windows,
-                blocked: root.blocked,
+                blocked: root.blockedKnown ? root.blocked : null,
                 streams: root.streams.length,
                 labels: root.labels,
                 // The windows whose live thumbnail has a source (a toplevel Hyprland knows at that address).
