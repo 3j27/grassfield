@@ -18,7 +18,7 @@ Singleton {
     readonly property int max: Settings.menubarRecentItems
     readonly property string home: Quickshell.env("HOME")
     // Documents outside this root (default $HOME; tests point it at their fixtures, like Search) are not listed.
-    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
+    readonly property string filesRoot: Apps.searchRoot
     // Dev session: the dev apps-home, never the owner's recent files.
     readonly property string dataHome: Apps.dataHome
     readonly property string stateDir: Mode.stateDir

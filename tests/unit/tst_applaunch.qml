@@ -30,6 +30,13 @@ TestCase {
         compare(AppLaunch.dataHome(false, apps, "", "/home/o"), "/home/o/.local/share");
     }
 
+    function test_searchRootDevIsNotHome() {
+        const apps = "/w/.dev/apps-home";
+        compare(AppLaunch.searchRoot(true, "", apps, "/home/o"), apps + "/files");
+        compare(AppLaunch.searchRoot(true, "/fixture", apps, "/home/o"), "/fixture");
+        compare(AppLaunch.searchRoot(false, "", apps, "/home/o"), "/home/o");
+    }
+
     function test_mergeEnvironment() {
         const base = {"HOME": "/h"};
         const extra = {"XCURSOR_SIZE": "48"};

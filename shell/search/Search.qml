@@ -126,7 +126,7 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
     // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
     // another database, so tests do not depend on the owner's index.
-    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
+    readonly property string filesRoot: Apps.searchRoot
     readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
     // Dev session: the dev apps-home, never the owner's recent files.
     readonly property string dataHome: Apps.dataHome

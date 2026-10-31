@@ -130,6 +130,15 @@ function dataHome(devSession, appsHome, xdgDataHome, home) {
     return xdgDataHome ? xdgDataHome : home + "/.local/share";
 }
 
+// Root the file results of Search and the recent documents are limited to: GRASSFIELD_SEARCH_ROOT (`devRoot`, "" outside dev)
+// when set; else `<appsHome>/files` in a dev session (never the owner's $HOME: the results are filtered by this prefix, so a
+// missing folder just lists nothing); else `home`.
+function searchRoot(devSession, devRoot, appsHome, home) {
+    if (devRoot)
+        return devRoot;
+    return devSession ? appsHome + "/files" : home;
+}
+
 // A control character (C0, DEL, C1) anywhere in `v`.
 function hasControl(v) {
     return /[\u0000-\u001f\u007f-\u009f]/.test(String(v));

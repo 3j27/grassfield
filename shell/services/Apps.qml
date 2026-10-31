@@ -217,6 +217,8 @@ Singleton {
     // scopedLaunch).
     readonly property bool devSession: Mode.dev
     readonly property string appsHome: AppLaunch.appsHomeFor(Mode.stateHome, Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    // Root of Search's file results and recent documents: GRASSFIELD_SEARCH_ROOT, else the dev apps-home's files folder in a dev session, else $HOME.
+    readonly property string searchRoot: AppLaunch.searchRoot(devSession, Mode.devValue("SEARCH_ROOT"), appsHome, Quickshell.env("HOME"))
     // XDG data home the shell reads recent documents from: the dev apps-home in a dev session, never the owner's.
     readonly property string dataHome: AppLaunch.dataHome(devSession, appsHome, Quickshell.env("XDG_DATA_HOME"), Quickshell.env("HOME"))
 
