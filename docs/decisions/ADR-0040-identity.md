@@ -181,6 +181,40 @@ and IQ-B3 here changes the palette only, not which controls read it.
   (`LockView.qml:80`): `WallpaperArt` without a parameter keeps today's drawing, so step 2 edits nothing in
   `shell/security` and the lock's output stays as it is until step 4a changes it under the security review (reviews of
   b44d17e and ed21d46).
+- **Step 2 as built** (in the one pull request of 2026-10-31):
+  - **Palettes as tokens (ID-1).** 44 `artwork.*` tokens: the Grassfield hills at Dawn, Day, Evening and Night in a light and a
+    dark set (sky, sun, its place, four hills), Meadow, Field Rows and Ridgeline light and dark. The light Dawn, Day and Night
+    are the mockups'; the light Evening is new (a warm dusk); the dark Dawn, Day and Night are the light ones darkened in
+    OKLCH (lightness x0.52 to x0.80, chroma x0.85 for the sky and x0.72 for the hills), so every dark phase keeps light menu
+    bar text; the dark Evening is the artwork as it was. The written exception of `GrassfieldArtwork.qml` is gone
+    (`tests/ci/qml_literals.py` no longer allows it a colour).
+  - **One component.** `GrassfieldArtwork.qml` draws the four artworks from those palettes (`artwork`, `variant`; the seeded
+    geometry of Meadow and Field Rows and the night's stars in the private `Artwork.js`), clipped to its own rectangle.
+    Without parameters it draws the dark Evening. The sun is now a real radial glow (a `Shape`: the `RadialGradient` of a
+    `Rectangle` drew a hard disc), which the lock and the screen saver show too; the lock's own picture changes under step 4a.
+  - **The time of day.** `TimeOfDay.js` (public in `Grassfield.Ui`) is the probe's rule in JavaScript: the zone's point from
+    `zone1970.tab`, `zone.tab` and the links of `tzdata.zi`, the NOAA sunrise and sunset, the phases, the short-day and
+    short-night rules, the fixed hours (`wallpaper.phase*` tokens). Its tests (`tst_timeofday.qml`) are the probe's twelve
+    checks on fixtures cut from tzdata 2026e. The shell's `DayPhase` service reads the zone (TZ, else the target of
+    `/etc/localtime`) and the three tables once, then keeps one timer to the next change, recomputed when the clock jumps
+    (a wake, a clock change), at local midnight and with the zone read again when the UTC offset moves.
+  - **Settings.** `wallpaper.artwork` and `wallpaper.artworkVariant` (schema, defaults, contract, `WallpaperConfig`;
+    additive). Settings > Wallpaper's Grassfield section shows the four artworks, each tile in the current appearance; the
+    current wallpaper's group gets the choice of variant (Time of Day, for the Grassfield artwork only, Automatic, Light,
+    Dark; `WallpaperConfig.artworkVariantFor`); the preview draws the variant the desktop shows (the shell publishes the
+    phase in its wallpaper status). Settings > Appearance draws the dark variant instead of darkening the light one (W-3).
+  - **The desktop.** Each output resolves the variant from the choice, the appearance and the phase. A new phase crossfades
+    over `wallpaper.phaseFadeMs` (20 s) and waits while a full-screen window is on that output; a new appearance crossfades
+    over `wallpaper.crossfadeMs` with the bar's tone switching at the midpoint (ID-14); Reduce Motion cuts; an output's
+    first wallpaper and the first phase known at start cut in (no fade from the default artwork). The bar's tone, the glass
+    backdrop and the window's colour read the palette on screen (they read slot A's before).
+  - **Gate A2.** `test_contrast_tokens.py` checks every palette's tone over the strip under the bar, without the band, on
+    displays 720 to 2160 pixels tall (6.9:1 or more). During a crossfade between two artworks the tone in effect is checked
+    at every twentieth of the fade (`BarToneLogic.artFadeNeedsBand`); where it would fall under 4.5:1 the band is on for the
+    fade and only then: Dawn to Day in the light set and an appearance switch at Day (`tst_bartone.qml`).
+  - **Not done here.** A pointer drag does not hold a phase change back: the shell has no signal for a drag in progress
+    (Hyprland 0.56 gives none); only a full-screen window does. NOT VERIFIED: the artworks and the fades on screen (nested:
+    `qs ipc call wallpaper phase dawn`, and the Settings tiles), and the zone files on the owner's machine.
 - **Videos (IQ-W3, owner: A, the drawn animation in 1.0).** No video file ships; the user's own videos stay as built
   (ADR-0016 W7). The default artwork gets a **moving** variant drawn live (clouds drift, the light changes slowly), also
   a screen saver kind (in `shell/saver`; nothing in `shell/security`, review of 6c310a8). The integrator's conditions

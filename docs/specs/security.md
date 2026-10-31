@@ -236,7 +236,7 @@ does not check its gate.
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
-| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status, phase | dev | wallpaper tests (`set` also needs the fixtures to show; `phase` shows a phase of the day, ADR-0040 IQ-W1 C) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
 

@@ -585,6 +585,47 @@ class ContrastTokens(unittest.TestCase):
             for ap in APPEARANCES:
                 self.assertGreaterEqual(role_ratio(self.tok, label, ap, 0.25, wp), 4.5)
 
+    def test_artworks_hold_their_menu_bar_tone(self):
+        # ADR-0040 step 2 (gate A2 for the artworks): every palette of the four artworks, light and dark sets, the Grassfield hills at
+        # every phase, gives the menu bar a tone that reaches menubar.toneNeededContrast over the whole strip under the bar, with no
+        # band, on a display from 720 to 2160 pixels tall. The tone is chosen as BarTone does (the strip's mean luminance against
+        # menubar.toneLightBelow and toneDarkAbove; either inside the hysteresis band); the text is the bar's own (the dark
+        # palette's text over a dark strip, the light palette's over a light one). The strip: the top of the artwork's gradient,
+        # from its first colour towards its second (at `at` of the height, Artwork.js palette().tone); Field Rows: the first four
+        # bands, which cross the top edge. The crossfades between two palettes are covered by the band rule
+        # (BarToneLogic.artFadeNeedsBand, tests/unit/tst_bartone.qml).
+        need = self.tok.path("menubar.toneNeededContrast")
+        light_below, dark_above = self.tok.path("menubar.toneLightBelow"), self.tok.path("menubar.toneDarkAbove")
+        white_text = self.tok.color("darkColors", "dark", "text")
+        black_text = self.tok.color("lightColors", "light", "text")
+        bar = self.tok.path("menubar.height")
+
+        def mix(a, b, t):
+            return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+        cases = []
+        for phase in ("Dawn", "Day", "Evening", "Night"):
+            for st in ("Light", "Dark"):
+                sky = [hex_rgb(c) for c in self.tok.path("artwork.grassfield%s%sSky" % (phase, st))]
+                cases.append(("grassfield %s %s" % (phase, st), sky[0], sky[1], 0.55, None))
+        for st in ("Light", "Dark"):
+            m = [hex_rgb(c) for c in self.tok.path("artwork.meadow%sSky" % st)]
+            cases.append(("meadow %s" % st, m[0], m[1], 1.0, None))
+            r = [hex_rgb(c) for c in self.tok.path("artwork.ridgeline%sSky" % st)]
+            cases.append(("ridgeline %s" % st, r[0], r[1], 0.6, None))
+            bands = [hex_rgb(c) for c in self.tok.path("artwork.rows%s" % st)]
+            cases.append(("rows %s" % st, bands[1], bands[2], 1.0, bands[:4]))
+        for name, top, nxt, at, extra in cases:
+            for height in (720, 1080, 1440, 2160):
+                reach = min(1.0, bar / (at * height))
+                strip = [mix(top, nxt, reach * k / 4) for k in range(5)] + (extra or [])
+                mean = lum(mix(top, nxt, reach / 2))
+                tones = ["light"] if mean < light_below else ["dark"] if mean > dark_above else ["light", "dark"]
+                for tone in tones:
+                    text = white_text if tone == "light" else black_text
+                    worst = min(wcag(text, c) for c in strip)
+                    self.assertGreaterEqual(worst, need, "%s at %d px: %s text %.2f:1" % (name, height, tone, worst))
+
     def test_menu_bar_tone_roles_are_asserted(self):
         # The adaptive bar is inside gate A2: white text over every wallpaper colour that picks it, black text over every one that picks
         # the dark foreground; neither is exempt, and every wallpaper colour is covered by at least one tone.

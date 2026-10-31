@@ -992,6 +992,28 @@
             }
           }
         },
+        "artwork": {
+          "type": "string",
+          "enum": [
+            "grassfield",
+            "meadow",
+            "rows",
+            "ridgeline"
+          ],
+          "description": "The Grassfield artwork the builtin source draws (ADR-0040 step 2): the Grassfield hills, Meadow, Field Rows or Ridgeline.",
+          "default": "grassfield"
+        },
+        "artworkVariant": {
+          "type": "string",
+          "enum": [
+            "timeOfDay",
+            "automatic",
+            "light",
+            "dark"
+          ],
+          "description": "Which variant of the artwork shows: the time of day (the Grassfield artwork only; the others read it as automatic), the appearance's (automatic), or always the light or the dark one.",
+          "default": "timeOfDay"
+        },
         "outputs": {
           "type": "array",
           "description": "Per-display overrides (at most 16); omitted fields come from the top level. An override of a display that is not connected stays stored.",

@@ -24,6 +24,8 @@ Singleton {
     property var ranges: ({})
     // {output name: {white, black}} worst-case contrast of each tone, for the status hook and the journal.
     property var contrasts: ({})
+    // {output name: true} while a crossfade between two artworks keeps that output's band on (ADR-0040 section 2, gate A2).
+    property var fadeBands: ({})
 
     // Test hook: qs ipc call bartone status -> JSON {output: {tone, luminance, assist, white, black}} (read-only; dev
     // session only, SEC-04).
@@ -54,8 +56,45 @@ Singleton {
         next[output] = lum;
         luminances = next;
         tones = Logic.update(tones, output, lum, Tokens.menubarToneLightBelow, Tokens.menubarToneDarkAbove);
-        setRange(output, null);
-        setAssist(output, false);
+        // A crossfade between two artworks may keep the band on past the tone's switch (reportArtFade).
+        if (root.fadeBands[output] !== true) {
+            setRange(output, null);
+            setAssist(output, false);
+        }
+    }
+
+    function rgbOf(c: color): var {
+        return {r: c.r, g: c.g, b: c.b};
+    }
+
+    // A crossfade between two artworks starts (ADR-0040 section 2, gate A2): when the tone in effect, the current one until
+    // `switchAt` of the fade and the incoming artwork's after, would fall under 4.5:1 somewhere in the blend, the band is on
+    // for the fade (endArtFade puts it back). Each artwork's top: a gradient from `top` towards `next`, the strip reaching
+    // `reach` of the way. True when the band is on.
+    function reportArtFade(output: string, fromTop: color, fromNext: color, fromReach: real, toTop: color, toNext: color, toReach: real, switchAt: real): bool {
+        const from = {top: rgbOf(fromTop), next: rgbOf(fromNext), reach: fromReach};
+        const to = {top: rgbOf(toTop), next: rgbOf(toNext), reach: toReach};
+        const toneFrom = tones[output] || "light";
+        const toneTo = Logic.decide(Logic.stripOfGradient(to.top, to.next, to.reach), toneFrom, Tokens.menubarToneLightBelow, Tokens.menubarToneDarkAbove);
+        const need = Logic.artFadeNeedsBand(from, to, toneFrom, toneTo, switchAt, Tokens.menubarToneNeededContrast);
+        const bands = Object.assign({}, fadeBands);
+        bands[output] = need;
+        fadeBands = bands;
+        if (need) {
+            setRange(output, Logic.artFadeRange(from, to));
+            setAssist(output, true);
+            console.info("wallpaper tone: the band is on for the crossfade (" + toneFrom + " to " + toneTo + ") output=" + output);
+        }
+        return need;
+    }
+
+    // The crossfade is over (or was cut): the next report decides the band again.
+    function endArtFade(output: string): void {
+        if (fadeBands[output] !== true)
+            return;
+        const bands = Object.assign({}, fadeBands);
+        bands[output] = false;
+        fadeBands = bands;
     }
 
     function rangeOf(output: string): var {

@@ -146,6 +146,14 @@ Scope {
             return root.dev ? WallpaperOnline.devStatus() : "refused";
         }
 
+        // Dev only: show this phase of the day ("dawn", "day", "evening", "night"; "" = the real one, ADR-0040 IQ-W1 C).
+        function phase(name: string): string {
+            if (!root.dev)
+                return "refused";
+            DayPhase.override = ["dawn", "day", "evening", "night"].indexOf(name) >= 0 ? name : "";
+            return DayPhase.shown;
+        }
+
         function set(path: string): string {
             if (!root.dev)
                 return "refused";
@@ -194,7 +202,7 @@ Scope {
             }
             exclusionMode: ExclusionMode.Ignore
             focusable: false
-            color: slotA.art.skyTop
+            color: win.shown ? win.shown.art.skyTop : slotA.art.skyTop
             WlrLayershell.layer: WlrLayer.Background
             WlrLayershell.namespace: "grassfield-wallpaper"
 
@@ -295,7 +303,47 @@ Scope {
             WallpaperFeed {
                 id: feed
                 screenInfo: win.modelData
-                onDisplayChanged: win.show(feed.display)
+                onDisplayChanged: win.show(win.withArt(feed.display), "normal")
+            }
+
+            // ---- the artwork's variant (ADR-0040 section 2): the choice, the appearance and the phase of the day ----
+            readonly property string artVariant: WallpaperConfig.artworkVariantFor(feed.cfg.artwork, feed.cfg.artworkVariant, Appearance.dark, DayPhase.shown)
+            function withArt(desc: var): var {
+                return desc && desc.kind === "art" ? Object.assign({}, desc, {artwork: feed.cfg.artwork, variant: win.artVariant}) : desc;
+            }
+            // A new phase: a slow crossfade (wallpaper.phaseFadeMs), never under a full-screen window (it waits for it to go).
+            // A new appearance: the usual crossfade, the tone switching at its midpoint (ID-14).
+            property bool phaseWaiting: false
+            // The phase as last seen: the first one known (at start) is a cut, not a change.
+            property string lastPhase: DayPhase.shown
+            Connections {
+                target: DayPhase
+                function onShownChanged(): void {
+                    const first = win.lastPhase === "";
+                    win.lastPhase = DayPhase.shown;
+                    if (feed.display && feed.display.kind === "art") {
+                        if (first)
+                            win.show(win.withArt(feed.display), "cut");
+                        else
+                            win.showPhase();
+                    }
+                }
+            }
+            Connections {
+                target: Appearance
+                function onDarkChanged(): void {
+                    if (feed.display && feed.display.kind === "art")
+                        win.show(win.withArt(feed.display), "appearance");
+                }
+            }
+            function showPhase(): void {
+                win.phaseWaiting = win.fullscreen;
+                if (!win.phaseWaiting)
+                    win.show(win.withArt(feed.display), "phase");
+            }
+            onFullscreenChanged: {
+                if (!win.fullscreen && win.phaseWaiting && feed.display && feed.display.kind === "art")
+                    win.showPhase();
             }
 
             // ---- ONE two-slot model for every kind of wallpaper (the artwork, a colour, a picture) ----
@@ -308,7 +356,7 @@ Scope {
             //   - nothing else sets the opacity of a layer from the REQUESTED state: only the fade does.
             property WallpaperSlot shown: slotA
             property WallpaperSlot incoming: null
-            property var shownDesc: ({kind: "art", color: "", url: "", strip: null, video: ""})
+            property var shownDesc: ({kind: "art", artwork: "grassfield", variant: "evening.dark", color: "", url: "", strip: null, video: ""})
 
             // ---- the pause policy of a video wallpaper (ADR-0016 section 5), re-evaluated by every event ----
             // Nothing polls: the lock state, the compositor's full-screen state of this output, the idle monitor, UPower and the
@@ -357,15 +405,21 @@ Scope {
             }
 
             function sameContent(a: var, b: var): bool {
-                return a.kind === b.kind && (a.kind !== "color" || a.color === b.color) && (a.kind !== "picture" || (a.url === b.url && (a.video || "") === (b.video || "")));
+                return a.kind === b.kind && (a.kind !== "color" || a.color === b.color) && (a.kind !== "art" || ((a.artwork || "") === (b.artwork || "") && (a.variant || "") === (b.variant || ""))) && (a.kind !== "picture" || (a.url === b.url && (a.video || "") === (b.video || "")));
             }
 
-            function show(desc: var): void {
+            // "normal" | "phase" (a slow fade) | "appearance" (the tone at the midpoint) | "cut": how the next change shows.
+            property string fadeMode: "normal"
+            // Nothing has been shown yet: the first content cuts in (no fade from the default artwork).
+            property bool shownOnce: false
+            function show(desc: var, mode: string): void {
                 // A fade in flight is complete at once: its content is ready (a fade only starts then).
                 if (fadeIn.running)
                     finishFade();
                 if (sameContent(desc, shownDesc)) {
                     cancelPending();
+                    // The output's first wallpaper is already on screen: later changes fade.
+                    shownOnce = true;
                     return;
                 }
                 if (incoming === null) {
@@ -377,9 +431,14 @@ Scope {
                 // A newer request replaces the pending one in the same slot; what is on screen is not touched.
                 pendingDesc = desc;
                 fadePending = true;
+                fadeMode = mode;
                 incoming.kind = desc.kind;
                 if (desc.kind === "color")
                     incoming.color = desc.color;
+                if (desc.kind === "art") {
+                    incoming.artwork = desc.artwork || "grassfield";
+                    incoming.variant = desc.variant || "evening.dark";
+                }
                 // A video wallpaper: the slot plays it once it is on screen (its poster is the picture that fades in).
                 incoming.video = desc.video || "";
                 incoming.videoFit = desc.fit || "fill";
@@ -450,12 +509,15 @@ Scope {
             function beginFade(): void {
                 fadePending = false;
                 // (The dev hook `wallpaper fadeLength <ms>` lengthens the fade so that a capture lands inside it.)
-                const ms = Settings.reduceMotion ? 0 : (root.fadeLengthMs > 0 ? root.fadeLengthMs : Tokens.wallpaperCrossfadeMs);
+                const ms = Settings.reduceMotion || !shownOnce || fadeMode === "cut" ? 0 : (root.fadeLengthMs > 0 ? root.fadeLengthMs : (fadeMode === "phase" ? Tokens.wallpaperPhaseFadeMs : Tokens.wallpaperCrossfadeMs));
                 if (ms === 0) {
                     incoming.opacity = 1;
                     completeFade();
                     return;
                 }
+                // Two artworks blend for the whole fade: the band covers the moments neither tone reads (gate A2).
+                if (shownDesc.kind === "art" && pendingDesc.kind === "art" && win.modelData && height > 0)
+                    BarTone.reportArtFade(win.modelData.name, Qt.color(shown.art.skyTop), Qt.color(shown.art.skyMid), Tokens.menubarHeight / (shown.palette.tone.at * height), Qt.color(incoming.art.skyTop), Qt.color(incoming.art.skyMid), Tokens.menubarHeight / (incoming.palette.tone.at * height), win.toneSwitchAt);
                 // The bar's tone follows the new wallpaper once it dominates: from the fade's own progress (the incoming
                 // slot's opacity reaching 60 %), not from a timer (a fade is frame-driven, a timer is not).
                 toneDone = false;
@@ -474,6 +536,9 @@ Scope {
             }
 
             function completeFade(): void {
+                if (win.modelData)
+                    BarTone.endArtFade(win.modelData.name);
+                shownOnce = true;
                 const old = shown;
                 shown = incoming;
                 shownDesc = pendingDesc;
@@ -494,7 +559,8 @@ Scope {
                 if (!win.modelData)
                     return;
                 // The backdrop of the adaptive glass (ADR-0024 G-3): the luminance range of what is on screen, when known.
-                Backdrop.reportWallpaper(win.modelData.name, VisualFixtures.wallpaperFile !== "" ? null : Backdrop.rangeOf(desc, slotA.art));
+                const slot = desc === win.pendingDesc && win.incoming !== null ? win.incoming : win.shown;
+                Backdrop.reportWallpaper(win.modelData.name, VisualFixtures.wallpaperFile !== "" ? null : Backdrop.rangeOf(desc, slot.art));
                 win.measureGrid(desc);
                 if (VisualFixtures.wallpaperFile !== "")
                     return;
@@ -508,7 +574,7 @@ Scope {
                 else if (source === "none")
                     BarTone.reportUnmeasured(win.modelData.name);
                 else if (height > 0)
-                    BarTone.reportGradient(win.modelData.name, Qt.color(slotA.art.skyTop), Qt.color(slotA.art.skyMid), Tokens.menubarHeight / (0.55 * height));
+                    BarTone.reportGradient(win.modelData.name, Qt.color(slot.art.skyTop), Qt.color(slot.art.skyMid), Tokens.menubarHeight / (slot.palette.tone.at * height));
             }
 
             NumberAnimation {
@@ -519,14 +585,16 @@ Scope {
                 onFinished: win.completeFade()
             }
 
-            // The bar's tone switches when the incoming wallpaper dominates: 60 % of the crossfade's own progress.
+            // The bar's tone switches when the incoming wallpaper dominates: 60 % of the crossfade's own progress; at the midpoint
+            // for a change of appearance (ADR-0040 ID-14).
             property bool toneDone: false
+            readonly property real toneSwitchAt: fadeMode === "appearance" ? 0.5 : 0.6
             Connections {
                 target: win.incoming
                 ignoreUnknownSignals: true
 
                 function onOpacityChanged(): void {
-                    if (!win.toneDone && win.incoming !== null && fadeIn.running && win.incoming.opacity >= 0.6 && win.pendingDesc !== null) {
+                    if (!win.toneDone && win.incoming !== null && fadeIn.running && win.incoming.opacity >= win.toneSwitchAt && win.pendingDesc !== null) {
                         win.toneDone = true;
                         win.reportTone(win.pendingDesc);
                     }

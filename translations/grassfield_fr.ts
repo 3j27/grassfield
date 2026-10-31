@@ -12224,6 +12224,34 @@
         <translation>Fond d’écran</translation>
     </message>
     <message>
+        <source>Meadow</source>
+        <translation>Prairie</translation>
+    </message>
+    <message>
+        <source>Field Rows</source>
+        <translation>Sillons</translation>
+    </message>
+    <message>
+        <source>Ridgeline</source>
+        <translation>Ligne de crête</translation>
+    </message>
+    <message>
+        <source>Time of Day</source>
+        <translation>Selon l’heure</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>Clair</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>Sombre</translation>
+    </message>
+    <message>
         <source>When logging in</source>
         <translation>À l’ouverture de session</translation>
     </message>
@@ -12510,6 +12538,10 @@
     <message>
         <source>All Displays</source>
         <translation>Tous les écrans</translation>
+    </message>
+    <message>
+        <source>Appearance of the wallpaper</source>
+        <translation>Aspect du fond d’écran</translation>
     </message>
     <message>
         <source>Use the All Displays Wallpaper</source>

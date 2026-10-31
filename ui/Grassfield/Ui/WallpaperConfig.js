@@ -6,6 +6,10 @@
 // grassfield.json goes through normalize(); an invalid field reads as its default, never as an error.
 
 const SOURCES = ["builtin", "color", "file", "folder", "video", "online"];
+// The Grassfield artworks (ADR-0040 step 2, ID-1) and the choice of variant: Time of Day (the Grassfield artwork only),
+// Automatic (by the appearance), Light, Dark.
+const ARTWORKS = ["grassfield", "meadow", "rows", "ridgeline"];
+const ARTWORK_VARIANTS = ["timeOfDay", "automatic", "light", "dark"];
 // Online daily pictures (ADR-0016 step 2): the Wikimedia Commons picture of the day and NASA's APOD. A provider is a name here
 // and a `fetch <provider>` subcommand of the helper.
 const ONLINE_PROVIDERS = ["commons", "apod"];
@@ -31,6 +35,8 @@ const WALLPAPER_DEFAULTS = {
     shuffle: true,
     videoOnBattery: false,
     online: {provider: "commons"},
+    artwork: "grassfield",
+    artworkVariant: "timeOfDay",
     outputs: []
 };
 
@@ -254,6 +260,8 @@ function normalize(raw) {
         shuffle: typeof r.shuffle === "boolean" ? r.shuffle : WALLPAPER_DEFAULTS.shuffle,
         videoOnBattery: typeof r.videoOnBattery === "boolean" ? r.videoOnBattery : WALLPAPER_DEFAULTS.videoOnBattery,
         online: {provider: isPlainObject(r.online) && oneOf(ONLINE_PROVIDERS, r.online.provider) ? r.online.provider : WALLPAPER_DEFAULTS.online.provider},
+        artwork: oneOf(ARTWORKS, r.artwork) ? r.artwork : WALLPAPER_DEFAULTS.artwork,
+        artworkVariant: oneOf(ARTWORK_VARIANTS, r.artworkVariant) ? r.artworkVariant : WALLPAPER_DEFAULTS.artworkVariant,
         outputs: normalizeOutputs(r.outputs)
     };
     return settle(out);
@@ -968,4 +976,24 @@ function photoAt(photos, path) {
 // licenseUrl), so one view serves both.
 function photoAbout(photo, lang) {
     return photo ? {title: photoName(photo, lang), author: photo.author, sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort, licenseUrl: photo.licenseUrl} : null;
+}
+
+// ---- the artwork's variant (ADR-0040 section 2, IQ-W1 C) ----
+// The variant GrassfieldArtwork draws for `artwork` under the user's `choice` (wallpaper.artworkVariant), the appearance
+// (`dark`) and the phase of the day (TimeOfDay, "" while it is not known). Grassfield: Time of Day is the phase in the
+// appearance's set (Evening until the phase is known); Automatic is Day in the light appearance and Evening in the dark one;
+// Light is the light Day; Dark the dark Evening. The other artworks follow the appearance (Time of Day reads as Automatic)
+// unless Light or Dark is chosen.
+function artworkVariantFor(artwork, choice, dark, phase) {
+    const c = oneOf(ARTWORK_VARIANTS, choice) ? choice : WALLPAPER_DEFAULTS.artworkVariant;
+    const set = dark ? "dark" : "light";
+    if (artwork !== "grassfield" && oneOf(ARTWORKS, artwork))
+        return c === "light" || c === "dark" ? c : set;
+    if (c === "light")
+        return "day.light";
+    if (c === "dark")
+        return "evening.dark";
+    if (c === "automatic")
+        return dark ? "evening.dark" : "day.light";
+    return (["dawn", "day", "evening", "night"].indexOf(phase) >= 0 ? phase : "evening") + "." + set;
 }

@@ -157,8 +157,18 @@ Scope {
             file: status === "ready" || (status === "error" && currentFile !== "") ? currentFile : "",
             video: videoFile,
             // 0..1 while a video is being transcoded, -1 otherwise.
-            progress: progress
+            progress: progress,
+            // The phase of the day the Grassfield artwork shows (ADR-0040 IQ-W1 C; Settings' preview draws the same variant).
+            phase: DayPhase.shown
         });
+    }
+
+    Connections {
+        target: DayPhase
+        function onShownChanged(): void {
+            if (root.cfg.source === "builtin")
+                root.publish();
+        }
     }
 
     function showNone(state: string): void {

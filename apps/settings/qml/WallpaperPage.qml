@@ -57,6 +57,15 @@ SettingsPage {
     readonly property bool shuffle: root.eff.shuffle
     readonly property bool videoOnBattery: root.store.value("wallpaper.videoOnBattery")
     readonly property string provider: root.store.value("wallpaper.online.provider")
+    // The Grassfield artworks (ADR-0040 step 2): which one the artwork source draws and which variant shows (stored values,
+    // normalised: an unknown one reads as the default).
+    readonly property var artworkCfg: WallpaperConfig.normalize({artwork: root.store.value("wallpaper.artwork"), artworkVariant: root.store.value("wallpaper.artworkVariant")})
+    readonly property string artwork: root.artworkCfg.artwork
+    readonly property string artworkVariant: root.artworkCfg.artworkVariant
+    // The four artworks, each tile drawn in the current appearance (macOS's dynamic wallpapers show the appearance's look).
+    readonly property var artworkModel: [{id: "grassfield", text: qsTr("Grassfield")}, {id: "meadow", text: qsTr("Meadow")}, {id: "rows", text: qsTr("Field Rows")}, {id: "ridgeline", text: qsTr("Ridgeline")}]
+    // The choice of variant: Time of Day for the Grassfield artwork only.
+    readonly property var variantModel: (root.artwork === "grassfield" ? [{id: "timeOfDay", text: qsTr("Time of Day")}] : []).concat([{id: "automatic", text: qsTr("Automatic")}, {id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}])
     // The tool's answer for the output the user looks at: {state, reason, source, path, name, files, file, video, progress}.
     property var status: ({})
     // Every output's answer, by output name.
@@ -199,7 +208,7 @@ SettingsPage {
 
     readonly property string headline: {
         if (root.source === "builtin")
-            return qsTr("Grassfield");
+            return root.artworkModel.find(a => a.id === root.artwork).text;
         if (root.source === "color")
             return root.colorName(root.color);
         if (root.source === "online")
@@ -310,8 +319,10 @@ SettingsPage {
         root.store.set("wallpaper.outputs", WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, null));
     }
 
-    function useArtwork(): void {
-        root.choose({"wallpaper.source": "builtin"}, "", "");
+    // An artwork tile: the artwork source and which artwork (wallpaper.artwork is not per display: it applies everywhere the
+    // artwork shows).
+    function useArtwork(name: string): void {
+        root.choose({"wallpaper.source": "builtin", "wallpaper.artwork": name}, "", "");
     }
 
     // The online tile asks first: what is contacted is shown, and nothing is turned on until the user agrees.
@@ -370,7 +381,7 @@ SettingsPage {
             // Nothing to restore, and the choice was for All Displays: the artwork there, no override for the display shown.
             root.store.setMany({"wallpaper.source": "builtin"});
         else if (plan.action === "artwork")
-            root.useArtwork();
+            root.useArtwork(root.artwork);
     }
 
     function useColor(c: string): void {
@@ -644,9 +655,12 @@ SettingsPage {
                         color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
                     }
 
+                    // The artwork and the variant the desktop shows (its phase of the day from the shell's report).
                     GrassfieldArtwork {
                         anchors.fill: parent
                         visible: root.source === "builtin" || (root.source !== "color" && preparedImage.status !== Image.Ready)
+                        artwork: root.artwork
+                        variant: WallpaperConfig.artworkVariantFor(root.artwork, root.artworkVariant, Appearance.dark, root.status.phase ?? "")
                     }
 
                     Image {
@@ -697,6 +711,17 @@ SettingsPage {
                 SettingsRow {
                     title: root.headline
                     subtitle: root.caption
+
+                    // The artwork's variant: Time of Day, Automatic, Light or Dark (ADR-0040 section 2, IQ-W1 C).
+                    ComboBox {
+                        visible: root.source === "builtin"
+                        inline: true
+                        accessibleName: qsTr("Appearance of the wallpaper")
+                        model: root.variantModel
+                        // Time of Day on another artwork reads as Automatic (WallpaperConfig.artworkVariantFor).
+                        value: root.variantModel.some(m => m.id === root.artworkVariant) ? root.artworkVariant : "automatic"
+                        onPicked: id => root.store.set("wallpaper.artworkVariant", id)
+                    }
 
                     ComboBox {
                         visible: root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video"
@@ -823,7 +848,7 @@ SettingsPage {
                     visible: root.status.state === "error" && root.source !== "builtin"
                     push: true
                     text: qsTr("Use the Grassfield Wallpaper")
-                    onClicked: root.useArtwork()
+                    onClicked: root.useArtwork(root.artwork)
                 }
 
                 Button {
@@ -850,8 +875,8 @@ SettingsPage {
             // The first title is placed from the line's top.
             lead: Tokens.settingsWallpaperTitleBaseline - line.height
             title: qsTr("Grassfield")
-            model: [{kind: "art", label: qsTr("Grassfield"), selected: root.source === "builtin"}]
-            onActivated: root.useArtwork()
+            model: root.artworkModel.map(a => ({kind: "art", artwork: a.id, variant: WallpaperConfig.artworkVariantFor(a.id, "automatic", Appearance.dark, ""), label: a.text, selected: root.source === "builtin" && root.artwork === a.id}))
+            onActivated: index => root.useArtwork(root.artworkModel[index].id)
         }
 
         // The shipped photographs (ADR-0040 step 2c), named in the session's language; the section is absent without them.

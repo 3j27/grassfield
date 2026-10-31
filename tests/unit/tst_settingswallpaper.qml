@@ -66,6 +66,8 @@ TestCase {
                     "wallpaper.shuffle": false,
                     "wallpaper.videoOnBattery": false,
                     "wallpaper.online.provider": "commons",
+                    "wallpaper.artwork": "grassfield",
+                    "wallpaper.artworkVariant": "timeOfDay",
                     "wallpaper.outputs": []
                 })
             property var writes: []
@@ -189,7 +191,34 @@ TestCase {
         compare(at.y - line.mapToItem(t.page.contentItem, 0, 0).y, Tokens.settingsWallpaperTitleBaseline + Tokens.settingsWallpaperTilesTop);
         compare(at.x, Tokens.settingsContentMargin);
         art.activated(0);
-        compare(last(t.store), {"wallpaper.source": "builtin"});
+        compare(last(t.store), {"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield"});
+    }
+
+    // ADR-0040 step 2: the four artworks, each tile in the current appearance; the chosen one's variant beside its name.
+    function test_theArtworks() {
+        const t = make({"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield", "wallpaper.artworkVariant": "timeOfDay"});
+        const art = grid(t.page, "Grassfield");
+        compare(art.model.map(m => m.label), ["Grassfield", "Meadow", "Field Rows", "Ridgeline"]);
+        compare(art.model.map(m => m.selected), [true, false, false, false]);
+        const set = Appearance.dark ? "dark" : "light";
+        compare(art.model.map(m => m.variant), [set === "dark" ? "evening.dark" : "day.light", set, set, set]);
+        // The variant pop-up: Time of Day for the Grassfield artwork only.
+        const pop = find(t.page.contentItem, i => i.accessibleName === "Appearance of the wallpaper" && i.picked !== undefined);
+        verify(pop && pop.visible);
+        compare(pop.model.map(m => m.id), ["timeOfDay", "automatic", "light", "dark"]);
+        compare(pop.value, "timeOfDay");
+        pop.picked("dark");
+        compare(last(t.store), {"wallpaper.artworkVariant": "dark"});
+        // Another artwork: its name heads the group, no Time of Day, and Time of Day reads as Automatic there.
+        art.activated(1);
+        compare(last(t.store), {"wallpaper.source": "builtin", "wallpaper.artwork": "meadow"});
+        t.store.set("wallpaper.artworkVariant", "timeOfDay");
+        compare(t.page.headline, "Meadow");
+        compare(pop.model.map(m => m.id), ["automatic", "light", "dark"]);
+        compare(pop.value, "automatic");
+        // A picture: no variant pop-up.
+        t.page.usePicture(testCase.pictures[0]);
+        verify(!pop.visible);
     }
 
     function test_showAllAndThumbnails() {

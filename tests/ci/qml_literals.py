@@ -77,7 +77,6 @@ NAMED = re.compile(r"([\"'`])[A-Za-z]+\1")
 
 # Colour literals that stay, by file: {path: (how many, why)}. A file holding more fails, so a new literal there is caught too.
 ALLOWED = {
-    "ui/Grassfield/Ui/GrassfieldArtwork.qml": (9, "the default artwork's own painting, its 8 colours and the sun's glow alpha (ADR-0040 ID-1 turns it into artwork tokens)"),
     "ui/Grassfield/Ui/Appearance.qml": (3, "the dev-only glyph markers of tests/visual (never drawn in production)"),
     "ui/Grassfield/Ui/TintedIcon.qml": (1, "black as the neutral default of a tint property the host sets"),
     "ui/Grassfield/Ui/IconEffect.qml": (1, "black as the neutral default of a tint property the host sets"),

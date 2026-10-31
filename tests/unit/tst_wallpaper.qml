@@ -25,6 +25,8 @@ TestCase {
         compare(props.source.enum, WallpaperConfig.SOURCES);
         compare(props.fit.enum, WallpaperConfig.FITS);
         compare(props.interval.enum, WallpaperConfig.INTERVAL_NAMES);
+        compare(props.artwork.enum, WallpaperConfig.ARTWORKS);
+        compare(props.artworkVariant.enum, WallpaperConfig.ARTWORK_VARIANTS);
         compare(Object.keys(props).sort(), Object.keys(WallpaperConfig.WALLPAPER_DEFAULTS).sort());
         compare(Object.keys(props.outputs.items.properties).sort(), ["color", "display", "fit", "interval", "path", "shuffle", "source"]);
         compare(read("../../config/defaults/grassfield.json").wallpaper, WallpaperConfig.WALLPAPER_DEFAULTS);
@@ -932,5 +934,37 @@ TestCase {
         const photos = WallpaperConfig.parsePhotos(xhr.responseText, "/usr/share/grassfield/wallpapers/photos");
         compare(photos.length, 16);
         compare(photos.length, JSON.parse(xhr.responseText).photos.length, "no entry is left out");
+    }
+
+    // ADR-0040 step 2: the artwork and its variant (wallpaper.artwork, wallpaper.artworkVariant).
+    function test_artworkKeys() {
+        const d = WallpaperConfig.normalize({});
+        compare(d.artwork, "grassfield");
+        compare(d.artworkVariant, "timeOfDay");
+        compare(WallpaperConfig.normalize({artwork: "meadow", artworkVariant: "dark"}).artwork, "meadow");
+        compare(WallpaperConfig.normalize({artwork: "meadow", artworkVariant: "dark"}).artworkVariant, "dark");
+        compare(WallpaperConfig.normalize({artwork: "Meadow", artworkVariant: 3}).artwork, "grassfield");
+        compare(WallpaperConfig.normalize({artwork: "Meadow", artworkVariant: 3}).artworkVariant, "timeOfDay");
+    }
+
+    function test_artworkVariant() {
+        const v = WallpaperConfig.artworkVariantFor;
+        // Time of Day: the phase in the appearance's set; the Evening until the phase is known.
+        compare(v("grassfield", "timeOfDay", false, "dawn"), "dawn.light");
+        compare(v("grassfield", "timeOfDay", true, "night"), "night.dark");
+        compare(v("grassfield", "timeOfDay", true, ""), "evening.dark");
+        compare(v("grassfield", "timeOfDay", false, "noon"), "evening.light");
+        // Automatic: Day in the light appearance, Evening in the dark one; Light and Dark whatever the appearance.
+        compare(v("grassfield", "automatic", false, "night"), "day.light");
+        compare(v("grassfield", "automatic", true, "day"), "evening.dark");
+        compare(v("grassfield", "light", true, "night"), "day.light");
+        compare(v("grassfield", "dark", false, "day"), "evening.dark");
+        // The other artworks follow the appearance; Time of Day reads as Automatic.
+        compare(v("meadow", "timeOfDay", true, "day"), "dark");
+        compare(v("rows", "automatic", false, ""), "light");
+        compare(v("ridgeline", "light", true, ""), "light");
+        compare(v("ridgeline", "dark", false, ""), "dark");
+        // An unknown choice reads as the default (Time of Day).
+        compare(v("grassfield", "sometimes", false, "day"), "day.light");
     }
 }

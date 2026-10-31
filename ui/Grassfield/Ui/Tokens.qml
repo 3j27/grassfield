@@ -1872,8 +1872,6 @@ QtObject {
     readonly property var settingsAppearanceThumbLightX: [0.42, 0.56, 0.7]
     // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Auto: the dark desktop from this fraction of the picture's width to its right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property real settingsAppearanceThumbAutoSplit: 0.49
-    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Dark: the artwork under the shadow colour at this opacity (the darker wallpaper) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
-    readonly property real settingsAppearanceThumbDarkWallpaper: 0.35
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock's size, a fraction of the picture's height
     readonly property real settingsSaverThumbClockSize: 0.3
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its left edge, a fraction of the picture's width (off the centre: it moves every minute)
@@ -2848,6 +2846,113 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
+    // ADR-0040 section 6 (IQ-W1 C): the slow crossfade between two phases of the Grassfield artwork through the two-slot model; Reduce Motion cuts
+    readonly property int wallpaperPhaseFadeMs: 20000
+    // ADR-0040 section 2 (the time-of-day rule): Dawn starts this many minutes before sunrise
+    readonly property int wallpaperPhaseDawnBeforeSunriseMin: 30
+    // ADR-0040 section 2 (the time-of-day rule): Day starts this many minutes after sunrise
+    readonly property int wallpaperPhaseDayAfterSunriseMin: 90
+    // ADR-0040 section 2 (the time-of-day rule): Evening starts this many minutes before sunset
+    readonly property int wallpaperPhaseEveningBeforeSunsetMin: 90
+    // ADR-0040 section 2 (the time-of-day rule): Night starts this many minutes after sunset
+    readonly property int wallpaperPhaseNightAfterSunsetMin: 30
+    // ADR-0040 section 2: Dawn's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedDawn: "06:00"
+    // ADR-0040 section 2: Day's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedDay: "08:00"
+    // ADR-0040 section 2: Evening's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedEvening: "18:00"
+    // ADR-0040 section 2: Night's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedNight: "20:30"
+
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDawnLightSky: ["#3B4F7A", "#B49AB4", "#F6C9A0"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDawnLightSun: "#FFE7C4"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDawnLightSunAt: [0.3, 0.62, 0.2]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the four hills, far to near
+    readonly property var artworkGrassfieldDawnLightHills: ["#6E8F7E", "#4E7A60", "#355E46", "#244833"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDayLightSky: ["#8FC1DA", "#CDE6EA", "#F6EAC8"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDayLightSun: "#FFFCEB"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDayLightSunAt: [0.68, 0.4, 0.22]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the four hills, far to near
+    readonly property var artworkGrassfieldDayLightHills: ["#8CC497", "#62A672", "#428554", "#2D6A41"]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldEveningLightSky: ["#2C4466", "#B8806A", "#F2C07E"]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldEveningLightSun: "#FFE3B0"
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldEveningLightSunAt: [0.7, 0.58, 0.24]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldEveningLightHills: ["#5E8458", "#4A6E43", "#365532", "#263F24"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldNightLightSky: ["#03070D", "#0B1B26", "#1C2A33"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldNightLightSun: "#DDE6F0"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldNightLightSunAt: [0.22, 0.24, 0.05]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the four hills, far to near
+    readonly property var artworkGrassfieldNightLightHills: ["#1A2E25", "#13241B", "#0D1A13", "#08120D"]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDawnDarkSky: ["#162445", "#604C60", "#886646"]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDawnDarkSun: "#DEC9AA"
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDawnDarkSunAt: [0.3, 0.62, 0.2]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldDawnDarkHills: ["#3A5045", "#274333", "#183323", "#0E2618"]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDayDarkSky: ["#284F62", "#4D5F62", "#685F46"]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDayDarkSun: "#DEDBCC"
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDayDarkSunAt: [0.68, 0.4, 0.22]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldDayDarkHills: ["#42674A", "#2A5635", "#174425", "#0B351B"]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldEveningDarkSky: ["#0F2A3F", "#2F6F7E", "#E8C98B"]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldEveningDarkSun: "#FFF1C2"
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldEveningDarkSunAt: [0.68, 0.52, 0.25]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the four hills, far to near
+    readonly property var artworkGrassfieldEveningDarkHills: ["#3E7D5A", "#2E6B3F", "#1F4F2C", "#16391F"]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldNightDarkSky: ["#010407", "#05111A", "#111C24"]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldNightDarkSun: "#C0C8D1"
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldNightDarkSunAt: [0.22, 0.24, 0.05]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldNightDarkHills: ["#121F19", "#0C1811", "#08100B", "#050A07"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient, top to bottom
+    readonly property var artworkMeadowLightSky: ["#EEF5E6", "#CFE4C3"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the four layers of grass blades, far to near
+    readonly property var artworkMeadowLightBlades: ["#9CCB8E", "#7BB572", "#5A9A5B", "#3F7E45"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient, top to bottom
+    readonly property var artworkMeadowDarkSky: ["#0B1712", "#183326"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the four layers of grass blades, far to near
+    readonly property var artworkMeadowDarkBlades: ["#1E3B2A", "#24472F", "#2D573A", "#356544"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Field Rows artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the bands of the field, repeated top to bottom
+    readonly property var artworkRowsLight: ["#A7CF8B", "#93C27A", "#B8D99A", "#7FB46A", "#D9CF8E", "#9CC783"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Field Rows artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the bands of the field, repeated top to bottom
+    readonly property var artworkRowsDark: ["#13261A", "#173020", "#1B3824", "#22412B", "#2A3A26", "#18301F"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient at 0, 0.6 and 1 of the height
+    readonly property var artworkRidgelineLightSky: ["#D6E7F1", "#EEF3F1", "#F8F0DF"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the two hill lines, far and near
+    readonly property var artworkRidgelineLightHills: ["#8DBB91", "#6EA376"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the low glow behind the ridge
+    readonly property string artworkRidgelineLightSun: "#FFFFFF"
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient at 0, 0.6 and 1 of the height
+    readonly property var artworkRidgelineDarkSky: ["#0A1017", "#16222D", "#2A3640"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the two hill lines, far and near
+    readonly property var artworkRidgelineDarkHills: ["#132219", "#0C170F"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the low glow behind the ridge
+    readonly property string artworkRidgelineDarkSun: "#9FB4C4"
 
     // ADR-0040 ID-21 (section 5): Log Out, Restart and Shut Down proceed by themselves when their confirmation is left alone this many seconds, as macOS's (“… automatically in 60 seconds”, ASSUMPTION from memory)
     readonly property int sessionExitCountdownSeconds: 60

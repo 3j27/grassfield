@@ -50,6 +50,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `wallpaper.shuffle` | bool | true | folder: random order, no repeat until all were shown |
 | `wallpaper.videoOnBattery` | bool | false | video (W7) |
 | `wallpaper.online.provider` | `"commons"` | `"commons"` | online source: which daily picture (Wikimedia Commons Picture of the Day; additive in contract version 1, one provider today) |
+| `wallpaper.artwork` | `"grassfield"` \| `"meadow"` \| `"rows"` \| `"ridgeline"` | `"grassfield"` | the artwork the `builtin` source draws (ADR-0040 step 2; additive in contract version 1) |
+| `wallpaper.artworkVariant` | `"timeOfDay"` \| `"automatic"` \| `"light"` \| `"dark"` | `"timeOfDay"` | which variant shows: the phase of the day in the appearance's set (the Grassfield artwork; the others read it as `automatic`), the appearance's, or always the light Day or the dark Evening (additive) |
 | `wallpaper.outputs` | array (at most 16) of `{display: {name, model, serial}, source?, path?, color?, fit?, interval?, shuffle?}` | `[]` | per-display overrides; read by the shell, no UI yet; an invalid entry is dropped |
 | `dock.autohide` | bool | false | Dock |
 | `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |

@@ -110,6 +110,8 @@ const DEFAULTS = {
     "wallpaper.shuffle": true,
     "wallpaper.videoOnBattery": false,
     "wallpaper.online.provider": "commons",
+    "wallpaper.artwork": "grassfield",
+    "wallpaper.artworkVariant": "timeOfDay",
     "wallpaper.outputs": []
 };
 
@@ -221,6 +223,8 @@ const ALL_DEFAULTS = {
     "wallpaper.shuffle": true,
     "wallpaper.videoOnBattery": false,
     "wallpaper.online.provider": "commons",
+    "wallpaper.artwork": "grassfield",
+    "wallpaper.artworkVariant": "timeOfDay",
     "wallpaper.outputs": []
 };
 
@@ -328,6 +332,8 @@ const RULES = {
     "wallpaper.shuffle": {"type": "boolean"},
     "wallpaper.videoOnBattery": {"type": "boolean"},
     "wallpaper.online.provider": {"type": "enum", "values": ["commons", "apod"]},
+    "wallpaper.artwork": {"type": "enum", "values": ["grassfield", "meadow", "rows", "ridgeline"]},
+    "wallpaper.artworkVariant": {"type": "enum", "values": ["timeOfDay", "automatic", "light", "dark"]},
     "wallpaper.outputs": {"type": "wallpaperOutputs"}
 };
 

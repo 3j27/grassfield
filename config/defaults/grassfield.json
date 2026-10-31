@@ -154,6 +154,8 @@
     "online": {
       "provider": "commons"
     },
+    "artwork": "grassfield",
+    "artworkVariant": "timeOfDay",
     "outputs": []
   }
 }

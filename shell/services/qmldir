@@ -3,6 +3,7 @@ singleton Settings 1.0 Settings.qml
 singleton SystemInfo 1.0 SystemInfo.qml
 singleton Popups 1.0 Popups.qml
 singleton Power 1.0 Power.qml
+singleton DayPhase 1.0 DayPhase.qml
 singleton Trash 1.0 Trash.qml
 singleton Audio 1.0 Audio.qml
 singleton Apps 1.0 Apps.qml

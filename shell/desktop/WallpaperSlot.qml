@@ -11,6 +11,9 @@ Item {
 
     // "art" | "color" | "picture"
     property string kind: "art"
+    // The artwork and its variant (ADR-0040 step 2; GrassfieldArtwork.qml): set with the kind "art".
+    property string artwork: "grassfield"
+    property string variant: "evening.dark"
     property color color: "#000000"
     // file: URL of the prepared picture ("" releases it).
     property string url: ""
@@ -29,7 +32,8 @@ Item {
     signal videoFailed(string message)
 
     // The artwork's palette (the window's base colour and the menu bar tone of the artwork come from it).
-    readonly property var art: artwork.art
+    readonly property var art: artworkItem.art
+    readonly property var palette: artworkItem.palette
     // The picture is decoded and shown (never true for an empty or failed source).
     readonly property bool pictureReady: image.status === Image.Ready && root.url !== ""
 
@@ -41,9 +45,11 @@ Item {
     visible: opacity > 0
 
     WallpaperArt {
-        id: artwork
+        id: artworkItem
         anchors.fill: parent
         visible: root.kind === "art"
+        artwork: root.artwork
+        variant: root.variant
     }
 
     Rectangle {
