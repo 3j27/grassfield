@@ -1,11 +1,11 @@
 import QtQuick
 import Grassfield.Ui
 
-// Dialog frame on the material, in one of two shapes (macOS 26):
-// - alert (default): an icon in a 64 frame at the top left, bold title and message left-aligned under it, capsule buttons of
-//   one width filling the row;
-// - sheet (sheet: true): title, message and custom content, then a full-width hairline above a 64-pt footer whose 24-pt
-//   push buttons sit 20 from the right and bottom edges.
+// Dialog frame on the material, in one of two shapes (measured on macOS 27, ADR-0039 step 10):
+// - alert (default): radius.alert, an icon in a 64 frame at the top left, bold title and message left-aligned under it,
+//   28-pt capsule buttons of one width filling the row;
+// - sheet (sheet: true): radius.sheet (the window's corner), title, message and custom content, then a full-width hairline
+//   above a 64-pt footer whose 24-pt sheet buttons (rounded rectangles, Button.sheet) sit 20 from the right and bottom edges.
 // Esc emits rejected(). Hosts focus the preferred button themselves.
 FocusScope {
     id: root
@@ -105,7 +105,7 @@ FocusScope {
     }
 
     // Buttons. Alert: capsules of one width filling the row (two of them are half each), never narrower than the widest
-    // label. Sheet: 24-pt push buttons of one width (a pair is equal width), right-aligned in the footer.
+    // label. Sheet: 24-pt sheet buttons of one width (a pair is equal width), right-aligned in the footer.
     Row {
         id: buttonRow
         x: root.sheet ? root.width - root.pad - width : root.pad
@@ -120,7 +120,8 @@ FocusScope {
                 if (!("capsule" in kids[i]))
                     continue;
                 kids[i]["capsule"] = !root.sheet;
-                kids[i]["push"] = root.sheet;
+                kids[i]["push"] = false;
+                kids[i]["sheet"] = root.sheet;
                 widest = Math.max(widest, kids[i].implicitWidth);
                 count++;
             }

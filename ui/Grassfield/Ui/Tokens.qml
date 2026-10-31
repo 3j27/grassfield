@@ -216,10 +216,10 @@ QtObject {
     readonly property int radiusBanner: 18
     // docs/specs/search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
-    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusAlert: 24
-    // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusSheet: 26
+    // macOS 27 alerts: 25.6-27.3 at the 45-degree point (Mail's Save this message as a draft?, Finder's Empty Trash; 512 Pixels release captures), rounder than the window; the owner's choice of 2026-10-31 over ADR-0039 Q2 (a), which gave alerts the window's 16 when no macOS 27 alert was measured; was 24, the macOS 26 value (Dialog frame: confirm, notice) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusAlert: 26
+    // the window's corner (its 45-degree point, Hyprland rounding 20 at power 2.6: ADR-0024), the owner's answer to ADR-0039 Q2 (a) of 2026-10-29; macOS 27 sheets measure 15.4-17.1 (Print, TextEdit's Open); was 26, the macOS 26 value (the shared Sheet, the shell's Force Quit and About) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusSheet: 16
 
     // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18
@@ -620,6 +620,8 @@ QtObject {
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
     readonly property int controlPushPadding: 12
+    // macOS 27 sheet button (Button.sheet): a 24-tall rounded rectangle, not a capsule, its corner's 45-degree point that of a 6.8-pt circle (+-0.9; Print, TextEdit's Open, Finder's Connect to Server), its label pushPadding from each end [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int controlSheetButtonRadius: 7
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
