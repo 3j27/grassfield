@@ -767,3 +767,36 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - A worker's message box whose job's delegate is deleted before the user answers goes unanswered, and KIO's notification
   queue then waits for it, holding the later message boxes of Files' workers (`usernotificationhandler.cpp:43-54`); KIO's
   own widget handler behaves the same way.
+
+
+## 10. Screenshots (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8)
+
+### macOS reference behavior
+Shift-Cmd-3 captures the screen, and Shift-Cmd-4 a selection: a drag captures an area, and the window mode captures a window.
+The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar. Grassfield
+gives the toolbar its own chantier; until then it does the selection (8-1).
+
+### Functional requirements
+- SC1 Shift-Cmd-3 captures the focused display. Shift-Cmd-4, Shift-Cmd-5 and Print capture a selection: a crosshair over the
+  live screen in Grassfield's colours (`capture.*`).
+  - A drag captures that area.
+  - A click captures the window under the pointer, or the display under it when no window is there.
+  - Esc, or a second press while the crosshair shows, cancels without saving.
+- SC2 The file is saved on the Desktop as macOS names it, translated, and never overwrites a file. The Desktop is xdg-user-dir's,
+  never the home folder.
+- SC3 The picture is copied to the clipboard as PNG.
+- SC4 A notice shows the picture. A click or its "Open in Preview" button opens it in Grassfield's Preview for 2 minutes.
+- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
+  captures the owner's screen.
+
+### Acceptance criteria
+- A-SC1 (L0) `tests/shell/capture.sh`: the geometry for the screen, a drag, a click on a window, a click on a display only, and a
+  click outside every display; Esc and a second press; slurp's colours equal to the tokens; the name in English and French
+  and " (2)"; the Desktop's fallbacks; the clipboard; the notice's arguments; Preview through `uwsm-app`; failures leave no file.
+- A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
+- A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
+  Desktop and in the clipboard; the notice and Preview.
+
+### Known limitations
+A picture over 8 MiB shows the app's icon in the notice, not the picture (8-3). Recording, the floating thumbnail and the
+toolbar's options are the later chantier's.

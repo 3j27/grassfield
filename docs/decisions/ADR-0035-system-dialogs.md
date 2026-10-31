@@ -1147,6 +1147,31 @@ passwords too (D-12). Q12: the amendment text above.
     mode does); Esc cancels. Saved to the Desktop as on macOS (**owner decision Q4**; Omarchy saves to Pictures).
   - later chantier (own ADR): the macOS capture toolbar (Shift-Cmd-5: screen, window, selection, recording, Options) and the
     floating thumbnail, drawn by the shell; recording then replaces Omarchy's `gpu-screen-recorder` path.
+
+  **Delivered in step 8.**
+  - **The helper:** `packaging/bin/grassfield-capture`, `python3 -I`, standard library only, strings through `tr()`.
+    - `screen` captures the focused display (`grim -o`).
+    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`. The boxes are the windows on the shown workspaces, then each display's logical rectangle. A drag captures that area. A click without a drag (under 20 square pixels) captures the window under the pointer, else the display under it. Esc cancels, and a second press while the crosshair shows cancels it.
+    - The file is created with `O_EXCL` on the Desktop (xdg-user-dir, never the home folder or `/`, else `~/Desktop`), as "Screenshot 2026-10-31 at 14.05.12.png", or « Capture d’écran 2026-10-31 à 14.05.12.png » in French; " (2)" is added rather than overwriting.
+    - The picture is copied with `wl-copy`.
+    - The notice shows the picture (an `image-path` hint) with "Open in Preview", both as the click and as a button. It opens `org.grassfield.Preview` through `systemd-run … uwsm-app`, as the Dock starts an app.
+  - **Bindings:** `config/hypr/grassfield/system.lua` calls `/usr/lib/grassfield/grassfield-capture screen|selection` and names no Omarchy command. `scripts/dev/omarchy-compat.sh` no longer requires Omarchy's capture commands.
+  - **Packaging:** grim and slurp are declared.
+  - **Tests:** `tests/shell/capture.sh` (every tool faked; the colours held to the tokens) and `tests/shell/session_services.sh` (the bindings).
+
+  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
+  - **8-1. Shift-Cmd-5 and Print until the toolbar.**
+    - Options: (a) nothing until the toolbar exists; (b) a selection, as Shift-Cmd-4.
+    - **Choice: (b).**
+    - Rule applied: a key the user knows from macOS must do something useful. The selection is what the toolbar opens on by default.
+  - **8-2. How long "Open in Preview" stays live.** The notice's button works only while the helper waits.
+    - Options: (a) wait until the notice is dismissed, however long; (b) wait 2 minutes, then close the notice.
+    - **Choice: (b).**
+    - Rule applied: no helper waits without a bound. The picture stays on the Desktop, and Preview opens it from there.
+  - **8-3. A picture too large for the notice.** The shell shows a notice image up to 8 MiB (`History.js`); a large multi-display PNG is bigger.
+    - Options: (a) a second, scaled capture for the notice; (b) the app's icon in its place.
+    - **Choice: (b).**
+    - Rule applied: one capture, so the notice never shows a picture other than the one saved. A known limitation.
 - **Migrations and updates in a terminal (O3, O4):** accepted. They are Omarchy's maintenance tools running in a terminal, as
   a command-line update is on macOS; the Grassfield path is Software Update (ADR-0033), whose own sheet asks the questions.
 - **Omarchy menus (O5):** nothing opens (verified by code: the stand-in `omarchy-shell` fails as Omarchy's wrapper does);
