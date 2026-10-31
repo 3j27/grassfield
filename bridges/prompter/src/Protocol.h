@@ -7,7 +7,7 @@
 //   {"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}
 //   {"type":"name","state":"released"|"queued"|"owned"}
 //   {"type":"prompt","id":"p<N>","kind":"password"|"confirm",
-//    "requester":{"role":"app"|"keyring"|"gnupg"|"unidentified","name":"...","desktopId":"...","icon":"...","path":"...",
+//    "requester":{"role":"app"|"keyring"|"gnupg"|"ssh"|"unidentified","name":"...","desktopId":"...","icon":"...","path":"...",
 //                 "identified":true|false,"onBehalf":true|false},
 //    "texts":{"title":"...","message":"...","description":"...","warning":"...","continue":"...","cancel":"..."},
 //    "choice":{"label":"...","chosen":true|false}|null,"passwordNew":true|false,"strength":true|false}
@@ -41,6 +41,7 @@ namespace gf::prompter {
         inline constexpr std::size_t kPassword    = 4096;  // bytes of a password, UTF-8, after decoding
         inline constexpr int         kRequests    = 8;     // secret requests outstanding at the shell (ADR-0035 D-9)
         inline constexpr int         kPrompts     = 64;    // gcr prompts open at the same time (BeginPrompting without StopPrompting)
+        inline constexpr int         kPromptsPerCaller = 8; // of which one bus connection may hold (security review of step 9a, NIT-2)
         inline constexpr int         kBadLines    = 8;     // invalid lines tolerated per shell connection
         inline constexpr int         kKinds       = 16;    // entries of a hello's "kinds"
         inline constexpr int         kShortString = 64;    // bytes of an id, a kind, a version, a result
@@ -112,7 +113,7 @@ namespace gf::prompter {
     // --- bridge -> shell ---------------------------------------------------------------------------------------------
 
     struct RequesterView {
-        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, unidentified
+        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, ssh, unidentified
         QString name;
         QString desktopId;
         QString icon;

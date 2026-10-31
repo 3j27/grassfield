@@ -14,12 +14,14 @@
 // - The shell connects to a private socket (Peer.h: this user, the expected unit's cgroup) and speaks prompter/1
 //   (Protocol.h). One shell at a time.
 // - Each request is identified (Identity.h) before the shell sees it; at most limits::kRequests are outstanding, the next
-//   ones are answered "cancelled"; a request its caller withdraws is withdrawn from the shell ("cancel").
+//   ones are answered "cancelled"; a request its caller withdraws is withdrawn from the shell ("cancel"). At most
+//   limits::kPrompts gcr prompts are open, at most limits::kPromptsPerCaller of them for one bus connection (Filter.h).
 // - Fail closed: no password is ever invented. An answer to an id that is not outstanding is ignored; a wrong answer to an
 //   outstanding id cancels that request; a line that cannot be attributed (not JSON, over the length limit, no id) closes
 //   the connection, which cancels every request and releases the name.
 // - Nothing the callers or the shell send is logged; the journal gets ids, kinds, requesters' roles and paths, and refusals.
 
+#include "Filter.h"
 #include "Peer.h"
 #include "Prompt.h"
 #include "Protocol.h"
@@ -103,10 +105,13 @@ namespace gf::prompter {
         Options            m_options;
         GcrSystemPrompter* m_prompter = nullptr;
         guint              m_filterId = 0;
+        FilterState*       m_filterState = nullptr; // the worker thread's; never freed while the connection lives
         guint              m_acquiredSub = 0;
         guint              m_lostSub     = 0;
+        guint              m_ownersSub   = 0; // every NameOwnerChanged, so that the filter sees callers leave
 
         int              m_listenFd = -1;
+        LogThrottle      m_refusals{10000}; // one journal line per 10 s for refused connections
         dev_t            m_socketDev = 0;
         ino_t            m_socketIno = 0;
         QSocketNotifier* m_acceptNotifier = nullptr;

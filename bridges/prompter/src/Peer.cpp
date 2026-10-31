@@ -47,12 +47,14 @@ namespace gf::prompter {
             return false;
         if (!requireUserManager)
             return true;
-        const QString manager = QStringLiteral("user@%1.service").arg(uid);
-        for (qsizetype i = 0; i + 1 < parts.size(); ++i) {
-            if (parts.at(i) == manager)
-                return true;
+        const qsizetype manager = parts.indexOf(QStringLiteral("user@%1.service").arg(uid));
+        if (manager < 0 || manager + 1 >= parts.size())
+            return false;
+        for (qsizetype i = manager + 1; i + 1 < parts.size(); ++i) {
+            if (!parts.at(i).endsWith(QLatin1String(".slice")) || parts.at(i) == QLatin1String(".slice"))
+                return false;
         }
-        return false;
+        return true;
     }
 
     bool validPeerUnit(const QString& unit, bool dev) {
@@ -88,7 +90,21 @@ namespace gf::prompter {
         return pidfd < 0 ? 0 : pidFromFdinfo(readSmall(QByteArrayLiteral("/proc/self/fdinfo/") + QByteArray::number(pidfd)));
     }
 
-    PeerCheck checkSocketPeer(int fd, uid_t uid, const QString& unit, bool requireUserManager) {
+    namespace {
+        PidfdAnswer kernelPidfd(int fd) {
+            PidfdAnswer answer;
+            socklen_t   length = sizeof(answer.pidfd);
+            answer.rc          = ::getsockopt(fd, SOL_SOCKET, SO_PEERPIDFD, &answer.pidfd, &length);
+            answer.error       = answer.rc == 0 ? 0 : errno;
+            if (answer.rc == 0 && answer.pidfd < 0) {
+                answer.rc    = -1;
+                answer.error = EINVAL;
+            }
+            return answer;
+        }
+    } // namespace
+
+    PeerCheck checkSocketPeer(int fd, uid_t uid, const QString& unit, bool requireUserManager, PidfdQuery query) {
         PeerCheck check;
         ucred     cred{};
         socklen_t length = sizeof(cred);
@@ -100,10 +116,10 @@ namespace gf::prompter {
             check.reason = QStringLiteral("peer runs as uid %1").arg(cred.uid);
             return check;
         }
-        int       pidfd    = -1;
-        socklen_t pidfdLen = sizeof(pidfd);
-        QByteArray cgroupText;
-        if (::getsockopt(fd, SOL_SOCKET, SO_PEERPIDFD, &pidfd, &pidfdLen) == 0 && pidfd >= 0) {
+        const PidfdAnswer answer = (query ? query : kernelPidfd)(fd);
+        const int         pidfd  = answer.pidfd;
+        QByteArray        cgroupText;
+        if (answer.rc == 0) {
             check.raceFree = true;
             check.pid      = pidOfPidfd(pidfd);
             if (check.pid > 0)
@@ -114,13 +130,14 @@ namespace gf::prompter {
                 check.reason = QStringLiteral("peer process gone or in another PID namespace");
                 return check;
             }
-        } else if (errno == ENOPROTOOPT || errno == EINVAL) {
-            // Before Linux 6.5: the PID of SO_PEERCRED (the residual race of the header).
+        } else if (answer.error == ENOPROTOOPT) {
+            // A kernel without SO_PEERPIDFD (before Linux 6.5): the PID of SO_PEERCRED (the residual race of the header).
             check.pid = cred.pid;
             if (check.pid > 0)
                 cgroupText = readSmall(QByteArrayLiteral("/proc/") + QByteArray::number(check.pid) + QByteArrayLiteral("/cgroup"));
         } else {
-            check.reason = QStringLiteral("no pidfd for the peer: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
+            // EINVAL on Linux 6.5 to 6.15: the peer has exited and been reaped. Never fall back to its PID then.
+            check.reason = QStringLiteral("no pidfd for the peer: %1").arg(QString::fromLocal8Bit(std::strerror(answer.error)));
             return check;
         }
         check.cgroup = unifiedCgroupPath(cgroupText);
@@ -130,6 +147,18 @@ namespace gf::prompter {
         }
         check.accepted = true;
         return check;
+    }
+
+    bool LogThrottle::allow(qint64 nowMs, qint64* suppressed) {
+        if (m_any && nowMs - m_last < m_windowMs) {
+            ++m_suppressed;
+            return false;
+        }
+        *suppressed  = m_suppressed;
+        m_suppressed = 0;
+        m_last       = nowMs;
+        m_any        = true;
+        return true;
     }
 
     QString socketPath(const QString& overridePath, const QString& runtimeDir) {

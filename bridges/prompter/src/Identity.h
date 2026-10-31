@@ -7,14 +7,22 @@
 // comes from /proc/self/fdinfo/<pidfd>, then /proc/<pid>/exe is read (its target's name, and the file itself through an
 // O_PATH open), then the pidfd is checked again: when the process still runs, the PID was not reused between. The
 // executable is trusted only when its absolute path names that same file now, and the file and every directory above it
-// belong to root and are not writable by group or others. A trusted executable is then:
-// - "keyring" for /usr/bin/gnome-keyring-daemon, "gnupg" for /usr/bin/pinentry-gnome3 and /usr/bin/gpg-agent (they ask on
-//   another program's behalf: the caller's text names that program, under the fixed row);
+// belong to root and are not writable by group or others, and the process is not being traced (a tracer can run any code
+// in it). A trusted executable is then:
+// - "keyring" for /usr/bin/gnome-keyring-daemon, "gnupg" for /usr/bin/pinentry-gnome3 and /usr/bin/gpg-agent, "ssh" for
+//   /usr/lib/gcr-ssh-agent: they ask on another program's behalf, and any program of the user can make them ask with
+//   text of its own (gpg-connect-agent, running pinentry-gnome3, ssh-add), so the row names the program that asks, never
+//   a guarantee about the text under it, which the shell shows as another program's unverified words;
 // - "app" with a desktop entry's name and icon when exactly one entry of /usr/share/applications (a root-owned regular
 //   file) runs exactly that executable: its Exec line is the program and field codes only, so an interpreter, a wrapper or
-//   a launcher with arguments never lends its entry to whatever it runs;
+//   a launcher with arguments never lends its entry to whatever it runs; and every file mapped executable in the process
+//   is trusted as well (no LD_PRELOAD or LD_LIBRARY_PATH code, no plugin from the user's files, nothing replaced since it
+//   was loaded);
 // - anything else, and every failure on the way (no ProcessFD, the process gone, another user, an executable in the home
-//   or deleted), is "unidentified" with the executable's path when it is known.
+//   or deleted, a traced process), is "unidentified" with the executable's path when it is known.
+// What this cannot see (security review of step 9a, MINOR-2, decision 9-14): the row names the program whose process
+// opened the bus connection, not proof of whose code speaks on it. A process can connect, fork, and exec a trusted program
+// while its child keeps using the connection; an ancestor can ptrace a trusted program, change its code and detach.
 // The pure parts take the owner and the top of the tree as parameters, so the tests run them on temporary trees.
 
 #include "Protocol.h"
@@ -79,8 +87,15 @@ namespace gf::prompter {
         QString role;
     };
 
-    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg.
+    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh.
     const QList<KnownCaller>& knownCallers();
+
+    // The files mapped executable in a process, from the text of /proc/<pid>/maps (unique, in order; pseudo mappings such
+    // as [vdso] and anonymous ones left out); *ok false when a line cannot be read.
+    QStringList executableFiles(const QByteArray& maps, bool* ok);
+
+    // The "TracerPid:" of /proc/<pid>/status: 0 when not traced, -1 when the line is missing or not a number.
+    qint64 tracerPid(const QByteArray& status);
 
     // The role of `exe` among `known` (the same file, by device and inode, as a trusted path of the list); empty when none.
     QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top);
@@ -89,8 +104,11 @@ namespace gf::prompter {
     struct ExeFacts {
         QString path;          // /proc/<pid>/exe's target; empty when unreadable
         FileId  file;          // the file /proc/<pid>/exe leads to
-        bool    alive = false; // the pidfd still ran after both reads
+        bool    alive = false; // the pidfd still ran after every read
         bool    sameUser = false; // the bus's UnixUserID is this user
+        bool    traced = true;    // TracerPid is not 0, or unknown
+        bool    codeKnown = false;  // /proc/<pid>/maps was read whole
+        QStringList codeFiles;      // the files mapped executable (executableFiles)
     };
 
     struct Where {

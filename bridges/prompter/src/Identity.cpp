@@ -230,6 +230,7 @@ namespace gf::prompter {
             {QStringLiteral("/usr/bin/gnome-keyring-daemon"), QStringLiteral("keyring")},
             {QStringLiteral("/usr/bin/pinentry-gnome3"), QStringLiteral("gnupg")},
             {QStringLiteral("/usr/bin/gpg-agent"), QStringLiteral("gnupg")},
+            {QStringLiteral("/usr/lib/gcr-ssh-agent"), QStringLiteral("ssh")},
         };
         return known;
     }
@@ -242,10 +243,57 @@ namespace gf::prompter {
         return {};
     }
 
+    QStringList executableFiles(const QByteArray& maps, bool* ok) {
+        *ok = true;
+        QStringList files;
+        for (const QByteArray& line : maps.split('\n')) {
+            if (line.isEmpty())
+                continue;
+            // address perms offset dev inode [path]: the path is everything after the fifth field (it may hold spaces).
+            int        field = 0;
+            qsizetype  i     = 0;
+            QByteArray perms;
+            while (field < 5 && i < line.size()) {
+                const qsizetype start = i;
+                while (i < line.size() && line.at(i) != ' ')
+                    ++i;
+                if (field == 1)
+                    perms = line.mid(start, i - start);
+                ++field;
+                while (i < line.size() && line.at(i) == ' ')
+                    ++i;
+            }
+            if (field < 5 || perms.size() != 4) {
+                *ok = false;
+                return {};
+            }
+            if (perms.at(2) != 'x')
+                continue;
+            const QByteArray path = line.mid(i);
+            if (path.isEmpty() || path.startsWith('['))
+                continue; // anonymous, or [vdso], [vsyscall]
+            const QString file = QFile::decodeName(path);
+            if (!files.contains(file))
+                files.append(file);
+        }
+        return files;
+    }
+
+    qint64 tracerPid(const QByteArray& status) {
+        for (const QByteArray& line : status.split('\n')) {
+            if (!line.startsWith("TracerPid:"))
+                continue;
+            bool         ok    = false;
+            const qint64 value = line.mid(10).trimmed().toLongLong(&ok);
+            return ok && value >= 0 ? value : -1;
+        }
+        return -1;
+    }
+
     RequesterView requesterFor(const ExeFacts& facts, const Where& where) {
         RequesterView r;
         r.path = flatten(facts.path, caps::kPath);
-        if (!facts.alive || !facts.sameUser || facts.path.isEmpty() || !facts.file.valid)
+        if (!facts.alive || !facts.sameUser || facts.traced || facts.path.isEmpty() || !facts.file.valid)
             return r;
         if (!trustedPath(facts.path, where.owner, where.top) || !(fileIdOf(facts.path) == facts.file))
             return r;
@@ -254,6 +302,13 @@ namespace gf::prompter {
             r.identified = true;
             r.onBehalf   = true;
             return r;
+        }
+        // An app's name is lent only to a process that runs nothing but trusted code (decision 9-14).
+        if (!facts.codeKnown || facts.codeFiles.isEmpty())
+            return r;
+        for (const QString& code : facts.codeFiles) {
+            if (!trustedPath(code, where.owner, where.top))
+                return r;
         }
         if (const auto entry = desktopEntryFor(facts.file, where.applications, where.programDirs, where.owner, where.top)) {
             const QString name = flatten(entry->name, caps::kName);
@@ -285,11 +340,26 @@ namespace gf::prompter {
                 facts.file = {true, st.st_dev, st.st_ino};
             ::close(fd);
         }
-        // Both reads are of the pidfd's process only if it still runs now: otherwise the PID may have been reused.
+        const QByteArray proc = QByteArrayLiteral("/proc/") + QByteArray::number(pid);
+        QFile            status(QString::fromLatin1(proc + "/status"));
+        if (status.open(QIODevice::ReadOnly))
+            facts.traced = tracerPid(status.read(64 * 1024)) != 0;
+        // At most 8 MiB of mappings (a large browser has a few thousand lines); more reads as unknown.
+        QFile maps(QString::fromLatin1(proc + "/maps"));
+        if (maps.open(QIODevice::ReadOnly)) {
+            const QByteArray text = maps.read(8 * 1024 * 1024 + 1);
+            bool             ok   = false;
+            facts.codeFiles       = executableFiles(text, &ok);
+            facts.codeKnown       = ok && text.size() <= 8 * 1024 * 1024;
+        }
+        // Every read is of the pidfd's process only if it still runs now: otherwise the PID may have been reused.
         facts.alive = pidfdAlive(pidfd);
         if (!facts.alive) {
             facts.path.clear();
             facts.file = {};
+            facts.codeFiles.clear();
+            facts.codeKnown = false;
+            facts.traced    = true;
         }
         return facts;
     }

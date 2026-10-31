@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 namespace gf::prompter {
@@ -32,6 +33,12 @@ namespace gf::prompter {
 
         QString kindName(PromptKind kind) {
             return kind == PromptKind::Password ? QStringLiteral("password") : QStringLiteral("confirm");
+        }
+
+        qint64 monotonicMs() {
+            timespec ts{};
+            ::clock_gettime(CLOCK_MONOTONIC, &ts);
+            return static_cast<qint64>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
         }
 
         // Best effort, for a peer that is refused before it is adopted.
@@ -69,6 +76,10 @@ namespace gf::prompter {
             g_dbus_connection_signal_unsubscribe(m_bus, m_acquiredSub);
         if (m_lostSub)
             g_dbus_connection_signal_unsubscribe(m_bus, m_lostSub);
+        if (m_ownersSub)
+            g_dbus_connection_signal_unsubscribe(m_bus, m_ownersSub);
+        // The filter and its state stay with the connection until the process ends: GDBus's worker thread may still be
+        // running the filter while it is removed.
         // The prompter stays registered until the process ends (decision 9-3): unregistering with prompts in flight would
         // race libgcr's own clean-up, and the bus forgets the object with the connection.
         explicit_bzero(m_in, kInCapacity);
@@ -77,8 +88,13 @@ namespace gf::prompter {
     }
 
     bool Bridge::start(QString* error) {
-        // The filter comes first: no PerformPrompt is ever dispatched without it (Filter.h).
-        m_filterId = g_dbus_connection_add_filter(m_bus, promptFilter, nullptr, nullptr);
+        // The filter comes first: no PerformPrompt is ever dispatched without it (Filter.h). It counts each caller's open
+        // prompts and forgets a caller that leaves the bus, so the bridge listens to every NameOwnerChanged.
+        m_filterState = new FilterState;
+        m_filterId    = g_dbus_connection_add_filter(m_bus, promptFilter, m_filterState, nullptr);
+        m_ownersSub   = g_dbus_connection_signal_subscribe(
+            m_bus, "org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged", "/org/freedesktop/DBus", nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+            [](GDBusConnection*, const gchar*, const gchar*, const gchar*, const gchar*, GVariant*, gpointer) {}, nullptr, nullptr);
         m_prompter = gcr_system_prompter_new(GCR_SYSTEM_PROMPTER_MULTIPLE, 0);
         g_signal_connect(m_prompter, "new-prompt", G_CALLBACK(onNewPrompt), this);
         gcr_system_prompter_register(m_prompter, m_bus);
@@ -327,16 +343,23 @@ namespace gf::prompter {
                 return;
             }
             const PeerCheck check = checkSocketPeer(fd, m_options.uid, m_options.peerUnit, m_options.requireUserManager);
+            // A refused peer can try again at once: the journal gets one line per 10 s, with the count of the others.
+            qint64 suppressed = 0;
             if (!check.accepted) {
-                log(QStringLiteral("refused a connection from pid %1 (cgroup %2): %3")
-                        .arg(check.pid)
-                        .arg(flatten(check.cgroup, caps::kPath), check.reason));
+                if (m_refusals.allow(monotonicMs(), &suppressed))
+                    log(QStringLiteral("refused a connection from pid %1 (cgroup %2): %3%4")
+                            .arg(check.pid)
+                            .arg(flatten(check.cgroup, caps::kPath), check.reason,
+                                 suppressed ? QStringLiteral(" (and %1 refused connection(s) not logged)").arg(suppressed) : QString()));
                 sendNow(fd, errorMessage(QStringLiteral("refused"), QStringLiteral("not the shell")));
                 ::close(fd);
                 continue;
             }
             if (m_client >= 0) {
-                log(QStringLiteral("refused a second shell connection (pid %1)").arg(check.pid));
+                if (m_refusals.allow(monotonicMs(), &suppressed))
+                    log(QStringLiteral("refused a second shell connection (pid %1)%2")
+                            .arg(check.pid)
+                            .arg(suppressed ? QStringLiteral(" (and %1 refused connection(s) not logged)").arg(suppressed) : QString()));
                 sendNow(fd, errorMessage(QStringLiteral("busy"), QStringLiteral("another shell is connected")));
                 ::close(fd);
                 continue;
