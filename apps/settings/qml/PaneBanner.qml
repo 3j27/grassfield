@@ -56,7 +56,8 @@ Rectangle {
         id: body
         textFormat: Text.PlainText
         x: Tokens.settingsBannerTextX
-        y: Tokens.settingsBannerTextBaseline - baselineOffset
+        // The text's first baseline its measured gap under the title's, growing with Text size (ADR-0039 step 18).
+        y: Tokens.settingsBannerTitleBaseline + (Tokens.settingsBannerTextBaseline - Tokens.settingsBannerTitleBaseline) * Appearance.textScale - baselineOffset
         width: root.width - x - Tokens.settingsRowInset
         text: root.text
         wrapMode: Text.Wrap

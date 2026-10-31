@@ -1357,8 +1357,8 @@ QtObject {
     readonly property real settingsBannerTitleBaseline: 22.5
     // macOS 27 Notifications: the header card's text, its first baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
     readonly property real settingsBannerTextBaseline: 38.5
-    // macOS 27 Notifications: the header card's text lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
-    readonly property int settingsBannerTextLineHeight: 14
+    // macOS 27 Notifications: the header card's text lines 14 apart (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextLineHeight: Math.round(14 * Appearance.textScale)
     // macOS 27 Notifications: the card ends 13 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
     readonly property int settingsBannerBottom: 13
     // macOS 27 Notifications and Focus: a row with a 28-pt picture, 52 tall (+1 separator) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
@@ -1419,14 +1419,14 @@ QtObject {
     readonly property int settingsHeroIconTop: 26
     // estimate: the header tile's corner, the sidebar tiles' proportion (5 on 20) on 48 [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroIconRadius: 11
-    // header title, bold: cap height 16.5 (SF about 23 pt); Inter's cap height 0.727 gives 22 [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTitleSize: 22
+    // header title, bold: cap height 16.5 (SF about 23 pt); Inter's cap height 0.727 gives 22 (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTitleSize: Math.round(22 * Appearance.textScale)
     // the header title's baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property real settingsHeroTitleBaseline: 107.5
-    // header text 12 pt (cap 8.5) in the window's secondary grey [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTextSize: 12
-    // header text line pitch [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTextLineHeight: 17
+    // header text 12 pt (cap 8.5) in the window's secondary grey (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextSize: Math.round(12 * Appearance.textScale)
+    // header text line pitch (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextLineHeight: Math.round(17 * Appearance.textScale)
     // the header text's first baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroTextBaseline: 124
     // the header text's last baseline to the card bottom [ref: docs/audits/settings-parity-2026-10-26.md § General]
@@ -1523,10 +1523,10 @@ QtObject {
     readonly property int settingsPreviewFirstBaseline: 21
     // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewLineGap: 16
-    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
-    readonly property int settingsCaptionDetailSize: 12
-    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
-    readonly property int settingsCaptionDetailLineHeight: 14
+    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsCaptionDetailSize: Math.round(12 * Appearance.textScale)
+    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsCaptionDetailLineHeight: Math.round(14 * Appearance.textScale)
     // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property real settingsCaptionDetailGap: 16.5
     // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
@@ -1559,8 +1559,8 @@ QtObject {
     readonly property real settingsStorageFreeOpacity: 0.14
     // the legend: its baseline 78 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
     readonly property int settingsStorageLegendBaseline: 78
-    // the legend: 10-pt text (caps 7 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
-    readonly property int settingsStorageLegendSize: 10
+    // the legend: 10-pt text (caps 7 tall) (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendSize: Math.round(10 * Appearance.textScale)
     // the legend: an 8-pt dot in the category's colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
     readonly property int settingsStorageLegendDot: 8
     // the legend: 5 from the dot to its name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
@@ -1657,10 +1657,10 @@ QtObject {
     readonly property real settingsServiceStatusInset: 61.5
     // an empty list's group (VPN: No VPN configurations): 36 tall, the text centred in the secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
     readonly property int settingsEmptyListHeight: 36
-    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
-    readonly property int settingsBtHeaderTextSize: 12
-    // Bluetooth's header text: lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
-    readonly property int settingsBtHeaderTextLineHeight: 15
+    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextSize: Math.round(12 * Appearance.textScale)
+    // Bluetooth's header text: lines 15 apart (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextLineHeight: Math.round(15 * Appearance.textScale)
     // Bluetooth's header text: first baseline 40 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsBtHeaderTextBaseline: 40
     // Bluetooth's header row: 13 under the text's last baseline (68 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
@@ -1707,8 +1707,8 @@ QtObject {
     readonly property int settingsChartWidth: 400
     // a chart's value labels (100 %, 50 %, 0 %) at 415 from the group edge, centred on their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
     readonly property int settingsChartLabelInset: 415
-    // a chart's labels: 12 pt, secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
-    readonly property int settingsChartLabelSize: 12
+    // a chart's labels: 12 pt, secondary colour (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelSize: Math.round(12 * Appearance.textScale)
     // a chart's time labels: baseline 37.5 below the plot, 3 after their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
     readonly property real settingsChartAxisBaseline: 37.5
     // a time label 3 after its vertical line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
