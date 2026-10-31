@@ -434,6 +434,8 @@ Scope {
             }
             // A new phase: a slow crossfade (wallpaper.phaseFadeMs), never under a full-screen window (it waits for it to go).
             // A new appearance: the usual crossfade, the tone switching at its midpoint (ID-14).
+            // Only once the feed has given its first result (its initial `display` is a placeholder artwork, review of
+            // c5d43be4): that result carries the phase and the appearance known by then (withArt).
             property bool phaseWaiting: false
             // The phase as last seen: the first one known (at start) is a cut, not a change.
             property string lastPhase: DayPhase.shown
@@ -442,7 +444,7 @@ Scope {
                 function onShownChanged(): void {
                     const first = win.lastPhase === "";
                     win.lastPhase = DayPhase.shown;
-                    if (feed.display && feed.display.kind === "art") {
+                    if (win.feedSeen && feed.display.kind === "art") {
                         if (first)
                             win.show(win.withArt(feed.display), "cut");
                         else
@@ -453,7 +455,7 @@ Scope {
             Connections {
                 target: Appearance
                 function onDarkChanged(): void {
-                    if (feed.display && feed.display.kind === "art")
+                    if (win.feedSeen && feed.display.kind === "art")
                         win.show(win.withArt(feed.display), "appearance");
                 }
             }
@@ -463,7 +465,7 @@ Scope {
                     win.show(win.withArt(feed.display), "phase");
             }
             onFullscreenChanged: {
-                if (!win.fullscreen && win.phaseWaiting && feed.display && feed.display.kind === "art")
+                if (!win.fullscreen && win.phaseWaiting && win.feedSeen && feed.display.kind === "art")
                     win.showPhase();
             }
 

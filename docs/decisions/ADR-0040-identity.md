@@ -265,7 +265,10 @@ and IQ-B3 here changes the palette only, not which controls read it.
     window's wiring from its source), `tst_artwork.qml` (every palette's ground, the default's equal to `session.ground`),
     `tst_minimized.qml` (`groundCall` interpolates only `#rrggbb`), `tst_sessionexit.qml` (the cover on `Ground.accepted`,
     the compositor's push only once known). Review of 4457edc1 (FAIL: M1 the phase or appearance before the feed; m1 the
-    flash at a restart; m2 the cover's colour; m3 the journal's clock; m4 the write path untested; two NITs): all fixed.
+    flash at a restart; m2 the cover's colour; m3 the journal's clock; m4 the write path untested; two NITs): all fixed;
+    the counter-review of c5d43be4 found M1's second half (a still already mapped was cut to the placeholder artwork by a
+    phase or appearance event before the feed's first result): the phase, appearance and full-screen handlers act only once
+    the feed has given its first result.
     NOT VERIFIED (nested): the first frame at start and at a shell restart, the hotplug, the background colour after a
     change and a reload.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).

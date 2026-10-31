@@ -1087,6 +1087,10 @@ TestCase {
         compare((w.match(/win\.feedSeen = true;/g) || []).length, 1);
         verify(/onDisplayChanged: \{\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
         verify(/if \(!win\.firstReady\) \{\s*win\.begin\(\);\s*return;\s*\}/.test(w), "show() before the first frame only asks the choice");
+        // After the first frame too: a phase or an appearance acts on the artwork only once the feed has given its first result
+        // (counter-review of c5d43be4: a mapped still was cut to the placeholder artwork).
+        compare((w.match(/feed\.display\.kind === "art"/g) || []).length, 3);
+        compare((w.match(/win\.feedSeen && feed\.display\.kind === "art"/g) || []).length, 3);
     }
 
     function test_groundFor() {

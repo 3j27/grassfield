@@ -1136,8 +1136,9 @@ function stateText(saved, startingBy, blocked, now) {
     }
     if (starting.length > 0)
         o.videoStarting = starting;
-    if (Array.isArray(blocked) && blocked.length > 0)
-        o.videoBlocked = blocked;
+    const list = asArray(blocked, 16);
+    if (list !== null && list.length > 0)
+        o.videoBlocked = list;
     return JSON.stringify(o, null, 2) + "\n";
 }
 
