@@ -144,6 +144,7 @@ namespace gf::menubridge {
     }
 
     void MenuClient::giveUp(const QString& code, const QString& why) {
+        log(QStringLiteral("window %1: menu given up (%2: %3)").arg(m_window, code, why));
         m_stopped = true;
         m_refetch.stop();
         m_retry.stop();

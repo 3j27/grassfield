@@ -43,8 +43,8 @@ fi
 grep -q '^image/png=imv.desktop' "$VS_DEV/isolated/visual/config/mimeapps.list" || fl_note "image/png is not imv's in Omarchy's mimeapps.list here"
 [[ -f /usr/share/applications/imv.desktop ]] || fl_note "imv is not installed: item 3 checks another default"
 bridge_log=$VS_DEV/menu-bridge.log
-# A read the bridge gave up: a "GetLayout ... failed" line that no "reading its menu again" line follows (MenuClient::fail).
-given_up_count() { echo $(( $(grep -c "GetLayout on .* failed" "$bridge_log" 2>/dev/null || true) - $(grep -c "reading its menu again" "$bridge_log" 2>/dev/null || true) )); }
+# A menu the bridge gave up (MenuClient::giveUp logs it; a failed re-read of a menu shown before keeps it and logs no such line).
+given_up_count() { grep -c "menu given up" "$bridge_log" 2>/dev/null || true; }
 given_up_before=$(given_up_count)
 
 class='^org\.grassfield\.Files$'
@@ -105,8 +105,10 @@ vs_sleep 3
 fl_check "the picture's default application, imv, is listed and selected" a11y_find "$pid" 'list item' '^imv$' --state selected --wait 15
 fl_check "Open is enabled" a11y_find "$pid" '(push )?button' '^(Open|Ouvrir)$' --state sensitive --wait 5
 fl_shot 3-other-panel >/dev/null
-fl_key -k Escape
-fl_check_wait "Escape closes the panel" 10 bash -c "[[ \$(\"$VS_ROOT/scripts/nestctl\" clients -j | jq '[.[] | select(.mapped and .class == \"org.grassfield.Files\")] | length') -le $windows ]]"
+# Cancel, pressed through its accessible action: the panel opened from the bar does not always have the keyboard (it says
+# "Click in the window to use the keyboard"), so Escape is not a reliable way out.
+fl_check "Cancel is pressed" a11y_find "$pid" '(push )?button' '^(Cancel|Annuler)$' --press --wait 5
+fl_check_wait "Cancel closes the panel" 10 bash -c "[[ \$(\"$VS_ROOT/scripts/nestctl\" clients -j | jq '[.[] | select(.mapped and .class == \"org.grassfield.Files\")] | length') -le $windows ]]"
 
 # 2. Go > Applications (Ctrl+Shift+A) in this window keeps the menus...
 fl_focus_class "$class" >/dev/null
