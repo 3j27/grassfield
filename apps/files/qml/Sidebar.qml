@@ -252,7 +252,7 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             name: entry.iconName
             size: Tokens.filesSidebarIconSize
-            color: Appearance.colors.accent
+            color: Appearance.colors.accentInk
         }
 
         // A tag: its colour dot, or a hollow ring for a tag without a colour (from another application).

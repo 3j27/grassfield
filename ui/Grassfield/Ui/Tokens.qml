@@ -121,10 +121,17 @@ QtObject {
         orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings. A light green, as macOS's Green, clearly apart from the brand green color.light.accent (OKLab distance 0.21; #3A7512 was 0.04): the owner's choice B of 2026-10-30 (IQ-B3 A) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        greenText: "#10240A",  // text and icons on the light green accent: dark, 6.5:1 (white would be 2.5:1; as yellowText) (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py) [ref: docs/decisions/ADR-0040-identity.md step 1c]
         graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+    })
+
+    // color roles, accentInkLight appearance
+    readonly property var colorAccentInkLight: ({
+        pink: "#BD2F6C",  // the lightest shade of the light pink accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        yellow: "#816500",  // the lightest shade of the light yellow accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        green: "#467427"  // the lightest shade of the light green accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
     })
 
     // color roles, selectionDark appearance
@@ -143,8 +150,8 @@ QtObject {
         orangeText: "#FFFFFF",  // text on the dark-appearance orange selection fill (A2: tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // dark-appearance selection fill, yellow: yellow keeps its light pair (dark text): a lighter shade would only lower the contrast [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         yellowText: "#241C00",  // text on the dark-appearance yellow selection fill (A2: tests/visual/test_contrast_tokens.py)
-        green: "#408014",  // dark-appearance selection fill, green: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
-        greenText: "#FFFFFF",  // text on the dark-appearance green selection fill (A2: tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // dark-appearance selection fill, green: the light accent itself, as yellow's: it holds dark text, and a selection is never darker than the light accent (the owner's choice B of 2026-10-30, ADR-0040 step 1c) [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        greenText: "#10240A",  // text on the dark-appearance green selection fill: dark, 6.5:1, as on the light accent (A2: tests/visual/test_contrast_tokens.py)
         graphite: "#6C717D",  // dark-appearance selection fill, graphite: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         graphiteText: "#FFFFFF"  // text on the dark-appearance graphite selection fill (A2: tests/visual/test_contrast_tokens.py)
     })
@@ -2496,8 +2503,8 @@ QtObject {
     readonly property int previewToolbarButtonSize: 28
     // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewThumbnailWidth: 140
-    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
-    readonly property int previewSidebarItemHeight: 28
+    // estimate: Preview app (docs/specs/preview.md); a PDF's file-name row, which grows with Text size so the selection ring keeps clear of its descenders (ADR-0039 step 4) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
+    readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSearchWidth: 200
     // page background of PDF thumbnails (documents are white in both themes) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]

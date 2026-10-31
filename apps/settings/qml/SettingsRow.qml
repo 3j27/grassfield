@@ -11,6 +11,8 @@ Item {
     property string valueText: ""
     // An optional coloured tile before the title (macOS 27 rows with an icon: About's software and displays, Storage).
     property string glyph: ""
+    // A colour of color.accentLight ("graphite" for an unknown one), or "grassfield": the brand green, color.light.accent
+    // (About's Grassfield row, ADR-0040 ID-11: not the pickable Green).
     property string tileColor: "graphite"
     property real tileSize: Tokens.settingsNavTileSize
     // The labels' offset from the row's middle (macOS 27 slider rows set their title a little higher).
@@ -45,7 +47,7 @@ Item {
         width: root.tileSize
         height: width
         radius: Math.round(root.tileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-        color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
+        color: root.tileColor === "grassfield" ? Tokens.colorLight.accent : (Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite)
 
         Icon {
             anchors.centerIn: parent

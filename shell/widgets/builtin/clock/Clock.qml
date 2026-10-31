@@ -128,7 +128,7 @@ WidgetBase {
             width: parent.width
             visible: root.isSmall
             text: Qt.locale().toString(root.now, "dddd")
-            color: Appearance.colors.accent
+            color: Appearance.colors.accentInk
             font.weight: Tokens.typographyMenuBoldWeight
         }
 

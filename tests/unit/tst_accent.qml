@@ -124,6 +124,37 @@ TestCase {
         compare(Appearance.iconTint, Qt.color("#8e5bea"));
     }
 
+    // Text and glyphs drawn in the accent colour read `accentInk` (the integrator's review of 5391761): the accent itself, or
+    // in the light appearance the darker shade of a light accent (color.accentInkLight: yellow, green, pink).
+    function test_accentInkIsTheAccentOrItsDarkerShade() {
+        // The palettes are JS objects: their colours are strings, compared as colours.
+        function same(a, b, what) {
+            verify(Qt.colorEqual(a, b), what + ": " + a + " != " + b);
+        }
+        Appearance.dark = false;
+        Appearance.accentSetting = "multicolor";
+        same(Appearance.colors.accentInk, Appearance.colors.accent, "the default: its own accent");
+        Appearance.accentSetting = "blue";
+        same(Appearance.colors.accentInk, Tokens.colorAccentLight.blue, "light blue: the accent");
+        for (const n of ["yellow", "green", "pink"]) {
+            Appearance.accentSetting = n;
+            same(Appearance.colors.accentInk, Tokens.colorAccentInkLight[n], "light " + n + ": its ink");
+            verify(!Qt.colorEqual(Appearance.colors.accentInk, Appearance.colors.accent), n);
+            same(Appearance.lightColors.accentInk, Tokens.colorAccentInkLight[n], "lightColors " + n);
+            same(Appearance.darkColors.accentInk, Tokens.colorAccentDark[n], "dark " + n + ": the accent itself");
+        }
+        Appearance.dark = true;
+        Appearance.accentSetting = "green";
+        same(Appearance.colors.accentInk, Tokens.colorAccentDark.green, "dark green");
+        Appearance.dark = false;
+        Appearance.accentSetting = "multicolor";
+        // Pure: a setting resolves without a scene.
+        compare(Accent.resolve("yellow", false, Tokens).accentInk, Tokens.colorAccentInkLight.yellow);
+        compare(Accent.resolve("yellow", true, Tokens).accentInk, Tokens.colorAccentDark.yellow);
+        compare(Accent.resolve("purple", false, Tokens).accentInk, Tokens.colorAccentLight.purple);
+        compare(Accent.resolve("multicolor", false, Tokens), null);
+    }
+
     function test_glyphMaskStillWins() {
         Appearance.accentSetting = "green";
         Appearance.devGlyphMode = "white";
@@ -135,7 +166,7 @@ TestCase {
 
     // The keyboard focus ring (UX-09, A11Y-08): one colour for every surface, 3:1 or more as a non-text element against the
     // material tint and against that tint over the extreme wallpapers (the tint alpha floor), for every accent in both
-    // appearances, the light appearance's yellow included (it falls back to the text colour).
+    // appearances, the light appearance's yellow and green included (they fall back to the text colour).
     function test_focusRingHolds3to1OnEveryAccentInBothAppearances() {
         function over(fg, a, bg) {
             const f = Qt.color(fg), b = Qt.color(bg);
@@ -157,6 +188,8 @@ TestCase {
         Appearance.dark = false;
         Appearance.accentSetting = "yellow";
         compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorLight.text).toString(), "light yellow: the text colour");
+        Appearance.accentSetting = "green";
+        compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorLight.text).toString(), "light green (ADR-0040 step 1c): the text colour");
         Appearance.accentSetting = "blue";
         compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorAccentLight.blue).toString(), "light blue: the accent");
     }

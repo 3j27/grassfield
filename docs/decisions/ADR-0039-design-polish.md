@@ -38,7 +38,7 @@ seams ADR-0024's lots left between surfaces, and the places where an accessibili
 | ID | Gap | Measure | Evidence |
 |---|---|---|---|
 | G1 | Glass surfaces without a glass class take the pre-ADR-0024 single tint | 4 classes exist; the Overview band, widget gallery, widgets, switcher, tooltips, Stages badges and the tails of the Dock menu, stack popup and tooltip draw 0.85 at the default slider (targets: band and gallery 0.15, widgets 0.92; tails: their body's class, which adapts) | audit §3.1; `Appearance.qml:160` |
-| G2 | The shell's sheets ask for a blur 2 pt squarer than they are drawn | blur radius 24 (`radius.alert`), shape 26 (`radius.sheet`) | `shell/overlay/Overlay.qml:132-144`, `Dialog.qml:25` |
+| G2 | The shell's sheets ask for a blur 2 pt squarer than they are drawn | blur radius 24 (`radius.alert`), shape 26 (`radius.sheet`) (closed by step 4: the blur takes the dialog's own corner; on screen NOT VERIFIED here) | `shell/overlay/Overlay.qml:132-144`, `Dialog.qml:25` |
 | G3 | Three button grammars, two sheet grammars | default 32-pt radius-6 rectangle (every app sheet), push 24-pt capsule (Settings rows, shell sheets), capsule 28 (alerts) | audit §3.6; `shots/gallery-light-2x-controls.png` |
 | G4 | Sheets rounder than the windows they sit on | sheet 26, alert 24, window 16.0 (circle-equivalent of Hyprland's 20 at power 2.6; macOS 27: 16.6) | audit §3.2 (C-2) |
 | G5 | Non-concentric inner shapes | switcher selection 26 for 10.5, sheet controls 6 for 10, Now Playing artwork 6 for 16 and 10, Force Quit rows 6 for 2, stack rows 6 for 1–7 | audit §3.2 |
@@ -111,7 +111,7 @@ few files), M (a surface family).
 | 1 | **Increase Contrast and pixel grid in the shared controls:** no border around the bezel-less inline pop-up (only its chevron disc), its disc on whole pixels; Toggle, Switch and Slider outlined under Increase Contrast; the check box label on a whole pixel (the menu shortcuts keep their whole right edge: not a defect) | `ui/Grassfield/Ui/ComboBox.qml`, `Toggle.qml`, `Switch.qml`, `Slider.qml`, `CheckBox.qml`; `tests/unit/tst_pixelgrid.qml` and `tst_increasecontrast.qml` | free, now | renders (`tools/run.sh`), unit tests, A2 | S | G8, G9, G23 |
 | 2 | **CI guard for literals:** `tests/ci/qml_literals.py` from the audit's tool, run by `just check-quick`; zero literal radius, font size, opacity, geometry value and animation duration; the 20 colours allowlisted per file and timers not counted (the OSD's hide delay was already `osd.hideDelay`; its 1500 is an arming delay after start, logic; the Store's 6000-ms notice lifetime becomes a token after step 3c) | `tests/ci/`, `tests/inventory.json`, `justfile` | free, now | the guard fails on a planted literal | S | rule 6 |
 | 3 | **Preview's window and settings:** `windowSurface`, window neutrals in Viewer and Glance, `windowSecondary`, text selection in `highlight`, Increase Contrast and Text size read by the backend and bound (Q7). With step 2's review: the literals guard reads a ternary's branches, an offset to a token, `Layout.*`, declared properties, groups, `scale`, `sourceSize`, literal alphas and named colours, outside JavaScript blocks and object literals; `tst_increasecontrast` grabs a knob in the scene and checks that nothing is outlined with the setting off | `apps/preview/qml/Viewer.qml`, `Glance.qml`, `Theme.qml`, `TextView.qml`, `apps/preview/src/previewapp.{h,cpp}` | free, now | build, unit tests, a render or nested capture | S–M | G11 (part), G12 |
-| 4 | **Shell sheets' blur radius** from the dialog's own corner | `shell/overlay/Overlay.qml` | free, now | nested capture (NOT VERIFIED here) | S | G2 |
+| 4 | **Shell sheets' blur radius** from the dialog's own corner. With step 3's review: the literals guard reads hex in any quotes, a binding's block by the values it returns, the right operand of `&&`, products of numbers alone and objects under an import alias; Preview's PDF file-name row follows Text size | `shell/overlay/Overlay.qml` | free, now | nested capture (NOT VERIFIED here) | S | G2 |
 | 5 | **Reduce Motion as crossfades** on the free surfaces: banners and the Notification Center fade instead of sliding, knobs, Overview tiles, Search's height, the stack fan and the OSD jump (the Files tab bar with step 23); the saver's slide crossfade capped; Preview's animated images and Settings' spinner still | `shell/notifications`, `shell/overview`, `shell/search`, `shell/overlay`, `shell/osd`, `shell/saver`, `ui/Grassfield/Ui/Toggle.qml`, `Switch.qml`, `apps/preview`, `apps/settings/qml/Spinner.qml` | free, now (a shared helper in `Appearance.qml` after its merge) | unit tests with `reduceMotion`, nested `reduce-motion-compositor.sh` unchanged | M | G10 |
 | 6 | **Window edge per appearance (C-4):** border tokens per appearance, pushed by the shell with the appearance as it pushes the blur | `shell/platform/Compositor.qml`, `Minimized.js`, `tokens.json`, `config/hypr/grassfield/looknfeel.lua` | free, now | a unit test of the call; nested capture of a light window's edge | S–M | G15 |
 | 7 | **One focus ring** on the free surfaces: `FocusRing` or `focusRingColor`, outside the shape, keyboard focus only; Clear All in the Notification Center and the Stages tiles on the keyboard | `shell/overlay`, `shell/notifications`, `shell/launchpad`, `shell/overview`, `shell/switcher`, `shell/widgets`, `shell/stages`, `ui/Grassfield/Ui/LinkText.qml`, `WindowLight.qml`; Settings' `ArrangeSheet`, `ColorWell`, `WallpaperSection`, `PrivacyCategoryPage`, `LoginItemsPage` | free, now | unit tests (ring after a key, none after a click) | M | G7 |
@@ -181,9 +181,10 @@ secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Ev
 **Q4. One green for "on" in the dark appearance.** Switches and slider fills use the bright green #4FB36B; checkboxes,
 radio buttons, default buttons and selected rows the deeper #2E8049 chosen for white text (owner decision of 2026-10-26).
 - (a) Switches and slider fills on #2E8049 too (each accent's dark selection fill). Pros: one green for "on"; the white knob
-  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.82–2.77:1 to 4.85–4.89:1 for every other accent but yellow. Cons: a
-  darker switch than macOS's bright one; with the yellow accent the knob stays under 3:1 (2.02:1 on #E0B000, 1.50:1 today),
-  because the yellow pair keeps dark marks.
+  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.82–2.77:1 to 4.85–4.89:1 for every other accent but yellow and
+  green. Cons: a darker switch than macOS's bright one; with the yellow or the green accent the knob stays under 3:1 (2.02:1
+  on #E0B000, 2.52:1 on #6DB53C), because their pairs keep dark marks (green since ADR-0040 step 1c, the owner's light Green
+  of 2026-10-30).
 - (b) Keep both greens. Pros: brighter switches. Cons: two greens side by side in one Settings row; the knob under 3:1.
 - (c) Checkboxes and radio buttons on #4FB36B with a dark mark. Pros: one bright green. Cons: breaks white-on-accent (F1,
   2026-10-26) with a dark checkmark, which macOS never draws.
@@ -256,8 +257,8 @@ Asked with AskUserQuestion after step 0 was written; the answers verbatim where 
   shade per accent of 2026-10-26), so "the same as on macOS 27" is option (a): switches and slider fills move to it. Step 11
   first checks this on the dark macOS 27 release captures (a switch and a checkbox side by side); if they show two fills, the
   step follows what they show and records it here. The fill is each accent's dark selection colour: the white knob reaches
-  4.85–4.89:1 for every accent but yellow, whose pair keeps dark marks; there the knob stays at 2.02:1 (1.50:1 today), and
-  step 11 gives it the outline Increase Contrast draws (step 1) or records the limit.
+  4.85–4.89:1 for every accent but yellow and green, whose pairs keep dark marks (green since ADR-0040 step 1c); there the
+  knob stays at 2.02:1 and 2.52:1, and step 11 gives it the outline Increase Contrast draws (step 1) or records the limit.
 
 ## Coordination with the identity lane (ADR-0040, pull request #46)
 The integrator's review named nine overlaps. Whichever pull request merges second rebases; the owner of each is:

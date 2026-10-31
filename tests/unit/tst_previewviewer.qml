@@ -87,7 +87,9 @@ TestCase {
         verify(title !== null);
         const subtitle = textOf(viewer.contentItem, viewer.subtitle);
         compare(title.font.pixelSize, Tokens.typographyBodySize);
+        const row = Tokens.previewSidebarItemHeight;
         backend.textScale = 1.3;
+        compare(Tokens.previewSidebarItemHeight, Math.round(row * 1.3), "a PDF's file-name row grows with the text");
         compare(Appearance.textScale, 1.3);
         compare(title.font.pixelSize, Math.round(13 * 1.3), "the title follows Text size");
         backend.increaseContrast = true;
@@ -122,6 +124,12 @@ TestCase {
         verify(tools.x + tools.width <= viewer.width);
         wait(300);
         const img = grabImage(viewer.contentItem);
-        img.save(Qt.resolvedUrl("../../.dev/b2-viewer.png").toString().replace("file://", ""));
+        // A capture for the visual review where the dev tree has its .dev/ (a fresh checkout has none, and the capture is not
+        // what this test checks).
+        try {
+            img.save(Qt.resolvedUrl("../../.dev/b2-viewer.png").toString().replace("file://", ""));
+        } catch (e) {
+            console.log("b2-viewer.png not saved: " + e);
+        }
     }
 }
