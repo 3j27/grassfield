@@ -906,6 +906,105 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   options are read (the button dimmed, Return held, the backend refusing an answer meanwhile). No memory of Grassfield's in 6a
   ("Last Used Settings" is 6b's).
 
+**Delivered in step 6b.** `apps/portal/src/printpreview.{h,cpp}`: the document of a Print with no token read into an unlinked
+private file (`spoolDocument`, `reopenSpool`), the child that draws a page (`--print-preview`, this binary: Qt PDF, the pdfium
+Preview uses) and its seccomp filter (`confineRenderer`), the parent's side (`renderPreview`: a header and raw pixels read back,
+no image decoder) and the pages drawn for the QML (`PreviewImages`, `image://printpreview/`). `print.{h,cpp}`: a Print with no
+token opens the sheet over the document (`showDocument`: `documentReady`, `renderPage`/`pageRendered`, `dismissed`); Open in
+Preview over both flows (`openInPreview`); the Presets (`choosePreset`, Last Used Settings in `portal-print.json`, grassfield-portal's
+state). `printlogic.{h,cpp}`: a printer's own options (`PrinterOption`, `optionChoices`, `validOptionValue`), a document's page
+ranges for the printer (`documentOptions`), the Presets (`Preset`, `presetOf`, `withPreset`, their JSON). `printsystem.cpp` reads
+the printer's own options (`printerOptions`). `PrintSheet.qml`: Presets, the options' disclosure sections, the "PDF" pull-down,
+the preview column. Qt PDF is linked by grassfield-portal (qt6-webengine, already a dependency for Preview). Tests:
+`tst_printlogic.cpp` (options, page ranges, Open in Preview, presets), `tst_print.cpp` (the filter, the private file, the pages
+drawn by the child, a document sent first, one that is not a PDF, Open in Preview, Last Used Settings, a printer's options; the
+scheduler's options in `print_cups.sh`), `tst_printsheet.qml`, and `portal_filechooser.sh` scenario 9b (Print with no token
+through the real frontend, the job in the scratch scheduler).
+
+**Decisions of step 6b** (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; each recorded
+here, numbered after 6a's).
+- **6-10. Who draws the preview.** Question: the document of a Print with no token comes from the application (a sandboxed
+  one too), and grassfield-portal runs as the user without a sandbox and holds every Open and Save panel; how is it drawn?
+  Options: (a) Qt PDF in grassfield-portal's QML (`PdfDocument`, as Preview draws a file the user opened); (b) a child process
+  with limits on memory and CPU time and a deadline (as Files decodes an application's icon, `AppIcons::loadIsolated`); (c) (b)
+  with a seccomp filter the child installs before it reads a byte of the document (no socket, so no bus and no network; no
+  program; no write, creation, truncation, removal, renaming, link or mode change of any file; no io_uring, ptrace, namespace
+  or mount), no bus address or display in its environment, no descriptor but its standard input (the private file, read-only),
+  output and error, and only a header and raw pixels read back (no image decoder runs on its answer). **Choice: (c).** Rule
+  applied: an application's document is data; a flaw in the PDF reader must not reach the bus or the user's files from the
+  process that answers the panels; (b) alone would leave the bus open to it. Memory is limited as data in use (`RLIMIT_DATA`,
+  1 GiB), not as address space: Qt PDF's pdfium reserves tens of GiB it never uses (the child stopped under a 32 GiB
+  `RLIMIT_AS`); CPU 10 s, a deadline of 8 s, killed with its parent. Cost: a child per page shown (tens of milliseconds); on an
+  architecture the filter does not know (neither x86_64 nor aarch64) the sheet says "No Preview" and the document still prints.
+- **6-11. Where the document is kept while the sheet is up.** Question: the document is read before the sheet can show it, print
+  it, save it or open it; where does it wait? Options: (a) in memory; (b) an unlinked file of
+  grassfield-portal's (`O_TMPFILE`, 0600) in the temporary folder; (c) a named file in the runtime folder. **Choice: (b)**: no
+  name another program could open or replace, gone with the process, in the place x-d-p-gtk keeps its own copy
+  (`g_file_open_tmp`); at most 2 GiB, a PDF only (6-4). Rule applied: the smallest exposure (no name, no memory held for a
+  large document), as upstream keeps it. The application's descriptor is read where it is (`pread`), its
+  position untouched, so the call can still go on to x-d-p-gtk as it came (6-12). Each reader (the job, Save as PDF, Open in
+  Preview, a page drawn) opens the file anew (`/proc/self/fd`), with a position of its own.
+- **6-12. A document sent first that is not a PDF.** Question: what happens to PostScript or a printer language sent with no
+  token? Options: (a) refuse it (response 2); (b) send the call to x-d-p-gtk as it
+  came, as every Print with no token went before 6b; (c) print it. **Choice: (b)** when the document is a file (read in place,
+  untouched), (a) when it came on a pipe that is read already. Rule applied: nothing that printed before 6b stops printing; only a
+  PDF reaches a printer through Grassfield (6-4); x-d-p-gtk's path stays upstream's own (6-4's accepted risk).
+- **6-13. What the sheet offers for a document sent first.** Question: which of the sheet's settings still apply to a document
+  that is already made? Options: (a) the same sheet as PreparePrint's; (b) without
+  Orientation and Scale, Pages as All Pages or a range (no current page or selection: no application to ask), the printer
+  applying the range (`page-ranges`, IPP, 1-based), the paper of the document's first page chosen where the printer has it.
+  **Choice: (b)**: the document is laid out already; a printer applies a range the same way everywhere, while orientation and
+  scale on a finished PDF differ between cups-filters and a driverless printer. Rule applied: offer only what has the same
+  effect on every printer.
+- **6-14. The preview's form.** Question: how are the document's pages shown? Options: (a) one page at a time with "‹ 1 of N ›" under it (macOS's print panel), Page Up and
+  Page Down turning pages; (b) a strip of thumbnails. **Choice: (a)**, macOS's own. Each page is drawn when shown, at the page
+  area's pixels (at most 2048), the latest page asked winning while one is drawn; the last four kept, all dropped with the
+  request.
+- **6-15. Print for a document sent first.** Question: the job is sent from grassfield-portal, which takes a moment for a long
+  document; what does the sheet do meanwhile? Options: (a) the sheet stays until the job is sent; (b) it goes at once, the
+  application's request ending when the job is sent (0, or 2 when the printer refuses). **Choice: (b)**. Rule applied: macOS's
+  sheet goes when Print is clicked.
+- **6-16. The PDF control.** Question: how are Save as PDF and Open in Preview offered? Options: (a) the Save as PDF… button and another for Open in Preview; (b) macOS's "PDF" pull-down
+  (its label always "PDF") with Save as PDF… and Open in Preview. **Choice: (b)**, as 6-3 said it would come back once it has
+  more than one item. Shown only when the application can make a PDF (a document sent first is one). Rule applied: macOS's own
+  control.
+- **6-17. How the PDF reaches Preview.** Question: Preview needs a file; which one, and how is Preview started? Options: (a) a file in the user's Downloads or Documents; (b) a private copy: a folder of
+  its own (`mkdtemp`, 0700) inside `$XDG_RUNTIME_DIR/grassfield-print` (made 0700; refused when it is not a folder of this user's
+  that no one else may enter), written as Save as PDF writes (6-3: only a PDF, the folder opened from "/" without following a
+  link, a temporary file renamed over the name), named after the document (the application's file name, else its title, else
+  "Document", ".pdf" added), gone at logout; Preview started as the Dock starts an application, from a transient unit of the
+  user manager (`systemd-run --user --collect -- uwsm-app -- grassfield-preview -- <copy>`, as grassfield-crash-watch's
+  Reopen), so that it inherits neither grassfield-portal's sandbox nor its unit and outlives its idle quit (in a dev session,
+  whose user manager shows on the owner's own display, Preview is a child of grassfield-portal instead, on the nested
+  display). **Choice: (b)**:
+  never a path the application chose or can see (a Flatpak does not see the runtime folder), nothing left in the user's
+  folders (macOS opens a temporary copy too). Rule applied: the same symlink-safe write as Save as PDF, to a place only the user
+  can reach, and the Dock's own way of starting an application. The application gets `file:///dev/null`, as for Save as PDF (6-3); the request
+  ends with 0 once Preview is started, 2 when the copy or the start fails.
+- **6-18. Presets.** Question: what do Default Settings and Last Used Settings hold, for which printers, and where are they
+  kept? Options for Last Used Settings' scope: (a) per application; (b) per printer; (c) one for every printer,
+  macOS's. **Choice: (c)**, with Default Settings and Last Used Settings only (named presets, "Save Current Settings as
+  Preset…", are a follow-up). It keeps how a print was printed (two sides, colour, collation, the printer's own options), never
+  what belongs to the document (copies, pages, paper, orientation, scale); it is kept when Print sends a job (not for Save as
+  PDF or Open in Preview), in `$XDG_STATE_HOME/grassfield/portal-print.json` (grassfield-portal's state, next to the panels'
+  memory; a file that does not read is no Last Used Settings); it applies where the printer takes it (two sides only on a
+  printer that has them, colour only on a colour printer, an option only with a value the printer lists). The sheet opens on
+  Last Used Settings when there are some (macOS), else on Default Settings: the application's settings and the printer's
+  defaults (6a's first state). Rule applied: never carry a choice that would waste paper or that belongs to another document.
+- **6-19. A printer's own options.** Question: which of the options CUPS reports beyond paper, two sides and colour does the
+  sheet show, how, and how do they reach the job? Options: (a) every attribute CUPS reports; (b) the ones macOS shows in its print panel's
+  sections, each only when the printer lists two values or more: Media & Quality (Feed From `media-source`, Media Type
+  `media-type`, Quality `print-quality`) and Printer Options (Output Bin `output-bin`, Finishing `finishings`), in disclosure
+  sections closed at first (macOS 13 and later). **Choice: (b)**. Rule applied: macOS's sections, and only what the printer
+  reports (a section with nothing in it is not shown). The values' names are CUPS's (the PPD's or the printer's,
+  localized by CUPS); the quality and finishing enums CUPS leaves as numbers are named by Grassfield (Draft, Normal, Best; None)
+  or by their IPP keyword in words. The default is the user's own (lpoptions), else the printer's (`<name>-default`,
+  `media-col-default` for the source and type), else the first. The job carries the value shown as CUPS takes it (a keyword or
+  an enum's number), only a value the printer listed and that reads as one value (`[a-z0-9][a-z0-9._-]*`: never a comma or a
+  brace, which libcups would read as several values or a collection); the scratch scheduler keeps them on the job
+  (`print_cups.sh`). Not in 6b (a follow-up): a PPD's vendor options with no IPP name, Layout (pages per sheet, border) and
+  Paper Handling (page order, odd or even pages).
+
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal
 (`gdk/wayland/gdksettings-wayland.c:443-540`) **only when it runs in a sandbox or `GDK_DEBUG` contains `portals`**; a plain
@@ -1746,7 +1845,7 @@ requests #8, #9 and #10 are merged (owner).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13). In two pull requests (decision 6-1):
    **6a**, PreparePrint's sheet, Print with its token, Save as PDF, no printer; **6b**, Print with no sheet before it (with the
-   document's preview), Presets and a printer's own options (decisions 6-1 to 6-9).
+   document's preview), Open in Preview, Presets and a printer's own options (decisions 6-1 to 6-9, then 6-10 to 6-19).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording
    indicator. After #8–#10.
 8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).
