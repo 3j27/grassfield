@@ -10065,6 +10065,61 @@
     </message>
 </context>
 <context>
+    <name>SharePickerPanel</name>
+    <message>
+        <source>Share Your Screen</source>
+        <translation>Partager votre écran</translation>
+    </message>
+    <message>
+        <source>An app wants to share your screen. Choose what it can see.</source>
+        <translation>Une app souhaite partager votre écran. Choisissez ce qu’elle peut voir.</translation>
+    </message>
+    <message>
+        <source>What to share</source>
+        <translation>Élément à partager</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>Fenêtres</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message>
+        <source>No display can be shared.</source>
+        <translation>Aucun écran ne peut être partagé.</translation>
+    </message>
+    <message>
+        <source>No window can be shared.</source>
+        <translation>Aucune fenêtre ne peut être partagée.</translation>
+    </message>
+    <message>
+        <source>Remember this choice</source>
+        <translation>Mémoriser ce choix</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
+    </message>
+</context>
+<context>
     <name>Sheet</name>
     <message>
         <source>OK</source>
