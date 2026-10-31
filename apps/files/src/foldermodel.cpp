@@ -1587,12 +1587,16 @@ void FolderModel::loadApplications()
 
 void FolderModel::applyApplications(const QList<ApplicationsLogic::Entry> &entries)
 {
-    QVariantMap paths, names;
-    for (const ApplicationsLogic::Entry &e : entries) {
-        paths.insert(e.id, e.path);
-        names.insert(e.id, e.name);
+    // The location's own list (Get Info's count, Copy, the name of a launch failure): never a Choose Application panel's,
+    // which adds the candidates the grid hides (review of fac5bff3: Get Info counted imv once a panel had listed it).
+    if (m_chooserListed.isEmpty()) {
+        QVariantMap paths, names;
+        for (const ApplicationsLogic::Entry &e : entries) {
+            paths.insert(e.id, e.path);
+            names.insert(e.id, e.name);
+        }
+        emit applicationsListed(paths, names);
     }
-    emit applicationsListed(paths, names);
     // Rows that stay keep their selection; the others go.
     QHash<QUrl, ApplicationsLogic::Entry> next;
     KFileItemList items;

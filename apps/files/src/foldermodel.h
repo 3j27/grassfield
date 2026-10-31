@@ -215,7 +215,9 @@ public:
 
 signals:
     // The Applications location was built (id -> .desktop path of every row): FilesApp keeps it for Copy and Get Info.
-    void applicationsListed(const QVariantMap &paths, const QVariantMap &names); // id -> .desktop path, id -> the name the row shows
+    // The Applications location's own list: id -> .desktop path, id -> the name the row shows. Not sent by a listing with
+    // chooser `listed` (a Choose Application panel's, which lists more).
+    void applicationsListed(const QVariantMap &paths, const QVariantMap &names);
     void urlChanged();
     void sortChanged();
     void showHiddenChanged();

@@ -282,6 +282,45 @@ TEST(FolderChooserApplications, ChooseApplicationListsTheCandidatesTheGridHides)
     QFile::remove(dir + QLatin1Char('/') + shownId + QStringLiteral(".desktop"));
 }
 
+// A Choose Application panel's longer list never becomes the location's: Get Info on Applications counts what the location
+// lists (FilesApp::applicationsCount), also after a panel listed a candidate the grid hides (review of fac5bff3, NIT: the
+// last listing won and the count grew by one).
+TEST(FolderChooserApplications, APanelsListIsNotTheLocationsCount)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString hiddenId = QStringLiteral("org.example.CountHiddenViewer");
+    {
+        QFile entry(dir + QLatin1Char('/') + hiddenId + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write("[Desktop Entry]\nType=Application\nName=CountHiddenViewer\nExec=true\nNoDisplay=true\n");
+    }
+    const auto waitFor = [](const std::function<bool()> &done) {
+        QDeadlineTimer deadline(10000);
+        while (!done() && !deadline.hasExpired()) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        }
+        return done();
+    };
+    FilesApp app(QList<QUrl>{});
+    auto *location = qobject_cast<FolderModel *>(app.createFolderModel(&app));
+    ASSERT_NE(location, nullptr);
+    location->setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !location->loading() && location->count() > 0 && app.applicationsCount() > 0; }));
+    const int listed = app.applicationsCount();
+    EXPECT_EQ(listed, location->count()) << "the location's own rows";
+    auto *panel = qobject_cast<FolderModel *>(app.createFolderModel(&app));
+    ASSERT_NE(panel, nullptr);
+    panel->setChooser({{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true},
+                       {QStringLiteral("applications"), QStringList{hiddenId}}, {QStringLiteral("listed"), QStringList{hiddenId}}});
+    panel->setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !panel->loading() && panel->count() == location->count() + 1; })) << "the panel lists one more";
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    EXPECT_EQ(app.applicationsCount(), listed) << "Get Info still counts the location's list";
+    QFile::remove(dir + QLatin1Char('/') + hiddenId + QStringLiteral(".desktop"));
+}
+
 // New Folder of a Save panel (FilesApp::makeFolder): a taken name, a folder's or a file's, is told by KIO's own error, since
 // the panels never look at the disk on the GUI thread first (ADR-0035 4b-18; re-review of 6b26afc); a new name is made; an
 // invalid one is refused at once.
