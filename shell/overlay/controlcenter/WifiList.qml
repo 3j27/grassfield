@@ -146,8 +146,11 @@ Column {
             height: Tokens.panelCcRowHeight
             radius: Tokens.radiusControl
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: password.activeFocus ? Tokens.controlFocusOutline : 0
-            border.color: Appearance.focusRingColor
+
+            // A text field's ring shows while it has the focus, outside the field (the shared ring; ADR-0039 step 7).
+            FocusRing {
+                visible: password.activeFocus
+            }
 
             TextInput {
                 id: password

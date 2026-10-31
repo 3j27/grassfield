@@ -75,8 +75,18 @@ Dialog {
             height: 6 * Tokens.menuItemHeight + 2 * Tokens.spacingXs
             radius: Tokens.radiusControl
             color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2) : Appearance.lightWellFill
-            border.width: list.activeFocus ? Tokens.controlFocusOutline : 1
-            border.color: list.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            border.width: 1
+            border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+
+            // The well keeps its hairline; the shared ring goes round it while the list has the keyboard (ADR-0039 step 7).
+            KeyFocus {
+                id: listFocus
+                target: list
+            }
+
+            FocusRing {
+                visible: listFocus.active
+            }
 
             ListView {
                 id: list

@@ -350,10 +350,14 @@ Variants {
                         anchors.fill: parent
                         radius: height / 2
                         color: "transparent"
-                        border.width: field.activeFocus && root.controller.keyNav ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.focusRingColor
                         Accessible.role: Accessible.Pane
                         Accessible.name: qsTr("Search")
+
+                        // The shared ring outside the capsule (ADR-0039 step 7).
+                        FocusRing {
+                            shapeRadius: height / 2
+                            visible: field.activeFocus && root.controller.keyNav
+                        }
 
                         Icon {
                             id: glass

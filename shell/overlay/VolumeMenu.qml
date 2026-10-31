@@ -68,12 +68,13 @@ FocusScope {
                     }
                 }
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Tokens.radiusControl
-                    color: "transparent"
-                    border.width: muteButton.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                // The shared ring outside the button, after a key only (ADR-0039 step 7).
+                KeyFocus {
+                    id: muteFocus
+                }
+
+                FocusRing {
+                    visible: muteFocus.active
                 }
 
                 Icon {
