@@ -166,6 +166,9 @@ public:
     Q_INVOKABLE void copySelection();
     // AM2: the window's size as it closes.
     Q_INVOKABLE void saveSize(int width, int height);
+    // AM74: another window's size (windowKinds()) as it closes, and the size it opens at (0 × 0: its token size).
+    Q_INVOKABLE void saveWindowSize(const QString &kind, int width, int height);
+    Q_INVOKABLE QSize savedWindowSize(const QString &kind) const;
     // AM42, AM44: the pop-up above the Disk graph ("io" or "data") or the Network graph ("packets" or "data"), remembered.
     Q_INVOKABLE void setGraphMode(const QString &graph, const QString &mode);
     // AM57: the selected process's Inspect window (the Info button, View > Inspect Process, Ctrl+I), or a row's (a

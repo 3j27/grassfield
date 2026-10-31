@@ -20,9 +20,12 @@ Window {
     readonly property alias cpuModePicker: cpuModePicker
     readonly property alias figures: figures
 
+    // AM74: the size it had when it last closed.
+    readonly property size savedSize: root.app.savedWindowSize("performance")
+
     title: qsTr("Performance")
-    width: Tokens.activityPerformanceWidth
-    height: Tokens.activityPerformanceHeight
+    width: root.savedSize.width > 0 ? root.savedSize.width : Tokens.activityPerformanceWidth
+    height: root.savedSize.height > 0 ? root.savedSize.height : Tokens.activityPerformanceHeight
     minimumWidth: Tokens.activityPerformanceMinWidth
     minimumHeight: Tokens.activityPerformanceMinHeight
     color: Appearance.colors.windowBackground
@@ -32,6 +35,7 @@ Window {
         root.performance.capacity = Tokens.activityHistorySamples;
         root.app.watchAux(root, "performance");
     }
+    onClosing: root.app.saveWindowSize("performance", root.width, root.height)
 
     Shortcut {
         sequences: [StandardKey.Close]
@@ -249,6 +253,9 @@ Window {
                     }
 
                     GraphFrame {
+                        // Spec "Accessibility": the graph's name with the selected resource's value now.
+                        Accessible.role: Accessible.Graphic
+                        Accessible.name: big.modelData.title + ", " + ((root.performance.resources.find(r => r.key === root.performance.selected) || {}).value || "")
                         width: big.width
                         height: (root.detail.graphs || []).length > 1 ? Tokens.activityPerformanceGraphHeight / 2 : Tokens.activityPerformanceGraphHeight
                         graph: big.modelData.graph
@@ -269,9 +276,12 @@ Window {
                     GraphFrame {
                         id: tile
                         required property int index
+                        readonly property var processor: root.performance.processors[tile.index] ?? ({busy: -1})
+                        Accessible.role: Accessible.Graphic
+                        Accessible.name: qsTr("Processor %1: %2%").arg(tile.index + 1).arg(Math.round(Math.max(0, tile.processor.busy) * 100))
                         width: (tiles.width - (tiles.columns - 1) * tiles.spacing) / tiles.columns
                         height: Tokens.activityPerformanceTileHeight
-                        graph: (root.performance.processors[tile.index] ?? ({graph: ({})})).graph
+                        graph: tile.processor.graph ?? ({})
                     }
                 }
             }

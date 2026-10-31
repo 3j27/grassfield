@@ -486,6 +486,21 @@ void ActivityApp::saveSize(int width, int height)
     scheduleSave();
 }
 
+void ActivityApp::saveWindowSize(const QString &kind, int width, int height)
+{
+    if (!windowKinds().contains(kind) || width < 200 || height < 150 || width > 16384 || height > 16384)
+        return;
+    if (m_state.windows.value(kind) == QSize(width, height))
+        return;
+    m_state.windows.insert(kind, QSize(width, height));
+    scheduleSave();
+}
+
+QSize ActivityApp::savedWindowSize(const QString &kind) const
+{
+    return m_state.windows.value(kind, QSize(0, 0));
+}
+
 void ActivityApp::setGraphMode(const QString &graph, const QString &mode)
 {
     if (graph == QLatin1String("disk") && (mode == QLatin1String("io") || mode == QLatin1String("data")) && mode != m_state.diskGraph) {

@@ -103,6 +103,13 @@ ActivityState readState(const QString &path)
         s.width = w;
         s.height = h;
     }
+    const QJsonObject others = root.value(QStringLiteral("windows")).toObject();
+    for (const QString &kind : windowKinds()) {
+        const QJsonObject o = others.value(kind).toObject();
+        const int ow = o.value(QStringLiteral("width")).toInt(0), oh = o.value(QStringLiteral("height")).toInt(0);
+        if (ow >= 200 && ow <= 16384 && oh >= 150 && oh <= 16384)
+            s.windows.insert(kind, QSize(ow, oh));
+    }
     if (const std::optional<Tab> tab = tabFromKey(root.value(QStringLiteral("tab")).toString()))
         s.tab = *tab;
     if (const std::optional<View> view = viewFromKey(root.value(QStringLiteral("view")).toString()); view && *view != View::Selected)
@@ -134,6 +141,13 @@ ActivityState readState(const QString &path)
     return s;
 }
 
+const QStringList &windowKinds()
+{
+    static const QStringList kinds{QStringLiteral("performance"), QStringLiteral("appHistory"), QStringLiteral("cpuHistory"),
+                                   QStringLiteral("gpuHistory")};
+    return kinds;
+}
+
 const QStringList &dockIconKinds()
 {
     static const QStringList kinds{QStringLiteral("icon"), QStringLiteral("network"), QStringLiteral("disk"),
@@ -147,6 +161,13 @@ bool writeState(const QString &path, const ActivityState &state)
     root.insert(QStringLiteral("version"), kVersion);
     if (state.width > 0 && state.height > 0)
         root.insert(QStringLiteral("window"), QJsonObject{{QStringLiteral("width"), state.width}, {QStringLiteral("height"), state.height}});
+    QJsonObject others;
+    for (auto it = state.windows.constBegin(); it != state.windows.constEnd(); ++it) {
+        if (windowKinds().contains(it.key()) && it->isValid())
+            others.insert(it.key(), QJsonObject{{QStringLiteral("width"), it->width()}, {QStringLiteral("height"), it->height()}});
+    }
+    if (!others.isEmpty())
+        root.insert(QStringLiteral("windows"), others);
     root.insert(QStringLiteral("tab"), tabKey(state.tab));
     root.insert(QStringLiteral("view"), viewKey(state.view == View::Selected ? View::All : state.view));
     root.insert(QStringLiteral("interval"), state.interval);

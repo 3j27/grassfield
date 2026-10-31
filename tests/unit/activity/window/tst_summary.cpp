@@ -391,8 +391,8 @@ TEST(ActivityState, TheGraphsChoiceIsRemembered)
     EXPECT_EQ(wrong.networkGraph, QStringLiteral("packets"));
 }
 
-// AM74 (steps 3 and 4): the Dock icon, Efficiency Mode's "Don't ask again" and App History's period are remembered; a value
-// of the wrong kind reads as the default.
+// AM74 (steps 3 to 5): the Dock icon, Efficiency Mode's "Don't ask again", App History's period and the other windows'
+// sizes are remembered; a value of the wrong kind reads as the default.
 TEST(ActivityState, TheLaterChoicesAreRemembered)
 {
     QTemporaryDir dir;
@@ -403,21 +403,28 @@ TEST(ActivityState, TheLaterChoicesAreRemembered)
     s.dockIcon = QStringLiteral("cpu-history");
     s.askEfficiency = false;
     s.appHistoryPeriod = QStringLiteral("30d");
+    s.windows.insert(QStringLiteral("performance"), QSize(900, 640));
+    s.windows.insert(QStringLiteral("cpuUsage"), QSize(300, 200)); // not a kind whose size is kept
     ASSERT_TRUE(writeState(path, s));
     const ActivityState back = readState(path);
     EXPECT_EQ(back.dockIcon, QStringLiteral("cpu-history"));
     EXPECT_FALSE(back.askEfficiency);
     EXPECT_EQ(back.appHistoryPeriod, QStringLiteral("30d"));
+    EXPECT_EQ(back.windows.value(QStringLiteral("performance")), QSize(900, 640));
+    EXPECT_FALSE(back.windows.contains(QStringLiteral("cpuUsage")));
 
     QFile f(path);
     ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
     f.write(QJsonDocument(QJsonObject{{QStringLiteral("version"), 1}, {QStringLiteral("dockIcon"), QStringLiteral("gpu")},
                                       {QStringLiteral("askEfficiency"), QStringLiteral("no")},
-                                      {QStringLiteral("appHistoryPeriod"), QStringLiteral("1y")}})
+                                      {QStringLiteral("appHistoryPeriod"), QStringLiteral("1y")},
+                                      {QStringLiteral("windows"), QJsonObject{{QStringLiteral("appHistory"),
+                                                                               QJsonObject{{QStringLiteral("width"), 50}, {QStringLiteral("height"), 400}}}}}})
                 .toJson());
     f.close();
     const ActivityState wrong = readState(path);
     EXPECT_EQ(wrong.dockIcon, QStringLiteral("icon"));
     EXPECT_TRUE(wrong.askEfficiency);
     EXPECT_EQ(wrong.appHistoryPeriod, QStringLiteral("12h"));
+    EXPECT_TRUE(wrong.windows.isEmpty()); // too narrow: the token size instead
 }

@@ -164,6 +164,14 @@ QtObject {
     function watchAux(window: var, kind: string): void {
         backend.record("watchAux:" + kind);
     }
+    // AM74: the windows' sizes, as the backend remembers them.
+    property var windowSizes: ({})
+    function savedWindowSize(kind: string): size {
+        return windowSizes[kind] ?? Qt.size(0, 0);
+    }
+    function saveWindowSize(kind: string, width: int, height: int): void {
+        backend.record("saveWindowSize:" + kind + ":" + width + "x" + height);
+    }
 
     // AM67: App History, a list model with the backend's properties; its calls recorded.
     readonly property ListModel appHistory: ListModel {

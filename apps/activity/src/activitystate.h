@@ -9,6 +9,7 @@
 #include "processtable.h"
 
 #include <QHash>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 
@@ -35,7 +36,12 @@ struct ActivityState {
     QString dockIcon = QStringLiteral("icon");          // AM62: "icon", "network", "disk", "cpu-usage" or "cpu-history"
     bool askEfficiency = true;                          // AM68: false once "Don't ask again" was checked
     QString appHistoryPeriod = QStringLiteral("12h");   // AM67: "12h", "7d" or "30d"
+    // AM74: the other windows' sizes, by kind (windowKinds()); a kind absent opens at its token size.
+    QHash<QString, QSize> windows;
 };
+
+// AM74: the windows whose size is remembered beside the main window's (CPU Usage is as wide as its bars).
+const QStringList &windowKinds();
 
 // AM62: View > Dock Icon's choices, in the menu's order.
 const QStringList &dockIconKinds();

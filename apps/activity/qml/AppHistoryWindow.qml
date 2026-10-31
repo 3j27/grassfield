@@ -33,15 +33,19 @@ Window {
         return index === 0 ? Tokens.activityAppHistoryNameWidth : root.figureUnit * root.columns[index].weight;
     }
 
+    // AM74: the size it had when it last closed.
+    readonly property size savedSize: root.app.savedWindowSize("appHistory")
+
     title: qsTr("App History")
-    width: Tokens.activityAppHistoryWidth
-    height: Tokens.activityAppHistoryHeight
+    width: root.savedSize.width > 0 ? root.savedSize.width : Tokens.activityAppHistoryWidth
+    height: root.savedSize.height > 0 ? root.savedSize.height : Tokens.activityAppHistoryHeight
     minimumWidth: Tokens.activityAppHistoryMinWidth
     minimumHeight: Tokens.activityAppHistoryMinHeight
     color: Appearance.colors.windowBackground
     visible: true
 
     Component.onCompleted: root.history.reload()
+    onClosing: root.app.saveWindowSize("appHistory", root.width, root.height)
 
     Shortcut {
         sequences: [StandardKey.Close]

@@ -241,7 +241,7 @@ TestCase {
         return buttons(sheet).find(b => b.text === text);
     }
     function calls(t) {
-        return t.backend.calls.filter(c => !c.startsWith("saveSize"));
+        return t.backend.calls.filter(c => !c.startsWith("saveSize") && !c.startsWith("saveWindowSize"));
     }
 
     // AM50: the Stop button follows the selection; its tooltip says why it is off.
@@ -497,6 +497,15 @@ TestCase {
         verify(!w.periodPicker.visible);
         w.close();
         tryVerify(() => t.win.ownWindows.length === 0);
+        verify(t.backend.calls.indexOf("saveWindowSize:appHistory:" + w.width + "x" + w.height) >= 0, "AM74: its size kept");
+        // AM74: it opens at the size it had.
+        t.backend.windowSizes = {appHistory: Qt.size(800, 500)};
+        t.win.showAppHistory();
+        const again = t.win.ownWindows.find(o => o.objectName === "appHistoryWindow");
+        compare(again.width, 800);
+        compare(again.height, 500);
+        again.close();
+        tryVerify(() => t.win.ownWindows.length === 0);
     }
 
     // AM66, AM71, AM72: Ctrl+5 Performance (the sidebar selects, CPU's pop-up shows the logical processors), Ctrl+2 CPU
@@ -536,6 +545,10 @@ TestCase {
         verify(gpuHistory);
         compare(gpuHistory.title, "GPU History");
         compare(gpuHistory.graphs.length, 1);
+        // Spec "Accessibility": each graph names its value now.
+        const named = n => findAll(n.contentItem, i => i.Accessible && i.Accessible.role === Accessible.Graphic).map(i => i.Accessible.name);
+        verify(named(cpuHistory).indexOf("Processor 1: 60%") >= 0, JSON.stringify(named(cpuHistory)));
+        verify(named(gpuHistory).indexOf("Intel UHD Graphics: 40%") >= 0, JSON.stringify(named(gpuHistory)));
         t.win.clearCpuHistory();
         verify(calls(t).indexOf("performance:clear") >= 0);
         compare(t.win.ownWindows.length, 4);

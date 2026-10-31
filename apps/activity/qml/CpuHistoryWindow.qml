@@ -17,18 +17,34 @@ Window {
     // The tests read it.
     readonly property alias tiles: tiles
 
+    // AM74: the size it had when it last closed.
+    readonly property string kind: root.gpu ? "gpuHistory" : "cpuHistory"
+    readonly property size savedSize: root.app.savedWindowSize(root.kind)
+
     title: root.gpu ? qsTr("GPU History") : qsTr("CPU History")
-    width: root.gpu ? Tokens.activityGpuHistoryWidth : Tokens.activityCpuHistoryWidth
-    height: root.gpu ? Tokens.activityGpuHistoryHeight : Tokens.activityCpuHistoryHeight
+    width: root.savedSize.width > 0 ? root.savedSize.width : root.gpu ? Tokens.activityGpuHistoryWidth : Tokens.activityCpuHistoryWidth
+    height: root.savedSize.height > 0 ? root.savedSize.height : root.gpu ? Tokens.activityGpuHistoryHeight : Tokens.activityCpuHistoryHeight
     minimumWidth: Tokens.activityPerformanceTileMinWidth + 2 * Tokens.spacingMd
     minimumHeight: chrome.height + Tokens.activityPerformanceTileHeight + 2 * Tokens.spacingMd
     color: Appearance.colors.windowBackground
     visible: true
 
+    // A graph's newest value, its series summed (a gap is 0).
+    function lastValue(graph: var): real {
+        let sum = 0;
+        for (const s of (graph && graph.series) || []) {
+            const v = s.values.length > 0 ? s.values[s.values.length - 1] : -1;
+            if (v > 0)
+                sum += v;
+        }
+        return sum;
+    }
+
     Component.onCompleted: {
         root.app.performance.capacity = Tokens.activityHistorySamples;
-        root.app.watchAux(root, root.gpu ? "gpuHistory" : "cpuHistory");
+        root.app.watchAux(root, root.kind);
     }
+    onClosing: root.app.saveWindowSize(root.kind, root.width, root.height)
 
     Shortcut {
         sequences: [StandardKey.Close]
@@ -87,8 +103,11 @@ Window {
                     readonly property var modelData: root.graphs[tile.index] ?? ({title: "", graph: ({})})
                     width: (tiles.width - (tiles.columns - 1) * tiles.spacing) / tiles.columns
                     spacing: Tokens.spacingXs
+                    // Spec "Accessibility": a graph's name says its current value.
+                    readonly property int percent: Math.round(Math.max(0, root.gpu ? root.lastValue(tile.modelData.graph) : (tile.modelData.busy ?? -1)) * 100)
                     Accessible.role: Accessible.Graphic
-                    Accessible.name: root.gpu ? tile.modelData.title : qsTr("Processor %1").arg(tile.index + 1)
+                    Accessible.name: root.gpu ? qsTr("%1: %2%").arg(tile.modelData.title).arg(tile.percent)
+                                              : qsTr("Processor %1: %2%").arg(tile.index + 1).arg(tile.percent)
 
                     Text {
                         visible: root.gpu
