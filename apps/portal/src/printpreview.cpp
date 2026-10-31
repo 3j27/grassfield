@@ -65,12 +65,31 @@ QMutex s_rendering;
 
 } // namespace
 
-Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes, const std::function<bool()> &stopped)
+bool SpoolBudget::take(qint64 bytes)
+{
+    qint64 used = m_used.load();
+    do {
+        if (bytes < 0 || used + bytes > m_total)
+            return false;
+    } while (!m_used.compare_exchange_weak(used, used + bytes));
+    return true;
+}
+
+void SpoolBudget::give(qint64 bytes)
+{
+    m_used.fetch_sub(bytes);
+}
+
+Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes, const SpoolHooks &hooks)
 {
     Spooled out;
-    // A file is read where it is (its position untouched: the call can still go to x-d-p-gtk as it came); a pipe as it flows.
-    bool positional = true;
-    qint64 offset = 0;
+    const auto stopped = hooks.stopped;
+    // A file is read where its descriptor stands (what x-d-p-gtk would read; the position itself untouched: the call can still go
+    // to x-d-p-gtk as it came); a pipe as it flows, once the caller agrees (mayConsume).
+    const off_t start = ::lseek(fd, 0, SEEK_CUR);
+    bool positional = start >= 0;
+    qint64 offset = positional ? qint64(start) : 0;
+    bool asked = false;
     const auto next = [&](char *into, size_t size, QString *error) -> ssize_t {
         while (positional) {
             if (stopped && stopped()) {
@@ -80,16 +99,19 @@ Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes
             const ssize_t n = ::pread(fd, into, size, offset);
             if (n < 0 && errno == EINTR)
                 continue;
-            if (n < 0 && errno == ESPIPE && offset == 0) {
-                positional = false;
-                break;
-            }
             if (n < 0) {
                 *error = QStringLiteral("cannot read the document");
                 return -1;
             }
             offset += n;
             return n;
+        }
+        if (!asked) {
+            asked = true;
+            if (hooks.mayConsume && !hooks.mayConsume()) {
+                *error = QStringLiteral("the request went elsewhere");
+                return -1;
+            }
         }
         out.consumed = true;
         return readChunk(fd, into, size, idleMs, stopped, error);
@@ -111,7 +133,12 @@ Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes
         ::close(fd);
         return out;
     }
-    const QByteArray dir = QFile::encodeName(folder.isEmpty() ? QDir::tempPath() : folder);
+    const QString place = folder.isEmpty() ? QDir::tempPath() : folder;
+    if (!QDir(place).exists()) {
+        QDir().mkpath(place);
+        ::chmod(QFile::encodeName(place).constData(), 0700);
+    }
+    const QByteArray dir = QFile::encodeName(place);
     // An unlinked file of this process's: no name another program could open or replace.
     int spool = ::open(dir.constData(), O_TMPFILE | O_RDWR | O_EXCL | O_CLOEXEC, 0600);
     if (spool < 0 && (errno == EOPNOTSUPP || errno == EISDIR || errno == EINVAL)) {
@@ -126,30 +153,40 @@ Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes
         ::close(fd);
         return out;
     }
-    qint64 total = head.size();
-    if (total > maxBytes)
-        out.error = QStringLiteral("the document is too large");
-    else if (!writeAll(spool, head.constData(), size_t(head.size())))
+    // Each piece is taken from the budget before it is written.
+    const auto room = [&](qint64 bytes) {
+        if (out.reserved + bytes > maxBytes) {
+            out.error = QStringLiteral("the document is too large");
+            return false;
+        }
+        if (hooks.budget && !hooks.budget->take(bytes)) {
+            out.error = QStringLiteral("the documents waiting to print take all the room they may");
+            return false;
+        }
+        out.reserved += bytes;
+        return true;
+    };
+    if (room(head.size()) && !writeAll(spool, head.constData(), size_t(head.size())))
         out.error = QStringLiteral("cannot keep the document: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
     while (out.error.isEmpty()) {
         const ssize_t n = next(chunk.data(), chunk.size(), &out.error);
-        if (n <= 0)
+        if (n <= 0 || !room(n))
             break;
-        total += n;
-        if (total > maxBytes) {
-            out.error = QStringLiteral("the document is too large");
-            break;
-        }
         if (!writeAll(spool, chunk.data(), size_t(n)))
             out.error = QStringLiteral("cannot keep the document: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
     }
     ::close(fd);
     if (!out.error.isEmpty()) {
         ::close(spool);
+        if (hooks.budget)
+            hooks.budget->give(out.reserved);
+        out.reserved = 0;
         return out;
     }
+    if (!hooks.budget)
+        out.reserved = 0;
     out.fd = spool;
-    out.size = total;
+    out.size = qint64(::lseek(spool, 0, SEEK_CUR));
     return out;
 }
 

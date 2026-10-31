@@ -63,7 +63,10 @@ struct Destination {
 struct OptionValue {
     QString value;
     QString label;
-    bool operator==(const OptionValue &o) const { return value == o.value && label == o.label; }
+    // Its IPP keyword ("staple-top-left" for finishings' 20; the value itself for a keyword): the sheet names the standard ones
+    // in the UI language where CUPS gives no name (security review of step 6b, NIT).
+    QString keyword;
+    bool operator==(const OptionValue &o) const { return value == o.value && label == o.label && keyword == o.keyword; }
 };
 
 // A printer's own option beyond paper, two sides and colour (step 6b): an IPP attribute CUPS reports for the printer
@@ -188,7 +191,9 @@ bool toGtk(const Choices &choices, QVariantMap *settings, QVariantMap *pageSetup
 // The CUPS options of the job (name, value): copies, collation, paper, two sides, colour and the printer's own options; never
 // pages, scale or orientation (GTK applied them, see above). Empty for Save as PDF and Open in Preview. The paper goes only as
 // one the printer lists, or, when it lists none, as a PWG name (validMediaName): never the application's text as it came; a
-// printer's own option only with a value that printer lists (validOptionValue too).
+// printer's own option only when it differs from the printer's default (a default sent would override the queue's own
+// settings, a tray forced among them: security review of step 6b, MINOR 5) and with a value that printer lists
+// (validOptionValue too).
 QList<QPair<QString, QString>> cupsOptions(const Choices &choices, const Capabilities &capabilities);
 // The same for a document the application sent first (Print with no token): it is made already, so the printer applies the
 // page ranges ("page-ranges", 1-based); the scale and orientation are the document's own (the sheet does not offer them).
@@ -239,6 +244,11 @@ QVariantMap toQml(const Destination &destination);
 // The PreparePrint options the sheet reads: {modal, acceptLabel (one line, its mnemonic removed), hasCurrentPage,
 // hasSelection, formats (the output formats the application can make: "pdf", "ps", "svg"; all three when it gives none)}.
 QVariantMap prepareOptions(const QVariantMap &options);
+
+// The name a document is saved or opened under: the first of `names` that is a plain file name (one line, no folder), else
+// "Document"; ".pdf" added; at most 255 bytes in UTF-8, a file name's limit, cut on a character's boundary (a long title in
+// Chinese or Japanese would otherwise fail the write: security review of step 6b, MINOR 4).
+QString pdfFileName(const QStringList &names);
 
 // The path of a local file URI Save as PDF may write to (an absolute path, no "." or "..", not a directory's URI); "" for
 // anything else.

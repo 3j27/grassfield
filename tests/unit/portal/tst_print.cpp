@@ -24,8 +24,10 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -361,6 +363,21 @@ protected:
         return send(m);
     }
 
+    // A pipe whose first bytes are written and whose write end stays open (the document still coming): the write end.
+    int printHeldPipe(const QString &handle, const QByteArray &first, std::shared_ptr<Reply> *reply)
+    {
+        int ends[2];
+        EXPECT_EQ(::pipe2(ends, O_CLOEXEC), 0);
+        EXPECT_EQ(::write(ends[1], first.constData(), size_t(first.size())), first.size());
+        QDBusMessage m = QDBusMessage::createMethodCall(QString::fromLatin1(kService), QStringLiteral("/org/freedesktop/portal/desktop"),
+                                                        QStringLiteral("org.freedesktop.impl.portal.Print"), QStringLiteral("Print"));
+        m << QVariant::fromValue(QDBusObjectPath(handle)) << QStringLiteral("org.example.Writer") << QString() << QStringLiteral("Print")
+          << QVariant::fromValue(QDBusUnixFileDescriptor(ends[0])) << QVariantMap{};
+        ::close(ends[0]);
+        *reply = send(m);
+        return ends[1];
+    }
+
     bool waitFor(const std::function<bool()> &condition, int ms = 3000)
     {
         QDeadlineTimer deadline(ms);
@@ -477,10 +494,10 @@ QStringList renderer()
 // Office's own options in the fake: two in Media & Quality.
 QList<print::PrinterOption> officeOptions()
 {
-    return {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1")}},
+    return {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic"), QStringLiteral("auto")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1"), QStringLiteral("tray-1")}},
              QStringLiteral("auto")},
             {QStringLiteral("print-quality"),
-             {{QStringLiteral("3"), QStringLiteral("Draft")}, {QStringLiteral("4"), QStringLiteral("Normal")}, {QStringLiteral("5"), QStringLiteral("High")}},
+             {{QStringLiteral("3"), QStringLiteral("Draft"), QStringLiteral("3")}, {QStringLiteral("4"), QStringLiteral("Normal"), QStringLiteral("4")}, {QStringLiteral("5"), QStringLiteral("High"), QStringLiteral("5")}},
              QStringLiteral("4")}};
 }
 
@@ -1284,6 +1301,69 @@ TEST(PrintPreview, TheDocumentIsKeptPrivately)
     EXPECT_EQ(large.fd, -1);
     EXPECT_EQ(large.error, QStringLiteral("the document is too large"));
     EXPECT_TRUE(QDir(spoolDir.path()).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty());
+
+    // A descriptor that does not stand at the start: what x-d-p-gtk would read from it, from where it stands (the review's NIT).
+    const int moved = source("junk" + pdf);
+    ASSERT_EQ(::lseek(moved, 4, SEEK_SET), 4);
+    const int mine = ::dup(moved);
+    Spooled fromThere = spoolDocument(mine, spoolDir.path(), 2000, print::kMaxDocumentBytes);
+    ASSERT_GE(fromThere.fd, 0) << fromThere.error.toStdString();
+    EXPECT_EQ(fromThere.size, pdf.size());
+    EXPECT_EQ(::lseek(moved, 0, SEEK_CUR), 4) << "its position untouched";
+    ::close(moved);
+    ::close(fromThere.fd);
+
+    // A folder that is not there yet is made, for this user only (the cache folder of a first print).
+    const QString fresh = spoolDir.filePath(QStringLiteral("cache/grassfield/print"));
+    Spooled first = spoolDocument(source(pdf), fresh, 2000, print::kMaxDocumentBytes);
+    ASSERT_GE(first.fd, 0) << first.error.toStdString();
+    ::close(first.fd);
+    struct stat folder;
+    ASSERT_EQ(::stat(QFile::encodeName(fresh).constData(), &folder), 0);
+    EXPECT_EQ(folder.st_mode & 0777, 0700u);
+
+    // A pipe is read only once the caller agrees (the call has not gone to x-d-p-gtk meanwhile; the review's MINOR 6).
+    int held[2];
+    ASSERT_EQ(::pipe2(held, O_CLOEXEC), 0);
+    ASSERT_EQ(::write(held[1], pdf.constData(), size_t(pdf.size())), pdf.size());
+    ::close(held[1]);
+    SpoolHooks refuse;
+    refuse.mayConsume = [] { return false; };
+    const Spooled notRead = spoolDocument(held[0], spoolDir.path(), 2000, print::kMaxDocumentBytes, refuse);
+    EXPECT_EQ(notRead.fd, -1);
+    EXPECT_FALSE(notRead.consumed) << "not a byte read";
+}
+
+// The documents kept at once share one budget (ADR-0035 6-21; the review's MAJOR 3): one that would go over it is not kept, and
+// what a document took comes back when it goes.
+TEST(PrintPreview, TheDocumentsKeptShareOneBudget)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QByteArray pdf = twoPages();
+    const auto source = [&dir, &pdf] {
+        static int n = 0;
+        QFile f(dir.filePath(QStringLiteral("budget-%1").arg(++n)));
+        EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(pdf);
+        f.close();
+        return ::open(QFile::encodeName(f.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    };
+    SpoolHooks hooks;
+    hooks.budget = std::make_shared<SpoolBudget>(pdf.size() + pdf.size() / 2);
+    const Spooled first = spoolDocument(source(), dir.path(), 2000, print::kMaxDocumentBytes, hooks);
+    ASSERT_GE(first.fd, 0);
+    EXPECT_EQ(first.reserved, pdf.size());
+    EXPECT_EQ(hooks.budget->used(), pdf.size());
+    const Spooled second = spoolDocument(source(), dir.path(), 2000, print::kMaxDocumentBytes, hooks);
+    EXPECT_EQ(second.fd, -1) << "over the budget the first one left";
+    EXPECT_EQ(second.error, QStringLiteral("the documents waiting to print take all the room they may"));
+    EXPECT_EQ(hooks.budget->used(), pdf.size()) << "what the refused one took came back";
+    ::close(first.fd);
+    hooks.budget->give(first.reserved);
+    const Spooled third = spoolDocument(source(), dir.path(), 2000, print::kMaxDocumentBytes, hooks);
+    EXPECT_GE(third.fd, 0) << "room again once the first one went";
+    ::close(third.fd);
 }
 
 // Step 6b: the pages are drawn by the confined child: the page count and the page's size, the page fitted in the size asked on
@@ -1594,6 +1674,7 @@ TEST_F(PrintTest, APrintersOwnOptionsGoWithTheJob)
     ASSERT_EQ(system.jobs.size(), 1);
     const auto &options = system.jobs.first().options;
     EXPECT_TRUE(options.contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    EXPECT_FALSE(options.contains({QStringLiteral("media-source"), QStringLiteral("auto")})) << "a default is not sent (the review's MINOR 5)";
     for (const auto &o : options) {
         EXPECT_NE(o.first, QStringLiteral("media-source")) << "a value Office does not list";
         EXPECT_NE(o.first, QStringLiteral("output-bin")) << "an option Office does not report";
@@ -1608,6 +1689,120 @@ TEST_F(PrintTest, APrintersOwnOptionsGoWithTheJob)
     EXPECT_TRUE(chosen.last().choices.value("options").toMap().isEmpty()) << "Mono reports none";
     EXPECT_TRUE(printer->answer(chosen.last().id, 1));
     ASSERT_TRUE(waitFor([&] { return other->done; }));
+}
+
+// The review's MINOR 6: a call whose document came on a pipe that is being read cannot go to x-d-p-gtk any more (it would get
+// it truncated): when the sheet does not show in time, it ends with response 2 instead; a file read in place still goes on.
+TEST_F(PrintTest, ADocumentReadFromAPipeIsNeverSentOnTruncated)
+{
+    make([this](Print::Options &o) {
+        o.uiDeadlineMs = 300;
+        o.spoolFolder = dir.path();
+    });
+    std::shared_ptr<Reply> reply;
+    const int writer = printHeldPipe(kHandle, "%PDF-1.4\n% the first bytes", &reply);
+    ASSERT_TRUE(waitFor([&] { return reply->done; }, 5000));
+    EXPECT_EQ(reply->response, 2u);
+    EXPECT_TRUE(gtk.calls.isEmpty()) << "nothing went to x-d-p-gtk";
+    ::close(writer);
+    // The same from a file: it goes to x-d-p-gtk as it came.
+    auto file = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/file"), twoPages(), {});
+    ASSERT_TRUE(waitFor([&] { return gtk.calls.size() == 1; }, 5000));
+    EXPECT_EQ(gtk.offsets, QList<qint64>{0});
+    gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(1u), QVariantMap{}}));
+    ASSERT_TRUE(waitFor([&] { return file->done; }));
+    EXPECT_EQ(file->response, 1u);
+}
+
+// The documents sent first share one budget across requests (ADR-0035 6-21; the review's MAJOR 3): one that would go over what
+// the others waiting left fails (response 2), and a request that ends gives its share back.
+TEST_F(PrintTest, DocumentsWaitingShareOneBudget)
+{
+    const QByteArray pdf = twoPages();
+    make([this, &pdf](Print::Options &o) {
+        o.uiDeadlineMs = 60000;
+        o.spoolFolder = dir.path();
+        o.spoolBudget = pdf.size() + pdf.size() / 2;
+    });
+    auto first = printDocument(kHandle, pdf, {});
+    ASSERT_TRUE(waitFor([&] { return !chosen.isEmpty(); }, 15000));
+    const int firstId = chosen.last().id;
+    auto second = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/second"), pdf, {});
+    ASSERT_TRUE(waitFor([&] { return second->done; }, 15000));
+    EXPECT_EQ(second->response, 2u) << "over the budget the first one left";
+    EXPECT_TRUE(printer->answer(firstId, 1));
+    ASSERT_TRUE(waitFor([&] { return first->done; }));
+    const qsizetype before = chosen.size();
+    auto third = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/third"), pdf, {});
+    ASSERT_TRUE(waitFor([&] { return chosen.size() > before; }, 15000)) << "room again once the first one ended";
+    EXPECT_TRUE(printer->answer(chosen.last().id, 1));
+    ASSERT_TRUE(waitFor([&] { return third->done; }));
+}
+
+// Open in Preview's copies (the review's MINOR 4): a name within a file name's 255 bytes (a long title in Japanese); the old
+// copies go (older than a day, or beyond the newest 16), never through a link; in the session, systemd-run is told not to expand
+// ${NAME} in the copy's path.
+TEST_F(PrintTest, OpenInPreviewKeepsItsCopiesInBounds)
+{
+    const QString base = dir.filePath(QStringLiteral("private"));
+    const QString launched = dir.filePath(QStringLiteral("launched"));
+    make([&](Print::Options &o) {
+        o.uiDeadlineMs = 60000;
+        o.previewFolder = base;
+        o.previewCommand = {QStringLiteral("/bin/sh"), QStringLiteral("-c"), QStringLiteral("printf '%s\\n' \"$1\" >>\"$0\""), launched};
+    });
+    ASSERT_TRUE(QDir().mkpath(base));
+    ASSERT_EQ(::chmod(QFile::encodeName(base).constData(), 0700), 0);
+    // 20 copies of earlier days and of just now, and a link named like one, to a folder that must be left alone.
+    QTemporaryDir elsewhere;
+    ASSERT_TRUE(elsewhere.isValid());
+    QFile precious(elsewhere.filePath(QStringLiteral("precious")));
+    ASSERT_TRUE(precious.open(QIODevice::WriteOnly));
+    precious.write("keep");
+    precious.close();
+    ASSERT_TRUE(QFile::link(elsewhere.path(), QDir(base).filePath(QStringLiteral("print-link"))));
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    for (int i = 0; i < 20; ++i) {
+        const QString folder = QDir(base).filePath(QStringLiteral("print-%1").arg(i, 6, 10, QLatin1Char('0')));
+        ASSERT_TRUE(QDir().mkpath(folder));
+        QFile copy(QDir(folder).filePath(QStringLiteral("Old.pdf")));
+        ASSERT_TRUE(copy.open(QIODevice::WriteOnly));
+        copy.write("%PDF-1.4 old");
+        copy.close();
+        // The first four of two days ago, the others of the last minutes (the newest last).
+        const qint64 when = i < 4 ? now - 2 * 24 * 3600 : now - 600 + i;
+        const struct timespec times[2] = {{time_t(when), 0}, {time_t(when), 0}};
+        ASSERT_EQ(::utimensat(AT_FDCWD, QFile::encodeName(folder).constData(), times, 0), 0);
+    }
+    const QString title = QString(120, QChar(0x65E5)); // 日, 3 bytes each: 360 bytes
+    auto reply = preparedAnswer(kHandle, {{QStringLiteral("preview"), true}}, {{QStringLiteral("output-basename"), title}});
+    ASSERT_EQ(reply->response, 0u);
+    auto job = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/job"), reply, "%PDF-1.7 a long title");
+    ASSERT_TRUE(waitFor([&] { return job->done; }));
+    EXPECT_EQ(job->response, 0u) << "a long name is cut, not refused";
+    QFile out(launched);
+    ASSERT_TRUE(waitFor([&] { return out.exists(); }));
+    ASSERT_TRUE(out.open(QIODevice::ReadOnly));
+    const QString copy = QString::fromUtf8(out.readAll()).trimmed();
+    EXPECT_LE(QFile::encodeName(QFileInfo(copy).fileName()).size(), 255);
+    EXPECT_TRUE(QFileInfo(copy).fileName().endsWith(QStringLiteral(".pdf")));
+    EXPECT_TRUE(QFileInfo(copy).isFile());
+    const QStringList left = QDir(base).entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System, QDir::Name);
+    QStringList folders = left.filter(QRegularExpression(QStringLiteral("^print-[0-9]{6}$")));
+    EXPECT_EQ(folders.size(), Print::kKeptCopies - 1) << "the newest 15 of the old ones, and the new copy beside them";
+    EXPECT_FALSE(folders.contains(QStringLiteral("print-000000"))) << "two days old";
+    EXPECT_FALSE(folders.contains(QStringLiteral("print-000004"))) << "beyond the newest 16";
+    EXPECT_TRUE(folders.contains(QStringLiteral("print-000019")));
+    EXPECT_TRUE(QFileInfo(QDir(base).filePath(QStringLiteral("print-link"))).isSymLink()) << "a link is not a copy's folder";
+    EXPECT_TRUE(precious.exists());
+
+    // systemd-run: --expand-environment=no where systemd knows it, uwsm-app where there is one.
+    EXPECT_EQ(Print::sessionPreviewCommand(true, true),
+              (QStringList{QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
+                           QStringLiteral("--expand-environment=no"), QStringLiteral("--"), QStringLiteral("uwsm-app"), QStringLiteral("--"),
+                           QStringLiteral("grassfield-preview"), QStringLiteral("--")}));
+    EXPECT_FALSE(Print::sessionPreviewCommand(false, false).contains(QStringLiteral("--expand-environment=no")));
+    EXPECT_FALSE(Print::sessionPreviewCommand(false, false).contains(QStringLiteral("uwsm-app")));
 }
 
 // The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
@@ -1688,6 +1883,8 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
     EXPECT_EQ(values(QStringLiteral("media-type")), (QStringList{QStringLiteral("stationery=Plain Paper"), QStringLiteral("photo=Photo Paper")}));
     EXPECT_EQ(values(QStringLiteral("output-bin")), (QStringList{QStringLiteral("upper=Upper Bin"), QStringLiteral("lower=Lower Bin")}));
     EXPECT_EQ(values(QStringLiteral("finishings")), (QStringList{QStringLiteral("3=None"), QStringLiteral("20=Staple Top Left")}));
+    ASSERT_NE(caps.option(QStringLiteral("finishings")), nullptr);
+    EXPECT_EQ(caps.option(QStringLiteral("finishings"))->values.at(1).keyword, QStringLiteral("staple-top-left")) << "the sheet names it by its keyword";
     QStringList qualities;
     for (const QString &v : values(QStringLiteral("print-quality")))
         qualities << v.section(QLatin1Char('='), 0, 0);

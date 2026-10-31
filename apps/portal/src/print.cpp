@@ -10,6 +10,7 @@
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
@@ -24,6 +25,7 @@
 
 #include <KIO/CommandLauncherJob>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -75,22 +77,6 @@ QString plainName(const QVariant &value)
     return name.contains(QLatin1Char('/')) || name == QLatin1String(".") || name == QLatin1String("..") ? QString() : name;
 }
 
-// The name a document is known by, as a file name: the first of `names` that is one, else "Document"; ".pdf" added.
-QString pdfFileName(const QStringList &names)
-{
-    QString file;
-    for (const QString &name : names) {
-        file = plainName(name).trimmed();
-        if (!file.isEmpty())
-            break;
-    }
-    if (file.isEmpty())
-        file = QStringLiteral("Document");
-    if (!file.endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive))
-        file += QStringLiteral(".pdf");
-    return file;
-}
-
 // A new private folder for one copy, in `base` (made 0700 when missing; refused when it is not a folder of this user's that
 // no one else may enter): its path with the links resolved, "" and `error` set on failure.
 QString privateFolder(const QString &base, QString *error)
@@ -100,6 +86,7 @@ QString privateFolder(const QString &base, QString *error)
         *error = QStringLiteral("no private folder for Open in Preview");
         return {};
     }
+    QDir().mkpath(QFileInfo(base).absolutePath());
     if (::mkdir(b.constData(), 0700) != 0 && errno != EEXIST) {
         *error = QStringLiteral("cannot make “%1”: %2").arg(base, QString::fromLocal8Bit(std::strerror(errno)));
         return {};
@@ -120,20 +107,95 @@ QString privateFolder(const QString &base, QString *error)
     return folder;
 }
 
-// How Preview opens a copy when nothing else is set (Options::previewCommand empty), the copy's path added last. In the session:
-// as the Dock starts an application (uwsm-app: a scope of its own), from a transient unit of the user manager (systemd-run
-// --user), so that Preview inherits neither this unit's limits nor its sandbox and outlives it (grassfield-crash-watch's Reopen
-// does the same). In a dev session: a child of this process, on its display (the user manager's display is the owner's own
-// session, which a dev run never touches: runmode.h), the grassfield-preview next to this binary first.
-QStringList defaultPreviewCommand()
+// Removes the folder `name` in `base` (an open folder) and the copy it holds, never through a link: its entries removed where
+// they are (a link is removed, not followed), then the folder.
+void removeCopyFolder(int base, const char *name)
+{
+    const int folder = ::openat(base, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (folder < 0)
+        return;
+    if (DIR *entries = ::fdopendir(folder)) {
+        while (const dirent *e = ::readdir(entries)) {
+            if (std::strcmp(e->d_name, ".") != 0 && std::strcmp(e->d_name, "..") != 0)
+                ::unlinkat(::dirfd(entries), e->d_name, 0);
+        }
+        ::closedir(entries);
+    } else {
+        ::close(folder);
+    }
+    ::unlinkat(base, name, AT_REMOVEDIR);
+}
+
+} // namespace
+
+void Print::removeOldCopies(const QString &base, qint64 now)
+{
+    // Open in Preview's copies (ADR-0035 6-22): a folder print-XXXXXX of this user's each; the ones older than a day, and all but
+    // the newest kKeptCopies - 1 (room for the one about to be made), go (Preview keeps a copy it has open readable: its file
+    // stays until it lets go).
+    const int folder = ::open(QFile::encodeName(base).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (folder < 0)
+        return;
+    DIR *entries = ::fdopendir(folder);
+    if (!entries) {
+        ::close(folder);
+        return;
+    }
+    QList<QPair<qint64, QByteArray>> copies;
+    while (const dirent *e = ::readdir(entries)) {
+        struct stat st;
+        if (std::strncmp(e->d_name, "print-", 6) != 0 || ::fstatat(::dirfd(entries), e->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0
+            || !S_ISDIR(st.st_mode) || st.st_uid != ::getuid())
+            continue;
+        copies.append({qint64(st.st_mtime), QByteArray(e->d_name)});
+    }
+    std::sort(copies.begin(), copies.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+    for (qsizetype i = 0; i < copies.size(); ++i) {
+        if (i >= kKeptCopies - 1 || now - copies.at(i).first > kCopyLifetimeSeconds)
+            removeCopyFolder(::dirfd(entries), copies.at(i).second.constData());
+    }
+    ::closedir(entries);
+}
+
+QStringList Print::sessionPreviewCommand(bool uwsmApp, bool keepsArguments)
+{
+    QStringList command{QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet")};
+    // systemd-run expands ${NAME} in a command's arguments, and the copy's name is the document's (security review of step 6b,
+    // MINOR 4): not where systemd knows how to say so (254 and later).
+    if (keepsArguments)
+        command << QStringLiteral("--expand-environment=no");
+    command << QStringLiteral("--");
+    if (uwsmApp)
+        command << QStringLiteral("uwsm-app") << QStringLiteral("--");
+    return command << QStringLiteral("grassfield-preview") << QStringLiteral("--");
+}
+
+namespace {
+
+// Whether this systemd-run takes --expand-environment=no (asked once; blocking: off the GUI thread).
+bool systemdRunKeepsArguments()
+{
+    static const bool keeps = [] {
+        QProcess help;
+        help.start(QStringLiteral("systemd-run"), {QStringLiteral("--help")});
+        return help.waitForFinished(3000) && help.readAllStandardOutput().contains("--expand-environment");
+    }();
+    return keeps;
+}
+
+// How Preview opens a copy when nothing else is set (Options::previewCommand empty), the copy's path added last; whether its
+// arguments reach Preview as they are (`keepsArguments`). In the session: as the Dock starts an application (uwsm-app: a scope
+// of its own), from a transient unit of the user manager (systemd-run --user), so that Preview inherits neither this unit's
+// limits nor its sandbox and outlives it (grassfield-crash-watch's Reopen does the same). In a dev session: a child of this
+// process, on its display (the user manager's display is the owner's own session, which a dev run never touches: runmode.h),
+// the grassfield-preview next to this binary first. Blocking (it may ask systemd-run once): off the GUI thread.
+QStringList defaultPreviewCommand(bool *keepsArguments)
 {
     if (grassfield::apps::runmode::session()) {
-        QStringList command{QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
-                            QStringLiteral("--")};
-        if (!QStandardPaths::findExecutable(QStringLiteral("uwsm-app")).isEmpty())
-            command << QStringLiteral("uwsm-app") << QStringLiteral("--");
-        return command << QStringLiteral("grassfield-preview") << QStringLiteral("--");
+        *keepsArguments = systemdRunKeepsArguments();
+        return Print::sessionPreviewCommand(!QStandardPaths::findExecutable(QStringLiteral("uwsm-app")).isEmpty(), *keepsArguments);
     }
+    *keepsArguments = true;
     const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-preview");
     return {QFileInfo(sibling).isExecutable() ? sibling : QStringLiteral("grassfield-preview"), QStringLiteral("--")};
 }
@@ -148,6 +210,8 @@ Print::SpoolFile::~SpoolFile()
 {
     if (fd >= 0)
         ::close(fd);
+    if (budget)
+        budget->give(reserved);
 }
 
 Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &options, QObject *parent)
@@ -155,6 +219,7 @@ Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &opt
                   Limits{options.gtkService, options.uiDeadlineMs, options.idleQuitMs, options.maxPending, false}, parent)
     , m_system(system)
     , m_options(options)
+    , m_budget(std::make_shared<SpoolBudget>(options.spoolBudget))
 {
 }
 
@@ -357,7 +422,7 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
     t.capabilities = it->capabilities;
     t.choices = c;
     t.document = it->document;
-    t.documentName = pdfFileName({it->settings.value(QStringLiteral("output-basename")).toString(), it->document ? it->title : QString(),
+    t.documentName = print::pdfFileName({it->settings.value(QStringLiteral("output-basename")).toString(), it->document ? it->title : QString(),
                                   appName(it->appId), it->title});
     if (!c.outputUri.isEmpty()) {
         t.pdfFolder = it->pdfFolder;
@@ -477,11 +542,7 @@ void Print::savePdf(int id, const QString &name, const QString &title)
     it->pdfUri.clear();
     it->pdfFolder.clear();
     it->pdfName.clear();
-    QString file = plainName(name);
-    if (file.isEmpty())
-        file = QStringLiteral("Document");
-    if (!file.endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive))
-        file += QStringLiteral(".pdf");
+    const QString file = print::pdfFileName({name});
     const QString handle = QStringLiteral("/org/freedesktop/portal/desktop/request/grassfield/print%1_%2").arg(id).arg(++m_saves);
     // This process's FileChooser, through the bus (its unique name: never another backend's), from the second connection: the
     // Open and Save panels' own path.
@@ -666,12 +727,21 @@ void Print::openInPreview(int id, const Ticket &ticket, int fd)
     }
     auto error = std::make_shared<QString>();
     auto path = std::make_shared<QString>();
-    const QString base = m_options.previewFolder, file = ticket.documentName;
+    auto command = std::make_shared<QStringList>(m_options.previewCommand);
+    const QString base = m_options.previewFolder, name = ticket.documentName;
     const int idle = m_options.fileIdleMs;
     const auto stop = m_stopWriting;
-    // A folder of its own in the private folder, then the copy written there as Save as PDF writes (only a PDF, never through
-    // a link): off this thread.
-    QThread *writer = QThread::create([fd, base, file, idle, error, path, stop] {
+    // The old copies go, a folder of its own is made in the private folder, the copy is written there as Save as PDF writes (only
+    // a PDF, never through a link) and the way Preview opens it is found: off this thread.
+    QThread *writer = QThread::create([fd, base, name, idle, error, path, command, stop] {
+        bool keepsArguments = true;
+        if (command->isEmpty())
+            *command = defaultPreviewCommand(&keepsArguments);
+        // Where systemd-run would expand ${NAME} in it, the name carries no dollar sign.
+        QString file = name;
+        if (!keepsArguments)
+            file.replace(QLatin1Char('$'), QChar(0xFF04));
+        removeOldCopies(base, QDateTime::currentSecsSinceEpoch());
         const QString folder = privateFolder(base, error.get());
         if (folder.isEmpty()) {
             ::close(fd);
@@ -682,16 +752,16 @@ void Print::openInPreview(int id, const Ticket &ticket, int fd)
             *path = QDir(folder).filePath(file);
     });
     writer->setParent(this);
-    connect(writer, &QThread::finished, this, [this, id, writer, error, path] {
+    connect(writer, &QThread::finished, this, [this, id, writer, error, path, command] {
         writer->deleteLater();
         if (!error->isEmpty()) {
             qWarning("grassfield-portal: Open in Preview: %s", qPrintable(*error));
             finish(id, 2, {});
             return;
         }
-        QStringList command = m_options.previewCommand.isEmpty() ? defaultPreviewCommand() : m_options.previewCommand;
-        const QString program = command.takeFirst();
-        const bool started = QProcess::startDetached(program, command << *path);
+        QStringList arguments = *command;
+        const QString program = arguments.takeFirst();
+        const bool started = QProcess::startDetached(program, arguments << *path);
         if (!started)
             qWarning("grassfield-portal: Open in Preview: %s could not be started", qPrintable(program));
         finish(id, started ? 0 : 2, {});
@@ -723,6 +793,7 @@ void Print::showDocument(int id, const QString &appId, const QString &parentWind
     sheet.insert(QStringLiteral("outputBasename"), plainName(QVariant(p.title)));
     sheet.insert(QStringLiteral("choices"), print::toQml(p.choices));
     const auto stop = p.stop;
+    const auto source = p.source;
     m_pending.insert(id, p);
     emit opened(id, sheet);
 
@@ -736,17 +807,26 @@ void Print::showDocument(int id, const QString &appId, const QString &parentWind
         ? QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--print-preview")}
         : m_options.rendererCommand;
     const auto stopAll = m_stopWriting;
-    const auto stopped = [stop, stopAll] { return stop->load() || stopAll->load(); };
-    QThread *reader = QThread::create([fd, folder, idle, deadline, renderer, spooled, info, stopped] {
-        *spooled = spoolDocument(fd, folder, idle, print::kMaxDocumentBytes, stopped);
+    SpoolHooks hooks;
+    hooks.stopped = [stop, stopAll] { return stop->load() || stopAll->load(); };
+    // A pipe is read only while the call has not gone to x-d-p-gtk, and once it is read the call cannot go there (forwardable).
+    hooks.mayConsume = [source] {
+        int untouched = kSourceUntouched;
+        return source->compare_exchange_strong(untouched, kSourceRead);
+    };
+    hooks.budget = m_budget;
+    QThread *reader = QThread::create([fd, folder, idle, deadline, renderer, spooled, info, hooks] {
+        *spooled = spoolDocument(fd, folder, idle, print::kMaxDocumentBytes, hooks);
         if (spooled->fd >= 0)
-            *info = renderPreview(renderer, spooled->fd, 0, {}, deadline, stopped);
+            *info = renderPreview(renderer, spooled->fd, 0, {}, deadline, hooks.stopped);
     });
     reader->setParent(this);
     connect(reader, &QThread::finished, this, [this, id, reader, spooled, info] {
         reader->deleteLater();
         auto file = std::make_shared<SpoolFile>();
         file->fd = spooled->fd;
+        file->budget = spooled->reserved > 0 ? m_budget : nullptr;
+        file->reserved = spooled->reserved;
         const auto p = m_pending.find(id);
         if (p == m_pending.end() || !isOpen(id))
             return;
@@ -835,6 +915,17 @@ void Print::startRender(int id, int page, int width, int height)
         }
     });
     drawer->start();
+}
+
+bool Print::forwardable(int id)
+{
+    // A document on a pipe that is being read, or was, would reach x-d-p-gtk truncated: the call ends instead (response 2). A file
+    // read in place, or a pipe not read yet (it is not read after this), goes on as it came.
+    const auto it = m_pending.find(id);
+    if (it == m_pending.end() || !it->document)
+        return true;
+    int untouched = kSourceUntouched;
+    return it->source->compare_exchange_strong(untouched, kSourceForwarded) || it->source->load() == kSourceForwarded;
 }
 
 void Print::forwarded(int id)

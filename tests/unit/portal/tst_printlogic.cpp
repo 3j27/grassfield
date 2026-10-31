@@ -52,12 +52,12 @@ Capabilities monoSimplex()
 Capabilities withOptions()
 {
     Capabilities c = office();
-    c.options = {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1")}},
+    c.options = {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic"), QStringLiteral("auto")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1"), QStringLiteral("tray-1")}},
                   QStringLiteral("auto")},
                  {QStringLiteral("print-quality"),
-                  {{QStringLiteral("3"), QStringLiteral("Draft")}, {QStringLiteral("4"), QStringLiteral("Normal")}, {QStringLiteral("5"), QStringLiteral("High")}},
+                  {{QStringLiteral("3"), QStringLiteral("Draft"), QStringLiteral("3")}, {QStringLiteral("4"), QStringLiteral("Normal"), QStringLiteral("4")}, {QStringLiteral("5"), QStringLiteral("High"), QStringLiteral("5")}},
                   QStringLiteral("4")},
-                 {QStringLiteral("finishings"), {{QStringLiteral("3"), QStringLiteral("None")}, {QStringLiteral("20"), QStringLiteral("Staple Top Left")}},
+                 {QStringLiteral("finishings"), {{QStringLiteral("3"), QStringLiteral("None"), QStringLiteral("3")}, {QStringLiteral("20"), QStringLiteral("Staple Top Left"), QStringLiteral("20")}},
                   QStringLiteral("3")}};
     return c;
 }
@@ -409,14 +409,18 @@ TEST(PrintLogic, APrintersOwnOptionsGoOnlyAsItListsThem)
     c.options.insert(QStringLiteral("output-bin"), QStringLiteral("lower"));
     const auto options = cupsOptions(c, caps);
     EXPECT_TRUE(options.contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
-    EXPECT_TRUE(options.contains({QStringLiteral("finishings"), QStringLiteral("3")}));
     for (const auto &o : options) {
         EXPECT_NE(o.first, QStringLiteral("media-source")) << "a value the printer does not list";
         EXPECT_NE(o.first, QStringLiteral("output-bin")) << "an option the printer does not report";
+        EXPECT_NE(o.first, QStringLiteral("finishings")) << "the printer's default is not sent (the review's MINOR 5)";
     }
+    // At its defaults, nothing of the printer's own goes (a tray of media-col-default would otherwise be forced).
+    const Choices defaults = initialChoices(QStringLiteral("Office"), caps, {}, {}, false, false);
+    for (const auto &o : cupsOptions(defaults, caps))
+        EXPECT_TRUE(optionSection(o.first).isEmpty()) << o.first.toStdString();
     // A value listed that CUPS would read as more than one, or as a collection: never sent.
     Capabilities odd = caps;
-    odd.options[1].values.append({QStringLiteral("5,6"), QStringLiteral("x")});
+    odd.options[1].values.append({QStringLiteral("5,6"), QStringLiteral("x"), QString()});
     c.options.insert(QStringLiteral("print-quality"), QStringLiteral("5,6"));
     for (const auto &o : cupsOptions(c, odd))
         EXPECT_NE(o.first, QStringLiteral("print-quality"));
@@ -549,4 +553,22 @@ TEST(PrintLogic, LastUsedSettingsKeepHowNotWhat)
     named.preset = QStringLiteral("last");
     EXPECT_EQ(fromQml(toQml(named), Choices{}).preset, QStringLiteral("last"));
     EXPECT_EQ(fromQml({{QStringLiteral("preset"), QStringLiteral("mine")}}, named).preset, QStringLiteral("last"));
+}
+
+// The name a document is saved or opened under (the review's MINOR 4): a plain name, ".pdf" once, within a file name's 255 bytes
+// in UTF-8, cut on a character's boundary.
+TEST(PrintLogic, ADocumentsFileNameFitsAFileSystem)
+{
+    EXPECT_EQ(pdfFileName({QStringLiteral("Quarterly Report")}), QStringLiteral("Quarterly Report.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("Report.PDF")}), QStringLiteral("Report.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("a/b"), QStringLiteral(".."), QStringLiteral("Second")}), QStringLiteral("Second.pdf"));
+    EXPECT_EQ(pdfFileName({QString(), QStringLiteral("  ")}), QStringLiteral("Document.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("line\nbreak")}), QStringLiteral("line break.pdf"));
+    const QString japanese = pdfFileName({QString(150, QChar(0x65E5))}); // 日: 3 bytes each
+    EXPECT_LE(japanese.toUtf8().size(), 255);
+    EXPECT_TRUE(japanese.endsWith(QStringLiteral(".pdf")));
+    EXPECT_EQ(japanese, QString(83, QChar(0x65E5)) + QStringLiteral(".pdf")) << "249 bytes of whole characters, then .pdf";
+    const QString emoji = pdfFileName({QString::fromUtf8("\xf0\x9f\x93\x84").repeated(100)});
+    EXPECT_LE(emoji.toUtf8().size(), 255);
+    EXPECT_EQ(QString::fromUtf8(emoji.toUtf8()), emoji) << "no half character";
 }

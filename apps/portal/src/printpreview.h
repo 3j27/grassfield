@@ -24,9 +24,39 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
 #include <functional>
+#include <memory>
 
 namespace grassfield::portal {
+
+// What the documents kept at once may take together, across every request (ADR-0035 6-21): a document that would go over it
+// is not kept (its print fails). Thread-safe.
+class SpoolBudget
+{
+public:
+    explicit SpoolBudget(qint64 total)
+        : m_total(total)
+    {
+    }
+    // Takes `bytes` when they fit, else nothing (false).
+    bool take(qint64 bytes);
+    void give(qint64 bytes);
+    qint64 used() const { return m_used.load(); }
+
+private:
+    const qint64 m_total;
+    std::atomic<qint64> m_used{0};
+};
+
+// How a document is read (spoolDocument): `stopped` ends it (asked at least every 200 ms); `mayConsume` is asked once before
+// the first byte of a pipe is read (its bytes then cannot go on to x-d-p-gtk; false: nothing is read); `budget` is the budget
+// shared by every document kept at once (none: maxBytes alone).
+struct SpoolHooks {
+    std::function<bool()> stopped;
+    std::function<bool()> mayConsume;
+    std::shared_ptr<SpoolBudget> budget;
+};
 
 // The document read into a private file (spoolDocument).
 struct Spooled {
@@ -40,12 +70,15 @@ struct Spooled {
     bool consumed = false;
     // Why it could not be read ("" when it was, or when it is not a PDF).
     QString error;
+    // What it took of the budget (the owner gives it back when the file goes).
+    qint64 reserved = 0;
 };
 
-// Reads the document at `fd` (taken: closed when done) into an unlinked file of its own in `folder` (O_TMPFILE, mode 0600): only
-// a PDF, at most maxBytes; a source silent for idleMs, or `stopped` saying so (asked at least every 200 ms), ends it. Blocking:
-// run it off the GUI thread.
-Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes, const std::function<bool()> &stopped = {});
+// Reads the document at `fd` (taken: closed when done) into an unlinked file of its own in `folder` (O_TMPFILE, mode 0600; the
+// folder made 0700 when missing): only a PDF, at most maxBytes and what the budget has left; a source silent for idleMs ends it.
+// A file is read from where its descriptor stands (what x-d-p-gtk would read), its position untouched. Blocking: run it off the
+// GUI thread.
+Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes, const SpoolHooks &hooks = {});
 // A new descriptor on the private file, read-only, from its start (its own position: several readers at once), -1 on failure.
 int reopenSpool(int spoolFd);
 

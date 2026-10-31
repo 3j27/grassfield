@@ -20,6 +20,7 @@
 #pragma once
 
 #include "printlogic.h"
+#include "printpreview.h"
 #include "requesthost.h"
 
 #include <QDBusAbstractAdaptor>
@@ -55,9 +56,13 @@ public:
         QStringList addPrinterCommand{QStringLiteral("grassfield-settings"), QStringLiteral("--section=printers")};
         // Last Used Settings (a JSON file of grassfield-portal's state); "": none kept.
         QString stateFile;
-        // Where a document sent first is kept while its sheet is up (an unlinked file); "": the temporary folder.
+        // Where a document sent first is kept while its sheet is up (an unlinked file, on disk: grassfield-portal sets the user's
+        // cache folder); "": the temporary folder.
         QString spoolFolder;
-        // The private folder Open in Preview's copies go to (made 0700, this user's); "": no Open in Preview.
+        // What the documents kept at once may take together, across requests (ADR-0035 6-21).
+        qint64 spoolBudget = print::kMaxDocumentBytes;
+        // The private folder Open in Preview's copies go to (made 0700, this user's; grassfield-portal sets one in the user's cache
+        // folder); "": no Open in Preview.
         QString previewFolder;
         // How Preview opens a copy: the program and its arguments, the copy's path added last; empty: in the session, as the Dock
         // starts an application, from a unit of the user manager (systemd-run --user, then uwsm-app where it is, then
@@ -114,6 +119,14 @@ public:
     // sheet of PreparePrint), hasLastUsed (false here; handlePrepare sets it)}.
     static QVariantMap toQml(const QString &appId, const QString &parentWindow, const QString &title, const QVariantMap &settings,
                              const QVariantMap &pageSetup, const QVariantMap &options);
+    // How Preview opens a copy in the session (pure; the tests read it): systemd-run --user (with --expand-environment=no when
+    // `keepsArguments`), then uwsm-app when there is one, then grassfield-preview; the copy's path is added last.
+    static QStringList sessionPreviewCommand(bool uwsmApp, bool keepsArguments);
+    // Open in Preview's old copies in `base` (folders print-*): those older than a day, and all but the newest kKeptCopies - 1
+    // (room for the next), go with what they hold, never through a link. Blocking.
+    static void removeOldCopies(const QString &base, qint64 nowSecondsSinceEpoch);
+    static constexpr int kKeptCopies = 16;
+    static constexpr qint64 kCopyLifetimeSeconds = 24 * 3600;
 
 signals:
     // A sheet to make for request `id` (toQml).
@@ -137,13 +150,22 @@ protected:
     QVariantMap relayed(const QVariantMap &gtkResults) const override;
     void ended(int id) override;
     void forwarded(int id) override;
+    bool forwardable(int id) override;
 
 private:
     // The private file of a document sent first, closed when the last of its users (the request, a page being drawn) lets go.
     struct SpoolFile {
         int fd = -1;
+        // What it took of the budget, given back when it goes.
+        std::shared_ptr<SpoolBudget> budget;
+        qint64 reserved = 0;
         ~SpoolFile();
     };
+    // Where a document sent first stands (Pending::source): untouched, a pipe being read (then it cannot go on to x-d-p-gtk), or
+    // gone to x-d-p-gtk (then it is not read).
+    static constexpr int kSourceUntouched = 0;
+    static constexpr int kSourceRead = 1;
+    static constexpr int kSourceForwarded = 2;
     struct Pending {
         QString appId;
         QString parentWindow;
@@ -171,6 +193,7 @@ private:
         std::shared_ptr<SpoolFile> spool;
         int pages = 0;
         std::shared_ptr<std::atomic<bool>> stop = std::make_shared<std::atomic<bool>>(false);
+        std::shared_ptr<std::atomic<int>> source = std::make_shared<std::atomic<int>>(kSourceUntouched);
         // A page being drawn, and the latest asked meanwhile (page, width, height); the pages drawn (PreviewImages' keys).
         bool rendering = false;
         std::optional<std::tuple<int, int, int>> wanted;
@@ -219,6 +242,7 @@ private:
     std::shared_ptr<std::atomic<bool>> m_stopWriting = std::make_shared<std::atomic<bool>>(false);
     int m_saves = 0;
     std::unique_ptr<QDBusConnection> m_panelBus;
+    std::shared_ptr<SpoolBudget> m_budget;
     bool m_lastUsedRead = false;
     std::optional<print::Preset> m_lastUsed;
 };

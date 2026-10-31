@@ -492,10 +492,10 @@ QList<QPair<QString, QString>> cupsOptions(const Choices &c, const Capabilities 
     }
     if (caps.color)
         out.append({QStringLiteral("print-color-mode"), c.color ? QStringLiteral("color") : QStringLiteral("monochrome")});
-    // The printer's own options, each only with a value it listed, as it listed it.
+    // The printer's own options, each only when it is not the printer's default, with a value it listed, as it listed it.
     for (const PrinterOption &o : caps.options) {
         const QString value = c.options.value(o.name);
-        if (!optionSection(o.name).isEmpty() && o.lists(value) && validOptionValue(value))
+        if (!optionSection(o.name).isEmpty() && value != o.defaultValue && o.lists(value) && validOptionValue(value))
             out.append({o.name, value});
     }
     return out;
@@ -628,7 +628,8 @@ QVariantMap toQml(const Capabilities &caps)
              for (const PrinterOption &o : caps.options) {
                  QVariantList values;
                  for (const OptionValue &v : o.values)
-                     values.append(QVariantMap{{QStringLiteral("value"), v.value}, {QStringLiteral("label"), v.label}});
+                     values.append(QVariantMap{{QStringLiteral("value"), v.value}, {QStringLiteral("label"), v.label},
+                                               {QStringLiteral("keyword"), v.keyword}});
                  options.append(QVariantMap{{QStringLiteral("name"), o.name},
                                             {QStringLiteral("section"), optionSection(o.name)},
                                             {QStringLiteral("defaultValue"), o.defaultValue},
@@ -700,6 +701,31 @@ QByteArray jobName(const QString &title)
         --cut;
     name.truncate(cut);
     return name;
+}
+
+QString pdfFileName(const QStringList &names)
+{
+    QString file;
+    for (const QString &name : names) {
+        file = oneLine(name).trimmed();
+        if (file.contains(QLatin1Char('/')) || file == QLatin1String(".") || file == QLatin1String(".."))
+            file.clear();
+        if (!file.isEmpty())
+            break;
+    }
+    if (file.endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive))
+        file.chop(4);
+    if (file.isEmpty())
+        file = QStringLiteral("Document");
+    QByteArray stem = file.toUtf8();
+    if (stem.size() > 251) {
+        qsizetype cut = 251;
+        // Back to the first byte of the character the cut falls in (continuation bytes are 10xxxxxx).
+        while (cut > 0 && (uchar(stem.at(cut)) & 0xC0) == 0x80)
+            --cut;
+        stem.truncate(cut);
+    }
+    return QString::fromUtf8(stem) + QStringLiteral(".pdf");
 }
 
 QString localPdfPath(const QString &uri)

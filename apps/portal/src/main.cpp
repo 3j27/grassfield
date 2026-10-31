@@ -27,6 +27,7 @@
 #include <QDBusConnection>
 #include <QDir>
 #include <QQmlApplicationEngine>
+#include <QStandardPaths>
 #include <QUrl>
 
 #include <wayland-client-core.h>
@@ -124,11 +125,14 @@ int main(int argc, char *argv[])
     // Dev plumbing: how Add Printer… opens Settings (the shell's own GRASSFIELD_SETTINGS_CMD).
     if (const QString settings = runmode::devValue("SETTINGS_CMD"); !settings.isEmpty())
         printOptions.addPrinterCommand = settings.split(QLatin1Char(' '), Qt::SkipEmptyParts) << QStringLiteral("--section=printers");
-    // Last Used Settings next to the panels' memory; Open in Preview's copies in a private folder of the session's runtime folder
-    // (gone at logout); dev plumbing: how Preview opens (the same GRASSFIELD_PREVIEW_CMD as Files' Glance).
+    // Last Used Settings next to the panels' memory. A document sent first is kept, and Open in Preview's copies are written, on
+    // disk in the user's cache folder (never the runtime folder, a tmpfs whose pages count against this unit's MemoryMax:
+    // security review of step 6b, MAJOR 3); dev plumbing: how Preview opens (the same GRASSFIELD_PREVIEW_CMD as Files' Glance).
     printOptions.stateFile = runmode::stateDir() + QStringLiteral("/portal-print.json");
-    if (const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR"); runtime.startsWith(QLatin1Char('/')))
-        printOptions.previewFolder = runtime + QStringLiteral("/grassfield-print");
+    if (const QString cache = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation); cache.startsWith(QLatin1Char('/'))) {
+        printOptions.spoolFolder = cache + QStringLiteral("/grassfield/print");
+        printOptions.previewFolder = cache + QStringLiteral("/grassfield/preview");
+    }
     if (const QString preview = runmode::devValue("PREVIEW_CMD"); !preview.isEmpty())
         printOptions.previewCommand = preview.split(QLatin1Char(' '), Qt::SkipEmptyParts);
     const QString serviceName = QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield");

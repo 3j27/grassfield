@@ -124,10 +124,11 @@ QList<print::PrinterOption> printerOptions(http_t *http, cups_dest_t *dest, cups
             if (!print::validOptionValue(value) || option.lists(value))
                 continue;
             const QByteArray v = value.toUtf8();
+            const QString keyword = tag == IPP_TAG_ENUM ? fromUtf8(ippEnumString(n.constData(), ippGetInteger(supported, i))) : value;
             QString label = fromUtf8(cupsLocalizeDestValue(http, dest, info, n.constData(), v.constData())).simplified();
             if (label.isEmpty() || label == value)
-                label = print::keywordLabel(tag == IPP_TAG_ENUM ? fromUtf8(ippEnumString(n.constData(), ippGetInteger(supported, i))) : value);
-            option.values.append({value, label.left(100)});
+                label = print::keywordLabel(keyword);
+            option.values.append({value, label.left(100), print::validOptionValue(keyword) ? keyword : QString()});
         }
         if (option.values.size() < 2)
             continue;
