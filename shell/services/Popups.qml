@@ -185,9 +185,10 @@ Singleton {
     }
 
     // `symbol`: the glyph of the notice's subject (power, moon, document, ...): a shell dialog shows its subject's symbol, never
-    // the Grassfield mark (ADR-0040 IQ-B1 B, tests/ci/mark_places.py).
-    function notice(title: string, message: string, symbol: string): void {
-        openCentered("notice", {title: title, message: message, symbol: symbol});
+    // the Grassfield mark (ADR-0040 IQ-B1 B, tests/ci/mark_places.py); none given, the information symbol
+    // (PopupKinds.noticeSymbol). Untyped: a string-typed parameter turns a missing one into "undefined".
+    function notice(title: string, message: string, symbol): void {
+        openCentered("notice", {title: title, message: message, symbol: PopupKinds.noticeSymbol(symbol)});
     }
 
     function close(): void {

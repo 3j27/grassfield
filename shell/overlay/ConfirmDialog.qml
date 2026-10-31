@@ -10,10 +10,10 @@ Dialog {
     readonly property var info: Popups.data
 
     // The glyph follows the action: power for restart and shut down, the person for log out, the cross for Force Quit, the bin for
-    // Empty Trash; another action shows power when destructive, the information symbol otherwise. Never the Grassfield mark
-    // (ADR-0040 IQ-B1 B: a dialog shows its subject's symbol).
+    // Empty Trash; an action without a symbol here shows the information symbol (its subject is unknown: power would claim
+    // one). Never the Grassfield mark (ADR-0040 IQ-B1 B: a dialog shows its subject's symbol).
     readonly property var glyphs: ({"restart": "power", "shutdown": "power", "logout": "person", "forcequit": "close-glyph", "emptytrash": "trash"})
-    icon: glyphs[info.action] ?? (info.destructive === true ? "power" : "info")
+    icon: glyphs[info.action] ?? "info"
     title: info.title ? info.title : ""
     message: info.message ? info.message : ""
 
