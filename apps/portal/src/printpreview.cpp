@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QHash>
 #include <QMutex>
@@ -12,14 +13,18 @@
 #include <QPdfDocument>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QTimer>
 
 #include <linux/audit.h>
 #include <linux/filter.h>
+#include <linux/landlock.h>
 #include <linux/seccomp.h>
 
 #include <fcntl.h>
+#include <sched.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -36,6 +41,10 @@ namespace {
 
 constexpr int kMaxPages = 1000000;
 constexpr double kMaxPagePoints = 100000;
+// The child's data in use (RLIMIT_DATA): a page of 2048 pixels needs less than 192 MiB (measured with the test documents); one
+// child at a time, so grassfield-portal and a child stay within the unit's MemoryMax (1 GiB). Not the address space: pdfium
+// reserves tens of GiB it never uses (PartitionAlloc's pools).
+constexpr rlim_t kChildDataBytes = rlim_t(512) << 20;
 
 bool writeAll(int fd, const char *data, size_t size)
 {
@@ -50,6 +59,9 @@ bool writeAll(int fd, const char *data, size_t size)
     }
     return true;
 }
+
+// One child at a time, for the whole process (its memory adds to grassfield-portal's in the unit's budget).
+QMutex s_rendering;
 
 } // namespace
 
@@ -149,19 +161,73 @@ int reopenSpool(int spoolFd)
     return ::open(path.constData(), O_RDONLY | O_CLOEXEC);
 }
 
-bool confineRenderer()
+namespace {
+
+// Landlock (ADR-0035 6-20): reading files and folders under /usr only (the fonts pdfium looks for: /usr/share/fonts,
+// /usr/share/X11/fonts, /usr/local/share/fonts), nothing written anywhere, no TCP; signals and abstract sockets scoped to the
+// child where the kernel has ABI 6. The rights handled follow the kernel's ABI, so every right it knows is denied unless listed.
+bool restrictFiles()
+{
+    const long abi = ::syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
+    if (abi < 1)
+        return false;
+    struct {
+        quint64 fs;
+        quint64 net;
+        quint64 scoped;
+    } attr{};
+    // ABI 1: execute, write, read a file, read a folder, remove, make each kind of entry (bits 0 to 12).
+    attr.fs = (quint64(1) << 13) - 1;
+    if (abi >= 2)
+        attr.fs |= quint64(1) << 13; // refer (a link or a rename across folders)
+    if (abi >= 3)
+        attr.fs |= quint64(1) << 14; // truncate
+    if (abi >= 5)
+        attr.fs |= quint64(1) << 15; // ioctl on a device
+    if (abi >= 4)
+        attr.net = quint64(1) << 0 | quint64(1) << 1; // bind, connect a TCP socket
+    if (abi >= 6)
+        attr.scoped = quint64(1) << 0 | quint64(1) << 1; // abstract unix sockets, signals
+    // The fields an older kernel does not know are zero, which it accepts.
+    const int ruleset = int(::syscall(SYS_landlock_create_ruleset, &attr, sizeof attr, 0));
+    if (ruleset < 0)
+        return false;
+    bool ok = false;
+    const int usr = ::open("/usr", O_PATH | O_DIRECTORY | O_CLOEXEC);
+    if (usr >= 0) {
+        landlock_path_beneath_attr beneath{};
+        beneath.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR;
+        beneath.parent_fd = usr;
+        ok = ::syscall(SYS_landlock_add_rule, ruleset, LANDLOCK_RULE_PATH_BENEATH, &beneath, 0) == 0
+            && ::syscall(SYS_landlock_restrict_self, ruleset, 0) == 0;
+        ::close(usr);
+    }
+    ::close(ruleset);
+    return ok;
+}
+
+// The seccomp allow-list (ADR-0035 6-20), measured with a ptrace recorder on the calls the child makes once confined (Qt Core,
+// Qt PDF, glibc; and AddressSanitizer's in a test build), three documents (shapes, embedded and standard fonts), 800 and 2048
+// pixels: anything else fails with EPERM (clone3 with ENOSYS, so that glibc makes its threads with clone).
+bool installFilter()
 {
 #if !(defined(__x86_64__) || defined(__aarch64__)) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-    return false; // no filter written for this architecture: no preview
+    return false; // no list written for this architecture: no preview
 #else
 #if defined(__x86_64__)
     constexpr uint32_t arch = AUDIT_ARCH_X86_64;
 #else
     constexpr uint32_t arch = AUDIT_ARCH_AARCH64;
 #endif
+    constexpr uint32_t kAllow = SECCOMP_RET_ALLOW;
+    constexpr uint32_t kRefuse = SECCOMP_RET_ERRNO | EPERM;
     std::vector<sock_filter> f;
     const auto add = [&f](sock_filter s) { f.push_back(s); };
     const auto loadNumber = [&add] { add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, nr)))); };
+    // The low half of an argument (little-endian; the values checked fit in 32 bits).
+    const auto loadArgument = [&add](int index) {
+        add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, args) + 8 * index)));
+    };
     add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, arch))));
     add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, arch, 1, 0));
     add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
@@ -169,99 +235,110 @@ bool confineRenderer()
 #if defined(__x86_64__)
     // The x32 numbers of the same calls: refused.
     add(BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000u, 0, 1));
-    add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM));
+    add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
 #endif
-    const auto deny = [&add](long nr, int error) {
+    const auto allow = [&add, kAllow](long nr) {
+        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 1));
+        add(BPF_STMT(BPF_RET | BPF_K, kAllow));
+    };
+    // Allowed only when argument `index` is one of `values`.
+    const auto allowWhen = [&](long nr, int index, const std::vector<uint32_t> &values) {
+        const uint8_t k = uint8_t(values.size());
+        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, uint8_t(k + 3)));
+        loadArgument(index);
+        for (uint8_t i = 0; i < k; ++i)
+            add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, values[i], uint8_t(k - i), 0));
+        add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
+        add(BPF_STMT(BPF_RET | BPF_K, kAllow));
+        loadNumber();
+    };
+    // Allowed only when none of `bits` is set in argument `index`.
+    const auto allowWithout = [&](long nr, int index, uint32_t bits) {
+        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 4));
+        loadArgument(index);
+        add(BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, bits, 1, 0));
+        add(BPF_STMT(BPF_RET | BPF_K, kAllow));
+        add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
+        loadNumber();
+    };
+    const auto answer = [&add](long nr, int error) {
         add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 1));
         add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (uint32_t(error) & SECCOMP_RET_DATA)));
     };
-    // An open that may write, create, truncate or append is refused; a read-only one (the fonts) goes on. The flags are the low
-    // half of the argument (little-endian); the call's number is loaded again after.
-    const auto denyWritingOpen = [&add, &loadNumber](long nr, int flagsArgument) {
-        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 3));
-        add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, args) + 8 * flagsArgument)));
-        add(BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, uint32_t(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND), 0, 1));
-        add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM));
-        loadNumber();
-    };
-    denyWritingOpen(SYS_openat, 2);
-#ifdef SYS_open
-    denyWritingOpen(SYS_open, 1);
-#endif
-    // A signal only to itself (abort() and raise() send one): never to grassfield-portal, its process group or another process.
     const uint32_t self = uint32_t(::getpid());
-    const auto onlySelf = [&add, &loadNumber, self](long nr) {
-        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 3));
-        add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, args))));
-        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, self, 1, 0));
-        add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM));
-        loadNumber();
-    };
-    onlySelf(SYS_kill);
-    onlySelf(SYS_tgkill);
-    onlySelf(SYS_rt_tgsigqueueinfo);
-    // openat2's flags are behind a pointer: refused as unknown, so that a caller falls back to openat.
-#ifdef SYS_openat2
-    deny(SYS_openat2, ENOSYS);
+
+    // Memory, the descriptors it has, time, its own threads and signals, the files Landlock lets it read.
+    for (long nr : {long(SYS_read), long(SYS_write), long(SYS_readv), long(SYS_writev), long(SYS_pread64), long(SYS_close), long(SYS_lseek),
+                    long(SYS_fstat), long(SYS_newfstatat), long(SYS_statx), long(SYS_getdents64), long(SYS_faccessat), long(SYS_mmap),
+                    long(SYS_mprotect), long(SYS_munmap), long(SYS_mremap), long(SYS_madvise), long(SYS_brk), long(SYS_rt_sigaction),
+                    long(SYS_rt_sigprocmask), long(SYS_rt_sigreturn), long(SYS_sigaltstack), long(SYS_futex), long(SYS_set_robust_list),
+                    long(SYS_rseq), long(SYS_sched_yield), long(SYS_nanosleep), long(SYS_clock_nanosleep), long(SYS_clock_gettime),
+                    long(SYS_gettimeofday), long(SYS_getpid), long(SYS_gettid), long(SYS_getuid), long(SYS_geteuid), long(SYS_getgid),
+                    long(SYS_getegid), long(SYS_getrandom), long(SYS_eventfd2), long(SYS_pipe2), long(SYS_ppoll), long(SYS_exit),
+                    long(SYS_exit_group), long(SYS_restart_syscall), long(SYS_membarrier)})
+        allow(nr);
+#ifdef SYS_stat
+    for (long nr : {long(SYS_stat), long(SYS_lstat), long(SYS_poll), long(SYS_access)})
+        allow(nr);
 #endif
-    for (long nr : {
-#ifdef SYS_io_uring_setup
-             long(SYS_io_uring_setup), long(SYS_io_uring_enter), long(SYS_io_uring_register),
+    // Opening only to read (Landlock decides where).
+    allowWithout(SYS_openat, 2, uint32_t(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND));
+#ifdef SYS_open
+    allowWithout(SYS_open, 1, uint32_t(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND));
 #endif
-             -1L}) {
-        if (nr >= 0)
-            deny(nr, ENOSYS);
-    }
-    const long refused[] = {
-        // No socket: no bus, no network, no other process.
-        SYS_socket, SYS_socketpair, SYS_connect, SYS_bind, SYS_listen, SYS_accept, SYS_accept4,
-        // No program, no other process's memory, no signal by a thread's or a process descriptor's number.
-        SYS_execve, SYS_execveat, SYS_ptrace, SYS_process_vm_readv, SYS_process_vm_writev, SYS_tkill, SYS_rt_sigqueueinfo,
-#ifdef SYS_pidfd_send_signal
-        SYS_pidfd_send_signal,
+    // A thread of its own process only: no new process, no namespace (the security review of step 6b, BLOCKER 1).
+    add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(SYS_clone), 0, 5));
+    loadArgument(0);
+    add(BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K,
+                 uint32_t(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET), 2, 0));
+    add(BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, uint32_t(CLONE_THREAD), 0, 1));
+    add(BPF_STMT(BPF_RET | BPF_K, kAllow));
+    add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
+    loadNumber();
+    // clone3's flags are behind a pointer: unknown, so that glibc falls back to clone.
+#ifdef SYS_clone3
+    answer(SYS_clone3, ENOSYS);
 #endif
-        // No change to any file or folder.
-        SYS_unlinkat, SYS_renameat, SYS_mkdirat, SYS_linkat, SYS_symlinkat, SYS_fchmod, SYS_fchmodat, SYS_fchown, SYS_fchownat,
-        SYS_truncate, SYS_mknodat, SYS_utimensat, SYS_setxattr, SYS_lsetxattr, SYS_fsetxattr, SYS_removexattr, SYS_lremovexattr,
-        SYS_fremovexattr, SYS_name_to_handle_at, SYS_open_by_handle_at,
-#ifdef SYS_renameat2
-        SYS_renameat2,
-#endif
-#ifdef SYS_fchmodat2
-        SYS_fchmodat2,
-#endif
-#ifdef SYS_unlink
-        SYS_unlink, SYS_rename, SYS_rmdir, SYS_mkdir, SYS_link, SYS_symlink, SYS_chmod, SYS_chown, SYS_lchown, SYS_mknod, SYS_creat,
-        SYS_utime, SYS_utimes, SYS_futimesat,
-#endif
-        // No mount, namespace, kernel module, key, BPF program or other kernel facility.
-        SYS_mount, SYS_umount2, SYS_pivot_root, SYS_chroot, SYS_unshare, SYS_setns, SYS_bpf, SYS_perf_event_open, SYS_keyctl, SYS_add_key,
-        SYS_request_key, SYS_kexec_load, SYS_init_module, SYS_finit_module, SYS_delete_module, SYS_userfaultfd, SYS_fanotify_init,
-        SYS_quotactl, SYS_swapon, SYS_swapoff,
-#ifdef SYS_kexec_file_load
-        SYS_kexec_file_load,
-#endif
-#ifdef SYS_open_tree
-        SYS_open_tree, SYS_move_mount, SYS_fsopen, SYS_fsconfig, SYS_fsmount, SYS_fspick,
-#endif
-#ifdef SYS_mount_setattr
-        SYS_mount_setattr,
-#endif
-#ifdef SYS_pidfd_getfd
-        SYS_pidfd_getfd,
-#endif
-    };
-    for (long nr : refused)
-        deny(nr, EPERM);
-    add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
-    if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
-        return false;
+    // Descriptor flags, never a lock, a lease or a notification.
+    allowWhen(SYS_fcntl, 1, {F_GETFD, F_SETFD, F_GETFL, F_SETFL});
+    // A thread's name and an anonymous mapping's name.
+    allowWhen(SYS_prctl, 0, {PR_SET_NAME, PR_GET_NAME, 0x53564d41u /* PR_SET_VMA */});
+    // A signal, a resource limit or the processors only for itself (0: itself).
+    allowWhen(SYS_kill, 0, {self});
+    allowWhen(SYS_tgkill, 0, {self});
+    allowWhen(SYS_rt_tgsigqueueinfo, 0, {self});
+    allowWhen(SYS_prlimit64, 0, {0, self});
+    allowWhen(SYS_sched_getaffinity, 0, {0, self});
+    // Anything else: refused.
+    add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
     sock_fprog program{static_cast<unsigned short>(f.size()), f.data()};
-    // Every thread of the process (TSYNC), else this one alone where the kernel has no seccomp() call.
-    if (::syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &program) == 0)
-        return true;
-    return errno == ENOSYS && ::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program, 0, 0) == 0;
+    // Every thread of the process (TSYNC): 0, or the id of a thread it could not join (then the child draws nothing).
+    return ::syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &program) == 0;
 #endif
+}
+
+} // namespace
+
+bool confineRenderer()
+{
+    // Both or nothing: the child draws nothing when either cannot be installed (ADR-0035 6-20: fail closed).
+    return ::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0 && restrictFiles() && installFilter();
+}
+
+QStringList rendererEnvironment()
+{
+    QStringList env;
+    // The locale only: never the bus address, the display, the session's or the user's own variables.
+    for (const char *name : {"LANG", "LC_ALL", "LC_CTYPE"}) {
+        const QByteArray value = qgetenv(name);
+        if (!value.isEmpty())
+            env << QString::fromLatin1(name) + QLatin1Char('=') + QString::fromLocal8Bit(value);
+    }
+#ifdef __SANITIZE_ADDRESS__
+    // A sanitizer build (the tests): LeakSanitizer's check at exit uses ptrace, which the filter refuses.
+    env << QStringLiteral("ASAN_OPTIONS=detect_leaks=0");
+#endif
+    return env;
 }
 
 bool isPreviewChildInvocation(int argc, char **argv)
@@ -282,8 +359,21 @@ int previewChildMain(int argc, char **argv)
     // Before a byte of the document is read.
     if (!confineRenderer())
         return 3;
+    // The document is descriptor 0, never a path (Landlock lets no path outside /usr open).
+    QFile input;
+    if (!input.open(STDIN_FILENO, QIODevice::ReadOnly, QFileDevice::DontCloseHandle))
+        return 1;
     QPdfDocument document;
-    if (document.load(QStringLiteral("/dev/stdin")) != QPdfDocument::Error::None)
+    document.load(&input);
+    if (document.status() == QPdfDocument::Status::Loading) {
+        QEventLoop loop;
+        QObject::connect(&document, &QPdfDocument::statusChanged, &loop, [&loop](QPdfDocument::Status status) {
+            if (status != QPdfDocument::Status::Loading)
+                loop.quit();
+        });
+        loop.exec();
+    }
+    if (document.status() != QPdfDocument::Status::Ready)
         return 1;
     const int pages = document.pageCount();
     if (pages <= 0 || pages > kMaxPages || page >= pages)
@@ -322,16 +412,18 @@ Rendered renderPreview(const QStringList &command, int spoolFd, int page, const 
 {
     if (command.isEmpty() || spoolFd < 0 || page < 0)
         return {};
+    // One child at a time: wait for the one drawing (its deadline bounds the wait), unless this one is stopped meanwhile.
+    while (!s_rendering.tryLock(50)) {
+        if (stopped && stopped())
+            return {};
+    }
+    const struct Unlock {
+        ~Unlock() { s_rendering.unlock(); }
+    } unlock;
     const QSize want = max.isEmpty() ? QSize(0, 0) : max.boundedTo(QSize(kMaxPreviewSide, kMaxPreviewSide));
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    for (const char *name : {"DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_ACTIVATION_TOKEN",
-                             "DESKTOP_STARTUP_ID"})
-        env.remove(QString::fromLatin1(name));
-    env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
-#ifdef __SANITIZE_ADDRESS__
-    // A sanitizer build (the tests): LeakSanitizer's check at exit uses ptrace, which the filter refuses.
-    env.insert(QStringLiteral("ASAN_OPTIONS"), QStringLiteral("detect_leaks=0"));
-#endif
+    QProcessEnvironment env;
+    for (const QString &entry : rendererEnvironment())
+        env.insert(entry.section(QLatin1Char('='), 0, 0), entry.section(QLatin1Char('='), 1));
     QProcess child;
     child.setProcessEnvironment(env);
     child.setProgram(command.first());
@@ -342,19 +434,25 @@ Rendered renderPreview(const QStringList &command, int spoolFd, int page, const 
     child.setWorkingDirectory(QStringLiteral("/"));
     // Only its standard input, output and error.
     child.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors | QProcess::UnixProcessFlag::ResetSignalHandlers);
-    // In the forked child before exec (async-signal-safe calls only): no core file, limits on memory and CPU time, and it dies
-    // with the thread that started it. The memory in use (RLIMIT_DATA), not the address space: Qt PDF's pdfium reserves tens of
-    // GiB of address space it never uses (PartitionAlloc's pools; the child stopped at 32 GiB of RLIMIT_AS), and a page of
-    // 2048 pixels needs less than 256 MiB.
+    // In the forked child before exec (async-signal-safe calls only): a session of its own (no terminal, not grassfield-portal's
+    // process group), no core file, limits on its data in use and CPU time, the OOM killer's first choice, and it dies with the
+    // thread that started it.
     child.setChildProcessModifier([] {
+        ::setsid();
 #ifndef __SANITIZE_ADDRESS__ // a sanitizer build maps terabytes of shadow memory
-        struct rlimit data = {1UL << 30, 1UL << 30};
+        struct rlimit data = {kChildDataBytes, kChildDataBytes};
         ::setrlimit(RLIMIT_DATA, &data);
 #endif
         struct rlimit cpu = {10, 10};
         ::setrlimit(RLIMIT_CPU, &cpu);
         struct rlimit core = {0, 0};
         ::setrlimit(RLIMIT_CORE, &core);
+        const int oom = ::open("/proc/self/oom_score_adj", O_WRONLY | O_CLOEXEC);
+        if (oom >= 0) {
+            ssize_t written = ::write(oom, "1000", 4);
+            (void)written;
+            ::close(oom);
+        }
         ::prctl(PR_SET_PDEATHSIG, SIGKILL);
     });
     child.start(QIODevice::ReadOnly);

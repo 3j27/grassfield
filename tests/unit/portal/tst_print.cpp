@@ -34,10 +34,17 @@
 #include <cups/cups.h>
 
 #include <fcntl.h>
+#include <pthread.h>
+#include <sched.h>
+#include <sys/file.h>
+#include <sys/inotify.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -1050,9 +1057,11 @@ TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
     EXPECT_EQ(leftovers(folder), QStringList());
 }
 
-// Step 6b: the child that draws a page installs a filter before it reads the document: it can still read files (the fonts), but
-// it cannot write, make, truncate, remove, rename or change one, open a socket (no bus, no network), run a program or signal
-// another process.
+// Step 6b: the child that draws a page confines itself before it reads the document (ADR-0035 6-10, 6-20; the security review of
+// step 6b's BLOCKER 1 and MAJOR 2, whose probes these checks are): it reads files under /usr (the fonts) and nothing else (no
+// file of the user's, no /proc, no terminal), writes, makes, truncates, removes, renames or changes no file, opens no socket (no
+// bus, no network), runs no program, makes no process (a thread only, never a namespace), signals, re-limits or re-schedules no
+// other process, takes no lock and watches no file.
 TEST(PrintPreview, TheChildThatDrawsIsConfined)
 {
     QTemporaryDir dir;
@@ -1063,34 +1072,48 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
     ASSERT_TRUE(keep.open(QIODevice::WriteOnly));
     keep.write("keep");
     keep.close();
+    const QByteArray environ = "/proc/" + QByteArray::number(::getpid()) + "/environ";
     int report[2];
     ASSERT_EQ(::pipe2(report, O_CLOEXEC), 0);
+    // A descriptor opened before, read-only, as the document is.
+    const int document = ::open(existing.constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(document, 0);
     const pid_t pid = ::fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {
         // The child: each check that fails sets its bit.
-        quint32 failed = 0;
+        quint64 failed = 0;
         int bit = 0;
         const auto check = [&](bool ok) {
             if (!ok)
-                failed |= 1u << bit;
+                failed |= quint64(1) << bit;
             ++bit;
         };
-        const auto refused = [](long result) { return result < 0 && errno == EPERM; };
+        // Refused by the seccomp list (EPERM) or by Landlock (EACCES).
+        const auto refused = [](long result) { return result < 0 && (errno == EPERM || errno == EACCES); };
         if (!confineRenderer())
-            failed = 0xffffffffu;
-        const int readable = ::open(existing.constData(), O_RDONLY | O_CLOEXEC);
-        check(readable >= 0);
+            failed = ~quint64(0);
+        // 0-1: what it may do: read what it was given, read under /usr.
         char byte = 0;
-        check(readable >= 0 && ::read(readable, &byte, 1) == 1 && byte == 'k');
+        check(::read(document, &byte, 1) == 1 && byte == 'k');
+        const int fonts = ::open("/usr", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        check(fonts >= 0);
+        // 2-4: no file of the user's, no /proc (another process's environment: the review's probe), no terminal.
+        check(refused(::open(existing.constData(), O_RDONLY | O_CLOEXEC)));
+        check(refused(::open(environ.constData(), O_RDONLY | O_CLOEXEC)));
+        check(refused(::open("/dev/tty", O_RDONLY | O_CLOEXEC)));
+        // 5-11: no write, creation, truncation or append anywhere.
         check(refused(::open(existing.constData(), O_WRONLY | O_CLOEXEC)));
         check(refused(::open(existing.constData(), O_RDWR | O_CLOEXEC)));
         check(refused(::open(existing.constData(), O_RDONLY | O_TRUNC | O_CLOEXEC)));
         check(refused(::open(existing.constData(), O_WRONLY | O_APPEND | O_CLOEXEC)));
         check(refused(::open(made.constData(), O_RDONLY | O_CREAT | O_CLOEXEC, 0600)));
         check(refused(::openat(AT_FDCWD, made.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600)));
+        check(refused(::open("/usr/.grassfield-probe", O_WRONLY | O_CREAT | O_CLOEXEC, 0600)));
+        // 12-13: no socket.
         check(refused(::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)));
         check(refused(::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0)));
+        // 14-20: no change to a file or a folder.
         check(refused(::unlink(existing.constData())));
         check(refused(::rename(existing.constData(), made.constData())));
         check(refused(::mkdir(made.constData(), 0700)));
@@ -1098,20 +1121,56 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
         check(refused(::link(existing.constData(), made.constData())));
         check(refused(::chmod(existing.constData(), 0777)));
         check(refused(::truncate(existing.constData(), 0)));
+        // 21-26: no program, no process, no namespace (clone with CLONE_NEWUSER: the review's probe), io_uring refused.
         char *const argv[] = {const_cast<char *>("/bin/true"), nullptr};
         check(refused(::execv("/bin/true", argv)));
-        check(::syscall(SYS_io_uring_setup, 1, nullptr) < 0 && errno == ENOSYS);
-        check(refused(::unshare(0x10000000 /* CLONE_NEWUSER */)));
-        // A signal to itself only: never to its parent (grassfield-portal) or its process group.
+        const long forked = ::fork();
+        if (forked == 0)
+            ::_exit(0);
+        check(refused(forked));
+        const long cloned = ::syscall(SYS_clone, long(SIGCHLD), 0L, 0L, 0L, 0L);
+        if (cloned == 0)
+            ::_exit(0);
+        check(refused(cloned));
+        const long user = ::syscall(SYS_clone, long(CLONE_NEWUSER | SIGCHLD), 0L, 0L, 0L, 0L);
+        if (user == 0)
+            ::_exit(0);
+        check(refused(user));
+        check(refused(::unshare(CLONE_NEWUSER)));
+        check(refused(::syscall(SYS_io_uring_setup, 1, nullptr)));
+        // 27-28: a thread of its own still starts (glibc falls back from clone3 to clone).
+        pthread_t thread;
+        const int started = ::pthread_create(&thread, nullptr, [](void *) -> void * { return reinterpret_cast<void *>(42); }, nullptr);
+        void *returned = nullptr;
+        check(started == 0 && ::pthread_join(thread, &returned) == 0 && returned == reinterpret_cast<void *>(42));
         check(::kill(::getpid(), 0) == 0);
-        check(refused(::kill(::getppid(), 0)));
+        // 29-36: nothing done to another process (its parent stands for grassfield-portal): no signal, no resource limit, no
+        // priority or scheduling change (the review's probes, with values that would change nothing if they went).
+        const pid_t parent = ::getppid();
+        check(refused(::kill(parent, 0)));
         check(refused(::kill(0, 0)));
-        check(refused(::syscall(SYS_tgkill, ::getppid(), ::getppid(), 0)));
+        check(refused(::syscall(SYS_tgkill, parent, parent, 0)));
+        struct rlimit limit {};
+        check(refused(::syscall(SYS_prlimit64, parent, RLIMIT_NOFILE, nullptr, &limit)));
+        check(::syscall(SYS_prlimit64, 0, RLIMIT_NOFILE, nullptr, &limit) == 0);
+        check(refused(::setpriority(PRIO_PROCESS, id_t(parent), 0)));
+        struct sched_param param {};
+        check(refused(::sched_setscheduler(parent, SCHED_OTHER, &param)));
+        check(refused(::syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, parent, 0)));
+        // 37-40: no lock (a covert channel: the review's probe), no watch, no terminal input (TIOCSTI), no ioctl at all.
+        check(refused(::flock(document, LOCK_EX | LOCK_NB)));
+        struct flock region {};
+        region.l_type = F_RDLCK;
+        check(refused(::fcntl(document, F_SETLK, &region)));
+        check(refused(::inotify_init1(IN_CLOEXEC)));
+        char c = '#';
+        check(refused(::ioctl(STDERR_FILENO, TIOCSTI, &c)));
         ::write(report[1], &failed, sizeof failed);
         ::_exit(0);
     }
     ::close(report[1]);
-    quint32 failed = 0xffffffffu;
+    ::close(document);
+    quint64 failed = ~quint64(0);
     ASSERT_EQ(::read(report[0], &failed, sizeof failed), ssize_t(sizeof failed));
     ::close(report[0]);
     int status = 0;
@@ -1121,6 +1180,45 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
     ASSERT_TRUE(keep.open(QIODevice::ReadOnly));
     EXPECT_EQ(keep.readAll(), QByteArray("keep"));
     EXPECT_FALSE(QFileInfo::exists(QFile::decodeName(made)));
+    EXPECT_FALSE(QFileInfo::exists(QStringLiteral("/usr/.grassfield-probe")));
+}
+
+// The child's environment is allow-listed (the review's MAJOR 2): the locale only, never the bus address, the display or the
+// user's own variables; it starts in a session of its own (no terminal, not its parent's process group).
+TEST(PrintPreview, TheChildGetsOnlyTheLocale)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    qputenv("GRASSFIELD_TEST_SECRET", "hunter2");
+    const QStringList env = rendererEnvironment();
+    for (const QString &entry : env)
+        EXPECT_TRUE(entry.startsWith(QStringLiteral("LANG=")) || entry.startsWith(QStringLiteral("LC_")) || entry.startsWith(QStringLiteral("ASAN_OPTIONS=")))
+            << entry.toStdString();
+    // A stand-in for the child that writes what it got: its environment, and whether it leads a session of its own.
+    QFile document(dir.filePath(QStringLiteral("doc.pdf")));
+    ASSERT_TRUE(document.open(QIODevice::WriteOnly));
+    document.write("%PDF-1.4\n");
+    document.close();
+    const int fd = ::open(QFile::encodeName(document.fileName()).constData(), O_RDONLY | O_CLOEXEC);
+    const QString out = dir.filePath(QStringLiteral("env"));
+    EXPECT_FALSE(renderPreview({QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+                                QStringLiteral("env >\"$0\"; read -r line </proc/$$/stat; set -- $line; echo \"session $6 of $1\" >>\"$0\""), out},
+                               fd, 0, QSize(10, 10), 3000)
+                     .ok);
+    ::close(fd);
+    qunsetenv("GRASSFIELD_TEST_SECRET");
+    QFile got(out);
+    ASSERT_TRUE(got.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(got.readAll());
+    EXPECT_FALSE(text.contains(QStringLiteral("hunter2")));
+    EXPECT_FALSE(text.contains(QStringLiteral("DBUS_SESSION_BUS_ADDRESS")));
+    EXPECT_FALSE(text.contains(QStringLiteral("WAYLAND_DISPLAY")));
+    EXPECT_FALSE(text.contains(QStringLiteral("HOME=")));
+    // Its session is its own (setsid): its session id is its own pid.
+    const QStringList session = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts).filter(QStringLiteral("session ")).value(0).split(QLatin1Char(' '));
+    ASSERT_EQ(session.size(), 4) << text.toStdString();
+    EXPECT_EQ(session.at(1), session.at(3));
+    EXPECT_NE(session.at(1), QString::number(::getsid(0))) << "not the session it was started from";
 }
 
 // Step 6b: a document sent first is kept in an unlinked file of the backend's own (0600), only when it is a PDF and within the

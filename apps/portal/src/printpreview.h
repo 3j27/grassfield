@@ -4,11 +4,18 @@
 //
 // The document comes from the application, a sandboxed one too, and grassfield-portal runs as the user without a sandbox: it never
 // reads the PDF itself. Each page is drawn by a child process of its own (this binary, "--print-preview"; Qt PDF, the pdfium that
-// Preview uses), which reads the private file on its standard input and answers the page's pixels on its standard output: no bus
-// address, no display, no descriptor but those three, limits on memory and CPU time, a deadline, killed with its parent, and,
-// before it reads a byte of the document, a seccomp filter that refuses it sockets, programs, a signal to any process but
-// itself, and any change to a file (no write, create, truncate, rename, link, removal or mode change; no io_uring, ptrace or
-// namespaces). grassfield-portal then reads only a header and raw pixels (no image decoder runs on what the child answers).
+// Preview uses), which reads the private file on its standard input (descriptor 0, never a path) and answers the page's pixels on
+// its standard output. The child (ADR-0035 6-10, as the security review of step 6b required it, 6-20 to 6-22):
+// - starts in a session of its own (setsid: no terminal), with an allow-listed environment (no bus address, display or the
+//   user's variables), no descriptor but its three, at most 512 MiB of data, 10 s of CPU, the OOM killer's first choice, a
+//   deadline, killed with its parent; one child at a time for the whole process;
+// - before it reads a byte of the document, restricts itself with Landlock to reading files and folders under /usr (the fonts;
+//   no file of the user's, no /proc, no /dev/tty; no write anywhere; no TCP; signals and abstract sockets scoped to itself where
+//   the kernel has ABI 6), then installs a seccomp allow-list measured on what Qt PDF calls (anything else fails: no socket, no
+//   program, no fork, a thread only, no ioctl, no lock, no inotify, a signal or a resource limit only for itself);
+// - draws nothing when either cannot be installed (an older kernel, another architecture): the sheet says "No Preview" and the
+//   document still prints.
+// grassfield-portal then reads only a header and raw pixels (no image decoder runs on what the child answers).
 #pragma once
 
 #include <QImage>
@@ -65,8 +72,11 @@ Rendered renderPreview(const QStringList &command, int spoolFd, int page, const 
 bool isPreviewChildInvocation(int argc, char **argv);
 int previewChildMain(int argc, char **argv);
 
-// The seccomp filter the child installs before it reads the document (see above): true when installed. Exposed for the tests.
+// The Landlock domain and the seccomp allow-list the child installs before it reads the document (see above): true when both
+// are installed, false (and the child draws nothing) when either cannot be. Exposed for the tests.
 bool confineRenderer();
+// The environment the child gets: only the locale's variables (and a sanitizer build's options). Exposed for the tests.
+QStringList rendererEnvironment();
 
 // The pages drawn, for the QML (image://printpreview/<key>), until Print removes them (their request ended).
 class PreviewImages
