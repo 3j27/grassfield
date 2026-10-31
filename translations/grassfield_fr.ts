@@ -12528,6 +12528,10 @@
         <translation>Préparation de la vidéo</translation>
     </message>
     <message>
+        <source>Photographs</source>
+        <translation>Photographies</translation>
+    </message>
+    <message>
         <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
         <translation>Une fois par jour, Grassfield contacte la source que vous choisissez : commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org, ou api.nasa.gov et apod.nasa.gov. Ces services voient votre adresse IP.</translation>
     </message>

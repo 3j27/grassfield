@@ -108,12 +108,15 @@ Backend::Backend(QObject *parent)
         m_wallpaperCache = dev + QStringLiteral("/cache/wallpapers");
         const QString pictures = grassfield::apps::runmode::devValue("PICTURES_DIR");
         m_picturesDir = pictures.isEmpty() ? dev + QStringLiteral("/wallpapers") : pictures;
+        // Under .dev, where the dev guard lets a wallpaper be (the package installs them under /usr/share).
+        m_wallpaperPhotosDir = dev + QStringLiteral("/photos");
     } else {
         m_wallpaperTool = QStringLiteral("/usr/lib/grassfield/grassfield-wallpaper");
         const QString xdg = qEnvironmentVariable("XDG_CACHE_HOME");
         m_wallpaperCache = (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.cache") : xdg) + QStringLiteral("/grassfield/wallpapers");
         const QString pictures = grassfield::apps::runmode::devValue("PICTURES_DIR");
         m_picturesDir = pictures.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) : pictures;
+        m_wallpaperPhotosDir = QStringLiteral("/usr/share/grassfield/wallpapers/photos");
     }
 }
 

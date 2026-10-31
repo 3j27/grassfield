@@ -116,6 +116,22 @@ and IQ-B3 here changes the palette only, not which controls read it.
     ships.
   - The pull request states the total package weight. They install under `/usr/share/grassfield/wallpapers/` and go
     through the helper like any picture (ADR-0016: the shell decodes only the helper's output).
+  - **Step 2c as built** (after the owner's call of 2026-10-31, "Owner decisions", and the owner's « Au build » for where
+    the files live): `packaging/arch/wallpaper-photos.json` is the one list (names in English and French, author, credit,
+    licence, Commons page, original, SHA-1); the PKGBUILD downloads the originals from `upload.wikimedia.org` (the ids
+    and addresses in `wallpaper-pins.sh`), checks each by the SHA-1 Commons publishes, shrinks them with the build-only
+    `grassfield-wallpaper-shrink` (at most 5120 px wide, JPEG quality 90, the EXIF orientation applied, no metadata kept;
+    the installed helper still writes only into its cache) and installs them with `photos.json` under
+    `/usr/share/grassfield/wallpapers/photos/` in a split package, `grassfield-wallpapers`, which `grassfield-desktop`
+    depends on, as it does on the icon theme (so it is downloaded again with each release, like the icons). Settings >
+    Wallpaper lists them in a Photographs section after the Grassfield artwork (`WallpaperConfig.parsePhotos`; an entry of
+    the wrong shape is left out, an id is a plain file name); one is chosen as a picture (source `file`, through the
+    helper like any other) and About This Wallpaper names its author, source and licence. The desktop's own About This
+    Wallpaper card shows them once `shell/desktop` has merged. Legal: E40 and `THIRD_PARTY.md` "5c";
+    `tests/ci/wallpaper_photos.py` holds the list, the pins, the PKGBUILD and the legal texts together. The package weight:
+    estimated at about 70 MB from the 960 px thumbnails at the same quality (the originals could not be downloaded in the
+    container that built it); the build gives the real figure. `scripts/dev/photos.sh` prepares them under `.dev/photos`
+    for a dev session.
 - **Default (IQ-W1, owner: C, the time of day).** The Grassfield hills through the day: **Dawn**, **Day**, **Evening**
   and **Night**, like macOS's dynamic desktop. Light and dark still choose the variant set: four light palettes in the
   light appearance, four dark ones in the dark appearance (the same scenes, darker; the dark Evening is today's
@@ -516,6 +532,39 @@ title bar colour, text `text`; ADR-0035 D-8), and the session's Hyprland ground 
 3 makes it the default artwork's ground (ID-2).
 Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
 themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
+
+**The photographs (step 2c, 2026-10-31).** Shown the list (a review page: each photograph's thumbnail cropped to 16:10
+under the menu bar and the Dock, its Commons page, licence, author, size, the closest well-known OS wallpaper and what to
+know), the owner kept all sixteen and answered the three licence questions: « domaine public (04, 16) : acceptées »
+(a deliberate exception to the integrator's "CC0 or CC BY": 04 was released into the public domain by its author, 16 is
+a work of the U.S. federal government whose status does not cover the agency's name or logo, neither shown);
+« Unsplash (01, 15) : CC0 de Commons accepté » (published on Unsplash before 2017-06-05, when it was CC0, and uploaded to
+Commons in 2017 from archived pages; Commons marks them CC0); « FIND/47 (08, 12) : acceptées » (the source library
+states CC BY 4.0 for all its photos, checked on its page; Commons has no licence review on these two files). The
+resemblance notes shown with them: 08 is the closest of the list to Windows XP's "Bliss" and 12 recalls macOS Big Sur's
+coast at dusk; the side-by-side check of E32 before release covers them. Found on Wikimedia Commons (the licence read
+from each file page); 55 other files were rejected (CC BY-SA, a look-alike of an OS wallpaper, a person, a vehicle, a
+watermark, flat light). The originals weigh 235.4 MB together; the files, their `docs/legal` entries (source, author,
+licence, date, changes made), the install path and the package weight come with step 2c's pull request.
+
+| No. | Commons file | Author | Licence | Original |
+|---|---|---|---|---|
+| 01 | `Matt Palmer 2016 (Unsplash).jpg` | Matt Palmer (Unsplash) | CC0 | 5760 × 3840, 14.3 MB |
+| 02 | `Łąki nad Wisłą pod Brzeźnicą po wschodzie słońca, 20241116 0725 2676.jpg` | Jakub Hałun | CC BY 4.0 | 4807 × 3198, 9.1 MB |
+| 03 | `Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322.jpg` | Jakub Hałun | CC BY 4.0 | 5340 × 3566, 12.5 MB |
+| 04 | `Desna river Vinn meadow 2016 G2.jpg` | George Chernilevsky | public domain (PD-self) | 6000 × 4000, 8.9 MB |
+| 05 | `Чуйский хребет и Курайская степь.jpg` | Aleksandr Rudny | CC BY 4.0 | 4857 × 2732, 8.1 MB |
+| 06 | `Tatry - panorama z Polskiego Spiszu.jpg` | Qvidemus | CC BY 3.0 | 8364 × 4850, 28.8 MB |
+| 07 | `Ingushetia, Закатный золотой свет на склонах долины Армхи, горы Ингушетии, Кавказ.jpg` | Vyacheslav Argenberg | CC BY 4.0 | 6000 × 4000, 19.4 MB |
+| 08 | `Hyogo-Rice terraces in Ueyama.(early autumn.)-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 30.2 MB |
+| 09 | `Dew on grass (21677746153).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.3 MB |
+| 10 | `Grass (14448015527).jpg` | Yuri Samoilov | CC BY 2.0 | 5760 × 3840, 4.0 MB |
+| 11 | `Grass at Sunrise (36993588030).jpg` | Mikhail Lazarev | CC BY 2.0 | 6000 × 4000, 6.1 MB |
+| 12 | `Kyoto-Evening view of Sodeshi rice terraces.-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 25.0 MB |
+| 13 | `Wschód słońca nad łąkami pod Tyńcem w Krakowie, 20260301 0636 4894.jpg` | Jakub Hałun | CC BY 4.0 | 4686 × 3118, 13.6 MB |
+| 14 | `Dew on grass (22309335571).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.9 MB |
+| 15 | `Waving grass under mountains (Unsplash).jpg` | Thomas Rohlfs (Unsplash) | CC0 | 4608 × 2592, 9.2 MB |
+| 16 | `Milky Way over Cronan Ranch (52321033535).jpg` | Bureau of Land Management California | public domain (PD-USGov-BLM) | 6965 × 4752, 25.0 MB |
 
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
