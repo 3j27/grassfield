@@ -250,11 +250,14 @@ TestCase {
 
     // The shell runs the check (it answered "ok"): the pane waits for the file's next answer, not for the pending logout alone.
     function test_theShellsAnswerEndsTheWait() {
-        const t = make(available(Date.now() - 5 * 60 * 1000));
+        // One time for both files: checkedAt keeps whole seconds, and two Date.now() calls around the page's creation could
+        // fall on either side of a second, which made the pending logout below look like a new answer (1 run in 4).
+        const before = Date.now() - 5 * 60 * 1000;
+        const t = make(available(before));
         t.backend.finished("update.ask", true, "ok\n");
         verify(t.updates.checking);
         compare(t.backend.runs, []);
-        t.backend.write(testCase.stateFile, JSON.stringify(Object.assign(available(Date.now() - 5 * 60 * 1000), {logoutPending: true})));
+        t.backend.write(testCase.stateFile, JSON.stringify(Object.assign(available(before), {logoutPending: true})));
         verify(t.updates.checking, "the pending logout written alone is no answer");
         t.backend.write(testCase.stateFile, JSON.stringify(answer("up-to-date", {grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}})));
         verify(!t.updates.checking);
