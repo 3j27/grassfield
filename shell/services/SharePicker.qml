@@ -42,12 +42,14 @@ Singleton {
             })))
     readonly property bool sharing: root.streams.length > 0
     // Stream id -> {kind, value, title} or null; the choices answered that no stream has taken yet ({at, what}). An app starts
-    // its stream as soon as the portal answers it: a choice older than 10 s names no stream (it may never have started one).
+    // its stream as soon as the portal answers it: a choice older than labelWindowMs names no stream (it may never have
+    // started one; decision 7-12: kept short, the label is best effort).
     property var labels: ({})
     property var pending: []
+    readonly property int labelWindowMs: 3000
 
     onStreamsChanged: {
-        const next = Logic.streamLabels(root.labels, root.streams, root.pending, Date.now(), 10000);
+        const next = Logic.streamLabels(root.labels, root.streams, root.pending, Date.now(), root.labelWindowMs);
         root.labels = next.labels;
         root.pending = next.pending;
     }
@@ -123,8 +125,8 @@ Singleton {
             root.cancel();
     }
 
-    // Which listed windows hide themselves from capture: Hyprland's effective rule, one getprop per window with an address, all
-    // at once, 1 s each at most, each answer on its own line after its address.
+    // Which listed windows hide themselves from capture: Hyprland's effective rule, one getprop per window with an address, 16
+    // at a time (Hyprland's socket takes a backlog of 10), 1 s each at most, each answer on its own line after its address.
     function askBlocked(): void {
         if (root.current === null || !root.shown || blockedQuery.running)
             return;
@@ -136,7 +138,7 @@ Singleton {
         }
         root.blockedFor = root.current.id;
         // Each answer goes out as one write of one line (under PIPE_BUF: atomic), so the parallel answers never interleave.
-        blockedQuery.command = ["sh", "-c", "for a; do (r=$(timeout 1 hyprctl -j getprop \"address:0x$a\" no_screen_share 2>/dev/null | tr -d '\\n'); printf '%s %s\\n' \"$a\" \"$r\") & done; wait", "sh"].concat(addresses);
+        blockedQuery.command = ["sh", "-c", "n=0; for a; do (r=$(timeout 1 hyprctl -j getprop \"address:0x$a\" no_screen_share 2>/dev/null | tr -d '\\n'); printf '%s %s\\n' \"$a\" \"$r\") & n=$((n + 1)); [ $((n % 16)) -ne 0 ] || wait; done; wait", "sh"].concat(addresses);
         blockedQuery.running = true;
     }
 
@@ -156,10 +158,19 @@ Singleton {
                 }
             }
         }
-        // A newer request's query waited for this one.
+        // A newer request's query waited for this one. A query that ended without an answer read (sh could not start: Quickshell
+        // reports it only by stopping) leaves no window greyed, as an unreadable answer does: Hyprland still blacks out a
+        // window that hides from capture in every capture (decision 7-13).
         onRunningChanged: {
-            if (!running && root.current !== null && root.shown && !root.blockedKnown && root.blockedFor !== root.current.id)
+            if (running || root.current === null || !root.shown || root.blockedKnown)
+                return;
+            if (root.blockedFor !== root.current.id) {
                 Qt.callLater(root.askBlocked);
+            } else {
+                console.warn("SharePicker: the windows' capture rules could not be read; none is greyed");
+                root.blocked = [];
+                root.blockedKnown = true;
+            }
         }
     }
 

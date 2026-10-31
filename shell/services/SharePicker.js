@@ -153,10 +153,12 @@ function sharingStreams(nodes) {
     return out;
 }
 
-// What each stream shares, for the indicator's menu: a stream that appears takes the choice the picker answered within
-// `maxAgeMs` (SharePicker: 10 s) only when it is the one new stream and that the one choice waiting; anything else is no
-// label ("Screen or window"), never a guess that could name less than is shared (review of step 7b, MINOR 2). A share an app
-// restored with its token had no picker. `labels`: stream id -> {kind, value, title} or null.
+// What each stream shares, for the indicator's menu, best effort: a stream that appears takes the choice the picker answered
+// within `maxAgeMs` (SharePicker: 3 s; an app starts its stream as soon as the portal answers it) only when it is the one new
+// stream and that the one choice waiting; anything else is no label ("Screen or window") (review of step 7b, MINOR 2). The
+// portal does not say which app a stream is for: an app that restores a share with its token (no picker) within those 3 s,
+// while the app the picker answered has not started its own, takes that answer's label (decision 7-12). `labels`: stream id
+// -> {kind, value, title} or null.
 function streamLabels(labels, streams, pending, now, maxAgeMs) {
     const kept = {};
     let left = pending.filter(g => now - g.at <= maxAgeMs);

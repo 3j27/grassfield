@@ -127,7 +127,10 @@ Dialog {
                 }
             ]
             value: root.tab
-            onPicked: id => root.show(id)
+            onPicked: id => {
+                if (root.armed)
+                    root.show(id);
+            }
         },
         Rectangle {
             width: parent.width
@@ -438,7 +441,13 @@ Dialog {
         CheckBox {
             text: qsTr("Remember this choice")
             checked: root.remember
-            onToggled: root.remember = checked
+            // A click before the panel is armed changes nothing (7-8): the box shows root.remember again.
+            onToggled: {
+                if (root.armed)
+                    root.remember = checked;
+                else
+                    checked = Qt.binding(() => root.remember);
+            }
         }
     ]
 
