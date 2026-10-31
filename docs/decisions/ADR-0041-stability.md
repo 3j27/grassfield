@@ -154,7 +154,7 @@ down, how sleep behaves) is written in the table at the end of this step.
 - **S1. The security process and its unit, nothing moved yet.** `shell/security/` is made free of UI imports (ADR-0010 S1:
   the lock backdrop through a `Grassfield.Ui` type; popups closed by the UI on `SessionState.locked`, so `Lock.lock()`'s
   `Popups.close()` goes; the sleep notice through the notification server's public D-Bus interface), without a
-  behaviour change. A second root, `shell/security/shell.qml`, and its unit `grassfield-security.service` (`Restart=always`,
+  behaviour change. A second root, `shell/security.qml` (next to `shell.qml`, so `qs.*` resolves from the same directory), and its unit `grassfield-security.service` (`Restart=always`,
   `RestartSec=1`, `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `PartOf=` and `Requisite=graphical-session.target`,
   `ConditionEnvironment=GRASSFIELD_SESSION=1`, the same `UnsetEnvironment=` lines as the shell's, no
   `NoNewPrivileges` for the same reason as the shell's, `MemoryHigh=`/`MemoryMax=`/`CPUQuota=` set from the S1
@@ -167,7 +167,7 @@ down, how sleep behaves) is written in the table at the end of this step.
 - **S2. Everything that locks moves together: the lock, idle and the sleep inhibitor.** `Lock`, `LockView`, the
   crash-recovery marker, the stranded-lock takeover, `Idle` (dim, lock, display off) and `SleepInhibitor` with its
   `PrepareForSleep` watcher run in the security process. The IPC targets `lock lock`, `lock lid` and `lock status`
-  answer on the security instance (`qs ipc -p /usr/share/grassfield/security`), and every caller of `Lock.lock` or of
+  answer on the security instance (`qs ipc -p /usr/share/grassfield/shell/security.qml`), and every caller of `Lock.lock` or of
   the targets switches in the same pull request: in-process callers become IPC callers (`shell/overlay/SystemMenu.qml:72`,
   `shell/services/SessionState.qml:21` `requestLock`, `shell/shell.qml:88`, `shell/services/Popups.qml`,
   `shell/services/TilingSuggest.qml`), and the external ones change their path (the key bindings in
@@ -302,6 +302,31 @@ down, how sleep behaves) is written in the table at the end of this step.
   session (the unit starts at login before the shell, `systemctl --user status grassfield-security.service` active/running,
   the helper's line).
 - Review: opus security (R12: a new process in the lock's future path; at S1 it changes nothing about the lock).
+- Merged 2026-10-31 as 6fc2bb2e (#72, the opus security review PASS). The integrator's nested pass: the root runs with its
+  own instance ID beside the dev shell, its IPC answers `state` and `heartbeat` only, it takes no surface, no lock and no
+  bus name; the lock holds through a `kill -9` of the UI and the UI's restart takes it again; killing the security
+  process leaves the UI locked; a duplicate start is refused; 157 MB of RSS at idle.
+
+### S1 as built, second part, first slice (2026-10-31; the four items of #72's merge review)
+- `tests/security/security_unit.sh`: the root's check is an allow-list (it instantiates `ShellRoot` and `IpcHandler` only)
+  and refuses `Loader`, `LazyLoader`, `Component`, `source:`, `createComponent`, `createQmlObject` and a file import; the
+  deny-list let a `FloatingWindow`, a `PopupWindow` or a `Loader` of the lock module through.
+- `grassfield-security.service`: `MemoryHigh=320M` and `MemoryMax=640M` from the 157 MB measured (about twice and four
+  times: a slow leak reaches the first after days, a runaway one the second, R4); `CPUQuota=150%` as the UI unit's, since
+  the 50% of the first version would have throttled the lock's rendering and the PAM exchange from S2. S2 measures again
+  with the lock's surfaces and resets the three.
+- `grassfield-security-status` passes `--any-display` when `WAYLAND_DISPLAY` is not set (Quickshell 0.3.1: "instances
+  will not be filtered by the display connection they were launched on"), so it answers from a TTY; inside the session
+  the call is unchanged.
+- The paths that still named `shell/security/shell.qml` and `/usr/share/grassfield/security` in this ADR and in ADR-0010
+  now name `shell/security.qml` and `/usr/share/grassfield/shell/security.qml`.
+- Still deferred (needs a Quickshell): the UI-import freedom of `shell/security/` and the start-time measurement
+  (gate P5); the real-session checks of the first part.
+- Evidence (this container): `tests/security/security_unit.sh` exit 0 (17 PASS, the allow-list and the TTY check among
+  them); `unit_restart_limits.py` on the unit ok; `session_services.sh` 28 PASS; `python3 -I tests/ci/inventory.py` ok
+  (596); `git diff --check` clean. NOT VERIFIED: `grassfield-security-status` from a TTY on a machine with the session.
+- Review: opus security (the unit's guards and the status helper are in the lock's future path; the allow-list is the
+  test that keeps S1's root empty).
 
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
@@ -610,7 +635,7 @@ Goal: no input a process reads from the system, a file or another process can cr
 | Item | Kind | Justification | Decided by |
 |---|---|---|---|
 | `grassfield-shell-failed.service` | a `Type=oneshot` user unit, a POSIX sh script | systemd counts starts, not failures, and cannot see a lifetime; nothing but the `OnFailure=` path sees each failure as it happens; it runs for a moment, never a daemon | step 1a (SQ-2 sets its numbers) |
-| `grassfield-security.service` | a second Quickshell process (the same `qs` binary, the root `shell/security/shell.qml`) and its user unit | the owner's SQ-1 B (ADR-0010's direction, GF-050): the lock, polkit, idle and the inhibitor apart from the UI, as loginwindow is apart from the Dock; its memory and start time measured at S1 against P2 and P5 | SQ-1 B (owner, 2026-10-29) |
+| `grassfield-security.service` | a second Quickshell process (the same `qs` binary, the root `shell/security.qml`) and its user unit | the owner's SQ-1 B (ADR-0010's direction, GF-050): the lock, polkit, idle and the inhibitor apart from the UI, as loginwindow is apart from the Dock; its memory and start time measured at S1 against P2 and P5 | SQ-1 B (owner, 2026-10-29) |
 | `grassfield-hold` and `grassfield-unhold` | two split packages with `depends`, `provides` and `conflicts` only | the only mechanism pacman offers that refuses on every path and can be undone in one transaction; no code, no service; shipped only once the `[grassfield]` repository is published | SQ-3 |
 | the checker's toolkit comparison | no new unit: a read-only step of the shell's existing update checker, as the user | learns on every path that the toolkit moved under the session, with nothing run as root (ADR-0009:112; review of 2c0bd74 dropped the alpm hook of the first version) | step 2b |
 | `grassfield-shell-watchdog.timer` | a user timer and a `Type=oneshot` unit | a frozen shell is otherwise invisible; a timer runs no daemon; Quickshell offers no `sd_notify` watchdog (NOT VERIFIED: the step checks `qs --help`) | SQ-5 |
