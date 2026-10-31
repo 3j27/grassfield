@@ -10,6 +10,7 @@
 # clipboard, and a Grassfield notice shows it with "Open in Preview" (Preview is Grassfield's viewer, org.grassfield.Preview),
 # which opens every picture of that capture. Nothing names an Omarchy shortcut; no tensaku. Standard library only; strings
 # through tr() (gate I1: scripts/dev/check-i18n.py).
+import contextlib
 import datetime
 import json
 import os
@@ -140,11 +141,18 @@ def contains(r, px, py):
 
 
 def on_top(wins, px, py):
-    # The window drawn on top at a point, as Hyprland stacks them (desktop/state/ViewHitTester.cpp): pinned windows above
-    # everything, a window over a fullscreen one above it, floating windows above tiled ones, then the later in its clients
-    # list. None when no window is there.
+    # The window drawn on top at a point, as Hyprland draws them (render/Renderer.cpp, renderWorkspaceWindows and
+    # renderWorkspaceWindowsFullscreen): pinned windows above everything, then a special workspace's windows, a window over
+    # a fullscreen one above it, floating windows above tiled ones, then the later in its clients list. Where a fullscreen
+    # or zoomed window is, only the windows of its own workspace (and pinned ones) are drawn over it: a window of another
+    # display's workspace that reaches there is under it. None when no window is there.
     under = [e for e in wins if contains(e["rect"], px, py)]
-    return max(under, key=lambda e: (e["pinned"], not e["full"], e["floating"], e["order"]))["rect"] if under else None
+    full = [e["ws"] for e in under if e["full"]]
+    if full:
+        under = [e for e in under if e["pinned"] or e["ws"] in full or e["ws"] < 0]
+    if not under:
+        return None
+    return max(under, key=lambda e: (e["pinned"], e["ws"] < 0, not e["full"], e["floating"], e["order"]))["rect"]
 
 
 def topmost(wins, sel):
@@ -238,7 +246,8 @@ def save(folder, stem, grim):
                         shutil.copyfileobj(src, out)
                 except BaseException:
                     # A full disk, or a signal (SIGTERM is SystemExit here): no partial picture stays.
-                    os.unlink(path)
+                    with contextlib.suppress(OSError):
+                        os.unlink(path)
                     raise
                 return path
         return None
@@ -357,10 +366,22 @@ def notify(paths):
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError:
         return
-    remember(proc.pid)
     out = b""
     try:
-        out, _ = proc.communicate(timeout=WAIT_SECONDS)
+        # The pid is recorded once notify-send has printed the notice's id: from then on SIGINT closes its notice (before, it
+        # would only end it, leaving the notice up).
+        until = time.monotonic() + WAIT_SECONDS
+        shown = min(until, time.monotonic() + 5)  # the id comes as soon as the notice shows
+        while b"\n" not in out and time.monotonic() < shown:
+            if select.select([proc.stdout], [], [], 0.1)[0]:
+                chunk = os.read(proc.stdout.fileno(), 4096)
+                if not chunk:
+                    break
+                out += chunk
+        if b"\n" in out:
+            remember(proc.pid)
+        rest, _ = proc.communicate(timeout=max(0.1, until - time.monotonic()))
+        out += rest or b""
     except subprocess.TimeoutExpired:
         pass
     finally:
