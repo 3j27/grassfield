@@ -103,8 +103,9 @@ QVariantMap ProcessActions::prepare(const QString &action)
         p.session = isSessionProcess(cgroup);
         p.appUnit = classify(cgroup, true, false, false) == Kind::App;
         if (p.appUnit && handle.tty() != 0) {
-            const int parent = handle.ppid();
-            p.terminal = !cgroup.empty() && (m_unitReader ? m_unitReader(parent) : cgroupOf(m_procRoot, parent)) == cgroup;
+            // AD43: its parent now, read again through the descriptor and checked (not the pid the row or the sheet read).
+            const std::string parent = m_unitReader ? m_unitReader(handle.currentPpid()) : handle.parentCgroup(m_procRoot);
+            p.terminal = !cgroup.empty() && parent == cgroup;
         }
         p.handle = std::move(handle);
         if (p.session && session.isEmpty())

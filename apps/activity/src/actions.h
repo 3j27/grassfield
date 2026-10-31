@@ -64,8 +64,8 @@ public:
     // AM55's signals in their order: the number and the pop-up's title.
     static QVariantList signalChoices(bool withStop);
 
-    // Tests: the cgroup path of a process by its pid (by default a sheet process's is read through its descriptor, its
-    // parent's by path). A test's children are in the unit of whatever runs the tests, an app's terminal or a container.
+    // Tests: the cgroup path of a process by its pid (by default a sheet process's and its parent's are read through their
+    // descriptors). A test's children are in the unit of whatever runs the tests, an app's terminal or a container.
     using UnitReader = std::function<std::string(int pid)>;
     void setUnitReader(UnitReader reader) { m_unitReader = std::move(reader); }
 
