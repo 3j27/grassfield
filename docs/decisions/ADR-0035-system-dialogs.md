@@ -1162,8 +1162,10 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   shell at a time. Reads go into a buffer of gcr's secure memory that is wiped line by line (9-5).
 - **Identification** (`src/Identity.{h,cpp}`): `GetConnectionCredentials` of the caller, `ProcessFD`, its PID from
   `/proc/self/fdinfo`, `/proc/<pid>/exe` read and opened, the pidfd checked again; trusted only when the path names that
-  same file now and the file and every directory above it are root's and not writable by group or others; then
-  "keyring", "gnupg", "app" (one desktop entry whose Exec is exactly that program) or "unidentified" with the path (9-4).
+  same file now and the file and every directory above it are root's and not writable by group or others, and the process
+  is not traced; then "keyring", "gnupg", "ssh", "app" (one desktop entry whose Exec is exactly that program, for a
+  process that runs only trusted code) or "unidentified" with the path (9-4, 9-14). The row names the program whose
+  process opened the bus connection, not proof of whose code is asking (9-14).
   Caller text and desktop-entry text are flattened and capped (`src/Text.{h,cpp}`, 9-13).
 - **The protocol** `prompter/1` (`src/Protocol.{h,cpp}`; spec section 5, "prompter/1 protocol"): hello both ways, name,
   prompt, cancel and error from the bridge, answer from the shell; at most 8 requests outstanding (the 9th is answered
@@ -1172,7 +1174,8 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
 - **Packaging.** The unit (no namespace option, seccomp, no core file, no swap, non-dumpable, 9-8); the PKGBUILD builds the
   bridge, runs its unit tests in `check()` and installs it with its unit; `grassfield-desktop` and the build declare
   `gcr-4` (already installed with gnome-keyring, probe P15). libsecret is not used yet (9e).
-- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (35 cases, also under ASan and UBSan): the flattening and caps, the
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (35 cases at first, 41 after the opus review, also under ASan and
+  UBSan): the flattening and caps, the
   line parser on valid, malformed, oversized and hostile lines, the messages, the bound of 8 and ids never reused, the
   cgroup line and the unit names, the socket peer of a socket pair, the socket directory checks, trusted executables and
   desktop entries on temporary trees, processes through their pidfd (alive, then gone), the bus filter on bodies and
@@ -1187,8 +1190,15 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   requests at once (eight shown, the ninth cancelled at once, the eight answered); an answer to an unknown id ignored, a
   wrong answer cancelling its request, an over-long line closing the connection; the shell's departure cancelling and
   releasing, its return taking the name again; an attacker asking to replace the owner only queued and never called; the
-  bridge queued behind a holder, then owning the name; no test password in the output. `tests/shell/session_services.sh`
-  checks the unit, the autostart and the PKGBUILD.
+  bridge queued behind a holder, then owning the name; no test password in the output (44 checks at first, 49 after the
+  opus review: refused connections logged once, one connection's ninth open prompt refused, a malformed PerformPrompt
+  answered InvalidArgs). `tests/shell/session_services.sh` checks the unit, the autostart and the PKGBUILD.
+- **The opus security review of step 9a: PASS** (no blocker, no major), with three minors and four nits, all fixed in
+  the same pull request: the amendment's "in force" note now names the owner's agreement on the step as well (MINOR-1);
+  a requester row is documented as what it is, the program that opened the connection, with a rule for 9b (MINOR-2, 9-4,
+  9-14); `SO_PEERPIDFD`'s EINVAL refuses the peer (MINOR-3, 9-7); only slices between the user's manager and the shell's
+  unit (NIT-1, 9-7); at most 8 open prompts per connection and refusals logged once per 10 s (NIT-2, 9-11); a malformed
+  `PerformPrompt` answered InvalidArgs (NIT-3, 9-6); gcr-ssh-agent shown as "ssh" (NIT-4, 9-4).
 - **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
   never asks for the name: every prompt is the stock gcr-prompter's, as before.
 
@@ -1221,7 +1231,14 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   and inode). Rule applied: macOS names the app or warns; an interpreter (`python3` running any script), a wrapper or a
   launcher with arguments must never lend an entry's name to whatever it runs. The fixed paths: gnome-keyring is
   `/usr/bin/gnome-keyring-daemon`; for GnuPG the caller on the bus is `/usr/bin/pinentry-gnome3` (gpg-agent runs it),
-  `/usr/bin/gpg-agent` is listed too.
+  `/usr/bin/gpg-agent` is listed too. **Amended after the opus review of step 9a (MINOR-2, NIT-4):** the first version
+  said these rows name the program that asks "on another app's behalf"; what they prove is less: the row names the program
+  whose process opened the bus connection, and "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
+  with text of its own (gpg-agent's `GET_PASSPHRASE` through `gpg-connect-agent`, `pinentry-gnome3` run directly with its
+  own `SETDESC`, `ssh-add` through gcr-ssh-agent, an app asking gnome-keyring to unlock a collection). So `onBehalf` means
+  "the text below is another program's, unverified", and step 9b shows it so (spec section 5, SC3b), never as the
+  Keyring's, GnuPG's or SSH's own words. `/usr/lib/gcr-ssh-agent` (gcr-4, root's) asks on ssh's behalf and gets the role
+  `ssh` (D-9 lists gcr-ssh-agent among gcr's prompting clients); the first version showed it as "Unidentified program".
 - **9-5. How does the bridge read the shell?** Options: (a) `QLocalServer` and `QJsonDocument`, as the menu bridge;
   (b) a plain Unix socket read into a buffer of gcr's secure memory, a strict parser of flat JSON objects that leaves the
   password escaped in the line and decodes it straight into gcr's secure memory, the line wiped once handled; outgoing
@@ -1236,7 +1253,10 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   answer before hello, another protocol version) closes the connection, which cancels every request and releases the name
   until the shell reconnects; an unknown message type or a repeated hello is answered "error" and counted, and the ninth
   such line closes the connection. Rule applied: fail closed, never a password invented (D-9); the menu bridge closes on an
-  over-long line too (ADR-0008).
+  over-long line too (ADR-0008). **Amended after the opus review of step 9a (NIT-3):** a `PerformPrompt` of the wrong
+  shape was dropped without a reply (its caller waited for its own timeout); the filter now answers it
+  `org.freedesktop.DBus.Error.InvalidArgs` (from the main loop, never from GDBus's worker thread) and gcr still never sees
+  it.
 - **9-7. Who may connect, and how is the shell's cgroup read?** **Choice:** `SO_PEERCRED`'s user must be the bridge's; the
   peer's cgroup is read through `SO_PEERPIDFD` (Linux 6.5): the pidfd's PID from its fdinfo, `/proc/<pid>/cgroup`, then
   the pidfd checked alive, so a reused PID cannot pass. On an older kernel the PID of `SO_PEERCRED` is read (a residual
@@ -1246,7 +1266,13 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   last component only, as a container has no user manager. One shell at a time ("busy"). The secret sheets share one
   queue with the polkit sheet, so they live in the polkit agent's process: when ADR-0041 S3 moves the agent to
   `grassfield-security.service`, the sheets and `--peer-unit` move with it. Rule applied: D-9's socket rule; the brief's
-  "no environment-variable bypass".
+  "no environment-variable bypass". **Amended after the opus review of step 9a.** MINOR-3: the first version also fell
+  back to `SO_PEERCRED`'s PID on EINVAL, which Linux 6.5 to 6.15 answer when the peer has exited and been reaped, exactly
+  when its PID can belong to another process: only ENOPROTOOPT (a kernel without `SO_PEERPIDFD`) falls back now, any other
+  error refuses the peer (Linux 6.18, the container's, gives a pidfd of the dead process, whose PID reads -1: refused as
+  well, checked with the reviewer's probe).
+  NIT-1: in a session every component between `user@<uid>.service` and the unit must be a slice (`<name>.slice`), so a
+  cgroup nested in a scope or another unit whose last component merely bears the unit's name is refused.
 - **9-8. The unit.** **Choice:** hardening without namespaces, as 2c-6 (the bridge reads `/proc/<pid>/exe` of its callers
   and needs root's files to show as root's): `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`, `RestrictNamespaces`,
   `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallFilter=@system-service`,
@@ -1268,7 +1294,14 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   "cancelled"); a password of at most 4096 bytes after decoding, never cut; shell lines of at most 16 KiB; caller strings
   over 16 KiB dropped by the filter; texts capped in UTF-16 code units, the ellipsis included: title 128, message 256,
   description 1024, warning 256, check box 128, buttons 32, requester name 128, icon and desktop id 256, path 512. Rule
-  applied: bounded input everywhere on the secret path; macOS alerts show a few lines.
+  applied: bounded input everywhere on the secret path; macOS alerts show a few lines. **Amended after the opus review of
+  step 9a (NIT-2):** the 64 open prompts were one global pool that one connection could fill, and a refused socket peer
+  could write a journal line per attempt. Now the bus filter counts each connection's open prompts (a `BeginPrompting`
+  not yet stopped; a connection that leaves the bus is forgotten, the bridge listening to every `NameOwnerChanged` for
+  that) and answers a ninth `BeginPrompting` of one connection `org.freedesktop.DBus.Error.LimitsExceeded` before gcr sees
+  it; 64 stays the global bound; refused connections are written once per 10 s with the count of those not written. A
+  prompt stays open until its caller stops prompting or leaves the bus (gcr's design), counting against that caller
+  only.
 - **9-12. The password's strength reported to the caller.** Options: (a) a score; (b) 0 for an empty password, 1
   otherwise, as gcr's own dialog does (gnome-keyring reads it to ask about storing passwords unencrypted). **Choice:
   (b).** The meter the user sees is the shell's (step 9b). Rule applied: gcr's contract as its own prompter keeps it.
@@ -1278,6 +1311,22 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   space become one space; the result is cut on a code point boundary with an ellipsis. The same rule for desktop-entry
   names and executable paths. Rule applied: D-9 (caller text plain, flattened, capped) and the `plainText` rule of the
   settings contract (ADR-0010 amendment of 2026-10-26).
+- **9-14. Can the bridge tell that the program named in the row is the code asking?** (opus review of step 9a, MINOR-2.)
+  Question: any program of the user can make a named program ask (9-4), connect to the bus and then fork and exec a
+  trusted program while its child keeps the connection, `LD_PRELOAD` its code into a trusted program, or, as its ancestor,
+  `ptrace` one, change its code and detach. Options: (a) document the limit only; (b) document it, and refuse an identity
+  to a traced process (`TracerPid` not 0) and lend an app's desktop entry only to a process whose every file mapped
+  executable (`/proc/<pid>/maps`) is a trusted file, read through the same pidfd and checked alive after; (c) as (b), with
+  the mapped-code check for the on-behalf roles too; (d) compare the process's start time or thread-group leader with the
+  connection's. **Choice: (b).** Rule applied: macOS names the app or warns, and a cheap check that stops the cheapest
+  borrowing (`LD_PRELOAD`, `LD_LIBRARY_PATH`, a plugin from the user's files) is worth having for the app row, which
+  otherwise any program could borrow by preloading itself into the app. (c) would turn "Keyring" and "GnuPG" into
+  "Unidentified program" after every library upgrade until the next login (their libraries show as deleted) without
+  stopping anyone: any program can make them ask through their own interfaces. (d) proves nothing: `exec` keeps the
+  process's PID and start time, and the bus gives no time for a connection. What remains, in the spec's known
+  limitations: the fork-and-exec of a trusted program after connecting, an ancestor's `ptrace` that detached, and
+  everything a program can make the on-behalf roles say; the row names the program that opened the connection, and step
+  9b shows the caller's text under an on-behalf row as unverified text from another program.
 
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):

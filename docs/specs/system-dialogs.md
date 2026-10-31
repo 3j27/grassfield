@@ -421,11 +421,16 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from the pidfd of
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
-  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "Network" for KIO's workers; anything else, or no `ProcessFD`,
-  "Unidentified program" and the path); then the caller's `title`, `message`, `description`
+  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers; anything
+  else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style; `warning` in red under the field; a secure field (`password-new`:
   New and Verify fields and a strength bar); `choice-label` as a check box; `continue-label` / `cancel-label` (else "OK" /
   "Cancel"); a `confirm` prompt has no field.
+- SC3b the row names the program whose process opened the bus connection, not proof of whose code is asking (opus review
+  of step 9a, MINOR-2; ADR-0035 9-4, 9-14): "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
+  with text of its own. Under such a row (`onBehalf`) the caller's text is shown as unverified text from another program
+  (the secondary style, introduced as such, for example "Another app sent this message:"), never as the Keyring's,
+  GnuPG's or SSH's own words, never in the title's place, and nothing in the sheet vouches for it.
 - SC4 security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
   the unlock without the keyboard until a click 500 ms after it appears); the field is cleared after each answer and on close;
   `ImhSensitiveData`, no input method; Esc and Cancel answer "no"; the shell never logs any field. The surface's layer namespace
@@ -503,12 +508,14 @@ Bridge to shell:
 - `{"type":"prompt","id":"p<N>","kind":"password"|"confirm","requester":{...},"texts":{...},"choice":{...}|null,
   "passwordNew":bool,"strength":bool}`:
   - `id`: `p` and a decimal number, never reused while the bridge runs;
-  - `requester`: `role` (`app`, `keyring`, `gnupg` or `unidentified`), `name` (the desktop entry's unlocalised `Name` for
-    `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG" and `unidentified` "Unidentified program"
-    in its own translated words), `desktopId` and `icon` (the entry's, for `app`), `path` (the caller's executable when
-    known, shown in the secondary style for `unidentified`), `identified` (true for `app`, `keyring`, `gnupg`), `onBehalf`
-    (true for `keyring` and `gnupg`: the caller's text then names the app it asks for, under the fixed row). Only the
-    bridge fills it, from the caller's bus credentials (SC3);
+  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh` or `unidentified`), `name` (the desktop entry's unlocalised
+    `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH" and
+    `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for `app`),
+    `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true for
+    `app`, `keyring`, `gnupg`, `ssh`), `onBehalf` (true for `keyring`, `gnupg` and `ssh`: these programs ask for others
+    and any program of the user can make them ask, so the caller's text under the row is another program's unverified
+    text, SC3b). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
+    opened the connection: an `app` row only for a process that is not traced and runs nothing but trusted code;
   - `texts`: `title`, `message`, `description`, `warning`, `continue`, `cancel`: the caller's own text, plain, on one line,
     capped (title 128, message 256, description 1024, warning 256, buttons 32 UTF-16 code units, an ellipsis when cut);
     empty when the caller set none (the shell then uses its own words, "OK" and "Cancel");
@@ -528,7 +535,13 @@ Shell to bridge (at most 16 KiB per line):
   only when the prompt had a check box.
 
 Rules (fail closed: no answer is ever invented):
-- At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it.
+- At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it. At most 64
+  gcr prompts open, at most 8 for one bus connection: a connection's ninth `BeginPrompting` is answered
+  `org.freedesktop.DBus.Error.LimitsExceeded` and never reaches gcr; a `PerformPrompt` of the wrong shape is answered
+  `org.freedesktop.DBus.Error.InvalidArgs`.
+- A peer whose pidfd the kernel will not give is refused, except on a kernel without `SO_PEERPIDFD` (ENOPROTOOPT); in a
+  session only slices may lie between `user@<uid>.service` and the shell's unit. Refused connections are logged once per
+  10 s, with the count of the others.
 - An answer to an id that is not outstanding is ignored. A wrong answer to an outstanding id (an unknown key, a password
   where none is asked or missing for `ok`, a choice where none was shown, a password over 4096 bytes) cancels that request
   (`cancel` to the shell, "cancelled" to the caller).
@@ -591,10 +604,18 @@ owns the name before the bridge asks for it keeps it (the bridge says "queued" a
 checks stop other processes of the user from passing for the shell, not same-user code that sets out to: the user owns
 their systemd manager's cgroups and can move a process into the shell's unit, and the shell's own children that stay in
 its cgroup (its helpers; an application started before `uwsm-app` is detected, ADR-0011) could connect while the shell is
-not connected (out of scope as for every Grassfield socket, security.md); on a kernel without `SO_PEERPIDFD` (before 6.5)
-the cgroup is read through the PID `SO_PEERCRED` gives, and a peer that exits and whose PID a process of the shell's unit
-reuses in between would pass. An interpreter or a launcher that runs other code is shown as "Unidentified program" with
-its path even when the code it runs is an app (9-4). The gcr protocol is unauthenticated: its exchange protects the
+not connected (out of scope as for every Grassfield socket, security.md); on a kernel without `SO_PEERPIDFD` at all
+(before 6.5) the cgroup is read through the PID `SO_PEERCRED` gives, and a peer that exits and whose PID a process of the
+shell's unit reuses in between would pass (later kernels refuse such a peer). An interpreter or a launcher that runs other
+code is shown as "Unidentified program" with its path even when the code it runs is an app (9-4). The requester row
+names the program whose process opened the bus connection, not proof of whose code is asking (opus review of step 9a,
+MINOR-2; ADR-0035 9-14): "GnuPG", "Keyring" and "SSH" can be driven by any program of the user (`gpg-connect-agent`'s
+`GET_PASSPHRASE` with its own description, `pinentry-gnome3` run directly, `ssh-add`, an app asking gnome-keyring to
+unlock), hence SC3b; a process can connect to the bus, then fork and exec a trusted program while its child speaks on the
+connection, or, as the ancestor of a trusted program, ptrace it, change its code and detach; an app's row is refused to a
+traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD_LIBRARY_PATH`, a library replaced
+since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The gcr
+protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
