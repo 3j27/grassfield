@@ -14,6 +14,7 @@ import datetime
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import stat
@@ -23,22 +24,24 @@ import time
 
 # capture.* of ui/tokens/tokens.json, as slurp takes them (#rrggbbaa): the veil over the screen, the selection's fill and
 # border, the border's width in pixels. The boxes a click can pick (the windows, then the displays) are filled with the veil
-# itself, so the veil stays even: slurp paints them over it, and the one under the pointer takes the selection's fill and
-# border (review of step 8: displays left out of the boxes made slurp 1.5.0 cancel a click outside every window).
+# itself, so the veil stays even: slurp draws them with Cairo's SOURCE operator, which replaces the veil rather than darkening
+# it twice, and the one under the pointer takes the selection's fill and border (review of step 8: displays left out of the
+# boxes made slurp 1.5.0 cancel a click outside every window).
 COLOURS = {"veil": "#0000002E", "selection": "#FFFFFF24", "border": "#FFFFFFE6"}
 BORDER_WIDTH = 1
 SLURP = ["slurp", "-b", COLOURS["veil"], "-s", COLOURS["selection"], "-c", COLOURS["border"], "-B", COLOURS["veil"],
          "-w", str(BORDER_WIDTH)]
-# A selection smaller than this many square pixels is a click that slurp answered as a point (a newer slurp, outside every
-# box): the rectangle under it.
+# A selection smaller than this many square pixels is a click: slurp answered a point (a newer slurp, outside every box) or
+# a hand that moved a pixel or two; the window on top there, else the display.
 CLICK_AREA = 20
 # Hyprland 0.56's clients JSON: "fullscreen" is the window's mode, 1 maximized (Zoom), 2 fullscreen (FullscreenController.hpp);
 # either covers the other windows of its workspace, except the pinned ones and those allowed over it.
 FULLSCREEN = 2
 WAIT_SECONDS = 120
-# The previous capture's notice is closed before a capture, then this long is left for its banner to go (the shell's
-# motion.normal, 220 ms, and a margin): a picture never shows the notice of the one before.
-BANNER_GONE_SECONDS = 0.4
+# The previous capture's notice is closed before a capture, and the picture is taken at least this long after: the shell
+# unmaps the banner's window at once, and Hyprland fades a layer out in at most its global speed, 300 ms
+# (config/hypr/grassfield/looknfeel.lua), so a picture never shows the notice of the one before. The crosshair does not wait.
+BANNER_GONE_SECONDS = 0.5
 PREVIEW = "org.grassfield.Preview.desktop"
 PREVIEW_ICON = "org.grassfield.Preview"
 
@@ -102,8 +105,10 @@ def displays(monitors):
 
 
 def windows(monitors):
-    # What a click can pick: the windows on the displays' shown workspaces, as {rect, focus, over}. On a workspace with a
-    # fullscreen or zoomed window, that window and the windows drawn over it (pinned, or allowed over it), not those behind.
+    # What a click can pick: the windows on the displays' shown workspaces, as {rect, full, over, pinned, floating, order},
+    # in Hyprland's stacking order (its clients list goes from the bottom up: a new window is added at the end, a raised one
+    # moved there). On a workspace with a fullscreen or zoomed window, that window and the windows drawn over it (pinned, or
+    # allowed over it: Hyprland clears that for the others when a window goes fullscreen), never those behind.
     shown = set()
     for m in monitors or []:
         if not isinstance(m, dict) or m.get("disabled"):
@@ -120,10 +125,9 @@ def windows(monitors):
             (x, y), (w, h) = c["at"], c["size"]
             if w > 0 and h > 0:
                 mode = c.get("fullscreen")
-                focus = c.get("focusHistoryID")
                 found.append({"ws": c["workspace"]["id"], "full": isinstance(mode, int) and 1 <= mode <= FULLSCREEN,
                               "over": c.get("pinned") is True or c.get("allowedOverFullscreen") is True,
-                              "focus": focus if isinstance(focus, int) and focus >= 0 else 1 << 30,
+                              "pinned": c.get("pinned") is True, "floating": c.get("floating") is True, "order": len(found),
                               "rect": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}})
         except (KeyError, TypeError, ValueError):
             continue
@@ -135,11 +139,18 @@ def contains(r, px, py):
     return r["x"] <= px < r["x"] + r["w"] and r["y"] <= py < r["y"] + r["h"]
 
 
+def on_top(wins, px, py):
+    # The window drawn on top at a point, as Hyprland stacks them (desktop/state/ViewHitTester.cpp): pinned windows above
+    # everything, a window over a fullscreen one above it, floating windows above tiled ones, then the later in its clients
+    # list. None when no window is there.
+    under = [e for e in wins if contains(e["rect"], px, py)]
+    return max(under, key=lambda e: (e["pinned"], not e["full"], e["floating"], e["order"]))["rect"] if under else None
+
+
 def topmost(wins, sel):
     # A click on a window: slurp answers the smallest box under the pointer, which may be a window behind a larger one in
-    # front. The window under the pointer that is drawn on top is taken instead: one drawn over a fullscreen window first,
-    # then the most recently focused (Grassfield raises a window when it takes focus, config/hypr/grassfield/stacking.lua).
-    # Anything unread: slurp's answer.
+    # front. The window drawn on top under the pointer is taken instead. The pointer is read after slurp has ended: when it
+    # has left slurp's box meanwhile (or cannot be read), slurp's answer stands.
     if not any(e["rect"] == sel for e in wins):
         return sel
     pos = hyprctl("cursorpos")
@@ -147,10 +158,9 @@ def topmost(wins, sel):
         px, py = int(pos["x"]), int(pos["y"])
     except (KeyError, TypeError, ValueError):
         return sel
-    under = [e for e in wins if contains(e["rect"], px, py)]
-    if not under:
+    if not contains(sel, px, py):
         return sel
-    return min(under, key=lambda e: (not e["over"], e["focus"]))["rect"]
+    return on_top(wins, px, py) or sel
 
 
 def parse_geometry(text):
@@ -158,15 +168,15 @@ def parse_geometry(text):
     return {"x": int(m[1]), "y": int(m[2]), "w": int(m[3]), "h": int(m[4])} if m else None
 
 
-def snapped(sel, rects):
-    # A click outside every window (slurp answers a 1x1 area there): the first rectangle that holds the point, windows before
-    # displays; else nothing. A click on a window is that window's box already (slurp's own answer).
+def snapped(sel, wins, screens):
+    # A click slurp answered as a tiny area (a point, or a hand that moved a pixel or two): the window on top there, else the
+    # display there, else nothing. A larger area is the user's own.
     if sel["w"] * sel["h"] >= CLICK_AREA:
         return sel
-    for r in rects:
-        if contains(r, sel["x"], sel["y"]):
-            return r
-    return None
+    window = on_top(wins, sel["x"], sel["y"])
+    if window:
+        return window
+    return next((r for r in screens if contains(r, sel["x"], sel["y"])), None)
 
 
 def geometry_text(r):
@@ -226,9 +236,10 @@ def save(folder, stem, grim):
                 try:
                     with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
                         shutil.copyfileobj(src, out)
-                except OSError:
+                except BaseException:
+                    # A full disk, or a signal (SIGTERM is SystemExit here): no partial picture stays.
                     os.unlink(path)
-                    return None
+                    raise
                 return path
         return None
     except OSError:
@@ -252,17 +263,18 @@ def selecting():
 
 def choose(monitors):
     wins = windows(monitors)
-    boxes = [e["rect"] for e in wins] + [rect for _, rect in displays(monitors)]
+    screens = [rect for _, rect in displays(monitors)]
+    boxes = [e["rect"] for e in wins] + screens
     r = run(SLURP, timeout=3600, input="".join(geometry_text(b) + "\n" for b in boxes).encode())
     if r is None or r.returncode != 0:
         return None  # Esc, or cancelled by a second press
     sel = parse_geometry(r.stdout.decode("utf-8", "replace"))
-    return snapped(topmost(wins, sel), boxes) if sel else None
+    return snapped(topmost(wins, sel), wins, screens) if sel else None
 
 
 def notice_file():
-    # $XDG_RUNTIME_DIR/grassfield/capture-notice: the pid of the notify-send showing the last capture's notice. The folder is
-    # the user's own (0700, not a link), as the share picker's.
+    # $XDG_RUNTIME_DIR/grassfield/capture-notice: the pid and start time of the notify-send showing the last capture's
+    # notice. The folder is the user's own (0700, not a link), as the share picker's.
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime):
         return None
@@ -277,38 +289,54 @@ def notice_file():
     return os.path.join(folder, "capture-notice")
 
 
+def started(pid):
+    # A process's start time (field 22 of /proc/<pid>/stat, after the command name in parentheses), or None.
+    try:
+        with open("/proc/%d/stat" % pid, "rb") as f:
+            return int(f.read().rpartition(b")")[2].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def close_previous():
     # The last capture's notice goes before this capture (macOS: the thumbnail of the last screenshot is put away), so its
-    # banner is in no picture. Only a notify-send of this user started by this helper (its command line) is told to close.
+    # banner is in no picture. Only the notify-send this helper started is told to close: the process is held by a pidfd,
+    # then it must still be the one recorded (its start time), this user's, notify-send with `-p`. Returns the time from which
+    # the picture may be taken (now when there was nothing to close).
     path = notice_file()
     if path is None:
-        return
+        return time.monotonic()
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd) as f:
-            pid = int(f.read(16).strip())
+            pid, start = (int(v) for v in f.read(64).split())
+        handle = os.pidfd_open(pid)
+    except (OSError, ValueError):
+        return time.monotonic()
+    try:
         with open("/proc/%d/cmdline" % pid, "rb") as f:
             argv = f.read().split(b"\0")
-        if os.stat("/proc/%d" % pid).st_uid != os.getuid() or argv[0] != b"notify-send" or b"-p" not in argv:
-            return
-        os.kill(pid, signal.SIGINT)
-    except (OSError, ValueError):
-        return
-    for _ in range(20):
-        if not os.path.exists("/proc/%d" % pid):
-            break
-        time.sleep(0.05)
-    time.sleep(BANNER_GONE_SECONDS)
+        if (started(pid) != start or os.stat("/proc/%d" % pid).st_uid != os.getuid() or argv[0] != b"notify-send"
+                or b"-p" not in argv):
+            return time.monotonic()
+        signal.pidfd_send_signal(handle, signal.SIGINT)
+        select.select([handle], [], [], 1.0)  # readable once it has ended
+    except OSError:
+        return time.monotonic()
+    finally:
+        os.close(handle)
+    return time.monotonic() + BANNER_GONE_SECONDS
 
 
 def remember(pid):
     path = notice_file()
-    if path is None:
+    start = started(pid)
+    if path is None or start is None:
         return
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as f:
-            f.write("%d\n" % pid)
+            f.write("%d %d\n" % (pid, start))
     except OSError:
         pass
 
@@ -330,17 +358,21 @@ def notify(paths):
     except OSError:
         return
     remember(proc.pid)
+    out = b""
     try:
         out, _ = proc.communicate(timeout=WAIT_SECONDS)
     except subprocess.TimeoutExpired:
-        proc.send_signal(signal.SIGINT)
-        try:
-            proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate()
-        return
-    if set(out.decode("utf-8", "replace").split()[1:]) & {"default", "open"}:
+        pass
+    finally:
+        # Unanswered in time, or this helper told to end (SIGTERM): notify-send closes its notice and ends with it.
+        if proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+            try:
+                proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+    if proc.returncode == 0 and set(out.decode("utf-8", "replace").split()[1:]) & {"default", "open"}:
         open_with(PREVIEW, paths)
 
 
@@ -363,7 +395,7 @@ def main():
     if mode == "selection":
         if selecting():
             return 0
-        close_previous()
+        ready = close_previous()  # the crosshair shows at once; the picture waits for the last notice to be gone
         sel = choose(monitors)
         if sel is None:
             return 0
@@ -372,7 +404,8 @@ def main():
         shots = [["grim", "-o", name] for name, _ in displays(monitors)]
         if not shots:
             return 1
-        close_previous()
+        ready = close_previous()
+    time.sleep(max(0.0, ready - time.monotonic()))
     folder = desktop()
     if folder is None:
         return 1
