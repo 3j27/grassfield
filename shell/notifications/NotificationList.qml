@@ -81,7 +81,9 @@ ListView {
             }
         }
 
+        // The pill grows to its new label; under Reduce Motion it takes its width at once (ADR-0039 step 6).
         Behavior on width {
+            enabled: !Appearance.reduceMotion
             NumberAnimation {
                 duration: Appearance.duration(Tokens.motionFast)
                 easing.type: Easing.BezierSpline

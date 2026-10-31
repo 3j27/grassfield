@@ -115,6 +115,8 @@ Item {
                     return;
                 if (card.dragX > root.width * Tokens.notificationDismissFraction)
                     Notifications.dismissBanner(root.key);
+                else if (Appearance.reduceMotion)
+                    card.dragX = 0;  // back in place at once, no glide (ADR-0039 step 6)
                 else
                     release.start();
             }

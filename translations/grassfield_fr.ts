@@ -5510,6 +5510,14 @@
         <source>Image %1</source>
         <translation>Image %1</translation>
     </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <source>Play</source>
+        <translation>Lecture</translation>
+    </message>
 </context>
 <context>
     <name>InfoWindow</name>
