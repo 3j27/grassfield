@@ -83,8 +83,8 @@ check bash -c '[[ $("$1" status) == off ]] && "$1" toggle && [[ $("$1" status) =
 
 # --- screenshots, autostart, units, packaging ---------------------------------------------------------------------------
 sys=$root/config/hypr/grassfield/system.lua
-desc="screenshots: Super+Shift+3/4/5 (by keycode) and Print run Omarchy's capture tool (screen, selection, picker)"
-check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"fullscreen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"region\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"smart\")" "$1" && grep -q "bind(\"PRINT\"" "$1" || grep -q "hl.bind(\"PRINT\", capture(\"smart\")" "$1"' _ "$sys"
+desc="screenshots: Super+Shift+3 (by keycode) runs Grassfield's capture of the screen, Super+Shift+4/5 and Print a selection, never Omarchy's tool (ADR-0035 D-10)"
+check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"screen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"selection\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"selection\")" "$1" && grep -q "hl.bind(\"PRINT\", capture(\"selection\")" "$1" && grep -q "exec_cmd(\"/usr/lib/grassfield/grassfield-capture \" .. mode)" "$1" && ! grep -q "omarchy-capture" "$1"' _ "$sys"
 
 auto=$root/config/hypr/grassfield/autostart.lua
 for unit in crash-watch battery-watch migrate-notify automount; do
