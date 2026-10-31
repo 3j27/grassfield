@@ -349,6 +349,13 @@ if want logic; then
   python3 -I tests/ci/wallpaper_photos.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/wallpaper_photos.py "$rc" PASS
+  # The login and boot themes (ADR-0042): the checks on planted mutants, then the themes and their package (draw only, the
+  # password only to sddm.login, two-step images on the ground, nothing activated by the package).
+  rc=0
+  python3 -I tests/ci/login_themes.py --selftest || rc=1
+  python3 -I tests/ci/login_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/login_themes.py "$rc" PASS
   # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
   rc=0
   python3 -I tests/ci/token_sources.py || rc=1

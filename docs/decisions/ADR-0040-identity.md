@@ -448,6 +448,17 @@ and IQ-B3 here changes the palette only, not which controls read it.
   - a broken theme must never hide the disk-password prompt: a tested fallback to the text prompt;
   - the last identity step, after the lock steps.
   Until then Omarchy's path stays, and Grassfield's identity starts at the ground colour.
+- **Step 10 as built** (2026-10-31, in the one pull request; ADR-0042, under the opus security review; nothing in
+  `shell/security`): the package `grassfield-login-themes` installs `/usr/share/sddm/themes/grassfield` (`Main.qml`,
+  `Strings.js`, `metadata.desktop`, `theme.conf`: the lock's layout on the default artwork, tokens only, SDDM's own
+  `sddm.login`, the field emptied before the call and after a failure; "Grassfield (uwsm)" selected first) and
+  `/usr/share/plymouth/themes/grassfield` (Plymouth's `two-step` module, the ground `#2F6D5F`, the mark white, an entry box,
+  bullets, a padlock and a throbber drawn in `packaging/plymouth/build.sh`), and activates nothing: the owner's commands, the
+  first-boot Esc test and the reverts are in `docs/owner-setup/login-boot-themes.md`. `grassfield-login-check` knows the
+  theme. Tests: `tests/ci/login_themes.py` (logic layer, 36 mutants), `tests/shell/login_session.sh` (+1),
+  `tests/ci/qml_literals.py` (scans the theme). Legal: E41 (the login layout; the mark's boot place and its white build-time
+  render, the owner's to confirm). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the
+  boot screen with the disk password, Esc to the text prompt, the reverts.
 
 ### 4. Lock screen (security module: display only, opus security review, R12)
 - **Backdrop (IQ-W4, owner: A, sharp, banded scrim).** The prepared still of the output's current wallpaper, sharp (the artwork, drawn

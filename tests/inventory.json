@@ -501,6 +501,7 @@
  {"path": "tests/ci/run_mode.py", "layer": "logic"},
  {"path": "tests/ci/gtk_themes.py", "layer": "logic"},
  {"path": "tests/ci/icon_strokes.py", "layer": "logic"},
+ {"path": "tests/ci/login_themes.py", "layer": "logic"},
  {"path": "tests/ci/mark_places.py", "layer": "logic"},
  {"path": "tests/ci/wallpaper_photos.py", "layer": "logic"},
  {"path": "tests/ci/qml_literals.py", "layer": "logic"},

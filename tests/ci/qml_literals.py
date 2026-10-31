@@ -5,7 +5,7 @@
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples
 
 Scanned: every .qml file of ui/Grassfield/ (Tokens.qml, generated from ui/tokens/tokens.json, excepted), shell/ (shell/security/
-included: it is read, never changed) and apps/.
+included: it is read, never changed), apps/ and the login theme packaging/sddm/theme/ (ADR-0042).
 
 A design property is known by its name (the last part of a dotted name, a group's member, or a declared property's name), so
 `anchors.leftMargin`, `font { pixelSize }`, `Layout.preferredWidth`, `sourceSize.width` and `readonly property int pillInset`
@@ -41,7 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOTS = ("ui/Grassfield", "shell", "apps")
+ROOTS = ("ui/Grassfield", "shell", "apps", "packaging/sddm/theme")
 SKIP = {"ui/Grassfield/Ui/Tokens.qml"}
 KINDS = ("radius", "font", "duration", "opacity", "scale", "geometry", "colour")
 MARK = re.compile(r"\bliteral-ok\s+(?P<kinds>[a-z]+(?:\s*,\s*[a-z]+)*)\s*:\s*\S.{8,}")

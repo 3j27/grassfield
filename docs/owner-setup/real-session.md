@@ -415,8 +415,12 @@ If Grassfield does not start at all: Ctrl+Alt+F3, log in, run `grassfield-login 
 ## 9. Uninstall
 
 ```bash
-sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
+sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-compositor grassfield-icons
 ```
+
+`grassfield-login-themes` (ADR-0042) is built and installed by the same `makepkg -si` and depends on `grassfield-desktop`, so
+it goes in the same command; it activates nothing by itself. If you made its login or boot theme the current one, revert
+them first ([login-boot-themes.md](login-boot-themes.md), section 3).
 
 All three packages: `grassfield-icons` (the icon theme, 30,000 files, 60 MiB) is installed with the others and is not
 removed when it is left out of the command (GF-046). This removes only Grassfield: every dependency is either

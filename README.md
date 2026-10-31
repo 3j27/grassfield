@@ -39,8 +39,11 @@ Nothing runs as root, no service starts by itself, no file is written under `$HO
 ## Uninstall
 
 ```bash
-sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
+sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-compositor grassfield-icons
 ```
+
+If you made Grassfield's login or boot theme the current one, revert it first
+([`docs/owner-setup/login-boot-themes.md`](docs/owner-setup/login-boot-themes.md), section 3).
 
 Your own data stays and can be removed by hand: `~/.config/grassfield`, `~/.local/state/grassfield`,
 `~/.local/share/icons/grassfield-cursors-custom` (section 9 of the guide above). Omarchy keeps working untouched.

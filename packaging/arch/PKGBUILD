@@ -3,7 +3,7 @@
 # grassfield-icons fetches TWO pinned upstream commits (MacTahoe and Pebble icon themes, GPL-3.0, ADR-0017);
 # grassfield-wallpapers fetches sixteen photographs from upload.wikimedia.org, each checked by its SHA-1 (ADR-0040 step 2c):
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
-# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons grassfield-wallpapers   (all of them:
+# Remove: sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-compositor grassfield-icons grassfield-wallpapers   (all of them:
 #   the icon theme and the photographs are installed with the others; naming only the first two leaves the 60 MiB icon
 #   theme and the photographs behind, GF-046)
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
@@ -22,7 +22,7 @@
 _here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
 pkgbase=grassfield
-pkgname=(grassfield-desktop grassfield-compositor grassfield-icons grassfield-store grassfield-wallpapers)
+pkgname=(grassfield-desktop grassfield-compositor grassfield-icons grassfield-store grassfield-wallpapers grassfield-login-themes)
 pkgver=${_ver//-/}
 if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; then
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
@@ -121,7 +121,7 @@ prepare() {
   # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
   # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
   # ${srcdir:?}: an empty $srcdir must stop here, never turn these into paths at the root.
-  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/BUILD-DEPS" "${srcdir:?}/pacman"
+  rm -rf "${srcdir:?}/snapshot" "${srcdir:?}"/*-build "${srcdir:?}/compositor-out" "${srcdir:?}/icons" "${srcdir:?}/grassfield-icons" "${srcdir:?}/plymouth-grassfield" "${srcdir:?}/grassfield.db" "${srcdir:?}/BUILD-COMMIT" "${srcdir:?}/BUILD-DEPS" "${srcdir:?}/pacman"
   mkdir -p "$srcdir/snapshot"
   git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
@@ -213,6 +213,8 @@ build() {
   # file missing) and when a listed logo, a dangling link or a forbidden word remains.
   python3 -I "$(_root)/packaging/arch/icons-compose.py" --mactahoe "$srcdir/mactahoe-icon-theme" --pebble "$srcdir/pebble-icon-theme" \
     --branding "$(_root)/branding/icons/theme" --list "$(_root)/packaging/arch/icons-apple-logos.txt" --out "$srcdir/grassfield-icons"
+  # Login and boot themes (ADR-0042): the Plymouth theme's images rendered from SVG (rsvg-convert); the SDDM theme is QML only.
+  "$(_root)/packaging/plymouth/build.sh" --out "$srcdir/plymouth-grassfield"
   # Software Update (ADR-0033): the [grassfield] section templates, this build's repository values and its pinned key,
   # checked (the key file must be the pinned fingerprint, public only) and generated from packaging/pacman/repository.conf.
   python3 -I "$(_root)/packaging/pacman/generate.py" --conf "$(_root)/packaging/pacman/repository.conf" \
@@ -570,4 +572,21 @@ package_grassfield-wallpapers() {
   # Settings > Wallpaper reads the list beside the pictures (WallpaperConfig.parsePhotos).
   install -Dm644 "$(_root)/packaging/arch/wallpaper-photos.json" "$dir/photos.json"
   install -Dm644 "$(_root)/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-wallpapers/THIRD_PARTY.md"
+}
+
+package_grassfield-login-themes() {
+  pkgdesc="Grassfield login and boot themes: an SDDM theme in the lock screen's layout and a Plymouth theme with the mark (ADR-0042; activated only by the owner's commands)"
+  arch=(any)
+  # The SDDM theme's QML is source code (MIT, as the repository); the Plymouth images drawn in build.sh: CC-BY-SA-4.0; the
+  # mark in the Plymouth theme is the owner's (all rights reserved).
+  license=(MIT CC-BY-SA-4.0 LicenseRef-Grassfield-logo-all-rights-reserved)
+  depends=("grassfield-desktop=$pkgver-$pkgrel")
+  optdepends=('sddm: the login theme (sddm-greeter-qt6)' 'plymouth: the boot theme')
+  # Nothing is activated here: no SDDM drop-in, no Plymouth default, no initramfs change (docs/owner-setup/login-boot-themes.md).
+  local sddm="$pkgdir/usr/share/sddm/themes/grassfield" ply="$pkgdir/usr/share/plymouth/themes/grassfield"
+  install -Dm644 -t "$sddm" "$(_root)"/packaging/sddm/theme/{Main.qml,Strings.js,metadata.desktop,theme.conf}
+  install -d "$ply"
+  install -m644 "$srcdir"/plymouth-grassfield/*.png "$srcdir/plymouth-grassfield/grassfield.plymouth" "$ply/"
+  install -Dm644 "$(_root)/LICENSE" "$pkgdir/usr/share/licenses/grassfield-login-themes/LICENSE"
+  install -Dm644 "$(_root)/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-login-themes/BRANDING.md"
 }
