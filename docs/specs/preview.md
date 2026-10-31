@@ -36,7 +36,10 @@ single instance.
 3. P3 Images (`ImageView.qml`): any format Qt can decode (`qt6-imageformats`, SVG through `qt6-svg`); fit (shrinks
    only) or zoom (0.05 to 16, Ctrl+wheel, pinch, + / - / 0 for 100 %, Ctrl+9 for Fit); rotation by quarter turns
    (Ctrl+R / Ctrl+L, view only); EXIF orientation applied; multi-page TIFF steps through pages (PgUp/PgDn, toolbar);
-   animated GIF and WebP play through `AnimatedImage`. Decoding goes through `image://preview/<frame>/<file index>`.
+   animated GIF and WebP play through `AnimatedImage`; under Reduce Motion they wait on their first frame with a play
+   control (a glass capsule at the bottom, Play / Pause), as macOS with "Auto-play animated images" off: Reduce Motion is
+   for the chrome, the content is the viewer's to play; the play ends with the setting's change or another file (ADR-0039
+   step 6). Decoding goes through `image://preview/<frame>/<file index>`.
 4. P4 PDF (`PdfView.qml`): QtPdf (`PdfMultiPageView`, pdfium, no JavaScript): continuous pages, zoom, fit to width,
    rotation, page navigation (PgUp/PgDn, Home/End, arrows turn pages, toolbar), thumbnails, text search (Ctrl+F,
    Enter next, Shift+Enter previous, Esc closes). Encrypted documents show a notice ("not supported yet").

@@ -185,6 +185,8 @@ Hyprland holds one blur size and one pass count for every surface (the `ext-back
 - Cost: more transparency = a wider blur = more GPU; the pass count drops by one for nearly opaque materials.
 - Verification: offline `tst_tokens` (mapping, monotonic, default = config) and `tst_minimized` (request builder, `blurAnswer` on the captured answers); nested, bare: `tests/compositor/blur_events.sh` (stages A to D above; PASS on 0.56.2).
 
+**Window edge per appearance (ADR-0039 step 6, C-4).** Hyprland draws one border colour pair for every window (`general.col.active_border`, `inactive_border`, `border_size` 1). macOS 27's contact edge is dark in the light appearance (about black at 0.25, `docs/audits/ui-finesse-2026-10-25.md` 7.3) and the light rim in the dark one, so the shell sends the pair of the appearance it shows, the same way as the blur and on the same socket: `Minimized.edgeCall(colour, active, inactive)` (Lua `hl.config({general={col={active_border, inactive_border}}})`, `rgba(rrggbbaa)`) from tokens `window.edge{Dark,Light}` and `window.edge{Active,Inactive}Opacity{Dark,Light}` (dark: white 0.15 / 0.08, the config's own; light: black 0.25 / 0.13, the inactive one an estimate); at start, on a change of appearance (debounced) and after a config reload, which restores the config's dark pair; an error answer stops these pushes until the next change. Verification: `tst_minimized` (the call per appearance, the config's pair is the dark one, the wiring read from `Compositor.qml`); nested: NOT VERIFIED here (a light window's edge on a capture).
+
 ## Interfaces / contracts (versions)
 Module `Grassfield.Ui` 1.0 (semver). Tokens JSON `version: 1`.
 
