@@ -2,7 +2,7 @@ import QtQuick
 import Grassfield.Ui
 
 // Grassfield.Ui's Appearance in the Files process, from FilesApp's reading of grassfield.json: appearance, accent, Reduce
-// Motion, shortcut style and icon appearance, live. Grassfield Files (Main.qml) and grassfield-portal's Open and Save panels
+// Motion, Increase Contrast, Text size, shortcut style and icon appearance, live. Grassfield Files (Main.qml) and grassfield-portal's Open and Save panels
 // (FilePanels.qml) hold one each.
 QtObject {
     id: root
@@ -31,6 +31,17 @@ QtObject {
             target: Appearance
             property: "reduceMotion"
             value: root.app.reduceMotion
+        },
+        // Increase Contrast and Text size (ADR-0039 step 23; a test's stand-in FilesApp may not carry them: the defaults).
+        Binding {
+            target: Appearance
+            property: "increaseContrast"
+            value: root.app.increaseContrast === true
+        },
+        Binding {
+            target: Appearance
+            property: "textScale"
+            value: root.app.textScale > 0 ? root.app.textScale : 1
         },
         // Accent colour (accent.color): live like the rest.
         Binding {

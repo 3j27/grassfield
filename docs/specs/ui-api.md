@@ -75,4 +75,5 @@ add SoftwareUpdateLogic
 add DevicePicture
 add KeyFocus
 add MenuHeader
+add Spinner
 ```

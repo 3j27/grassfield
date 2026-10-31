@@ -152,6 +152,7 @@ Every Grassfield control is built on `QtQuick.Templates` (keyboard, focus, hover
 | `SegmentedControl` | Control + AbstractButton | model `[{id,text}]`, `value` owned by the host, `picked(id)`, arrows step; the selected segment is a raised pill (white in the light appearance) with ordinary text, 2 px inside the track with a concentric radius (macOS 27, ADR-0024) |
 | `ComboBox` | ComboBox | pop-up button, list = `PopupMenu` in a Popup inside a Flickable; `value`, `picked(id)` (the former settings Picker); the list stays inside the window (right-aligned with the button, above it when it does not fit) and scrolls when taller than the window, the keyboard cursor kept in view; a keyboard pick returns the focus with the ring |
 | `ProgressBar` | ProgressBar | determinate, indeterminate sweep (still with Reduce Motion) |
+| `Spinner` | (none: a plain Item) | the indeterminate spokes of macOS 27 (Settings' section titles, Files' loading view; `control.spinner*`, ADR-0039 D4, step 23); it stands still under Reduce Motion |
 | `ScrollBar` | ScrollBar | attached (`ScrollBar.vertical`) or standalone (`flickable: view`) |
 | `Sheet` | Pane (panel) | modal over its window, Return confirms, Esc cancels, field optional (`fieldPassword` hides what is typed) |
 

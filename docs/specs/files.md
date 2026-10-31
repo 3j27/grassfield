@@ -795,3 +795,5 @@ macOS: the Finder is the first Dock tile, cannot be removed, and opens every fol
 
 ## Toolbar capsules (visual audit 2026-10-25, priority 11)
 macOS model, measured: back/forward are one 72 x 36 capsule (`toolbar.groupButton` 34 each), the view switcher a 36-pt capsule whose selected view is a lighter pill, the search a 36-pt circle that expands to `files.searchWidth` 200 while it has the focus or text. Settings has the same back/forward capsule over its detail pane (history of the panes, `apps/settings/qml/NavHistory.js`, `tst_navhistory.qml`). Fills are `Appearance.buttonFill` (6 % grey in light), the pill `Appearance.chipFill`; contrast in `WindowSurfacePairs`.
+
+Design polish step 23 (ADR-0039): every toolbar capsule is the shared `RimmedCapsule` (`toolbar.*`), Action sits in a capsule of its own, and the search circle is rimmed with the shared focus ring outside it and a clear button. A folder that has listed nothing after `files.loadingDelay` shows the shared `Spinner` and "Loading…" in its view. Files reads Increase Contrast and Text size; the path bar's segments and the preview pane's actions take the keyboard.

@@ -28,12 +28,11 @@ Item {
 
     // View switcher (macOS 27 Finder, measured on Finder-Home): four segments in a capsule, the selected view a pill
     // darker than the capsule, a rule between two views that are not selected.
-    Rectangle {
+    RimmedCapsule {
         visible: !root.compact
         width: root.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
         height: Tokens.toolbarCapsule
-        radius: height / 2
-        color: Appearance.buttonFill
+        fillOpacity: Tokens.toolbarCapsuleFillOpacity
         Accessible.role: Accessible.Grouping
         Accessible.name: qsTr("View")
 
@@ -85,12 +84,11 @@ Item {
 
     // The switcher folded into one pop-up button while the search field is open or the title has no room
     // (Finder-Search): the current view's glyph and up and down chevrons; it opens View As.
-    Rectangle {
+    RimmedCapsule {
         visible: root.compact
         width: Tokens.filesViewPopupWidth
         height: Tokens.toolbarCapsule
-        radius: height / 2
-        color: Appearance.buttonFill
+        fillOpacity: Tokens.toolbarCapsuleFillOpacity
 
         ToolButton {
             id: viewPopup

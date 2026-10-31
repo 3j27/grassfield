@@ -165,7 +165,7 @@ Window {
                     y: Tokens.spacingXs
                     horizontalAlignment: Text.AlignRight
                     text: qsTr("Colour:")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
@@ -197,7 +197,7 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     horizontalAlignment: Text.AlignRight
                     text: qsTr("Custom:")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
@@ -207,9 +207,13 @@ Window {
                     width: Tokens.filesCustomizeHexWidth
                     height: parent.height
                     radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: hexField.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                    // The light well of the appearance (ADR-0039 step 23: it was the dark appearance's fill in both), and the
+                    // shared focus ring outside it (G7).
+                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+
+                    FocusRing {
+                        visible: hexField.activeFocus
+                    }
 
                     TextInput {
                         id: hexField
@@ -243,7 +247,7 @@ Window {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: hexField.text === ""
                             text: qsTr("#rrggbb")
-                            color: Appearance.colors.textSecondary
+                            color: Appearance.windowSecondary
                             font: hexField.font
                         }
                     }
@@ -261,7 +265,7 @@ Window {
                     y: Tokens.spacingXs
                     horizontalAlignment: Text.AlignRight
                     text: qsTr("Symbol:")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
@@ -372,9 +376,13 @@ Window {
                     width: parent.width - x
                     height: parent.height
                     radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: glyphField.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                    // The light well of the appearance (ADR-0039 step 23: it was the dark appearance's fill in both), and the
+                    // shared focus ring outside it (G7).
+                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+
+                    FocusRing {
+                        visible: glyphField.activeFocus
+                    }
 
                     TextInput {
                         id: glyphField
@@ -408,7 +416,7 @@ Window {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: glyphField.text === ""
                             text: qsTr("Type or paste a symbol")
-                            color: Appearance.colors.textSecondary
+                            color: Appearance.windowSecondary
                             font: glyphField.font
                         }
                     }
@@ -421,7 +429,7 @@ Window {
                 width: parent.width
                 text: root.errorText !== "" ? root.errorText : root.note
                 wrapMode: Text.Wrap
-                color: root.errorText !== "" ? Appearance.colors.danger : Appearance.colors.textSecondary
+                color: root.errorText !== "" ? Appearance.colors.danger : Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: root.errorText !== "" ? Accessible.AlertMessage : Accessible.StaticText

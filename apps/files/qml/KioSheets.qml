@@ -150,7 +150,7 @@ Item {
                     return isNaN(date.getTime()) ? qsTr("unknown") : date.toLocaleDateString(Qt.locale(), format);
                 })).join("\n");
             }
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }

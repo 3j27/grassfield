@@ -25,6 +25,7 @@ SpinBox 1.0 SpinBox.qml
 SegmentedControl 1.0 SegmentedControl.qml
 ComboBox 1.0 ComboBox.qml
 ProgressBar 1.0 ProgressBar.qml
+Spinner 1.0 Spinner.qml
 ScrollBar 1.0 ScrollBar.qml
 Sheet 1.0 Sheet.qml
 LinkText 1.0 LinkText.qml

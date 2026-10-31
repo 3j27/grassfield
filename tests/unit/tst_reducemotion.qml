@@ -2,7 +2,6 @@ import QtQuick
 import QtTest
 import Grassfield.Ui
 import "../../apps/preview/qml" as PreviewQml
-import "../../apps/settings/qml" as SettingsQml
 
 // Reduce Motion replaces motion instead of shortening it (ADR-0039 step 5, G10; macOS: slides become fades): a switch's knob
 // jumps to its side, Settings' spinner and Preview's animated images stand still. Without the setting the knob slides and the
@@ -20,7 +19,7 @@ TestCase {
     Column {
         Toggle { id: toggle; checked: false }
         Switch { id: switchControl; checked: false }
-        SettingsQml.Spinner { id: spinner }
+        Spinner { id: spinner }
         PreviewQml.ImageView {
             id: imageView
             width: 200
@@ -86,10 +85,10 @@ TestCase {
     function test_spinnerStandsStill() {
         Appearance.reduceMotion = false;
         const first = spinner.step;
-        tryVerify(() => spinner.step !== first, Tokens.settingsSpinnerStepMs * 4, "the spinner steps");
+        tryVerify(() => spinner.step !== first, Tokens.controlSpinnerStepMs * 4, "the spinner steps");
         Appearance.reduceMotion = true;
         const still = spinner.step;
-        wait(Tokens.settingsSpinnerStepMs * 3);
+        wait(Tokens.controlSpinnerStepMs * 3);
         compare(spinner.step, still, "the spinner stands still under Reduce Motion");
     }
 

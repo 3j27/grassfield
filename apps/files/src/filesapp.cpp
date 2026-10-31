@@ -253,7 +253,11 @@ void FilesApp::readAppearance()
     const QString setting = root.value(QStringLiteral("appearance")).toString();
     m_autoAppearance = setting == QLatin1String("auto");
     const bool dark = grassfield::apps::isDarkAppearance(setting, QTime::currentTime());
-    const bool reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
+    const QJsonObject a11y = root.value(QStringLiteral("accessibility")).toObject();
+    const bool reduce = a11y.value(QStringLiteral("reduceMotion")).toBool(false);
+    // Increase Contrast and Text size, read as the Store and Settings read them (ADR-0039 step 23).
+    const bool contrast = a11y.value(QStringLiteral("increaseContrast")).toBool(false);
+    const qreal scale = qBound(1.0, a11y.value(QStringLiteral("textSize")).toDouble(1), 1.3);
     // Icon appearance: the same validation as the shell (unknown values fall back to the defaults).
     const QJsonObject icons = root.value(QStringLiteral("icons")).toObject();
     QString mode = icons.value(QStringLiteral("mode")).toString();
@@ -288,14 +292,16 @@ void FilesApp::readAppearance()
         m_canMinimize = canMinimize;
         emit appearanceChanged();
     }
-    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor
-        || highlight != m_accentHighlight || shortcuts != m_shortcutStyle) {
+    if (dark != m_dark || reduce != m_reduceMotion || contrast != m_increaseContrast || scale != m_textScale || mode != m_iconMode || tint != m_iconTint
+        || folderColor != m_folderColor || accent != m_accentColor || highlight != m_accentHighlight || shortcuts != m_shortcutStyle) {
         m_accentColor = accent;
         m_accentHighlight = highlight;
         m_shortcutStyle = shortcuts;
         m_folderColor = folderColor;
         m_dark = dark;
         m_reduceMotion = reduce;
+        m_increaseContrast = contrast;
+        m_textScale = scale;
         m_iconMode = mode;
         m_iconTint = tint;
         emit appearanceChanged();

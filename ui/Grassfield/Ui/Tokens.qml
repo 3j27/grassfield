@@ -692,6 +692,18 @@ QtObject {
     readonly property int controlPageStepFactor: 10
     // GF-085: inset of the stepper arrow highlight [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlStepperInset: 1
+    // moved from settings.spinnerSize, the spinner shared by every app (ADR-0039 D4, step 23): the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerSize: 15.5
+    // moved from settings.spinnerSpokes, the spinner shared by every app (ADR-0039 D4, step 23): the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerSpokes: 8
+    // moved from settings.spinnerSpokeWidth, the spinner shared by every app (ADR-0039 D4, step 23): a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerSpokeWidth: 2
+    // moved from settings.spinnerSpokeLength, the spinner shared by every app (ADR-0039 D4, step 23): a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerSpokeLength: 5.5
+    // moved from settings.spinnerTailOpacity, the spinner shared by every app (ADR-0039 D4, step 23): the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerTailOpacity: 0.2
+    // moved from settings.spinnerStepMs, the spinner shared by every app (ADR-0039 D4, step 23): the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerStepMs: 125
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291
@@ -1639,20 +1651,8 @@ QtObject {
     readonly property int settingsWifiGlyphSize: 15
     // the signal glyph: ink 14.5 x 10.5 (14 x 10.7 at 14) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int settingsWifiSignalSize: 14
-    // the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerSize: 15.5
-    // the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerSpokes: 8
-    // a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerSpokeWidth: 2
-    // a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerSpokeLength: 5.5
-    // the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerTailOpacity: 0.2
     // the spinner's right edge from the group edge, centred on the section title [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property real settingsSpinnerInset: 12.5
-    // the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerStepMs: 125
     // how long a requested scan shows the spinner (NetworkManager answers RequestScan at once and scans for a few seconds) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int settingsWifiScanMs: 8000
     // the pane asks for a new scan this often while it is open, as macOS keeps scanning [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
@@ -2238,6 +2238,8 @@ QtObject {
     readonly property int filesSpringDelay: 500
     // own value: a window size is kept this long after the last resize step (one write per resize, not per frame) [ref: docs/specs/files.md § Tabs and windows]
     readonly property int filesWindowSizeDelay: 250
+    // own value: a folder that has listed nothing after this long shows the spinner in its view (ADR-0039 step 23), so a local folder never flashes it [ref: docs/specs/files.md § Views and selection; docs/decisions/ADR-0039-design-polish.md § Decision]
+    readonly property int filesLoadingDelay: 500
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -2360,8 +2362,10 @@ QtObject {
     readonly property int filesPanelFieldWidth: 300
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
-    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
+    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery); the pane scales it by Text size with the name (ADR-0039 step 23; a textScale token would round 21.5 to 22) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
+    // the icon view's file names and their rename field, a point above the caption (it was typography.captionSize + 1 in the views); follows Text size (ADR-0039 step 23) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesIconLabelSize: Math.round(12 * Appearance.textScale)
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
     readonly property int filesPreviewNameLines: 3
     // macOS 27 Finder: 10 between the name block and Information [ref: docs/specs/files.md § Preview pane]

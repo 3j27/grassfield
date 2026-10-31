@@ -46,7 +46,7 @@ Rectangle {
         selectionColor: Appearance.highlight
         selectedTextColor: Appearance.highlightText
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyCaptionSize + 1
+        font.pixelSize: Tokens.filesIconLabelSize
         Accessible.role: Accessible.EditableText
         Accessible.name: qsTr("Name")
 

@@ -2741,6 +2741,14 @@
         <translation>Super+4</translation>
     </message>
     <message>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
         <source>List</source>
         <translation>Liste</translation>
     </message>
@@ -9521,6 +9529,10 @@
     <message>
         <source>Search</source>
         <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
     </message>
 </context>
 <context>

@@ -129,11 +129,14 @@ Item {
                 Accessible.selected: tabItem.current
                 Accessible.onPressAction: root.win.selectTab(tabItem.index)
 
+                // Tabs make room for a dragged one on the move curve; under Reduce Motion they take their place without
+                // sliding (ADR-0039 D2 and step 23; the dragged tab itself follows the pointer).
                 Behavior on x {
-                    enabled: root.dragFrom >= 0 || root.hoverSlot >= 0
+                    enabled: (root.dragFrom >= 0 || root.hoverSlot >= 0) && !Appearance.reduceMotion
                     NumberAnimation {
                         duration: Appearance.duration(Tokens.motionFast)
-                        easing.type: Easing.OutQuad
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.curve
                     }
                 }
 
@@ -154,7 +157,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     text: DisplayName.text(tabItem.modelData.title)
                     elide: Text.ElideMiddle
-                    color: tabItem.current ? Appearance.colors.text : Appearance.colors.textSecondary
+                    color: tabItem.current ? Appearance.colors.text : Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     font.weight: Tokens.typographyMenuWeight
@@ -237,7 +240,7 @@ Item {
                     glyphSize: Tokens.filesTabCloseSize - Tokens.spacingXs
                     capsule: true
                     iconName: "close-glyph"
-                    tint: Appearance.colors.textSecondary
+                    tint: Appearance.windowSecondary
                     accessibleName: qsTr("Close Tab")
                     onClicked: root.win.closeTab(tabItem.index)
                 }
