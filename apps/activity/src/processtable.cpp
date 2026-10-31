@@ -28,7 +28,9 @@ const ViewInfo kViews[] = {
     {View::Active, "active", QT_TRANSLATE_NOOP("ActivityView", "Active Processes")},
     {View::Inactive, "inactive", QT_TRANSLATE_NOOP("ActivityView", "Inactive Processes")},
     {View::Gpu, "gpu", QT_TRANSLATE_NOOP("ActivityView", "GPU Processes")},
+    {View::Windowed, "windowed", QT_TRANSLATE_NOOP("ActivityView", "Windowed Processes")},
     {View::Selected, "selected", QT_TRANSLATE_NOOP("ActivityView", "Selected Processes")},
+    {View::ByType, "byType", QT_TRANSLATE_NOOP("ActivityView", "Processes, by Type")},
     {View::ByGpu, "byGpu", QT_TRANSLATE_NOOP("ActivityView", "Processes, by GPU")},
 };
 
@@ -88,9 +90,10 @@ QString viewTitle(View view)
 
 const std::vector<View> &views()
 {
-    // macOS's order: the grouped view of the GPUs last.
-    static const std::vector<View> all{View::All,    View::Tree,     View::Mine, View::System,   View::OtherUsers,
-                                       View::Active, View::Inactive, View::Gpu,  View::Selected, View::ByGpu};
+    // macOS's order, the grouped views last: by Type (Windows 11's, AM65), then by GPU.
+    static const std::vector<View> all{View::All,      View::Tree, View::Mine,     View::System,   View::OtherUsers,
+                                       View::Active,   View::Inactive, View::Gpu,  View::Windowed, View::Selected,
+                                       View::ByType,   View::ByGpu};
     return all;
 }
 
@@ -243,7 +246,8 @@ QHash<int, QByteArray> ProcessTable::roleNames() const
     return {{CellsRole, "cells"},       {KeyRole, "rowKey"},         {PidRole, "pid"},       {NameRole, "name"},
             {IconRole, "icon"},         {SelectedRole, "selected"},  {CurrentRole, "current"}, {KernelRole, "kernel"},
             {OwnRole, "own"},           {AccessibleRole, "accessibleText"}, {DepthRole, "depth"},
-            {ExpandableRole, "expandable"}, {ExpandedRole, "expanded"}, {GroupRole, "group"}};
+            {ExpandableRole, "expandable"}, {ExpandedRole, "expanded"}, {GroupRole, "group"},
+            {NotRespondingRole, "notResponding"}};
 }
 
 QVariant ProcessTable::data(const QModelIndex &index, int role) const
@@ -263,7 +267,7 @@ QVariant ProcessTable::data(const QModelIndex &index, int role) const
     default:
         break;
     }
-    if (!entry.row) { // a GPU's header (AM49): its name in the name column, nothing else
+    if (!entry.row) { // a group's header (AM49, AM65): its name in the name column, nothing else
         switch (role) {
         case CellsRole: {
             QStringList cells(static_cast<qsizetype>(m_columns.size()));
@@ -280,11 +284,12 @@ QVariant ProcessTable::data(const QModelIndex &index, int role) const
         case AccessibleRole:
             return entry.title;
         case IconRole:
-            return QString();
+            return entry.icon;
         case SelectedRole:
         case CurrentRole:
         case KernelRole:
         case OwnRole:
+        case NotRespondingRole:
             return false;
         default:
             return {};
@@ -316,6 +321,8 @@ QVariant ProcessTable::data(const QModelIndex &index, int role) const
         return row.kernel;
     case OwnRole:
         return own(row);
+    case NotRespondingRole:
+        return row.notResponding;
     case AccessibleRole: {
         QStringList parts{cellText(row, Column::Name)};
         for (Column c : m_columns) {
@@ -352,7 +359,8 @@ QString ProcessTable::cellText(const TableRow &row, Column column) const
     const bool mine = p.own;
     switch (column) {
     case Column::Name:
-        return row.name;
+        // AM27: the Force Quit panel's words (fr « (ne répond pas) »).
+        return row.notResponding ? QCoreApplication::translate("ActivityTable", "%1 (Not Responding)").arg(row.name) : row.name;
     case Column::CpuPercent:
         return formatDecimal(p.cpuPercent, locale);
     case Column::CpuTime:
@@ -370,6 +378,17 @@ QString ProcessTable::cellText(const TableRow &row, Column column) const
         return mine ? formatCount(p.openFiles, locale) : dash();
     case Column::Kind:
         return kindText(row);
+    case Column::Status:
+        // AM27: what is wrong first (macOS's red mark), then Windows' Efficiency Mode leaf, then the kernel's states.
+        if (row.notResponding)
+            return QCoreApplication::translate("ActivityTable", "Not Responding");
+        if (row.process.efficient)
+            return QCoreApplication::translate("ActivityTable", "Efficiency Mode");
+        if (p.state == 'T' || p.state == 't')
+            return QCoreApplication::translate("ActivityTable", "Stopped");
+        if (p.state == 'Z')
+            return QCoreApplication::translate("ActivityTable", "Zombie");
+        return QString();
     case Column::Command:
         return mine && !p.command.empty() ? QString::fromStdString(p.command) : dash();
     case Column::Memory:
@@ -510,6 +529,7 @@ bool ProcessTable::accepts(const TableRow &row) const
     switch (m_view) {
     case View::All:
     case View::Tree:
+    case View::ByType:
         break;
     case View::Mine:
         if (!own(row))
@@ -534,6 +554,10 @@ bool ProcessTable::accepts(const TableRow &row) const
     case View::Gpu:
     case View::ByGpu:
         if (row.kernel || p.gpuDevices.empty())
+            return false;
+        break;
+    case View::Windowed:
+        if (!row.windowed)
             return false;
         break;
     case View::Selected:
@@ -673,9 +697,7 @@ std::vector<Entry> ProcessTable::byGpu()
     }
     std::vector<Entry> out;
     for (auto &[pdev, rows] : groups) {
-        quint64 &id = m_groupIds[pdev];
-        if (id == 0)
-            id = static_cast<quint64>(m_groupIds.size());
+        const quint64 id = groupId(pdev);
         std::stable_sort(rows.begin(), rows.end(), [this](const TableRow *a, const TableRow *b) { return less(*a, *b); });
         Entry header;
         header.group = id;
@@ -696,6 +718,134 @@ std::vector<Entry> ProcessTable::byGpu()
     return out;
 }
 
+quint64 ProcessTable::groupId(const QString &key)
+{
+    quint64 &id = m_groupIds[key];
+    if (id == 0)
+        id = static_cast<quint64>(m_groupIds.size());
+    return id;
+}
+
+// AM65 (Windows 11's Processes tab): a header per kind with its count, in the order Apps, Background Processes, Session
+// Processes, System Processes (the Kernel row there), Other Users; a kind without a process the search keeps is not listed.
+// Under Apps, a header per app unit with its processes (the app's name and icon: its window's, its desktop entry's, the
+// unit's name, from the window's rows), then the processes Apps holds outside such a unit (a window's owner).
+std::vector<Entry> ProcessTable::byType()
+{
+    struct KindGroup {
+        Kind kind;
+        const char *key;
+        const char *title;
+    };
+    static const KindGroup kinds[] = {
+        {Kind::App, "type/apps", QT_TRANSLATE_NOOP("ActivityType", "Apps")},
+        {Kind::Background, "type/background", QT_TRANSLATE_NOOP("ActivityType", "Background Processes")},
+        {Kind::Session, "type/session", QT_TRANSLATE_NOOP("ActivityType", "Session Processes")},
+        {Kind::System, "type/system", QT_TRANSLATE_NOOP("ActivityType", "System Processes")},
+        {Kind::OtherUser, "type/otherUsers", QT_TRANSLATE_NOOP("ActivityType", "Other Users")},
+    };
+    const auto kindOf = [](const TableRow &r) { return r.kernel ? Kind::System : r.process.kind; };
+    const auto sorted = [this](std::vector<const TableRow *> &rows) {
+        std::stable_sort(rows.begin(), rows.end(), [this](const TableRow *a, const TableRow *b) { return less(*a, *b); });
+    };
+    const auto withCount = [this](const QString &name, size_t count) {
+        return QCoreApplication::translate("ActivityType", "%1 (%2)").arg(name, m_locale.toString(static_cast<qulonglong>(count)));
+    };
+    std::vector<Entry> out;
+    for (const KindGroup &k : kinds) {
+        std::vector<const TableRow *> rows;
+        for (const TableRow &r : m_all) {
+            if (kindOf(r) == k.kind && accepts(r))
+                rows.push_back(&r);
+        }
+        if (rows.empty())
+            continue;
+        Entry header;
+        header.group = groupId(QLatin1String(k.key));
+        header.title = withCount(QCoreApplication::translate("ActivityType", k.title), rows.size());
+        header.expandable = true;
+        header.expanded = !m_collapsed.contains(EntryKey{kHeaderId, header.group});
+        out.push_back(header);
+        if (!header.expanded)
+            continue;
+        if (k.kind != Kind::App) {
+            sorted(rows);
+            for (const TableRow *r : rows) {
+                Entry e;
+                e.row = r;
+                e.depth = 1;
+                e.group = header.group;
+                out.push_back(e);
+            }
+            continue;
+        }
+        // The app units, in the order of their first process once sorted (the sort column's leader first), then the rest.
+        sorted(rows);
+        std::vector<quint64> order;
+        QHash<quint64, std::vector<const TableRow *>> units;
+        std::vector<const TableRow *> loose;
+        for (const TableRow *r : rows) {
+            const quint64 unit = r->process.unitKey;
+            if (unit == 0) {
+                loose.push_back(r);
+                continue;
+            }
+            auto it = units.find(unit);
+            if (it == units.end()) {
+                order.push_back(unit);
+                it = units.insert(unit, {});
+            }
+            it->push_back(r);
+        }
+        for (const quint64 unit : order) {
+            const std::vector<const TableRow *> &members = units[unit];
+            // The window's name first (the projection's app), else the desktop entry's, else the unit's own name.
+            const TableRow *named = members.front();
+            for (const TableRow *r : members) {
+                if (r->windowed && !r->appName.isEmpty()) {
+                    named = r;
+                    break;
+                }
+            }
+            QString name = named->appName;
+            QString icon = named->icon;
+            for (const TableRow *r : members) {
+                if (name.isEmpty() && !r->appName.isEmpty())
+                    name = r->appName;
+                if (icon.isEmpty() && !r->icon.isEmpty())
+                    icon = r->icon;
+            }
+            if (name.isEmpty())
+                name = QString::fromStdString(named->process.appId);
+            Entry app;
+            app.group = groupId(QStringLiteral("unit/") + QString::number(unit, 16));
+            app.depth = 1;
+            app.title = withCount(name, members.size());
+            app.icon = icon;
+            app.expandable = true;
+            app.expanded = !m_collapsed.contains(EntryKey{kHeaderId, app.group});
+            out.push_back(app);
+            if (!app.expanded)
+                continue;
+            for (const TableRow *r : members) {
+                Entry e;
+                e.row = r;
+                e.depth = 2;
+                e.group = app.group;
+                out.push_back(e);
+            }
+        }
+        for (const TableRow *r : loose) {
+            Entry e;
+            e.row = r;
+            e.depth = 1;
+            e.group = header.group;
+            out.push_back(e);
+        }
+    }
+    return out;
+}
+
 void ProcessTable::rebuild()
 {
     const int before = count();
@@ -705,6 +855,8 @@ void ProcessTable::rebuild()
         target = tree();
     } else if (m_view == View::ByGpu) {
         target = byGpu();
+    } else if (m_view == View::ByType) {
+        target = byType();
     } else {
         std::vector<const TableRow *> rows;
         rows.reserve(m_all.size());

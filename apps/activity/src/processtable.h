@@ -19,9 +19,8 @@
 
 namespace activity {
 
-// AM12's views of steps 2a and 2b (Windowed Processes comes with the shell's projection, step 3; Processes, by Type with
-// step 4).
-enum class View { All, Tree, Mine, System, OtherUsers, Active, Inactive, Gpu, Selected, ByGpu };
+// AM12's views of steps 2a, 2b, 3 (Windowed Processes with the shell's projection) and 4 (Processes, by Type).
+enum class View { All, Tree, Mine, System, OtherUsers, Active, Inactive, Gpu, Windowed, Selected, ByGpu, ByType };
 
 QString viewKey(View view);
 std::optional<View> viewFromKey(const QString &key);
@@ -40,6 +39,10 @@ struct TableRow {
     QString appName;           // the app's name from its desktop entry (own processes of an app unit), for the search
     QString icon;              // a theme icon name; "" for the generic executable glyph
     bool preventingSleep = false; // AM38
+    // The shell's projection (AM60): it owns a window (Windowed Processes, AM12), and the shell marks it as not responding
+    // (AM27: " (Not Responding)" after its name, in the destructive colour).
+    bool windowed = false;
+    bool notResponding = false;
 };
 
 // A row's identity across samples: the pid and its start time (pid -1 for the Kernel row). A plain value: the table
@@ -55,14 +58,15 @@ inline size_t qHash(const RowId &id, size_t seed = 0)
     return qHashMulti(seed, id.pid, id.start);
 }
 
-// A row as the table lists it: a process (or the Kernel row) at its depth, or a group's header (Processes, by GPU).
+// A row as the table lists it: a process (or the Kernel row) at its depth, or a group's header (Processes, by GPU, by Type).
 struct Entry {
     const TableRow *row = nullptr; // nullptr: a group's header
-    int depth = 0;                 // the tree's level, or 1 under a group's header
+    int depth = 0;                 // the tree's level, or 1 under a group's header (2 under an app's, AM65)
     bool expandable = false;       // a disclosure triangle: children in the tree, processes under a header
     bool expanded = true;
-    quint64 group = 0;             // the group it heads or is in (a GPU), 0 outside Processes, by GPU
-    QString title;                 // a header's: the GPU's name
+    quint64 group = 0;             // the group it heads or is in (a GPU, a kind, an app's unit), 0 outside the grouped views
+    QString title;                 // a header's: the GPU's name, the kind's with its count, the app's with its count
+    QString icon;                  // an app's header (AM65): its icon
 };
 // An entry's identity across samples: its process's (or none for a header) and its group's, since a process that uses two
 // GPUs is listed under both.
@@ -103,6 +107,7 @@ public:
         ExpandableRole, // a disclosure triangle shows
         ExpandedRole,
         GroupRole,      // a group's header (AM49): not a process, never selected
+        NotRespondingRole, // AM27: the name in the destructive colour
     };
 
     explicit ProcessTable(QObject *parent = nullptr);
@@ -131,6 +136,8 @@ public:
     // by its pid and start time, or by its pid alone when `start` is 0 (AM57's names).
     const TableRow *rowAt(int row) const { return processAt(row); }
     const TableRow *processRow(int pid, quint64 start) const;
+    // Every process of the last sample, whatever the view and the search.
+    const std::vector<TableRow> &allRows() const { return m_all; }
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -160,6 +167,8 @@ private:
     bool less(const TableRow &a, const TableRow &b) const;
     std::vector<Entry> tree() const;
     std::vector<Entry> byGpu();
+    std::vector<Entry> byType();
+    quint64 groupId(const QString &key);
     EntryKey keyOf(const Entry &entry) const;
     double sortValue(const TableRow &row, Column column) const;
     QString sortText(const TableRow &row, Column column) const;
@@ -183,7 +192,7 @@ private:
     std::vector<Entry> m_shown;
     QSet<EntryKey> m_collapsed;           // the tree's rows and the GPU headers collapsed (AM13)
     QHash<QString, QString> m_gpuNames;   // by drm-pdev
-    QHash<QString, quint64> m_groupIds;   // by drm-pdev, from 1: a group's identity for the run
+    QHash<QString, quint64> m_groupIds;   // by drm-pdev, kind or unit, from 1: a group's identity for the run
     QSet<RowId> m_selected;
     QSet<RowId> m_selectedView; // Selected Processes: the rows selected when the view was chosen
     std::optional<RowId> m_anchor, m_current;

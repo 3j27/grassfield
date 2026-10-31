@@ -8,6 +8,8 @@
 #include "inspection.h"
 
 #include <QAbstractItemModelTester>
+#include <QDir>
+#include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QThread>
@@ -321,4 +323,85 @@ TEST(Inspection, TheRowsChangeInPlace)
     EXPECT_EQ(rows.roleNames().size(), 1); // one role: QML's `modelData`
     EXPECT_EQ(rows.data(rows.index(0), rows.roleNames().constBegin().key()).toMap().value(QStringLiteral("value")).toString(),
               QStringLiteral("9"));
+}
+
+// AM60, AM17, AM27, AM12, AM57 (step 3): the shell's projection, read from the display's runtime folder. A process that owns
+// a window takes its app's desktop entry name and icon, one the shell marks shows " (Not Responding)" and counts a hang
+// each time the mark comes back; Windowed Processes lists the windowed ones; without a projection Recent hangs is "—".
+TEST(Inspection, TheShellsProjectionNamesMarksAndCountsHangs)
+{
+    Fixture f;
+    f.process(100, "editor", kMe, 100, 1, std::string("editor\0", 7), "/");
+    f.process(101, "helper", kMe, 50, 1, std::string("helper\0", 7), "/");
+    f.write("proc/700/stat", Fixture::statLine(700, "quickshell", 'S', 1, 0, 1, 1, 4, 9000)); // the shell, the writer
+    QTemporaryDir config, state, runtime, data;
+    qputenv("GRASSFIELD_CONFIG_HOME", config.path().toUtf8());
+    const QByteArray runtimeBefore = qgetenv("XDG_RUNTIME_DIR"), displayBefore = qgetenv("WAYLAND_DISPLAY"),
+                     dataBefore = qgetenv("XDG_DATA_DIRS"), homeBefore = qgetenv("XDG_DATA_HOME");
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    qputenv("WAYLAND_DISPLAY", "wayland-test");
+    qputenv("XDG_DATA_HOME", (data.path() + QStringLiteral("/none")).toUtf8());
+    qputenv("XDG_DATA_DIRS", data.path().toUtf8());
+    QDir().mkpath(data.path() + QStringLiteral("/applications"));
+    QFile entry(data.path() + QStringLiteral("/applications/org.example.Editor.desktop"));
+    ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+    entry.write("[Desktop Entry]\nType=Application\nName=Example Editor\nIcon=accessories-text-editor\nExec=editor\n");
+    entry.close();
+    const QString folder = runtimeFolder();
+    ASSERT_TRUE(QDir().mkpath(folder));
+    const auto write = [&](const char *hung) {
+        QFile out(folder + QStringLiteral("/windows.json"));
+        ASSERT_TRUE(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        out.write(QByteArray(R"({"v":1,"writer":{"pid":700,"start":9000},"windows":[{"pid":100,"app":"org.example.Editor","idleInhibit":true}],"notResponding":[)")
+                  + hung + "]}");
+    };
+    write("100");
+    Options o;
+    o.procRoot = f.proc();
+    o.sysRoot = f.sys();
+    o.uid = kMe;
+    o.clockTicks = 100;
+    o.maxKeptFiles = 4096;
+    {
+        ActivityApp app(o, state.path() + QStringLiteral("/activity.json"));
+        QSignalSpy sampled(&app, &ActivityApp::sampled);
+        app.setWindowShown(true);
+        ASSERT_TRUE(sampled.wait(5000));
+        const TableRow *editor = app.processTable().processRow(100, 0);
+        ASSERT_NE(editor, nullptr);
+        EXPECT_TRUE(editor->windowed);
+        EXPECT_TRUE(editor->notResponding);
+        EXPECT_TRUE(editor->preventingSleep); // its window inhibits idle (AM38)
+        EXPECT_EQ(editor->name, QStringLiteral("Example Editor"));
+        EXPECT_EQ(editor->icon, QStringLiteral("accessories-text-editor"));
+        EXPECT_EQ(app.processTable().cellText(*editor, Column::Name), QStringLiteral("Example Editor (Not Responding)"));
+        const TableRow *helper = app.processTable().processRow(101, 0);
+        ASSERT_NE(helper, nullptr);
+        EXPECT_FALSE(helper->windowed);
+        app.setView(QStringLiteral("windowed"));
+        ASSERT_EQ(app.processTable().count(), 1);
+        EXPECT_EQ(app.processTable().rowAt(0)->process.pid, 100);
+
+        // AM57: the mark goes and comes back: two hangs.
+        Inspection *i = app.inspectors().open(100, editor->process.start, editor->name);
+        ASSERT_NE(i, nullptr);
+        EXPECT_EQ(i->hangsText(), QStringLiteral("1"));
+        write("");
+        app.inspectors().namesChanged();
+        ASSERT_TRUE(sampled.wait(7000)); // the next sample reads the projection again
+        write("100");
+        ASSERT_TRUE(sampled.wait(7000));
+        EXPECT_EQ(i->hangsText(), QStringLiteral("2"));
+
+        // The shell's file goes (its last window closed): no projection, nothing marked, "—".
+        QFile::remove(folder + QStringLiteral("/windows.json"));
+        ASSERT_TRUE(sampled.wait(7000));
+        EXPECT_FALSE(app.processTable().processRow(100, 0)->notResponding);
+        EXPECT_EQ(i->hangsText(), dash());
+    }
+    const auto restore = [](const char *name, const QByteArray &value) { value.isNull() ? qunsetenv(name) : qputenv(name, value); };
+    restore("XDG_RUNTIME_DIR", runtimeBefore);
+    restore("WAYLAND_DISPLAY", displayBefore);
+    restore("XDG_DATA_DIRS", dataBefore);
+    restore("XDG_DATA_HOME", homeBefore);
 }

@@ -9,6 +9,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 #include <map>
 #include <vector>
@@ -30,7 +31,12 @@ struct ActivityState {
     std::map<Tab, TabState> tabs;
     QString diskGraph = QStringLiteral("io");          // AM42: "io" or "data"
     QString networkGraph = QStringLiteral("packets");  // AM44: "packets" or "data"
+    QString dockIcon = QStringLiteral("icon");          // AM62: "icon", "network", "disk", "cpu-usage" or "cpu-history"
+    bool askEfficiency = true;                          // AM68: false once "Don't ask again" was checked
 };
+
+// AM62: View > Dock Icon's choices, in the menu's order.
+const QStringList &dockIconKinds();
 
 // The defaults: every tab with its default columns and sort.
 ActivityState defaultState();

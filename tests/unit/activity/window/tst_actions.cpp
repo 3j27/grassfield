@@ -417,3 +417,86 @@ TEST(ProcessActions, AFailedSignalIsShown)
     f.write("proc/4242/cgroup", std::string("0::") + kSession + "\n");
     EXPECT_EQ(a.prepare(QStringLiteral("quit")).value(QStringLiteral("session")).toString(), "fixture");
 }
+
+// AM52, AM61 (step 3): with the shell's projection, a process that owns windows is quit by the shell. "ok" sends nothing
+// (the shell closed its windows; the app may ask to save), "no-windows" sends SIGTERM through its descriptor, "refused" or
+// no answer leaves Force Quit alone; the answer comes after quit() said "pending", never inside it. With a projection, a
+// process of an app unit that owns no window gets SIGTERM at once.
+TEST(ProcessActions, AWindowedProcessIsQuitByTheShell)
+{
+    Actions t(kAppUnit);
+    QStringList asked;
+    QString reply = QStringLiteral("ok");
+    t.actions.setShellQuit([&](int pid, std::function<void(const QString &)> answer) {
+        asked << QString::number(pid);
+        answer(reply);
+    });
+    QSignalSpy finished(&t.actions, &ProcessActions::quitFinished);
+    const auto quitWith = [&](pid_t pid, const char *name) {
+        t.actions.release();
+        t.actions.setSelection({own(pid, name)});
+        t.actions.prepare(QStringLiteral("quit"));
+        finished.clear();
+        return t.actions.quit();
+    };
+
+    const pid_t a = idleChild();
+    t.actions.setProjection(true, {a});
+    EXPECT_TRUE(quitWith(a, "foot").value(QStringLiteral("pending")).toBool());
+    EXPECT_EQ(finished.count(), 0);
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(asked, QStringList{QString::number(a)});
+    EXPECT_EQ(ending(a, false), -1); // "ok": its windows closed, no signal
+
+    reply = QStringLiteral("no-windows");
+    EXPECT_TRUE(quitWith(a, "foot").value(QStringLiteral("pending")).toBool());
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(a), SIGTERM);
+
+    for (const QString &answer : {QStringLiteral("refused"), QString()}) {
+        const pid_t b = idleChild();
+        reply = answer;
+        t.actions.setProjection(true, {b});
+        EXPECT_TRUE(quitWith(b, "foot").value(QStringLiteral("pending")).toBool());
+        ASSERT_TRUE(finished.wait(2000));
+        const QVariantMap f = finished.at(0).at(0).toMap();
+        EXPECT_TRUE(f.value(QStringLiteral("unsafe")).toBool()) << answer.toStdString();
+        EXPECT_EQ(f.value(QStringLiteral("error")).toString(), "The process couldn't be quit safely.");
+        EXPECT_EQ(ending(b, false), -1);
+        EXPECT_TRUE(t.actions.forceQuit().value(QStringLiteral("done")).toBool());
+        EXPECT_EQ(ending(b), SIGKILL);
+    }
+
+    const pid_t c = idleChild();
+    t.actions.setProjection(true, {});
+    asked.clear();
+    EXPECT_TRUE(quitWith(c, "helper").value(QStringLiteral("done")).toBool());
+    EXPECT_TRUE(asked.isEmpty());
+    EXPECT_EQ(ending(c), SIGTERM);
+}
+
+// AM52: the sheet closed before the shell answered: the answer goes nowhere (nothing is sent), and the next Quit asks again.
+TEST(ProcessActions, AnAnswerAfterTheSheetClosedGoesNowhere)
+{
+    Actions t(kAppUnit);
+    std::vector<std::function<void(const QString &)>> later;
+    t.actions.setShellQuit([&](int, std::function<void(const QString &)> answer) { later.push_back(std::move(answer)); });
+    const pid_t a = idleChild();
+    t.actions.setProjection(true, {a});
+    t.actions.setSelection({own(a, "foot")});
+    t.actions.prepare(QStringLiteral("quit"));
+    EXPECT_TRUE(t.actions.quit().value(QStringLiteral("pending")).toBool());
+    t.actions.release();
+    QSignalSpy finished(&t.actions, &ProcessActions::quitFinished);
+    later.at(0)(QStringLiteral("no-windows"));
+    EXPECT_FALSE(finished.wait(300));
+    EXPECT_EQ(ending(a, false), -1);
+    t.actions.prepare(QStringLiteral("quit"));
+    EXPECT_TRUE(t.actions.quit().value(QStringLiteral("pending")).toBool());
+    ASSERT_EQ(later.size(), 2u);
+    later.at(1)(QStringLiteral("no-windows"));
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_EQ(ending(a), SIGTERM);
+}

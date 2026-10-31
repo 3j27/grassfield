@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QLocale>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 
@@ -170,6 +171,12 @@ public:
     QString userName(uint32_t uid) const;
     // A new sample: names may have come (a parent's, a group leader's).
     void namesChanged();
+    // AM57: Recent hangs, the times the shell marked a process since the app opened; -1 without a projection.
+    using Hangs = std::function<int(int pid, quint64 start)>;
+    void setHangs(Hangs hangs) { m_hangs = std::move(hangs); }
+    int hangs(int pid, quint64 start) const { return m_hangs ? m_hangs(pid, start) : -1; }
+    // AM52, AM60: the projection, for each window's Quit.
+    void setProjection(bool valid, QSet<int> windowPids);
 
     // The inspection of a process, made when none is open; nullptr when the process ended or its pid names another one
     // now (AM51's check). `opened` follows, the window raised or made.
@@ -197,6 +204,9 @@ private:
     bool m_swapped = false;
     ProcessName m_processName;
     UserName m_userName;
+    Hangs m_hangs;
+    bool m_projectionValid = false;
+    QSet<int> m_windowPids;
     quint64 m_nextId = 1;
     QHash<quint64, Inspection *> m_open;
 };

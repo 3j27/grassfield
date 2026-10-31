@@ -75,6 +75,86 @@ Window {
         InspectWindow {}
     }
 
+    // The app's own windows other than Inspect (AM66, AM67, AM71, AM72): one each, made or brought forward, transient
+    // children as the Inspect windows (closed with this one, their keys their own). `kind`: its objectName.
+    function showOwn(kind: string, component: Component): void {
+        for (const w of root.ownWindows) {
+            if (w.objectName === kind) {
+                w.show();
+                w.raise();
+                w.requestActivate();
+                return;
+            }
+        }
+        const w = component.createObject(root, {transientParent: root, app: root.backend, objectName: kind});
+        if (w) {
+            root.ownWindows = root.ownWindows.concat([w]);
+            w.closing.connect(() => {
+                root.ownWindows = root.ownWindows.filter(o => o !== w);
+                Qt.callLater(w.destroy);
+            });
+        }
+    }
+
+    // AM67 (step 4): View > App History, Ctrl+6.
+    function showAppHistory(): void {
+        root.showOwn("appHistoryWindow", appHistoryComponent);
+    }
+
+    // Ctrl+1: the main window, from any of its windows.
+    function showMain(): void {
+        root.show();
+        root.raise();
+        root.requestActivate();
+    }
+
+    // AM66 (step 4): View > Performance, Ctrl+5.
+    function showPerformance(): void {
+        root.showOwn("performanceWindow", performanceComponent);
+    }
+
+    // AM71, AM72 (step 5): View > CPU Usage (Ctrl+2), CPU History (Ctrl+3), GPU History (Ctrl+4).
+    function showCpuUsage(): void {
+        root.showOwn("cpuUsageWindow", cpuUsageComponent);
+    }
+    function showCpuHistory(): void {
+        root.showOwn("cpuHistoryWindow", cpuHistoryComponent);
+    }
+    function showGpuHistory(): void {
+        root.showOwn("gpuHistoryWindow", gpuHistoryComponent);
+    }
+    // AM72: View > Clear CPU History (Ctrl+K).
+    function clearCpuHistory(): void {
+        root.backend.performance.clearCpuHistory();
+    }
+
+    Component {
+        id: appHistoryComponent
+        AppHistoryWindow {}
+    }
+
+    Component {
+        id: performanceComponent
+        PerformanceWindow {}
+    }
+
+    Component {
+        id: cpuUsageComponent
+        CpuUsageWindow {}
+    }
+
+    Component {
+        id: cpuHistoryComponent
+        CpuHistoryWindow {}
+    }
+
+    Component {
+        id: gpuHistoryComponent
+        CpuHistoryWindow {
+            gpu: true
+        }
+    }
+
     Connections {
         target: root.backend
         function onInspectRequested(inspection: var): void {
@@ -98,13 +178,31 @@ Window {
     // AM3, AM50, AM55: the action menu's items, as the row's context menu shows them.
     function actionItems(): var {
         const actions = root.backend.actions;
-        return [
+        const efficiency = root.backend.efficiency;
+        const items = [
             {id: "quit", text: qsTr("Quit Process"), shortcut: "Ctrl+Alt+Q", enabled: actions.canQuit},
             {id: "inspect", text: qsTr("Inspect Process"), shortcut: "Ctrl+I", enabled: root.backend.canInspect},
-            {id: "signal", text: qsTr("Send Signal to Process…"), enabled: actions.canSignal},
-            {separator: true},
-            {id: "copy", text: qsTr("Copy"), enabled: root.backend.table.selectedCount > 0}
+            {id: "signal", text: qsTr("Send Signal to Process…"), enabled: actions.canSignal}
         ];
+        // AM68: a checked item for the selected process; absent without the user manager (AM76).
+        if (efficiency.supported)
+            items.push({id: "efficiency", text: qsTr("Efficiency Mode"), checked: efficiency.on, enabled: efficiency.available && !efficiency.busy});
+        items.push({separator: true});
+        items.push({id: "copy", text: qsTr("Copy"), enabled: root.backend.table.selectedCount > 0});
+        return items;
+    }
+
+    // AM68: on, the first time after its sheet (until "Don't ask again"); off at once.
+    function toggleEfficiency(): void {
+        const efficiency = root.backend.efficiency;
+        if (!efficiency.available || efficiency.busy)
+            return;
+        if (efficiency.on)
+            efficiency.set(false);
+        else if (root.backend.askEfficiency)
+            sheets.openEfficiency();
+        else
+            efficiency.set(true);
     }
 
     function runAction(id: string): void {
@@ -114,6 +212,8 @@ Window {
             root.backend.inspectSelection();
         else if (id === "signal")
             sheets.openSignal();
+        else if (id === "efficiency")
+            root.toggleEfficiency();
         else if (id === "copy")
             root.copy();
     }
@@ -348,6 +448,7 @@ Window {
         id: sheets
         objectName: "actionSheets"
         actions: root.backend.actions
+        backend: root.backend
         focusBack: processList
         z: 20
     }
@@ -462,5 +563,39 @@ Window {
         sequence: "Ctrl+Q"
         enabled: true
         run: () => root.close()
+    }
+    // Spec "Keyboard": the windows, from any of the app's windows (an application shortcut: the Inspect, Performance and
+    // CPU windows have none of their own for these keys).
+    component WindowKey: Key {
+        enabled: true
+        context: Qt.ApplicationShortcut
+    }
+    WindowKey {
+        sequence: "Ctrl+1"
+        run: root.showMain
+    }
+    WindowKey {
+        sequence: "Ctrl+2"
+        run: root.showCpuUsage
+    }
+    WindowKey {
+        sequence: "Ctrl+3"
+        run: root.showCpuHistory
+    }
+    WindowKey {
+        sequence: "Ctrl+4"
+        run: root.showGpuHistory
+    }
+    WindowKey {
+        sequence: "Ctrl+K"
+        run: root.clearCpuHistory
+    }
+    WindowKey {
+        sequence: "Ctrl+5"
+        run: root.showPerformance
+    }
+    WindowKey {
+        sequence: "Ctrl+6"
+        run: root.showAppHistory
     }
 }

@@ -34,6 +34,9 @@ QtObject {
     ]
     property string search: ""
     property int interval: 5
+    property string dockIcon: "icon"
+    readonly property var dockIcons: [{key: "icon", title: "Show Application Icon"}, {key: "network", title: "Show Network Usage"},
+        {key: "disk", title: "Show Disk Activity"}, {key: "cpu-usage", title: "Show CPU Usage"}, {key: "cpu-history", title: "Show CPU History"}]
     property int savedWidth: 0
     property int savedHeight: 0
     property bool ready: true
@@ -113,6 +116,7 @@ QtObject {
         property var sendResult: ({done: true})
 
         signal closeWindowRequested
+        signal quitFinished(var result)
 
         function prepare(action: string): var {
             backend.record("prepare:" + action);
@@ -136,6 +140,83 @@ QtObject {
     }
 
     // Inspect (apps/activity/src/activityapp.h, inspection.h): the window opens one Inspect window per inspection.
+    // AM66, AM71, AM72: the Performance data, two processors and one GPU; the windows' states recorded.
+    readonly property QtObject performance: QtObject {
+        property int capacity: 1
+        property string selected: "cpu"
+        property string cpuMode: "overall"
+        readonly property var graph: ({style: "stacked", max: 1, series: [{values: [0.1, 0.2], color: "activityGraphSystem"}, {values: [0.3, 0.2], color: "activityGraphUser"}]})
+        property var resources: [
+            {key: "cpu", kind: "cpu", title: "CPU", subtitle: "2.40 GHz", value: "40%", graph: graph},
+            {key: "memory", kind: "memory", title: "Memory", subtitle: "4 GB of 16 GB", value: "25%", graph: graph},
+            {key: "disk:nvme0n1", kind: "disk", title: "Disk 0 (nvme0n1)", subtitle: "SSD", value: "1%", graph: graph}
+        ]
+        property var detail: ({key: "cpu", title: "CPU", subtitle: "Test CPU", logical: cpuMode === "logical",
+                               graphs: [{title: "% Utilization", graph: graph}],
+                               figures: [{label: "Utilization:", value: "40%"}, {label: "Up Time:", value: "0:01:01:01"}]})
+        property var processors: [{busy: 0.6, user: 0.5, system: 0.1, graph: graph}, {busy: 0.2, user: 0.05, system: 0.15, graph: graph}]
+        property var gpus: [{title: "Intel UHD Graphics", graph: graph}]
+        onSelectedChanged: backend.record("performance:select:" + selected)
+        function clearCpuHistory(): void {
+            backend.record("performance:clear");
+        }
+    }
+    function watchAux(window: var, kind: string): void {
+        backend.record("watchAux:" + kind);
+    }
+
+    // AM67: App History, a list model with the backend's properties; its calls recorded.
+    readonly property ListModel appHistory: ListModel {
+        property string period: "12h"
+        readonly property var periods: [{key: "12h", title: "Last 12 Hours"}, {key: "7d", title: "Last 7 Days"}, {key: "30d", title: "Last 30 Days"}]
+        property string caption: "Resource use since 10/31/26 8:00 AM for alice"
+        property bool unavailable: false
+        property bool loading: false
+        property string sortKey: "cpu"
+        property bool sortDescending: true
+        onPeriodChanged: backend.record("history:period:" + period)
+        function reload(): void {
+            backend.record("history:reload");
+        }
+        function sortBy(key: string): void {
+            backend.record("history:sort:" + key);
+        }
+
+        ListElement {
+            name: "Foot"
+            icon: ""
+            cpuTime: "1:02.00"
+            memoryPeak: "120 MB"
+            launches: "3"
+            lastUsed: "10/31/26 7:40 PM"
+            accessibleText: "Foot"
+        }
+        ListElement {
+            name: "zed"
+            icon: ""
+            cpuTime: "0:41.00"
+            memoryPeak: "300 MB"
+            launches: "1"
+            lastUsed: "10/31/26 6:00 PM"
+            accessibleText: "zed"
+        }
+    }
+
+    // AM68: Efficiency Mode, its calls recorded.
+    property bool askEfficiency: true
+    readonly property QtObject efficiency: QtObject {
+        property bool supported: true
+        property bool available: false
+        property bool on: false
+        property string reason: ""
+        property string appName: "Foot"
+        property bool busy: false
+        signal finished(string error)
+        function set(on: bool): void {
+            backend.record("efficiency:" + on);
+        }
+    }
+
     property bool canInspect: false
     property var focusWindow: null
     signal inspectRequested(var inspection)
@@ -144,6 +225,10 @@ QtObject {
     }
     function inspectRow(row: int): void {
         backend.record("inspectRow:" + row);
+    }
+    function openLoginItems(): bool {
+        backend.record("openLoginItems");
+        return true;
     }
     function closeInspection(inspection: var): void {
         backend.record("closeInspection:" + inspection.key);
@@ -190,6 +275,7 @@ QtObject {
                 property string refusal: ""
                 property var sheet: ({ok: true, count: 1, name: "foot", pid: 2001, session: "", self: false, signals: backend.signalList})
                 signal closeWindowRequested
+                signal quitFinished(var result)
                 function prepare(action: string): var {
                     backend.record("inspect-prepare:" + action);
                     return this.sheet;
@@ -214,7 +300,7 @@ QtObject {
 
     function row(name: string, cpu: string, pid: string): var {
         return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"],
-                depth: 0, expandable: false, expanded: true, group: false};
+                depth: 0, expandable: false, expanded: true, group: false, notResponding: false};
     }
 
     // A table of `rows` with the table's methods, the calls they get recorded in `clicks`.

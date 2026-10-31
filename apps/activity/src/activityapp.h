@@ -5,12 +5,16 @@
 #pragma once
 
 #include "actions.h"
+#include "apphistory.h"
+#include "performance.h"
+#include "efficiency.h"
 #include "activitystate.h"
 #include "battery.h"
 #include "desktopapps.h"
 #include "inhibitors.h"
 #include "inspection.h"
 #include "processtable.h"
+#include "runtimefiles.h"
 #include "samplerworker.h"
 #include "summary.h"
 
@@ -20,6 +24,7 @@
 #include <QHash>
 #include <QLocale>
 #include <QObject>
+#include <QWindow>
 #include <QProcessEnvironment>
 #include <QThread>
 #include <QTimer>
@@ -50,11 +55,23 @@ class ActivityApp : public QObject
     Q_PROPERTY(QString search READ search WRITE setSearch NOTIFY searchChanged)
     // AM9: 1, 2 or 5 seconds.
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
+    // AM62: View > Dock Icon: "icon" (the application icon) or the graph the Dock draws on the tile, and the menu's choices
+    // ({key, title}).
+    Q_PROPERTY(QString dockIcon READ dockIcon WRITE setDockIcon NOTIFY dockIconChanged)
+    Q_PROPERTY(QVariantList dockIcons READ dockIcons CONSTANT)
     Q_PROPERTY(QObject *table READ table CONSTANT)
     // The summary under the table: the tab's figures and graphs (AM5).
     Q_PROPERTY(QObject *summary READ summary CONSTANT)
     // Quit, Force Quit and Send Signal on the selection (step 2c, AM50 to AM56).
     Q_PROPERTY(QObject *actions READ actions CONSTANT)
+    // AM66, AM71, AM72: the Performance window's and the CPU and GPU windows' data.
+    Q_PROPERTY(QObject *performance READ performance CONSTANT)
+    // AM67: App History's rows (read when its window opens).
+    Q_PROPERTY(QObject *appHistory READ appHistory CONSTANT)
+    // AM68: Efficiency Mode of the selected process.
+    Q_PROPERTY(QObject *efficiency READ efficiency CONSTANT)
+    // AM68: the first time's sheet shows (until "Don't ask again").
+    Q_PROPERTY(bool askEfficiency READ askEfficiency WRITE setAskEfficiency NOTIFY askEfficiencyChanged)
     // Inspect (step 2d, AM57): one process selected, not the Kernel row.
     Q_PROPERTY(bool canInspect READ canInspect NOTIFY inspectChanged)
     // The key window (QGuiApplication::focusWindow), null while no window of the app has the keyboard: a key belongs to the
@@ -102,11 +119,22 @@ public:
     void setSearch(const QString &text);
     int interval() const { return m_state.interval; }
     void setInterval(int seconds);
+    QString dockIcon() const { return m_state.dockIcon; }
+    void setDockIcon(const QString &key);
+    QVariantList dockIcons() const;
     QObject *table() { return &m_table; }
     ProcessTable &processTable() { return m_table; }
     QObject *summary() { return &m_summary; }
     QObject *actions() { return &m_actions; }
     ProcessActions &processActions() { return m_actions; }
+    QObject *efficiency() { return &m_efficiency; }
+    QObject *appHistory() { return &m_appHistory; }
+    QObject *performance() { return &m_performance; }
+    Performance &performanceModel() { return m_performance; }
+    AppHistory &appHistoryModel() { return m_appHistory; }
+    Efficiency &efficiencyMode() { return m_efficiency; }
+    bool askEfficiency() const { return m_state.askEfficiency; }
+    void setAskEfficiency(bool ask);
     bool canInspect() const;
     QObject *focusWindow() const;
     Inspectors &inspectors() { return m_inspectors; }
@@ -123,6 +151,12 @@ public:
 
     // AM8: the window is on screen (visible, not minimized, exposed). While it is not, no sample is taken.
     Q_INVOKABLE void setWindowShown(bool shown);
+    // AM66, AM71, AM72: one of the app's other windows that draw live data ("performance", "cpuUsage", "cpuHistory",
+    // "gpuHistory") is on screen or not. While one is, the system's files are read (and the GPU clients for Performance and
+    // GPU History) even if the main window is not.
+    Q_INVOKABLE void setAuxShown(const QString &kind, bool shown);
+    // That window's state followed (visible, exposed, not minimized, as the main window's), and its end.
+    Q_INVOKABLE void watchAux(QWindow *window, const QString &kind);
     // AM15: a column of the tab shown or hidden (never the name), its width.
     Q_INVOKABLE void setColumnShown(const QString &key, bool shown);
     Q_INVOKABLE void setColumnWidth(const QString &key, int width);
@@ -141,6 +175,9 @@ public:
     Q_INVOKABLE void inspectRow(int row);
     // Its window closed.
     Q_INVOKABLE void closeInspection(QObject *inspection);
+    // AM69 (step 4): Settings on General > Login Items, a link and not a copy (the owner's brief); false when it could not
+    // be started.
+    Q_INVOKABLE bool openLoginItems();
 
     // The rows of a snapshot as the table shows them (the tests feed snapshots through it).
     std::vector<TableRow> tableRows(const Snapshot &snapshot);
@@ -152,6 +189,8 @@ signals:
     void viewChanged();
     void searchChanged();
     void intervalChanged();
+    void dockIconChanged();
+    void askEfficiencyChanged();
     void columnsChanged();
     void sampled();
     // Asked by the worker's thread; queued.
@@ -169,7 +208,13 @@ private:
     void scheduleSave();
     void readAppearance();
     void updateActionTargets();
+    // AM60: the shell's projection read again: the actions, the inspections, the sampler and the table follow it.
+    void applyProjection();
+    // AM62: the Dock tile's graph from the last sample, or no file for the application icon.
+    void writeDockTile();
     QString userName(uint32_t uid);
+    // AM67: the live app units of the last sample, their cgroup's CPU time and memory peak now.
+    std::vector<LiveUnit> liveUnits();
 
     Options m_options;
     QString m_statePath;
@@ -177,7 +222,22 @@ private:
     ProcessTable m_table;
     Summary m_summary;
     ProcessActions m_actions;
+    Efficiency m_efficiency;
+    AppHistory m_appHistory;
+    Performance m_performance;
     Inspectors m_inspectors;
+    QString m_runtimeFolder;
+    ProjectionWatch m_projection;
+    SnapshotPtr m_lastSnapshot;   // the table's last sample, for a projection that changes between two
+    bool m_inSnapshot = false;
+    QSet<int> m_hung;             // the pids the projection marked last
+    // AM57: each pid's marks since the app opened, with the start time of the process they were for (0 while its row was not
+    // sampled yet: the first mark can come before the first sample).
+    struct Hangs {
+        quint64 start = 0;
+        int count = 0;
+    };
+    QHash<int, Hangs> m_hangs;
     BatteryWatch m_battery;
     QThread m_thread;
     SamplerWorker *m_worker = nullptr; // lives on m_thread

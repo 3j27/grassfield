@@ -38,6 +38,7 @@ enum Read : unsigned {
     ReadSystemDisk = 1u << 10, // /proc/diskstats
     ReadSystemNet = 1u << 11,  // /proc/net/dev
     ReadMemory = 1u << 12,     // statm of every process, status of one fifth of them in turn (Memory tab, AD32)
+    ReadEfficiency = 1u << 13, // AM68: cpu.idle and cpu.weight of each own app unit once (the window shown)
 };
 
 enum class Tab { Cpu, Memory, Energy, Disk, Network };
@@ -99,6 +100,10 @@ struct ProcessValues {
     Kind kind = Kind::Background;
     bool session = false;            // AM54
     bool efficiencyEligible = false; // AM68
+    // AM65: the unit uwsm named for one launch (A7) as a number, the same for its processes, never 0; 0 outside such a unit.
+    uint64_t unitKey = 0;
+    // AM68: that unit's cpu.weight is the lowest (Efficiency Mode), read once per unit and sample (ReadEfficiency).
+    bool efficient = false;
     // CPU (AM20 to AM22): ticks since start; the share of one core since the previous sample, -1 at the first.
     uint64_t cpuTicks = 0;
     double cpuPercent = -1;
@@ -182,6 +187,7 @@ struct GpuDevice {
     std::string driver;
     std::vector<GpuEngine> engines;
     uint64_t memoryBytes = 0;
+    std::map<std::string, uint64_t> memoryRegions; // AM66: drm-memory-<region> summed over the clients, by region
     // AM47: the DRM card whose device is this pdev (/sys/class/drm/card<n>), -1 when none is; its name from pci.ids ("Intel
     // UHD Graphics"), "" when pci.ids does not name it.
     int card = -1;
@@ -193,6 +199,7 @@ struct SystemSnapshot {
     double userShare = -1, systemShare = -1, idleShare = -1; // AM29, fractions of the whole machine
     bool sharesByOwner = false; // User and System as macOS means them (AD5), else the kernel's user/kernel split
     std::vector<double> perCpuBusy;                          // fractions, -1 at the first sample
+    std::vector<double> perCpuUser;                          // AM71: the kernel's user-mode part of each (System is the rest)
     int tasks = -1;      // /proc/loadavg: every task, threads included
     int processes = 0;   // numeric entries of /proc
     MemorySummary memory;
@@ -206,7 +213,7 @@ struct SystemSnapshot {
 struct Counters {
     uint64_t listed = 0, statReads = 0, statusReads = 0, ioReads = 0, threadStatusReads = 0, fdListReads = 0, fdLinks = 0,
              fdinfoReads = 0, sockDumps = 0, cmdlineReads = 0, cgroupReads = 0, exeLinks = 0, systemReads = 0,
-             statmReads = 0, ownerStats = 0;
+             statmReads = 0, ownerStats = 0, weightReads = 0;
     uint64_t statParses = 0, ioParses = 0; // lines parsed: an unchanged one is not (2b)
     size_t keptFiles = 0;
 };
@@ -288,6 +295,7 @@ private:
         std::string command;
         std::string cgroup; // own processes only (AD25)
         std::string appId;  // parseAppUnit's name, own processes only
+        uint64_t unitKey = 0; // AM65: a hash of the unit's name when parseAppUnit names it
         bool haveCtx = false;
         uint64_t ctx = 0;
         double ctxTime = 0;
@@ -336,6 +344,7 @@ private:
     std::vector<int> listing_; // the pids /proc lists
     int procFd_ = -1;          // opt_.procRoot, for fstatat
     std::vector<TcpCounters> tcp_;
+    std::unordered_map<uint64_t, bool> efficientUnits_; // AM68: by unitKey, this sample's
     std::string buf_;        // whole files read by readFile
     std::string path_;       // the /proc path being built (its capacity kept: no allocation per read)
     std::unique_ptr<char[]> io_; // kept files' contents (kBufSize, never cleared: only the bytes read are looked at)

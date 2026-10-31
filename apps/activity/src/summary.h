@@ -66,6 +66,11 @@ public:
 
     static QString durationText(qint64 seconds); // "h:mm" (AM39)
 
+    // AM62: the Dock tile's graph of `kind` ("network", "disk", "cpu-usage", "cpu-history"), its last `count` samples at
+    // most, each in [0, 1]: network and disk a pair (in and out, read and written, over the largest of those samples), CPU
+    // history a pair (System and User shares), CPU usage the last sample's share alone. A gap is 0.
+    QVariantList dockTileSamples(const QString &kind, int count) const;
+
 signals:
     void changed();
     void capacityChanged();

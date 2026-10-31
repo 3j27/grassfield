@@ -352,7 +352,7 @@ TestCase {
         mouseClick(t.win.moreButton);
         verify(t.win.actionMenu.opened);
         compare(t.win.actionMenu.items.filter(i => !i.separator).map(i => i.text),
-                ["Quit Process", "Inspect Process", "Send Signal to Process…", "Copy"]);
+                ["Quit Process", "Inspect Process", "Send Signal to Process…", "Efficiency Mode", "Copy"]);
         compare(t.win.actionMenu.items[0].shortcut, "Ctrl+Alt+Q");
         compare(t.win.actionMenu.items[1].shortcut, "Ctrl+I");
         t.win.actionMenu.chosen("signal");
@@ -387,8 +387,152 @@ TestCase {
         mouseClick(rows[2], 40, 5, Qt.RightButton);
         compare(t.backend.table.clicks[0], "2:0");
         verify(t.win.actionMenu.opened);
-        compare(t.win.actionMenu.items.map(i => i.text || "-"), ["Quit Process", "Inspect Process", "Send Signal to Process…", "-", "Copy"]);
+        compare(t.win.actionMenu.items.map(i => i.text || "-"), ["Quit Process", "Inspect Process", "Send Signal to Process…", "Efficiency Mode", "-", "Copy"]);
         t.win.actionMenu.close();
+    }
+
+    // AM52, AM61 (step 3): Quit of a process that owns windows waits for the shell (at most a second): the sheet takes no
+    // click or key meanwhile, then closes on the answer, or offers Force Quit alone.
+    function test_quitWaitsForTheShell() {
+        const t = make();
+        t.backend.actions.canQuit = true;
+        t.backend.actions.quitResult = {pending: true};
+        mouseClick(t.win.stopButton);
+        const sheet = t.win.sheets.quitSheet;
+        keyClick(Qt.Key_Return);
+        verify(sheet.shown);
+        verify(t.win.sheets.waiting);
+        verify(sheet.holdInput);
+        verify(!sheet.confirmEnabled);
+        compare(sheet.errorText, "");
+        t.backend.actions.quitFinished({done: true});
+        verify(!sheet.shown);
+        verify(!t.win.sheets.waiting);
+        compare(calls(t), ["prepare:quit", "quit", "release"]);
+        mouseClick(t.win.stopButton);
+        keyClick(Qt.Key_Return);
+        t.backend.actions.quitFinished({done: false, unsafe: true, error: "The process couldn't be quit safely."});
+        verify(sheet.shown);
+        compare(sheet.errorText, "The process couldn't be quit safely.");
+        compare(sheet.confirmText, "Force Quit");
+        keyClick(Qt.Key_Escape);
+        verify(!sheet.shown);
+    }
+
+    // AM68, AM76: Efficiency Mode, a checked item of the action menu for the selected process (absent without the user
+    // manager); the first time on asks with its sheet ("Don't ask again" remembered), off at once; a failure says so.
+    function test_efficiencyMode() {
+        const t = make();
+        const e = t.backend.efficiency;
+        const item = () => t.win.actionItems().find(i => i.id === "efficiency");
+        verify(!item().enabled);
+        e.available = true;
+        verify(item().enabled);
+        verify(!item().checked);
+        t.win.runAction("efficiency");
+        const sheet = t.win.sheets.efficiencySheet;
+        verify(sheet.shown);
+        compare(sheet.title, "Turn on Efficiency Mode for “Foot”?");
+        keyClick(Qt.Key_Escape); // Cancel: nothing set
+        verify(!sheet.shown);
+        compare(calls(t).filter(c => c.startsWith("efficiency")), []);
+        t.win.runAction("efficiency");
+        const box = findChild(sheet, "dontAskEfficiency");
+        verify(box);
+        box.checked = true;
+        keyClick(Qt.Key_Return);
+        verify(!sheet.shown);
+        verify(!t.backend.askEfficiency);
+        compare(calls(t).filter(c => c.startsWith("efficiency")), ["efficiency:true"]);
+        t.win.runAction("efficiency"); // no sheet any more
+        verify(!sheet.shown);
+        e.on = true;
+        verify(item().checked);
+        t.win.runAction("efficiency");
+        compare(calls(t).filter(c => c.startsWith("efficiency")), ["efficiency:true", "efficiency:true", "efficiency:false"]);
+        e.busy = true;
+        verify(!item().enabled);
+        e.busy = false;
+        e.finished("Efficiency Mode couldn't be turned off.");
+        verify(t.win.sheets.efficiencyError.shown);
+        compare(t.win.sheets.efficiencyError.title, "Efficiency Mode couldn't be turned off.");
+        keyClick(Qt.Key_Return);
+        verify(!t.win.sheets.efficiencyError.shown);
+        e.supported = false;
+        compare(item(), undefined);
+    }
+
+    // AM67: View > App History (Ctrl+6): one window, read when it opens; the period pop-up reads again; a header sorts; no
+    // journal shows the message alone. Ctrl+1 brings the main window back.
+    function test_appHistoryWindow() {
+        const t = make();
+        keyClick(Qt.Key_6, Qt.ControlModifier);
+        const w = t.win.ownWindows.find(o => o.objectName === "appHistoryWindow");
+        verify(w, "the App History window opened");
+        compare(w.title, "App History");
+        compare(calls(t).filter(c => c.startsWith("history")), ["history:reload"]);
+        t.win.showAppHistory(); // a second request raises it
+        compare(t.win.ownWindows.filter(o => o.objectName === "appHistoryWindow").length, 1);
+        tryCompare(w.rows, "count", 2);
+        w.periodPicker.picked("7d");
+        compare(t.backend.appHistory.period, "7d");
+        verify(calls(t).indexOf("history:period:7d") >= 0);
+        const headers = findChild(w.contentItem, "historyHeaders");
+        verify(headers);
+        verify(!w.unavailableText.visible);
+        t.backend.appHistory.unavailable = true;
+        verify(w.unavailableText.visible);
+        verify(!w.rows.visible);
+        verify(!w.periodPicker.visible);
+        w.close();
+        tryVerify(() => t.win.ownWindows.length === 0);
+    }
+
+    // AM66, AM71, AM72: Ctrl+5 Performance (the sidebar selects, CPU's pop-up shows the logical processors), Ctrl+2 CPU
+    // Usage (a bar per processor, System lit first), Ctrl+3 CPU History and Ctrl+4 GPU History (a graph each), Ctrl+K
+    // clears; each window says when it is on screen, one of each.
+    function test_performanceAndCpuWindows() {
+        const t = make();
+        keyClick(Qt.Key_5, Qt.ControlModifier);
+        const perf = t.win.ownWindows.find(o => o.objectName === "performanceWindow");
+        verify(perf, "the Performance window opened");
+        compare(perf.gfChromeRole, "info");
+        tryCompare(perf.sidebar, "count", 3);
+        perf.step(1); // Down in the sidebar
+        compare(t.backend.performance.selected, "memory");
+        perf.step(5); // past the end: the last one
+        compare(t.backend.performance.selected, "disk:nvme0n1");
+        verify(calls(t).indexOf("watchAux:performance") >= 0);
+        t.backend.performance.selected = "cpu";
+        verify(perf.cpuModePicker.visible);
+        perf.cpuModePicker.picked("logical");
+        compare(t.backend.performance.cpuMode, "logical");
+        compare(perf.figures.children.filter(c => c.Accessible && c.Accessible.role === Accessible.StaticText).length, 2);
+
+        t.win.showCpuUsage();
+        const usage = t.win.ownWindows.find(o => o.objectName === "cpuUsageWindow");
+        verify(usage);
+        tryCompare(usage.bars.children.filter(c => c.Accessible && c.Accessible.role === Accessible.StaticText), "length", 2);
+        compare(usage.bars.children[0].Accessible.name, "Processor 1: 60%");
+        compare(usage.bars.children[0].systemLit, 2); // 0.1 of 20 segments
+        compare(usage.bars.children[0].lit, 12);
+        t.win.showCpuHistory();
+        const cpuHistory = t.win.ownWindows.find(o => o.objectName === "cpuHistoryWindow");
+        verify(cpuHistory);
+        compare(cpuHistory.title, "CPU History");
+        t.win.showGpuHistory();
+        const gpuHistory = t.win.ownWindows.find(o => o.objectName === "gpuHistoryWindow");
+        verify(gpuHistory);
+        compare(gpuHistory.title, "GPU History");
+        compare(gpuHistory.graphs.length, 1);
+        t.win.clearCpuHistory();
+        verify(calls(t).indexOf("performance:clear") >= 0);
+        compare(t.win.ownWindows.length, 4);
+        t.win.showCpuUsage(); // raised, not a second one
+        compare(t.win.ownWindows.length, 4);
+        for (const w of t.win.ownWindows.slice())
+            w.close();
+        tryVerify(() => t.win.ownWindows.length === 0);
     }
 
     // AM54: the app's own row quit: the window closes.

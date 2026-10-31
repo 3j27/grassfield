@@ -126,8 +126,10 @@ QString Inspection::key() const
 
 QString Inspection::hangsText() const
 {
-    // AM57: the times the shell's projection marked the process; there is no projection before step 3 (R11: no made-up 0).
-    return dash();
+    // AM57: the times the shell's projection marked the process since the app opened; "—" without a projection (no shell,
+    // AM75; R11: no made-up 0).
+    const int n = m_registry->hangs(m_pid, m_start);
+    return n < 0 ? dash() : formatCount(n, m_registry->locale());
 }
 
 void Inspection::setTab(const QString &tab)
@@ -399,6 +401,14 @@ QString Inspectors::userName(uint32_t uid) const
     return m_userName ? m_userName(uid) : QString::number(uid);
 }
 
+void Inspectors::setProjection(bool valid, QSet<int> windowPids)
+{
+    m_projectionValid = valid;
+    m_windowPids = std::move(windowPids);
+    for (Inspection *i : std::as_const(m_open))
+        i->processActions().setProjection(m_projectionValid, m_windowPids);
+}
+
 void Inspectors::namesChanged()
 {
     for (Inspection *i : std::as_const(m_open))
@@ -421,6 +431,7 @@ Inspection *Inspectors::open(int pid, quint64 start, const QString &name)
         shown = QString::fromStdString(reader->read(0, monotonicSeconds()).comm);
     const quint64 id = m_nextId++;
     auto *inspection = new Inspection(this, id, std::move(reader), shown, m_procRoot);
+    inspection->processActions().setProjection(m_projectionValid, m_windowPids);
     m_open.insert(id, inspection);
     emit opened(inspection);
     return inspection;

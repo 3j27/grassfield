@@ -12,6 +12,7 @@ set(CMAKE_AUTOMOC ON)
 # Core, Gui and DBus) and the app with its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
 add_library(grassfield-activity-sampler STATIC
     src/inspect.cpp src/inspect.h
+    src/machine.cpp src/machine.h
     src/netdiag.cpp src/netdiag.h
     src/procparse.cpp src/procparse.h
     src/sampler.cpp src/sampler.h
@@ -31,14 +32,18 @@ find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 add_library(grassfield-activity-window STATIC
     src/actions.cpp src/actions.h
     src/activityapp.cpp src/activityapp.h
+    src/apphistory.cpp src/apphistory.h
     src/activitystate.cpp src/activitystate.h
     src/battery.cpp src/battery.h
     src/columns.cpp src/columns.h
     src/desktopapps.cpp src/desktopapps.h
+    src/efficiency.cpp src/efficiency.h
     src/format.cpp src/format.h
     src/inhibitors.cpp src/inhibitors.h
     src/inspection.cpp src/inspection.h src/shownwatch.h
+    src/performance.cpp src/performance.h
     src/processtable.cpp src/processtable.h
+    src/runtimefiles.cpp src/runtimefiles.h
     src/samplerworker.cpp src/samplerworker.h
     src/summary.cpp src/summary.h)
 target_include_directories(grassfield-activity-window PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -65,6 +70,7 @@ if(GTest_FOUND)
     enable_testing()
     add_executable(activity-unit-tests
         ../../tests/unit/activity/tst_inspect.cpp
+        ../../tests/unit/activity/tst_machine.cpp
         ../../tests/unit/activity/tst_memory.cpp
         ../../tests/unit/activity/tst_netdiag.cpp
         ../../tests/unit/activity/tst_procparse.cpp
@@ -80,10 +86,14 @@ if(GTest_FOUND)
     add_executable(activity-window-tests
         ../../tests/unit/activity/window/tst_actions.cpp
         ../../tests/unit/activity/window/tst_activityapp.cpp
+        ../../tests/unit/activity/window/tst_apphistory.cpp
+        ../../tests/unit/activity/window/tst_efficiency.cpp
         ../../tests/unit/activity/window/tst_format.cpp
         ../../tests/unit/activity/window/tst_inspection.cpp
         ../../tests/unit/activity/window/tst_main.cpp
+        ../../tests/unit/activity/window/tst_performance.cpp
         ../../tests/unit/activity/window/tst_processtable.cpp
+        ../../tests/unit/activity/window/tst_runtimefiles.cpp
         ../../tests/unit/activity/window/tst_summary.cpp)
     target_include_directories(activity-window-tests PRIVATE ../../tests/unit/activity)
     target_link_libraries(activity-window-tests PRIVATE grassfield-activity-window Qt6::Test GTest::gtest)

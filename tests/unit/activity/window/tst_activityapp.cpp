@@ -149,7 +149,7 @@ TEST(ActivityApp, RequestsWhileASampleRunsMakeOneMore)
     EXPECT_FALSE(samples.wait(1000)); // no third before the interval
     EXPECT_EQ(samples.count(), 2);
     ASSERT_EQ(requests.count(), 2);
-    EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults));
+    EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults) | ReadEfficiency);
 }
 
 // Follow-up 2 (AD32): a pause is told by the update interval set in the window, which reaches the sampler.

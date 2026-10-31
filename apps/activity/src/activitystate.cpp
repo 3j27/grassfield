@@ -116,6 +116,12 @@ ActivityState readState(const QString &path)
     const QString network = root.value(QStringLiteral("networkGraph")).toString();
     if (network == QLatin1String("packets") || network == QLatin1String("data"))
         s.networkGraph = network;
+    const QString dock = root.value(QStringLiteral("dockIcon")).toString();
+    if (dockIconKinds().contains(dock))
+        s.dockIcon = dock;
+    const QJsonValue ask = root.value(QStringLiteral("askEfficiency"));
+    if (ask.isBool())
+        s.askEfficiency = ask.toBool();
     const QJsonObject tabs = root.value(QStringLiteral("tabs")).toObject();
     for (Tab tab : kTabs) {
         const QJsonValue v = tabs.value(tabKey(tab));
@@ -123,6 +129,13 @@ ActivityState readState(const QString &path)
             s.tabs[tab] = readTab(tab, v.toObject());
     }
     return s;
+}
+
+const QStringList &dockIconKinds()
+{
+    static const QStringList kinds{QStringLiteral("icon"), QStringLiteral("network"), QStringLiteral("disk"),
+                                   QStringLiteral("cpu-usage"), QStringLiteral("cpu-history")};
+    return kinds;
 }
 
 bool writeState(const QString &path, const ActivityState &state)
@@ -136,6 +149,8 @@ bool writeState(const QString &path, const ActivityState &state)
     root.insert(QStringLiteral("interval"), state.interval);
     root.insert(QStringLiteral("diskGraph"), state.diskGraph);
     root.insert(QStringLiteral("networkGraph"), state.networkGraph);
+    root.insert(QStringLiteral("dockIcon"), state.dockIcon);
+    root.insert(QStringLiteral("askEfficiency"), state.askEfficiency);
     QJsonObject tabs;
     for (const auto &[tab, t] : state.tabs) {
         QJsonArray columns;
