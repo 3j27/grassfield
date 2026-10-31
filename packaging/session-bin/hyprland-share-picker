@@ -30,6 +30,7 @@ import sys
 import time
 
 STOCK_DIR = "/usr/bin"
+SUSPEND_STATS = "/sys/power/suspend_stats/success"
 STOCK_NAMES = ("hyprland-share-picker", "hyprland-preview-share-picker")
 SHELL_DIR = "/usr/share/grassfield/shell"
 ACK_SECONDS = 1.0
@@ -39,6 +40,8 @@ MAX_WINDOWS = 256
 MAX_TEXT = 256
 MAX_LINE = 4096
 NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
+# The shell's lock marker line (shell/security/LockMachine.js MARKER_LINE).
+MARKER = re.compile(r"(locked|unlocked)(?: sleeps=([0-9]{1,12}))?")
 SELECTION = re.compile(r"(r?)/(?:screen:(?P<screen>[A-Za-z0-9._-]{1,64})|window:(?P<window>[0-9]{1,10})|"
                        r"region:(?P<region>[A-Za-z0-9._-]{1,64})@(?P<x>[0-9]{1,5}),(?P<y>[0-9]{1,5}),(?P<w>[0-9]{1,5}),"
                        r"(?P<h>[0-9]{1,5}))")
@@ -73,9 +76,10 @@ def run(argv, timeout):
 
 
 def child_env():
-    # Quickshell's option variables would make `qs ipc -p` refuse (security.md, tests/security/lock_request_env.sh).
+    # Quickshell's option variables would make `qs ipc -p` refuse (security.md, tests/security/lock_request_env.sh). The
+    # window list (titles) goes to no helper.
     env = dict(os.environ)
-    for key in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST"):
+    for key in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST", "XDPH_WINDOW_SHARING_LIST"):
         env.pop(key, None)
     return env
 
@@ -99,10 +103,20 @@ def marker_path():
     return os.path.join(runtime, "grassfield-lock-" + re.sub(r"[^A-Za-z0-9_.-]", "_", key))
 
 
+def sleeps_now():
+    # The count of completed suspends, or None when it cannot be read (the shell's sleepCount()).
+    try:
+        with open(SUSPEND_STATS) as f:
+            return int(f.read(32).strip())
+    except (OSError, ValueError):
+        return None
+
+
 def locked():
     # Owner decision Q15: while the session is locked nothing shows. Every doubt counts as locked (ADR-0035 D-6): hyprctl
-    # failing, silent or unreadable, no display, every display blocked by the lock, a marker that says anything but
-    # "unlocked" or cannot be read.
+    # failing, silent or unreadable, no display, every display blocked by the lock; a marker that cannot be read, or that is
+    # not "unlocked" in the shell's own grammar (LockMachine.markerSaysLocked: "unlocked" or "unlocked sleeps=<n>"), or one
+    # whose sleep count is not the machine's now (LockMachine.sleptSince: a sleep that no shell locked for, the shell locks).
     shown = monitors()
     if shown is None:
         return True
@@ -116,7 +130,11 @@ def locked():
         return False
     except (OSError, UnicodeDecodeError):
         return True
-    return text != "unlocked"
+    m = MARKER.fullmatch(text)
+    if not m or m.group(1) != "unlocked":
+        return True
+    now = sleeps_now()
+    return m.group(2) is not None and now is not None and int(m.group(2)) != now
 
 
 def window_list():
@@ -238,11 +256,13 @@ def valid(selection, windows):
 
 def converse(conn, request_id, windows):
     # The shell's lines until its answer: the selection to print, or None (cancelled).
-    conn.setblocking(False)
+    # The list whole, however long, within the connection's 2 s; then the shell's lines without blocking.
+    conn.settimeout(CONNECT_SECONDS)
     try:
         conn.sendall((request_id + " list " + json.dumps(windows, ensure_ascii=True) + "\n").encode("ascii"))
-    except (BlockingIOError, OSError):
+    except OSError:
         return None
+    conn.setblocking(False)
     buffered = b""
     last = time.monotonic()
     while True:
@@ -297,10 +317,15 @@ def main():
     server = listen()
     answer = ask_shell(request_id, socket_path) if server is not None else None
     if answer is None:
-        # No shell: the stock picker, once the socket file is gone (a late "accepted" finds nothing to connect to).
+        # No shell: the stock picker, once the socket file is gone (a late "accepted" finds nothing to connect to), and
+        # only if the session did not lock meanwhile (a restarting shell restores its lock). SIGPIPE back to its default:
+        # Python ignores it, and an exec keeps an ignored signal.
         remove_socket()
         if server is not None:
             server.close()
+        if locked():
+            cancel()
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
         stock = os.path.join(STOCK_DIR, stock_name)
         try:
             os.execv(stock, [stock] + args)

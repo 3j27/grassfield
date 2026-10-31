@@ -2,6 +2,7 @@
 # shell, a fake hyprctl and fake stock pickers; run by tests/shell/share_picker.sh as `python3 -I check.py <root> <tmp>`.
 # Its stdout goes through a copy of xdph 1.4.1's parser (promptForScreencopySelection, src/shared/ScreencopyShared.cpp:70-125),
 # so a selection counts only as xdph reads it. Spec system-dialogs.md A-SP1, A-SP2, A-SP2b, A-SP3.
+import atexit
 import json
 import os
 import re
@@ -10,6 +11,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 root, tmp = sys.argv[1:3]
@@ -28,34 +30,46 @@ def write(path, text, mode=0o755):
     os.chmod(path, mode)
 
 
-# A scratch copy of the stand-ins whose stock pickers are fakes.
-bindir, fake, stock, run = (os.path.join(tmp, d) for d in ("bin", "fake", "stock", "run"))
+# A scratch copy of the stand-ins whose stock pickers are fakes, and whose count of suspends is a file here. The runtime
+# directory is short and of its own: a Unix socket's path holds at most 107 bytes, and `just test` puts the test's
+# directory deep in the tree.
+bindir, fake, stock = (os.path.join(tmp, d) for d in ("bin", "fake", "stock"))
 for d in (bindir, fake, stock):
     os.makedirs(d)
-os.makedirs(run, 0o700)
+run = tempfile.mkdtemp(prefix="gfsp-", dir="/tmp")
+os.chmod(run, 0o700)
+atexit.register(shutil.rmtree, run, True)
+check(len(os.path.join(run, "grassfield", "picker", "0" * 32 + ".sock").encode()) <= 107, "the channel's path fits a Unix socket")
+suspends = os.path.join(tmp, "suspend-success")
 source = open(os.path.join(root, "packaging/session-bin/hyprland-share-picker")).read()
-check(source.count('STOCK_DIR = "/usr/bin"\n') == 1, "the stand-in runs its stock pickers from /usr/bin")
-write(os.path.join(bindir, "hyprland-share-picker"), source.replace('STOCK_DIR = "/usr/bin"\n', 'STOCK_DIR = %r\n' % stock))
+check(source.count('STOCK_DIR = "/usr/bin"\n') == 1 and source.count('SUSPEND_STATS = "/sys/power/suspend_stats/success"\n') == 1,
+      "the stand-in runs its stock pickers from /usr/bin and reads the suspends' count from /sys/power")
+write(os.path.join(bindir, "hyprland-share-picker"), source.replace('STOCK_DIR = "/usr/bin"\n', 'STOCK_DIR = %r\n' % stock)
+      .replace('SUSPEND_STATS = "/sys/power/suspend_stats/success"\n', 'SUSPEND_STATS = %r\n' % suspends))
 shutil.copy(os.path.join(root, "packaging/session-bin/hyprland-preview-share-picker"), bindir)
 
 logs = {k: os.path.join(tmp, k + ".log") for k in ("qs", "shell", "hyprctl", "stock")}
 picker_dir = os.path.join(run, "grassfield", "picker")
 
-# The stock pickers: their name, arguments, the window list they got, and the channel files left when they started.
+# The stock pickers: their name, arguments, the window list they got, the channel files left when they started, and whether
+# SIGPIPE was ignored (read by sh before Python starts: Python ignores it itself).
 for name in ("hyprland-share-picker", "hyprland-preview-share-picker"):
-    write(os.path.join(stock, name), """#!/usr/bin/python3 -I
-import json, os, sys
+    write(os.path.join(stock, name + ".py"), """import json, os, sys
 d = %r
 left = sorted(os.listdir(d)) if os.path.isdir(d) else []
+ignored = int(os.environ["SIGIGN"].split()[1], 16)
 with open(%r, "a") as f:
-    f.write(json.dumps({"name": %r, "args": sys.argv[1:], "list": os.environ.get("XDPH_WINDOW_SHARING_LIST"), "left": left}) + "\\n")
-""" % (picker_dir, logs["stock"], name))
+    f.write(json.dumps({"name": %r, "args": sys.argv[1:], "list": os.environ.get("XDPH_WINDOW_SHARING_LIST"), "left": left,
+                        "sigpipe_ignored": bool(ignored & (1 << (13 - 1)))}) + "\\n")
+""" % (picker_dir, logs["stock"], name), 0o644)
+    write(os.path.join(stock, name), '#!/bin/sh\nSIGIGN=$(grep "^SigIgn:" /proc/$$/status) exec python3 -I %s "$@"\n'
+          % os.path.join(stock, name + ".py"))
 
 # hyprctl: FAKE_HYPRCTL ok (FAKE_MONITORS), fail, hang, garbage.
 write(os.path.join(fake, "hyprctl"), """#!/usr/bin/python3 -I
 import os, sys, time
 with open(%r, "a") as f:
-    f.write(" ".join(sys.argv[1:]) + "\\n")
+    f.write(" ".join(sys.argv[1:]) + (" +list" if "XDPH_WINDOW_SHARING_LIST" in os.environ else "") + "\\n")
 mode = os.environ.get("FAKE_HYPRCTL", "ok")
 if mode == "fail":
     sys.exit(1)
@@ -76,7 +90,7 @@ def mode(p):
     except OSError:
         return None, False
 with open(os.environ["QS_LOG"], "a") as f:
-    f.write(json.dumps({"argv": sys.argv[1:], "qsenv": [k for k in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST") if k in os.environ],
+    f.write(json.dumps({"argv": sys.argv[1:], "qsenv": [k for k in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST", "XDPH_WINDOW_SHARING_LIST") if k in os.environ],
                         "socket": mode(path), "dir": mode(os.path.dirname(path))}) + "\n")
 how = os.environ.get("FAKE_QS", "accept")
 log = os.environ["SHELL_LOG"]
@@ -129,6 +143,10 @@ elif how in ("busy", "locked", "garbage"):
     print("yes" if how == "garbage" else how, flush=True)
 elif how == "silent":
     time.sleep(3)
+elif how == "lock-then-silent":
+    with open(os.environ["MARKER_PATH"], "w") as f:
+        f.write("locked\n")
+    time.sleep(3)
 elif how == "late":
     shell(1.5)
     time.sleep(1.2)
@@ -150,7 +168,7 @@ WINDOWS = ("123456[HC>]org.gnome.TextEditor[HT>]notes.txt[HE>]94371412345678[HA>
 def env_for(**extra):
     env = {"PATH": "%s:/usr/bin:/bin" % fake, "XDG_RUNTIME_DIR": run, "HYPRLAND_INSTANCE_SIGNATURE": "test_sig",
            "XDPH_WINDOW_SHARING_LIST": WINDOWS, "FAKE_MONITORS": TWO, "QS_LOG": logs["qs"], "SHELL_LOG": logs["shell"],
-           "QS_CONFIG_PATH": "/elsewhere", "QS_MANIFEST": "x"}
+           "QS_CONFIG_PATH": "/elsewhere", "QS_MANIFEST": "x", "MARKER_PATH": os.path.join(run, "grassfield-lock-test_sig")}
     env.update({k: v for k, v in extra.items() if v is not None})
     return env
 
@@ -246,11 +264,19 @@ check(re.fullmatch(r"[0-9a-f]{32}", rid) is not None and listed == [
 check(qs and qs[0]["argv"][:7] == ["ipc", "-p", "/usr/share/grassfield/shell", "call", "picker", "request", rid]
       and qs[0]["argv"][-1].startswith(picker_dir + "/") and qs[0]["argv"][-1].endswith(".sock"),
       "the shell is asked with qs ipc -p /usr/share/grassfield/shell call picker request <id> <socket> [%r]" % (qs[0]["argv"] if qs else None))
-check(qs and qs[0]["qsenv"] == [], "Quickshell's option variables are not passed to qs ipc")
+check(qs and qs[0]["qsenv"] == [], "Quickshell's option variables and the window list are not passed to qs ipc")
+check(all(not l.endswith(" +list") for l in open(logs["hyprctl"]).read().splitlines()), "the window list is not passed to hyprctl")
 check(qs and qs[0]["socket"] == ["0o600", True] and qs[0]["dir"] == ["0o700", False],
       "the one-time socket is 0600 in a 0700 directory when the shell is asked [%r]" % (qs[0] if qs else None))
 check(os.listdir(picker_dir) == [], "the socket file is gone afterwards")
 
+# A long list (150 windows titled with 200 emoji each: 360 KB of JSON, past a socket's send buffer) reaches the shell whole.
+big = "".join("%d[HC>]app[HT>]%s[HE>]0[HA>]" % (i + 1, "\U0001F600" * 200) for i in range(150))
+out, _, _ = shell_answers("/window:150", XDPH_WINDOW_SHARING_LIST=big)
+seen = [e for e in read("shell") if e["event"] == "list"]
+got = json.loads(seen[0]["line"].split(" list ", 1)[1]) if seen else []
+check(out == "[SELECTION]/window:150\n" and len(got) == 150 and got[149]["title"] == "\U0001F600" * 200,
+      "a list past the socket's buffer reaches the shell whole [%d windows, %r]" % (len(got), out))
 out, _, _ = shell_answers("r/window:123456")
 check(xdph(out) == {"allowToken": True, "type": "window", "handleLo": 123456},
       "Window with Remember this choice: xdph reads the listed window and the restore-token flag [%r]" % out)
@@ -334,6 +360,19 @@ for desc, extra, marker in (
           "locked when %s: nothing printed, neither the shell nor the stock picker asked [%.1f s]" % (desc, took))
 out, _, _ = picker(marker="unlocked\n", **answers)
 check(out == "[SELECTION]/screen:DP-1\n", "a marker that says unlocked: the picker is asked [%r]" % out)
+# The shell writes "unlocked sleeps=<n>" where the count of suspends can be read (LockMachine.markerLine): unlocked when n
+# is the machine's count now or the count cannot be read; a sleep since then, that no shell locked for, is locked.
+write(suspends, "3\n", 0o644)
+out, _, _ = picker(marker="unlocked sleeps=3\n", **answers)
+check(out == "[SELECTION]/screen:DP-1\n", "the shell's unlocked marker with the machine's count of suspends: the picker is asked [%r]" % out)
+out, _, _ = picker(marker="unlocked sleeps=2\n", **answers)
+check(out == "" and read("qs") == [], "an unlocked marker written before a sleep no shell locked for: locked [%r]" % out)
+for bad in ("unlocked sleeps=\n", "unlocked sleeps=x\n", "unlocked sleeps=3 x\n", "unlocked  sleeps=3\n", "UNLOCKED\n"):
+    out, _, _ = picker(marker=bad, **answers)
+    check(out == "" and read("qs") == [], "a marker outside the shell's grammar is locked: %r" % bad)
+os.unlink(suspends)
+out, _, _ = picker(marker="unlocked sleeps=2\n", **answers)
+check(out == "[SELECTION]/screen:DP-1\n", "the count of suspends unreadable: the shell's unlocked marker stands [%r]" % out)
 reset()
 one_locked = json.dumps([{"name": "DP-1", "solitaryBlockedBy": ["LOCK"]}, {"name": "DP-2", "width": 2560, "height": 1440, "scale": 2}])
 out, _, _ = shell_answers("/screen:DP-2", FAKE_MONITORS=one_locked)
@@ -346,6 +385,9 @@ for how in ("fail", "silent", "garbage"):
     check(len(stocks) == 1 and stocks[0]["name"] == "hyprland-share-picker" and stocks[0]["args"] == ["--allow-token"]
           and stocks[0]["list"] == WINDOWS and stocks[0]["left"] == [] and took < 2.5,
           "the shell's %s: the stock picker, its arguments and window list kept, no channel file left [%.1f s %r]" % (how, took, stocks))
+check(stocks and not stocks[0]["sigpipe_ignored"], "the stock picker runs with SIGPIPE at its default, not ignored as in Python")
+out, _, took = picker(["--allow-token"], FAKE_QS="lock-then-silent")
+check(out == "" and read("stock") == [], "the session locked while the shell was asked: no stock picker either [%r]" % read("stock"))
 out, _, _ = picker(["--allow-token"], program="hyprland-preview-share-picker", FAKE_QS="fail")
 stocks = read("stock")
 check(len(stocks) == 1 and stocks[0]["name"] == "hyprland-preview-share-picker" and stocks[0]["args"] == ["--allow-token"],
