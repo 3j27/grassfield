@@ -117,34 +117,6 @@ if [[ $idx != null && -n $idx ]]; then
   vs_ipc menubar close >/dev/null
 fi
 
-# 7. Glance on top of Preview: no Dock tile, the bar keeps naming Preview
-fl_focus_class '^org\.grassfield\.Preview$' >/dev/null
-vs_sleep 1
-fl_shot before-glance >/dev/null
-vs_spawn "$b/grassfield-preview" --glance -- "$img/img2.png"
-fl_check_wait "Glance opens" 30 fl_has_window 'Preview\.Glance'
-vs_sleep 2
-fl_check "Glance has the focus" fl_active_is 'Preview\.Glance'
-tiles=$(vs_ipc dock tiles)
-echo "dock tiles with Glance: $tiles"
-fl_check "no Dock tile for Glance" test "$(grep -ci glance <<<"$tiles")" = 0
-fl_shot glance >/dev/null
-
-fl_tap Escape
-vs_sleep 1
-
-# 7b. Glance opened from the desktop (the desktop holds the keyboard, then Glance is clicked): the bar stays on the desktop
-vs_pointer abs 250 600 click >/dev/null
-vs_sleep 1
-vs_spawn "$b/grassfield-preview" --glance -- "$img/img1.png"
-fl_check_wait "Glance opens from the desktop" 30 fl_has_window 'Preview\.Glance'
-vs_sleep 2
-fl_focus_class 'Preview\.Glance' >/dev/null
-vs_sleep 1
-fl_shot glance-desktop >/dev/null
-fl_tap Escape
-vs_sleep 1
-
 # 8. a stack in Grid view with long names
 fix=$VS_DEV/stackfix
 rm -rf "$fix"
@@ -163,5 +135,76 @@ vs_ipc dock stack "$idx" "$VS_OUTPUT" >/dev/null
 vs_sleep 2
 fl_shot stack-grid >/dev/null
 fl_tap Escape
+vs_sleep 0.5
+
+# What the bar names and how many app menus it carries (IPC `menubar shown`, dev only).
+bar() { fl_json menubar shown "$VS_OUTPUT" | jq -r "$1"; }
+bar_is() { [[ $(bar '"\(.appId)|\(.bridgeMenus > 0)"') == "$1" ]]; }
+glance_closed() { ! fl_has_window 'Preview\.Glance'; }
+# Closes Glance by its own close button (the window's top left), then waits for it to go.
+close_glance() {
+  local n
+  for n in 1 2 3; do
+    vs_pointer abs 406 134 click >/dev/null
+    fl_wait 3 glance_closed && return 0
+    fl_tap Escape
+    fl_wait 2 glance_closed && return 0
+  done
+  return 1
+}
+
+# 7. Glance opened from an app: no Dock tile, the bar keeps that app and its menus. The main path (the regression of the first
+# fix): Files, the desktop, Files again, then Glance. Hyprland keeps Files active while the desktop holds the keyboard, so
+# going back into Files announces no focus change.
+fl_focus_class "$files" >/dev/null
+vs_sleep 1
+fl_check_wait "the bar names Files with its menus" 10 bar_is 'org.grassfield.Files|true'
+vs_pointer abs 250 600 click >/dev/null
+vs_sleep 1
+fl_check_wait "after a click on the desktop the bar reads the desktop" 10 bar_is '|false'
+vs_pointer abs 900 500 click >/dev/null
+vs_sleep 1
+fl_check_wait "back in Files the bar names Files with its menus again" 10 bar_is 'org.grassfield.Files|true'
+vs_spawn "$b/grassfield-preview" --glance -- "$img/img2.png"
+fl_check_wait "Glance opens" 30 fl_has_window 'Preview\.Glance'
+vs_sleep 2
+fl_check "Glance has the focus" fl_active_is 'Preview\.Glance'
+fl_check "Files -> desktop -> Files -> Glance: the bar keeps Files and its menus" bar_is 'org.grassfield.Files|true'
+tiles=$(vs_ipc dock tiles)
+echo "dock tiles with Glance: $tiles"
+fl_check "no Dock tile for Glance" test "$(grep -ci glance <<<"$tiles")" = 0
+fl_shot glance >/dev/null
+close_glance
+fl_check "Glance is closed" glance_closed
+
+# Preview as the opener (the first run's check): Preview focused, then Glance.
+fl_focus_class '^org\.grassfield\.Preview$' >/dev/null
+vs_sleep 1
+fl_check_wait "the bar names Preview" 10 bar_is 'org.grassfield.Preview|true'
+vs_spawn "$b/grassfield-preview" --glance -- "$img/img1.png"
+fl_check_wait "Glance opens over Preview" 30 fl_has_window 'Preview\.Glance'
+vs_sleep 2
+fl_check "Preview -> Glance: the bar keeps Preview and its menus" bar_is 'org.grassfield.Preview|true'
+close_glance
+
+# 7b. Glance opened from the desktop: the bar stays on the desktop, also while a shell popup (a Dock stack) holds the keyboard.
+vs_pointer abs 250 600 click >/dev/null
+vs_sleep 1
+vs_spawn "$b/grassfield-preview" --glance -- "$img/img1.png"
+fl_check_wait "Glance opens from the desktop" 30 fl_has_window 'Preview\.Glance'
+vs_sleep 2
+fl_focus_class 'Preview\.Glance' >/dev/null
+vs_sleep 1
+fl_check_wait "desktop -> Glance: the bar reads the desktop and carries no app menus" 10 bar_is '|false'
+fl_shot glance-desktop >/dev/null
+vs_ipc dock stack "$idx" "$VS_OUTPUT" >/dev/null
+vs_sleep 2
+fl_check "a shell popup is open" test "$(vs_ipc dock popup | tr -d '"')" = dockstack
+fl_check "the desktop stays the opener under a shell popup" bar_is '|false'
+fl_shot glance-desktop-popup >/dev/null
+fl_tap Escape
+vs_sleep 0.5
+close_glance
+fl_check "the desktop-opened Glance is closed" glance_closed
 
 fl_done
