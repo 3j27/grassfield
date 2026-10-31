@@ -78,11 +78,12 @@ TestCase {
         const windows = [{handle: "123456", appId: "a", title: "", address: ""}];
         compare(Logic.selection("screen", "DP-1", false, ["DP-1", "HDMI-A-1"], windows), "/screen:DP-1");
         compare(Logic.selection("screen", "HDMI-A-1", true, ["DP-1", "HDMI-A-1"], windows), "r/screen:HDMI-A-1", "Remember this choice: the r flag");
-        compare(Logic.selection("window", "123456", false, [], windows), "/window:123456");
-        compare(Logic.selection("window", "123456", true, [], windows), "r/window:123456");
+        compare(Logic.selection("window", "123456", false, [], windows, {}, []), "/window:123456");
+        compare(Logic.selection("window", "123456", true, [], windows, {}, []), "r/window:123456");
+        compare(Logic.selection("window", "123456", false, [], windows, {}, null), "", "no window before Hyprland has said which hide from capture");
         compare(Logic.selection("screen", "DP-2", false, ["DP-1"], windows), "", "a display that is not there");
         compare(Logic.selection("screen", "DP-1\n/window:1", false, ["DP-1\n/window:1"], windows), "", "a name with a line break");
-        compare(Logic.selection("window", "999", false, [], windows), "", "a window xdph did not list");
+        compare(Logic.selection("window", "999", false, [], windows, {}, []), "", "a window xdph did not list");
         compare(Logic.selection("region", "DP-1@0,0,1,1", false, ["DP-1"], windows), "", "an area without its display's size");
         compare(Logic.selection("screen", "DP-1", "yes", ["DP-1"], windows), "/screen:DP-1", "only true ticks Remember");
     }
@@ -114,34 +115,44 @@ TestCase {
     }
 
     // Step 7b (7-11): a window that hides itself from capture is greyed and never answered; Hyprland's getprop answers, one
-    // line per window with an address, in order.
+    // line per window asked, after its address, in any order; matched by address.
     function test_aWindowThatHidesFromCaptureIsNeverShared() {
         const windows = [{handle: "1", appId: "a", title: "", address: "55aa"}, {handle: "2", appId: "b", title: "", address: ""},
             {handle: "3", appId: "c", title: "", address: "55bb"}, {handle: "4", appId: "d", title: "", address: "55cc"}];
-        compare(Logic.blockedHandles(windows, '{"no_screen_share": false}\n{"no_screen_share": true}\nwindow not found\n'), ["3"]);
-        compare(Logic.blockedHandles(windows, '{"no_screen_share": true}\n'), ["1"], "the rest not answered: not hidden");
-        compare(Logic.blockedHandles(windows, '{"no_screen_share": "true"}\n{"no_screen_share": 1}\n'), [], "only the boolean true");
+        compare(Logic.blockedHandles(windows, '55cc window not found\n55bb {"no_screen_share": true}\n55aa {"no_screen_share": false}\n'), ["3"],
+            "in any order");
+        compare(Logic.blockedHandles(windows, '55aa {"no_screen_share": true}\n'), ["1"], "the rest not answered: not hidden");
+        compare(Logic.blockedHandles(windows, '55aa {"no_screen_share": "true"}\n55bb {"no_screen_share": 1}\n'), [], "only the boolean true");
+        compare(Logic.blockedHandles(windows, '99ff {"no_screen_share": true}\n'), [], "an answer for another request's window marks none");
+        compare(Logic.blockedHandles(windows, '{"no_screen_share": true}\n'), [], "an answer without its address marks none");
         compare(Logic.blockedHandles(windows, ""), []);
         compare(Logic.selection("window", "3", false, [], windows, {}, ["3"]), "", "a hidden window is not answered");
         compare(Logic.selection("window", "1", false, [], windows, {}, ["3"]), "/window:1");
     }
 
-    // Step 7b (7-9), the indicator: xdph's streams among PipeWire's nodes, and what each shares by the picker's choices.
+    // Step 7b (7-9), the indicator: xdph's streams among PipeWire's nodes (video nodes named after xdph's program: PipeWire
+    // takes node.name from the program, the stream's own name stays in media.name), and what each shares.
     function test_theIndicatorFollowsXdphsStreams() {
-        compare(Logic.sharingStreams([{id: 5, name: "xdph-streaming-ab12"}, {id: 6, name: "alsa_output.pci"}, {id: 7, name: "xdph-stream"},
-            {id: 8}, null, {id: 9, name: "XDPH-streaming-x"}]), [5]);
+        compare(Logic.sharingStreams([{id: 5, name: "xdg-desktop-portal-hyprland", video: true}, {id: 6, name: "alsa_output.pci", video: false},
+            {id: 7, name: "xdg-desktop-portal-hyprland", video: false}, {id: 8, name: "xdph-streaming-ab12", video: true},
+            {id: 9, name: "chromium", video: true}, {id: 10}, null]), [5]);
         compare(Logic.sharingStreams(undefined), []);
         const screen = {kind: "screen", value: "DP-1", title: ""}, win = {kind: "window", value: "777", title: "A page"};
-        let r = Logic.streamLabels({}, [5], [{at: 1000, what: screen}, {at: 2000, what: win}], 3000, 60000);
-        compare(r.labels, {"5": screen}, "the oldest choice to the first stream");
-        compare(r.pending, [{at: 2000, what: win}]);
-        r = Logic.streamLabels(r.labels, [5, 6], r.pending, 4000, 60000);
-        compare(r.labels, {"5": screen, "6": win}, "a stream keeps its label; the next takes the next choice");
-        r = Logic.streamLabels(r.labels, [6], r.pending, 5000, 60000);
-        compare(r.labels, {"6": win}, "a stream that ends takes its label away");
-        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 70000, 60000);
-        compare(r.labels, {"7": null}, "a choice older than a minute names nothing: a share restored with a token");
+        let r = Logic.streamLabels({}, [5], [{at: 1000, what: screen}], 3000, 10000);
+        compare(r.labels, {"5": screen}, "one new stream, one choice waiting: that choice");
         compare(r.pending, []);
+        r = Logic.streamLabels(r.labels, [5, 6], [{at: 3500, what: win}], 4000, 10000);
+        compare(r.labels, {"5": screen, "6": win}, "a stream keeps its label; the next one new takes the next choice");
+        r = Logic.streamLabels(r.labels, [6], [], 5000, 10000);
+        compare(r.labels, {"6": win}, "a stream that ends takes its label away");
+        r = Logic.streamLabels({}, [7], [{at: 0, what: screen}], 20000, 10000);
+        compare(r.labels, {"7": null}, "a choice older than 10 s names nothing: a share restored with a token");
+        compare(r.pending, []);
+        r = Logic.streamLabels({}, [8], [{at: 1000, what: screen}, {at: 2000, what: win}], 3000, 10000);
+        compare(r.labels, {"8": null}, "two choices waiting for one stream: no guess");
+        compare(r.pending.length, 2);
+        r = Logic.streamLabels({}, [8, 9], [{at: 1000, what: screen}], 3000, 10000);
+        compare(r.labels, {"8": null, "9": null}, "two new streams for one choice: no guess");
     }
 
     // The selection is what a tile stands for: when the tiles are listed again in another order (a display plugged in, app

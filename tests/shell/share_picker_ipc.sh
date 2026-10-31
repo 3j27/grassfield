@@ -15,9 +15,10 @@
 # Step 7b:
 #   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
 #  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
-#  11 the indicator: with a private PipeWire, a node named as xdph names its streams makes the shell count a share, labelled by
-#     the choice it answered just before (older ones expired after 10 s); destroyed, the share is gone (skipped without pipewire
-#     and pw-cli).
+#  11 the indicator: with a private PipeWire, a stream made as xdph makes it (share_picker_ipc.d/fake-xdph-stream.c, built
+#     as a program of xdph's name) makes the shell count a share, labelled by the one choice it answered just before (older
+#     ones expired after 10 s); another program's video node and an audio node of xdph's name are not; the stream ended, the
+#     share is gone (skipped without pipewire, pw-cli, a C compiler or libpipewire's headers).
 # The probe runs as a dev session (status and choose are dev hooks) and the stand-in reaches it through GRASSFIELD_SHELL_DIR
 # (honoured in a dev session only). Nothing here can reach a real Hyprland or shell: HYPRLAND_INSTANCE_SIGNATURE and
 # XDG_RUNTIME_DIR point at the test's own directory. Prints PASS/FAIL, exits non-zero on failure.
@@ -35,7 +36,7 @@ tmp=$(mktemp -d "$root/.dev/share-picker-ipc.XXXXXX" 2>/dev/null || { mkdir -p "
 fake="" shell="" standin="" runtime=""
 cleanup() {
   local p
-  for p in $fake $shell $standin ${pw:-}; do kill "$p" 2>/dev/null || true; done
+  for p in $fake $shell $standin ${xdph:-} ${pw:-}; do kill "$p" 2>/dev/null || true; done
   rm -rf "$tmp" "$runtime"
 }
 trap cleanup EXIT
@@ -85,10 +86,10 @@ fi
 mkdir -p "$tmp/fake"
 cat >"$tmp/fake/hyprctl" <<'SH'
 #!/bin/sh
-case "$1 $2 $3" in
-"-j monitors "*) cat "$(dirname "$0")/monitors.json" ;;
-"-j getprop address:0x2000") echo '{"no_screen_share": true}' ;;
-"-j getprop "*) echo '{"no_screen_share": false}' ;;
+case "$1 $2 $3 $4" in
+"-j monitors  ") cat "$(dirname "$0")/monitors.json" ;;
+"-j getprop address:0x2000 no_screen_share") echo '{"no_screen_share": true}' ;;
+"-j getprop address:0x"*" no_screen_share") echo '{"no_screen_share": false}' ;;
 *) exit 1 ;;
 esac
 SH
@@ -130,6 +131,8 @@ share() { # runs the stand-in as xdph does; sets `standin`
   standin=$!
 }
 shown_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(shown)s %(popup)s') == "True sharePicker" ]] && return 0; sleep 0.05; done; return 1; }
+# No window is answered before Hyprland has said which hide from capture.
+known_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(blocked)s') != None ]] && return 0; sleep 0.05; done; return 1; }
 ended_within() { local i; for ((i = 0; i < $2 * 20; i++)); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
 idle_within() { local i; for ((i = 0; i < 20; i++)); do [[ $(state '%(open)s %(shown)s %(popup)s') == "False False " ]] && return 0; sleep 0.05; done; return 1; }
 
@@ -152,7 +155,8 @@ share
 shown_within || true
 desc="2 a second request while the panel is open: busy"
 check test "$(ipc picker request "$(printf '%032x' 1)" "$runtime/grassfield/picker/$(printf '%032x' 2).sock")" == busy
-desc="2 a window's choice reaches xdph as its handle"
+desc="2 a window's choice reaches xdph as its handle, once Hyprland has said which windows hide from capture"
+check known_within
 check test "$(ipc picker choose window 123456 no)" == ok
 ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
@@ -235,31 +239,41 @@ ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
 
 # 11.
-if [[ -n $pw ]]; then
+# The stream as xdph makes it, from a program of xdph's name (share_picker_ipc.d/fake-xdph-stream.c): PipeWire gives its node
+# the program's name and keeps the stream's own name in media.name.
+xdph_bin=""
+if [[ -n $pw ]] && command -v cc >/dev/null && pkg-config --exists libpipewire-0.3 2>/dev/null; then
+  mkdir -p "$tmp/xdph"
+  cc -O1 -o "$tmp/xdph/xdg-desktop-portal-hyprland" tests/shell/share_picker_ipc.d/fake-xdph-stream.c \
+    $(pkg-config --cflags --libs libpipewire-0.3) 2>"$tmp/xdph/cc.log" && xdph_bin="$tmp/xdph/xdg-desktop-portal-hyprland"
+fi
+if [[ -n $xdph_bin ]]; then
   streams_are() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(streams)s') == "$1" ]] && return 0; sleep 0.05; done; return 1; }
   pwcli() { XDG_RUNTIME_DIR="$runtime" timeout 5 pw-cli "$@" 2>&1; }
   desc="11 no stream of xdph: no share"
   check streams_are 0
-  desc="11 a node named as xdph names its streams: one share, labelled by the choice answered just before it (older ones expired)"
+  desc="11 another program's video node and an audio node are no share"
+  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=chromium media.class=Video/Source object.linger=true }' >/dev/null
+  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=xdg-desktop-portal-hyprland media.class=Audio/Sink object.linger=true }' >/dev/null
+  sleep 0.5
+  check streams_are 0
+  desc="11 a stream made as xdph makes it: one share, labelled by the one choice answered just before it (older ones expired)"
   sleep 10.5
   share
   shown_within || true
   ipc picker choose screen DP-1 no >/dev/null
   ended_within "$standin" 3 || true
-  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=xdph-streaming-test1 media.class=Video/Source object.linger=true }' >/dev/null
+  XDG_RUNTIME_DIR="$runtime" "$xdph_bin" xdph-streaming-test1 >"$tmp/xdph/run.log" 2>&1 &
+  xdph=$!
   check streams_are 1
   check test "$(ipc picker status | python3 -I -c 'import json, sys; d = json.load(sys.stdin); print(list(d["labels"].values()))')" == "[{'kind': 'screen', 'value': 'DP-1', 'title': ''}]"
-  desc="11 another node of PipeWire is no share"
-  pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name=alsa_output.test media.class=Audio/Sink object.linger=true }' >/dev/null
-  sleep 0.5
-  check streams_are 1
-  desc="11 the stream destroyed: no share, no label"
-  id=$(pwcli ls Node | python3 -I -c 'import re, sys; t = sys.stdin.read(); print(next((m.group(1) for m in re.finditer(r"id (\d+), type PipeWire:Interface:Node.*?node.name = \"([^\"]+)\"", t, re.S) if m.group(2) == "xdph-streaming-test1"), ""))')
-  pwcli destroy "$id" >/dev/null
+  desc="11 the stream ends: no share, no label"
+  kill "$xdph"
+  wait "$xdph" 2>/dev/null || true
   check streams_are 0
   check test "$(state '%(labels)s')" == "{}"
 else
-  echo "SKIP: 11 the indicator needs pipewire and pw-cli"
+  echo "SKIP: 11 the indicator needs pipewire, pw-cli, a C compiler and libpipewire's headers"
 fi
 
 if ((fail)); then tail -20 "$tmp/shell.log"; fi
