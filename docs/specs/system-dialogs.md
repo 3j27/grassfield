@@ -777,26 +777,35 @@ The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-
 gives the toolbar its own chantier; until then it does the selection (8-1).
 
 ### Functional requirements
-- SC1 Shift-Cmd-3 captures the focused display. Shift-Cmd-4, Shift-Cmd-5 and Print capture a selection: a crosshair over the
-  live screen in Grassfield's colours (`capture.*`).
+- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
+  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: the veil over everything but the windows).
   - A drag captures that area.
-  - A click captures the window under the pointer, or the display under it when no window is there.
-  - Esc, or a second press while the crosshair shows, cancels without saving.
-- SC2 The file is saved on the Desktop as macOS names it, translated, and never overwrites a file. The Desktop is xdg-user-dir's,
-  never the home folder.
-- SC3 The picture is copied to the clipboard as PNG.
-- SC4 A notice shows the picture. A click or its "Open in Preview" button opens it in Grassfield's Preview for 2 minutes.
+  - A click captures the window under the pointer (on a workspace with a fullscreen window, that window), or the display
+    under it when no window is there.
+  - Esc, or a second press while the crosshair shows, cancels without saving; only this helper's crosshair is cancelled.
+- SC2 Each file is saved on the Desktop as macOS names it, translated (the next display's " (2)"), and never overwrites a
+  file; the Desktop never shows a picture being written. The Desktop is xdg-user-dir's, never the home folder.
+- SC3 The focused display's picture, or the selection, is copied to the clipboard as PNG.
+- SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
+  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes.
 - SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
   captures the owner's screen.
 
 ### Acceptance criteria
-- A-SC1 (L0) `tests/shell/capture.sh`: the geometry for the screen, a drag, a click on a window, a click on a display only, and a
-  click outside every display; Esc and a second press; slurp's colours equal to the tokens; the name in English and French
-  and " (2)"; the Desktop's fallbacks; the clipboard; the notice's arguments; Preview through `uwsm-app`; failures leave no file.
+- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp's box or 1x1 for a click,
+  notify-send's output ending before it does): every display for the screen, the focused one first; a drag, a click on a
+  window, on a fullscreen window, on a display only, and outside every display; the windows only as slurp's boxes; Esc and a
+  second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
+  " (2)"; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
+  notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
+  closing its notice), gdbus without notify-send; Preview through `uwsm-app`; failures leave no file.
 - A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
 - A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
   Desktop and in the clipboard; the notice and Preview.
 
 ### Known limitations
-A picture over 8 MiB shows the app's icon in the notice, not the picture (8-3). Recording, the floating thumbnail and the
-toolbar's options are the later chantier's.
+A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click picks the smallest window under the
+pointer (slurp's rule), not the topmost: a floating window over a larger tiled one is picked only where it is the smaller
+(a fullscreen window is the only box of its workspace). The notification settings list the helper under its translated
+name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
+the toolbar's options are the later chantier's.

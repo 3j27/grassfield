@@ -1150,28 +1150,32 @@ passwords too (D-12). Q12: the amendment text above.
 
   **Delivered in step 8.**
   - **The helper:** `packaging/bin/grassfield-capture`, `python3 -I`, standard library only, strings through `tr()`.
-    - `screen` captures the focused display (`grim -o`).
-    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`. The boxes are the windows on the shown workspaces, then each display's logical rectangle. A drag captures that area. A click without a drag (under 20 square pixels) captures the window under the pointer, else the display under it. Esc cancels, and a second press while the crosshair shows cancels it.
-    - The file is created with `O_EXCL` on the Desktop (xdg-user-dir, never the home folder or `/`, else `~/Desktop`), as "Screenshot 2026-10-31 at 14.05.12.png", or « Capture d’écran 2026-10-31 à 14.05.12.png » in French; " (2)" is added rather than overwriting.
-    - The picture is copied with `wl-copy`.
-    - The notice shows the picture (an `image-path` hint) with "Open in Preview", both as the click and as a button. It opens `org.grassfield.Preview` through `systemd-run … uwsm-app`, as the Dock starts an app.
+    - `screen` captures every enabled display, one picture each (`grim -o`), the focused one first (8-4).
+    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`. The boxes are the windows on the shown workspaces (on a workspace with a fullscreen window, only that window, since slurp picks the smallest box under the pointer); the veil covers the rest. A drag captures that area. A click on a window captures it (slurp answers its box); a click elsewhere (slurp answers 1x1) captures the display under it. Esc cancels, and a second press while the crosshair shows cancels it: `pkill` on this helper's exact slurp command line, so another program's slurp is left alone (review of step 8, MINORs 1-3).
+    - grim writes a hidden file of the helper's on the Desktop (xdg-user-dir, never the home folder or `/`, else `~/Desktop`), made with `O_EXCL`; it is then linked to the first free name, "Screenshot 2026-10-31 at 14.05.12.png", or « Capture d’écran 2026-10-31 à 14.05.12.png » in French, then " (2)" and on, so no file is ever overwritten and the Desktop never shows a picture being written (a file system without hard links gets a copy under an `O_EXCL` name).
+    - The focused display's picture, or the selection, is copied with `wl-copy`.
+    - The notice is the shell's ordinary banner (no `-t 0`: it would have stayed on screen, in the next screenshot too; review of step 8, MAJOR 2) with the picture (an `image-path` hint), Preview's icon, and "Open in Preview", both as the click and as a button. It opens the capture's pictures in `org.grassfield.Preview` through `systemd-run … uwsm-app`, as the Dock starts an app. The helper waits for notify-send's end (`communicate`), not for the end of its output, so a click is never taken for the wait running out (review of step 8, MAJOR 1: about 6 % of clicks were lost).
   - **Bindings:** `config/hypr/grassfield/system.lua` calls `/usr/lib/grassfield/grassfield-capture screen|selection` and names no Omarchy command. `scripts/dev/omarchy-compat.sh` no longer requires Omarchy's capture commands.
   - **Packaging:** grim and slurp are declared.
   - **Tests:** `tests/shell/capture.sh` (every tool faked; the colours held to the tokens) and `tests/shell/session_services.sh` (the bindings).
 
-  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
+  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user; 8-4 after its review):
   - **8-1. Shift-Cmd-5 and Print until the toolbar.**
     - Options: (a) nothing until the toolbar exists; (b) a selection, as Shift-Cmd-4.
     - **Choice: (b).**
     - Rule applied: a key the user knows from macOS must do something useful. The selection is what the toolbar opens on by default.
   - **8-2. How long "Open in Preview" stays live.** The notice's button works only while the helper waits.
     - Options: (a) wait until the notice is dismissed, however long; (b) wait 2 minutes, then close the notice.
-    - **Choice: (b).**
+    - **Choice: (b).** notify-send is sent SIGINT, and closes the notice it showed (never one closed by a bare id, which could be another's after a restart of the shell).
     - Rule applied: no helper waits without a bound. The picture stays on the Desktop, and Preview opens it from there.
   - **8-3. A picture too large for the notice.** The shell shows a notice image up to 8 MiB (`History.js`); a large multi-display PNG is bigger.
-    - Options: (a) a second, scaled capture for the notice; (b) the app's icon in its place.
+    - Options: (a) a second, scaled capture for the notice; (b) Preview's icon in its place (`-i org.grassfield.Preview`).
     - **Choice: (b).**
     - Rule applied: one capture, so the notice never shows a picture other than the one saved. A known limitation.
+  - **8-4. Shift-Cmd-3 with several displays** (review of step 8, MINOR 5: the first build took the focused display only).
+    - Options: (a) the focused display; (b) every display, one file each, as macOS saves them ("… (2).png" for the next).
+    - **Choice: (b).** The focused display comes first and gets the plain name; its picture is the one copied and shown in the notice; "Open in Preview" opens them all.
+    - Rule applied: macOS first; a display left out is a picture the user expected and does not have.
 - **Migrations and updates in a terminal (O3, O4):** accepted. They are Omarchy's maintenance tools running in a terminal, as
   a command-line update is on macOS; the Grassfield path is Software Update (ADR-0033), whose own sheet asks the questions.
 - **Omarchy menus (O5):** nothing opens (verified by code: the stand-in `omarchy-shell` fails as Omarchy's wrapper does);
