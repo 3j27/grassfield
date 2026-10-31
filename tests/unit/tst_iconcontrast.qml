@@ -39,7 +39,7 @@ TestCase {
         const bad = [];
         const counts = {};
         let pairs = 0;
-        for (const tint of ["#3E7BFA", "#E6B422", "#E25AA1", "#26763F", "#4FB36B"]) {
+        for (const tint of ["#3E7BFA", "#E6B422", "#E25AA1", "#195E3F", "#4FB36B"]) {
             for (const dark of [true, false]) {
                 for (const mode of ["dark", "clear", "tinted"]) {
                     if (mode !== "tinted" && tint !== "#3E7BFA")

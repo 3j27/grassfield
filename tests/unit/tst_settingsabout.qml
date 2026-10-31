@@ -302,7 +302,15 @@ TestCase {
         verify(grassfield, "the Grassfield row");
         compare(grassfield.tileColor, "grassfield");
         compare(page.system.queried, ["host.state"], "the page asked hostname1 through the fake");
-        verify(find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorLight.accent)), "a tile of the brand green");
+        // The brand green of the appearance (review of a51b62c: the light-only #195E3F stays in the light appearance; in the
+        // dark one the tile is color.dark.accent, as the About window's mark).
+        const wasDark = Appearance.dark;
+        Appearance.dark = false;
+        verify(find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorLight.accent)), "light: a tile of the brand green");
+        Appearance.dark = true;
+        verify(find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorDark.accent)), "dark: the dark brand green");
+        verify(!find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorLight.accent)), "dark: not the light one");
+        Appearance.dark = wasDark;
         verify(!Qt.colorEqual(Tokens.colorLight.accent, Tokens.colorAccentLight.green), "the pickable Green is another green");
     }
 
