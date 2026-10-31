@@ -54,14 +54,40 @@ TestCase {
         compare(apps.map(a => a.key), ["org.grassfield.Files"]);
     }
 
-    // Review MINOR 2: a quick look opened from the desktop belongs to the desktop (macOS: the Finder's menus), not to the last window.
-    function test_theDesktopIsTheOpenerWhenItTookTheKeyboardLast() {
-        verify(QuickLook.openerIsDesktop(2000, 1000), "the desktop took the keyboard after the window got the focus");
-        verify(!QuickLook.openerIsDesktop(1000, 2000), "the window was focused after the desktop");
-        verify(!QuickLook.openerIsDesktop(0, 0), "nothing happened yet: no desktop");
-        verify(!QuickLook.openerIsDesktop(undefined, 5), "no desktop stamp");
-        verify(QuickLook.openerIsDesktop(5, undefined), "the desktop and no window at all");
-        verify(!QuickLook.openerIsDesktop(1000, 1000), "a tie keeps the window");
+    // Who a quick look belongs to (review MINOR 2 and the re-review's regression): the sequences of a session through QuickLook.frontAfter.
+    function run(events) {
+        let front = "window";
+        for (const e of events)
+            front = QuickLook.frontAfter(front, e);
+        return front;
+    }
+
+    readonly property var held: ({type: "desktopHeld"})
+    readonly property var windowFocus: ({type: "regularFocused"})
+    readonly property var settledOnWindow: ({type: "settled", focusedRegular: true})
+    readonly property var settledOnOther: ({type: "settled", focusedRegular: false})
+
+    function test_desktopThenSpaceIsTheDesktop() {
+        compare(run([windowFocus, held]), "desktop", "a click on the desktop, then Space: the desktop is the opener");
+        // Glance maps and is clicked: the desktop lets go, the focus lands on Glance (not a regular window).
+        compare(run([windowFocus, held, settledOnOther]), "desktop", "the desktop lets go for a quick look: it stays the opener");
+    }
+
+    // The regression: Files, the desktop, Files again. Hyprland kept Files active all along, so no focus change is announced; the
+    // desktop letting go with a regular window focused is what says the user is back in it.
+    function test_filesDesktopFilesThenSpaceIsFiles() {
+        compare(run([windowFocus, held, settledOnWindow]), "window");
+        compare(run([windowFocus, held, settledOnWindow, held, settledOnWindow]), "window", "and again, any number of times");
+    }
+
+    function test_aWindowFocusedWhileTheDesktopIsInFrontTakesItBack() {
+        compare(run([held, windowFocus]), "window");
+    }
+
+    function test_theOpenerSurvivesWhateverElseHappens() {
+        compare(run([held, settledOnOther, settledOnOther]), "desktop", "a shell popup coming and going changes nothing");
+        compare(run([held, {type: "nonsense"}]), "desktop");
+        compare(QuickLook.frontAfter("window", undefined === 1 ? null : {type: "settled"}), "window", "no focusedRegular: unchanged");
     }
 
     function test_aPinnedAppWithOnlyAQuickLookIsNotRunning() {

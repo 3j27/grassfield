@@ -67,6 +67,20 @@ Scope {
             return Popups.active && Popups.pointerHeld ? "held" : "";
         }
 
+        // Test hook (tests/visual/flow-capture-defects.sh): the app the bar of `screen` names and how many app menus it carries, as
+        // JSON {appId, appName, bridgeMenus}. Read-only, dev session only.
+        function shown(screen: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            const all = bars.instances;
+            let bar = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    bar = all[i];
+            }
+            return bar ? JSON.stringify({appId: bar.shownAppId, appName: bar.appName, bridgeMenus: bar.bridgeMenus.length}) : "{}";
+        }
+
         // Test hook (tests/visual/menubar-status.sh): JSON {menusRight, status: [{name, x, w}]} of the bar of `screen`.
         function statusState(screen: string): string {
             if (!VisualFixtures.dev)
@@ -257,7 +271,7 @@ Scope {
             // The desktop holds the keyboard: Hyprland still reports the last window as active, the bar shows the desktop (Finder).
             // With Stages on and no active window (an Exclusive layer holds the keyboard after a swap) the front app of the
             // Stages state is named (display only, AppMenus.context disables the window commands).
-            readonly property string shownAppId: DesktopState.holdsKeyboard ? "" : Compositor.frontAppId !== "" ? Compositor.frontAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : Compositor.stagesFrontAppId)
+            readonly property string shownAppId: DesktopState.holdsKeyboard || Compositor.quickLookFromDesktop ? "" : Compositor.frontAppId !== "" ? Compositor.frontAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : Compositor.stagesFrontAppId)
             readonly property string appName: {
                 if (shownAppId === "")
                     return qsTr("Desktop");

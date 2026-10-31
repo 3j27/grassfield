@@ -29,18 +29,21 @@ Singleton {
 
     // Quick Look (Glance, platform/QuickLook.js) belongs to the app that opened it (macOS): while it has the focus the menu
     // bar and the app menus stay with the window that was in front before it. `regularToplevel` is the last focus that was not
-    // a quick look, `regularAt` when it got it; `desktopHeldAt` is when the desktop last took the keyboard. A quick look opened
-    // from the desktop (the desktop took the keyboard after that window) belongs to the desktop. Anything that acts on the
-    // focused window keeps using focusedToplevel.
+    // a quick look. `front` is who was in front before it ("desktop" or "window", QuickLook.frontAfter): a quick look opened from the
+    // desktop belongs to the desktop. Anything that acts on the focused window keeps using focusedToplevel.
     readonly property bool quickLookFocused: !!focusedToplevel && QuickLook.isQuickLook(focusedToplevel.appId)
+    readonly property bool quickLookOpen: {
+        const list = toplevels ? toplevels.values : [];
+        return list.some(t => QuickLook.isQuickLook(t.appId));
+    }
     property var regularToplevel: null
-    property real regularAt: 0
-    property real desktopHeldAt: 0
-    readonly property bool quickLookFromDesktop: quickLookFocused && QuickLook.openerIsDesktop(desktopHeldAt, regularAt)
+    property string front: "window"
+    // A quick look is open (focused or not, a shell popup may hold the keyboard) and the desktop is what it belongs to.
+    readonly property bool quickLookFromDesktop: front === "desktop" && (quickLookFocused || quickLookOpen)
     readonly property var frontToplevel: {
         if (!quickLookFocused)
             return focusedToplevel;
-        if (quickLookFromDesktop)
+        if (front === "desktop")
             return null;
         const list = toplevels ? toplevels.values : [];
         return regularToplevel && list.indexOf(regularToplevel) >= 0 ? regularToplevel : null;
@@ -1558,7 +1561,7 @@ Singleton {
     function noteRegularFocus(): void {
         if (focusedToplevel && focusedToplevel.appId !== "" && !QuickLook.isQuickLook(focusedToplevel.appId)) {
             regularToplevel = focusedToplevel;
-            regularAt = Date.now();
+            front = QuickLook.frontAfter(front, {type: "regularFocused"});
         }
     }
 
@@ -1567,7 +1570,19 @@ Singleton {
 
         function onHoldsKeyboardChanged(): void {
             if (DesktopState.holdsKeyboard)
-                root.desktopHeldAt = Date.now();
+                root.front = QuickLook.frontAfter(root.front, {type: "desktopHeld"});
+            else
+                frontSettle.restart();
+        }
+    }
+
+    // The desktop let go of the keyboard: once the focus has landed, a regular window with it means the user is back in that window.
+    Timer {
+        id: frontSettle
+        interval: 250
+        onTriggered: {
+            const t = root.focusedToplevel;
+            root.front = QuickLook.frontAfter(root.front, {type: "settled", focusedRegular: !!t && t.appId !== "" && !QuickLook.isQuickLook(t.appId)});
         }
     }
 

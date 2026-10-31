@@ -14,10 +14,24 @@ function isQuickLook(appId) {
     return id !== "" && IDS.indexOf(id) >= 0;
 }
 
-// Who opened a quick look that now has the focus: the desktop when the desktop took the keyboard more recently than the last
-// regular window got the focus (`desktopHeldAt`, `regularAt`: ms stamps, 0 = never), else that window. macOS: Quick Look from the
-// desktop keeps the Finder's menus, from an app that app's. Stamps, not the state at the moment of the focus change: the
-// desktop lets go of the keyboard and the quick look is focused in an order the compositor decides.
-function openerIsDesktop(desktopHeldAt, regularAt) {
-    return (desktopHeldAt || 0) > (regularAt || 0);
+// Who is in front, for the bar and the menus: "desktop" or "window" (the last regular window). A quick look belongs to whoever was in
+// front when it opened (macOS: Quick Look from the desktop keeps the Finder's menus, from an app that app's). The state follows
+// events, not time stamps:
+//   desktopHeld      the desktop took the keyboard                                -> desktop
+//   regularFocused   a regular window got the focus                              -> window
+//   settled          a moment after the desktop let go of the keyboard: `focusedRegular` says whether the window with the focus
+//                    is a regular one (the user clicked back into a window: Hyprland kept it active all along, so no focus
+//                    change announces it) or not (a quick look or nothing took it: the desktop stays in front)
+// A click on a quick look and a click on the window below look the same when the desktop lets go, hence the settle: the focus
+// has landed by then.
+function frontAfter(front, event) {
+    switch (event.type) {
+    case "desktopHeld":
+        return "desktop";
+    case "regularFocused":
+        return "window";
+    case "settled":
+        return event.focusedRegular === true ? "window" : front;
+    }
+    return front;
 }
