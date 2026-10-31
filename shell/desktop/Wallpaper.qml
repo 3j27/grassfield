@@ -330,6 +330,10 @@ Scope {
             property bool firstReady: false
             // The feed has given its first result (its initial `display` is a placeholder, never shown).
             property bool feedSeen: false
+            // The first frame is the artwork because nothing else came in time (the timeout, a still that cannot be read): it
+            // follows the phase and the appearance like the feed's own artwork (a feed that never answers leaves it there).
+            property bool fallbackArt: false
+            readonly property bool artLive: win.feedSeen || win.fallbackArt
             function stillDesc(): var {
                 const st = win.modelData ? WallpaperState.stillOf(win.modelData.name) : null;
                 return st ? {kind: "picture", color: "", url: "file://" + st.file, strip: st.strip, image: st.image, mean: st.mean, video: ""} : null;
@@ -410,6 +414,7 @@ Scope {
                     if (win.firstReady)
                         return;
                     console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": the first frame took longer than " + interval + " ms; the artwork shows");
+                    win.fallbackArt = true;
                     win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
                 }
             }
@@ -444,7 +449,7 @@ Scope {
                 function onShownChanged(): void {
                     const first = win.lastPhase === "";
                     win.lastPhase = DayPhase.shown;
-                    if (win.feedSeen && feed.display.kind === "art") {
+                    if (win.artLive && feed.display.kind === "art") {
                         if (first)
                             win.show(win.withArt(feed.display), "cut");
                         else
@@ -455,7 +460,7 @@ Scope {
             Connections {
                 target: Appearance
                 function onDarkChanged(): void {
-                    if (win.feedSeen && feed.display.kind === "art")
+                    if (win.artLive && feed.display.kind === "art")
                         win.show(win.withArt(feed.display), "appearance");
                 }
             }
@@ -465,7 +470,7 @@ Scope {
                     win.show(win.withArt(feed.display), "phase");
             }
             onFullscreenChanged: {
-                if (!win.fullscreen && win.phaseWaiting && win.feedSeen && feed.display.kind === "art")
+                if (!win.fullscreen && win.phaseWaiting && win.artLive && feed.display.kind === "art")
                     win.showPhase();
             }
 
@@ -640,6 +645,7 @@ Scope {
                 // The first frame's picture cannot be read: the artwork shows instead.
                 if (!win.firstReady && slot === slotA) {
                     console.warn("wallpaper: cannot load the first frame " + slot.url + "; the artwork shows");
+                    win.fallbackArt = true;
                     win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
                     return;
                 }

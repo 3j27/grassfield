@@ -1090,7 +1090,9 @@ TestCase {
         // After the first frame too: a phase or an appearance acts on the artwork only once the feed has given its first result
         // (counter-review of c5d43be4: a mapped still was cut to the placeholder artwork).
         compare((w.match(/feed\.display\.kind === "art"/g) || []).length, 3);
-        compare((w.match(/win\.feedSeen && feed\.display\.kind === "art"/g) || []).length, 3);
+        compare((w.match(/win\.artLive && feed\.display\.kind === "art"/g) || []).length, 3);
+        verify(/readonly property bool artLive: win\.feedSeen \|\| win\.fallbackArt/.test(w), "a fallback artwork follows the phase too");
+        compare((w.match(/win\.fallbackArt = true;/g) || []).length, 2);
     }
 
     function test_groundFor() {
