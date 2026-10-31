@@ -35,9 +35,10 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
                   only, which its caller catches); the state is one of the documented ones; the other updates are
                   counted as listed, sorted, without Grassfield's or Omarchy's packages; every time is None or ISO 8601;
                   the output line stays under the 256 KiB cap and is JSON; the failures file holds a plausible time
-                  afterwards; a release of the notes has a well-formed version, date and plain-text notes; a toolkit
-                  move names a tracked package once, in the record's order, with versions in pacman's grammar whose
-                  compare keys differ, and a time or None.
+                  afterwards; a release of the notes has a well-formed version, date and plain-text notes; the toolkit
+                  lists each tracked package pacman names once, in the record's order, with its version in pacman's
+                  grammar, a time or None, the record's version or None, and moved null without a record, true when the
+                  record does not name it, else the compare keys' difference.
 Standard library only; the same seed mutates the same inputs (a scenario's seed is a crc32 of its name, never hash()).
 """
 import importlib.machinery
@@ -602,22 +603,27 @@ def update_check():
 
     def check_toolkit(out, stub):
         # What installed() answers for each tracked package: the stub's version, or the mutated line's second word when
-        # that line names the package (as the reader demands), else nothing.
+        # that line names the package (as the reader demands), else nothing; a version outside pacman's grammar is not
+        # listed.
         expected = {}
         for name, v in stub.installed.items():
             parts = (stub.installed_text or "%s %s\n" % (name, v)).split()
-            expected[name] = parts[1] if len(parts) == 2 and parts[0] == name else None
-        if out is None:
-            return
-        assert isinstance(out, list), out
-        names = [p["name"] for p in out]
-        assert names == [n for n in m.TRACKED if n in names], names
-        for p in out:
-            assert set(p) == {"name", "built", "installed", "installedAt"}, p
-            assert m.RECORD_VERSION.match(p["built"]) and m.RECORD_VERSION.match(p["installed"]), p
-            assert m.compare_key(p["name"], p["built"]) != m.compare_key(p["name"], p["installed"]), p
+            if len(parts) == 2 and parts[0] == name and m.RECORD_VERSION.match(parts[1]):
+                expected[name] = parts[1]
+        assert isinstance(out, dict) and set(out) == {"record", "packages"} and isinstance(out["record"], bool), out
+        packages = out["packages"]
+        assert isinstance(packages, list), out
+        assert [p["name"] for p in packages] == [n for n in m.TRACKED if n in expected], (packages, expected)
+        for p in packages:
+            assert set(p) == {"name", "installed", "installedAt", "built", "moved"}, p
+            assert p["installed"] == expected[p["name"]], (p, expected[p["name"]])
             assert p["installedAt"] is None or iso.match(p["installedAt"]), p
-            assert p["installed"] == expected.get(p["name"]), (p, expected.get(p["name"]))
+            if not out["record"]:
+                assert p["built"] is None and p["moved"] is None, p
+            elif p["built"] is None:
+                assert p["moved"] is True, p
+            else:
+                assert m.RECORD_VERSION.match(p["built"]) and p["moved"] == (m.compare_key(p["name"], p["built"]) != m.compare_key(p["name"], p["installed"])), p
 
     def body(i):
         mut = sc.mutator
@@ -636,9 +642,14 @@ def update_check():
             os.makedirs(entry, exist_ok=True)
             with open(os.path.join(entry, "desc"), "wb") as f:
                 f.write(mut.mutate(mut.rng.pick(desc_corpus), desc_corpus, 65536))
+            if mut.rng.below(8) == 0:
+                try:
+                    os.unlink(m.BUILD_DEPS)
+                except FileNotFoundError:
+                    pass
             out = checker(stub).toolkit()
             check_toolkit(out, stub)
-            return bool(out)
+            return any(p["moved"] for p in out["packages"])
         if i % 5 == 0:
             stub.answers = {"checkupdates": (mut.rng.pick([0, 2, 1]), mut.text(mut.rng.pick(upd_corpus), upd_corpus, 65536), "")}
             if mut.rng.below(4) == 0:

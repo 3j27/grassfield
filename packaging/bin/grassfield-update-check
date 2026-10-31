@@ -30,11 +30,11 @@ What it does, in order (its own lock first: a second run answers `busy`):
      grassfield-notes.json and its .sig next to the database, fetched with curl (https only; file only when this build's
      base is file://, the container tests), checked with gpgv against grassfield-keyring's private folder (the signer is
      VALIDSIG's argument 10, the primary key: listed in grassfield-trusted, absent from grassfield-revoked);
-  0. before all of that (ADR-0041 step 2b, every state carries it): the toolkit installed now against the record this
-     Grassfield was built with (/usr/share/grassfield/BUILD-DEPS, U27's rule: Quickshell by its whole version, Qt,
-     Hyprland, aquamarine and KF6 by major.minor), with the install time of each package that moved
-     (/var/lib/pacman/local/<name>-<version>/desc, readable by every user), so the shell can ask for a log out when a
-     library the running session loaded was replaced under it.
+  0. before all of that (ADR-0041 step 2b, U31, every state carries it): the toolkit installed now, each tracked
+     package with the time pacman installed it (/var/lib/pacman/local/<name>-<version>/desc, readable by every user),
+     the version this Grassfield was built with (/usr/share/grassfield/BUILD-DEPS) and whether it moved away from that
+     record by U27's rule (Quickshell by its whole version, Qt, Hyprland, aquamarine and KF6 by major.minor), so the
+     shell can ask for a log out when a library the running session loaded was replaced under it.
 A stale db.lck in its own database folders is removed first (only one checker runs). Every child has stdin from
 /dev/null and runs in its own process group; the whole check is stopped after 180 s (SIGTERM, SIGKILL 5 s later).
 
@@ -42,8 +42,9 @@ Output: {"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":�
          "grassfield":{"installed":…,"available":…,"notes":[{"version","date","notes":{"en","fr"}}],"notesError":…},
          "omarchy":{"installed":…,"available":…},"others":N,"otherPackages":[{"name","installed","available"}],
          "otherPackagesTruncated":true (only when cut),"retryAt":…,"episode":…,
-         "toolkitMoved":[{"name","built","installed","installedAt"}] ([] when every tracked package matches the record,
-         null when there is no record to compare with)}
+         "toolkit":{"record":true|false,"packages":[{"name","installed","installedAt","built","moved"}]} (one entry per
+         tracked package pacman lists; built and moved null without a record, moved true when the record does not name
+         the package)}
 At the 256 KiB cap the list of other updates is cut first, then the notes (notesError "unavailable"); the counts stay
 (ADR-0033 d.3.5).
 States: not-set-up, repair, blocking, up-to-date, available, failed (error offline|unavailable), update-running, busy.
@@ -209,7 +210,7 @@ def install_time(name, version):
                 t = int(lines[i + 1].strip())
             except ValueError:
                 return None
-            return t if 0 <= t <= 2 ** 40 else None
+            return t if 0 <= t <= 253402300799 else None  # a four-digit year: 9999-12-31T23:59:59Z at most
     return None
 
 
@@ -294,7 +295,7 @@ class Checker:
                        "lastSuccessAt": None, "error": None, "message": None,
                        "grassfield": {"installed": None, "available": None, "notes": [], "notesError": None},
                        "omarchy": {"installed": None, "available": None}, "others": 0,
-                       "retryAt": None, "episode": None, "toolkitMoved": None}
+                       "retryAt": None, "episode": None, "toolkit": None}
 
     # -- helpers
     def path(self, *parts):
@@ -338,27 +339,32 @@ class Checker:
             return 0
 
     def toolkit(self):
-        """ADR-0041 step 2b: the tracked packages whose installed version no longer matches the record this Grassfield was
-        built with (U27's rule), as [{"name", "built", "installed", "installedAt"}]; [] when all match; None when there
-        is no record. A package pacman does not list, or one the record does not name, is not a move (nothing to
-        compare). The shell asks for a log out for a move installed after the session started."""
+        """ADR-0041 step 2b (U31): the toolkit as installed now: {"record": whether BUILD-DEPS was read, "packages":
+        [{"name", "installed", "installedAt", "built", "moved"}]}, one entry per tracked package pacman lists, with its
+        version, the time pacman installed it (the local database entry's %INSTALLDATE%, or None), the version this
+        Grassfield was built with (None without a record, or when the record does not name it) and whether it moved away
+        from that record by U27's rule (None without a record; True when the record does not name it, as the helper
+        refuses then: fail safe). The shell asks for a log out for a package installed after the session started,
+        whatever the record says: the running session loaded the file that was replaced. A version outside pacman's
+        grammar is not pacman's answer (tests/fuzz/fuzz_helpers.py, update-check): not listed."""
         text = read_text(BUILD_DEPS, 4096)
-        if text is None:
-            return None
-        built = record_of(text)
-        moved = []
+        built = record_of(text) if text is not None else None
+        packages = []
         for name in TRACKED:
             now = self.installed(name)
-            # A version outside pacman's grammar is not pacman's answer (tests/fuzz/fuzz_helpers.py, update-check): no move.
-            if now is None or not RECORD_VERSION.match(now) or name not in built or compare_key(name, now) == compare_key(name, built[name]):
+            if now is None or not RECORD_VERSION.match(now):
                 continue
-            moved.append({"name": name, "built": built[name], "installed": now, "installedAt": iso(install_time(name, now))})
-        return moved
+            entry = {"name": name, "installed": now, "installedAt": iso(install_time(name, now)), "built": None, "moved": None}
+            if built is not None:
+                entry["built"] = built.get(name)
+                entry["moved"] = entry["built"] is None or compare_key(name, now) != compare_key(name, entry["built"])
+            packages.append(entry)
+        return {"record": text is not None, "packages": packages}
 
     # -- steps
     def run(self):
         try:
-            self.result["toolkitMoved"] = self.toolkit()
+            self.result["toolkit"] = self.toolkit()
             return self._run()
         except Timeout:
             return self.failed("unavailable", f"the check took more than {CHECK_SECONDS} s")
