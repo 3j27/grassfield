@@ -787,6 +787,60 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   every wait on the shell is bounded (tests: `accepted` and no connection, a late `accepted` after the fallback, a shell that
   stops writing, `hyprctl` failing).
 
+**Delivered in step 7a (the picker: Entire Screen and Window).**
+- **The stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` is a Python program run with `python3 -I`, standard library only. In order, it:
+    - checks the lock, where every doubt counts as locked;
+    - reads xdph's window list;
+    - makes the one-time socket;
+    - asks the shell under 1 s with `qs ipc -p /usr/share/grassfield/shell call picker request <id> <socket>`;
+    - after `accepted`, waits 2 s for the connection, then 15 s at most between the shell's lines;
+    - sends the window list first;
+    - checks the answer and prints xdph's line.
+  - Without the shell it removes the socket file and then `exec`s `/usr/bin/<name>` with the same arguments.
+  - `hyprland-preview-share-picker` (Omarchy's name, from its `xdph.conf`) runs the same program with `--stock-name`. That option takes only the two picker names.
+  - `env-grassfield` puts `/usr/lib/grassfield/session-bin` first in the systemd user manager's PATH, where xdph runs (decision 3-9).
+- **The shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, and the dev hooks `status` and `choose`), the Quickshell `Socket` client, the `wait` lines, and cancelling on lock, on another popup and when the stand-in's end closes.
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`, a `Dialog` sheet with Entire Screen and Window as a `SegmentedControl` and a grid of live `ScreencopyView` thumbnails.
+  - Tokens `panel.sharePicker*`.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: the stand-in against a fake shell, a fake `hyprctl` and fake stock pickers, its output read by a copy of xdph 1.4.1's parser (A-SP1 to A-SP3).
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under the real Quickshell, offscreen.
+  - `tests/unit/tst_sharepicker.qml`: the decisions in `SharePicker.js`.
+  - `tests/shell/shell_unit.sh`: the stand-in's `qs ipc` line and its dev gate.
+
+Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
+- **7-1. Two pull requests.**
+  - Question: deliver D-6 in one pull request, or split it?
+  - Options: (a) one; (b) **7a**, the stand-ins, the channel, the lock and the panel with Entire Screen and Window; then **7b**, Selection (a crosshair, which D-10's screenshots need too) and the menu bar's recording indicator.
+  - **Choice: (b).**
+  - Rule applied: the channel, the part that touches security, is reviewed on its own in the smallest change. The system picker leads with the screen and the window. Selection waits for the crosshair that steps 7b and 8 share. Until 7b no region is offered, though the stand-in already checks a `region:` answer (SP3).
+- **7-2. How the window list reaches the shell.**
+  - Question: xdph gives the stand-in the window list in its environment; how does the list reach the shell?
+  - Options:
+    - (a) in the IPC call's arguments: any local user can read a process's command line in `/proc`, so the titles would leak;
+    - (b) in the environment: the shell does not get the stand-in's environment;
+    - (c) as the stand-in's first line on the one-time socket, which only this user can open.
+  - **Choice: (c).**
+  - Rule applied: no title leaves this user's processes. The shell keeps at most 256 windows, each with its handle, app id, title (capped at 256 characters) and Hyprland address (in hex, for the thumbnail).
+- **7-3. What is selected when the panel opens.**
+  - Options: (a) the first display, so that Return shares it at once; (b) nothing, with Share dimmed until a tile is chosen.
+  - **Choice: (b).**
+  - Rule applied: the system picker shares nothing until something is picked, and a stray Return must never share the screen. Arrows select from the first tile.
+- **7-4. Windows that hide themselves from capture** (`no_screen_share`, greyed with "This window can't be shared" in D-6).
+  - Options: (a) read `privacy.lua`'s rules in the shell, a second copy of them; (b) leave the greying to 7b, after checking what Hyprland 0.56 reports for a client with that rule.
+  - **Choice: (b).**
+  - Rule applied: no second copy of a privacy rule. Hyprland already leaves such a window out of every capture, xdph's stream included, so sharing it shows nothing of it. A known gap of 7a.
+- **7-5. Another popup in the panel's place.** The Overlay draws one popup at a time; a menu bar click or a click outside closes the open one.
+  - Options: (a) bring the panel back afterwards; (b) cancel.
+  - **Choice: (b).**
+  - Rule applied: one deterministic outcome, and the app can ask again. Nothing is shared without a pick.
+- **7-6. A channel that cannot be made** (no private `$XDG_RUNTIME_DIR/grassfield/picker`: one others can read, a link, or not ours).
+  - Options: (a) cancel; (b) the stock picker.
+  - **Choice: (b).**
+  - Rule applied: the share still works, and the shell was never asked, so two pickers never show.
+
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.
   - `PreparePrint(parent_window, title, settings, page_setup, options)`: the macOS print sheet on the app's window: Printer

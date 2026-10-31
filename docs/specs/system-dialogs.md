@@ -312,10 +312,44 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
+### Built in step 7a (ADR-0035 7-1 to 7-6)
+- **Stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
+  - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
+- **Shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, plus the dev hooks `status` and `choose`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`.
+- **The channel as built (SP2, SP2b):**
+  - The stand-in's first line on the socket is `<id> list <json>`: xdph's windows as `{handle, class, title, address}`. The address is Hyprland's, in hex, or `""`. The titles never go into a command line (7-2).
+  - The shell opens the panel when that line arrives, at most 2 s after `accepted`; otherwise it closes the connection and shows nothing.
+  - The shell's answer is `<id> <flags>/screen:<output>` or `<id> <flags>/window:<handle>`.
+  - Lines with another id are ignored. A line longer than 4096 bytes, or one that is not ASCII, cancels.
+  - `request` answers `refused` to an id that is not 128-bit lowercase hex, or a socket that is not `<128-bit hex>.sock` directly in `$XDG_RUNTIME_DIR/grassfield/picker/`. The stand-in, which always uses that form, then treats it like a missing shell.
+- **The panel (SP6, SP7):**
+  - "Share Your Screen", "An app wants to share your screen. Choose what it can see.", and Entire Screen / Window as a segmented control.
+  - A grid of live thumbnails, three to a row, two rows before it scrolls.
+  - Windows are grouped by app name, then sorted by title. A window without an address, or one the shell does not know, shows its app's icon.
+  - Remember this choice is unticked at every opening.
+  - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
+  - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+- **Cancelled:**
+  - when another popup takes the panel's place or a click lands outside it (7-5);
+  - when the session locks;
+  - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
+- **Not in 7a:**
+  - Selection (`region:`) and the recording indicator (SP8) are step 7b (7-1).
+  - Protected windows are listed but not greyed yet (7-4).
+- **Tests:**
+  - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms.
+  - `tests/unit/tst_sharepicker.qml`.
+  - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
 3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app.
+requesting app. Until step 7b: no Selection tab, no recording indicator, and a window that hides itself from capture is listed
+like any other (Hyprland still leaves it out of the stream).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
