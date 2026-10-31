@@ -248,6 +248,19 @@ done
 read -r mx my mw mh rtop rbottom < <(nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height) \(.reserved[1]) \(.reserved[3])"')
 # Free area of any output: "x y w h" (reserved = [left, top, right, bottom]).
 area_of() { nestctl monitors -j | jq -r --arg o "$1" '.[] | select(.name == $o) | "\(.x + .reserved[0]) \(.y + .reserved[1]) \(.width - .reserved[0] - .reserved[2]) \(.height - .reserved[1] - .reserved[3])"'; }
+# The window ADDRESS out of zoom and full screen, whatever it is in (Hyprland's fullscreen: 0 none, 1 zoom, 2 full screen):
+# true once it is in neither. A case that leaves it zoomed would fail the next with "Window is fullscreen" (integrator
+# re-review of 67800eb, C).
+fs_clear() { # address
+  local st
+  st=$(nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen')
+  case "$st" in
+    1) nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$1\" })" >>"$log" 2>&1; sleep 0.8 ;;
+    2) nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$1\" })" >>"$log" 2>&1; sleep 0.8 ;;
+  esac
+  st=$(nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen')
+  [[ $st == 0 || -z $st ]]
+}
 # Another output that touches GF-REF's left (or right) edge over an overlapping span: its name, or "".
 neighbour_on() { # left|right
   nestctl monitors -j | jq -r --arg o "$out" --arg side "$1" --argjson x "$mx" --argjson w "$mw" --argjson y "$my" --argjson h "$mh" \
@@ -2175,19 +2188,26 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       # D64 on a member (integrator review of 7096305, MAJOR 1): its light lies under the menu bar's strip (the bar is away on
       # a Split View Desktop); clicked under its open popover, the member leaves the Split View and no app menu opens.
       close_shell_popup "split green under popover"
+      # The other member's Exit Full Screen just showed the home Desktop: the member's Split View Desktop is shown again first
+      # (integrator re-review of 67800eb, A: the click landed on the menu bar of the home Desktop).
+      nestctl dispatch "hl.dsp.focus({ window = 'address:0x$first' })" >>"$log" 2>&1
+      sleep 1
+      check "split green under popover: the member's Split View Desktop is shown" test "$(shown_desktop)" = "$next5"
       mark_events
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"0x$first\")" >>"$log" 2>&1
-      if event_came ".type == \"tile-hover\" and .address == \"$first\" and .state == \"open\""; then
+      if [[ $(shown_desktop) == "$next5" ]] && event_came ".type == \"tile-hover\" and .address == \"$first\" and .state == \"open\""; then
         read -r slx sly < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$last_event")
         say "  member's light at $slx,$sly"
-        wait_popup_open || true
-        check "split green under popover: the tiling popover is open" test "$(open_kind)" = "tiling@$out"
-        pointer abs $((slx - mx)) $((sly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 1200
-        check "split green under popover: the member leaves the Split View (D64)" test "$(desktop_of "0x$first")" = "$home"
-        check "split green under popover: no app menu opened, the popover closed" test -z "$(open_kind)"
-        check "split green under popover: no overlay left mapped" overlay_gone
+        if wait_popup_open && [[ $(open_kind) == "tiling@$out" ]]; then
+          pointer abs $((slx - mx)) $((sly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 1200
+          check "split green under popover: the member leaves the Split View (D64)" test "$(desktop_of "0x$first")" = "$home"
+          check "split green under popover: no app menu opened, the popover closed" test -z "$(open_kind)"
+          check "split green under popover: no overlay left mapped" overlay_gone
+        else
+          check "split green under popover: the member's tiling popover showed before the click (openKind '$(open_kind)')" false
+        fi
       else
-        check "split green under popover: tile_popover posts open for the member" false
+        check "split green under popover: tile_popover posts open for the member on its shown Split View Desktop" false
       fi
       split_listed "$next5" "$home" >/dev/null 2>&1 && unsplit_ipc "0x$first"
       close_shell_popup "split green under popover end"
@@ -2278,21 +2298,26 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       check "full screen 6c: the Dock is back on the top layer" test "$(dock_level)" = 2
       pointer abs 20 $((mh / 2)) sleep 200
       close_shell_popup "full screen 6c"
+      fs_clear "$addr" || say "  full screen 6c: the window was still zoomed or in full screen"
       mark_events
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
       if event_came ".type == \"tile-hover\" and .address == \"${addr#0x}\" and .state == \"open\""; then
         read -r glx gly < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$last_event")
-        wait_popup_open || true
-        pointer abs $((glx - mx)) $((gly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 600
-        check "green under popover: a click on the zoom light under its open popover zooms the window (D64)" test "$(fs_of "$addr")" = 1
-        check "green under popover: the popover closed" test -z "$(open_kind)"
-        check "green under popover: no overlay left mapped" overlay_gone
-        nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$addr\" })" >>"$log" 2>&1
-        sleep 0.8
-        close_shell_popup "green under popover"
+        # Only once the popover shows: a popover mapping mid-click cancels the plugin's gesture and nothing zooms (integrator
+        # re-review of 67800eb, C).
+        if wait_popup_open && [[ $(open_kind) == "tiling@$out" ]]; then
+          pointer abs $((glx - mx)) $((gly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 600
+          check "green under popover: a click on the zoom light under its open popover zooms the window (D64)" test "$(fs_of "$addr")" = 1
+          check "green under popover: the popover closed" test -z "$(open_kind)"
+          check "green under popover: no overlay left mapped" overlay_gone
+        else
+          check "green under popover: the tiling popover showed before the click (openKind '$(open_kind)')" false
+        fi
       else
         check "green under popover: tile_popover posts open" false
       fi
+      close_shell_popup "green under popover"
+      check "green under popover: the window out of zoom and full screen again" fs_clear "$addr"
       loops_after=$(shell_loops)
       check "full-screen popover: no binding loop in the shell's log (${loops_before} before, ${loops_after} after)" test "$loops_after" = "$loops_before"
       tile_ipc "$addr" previous
@@ -2345,16 +2370,28 @@ gather_place() { # the foot window onto the headless output's area, its Desktop 
   say "  foot placed at x ${x:-?} (output $gather_out at $gx,$gy)"
   [[ -n ${x:-} ]] && (( x >= gx )) && [[ $(nestctl clients -j | jq -r --arg a "$gaddr" '.[] | select(.address == $a) | .workspace.id') == "$gather_home" ]]
 }
-gather_logged() { # the plugin's gathering line, written since `gather_from`
-  tail -n +"$((gather_from + 1))" "$hyprlog" 2>/dev/null | grep -a "was off every output" >>"$log"
+gather_count() { nestctl rollinglog 2>/dev/null | grep -ac "was off every output"; }
+gather_logged() { # the plugin's gathering line since `gather_from` (log file line) or `gather_seen` (rolling log count): polled up
+  # to 3 s, the log file is buffered (integrator re-review of 67800eb, B)
+  local _ n
+  for _ in $(seq 1 15); do
+    tail -n +"$((gather_from + 1))" "$hyprlog" 2>/dev/null | grep -aq "was off every output" && return 0
+    n=$(gather_count)
+    (( ${n:-0} > ${gather_seen:-0} )) && return 0
+    sleep 0.2
+  done
+  return 1
 }
+gather_not_logged() { ! gather_logged; }
 if [[ -n $(geometry) ]] && nestctl output create headless "$gather_out" >>"$log" 2>&1; then
   sleep 1.5
-  declare -F free_foot >/dev/null && free_foot
   gaddr=$(geometry | awk '{print $5}')
+  check "gather: the window out of zoom and full screen first" fs_clear "$gaddr"
+  declare -F free_foot >/dev/null && free_foot
   gather_home=$(nestctl clients -j | jq -r --arg a "$gaddr" '.[] | select(.address == $a) | .workspace.id')
   check "gather: the window on the headless output's area, still on $out's Desktop ($gather_home)" gather_place
   gather_from=$(log_lines)
+  gather_seen=$(gather_count)
   nestctl output remove "$gather_out" >>"$log" 2>&1
   sleep 1.5
   check "gather: Hyprland alive after the unplug" alive
@@ -2368,11 +2405,12 @@ if [[ -n $(geometry) ]] && nestctl output create headless "$gather_out" >>"$log"
     read -r lock_x _ < <(geometry)
     if lock_session; then
       gather_from=$(log_lines)
+      gather_seen=$(gather_count)
       nestctl output remove "$gather_out" >>"$log" 2>&1
       sleep 1.5
       read -r locked_x _ < <(geometry)
       check "gather locked: the window stays where it was behind the lock screen (x ${locked_x:-?}, was $lock_x)" test "${locked_x:-}" = "$lock_x"
-      check "gather locked: nothing gathered while locked" bash -c "! tail -n +$((gather_from + 1)) '$hyprlog' 2>/dev/null | grep -aq 'was off every output'"
+      check "gather locked: nothing gathered while locked" gather_not_logged
     else
       check "gather locked: the foreign locker holds the session lock (${locked:-no answer})" false
       nestctl output remove "$gather_out" >>"$log" 2>&1 || true
