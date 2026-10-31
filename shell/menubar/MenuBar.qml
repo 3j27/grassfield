@@ -253,6 +253,8 @@ Scope {
             UsableProbe {
                 kind: "bar"
                 screenName: win.modelData ? win.modelData.name : ""
+                // P5 counts the entrance (ADR-0040 step 6): the bar's first frame once it is shown.
+                armed: win.entered
             }
 
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
@@ -621,8 +623,44 @@ Scope {
                     b.activated();
             }
 
-            Component.onCompleted: Popups.registerBar(win.screen.name, win)
-            Component.onDestruction: Popups.unregisterBar(win.screen.name, win)
+            Component.onCompleted: {
+                Popups.registerBar(win.screen.name, win);
+                Entrance.expect("menubar:" + win.screen.name);
+                if (win.barFinal)
+                    win.settleBar();
+                if (win.entered)
+                    Journal.shown("menubar", win.screen.name);
+            }
+            Component.onDestruction: {
+                Popups.unregisterBar(win.screen.name, win);
+                if (win.entered)
+                    Journal.hidden("menubar", win.screen ? win.screen.name : "");
+            }
+
+            // ---- the entrance (ADR-0040 step 6, ID-20, ID-5, ID-6) ----
+            // The bar's content is final once the settings are read (or the wait for them is over: Entrance.settingsFinal); its
+            // auto-hide then starts where it will rest (hidden when it hides, as the Dock's), instead of showing and sliding
+            // away. It appears with the Dock and the desktop icons in one fade (Entrance.revealed, session.revealMs).
+            readonly property bool barFinal: Entrance.settingsFinal
+            onBarFinalChanged: {
+                if (barFinal)
+                    win.settleBar();
+            }
+            function settleBar(): void {
+                win.hideMachine = AutoHide.initial(win.autoHides);
+                Entrance.ready("menubar:" + win.screen.name);
+            }
+            readonly property bool entered: Entrance.revealed
+            onEnteredChanged: {
+                if (entered)
+                    Journal.shown("menubar", win.screen.name);
+            }
+            property real entrance: Entrance.revealed ? 1 : 0
+            Behavior on entrance {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.sessionRevealMs)
+                }
+            }
 
             // Opens a popup under (left) or aligned to the right edge of (right) a bar button.
             function openFor(kind: string, button: Item, alignment: string, payload: var): void {
@@ -834,7 +872,7 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
-                opacity: win.dimOpacity
+                opacity: win.dimOpacity * win.entrance
                 visible: win.showBackground
                 // ADR-0024: the band is glass like the other surfaces (the "menu" class: its target at the slider, raised to keep the
                 // text at 4.5:1 over the wallpaper strip), not the legacy clamped tint; the strip under the bar is what lies behind it.
@@ -867,7 +905,7 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
-                opacity: win.dimOpacity
+                opacity: win.dimOpacity * win.entrance
 
                     Row {
                         id: leftRow

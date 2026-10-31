@@ -404,6 +404,8 @@ Scope {
     }
 
     Component.onCompleted: {
+        // The entrance waits for the Dock's first layout (ADR-0040 step 6).
+        Entrance.expect("dock");
         rebuild();
         latchStartScreen();
         if (inputsFinal)
@@ -443,6 +445,7 @@ Scope {
             // shown otherwise): a machine that began shown would slide out in front of the user.
             windows.instances.forEach(w => w.resetHide());
             settled = true;
+            Entrance.ready("dock");
         }
     }
 
@@ -1325,7 +1328,8 @@ Scope {
             // the compositor answers an anchor change with a new size a frame or two later); the timer lets go of `placed`.
             readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth)
             property bool placedGivenUp: false
-            readonly property bool revealWanted: root.settled && (placed || placedGivenUp)
+            // And the session's entrance (ADR-0040 step 6, ID-20): with the menu bar and the desktop icons, in their one fade.
+            readonly property bool revealWanted: root.settled && (placed || placedGivenUp) && Entrance.revealed
             // Latched: a later change of the Dock's edge (Settings) re-places the surface but never hides the Dock.
             property bool reveal: false
             onRevealWantedChanged: {
@@ -1439,7 +1443,15 @@ Scope {
             function resetHide(): void {
                 hideMachine = AutoHide.initial(autohide);
             }
-            Component.onDestruction: Compositor.unregisterDock(screenName, win)
+            Component.onDestruction: {
+                Compositor.unregisterDock(screenName, win);
+                if (win.reveal && win.isDockScreen)
+                    Journal.hidden("dock", screenName);
+            }
+            onRevealChanged: {
+                if (reveal && isDockScreen)
+                    Journal.shown("dock", screenName);
+            }
 
             onPointerActiveChanged: {
                 if (pointerActive)
@@ -1480,8 +1492,14 @@ Scope {
             Item {
                 id: area
                 anchors.fill: parent
-                // Nothing is drawn before the reveal; at it the Dock appears whole, in one frame (no fade, with or without Reduce Motion).
+                // Nothing is drawn before the reveal; at it the Dock appears whole, in the entrance's one fade (session.revealMs,
+                // ADR-0040 ID-20; Reduce Motion caps it), with the menu bar and the desktop icons.
                 opacity: win.reveal ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.sessionRevealMs)
+                    }
+                }
 
                 HoverHandler {
                     id: areaHover

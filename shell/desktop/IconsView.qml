@@ -111,6 +111,26 @@ FocusScope {
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Desktop")
 
+    // ---- the entrance (ADR-0040 step 6, ID-20): the icons appear with the menu bar and the Dock, in one fade, once their
+    // first layout is final (`ready`) ----
+    readonly property string entranceKey: "icons:" + (screen ? screen.name : "")
+    property real entrance: Entrance.revealed ? 1 : 0
+    Behavior on entrance {
+        NumberAnimation {
+            duration: Appearance.duration(Tokens.sessionRevealMs)
+        }
+    }
+    opacity: entrance
+    onReadyChanged: {
+        if (ready)
+            Entrance.ready(root.entranceKey);
+    }
+    Component.onCompleted: {
+        Entrance.expect(root.entranceKey);
+        if (ready)
+            Entrance.ready(root.entranceKey);
+    }
+
     // Persist the slots handed out to icons that had none (new files, a smaller grid).
     onLayChanged: syncTimer.restart()
 

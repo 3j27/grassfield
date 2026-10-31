@@ -16,8 +16,11 @@ Scope {
     // The session is locked (set from shell.qml, as Overview and the switcher get it): a video wallpaper pauses.
     property bool locked: false
 
-    // The measurement's clock starts with the desktop (ADR-0040 ID-16): its `shown` lines count from here.
-    Component.onCompleted: Journal.begin()
+    // The measurement's clock and the entrance's bounds start with the desktop (ADR-0040 ID-16, step 6).
+    Component.onCompleted: {
+        Journal.begin();
+        Entrance.begin();
+    }
 
     // Dev-only wallpaper override for tests/visual (contrast on worst-case wallpapers): with
     // GRASSFIELD_DEV=1, GRASSFIELD_WALLPAPER_FILE (initial, trusted: set by the dev scripts) or
@@ -239,6 +242,8 @@ Scope {
             onImageFileChanged: Qt.callLater(measure)
             onHeightChanged: Qt.callLater(measure)
             Component.onCompleted: {
+                // The entrance waits for this output's first frame (ADR-0040 step 6: the wallpaper first).
+                Entrance.expect("wallpaper:" + (win.modelData ? win.modelData.name : ""));
                 Qt.callLater(measure);
                 Qt.callLater(win.begin);
             }
@@ -397,6 +402,7 @@ Scope {
                 Qt.callLater(win.measure);
                 console.info("grassfield-shell: wallpaper first " + win.shownDesc.kind + (win.shownDesc.kind === "art" ? " " + (win.shownDesc.artwork || "grassfield") + " " + (win.shownDesc.variant || "evening.dark") : "") + " source=" + feed.cfg.source + " output=" + (win.modelData ? win.modelData.name : ""));
                 Journal.shown("wallpaper", win.modelData ? win.modelData.name : "");
+                Entrance.ready("wallpaper:" + (win.modelData ? win.modelData.name : ""));
             }
             // What is on screen now is final: its ground (ADR-0040 ID-2) and its record in wallpaper.json (`shown`: the first frame
             // of the next start, ID-3, and the lock's backdrop, ID-7; with the artwork it would draw instead).

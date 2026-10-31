@@ -2958,6 +2958,12 @@ QtObject {
     // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the low glow behind the ridge
     readonly property string artworkRidgelineDarkSun: "#9FB4C4"
 
+    // ADR-0040 section 6 (ID-5): no surface of the entrance shows before the settings are read (Settings.loaded), at most this long after the shell starts; then the defaults
+    readonly property int sessionSettingsWaitMs: 500
+    // ADR-0040 section 6 (P-6, ID-20): the longest the menu bar, the Dock and the desktop icons wait for each other and for the wallpaper's first frame at the session's entrance (shell/services/Entrance.qml)
+    readonly property int sessionRevealTimeoutMs: 1500
+    // ADR-0040 section 6 (ID-20; ASSUMPTION for macOS, no capture): the one fade in which the menu bar, the Dock and the desktop icons appear together at the session's entrance; Reduce Motion caps it (Appearance.duration)
+    readonly property int sessionRevealMs: 250
     // ADR-0040 ID-21 (section 5): Log Out, Restart and Shut Down proceed by themselves when their confirmation is left alone this many seconds, as macOS's (“… automatically in 60 seconds”, ASSUMPTION from memory)
     readonly property int sessionExitCountdownSeconds: 60
     // ADR-0040 section 6 (ID-10): the exit cover's one fade of the whole screen to the ground once the windows have closed; an estimate until P3 (Reduce Motion: motion.reducedMax)

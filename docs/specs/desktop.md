@@ -36,6 +36,8 @@ No timers run until the pointer is in a corner. Corners are pointer-only; every 
 
 ## Startup
 
+The session's entrance (ADR-0040 step 6, ID-20): the wallpaper maps first with its own first frame; the desktop icons, the menu bar and the Dock then fade in together (`session.revealMs`) once all are final, or after `session.revealTimeoutMs` (`shell/services/Entrance.qml`; the icons say `icons:<output>` is ready when `ready` holds). Measured by `tests/visual/appear-once.sh` from the journal lines of `shell/services/Journal.qml`.
+
 The desktop exposes nothing before its first layout is final (`Logic.settledOn`): the surface is sized, the settings file, the widgets file and the positions file were read, and the first complete listing of the resolved folder is in. `lay` stays empty until then, so no icon appears at a default slot and then moves, and no partial listing is shown and then pruned. The folder model starts on the process's working directory (often the home folder) before its folder is set: a row whose parent is not the desktop folder is a stale row, the listing is refused and nothing is pruned. Clean Up and Clean Up By do nothing before the desktop is ready (they would save empty positions). Each icon stays invisible until its image is in and, for a launcher, its file is read, bounded by `desktopIcon.loadTimeout` (macOS shows each icon whole).
 
 ## Known limitations

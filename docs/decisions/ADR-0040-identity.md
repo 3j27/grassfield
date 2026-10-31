@@ -432,6 +432,25 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | Time of day | (none) | a 20 s crossfade at each phase boundary, deferred during a drag or a full-screen window (IQ-W1 C) | step 2 |
 | Wallpaper change | crossfade (ADR-0016) | unchanged | — |
 
+Step 6 as built (ID-20, ID-5, ID-6; 2026-10-31, in the one pull request). The entrance is a latch,
+`shell/services/Entrance.qml` (its rule pure in `EntranceLogic.js`): every surface says it is expected when it is created
+(`wallpaper:<output>`, `menubar:<output>`, `dock`, `icons:<output>`) and ready when its content is final (the wallpaper's
+first frame, step 3; the menu bar once the settings are read; the Dock's first settled layout; the desktop icons' first
+layout); `revealed` latches once all are, or after `session.revealTimeoutMs` (1500), and never goes back (a surface created
+later is simply shown). Then the menu bar (band and content), the Dock and the desktop icons fade in together over
+`session.revealMs` (250; Reduce Motion caps it); the wallpaper is not part of the fade, it is there first. The Dock's
+latched `reveal` now also waits for the entrance (its mask, blur and exclusive zone switch with it). Settings first (ID-5):
+`Entrance.settingsFinal` once `Settings.loaded`, or `session.settingsWaitMs` (500) after the start, logged, with the
+defaults. The menu bar's auto-hide starts at rest (ID-6): when its settings are final its machine is
+`AutoHide.initial(autoHides)`, as the Dock's, so an auto-hidden bar is never shown and slid away. P5 counts the entrance:
+the bar's `UsableProbe` is armed only once it is shown, and the Dock's probe follows its reveal. Journal: `grassfield-shell:
+entrance (ready|timeout[; waited for <keys>])`, and `shown`/`hidden` lines for `menubar` and `dock`. Tests:
+`tests/unit/tst_entrance.qml` (the latch, the tokens, the wiring of the four surfaces), `tests/shell/startup_settle_wiring.sh`
+(unchanged, passes), and the nested `tests/visual/appear-once.sh` (section 7: first wallpaper kind equals the final one, no
+surface shown twice, the bars after the wallpaper, the entrance ready rather than timed out, one bar tone in the first 3 s;
+at a start and at a restart). NOT VERIFIED: `appear-once.sh` was not run (no nested session in this container), nor P5 on
+the owner's logins.
+
 Step 7 as built (ID-21, ID-10). Log Out, Restart and Shut Down, from the System menu and from Search, confirm with the
 countdown as their message ("If you do nothing, the computer will restart automatically in 60 seconds.", one second at a
 time from `session.exitCountdownSeconds`; one and many as separate strings); left alone, the dialog confirms itself
