@@ -83,9 +83,9 @@ Plan (next security milestone, each step reviewed and gated L1–L5):
 - S1: make `shell/security/` free of UI imports: the lock backdrop through a `Grassfield.Ui` type; popups closed by the UI
   on `SessionState.locked` (done by GF-116, so `Lock.lock()`'s `Popups.close()` can go); the sleep notice through the
   notification server's public D-Bus interface;
-- S2: `shell/security/shell.qml`, a root with Lock, AuthAgent and Idle only, run beside the UI in nested: one session lock
+- S2: `shell/security.qml` (a root next to `shell.qml`, as built at ADR-0041 S1), with Lock, AuthAgent and Idle only, run beside the UI in nested: one session lock
   owner, one polkit agent, memory measured;
-- S3: IPC: the same target names on the security instance (`qs ipc -p /usr/share/grassfield/security …`); an action
+- S3: IPC: the same target names on the security instance (`qs ipc -p /usr/share/grassfield/shell/security.qml …`); an action
   `lock state` (`unlocked`|`locked` only) the UI reads at start, plus a push from the security instance on every
   transition into the UI; the UI treats "no answer yet" as locked for its refusals; bindings, lid helper, stand-in and
   tests switch together;

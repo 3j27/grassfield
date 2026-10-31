@@ -34,11 +34,15 @@ ExecStart=/usr/bin/qs -n -p /usr/share/grassfield/shell/security.qml
 Restart=always
 RestartSec=1
 TimeoutStopSec=5
-# Resource guard, provisional until the S1 measurement (ADR-0041 step 1: the process's RSS at idle and its start time are
-# measured in nested and in the real session, then these are set from them). At S1 the process hosts one IPC handler.
-MemoryHigh=256M
-MemoryMax=512M
-CPUQuota=50%
+# Memory guard from the S1 measurement (ADR-0041 step 1; the integrator's nested pass of #72: 157 MB of RSS at idle for
+# the root hosting one IPC handler): MemoryHigh about twice that, MemoryMax about four times, as a slow leak reaches the
+# first after days and a runaway one the second (ADR-0041 R4). S2 measures again with the lock's surfaces and resets both.
+# CPUQuota as the UI unit's (one and a half cores): a spinning process cannot starve the compositor, while the lock
+# screen's rendering and the PAM exchange (S2) keep a whole core; the 50% of the first version would have throttled them
+# (the integrator's merge review of #72). A loop is caught by the restart limit above and, from S2, by the heartbeat.
+MemoryHigh=320M
+MemoryMax=640M
+CPUQuota=150%
 # No NoNewPrivileges/ProtectSystem here on purpose, as for the UI's unit: from S2 the lock and from S3 the polkit agent
 # rely on the setuid/setgid helpers unix_chkpwd and polkit-agent-helper-1, which NoNewPrivileges would break, leaving the
 # session unable to unlock.
