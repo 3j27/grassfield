@@ -797,8 +797,11 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
 - A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
   click, a click outside every box cancelled; notify-send's output ending before it does, under its own name in /proc):
   every display for the screen, the focused one first; a drag, a click on a window, on a window behind a larger one in
-  front, on a fullscreen window and a pinned one over it, on a display only, and outside every display; the windows then
-  the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the next; Esc and a
+  front (opened without the focus), with the pointer unread or gone from slurp's box, with a hand that moved a pixel, on a
+  pinned Picture-in-Picture window over the focused one, on a fullscreen window and the windows pinned or opened over it,
+  on a display only, and outside every display, with fixtures that carry every field Hyprland gives, in its stacking
+  order; the windows then the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the
+  next, the crosshair not waiting for it, the picture waiting; SIGTERM while the notice waits; Esc and a
   second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
   " (2)"; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
   notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
@@ -809,7 +812,8 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
 
 ### Known limitations
 A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
-own box, without Grassfield's title bar (8-5). While the crosshair shows, slurp outlines the smallest box under the pointer,
+own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
+(8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
 which can be a window behind a larger one; the picture is the window on top (the most recently focused under the pointer). The notification settings list the helper under its translated
 name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
 the toolbar's options are the later chantier's.
