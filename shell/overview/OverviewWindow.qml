@@ -351,14 +351,14 @@ Variants {
         // A drop of window `key` on Desktop tile `index` moves it: not on "+", the Desktop shown, a Split View Desktop, nor for a
         // member of one (WindowTiling.dropAllowed, ADR-0036 D72).
         function dropAllowed(key: string, index: int): bool {
-            const info = byKey[key];
-            const tile = tiles[index];
+            const info = win.byKey[key];
+            const tile = win.tiles[index];
             return !!info && !!tile && !tile.plus && !tile.active && WindowTiling.dropAllowed(TilingLink.splits, info.address, tile.id);
         }
 
         function dropWindow(key: string, index: int): void {
-            if (dropAllowed(key, index))
-                Compositor.moveGroupToSpace(byKey[key].address, tiles[index].id); // with its tile group (TL29)
+            if (win.dropAllowed(key, index))
+                Compositor.moveGroupToSpace(win.byKey[key].address, win.tiles[index].id); // with its tile group (TL29)
         }
 
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).
