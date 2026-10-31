@@ -132,7 +132,7 @@ def app_names(open_windows):
 
 def shell_call(command, timeout):
     """COVER or LIFT on the shell's instance; its answer, None when it did not answer. Quickshell's option variables are
-    cleared as every `qs ipc` caller of the session does (a stray QS_MANIFEST made `qs ipc -p` exit 108)."""
+    cleared as every IPC caller of the session does (a stray QS_MANIFEST made the IPC call exit 108)."""
     env = {k: v for k, v in os.environ.items() if k not in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST")}
     r = run(command.split(), timeout=timeout, env=env)
     if r is None or r.returncode != 0:
