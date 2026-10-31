@@ -1,5 +1,7 @@
 # Grassfield — kit de marque proposé
 
+English: [README.en.md](README.en.md).
+
 **Statut : identité en cours de validation.** Cette identité reprend le premier concept généré et sa retouche choisie pendant la conversation. Le symbole SVG est un redessin vectoriel d’interprétation : il diffère légèrement de l’image générée. Il est intégré aux ressources du logo système ; les autres éléments restent proposés. La validation visuelle et juridique reste à faire avant lancement public ou dépôt.
 
 Ouvrir [la planche de marque](brandboard.html) dans un navigateur. Le [concept source](../concepts/grassfields-original-refined/logo.png) et son [prompt](../concepts/grassfields-original-refined/PROMPT.md) sont conservés. Les SVG et leurs exports PNG transparents sont dans [assets](assets/).
@@ -19,7 +21,7 @@ Une silhouette ascendante et des courbes superposées évoquent l’élan et les
 
 **Tailles :** pour la communication, commencer à 32 px de hauteur pour le symbole et 200 px de largeur pour la signature horizontale. Ce sont des repères provisoires : le détail du bas peut disparaître aux petites tailles. Vérifier sur écran et en impression. Ne pas réduire le PNG au lieu de partir du SVG.
 
-**Version optique (16–24 px) :** l’interface utilise deux fichiers sur la grille de 24 unités. `branding/icons/symbolic/grassfield-logo-full.svg` est le symbole complet, inchangé, pour 32 px et plus (les dialogues d’alerte du système, 48 px). `branding/icons/symbolic/grassfield-logo.svg` est sa version optique pour 16–24 px (barre de menus, fenêtre « À propos », réglages, recherche) : mêmes lames montantes sur la même base arrondie, avec moins d’espaces blancs et des espaces plus larges. La fente fine entre la grande lame et la lame de droite se referme en V là où elle deviendrait floue, l’encoche de gauche est plus ouverte, la base garde son contour en vague sans la fente intérieure, et un seul espace d’environ 1,4 px à 16 px sépare les lames de la base. Le dessin du symbole complet ne change pas. Cette version optique suit le statut du symbole : son adoption finale et sa validation juridique restent au propriétaire.
+**Version optique (16–24 px) :** l’interface utilise deux fichiers sur la grille de 24 unités. `branding/icons/symbolic/grassfield-logo-full.svg` est le symbole complet, inchangé, pour 32 px et plus : la source des grands usages (site, futures surfaces « À propos » en grand) ; aucune surface du système ne l’affiche aujourd’hui. `branding/icons/symbolic/grassfield-logo.svg` est sa version optique pour 16–24 px (barre de menus, fenêtre « À propos », réglages, recherche) : mêmes lames montantes sur la même base arrondie, avec moins d’espaces blancs et des espaces plus larges. La fente fine entre la grande lame et la lame de droite se referme en V là où elle deviendrait floue, l’encoche de gauche est plus ouverte, la base garde son contour en vague sans la fente intérieure, et un seul espace d’environ 1,4 px à 16 px sépare les lames de la base. Le dessin du symbole complet ne change pas. Cette version optique suit le statut du symbole : son adoption finale et sa validation juridique restent au propriétaire.
 
 ## Couleurs
 
