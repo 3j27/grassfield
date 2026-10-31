@@ -3270,6 +3270,17 @@ QtObject {
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
 
+    // the light dimming slurp lays over the screen while the crosshair shows, read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
+    readonly property string captureVeil: "#0000002E"
+    // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
+    readonly property string captureSelection: "#FFFFFF24"
+    // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
+    readonly property string captureBorder: "#FFFFFFE6"
+    // the windows a click can pick, a faint light fill (ADR-0035 D-10, step 8); estimate
+    readonly property string captureBox: "#FFFFFF14"
+    // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
+    readonly property int captureBorderWidth: 1
+
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4
 
