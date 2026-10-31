@@ -5,8 +5,9 @@
 // Pure functions (tests/unit/tst_activitylink.qml).
 
 const APP_ID = "org.grassfield.Activity";
-// AM60: at most this many windows in the projection.
+// AM60: at most this many windows in the projection, and an app id of at most this many characters.
 const MAX_WINDOWS = 256;
+const MAX_APP_ID = 256;
 
 // $XDG_RUNTIME_DIR/grassfield/activity-<display>: one folder per display (AD29: a nested session shares the real session's
 // runtime directory), <display> the last part of WAYLAND_DISPLAY with every character outside [A-Za-z0-9._-] replaced by
@@ -36,7 +37,8 @@ function projection(windows, marks) {
             break;
         if (!w || !plainPid(w.pid))
             continue;
-        out.push({pid: w.pid, app: String(w.cls || ""), idleInhibit: w.idleInhibit === true});
+        // An app id is the client's to choose: cut at the length the app reads (it refuses a longer one, AM60).
+        out.push({pid: w.pid, app: String(w.cls || "").slice(0, MAX_APP_ID), idleInhibit: w.idleInhibit === true});
     }
     const hung = [];
     for (const m of marks || []) {

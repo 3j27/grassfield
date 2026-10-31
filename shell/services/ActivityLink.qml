@@ -152,9 +152,11 @@ Singleton {
         // title. The shell closes only its own compositor's windows: a nested session's shell reaches the nested
         // session's alone.
         function quit(pid: int): string {
-            const plan = Logic.quitPlan(pid, Compositor.knownWindows().map(w => w.pid));
+            // Only the windows the shell can ask to close count: one without its protocol handle is no window here, so the
+            // answer is then "no-windows" and the app sends SIGTERM itself.
+            const tops = Compositor.knownToplevels();
+            const plan = Logic.quitPlan(pid, Compositor.knownWindows().map((w, i) => tops[i] ? w.pid : 0));
             if (plan.answer === "ok") {
-                const tops = Compositor.knownToplevels();
                 plan.indexes.forEach(i => Compositor.close(tops[i]));
             } else if (plan.answer === "refused") {
                 console.info("grassfield-shell: activity quit refused for pid", pid);

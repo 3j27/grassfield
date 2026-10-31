@@ -37,6 +37,9 @@ TestCase {
             many.push({pid: 100 + i, cls: "app"});
         compare(JSON.parse(Logic.projection(many, [])).windows.length, Logic.MAX_WINDOWS);
         compare(Logic.projection(null, null), "{\"windows\":[],\"notResponding\":[]}");
+        // A client's app id longer than the app reads is cut there, so one window never voids the whole projection.
+        const long = JSON.parse(Logic.projection([{pid: 4242, cls: "x".repeat(1000)}], [])).windows[0].app;
+        compare(long.length, Logic.MAX_APP_ID);
     }
 
     function test_quitPlan() {
