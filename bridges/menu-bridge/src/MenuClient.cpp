@@ -90,15 +90,17 @@ namespace gf::menubridge {
 
     void MenuClient::handleLayout(const QDBusMessage& reply) {
         if (reply.type() != QDBusMessage::ReplyMessage || reply.signature() != QLatin1String("u(ia{sv}av)") || reply.arguments().size() != 2) {
-            const QString why = reply.type() == QDBusMessage::ErrorMessage ? reply.errorName() : QStringLiteral("unexpected reply signature %1").arg(reply.signature());
+            const bool error = reply.type() == QDBusMessage::ErrorMessage;
+            const QString why = error ? reply.errorName() : QStringLiteral("unexpected reply signature %1").arg(reply.signature());
             log(QStringLiteral("window %1: GetLayout on %2 %3 failed: %4").arg(m_window, m_service, m_path, why));
-            fail(QStringLiteral("layout-failed"), why);
+            // No answer (NoReply, or no menu object yet: an error) may come later; a reply of the wrong shape will not.
+            fail(QStringLiteral("layout-failed"), why, error);
             return;
         }
         RawItem      root;
         LayoutBudget readBudget;
         if (!readLayout(qvariant_cast<QDBusArgument>(reply.arguments().at(1)), root, 0, readBudget)) {
-            fail(QStringLiteral("layout-failed"), QStringLiteral("malformed layout"));
+            fail(QStringLiteral("layout-failed"), QStringLiteral("malformed layout"), false);
             return;
         }
         if (readBudget.truncated) {
@@ -122,7 +124,7 @@ namespace gf::menubridge {
             fetch();
     }
 
-    void MenuClient::fail(const QString& code, const QString& why) {
+    void MenuClient::fail(const QString& code, const QString& why, bool retry) {
         ++m_failures;
         if (m_ready) {
             // A re-read: the last good layout stays shown; the application's next signal reads it again.
@@ -130,9 +132,9 @@ namespace gf::menubridge {
                 giveUp(code, why);
             return;
         }
-        // The first read: tried again later. It used to fail at once, and a window whose application was busy past the
-        // timeout showed the T0 menus until its next focus.
-        if (m_failures >= kFirstReadTries) {
+        // The first read: tried again later when the application did not answer (it used to fail at once, and a window whose
+        // application was busy past the timeout showed the T0 menus until its next focus); never for a malformed answer.
+        if (!retry || m_failures >= kFirstReadTries) {
             giveUp(code, why);
             return;
         }

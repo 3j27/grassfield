@@ -79,7 +79,8 @@ namespace gf::menubridge {
       private:
         void fetch();
         void scheduleRefetch();
-        void fail(const QString& code, const QString& why);
+        // `retry`: the first read may be tried again (the application did not answer; a malformed answer is final).
+        void fail(const QString& code, const QString& why, bool retry);
         void giveUp(const QString& code, const QString& why);
         void handleLayout(const QDBusMessage& reply);
         // Sends `message`, announces it and runs `handler` with the reply.

@@ -347,6 +347,11 @@ namespace {
         RawItem     layout;
         // GetLayout calls still to answer with an error (an application busy past the timeout: NoReply).
         int         busyGetLayouts = 0;
+        // GetLayout answered with a reply of the wrong signature (a string).
+        bool        wrongSignature = false;
+        // When each GetLayout came (ms on one clock).
+        QList<qint64>  getLayoutTimes;
+        QElapsedTimer  clock;
 
         QString     introspect(const QString&) const override {
             return {};
@@ -354,7 +359,14 @@ namespace {
 
         bool handleMessage(const QDBusMessage& msg, const QDBusConnection& conn) override {
             calls << msg.member() + u':' + msg.signature();
-            if (msg.member() == QLatin1String("GetLayout") && busyGetLayouts > 0) {
+            if (msg.member() == QLatin1String("GetLayout")) {
+                if (!clock.isValid())
+                    clock.start();
+                getLayoutTimes << clock.elapsed();
+            }
+            if (msg.member() == QLatin1String("GetLayout") && wrongSignature) {
+                conn.send(msg.createReply(QVariant(QStringLiteral("not a layout"))));
+            } else if (msg.member() == QLatin1String("GetLayout") && busyGetLayouts > 0) {
                 --busyGetLayouts;
                 conn.send(msg.createErrorReply(QStringLiteral("org.freedesktop.DBus.Error.NoReply"), QStringLiteral("busy")));
             } else if (msg.member() == QLatin1String("GetLayout"))
@@ -610,6 +622,26 @@ TEST(MenuClientRetry, AShownMenuKeepsItsLayoutWhenARefreshFails) {
     pump(300);
     EXPECT_EQ(code, QStringLiteral("layout-failed")) << "the third failed re-read in a row gives it up";
     EXPECT_EQ(peer.getLayoutCalls(), 4);
+}
+
+// A first read answered with a reply of the wrong shape is not tried again (review of fac5bff3, NIT): only a read the
+// application did not answer may succeed later.
+TEST(MenuClientRetry, AFirstReadOfTheWrongShapeIsNotTriedAgain) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-shape"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.wrongSignature = true;
+    MenuClient client(peer.client, QStringLiteral("7"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (code.isEmpty() && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(code, QStringLiteral("layout-failed"));
+    pump(1200);
+    EXPECT_EQ(peer.getLayoutCalls(), 1) << "read once";
 }
 
 TEST(DBusMenuWire, NonLayoutArgumentsAreRefused) {
