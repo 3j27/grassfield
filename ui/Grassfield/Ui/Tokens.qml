@@ -634,6 +634,12 @@ QtObject {
     readonly property int controlPushPadding: 12
     // macOS 27 sheet button (Button.sheet): a 24-tall rounded rectangle, not a capsule, its corner's 45-degree point that of a 6.8-pt circle (+-0.9; Print, TextEdit's Open, Finder's Connect to Server), its label pushPadding from each end [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
     readonly property int controlSheetButtonRadius: 7
+    // the switch knob's drop shadow, the shadow colour at this opacity (macOS 27 Settings, an off switch at 2 px/pt: the shadow darkens the track by 0.077 of its value under the knob, 0.050 at its side, 0.027 above it; this token, the blur and the offset give 0.077, 0.051 and 0.034 in a 2x render) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property real controlKnobShadowOpacity: 0.22
+    // its blur (the measured shadow fades into the track over about 5 pt; 3 matches its first three device pixels) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property int controlKnobShadowBlur: 3
+    // its offset down (darker under the knob than above it) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property real controlKnobShadowOffsetY: 0.5
     // WCAG 1.4.11 (non-text contrast) for the white knob of a switch or a slider on its on fill (the selection colour, ADR-0039 D-Q4): under it the knob is outlined in the fill's mark colour (Accent.knobOutlined; the yellow and green fills, 2.02:1 and 2.52:1) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
     readonly property real controlKnobMinContrast: 3.0
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]

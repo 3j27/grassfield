@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Templates as T
 
 // On/off switch (QtQuick.Templates Switch), the stock-Controls shaped sibling of Toggle: it toggles itself on a click, on
@@ -63,6 +64,17 @@ T.Switch {
             // under 3:1, the fill's mark colour outlines it.
             border.width: Appearance.increaseContrast || root.knobOutlined ? Tokens.controlBorderWidth : 0
             border.color: root.knobOutlined ? Appearance.colors.selectionText : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+
+            // The knob's soft drop shadow, which sets it apart from a light off track (macOS 27, measured: ADR-0039 step 28, G9
+            // with Increase Contrast off): drawn under the knob (z -1).
+            RectangularShadow {
+                anchors.fill: parent
+                z: -1
+                radius: parent.radius
+                blur: Tokens.controlKnobShadowBlur
+                offset: Qt.vector2d(0, Tokens.controlKnobShadowOffsetY)
+                color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.controlKnobShadowOpacity)
+            }
 
             // Under Reduce Motion the knob jumps to its side (ADR-0039 step 5).
             Behavior on x {

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Templates as T
 
 // On/off switch on a QtQuick.Templates Control: the host owns the value. checked is set from outside; toggled() reports a user
@@ -83,6 +84,17 @@ T.Control {
         border.width: Appearance.increaseContrast || root.knobOutlined ? Tokens.controlBorderWidth : 0
         border.color: root.knobOutlined ? Appearance.colors.selectionText : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.dimmed ? Tokens.controlToggleDisabledKnobOpacity : 1
+
+        // The knob's soft drop shadow, which sets it apart from a light off track (macOS 27, measured: ADR-0039 step 28, G9 with
+        // Increase Contrast off): drawn under the knob (z -1) and faded with it.
+        RectangularShadow {
+            anchors.fill: parent
+            z: -1
+            radius: parent.radius
+            blur: Tokens.controlKnobShadowBlur
+            offset: Qt.vector2d(0, Tokens.controlKnobShadowOffsetY)
+            color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.controlKnobShadowOpacity)
+        }
 
         // Under Reduce Motion the knob jumps to its side; the track's colour still crossfades (ADR-0039 step 5).
         Behavior on x {
