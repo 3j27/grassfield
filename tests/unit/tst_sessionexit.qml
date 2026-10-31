@@ -70,8 +70,8 @@ TestCase {
         verify(/interval: Tokens\.sessionExitCoverHoldMs/.test(cover), "the cover lifts by itself");
         verify(/function state\(\): string \{\s*if \(!VisualFixtures\.dev\)\s*return "";/.test(cover), "state is a dev hook");
         const helper = source("packaging/bin/grassfield-session-end");
-        verify(/^COVER = "qs ipc -p \/usr\/share\/grassfield\/shell call session cover"$/m.test(helper));
-        verify(/^LIFT = "qs ipc -p \/usr\/share\/grassfield\/shell call session lift"$/m.test(helper));
+        verify(/^COVER = "qs ipc -p \/usr\/share\/grassfield\/shell call session cover"  # i18n-ignore \(a command line\)$/m.test(helper));
+        verify(/^LIFT = "qs ipc -p \/usr\/share\/grassfield\/shell call session lift"  # i18n-ignore \(a command line\)$/m.test(helper));
         verify(/shell_call\(COVER, EXIT_WAIT\)/.test(helper) && /shell_call\(LIFT, EXIT_WAIT\)/.test(helper));
         verify(/^\s+ExitCover \{\}$/m.test(source("shell/shell.qml")), "the shell builds the cover");
         verify(/^ExitCover 1\.0 ExitCover\.qml$/m.test(source("shell/overlay/qmldir")));

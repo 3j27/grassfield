@@ -69,8 +69,8 @@ SETTLE_EMPTY = 2  # consecutive empty window lists before the windows count as g
 ASK_TIMEOUT = 295  # seconds a "<Action> Anyway" notice waits before it is closed (GRASSFIELD_SESSION_END_ASK_TIMEOUT, tests)
 # The shell's exit cover (ADR-0040 ID-10), its instance called by its path as grassfield-lid and hyprland-dialog call it; whole
 # command lines, so that tests/security/ipc_inventory.sh finds this helper as the caller of `session cover` and `session lift`.
-COVER = "qs ipc -p /usr/share/grassfield/shell call session cover"
-LIFT = "qs ipc -p /usr/share/grassfield/shell call session lift"
+COVER = "qs ipc -p /usr/share/grassfield/shell call session cover"  # i18n-ignore (a command line)
+LIFT = "qs ipc -p /usr/share/grassfield/shell call session lift"  # i18n-ignore (a command line)
 EXIT_WAIT = 1.0  # session.exitWaitMs (ui/tokens/tokens.json; tests/shell/session_end.sh holds them equal): the exit cover's bound
 
 
