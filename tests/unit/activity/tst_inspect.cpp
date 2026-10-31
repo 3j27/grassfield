@@ -200,6 +200,34 @@ TEST(InspectFixture, AnOwnProcessOnEveryTab)
     EXPECT_EQ(d.moreFiles, 0u);
 }
 
+// Mutants D13, D14, D16 of step 2d: a path a process chose is sanitized as AM17; Peak Memory never shows below Real Memory
+// (AM31); past 10 000 descriptors the rest are counted, not listed.
+TEST(InspectFixture, APathIsSanitizedThePeakIsNeverBelowAndTheListIsBounded)
+{
+    Fixture fx;
+    writeOwn(fx, 300, 5000, 100);
+    fx.link("/home/alice/invoice\xe2\x80\xae" "fdp.exe", "proc/300/fd/12"); // a right-to-left override
+    // VmHWM below VmRSS (the kernel updates the peak lazily).
+    fx.write("proc/300/status", "Name:\tworker\nUid:\t1000\t1000\t1000\t1000\nVmHWM:\t  100 kB\nVmRSS:\t  8000 kB\n"
+                                "RssAnon:\t  3000 kB\nRssFile:\t  4000 kB\nRssShmem:\t  1000 kB\nVmSwap:\t  0 kB\n");
+    ProcessInspector in(fx.proc(), kUid, 100);
+    ASSERT_TRUE(in.open(300, 5000));
+    ProcessDetails d = in.read(activity::InspectFiles, 1.0);
+    ASSERT_TRUE(d.hasFiles);
+    bool found = false;
+    for (const Descriptor &f : d.files)
+        found = found || (f.fd == 12 && f.name == "/home/alice/invoicefdp.exe");
+    EXPECT_TRUE(found);
+    EXPECT_EQ(d.peakMemory, 8000u * 1024);
+
+    for (size_t fd = 100; fd < 100 + activity::kMaxDescriptors; ++fd)
+        fx.link("/dev/null", "proc/300/fd/" + std::to_string(fd));
+    d = in.read(activity::InspectFiles, 2.0);
+    EXPECT_EQ(d.files.size(), activity::kMaxDescriptors);
+    EXPECT_EQ(d.moreFiles, 8u); // the eight of the fixture past the bound (the lowest numbers are listed)
+    EXPECT_EQ(d.files.front().fd, 0);
+}
+
 TEST(InspectFixture, ProportionalMemoryAtMostEveryFiveSeconds)
 {
     Fixture fx;

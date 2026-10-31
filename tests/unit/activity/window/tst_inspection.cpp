@@ -206,6 +206,34 @@ TEST(Inspection, ReadsOnTheWorkersThreadOnlyWhileShown)
     thread.wait();
 }
 
+// Mutant N8 of step 2d: a read asked for while one runs (a tab chosen) is not made once the window has gone off screen.
+TEST(Inspection, AReadAskedForMeanwhileIsDroppedOffScreen)
+{
+    Registry r;
+    r.fx.inspectable(300, 5000, kMe, 100);
+    QThread thread;
+    auto *worker = new QObject;
+    worker->moveToThread(&thread);
+    QObject::connect(&thread, &QThread::finished, worker, &QObject::deleteLater);
+    thread.start();
+    r.inspectors.setWorker(worker);
+    Inspection *i = r.inspectors.open(300, 5000, QStringLiteral("Worker"));
+    ASSERT_NE(i, nullptr);
+    // The worker's thread is busy for a while: the window's first read waits behind it.
+    QMetaObject::invokeMethod(worker, [] { QThread::msleep(300); }, Qt::QueuedConnection);
+    QSignalSpy changed(i, &Inspection::changed);
+    i->setShown(true);                         // a read asked for
+    i->setTab(QStringLiteral("statistics"));   // one more while it runs
+    i->setShown(false);                        // off screen before either is made
+    changed.clear();                           // setTab's own signal
+    ASSERT_TRUE(changed.wait(3000));           // the first read comes back
+    EXPECT_FALSE(changed.wait(1500));          // and nothing more is read
+    EXPECT_EQ(changed.count(), 1);
+    r.inspectors.close(i);
+    thread.quit();
+    thread.wait();
+}
+
 TEST(Inspection, TheAppOpensTheSelectedRowOrADoubleClickedOne)
 {
     Fixture f;
