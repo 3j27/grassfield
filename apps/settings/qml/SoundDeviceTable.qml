@@ -149,7 +149,7 @@ Item {
                 readonly property bool selected: root.isSelected(row.nodeId, row.isDefault)
                 readonly property bool emphasized: row.selected && root.activeFocus
                 readonly property bool last: row.index === root.count - 1
-                readonly property real cornerRadius: root.roundBottom && row.last ? Tokens.radiusMenu : 0
+                readonly property real cornerRadius: root.roundBottom && row.last ? Tokens.radiusGroup : 0
 
                 width: rows.width
                 height: Tokens.settingsSoundTableRowHeight

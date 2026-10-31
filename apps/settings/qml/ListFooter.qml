@@ -23,12 +23,12 @@ Item {
     readonly property color fill: Qt.tint(Appearance.colors.groupFill, Appearance.withAlpha(Appearance.colors.text, Tokens.settingsFooterFillOpacity))
     Rectangle {
         anchors.fill: parent
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: root.fill
     }
     Rectangle {
         width: parent.width
-        height: Math.min(parent.height, Tokens.radiusMenu)
+        height: Math.min(parent.height, Tokens.radiusGroup)
         color: root.fill
     }
     Rectangle {

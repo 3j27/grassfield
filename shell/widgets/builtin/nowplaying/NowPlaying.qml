@@ -38,7 +38,8 @@ WidgetBase {
         y: root.padding
         width: edge
         height: edge
-        radius: Tokens.radiusControl
+        // A cover art's corner, concentric with the tile (ADR-0039 step 13, G5).
+        radius: Tokens.radiusArtwork
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
         clip: true
 

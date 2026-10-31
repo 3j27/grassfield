@@ -55,7 +55,7 @@ Sheet {
     Rectangle {
         width: parent.width
         height: Tokens.settingsPickerListHeight
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
         clip: true
 

@@ -75,7 +75,7 @@ Item {
     Rectangle {
         visible: !root.plain
         anchors.fill: column
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
         // Increase Contrast outlines the group; otherwise the fill alone separates it (macOS 27).
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0

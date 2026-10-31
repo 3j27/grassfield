@@ -332,10 +332,11 @@ FocusScope {
             Accessible.name: qsTr("Back to %1").arg(root.nested && root.trail.length > 1 ? DisplayName.text(Stacks.baseName(root.trail[root.trail.length - 2])) : DisplayName.text(root.info.name))
             Accessible.onPressAction: root.back()
 
-            // A control: the control fill, the control hover over it (ADR-0039 step 12, G6).
+            // A control: the control fill, the control hover over it (ADR-0039 step 12, G6); concentric with the panel's corner,
+            // which it hugs (the corner less its inset, step 13, G5).
             Rectangle {
                 anchors.fill: parent
-                radius: Tokens.radiusControl
+                radius: Tokens.radiusMenu - backRow.x
                 color: Appearance.buttonFill
 
                 Rectangle {
@@ -550,7 +551,8 @@ FocusScope {
 
             Rectangle {
                 anchors.fill: parent
-                radius: root.view === "list" ? Tokens.radiusMenu - Tokens.menuPadding : Tokens.radiusControl
+                // Concentric with the panel's corner, which it hugs (ADR-0039 step 13, G5).
+                radius: Tokens.radiusMenu - openRow.x
                 color: Appearance.colors.selection
                 visible: openRow.current
             }

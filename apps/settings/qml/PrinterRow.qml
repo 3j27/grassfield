@@ -52,7 +52,7 @@ T.AbstractButton {
 
         // Keyboard focus only (never after a click).
         FocusRing {
-            shapeRadius: Tokens.radiusMenu
+            shapeRadius: Tokens.radiusGroup
             visible: root.visualFocus
         }
     }

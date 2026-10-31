@@ -157,6 +157,7 @@
  {"path": "tests/unit/tst_sheetbuttons.qml", "layer": "headless"},
  {"path": "tests/unit/tst_onfill.qml", "layer": "headless"},
  {"path": "tests/unit/tst_selectionroles.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_radiusroles.qml", "layer": "headless"},
  {"path": "tests/unit/tst_popupkinds.qml", "layer": "logic"},
  {"path": "tests/unit/tst_runmode.qml", "layer": "headless"},
  {"path": "tests/shell/run_mode_import/shell.qml", "layer": "headless"},

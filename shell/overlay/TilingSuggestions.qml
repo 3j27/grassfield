@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
@@ -149,16 +150,38 @@ FocusScope {
                     width: parent.width
                     height: root.grid.thumbHeight
 
-                    // The window fitted in its box with its own aspect, live.
-                    ScreencopyView {
-                        readonly property real ratio: implicitWidth > 0 && implicitHeight > 0 ? implicitWidth / implicitHeight : Tokens.tilingSuggestThumbAspect
+                    // The window fitted in its box with its own aspect, live, its corners rounded as the Overview's thumbnails
+                    // (ADR-0039 step 13, G5: they were square).
+                    Item {
+                        id: fitted
+
+                        readonly property real ratio: shot.implicitWidth > 0 && shot.implicitHeight > 0 ? shot.implicitWidth / shot.implicitHeight : Tokens.tilingSuggestThumbAspect
 
                         anchors.centerIn: parent
                         width: ratio >= thumb.width / thumb.height ? thumb.width : thumb.height * ratio
                         height: ratio >= thumb.width / thumb.height ? thumb.width / ratio : thumb.height
-                        captureSource: tile.modelData.toplevel
-                        live: true
-                        paintCursor: false
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: thumbMask
+                        }
+
+                        ScreencopyView {
+                            id: shot
+                            anchors.fill: parent
+                            captureSource: tile.modelData.toplevel
+                            live: true
+                            paintCursor: false
+                        }
+                    }
+
+                    Rectangle {
+                        id: thumbMask
+                        width: fitted.width
+                        height: fitted.height
+                        radius: Tokens.tilingSuggestThumbRadius
+                        visible: false
+                        layer.enabled: true
                     }
                 }
 

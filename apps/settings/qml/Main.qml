@@ -666,7 +666,7 @@ Window {
             y: detailToolbar.height + Tokens.spacingLg
             width: parent.width - 2 * Tokens.spacingLg
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingMd : 0
-            radius: Tokens.radiusMenu
+            radius: Tokens.radiusGroup
             // Destructive colour: the file is refused (or a change failed), nothing is written.
             color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage

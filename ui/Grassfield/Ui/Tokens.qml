@@ -208,6 +208,10 @@ QtObject {
     readonly property int radiusMenuBar: 0
     // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusMenu: 12
+    // a Settings group, its rows' rings and the boxes that sit with the groups (banners, the hero, a sheet's list well): macOS 27 measures 11.9 at the 45-degree point (Desktop & Dock's groups, 512 Pixels release capture); its own role, no longer the menus' radius (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int radiusGroup: 12
+    // a cover art's corner in Now Playing (Control Center's module and the widget): macOS 27's Control Center measures 10.2 at the 45-degree point on its 40-pt artwork; the widget's is concentric with its tile (widget.radius 26 less its 16 padding); was radius.control 6 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int radiusArtwork: 10
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusPanel: 18
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
@@ -804,6 +808,8 @@ QtObject {
     readonly property int notificationBannerGap: 6
     // design/reference/macos (gap 7): app icon 32 pt in banners and cards [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerIconSize: 32
+    // the app icon tile of a notification while its image loads: an app icon's corner at notification.bannerIconSize 32 (0.225 of its side, as an app icon); it borrowed the Dock's radius.dockIcon 11 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int notificationIconRadius: 7
     // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconInset: 2
     // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
@@ -2793,12 +2799,12 @@ QtObject {
     readonly property int switcherPitch: 134
     // F1 gap 19: selection square about 123 pt [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherSelectionSize: 123
-    // estimate: corner radius of the selection square (F1: rounded square, about a fifth of its side) [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherSelectionRadius: 26
-    // F1 gap 19: panel radius about 30 [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherPanelRadius: 30
-    // estimate: panel inner margin around the tile grid [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherPadding: 14
+    // corner of the selection square: macOS 27's App Switcher measures 32.4-34.1 at the 45-degree point, concentric with its panel (60 less its 27.5-pt inset: switcher.padding and the pitch's margin round the 123 square); was 26, an estimate (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherSelectionRadius: 33
+    // the panel's corner: macOS 27's App Switcher measures 59.7 at the 45-degree point (512 Pixels release capture Finder-App-Switcher), concentric with its selection; was 30, the F1 value of the macOS 26 captures (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherPanelRadius: 60
+    // panel inner margin around the tile grid: macOS 27's App Switcher sets its first tile 21.5 in (its selection 29 from the panel's edge), so the selection square sits concentric in the 60 corner; was 14, an estimate (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherPadding: 22
     // estimate: app name under the selected icon [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherNameSize: Math.round(15 * Appearance.textScale)
     // estimate: tile grid to app name [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
@@ -3335,6 +3341,8 @@ QtObject {
     readonly property int tilingSuggestTileWidth: 240
     // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property real tilingSuggestThumbAspect: 1.6
+    // a tiling suggestion's window thumbnail rounded as the Overview's (overview.thumbRadius 10); it was square (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int tilingSuggestThumbRadius: 10
     // estimate until measured in nested against the owner's captures: the middle of the stretch two windows of a tile group share along an edge where a drag resizes every window along it (pt; outside it the edge resizes one window, TL30; parity rows M43 and W18) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property int tilingHandleLength: 120
     // own value: the shared-edge handle is at least this wide across the edge (pt; the margin between tiled windows is 8; without margins the band takes half from each window, as Hyprland's border grab does, TL30) [ref: docs/specs/tiling.md § Functional requirements]

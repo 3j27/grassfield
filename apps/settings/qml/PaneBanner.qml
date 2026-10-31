@@ -15,7 +15,7 @@ Rectangle {
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
     implicitHeight: Math.round(body.y + body.baselineOffset + (body.lineCount - 1) * Tokens.settingsBannerTextLineHeight + Tokens.settingsBannerBottom)
-    radius: Tokens.radiusMenu
+    radius: Tokens.radiusGroup
     color: Appearance.colors.groupFill
     // Increase Contrast outlines the card, as it does the groups (SettingsGroup).
     border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0

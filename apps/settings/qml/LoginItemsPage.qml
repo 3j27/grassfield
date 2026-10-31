@@ -170,7 +170,7 @@ SettingsPage {
             }
 
             FocusRing {
-                shapeRadius: Tokens.radiusMenu
+                shapeRadius: Tokens.radiusGroup
                 visible: listFocus.active
             }
         }

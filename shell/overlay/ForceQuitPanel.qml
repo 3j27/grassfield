@@ -118,9 +118,10 @@ Dialog {
                     Accessible.name: row.notResponding ? qsTr("%1 (Not Responding)").arg(Apps.nameFor(row.modelData.appId)) : Apps.nameFor(row.modelData.appId)
                     Accessible.selected: row.current
 
+                    // Concentric with the well around the list (its corner less the list's margin; ADR-0039 step 13, G5).
                     Rectangle {
                         anchors.fill: parent
-                        radius: Tokens.radiusControl
+                        radius: Tokens.radiusControl - Tokens.spacingXs
                         color: Appearance.colors.selection
                         visible: row.current
                     }

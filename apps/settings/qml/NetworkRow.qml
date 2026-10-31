@@ -64,7 +64,7 @@ Item {
         width: parent.width - Tokens.controlFocusOutline
         height: root.rowHeight - Tokens.controlFocusOutline
         visible: root.visualFocus
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: "transparent"
         border.width: Tokens.controlFocusOutline
         border.color: Appearance.focusRingColor

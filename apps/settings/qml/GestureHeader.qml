@@ -76,7 +76,7 @@ Item {
         y: -Tokens.settingsContentTop
         width: root.cardWidth
         height: Tokens.settingsGestureCardHeight
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
 
         Item {
