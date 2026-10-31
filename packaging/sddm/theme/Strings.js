@@ -40,9 +40,10 @@ function pickSession(names, lastIndex) {
 // face the administrator installed for that user in SDDM's faces folder); "" otherwise, and the initials show. SDDM offers
 // ~/.face.icon first, which the user controls: a FIFO or a device there would block the greeter's decoder for every user
 // (opus review of c5b02369), so a picture is never read from a home. A plain file name only: no "/", no leading "." (SDDM's
-// generic default face, ".face.icon", gives the initials, as on the lock screen).
+// generic default face, ".face.icon", gives the initials, as on the lock screen). SDDM may give the path as a file URL:
+// one leading "file://" is dropped, and an absolute path must still follow.
 function pictureUrl(path) {
-    var p = String(path || "");
+    var p = String(path || "").replace(/^file:\/\//, "");
     var account = /^\/var\/lib\/AccountsService\/icons\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
     var face = /^\/usr\/share\/sddm\/faces\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\.face\.icon$/;
     return account.test(p) || face.test(p) ? "file://" + p : "";

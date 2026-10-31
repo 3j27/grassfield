@@ -106,6 +106,9 @@ first.
   every other way to the typed text (`getText`, `displayText`, a computed member, an alias of the field or of `sddm`, an
   assigned `echoMode` or `source`, key handlers) and any picture URL but `Strings.pictureUrl`'s (53 mutants); the guide
   reads `/etc/sddm.conf` last and gives a recovery that needs no theme (`plymouth.enable=0` from Limine's editor).
+  Counter-review of b5ad82fa: PASS; its NITs: no walk of the object tree (`children`, `data`, `resources`,
+  `activeFocusItem`, `childAt`) and no `.text` read but the field's (58 mutants), and `Strings.pictureUrl` takes SDDM's
+  icon as a path or as a `file://` URL (VERIFY which one SDDM gives: either shows the picture now).
 - NOT VERIFIED here (owner, real machine): the SDDM theme in `sddm-greeter-qt6` (a log out, a wrong password, Restart and
   Shut Down), its fallback; the Plymouth theme at boot with the disk password, Esc to the text prompt, the revert.
 

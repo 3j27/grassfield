@@ -15,7 +15,9 @@ The SDDM theme (packaging/sddm/theme, run by sddm-greeter as the `sddm` user):
     `.forceActiveFocus`, `.activeFocus` or `.font`; only its length is read anywhere but in the one function that calls
     sddm.login: there the text is copied to a local once, the field is emptied before sddm.login, and that local is
     sddm.login's password, its only other use; the failure handler empties the field too; no other way to the typed text
-    (getText, displayText, preeditText, selectedText, copy, cut, Keys handlers, event.text);
+    (getText, displayText, preeditText, selectedText, copy, cut, Keys handlers, event.text, a walk of the object tree:
+    children, data, resources, activeFocusItem, childAt), and no `.text` is read of anything but the field (besides the
+    colour token root.colors.text and the words' Strings.text(...));
   - a picture only through Strings.pictureUrl, the one "file://" of the theme, which accepts only AccountsService's
     icons and SDDM's faces folder (root-written; a user's ~/.face.icon could be a FIFO that blocks the greeter); every
     Image source is that URL (root.avatarUrl) or the other Image's (picture.source), never assigned.
@@ -67,6 +69,7 @@ FORBIDDEN = [
     (r"\bKeys\s*\.", "a key handler (the typed keys)"),
     (r"\bevent\s*\.\s*text\b", "a read of a typed key"),
     (r"\b(?:source|echoMode)\s*=(?!=)", "an assigned source or echo mode"),
+    (r"\b(?:children|data|resources|contentChildren|contentData|activeFocusItem|focusItem|childAt)\b", "a walk of the object tree"),
 ]
 FIELD_MEMBERS = {"text", "forceActiveFocus", "activeFocus", "font"}
 TWO_STEP_IMAGES = ("lock.png", "box.png", "entry.png", "bullet.png", "watermark.png")
@@ -227,6 +230,13 @@ def check_sddm(files):
         problems.append("the TextInput has no id")
         return problems
     fid = fid.group(1)
+    # Every `.text` is the field's, a colour token (root.colors.text) or the words' function (Strings.text(...)).
+    for m in re.finditer(r"\.\s*text\b", qml):
+        before = qml[:m.start()]
+        if re.search(r"\b%s\s*$" % re.escape(fid), before) or re.search(r"\broot\s*\.\s*colors\s*$", before):
+            continue
+        if not (re.search(r"\bStrings\s*$", before) and re.match(r"\s*\(", qml[m.end():])):
+            problems.append("a .text is read of something other than the field: %r" % qml[max(0, m.start() - 30):m.end()].split("\n")[-1])
     if len(re.findall(r"\bechoMode\b", qml)) != 1:
         problems.append("echoMode appears more than once (only the field's Password binding)")
     for m in re.finditer(r"\b%s\b" % re.escape(fid), qml):
@@ -450,6 +460,13 @@ def selftest():
         "the picture from the home": qml.replace("source: root.avatarUrl", 'source: "file://" + root.user.iconPath'),
         "a picture source assigned": qml.replace(copy_line, copy_line + "        picture.source = root.avatarUrl;\n"),
         "avatarUrl not filtered": qml.replace("Strings.pictureUrl(root.user.iconPath)", "root.user.iconPath"),
+        # The opus counter-review of b5ad82fa: five walks of the object tree to the field.
+        "children of the frame": qml.replace('root.message = root.t("incorrect");', 'root.message = fieldFrame.children[0].text;'),
+        "the focus item": qml.replace("    // ---- what is drawn ----",
+            "    Text { text: root.Window.activeFocusItem ? root.Window.activeFocusItem.text : \"\" }\n    // ---- what is drawn ----"),
+        "data of the frame": qml.replace('root.message = root.t("incorrect");', 'root.message = fieldFrame.data[0].text;'),
+        "a deep walk": qml.replace('root.message = root.t("incorrect");', 'root.message = account.children[3].children[0].children[0].text;'),
+        "a text read through an index": qml.replace('root.message = root.t("incorrect");', 'root.message = userList.itemAt(0).text;'),
     }
     for label, text in mutants.items():
         if text == qml:

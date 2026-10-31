@@ -466,7 +466,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   `/usr/share/plymouth/themes/grassfield` (Plymouth's `two-step` module, the ground `#2F6D5F`, the mark white, an entry box,
   bullets, a padlock and a throbber drawn in `packaging/plymouth/build.sh`), and activates nothing: the owner's commands, the
   first-boot Esc test and the reverts are in `docs/owner-setup/login-boot-themes.md`. `grassfield-login-check` knows the
-  theme. Tests: `tests/ci/login_themes.py` (logic layer, 53 mutants after the opus review), `tests/unit/tst_loginstrings.qml`
+  theme. Tests: `tests/ci/login_themes.py` (logic layer, 58 mutants after the opus reviews), `tests/unit/tst_loginstrings.qml`
   (the picture only from root-written folders), `tests/shell/login_session.sh` (+1),
   `tests/ci/qml_literals.py` (scans the theme). Legal: E41 (the login layout; the mark's boot place and its white build-time
   render, confirmed by the owner on 2026-10-31: « Oui, marque blanche »). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the

@@ -11,6 +11,8 @@ TestCase {
     function test_pictureOnlyFromRootFolders() {
         compare(Strings.pictureUrl("/var/lib/AccountsService/icons/ada"), "file:///var/lib/AccountsService/icons/ada");
         compare(Strings.pictureUrl("/usr/share/sddm/faces/ada.face.icon"), "file:///usr/share/sddm/faces/ada.face.icon");
+        // SDDM may give the icon as a file URL (opus counter-review of b5ad82fa).
+        compare(Strings.pictureUrl("file:///var/lib/AccountsService/icons/ada"), "file:///var/lib/AccountsService/icons/ada");
         const refused = [
             "", null, undefined,
             "/home/ada/.face.icon", "/home/ada/.face", "~/.face.icon",
@@ -19,7 +21,9 @@ TestCase {
             "/var/lib/AccountsService/icons/sub/ada", "/var/lib/AccountsService/icons/.hidden",
             "/var/lib/AccountsService/icons/", "/usr/share/sddm/faces/ada.png",
             "/usr/share/sddm/faces/../../../../home/ada/x.face.icon",
-            "/tmp/var/lib/AccountsService/icons/ada", "file:///var/lib/AccountsService/icons/ada",
+            "/tmp/var/lib/AccountsService/icons/ada", "file://var/lib/AccountsService/icons/ada",
+            "file://file:///var/lib/AccountsService/icons/ada", "file:///home/ada/.face.icon",
+            "http:///var/lib/AccountsService/icons/ada",
             "/var/lib/AccountsService/icons/ada\n/etc/shadow"
         ];
         for (let i = 0; i < refused.length; i++)
