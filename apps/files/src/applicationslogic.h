@@ -66,6 +66,12 @@ struct Environment {
     QStringList locales;
     // Ids that are helpers.
     QSet<QString> helperIds;
+    // Ids listed although the grid hides them (NoDisplay=true, OnlyShowIn or NotShowIn, a helper id, a terminal's server or
+    // client launcher): a Choose Application panel's candidates (FolderModel.chooser `listed`). KDE's associations offer an
+    // application whatever those rules say, and the Open With submenu lists it (imv, Omarchy's image viewer, is NoDisplay);
+    // the panel must list and preselect what the submenu names. Still never an entry that is not an application with a Name,
+    // nor a Hidden=true one (a deleted entry).
+    QSet<QString> alsoListed;
 };
 
 // The ids the shell's hidden-entries.sh hides as helpers by default (GRASSFIELD_HELPER_IDS replaces them there).
@@ -79,7 +85,8 @@ Environment processEnvironment();
 QStringList localeCandidates(const QString &localeName);
 
 // One desktop entry's text -> an entry, or false when the grid does not list it (the rules above, except the id-based helper
-// rule and the names being told apart). `id` and `path` are copied into the entry.
+// rule and the names being told apart; an id of env.alsoListed only needs to be an application with a Name, not Hidden).
+// `id` and `path` are copied into the entry.
 bool parseEntry(const QByteArray &text, const QString &id, const QString &path, const Environment &env, Entry *out);
 
 // Model.disambiguate on a list: `name` is replaced where two entries share a Name; `baseName` keeps the entry's own.

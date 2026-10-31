@@ -41,6 +41,19 @@ TestCase {
         compare(drawn, PopupKinds.kinds.slice().sort());
     }
 
+    // ADR-0040 IQ-B1 B (the review of 52b2bec): a notice shows its subject's symbol, the information symbol when the caller
+    // gives none; a missing symbol through a string-typed parameter arrives as "undefined" and drew an empty frame.
+    function test_aNoticeWithoutASymbolShowsInfo() {
+        compare(PopupKinds.noticeSymbol("moon"), "moon");
+        compare(PopupKinds.noticeSymbol(undefined), "info");
+        compare(PopupKinds.noticeSymbol("undefined"), "info");
+        compare(PopupKinds.noticeSymbol(""), "info");
+        compare(PopupKinds.noticeSymbol(null), "info");
+        const popups = source("shell/services/Popups.qml");
+        verify(/function notice\(title: string, message: string, symbol\): void \{\s*openCentered\("notice", \{title: title, message: message, symbol: PopupKinds\.noticeSymbol\(symbol\)\}\);/.test(popups),
+               "Popups.notice passes its untyped symbol through PopupKinds.noticeSymbol");
+    }
+
     function test_openAsksForAKnownKind() {
         const popups = source("shell/services/Popups.qml");
         verify(popups.indexOf("if (!PopupKinds.known(popupKind)) {") > popups.indexOf("function open(popupKind"), "Popups.open checks the kind");

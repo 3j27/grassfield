@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
+
 namespace {
 
 class FolderChooserTest : public ::testing::Test
@@ -204,6 +206,119 @@ TEST(FolderChooserApplications, ChooseApplicationTakesTheNamedOnes)
     EXPECT_FALSE(dimmed(viewer));
     for (const char *id : {"org.example.ChooserEditor", "org.example.ChooserViewer"})
         QFile::remove(dir + QLatin1Char('/') + QString::fromLatin1(id) + QStringLiteral(".desktop"));
+}
+
+// Choose Application lists its candidates even when the Apps grid hides them (`listed`; NoDisplay=true: imv, Omarchy's image
+// viewer, which the Open With submenu offers), under Recommended and under All Applications; the location in Files itself keeps
+// the grid's list. The panel then selects the type's default application in it (FilePanel.preselect: FolderModel::expect).
+TEST(FolderChooserApplications, ChooseApplicationListsTheCandidatesTheGridHides)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString hiddenId = QStringLiteral("org.example.ChooserHiddenViewer");
+    const QString shownId = QStringLiteral("org.example.ChooserShownViewer");
+    const auto writeEntry = [&dir](const QString &id, const QByteArray &name, const QByteArray &extra) {
+        QFile entry(dir + QLatin1Char('/') + id + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write("[Desktop Entry]\nType=Application\nName=" + name + "\nExec=true\n" + extra);
+    };
+    writeEntry(hiddenId, "HiddenViewer", "NoDisplay=true\n");
+    writeEntry(shownId, "ShownViewer", "");
+    const auto rowOf = [](FolderModel &model, const char *name) {
+        for (int r = 0; r < model.count(); ++r)
+            if (model.nameAt(r) == QLatin1String(name))
+                return r;
+        return -1;
+    };
+    const auto waitFor = [](const std::function<bool()> &done) {
+        QDeadlineTimer deadline(10000);
+        while (!done() && !deadline.hasExpired()) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        }
+        return done();
+    };
+
+    // Files' own Applications location: the grid's list, without the NoDisplay one.
+    FolderModel files;
+    files.setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return rowOf(files, "ShownViewer") >= 0; }));
+    EXPECT_LT(rowOf(files, "HiddenViewer"), 0) << "the location in Files lists what the Apps grid lists";
+
+    // A Choose Application panel's listing: the chooser is set before the location (BrowserTab.createModel), as the panel does.
+    FolderModel panel;
+    const QVariantMap recommended{{QStringLiteral("foldersOnly"), true},
+                                  {QStringLiteral("single"), true},
+                                  {QStringLiteral("applications"), QStringList{hiddenId}},
+                                  {QStringLiteral("listed"), QStringList{hiddenId}}};
+    panel.setChooser(recommended);
+    panel.setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !panel.loading() && rowOf(panel, "HiddenViewer") >= 0; })) << "the NoDisplay candidate is listed";
+    const int hidden = rowOf(panel, "HiddenViewer");
+    EXPECT_FALSE(panel.data(panel.index(hidden, 0), FolderModel::DimmedRole).toBool()) << "and can be chosen";
+    EXPECT_TRUE(panel.data(panel.index(rowOf(panel, "ShownViewer"), 0), FolderModel::DimmedRole).toBool());
+    panel.expect(ApplicationsLogic::entryUrl(hiddenId), false);
+    ASSERT_TRUE(waitFor([&] { return panel.selectedCount() == 1; })) << "the panel's preselection takes it";
+    EXPECT_EQ(panel.selectedUrls(), QList<QUrl>{ApplicationsLogic::entryUrl(hiddenId)});
+
+    // All Applications keeps it listed.
+    QVariantMap all = recommended;
+    all.insert(QStringLiteral("applications"), QStringList{});
+    all.insert(QStringLiteral("allApplications"), true);
+    panel.setChooser(all);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 200);
+    ASSERT_TRUE(waitFor([&] { return rowOf(panel, "HiddenViewer") >= 0 && rowOf(panel, "ShownViewer") >= 0; }));
+
+    // A chooser that names it later (the frontend's UpdateChoices) lists it again: the listing made without it is made again.
+    FolderModel late;
+    late.setChooser({{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true}});
+    late.setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !late.loading() && rowOf(late, "ShownViewer") >= 0; }));
+    EXPECT_LT(rowOf(late, "HiddenViewer"), 0);
+    late.setChooser(recommended);
+    EXPECT_TRUE(waitFor([&] { return rowOf(late, "HiddenViewer") >= 0; })) << "listed once the chooser names it";
+
+    QFile::remove(dir + QLatin1Char('/') + hiddenId + QStringLiteral(".desktop"));
+    QFile::remove(dir + QLatin1Char('/') + shownId + QStringLiteral(".desktop"));
+}
+
+// A Choose Application panel's longer list never becomes the location's: Get Info on Applications counts what the location
+// lists (FilesApp::applicationsCount), also after a panel listed a candidate the grid hides (review of fac5bff3, NIT: the
+// last listing won and the count grew by one).
+TEST(FolderChooserApplications, APanelsListIsNotTheLocationsCount)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/applications");
+    ASSERT_TRUE(QDir().mkpath(dir));
+    const QString hiddenId = QStringLiteral("org.example.CountHiddenViewer");
+    {
+        QFile entry(dir + QLatin1Char('/') + hiddenId + QStringLiteral(".desktop"));
+        ASSERT_TRUE(entry.open(QIODevice::WriteOnly));
+        entry.write("[Desktop Entry]\nType=Application\nName=CountHiddenViewer\nExec=true\nNoDisplay=true\n");
+    }
+    const auto waitFor = [](const std::function<bool()> &done) {
+        QDeadlineTimer deadline(10000);
+        while (!done() && !deadline.hasExpired()) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        }
+        return done();
+    };
+    FilesApp app(QList<QUrl>{});
+    auto *location = qobject_cast<FolderModel *>(app.createFolderModel(&app));
+    ASSERT_NE(location, nullptr);
+    location->setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !location->loading() && location->count() > 0 && app.applicationsCount() > 0; }));
+    const int listed = app.applicationsCount();
+    EXPECT_EQ(listed, location->count()) << "the location's own rows";
+    auto *panel = qobject_cast<FolderModel *>(app.createFolderModel(&app));
+    ASSERT_NE(panel, nullptr);
+    panel->setChooser({{QStringLiteral("foldersOnly"), true}, {QStringLiteral("single"), true},
+                       {QStringLiteral("applications"), QStringList{hiddenId}}, {QStringLiteral("listed"), QStringList{hiddenId}}});
+    panel->setUrl(ApplicationsLogic::locationUrl());
+    ASSERT_TRUE(waitFor([&] { return !panel->loading() && panel->count() == location->count() + 1; })) << "the panel lists one more";
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    EXPECT_EQ(app.applicationsCount(), listed) << "Get Info still counts the location's list";
+    QFile::remove(dir + QLatin1Char('/') + hiddenId + QStringLiteral(".desktop"));
 }
 
 // New Folder of a Save panel (FilesApp::makeFolder): a taken name, a folder's or a file's, is told by KIO's own error, since

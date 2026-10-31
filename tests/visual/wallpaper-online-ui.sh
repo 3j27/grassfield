@@ -7,9 +7,14 @@
 #      the pane shows the attribution (Title, Author, Source, Licence, Last updated).
 #   3. The desktop menu offers About This Wallpaper and opens the same attribution.
 #   4. Nothing cached and no connection: the artwork, and the pane says "Waiting for a connection".
+# The controls of Settings are found by their accessible role and name (tests/visual/a11y-lib.sh and a11y-find.py: AT-SPI
+# on the nested private bus), never by a screen point: the fixed point of the Online tile landed on "Add Video…" once the Videos grid came in
+# above it (1fc836b). The shell fetches with the dev helper .dev/build/grassfield-wallpaper (WallpaperConfig.toolPath), which
+# is built here when it is missing or older than its sources (apps/wallpaper-tool/build-direct.sh).
 # Usage (bare command): tests/visual/wallpaper-online-ui.sh      Captures: $VS_SHOTS/wallpaper-online-ui-*.<lang>.png
 source "$(dirname "$0")/lib.sh"
 source "$(dirname "$0")/online-lib.sh"
+source "$(dirname "$0")/a11y-lib.sh"
 
 fail=0
 check() {
@@ -18,8 +23,22 @@ check() {
   if "$@"; then echo "PASS: $name"; else echo "FAIL: $name"; fail=1; fi
 }
 
+# The helper the shell fetches with: checked once when the shell starts (WallpaperState.toolMissing), so before vs_session.
+tool=$VS_DEV/build/grassfield-wallpaper
+if [[ ! -x $tool || -n $(find "$VS_ROOT/apps/wallpaper-tool" -newer "$tool" -type f -print -quit) ]]; then
+  echo "wallpaper-online-ui: building $tool (apps/wallpaper-tool/build-direct.sh)"
+  "$VS_ROOT/apps/wallpaper-tool/build-direct.sh" > "$VS_DEV/wallpaper-tool-build.log" 2>&1 \
+    || { echo "FAIL: the wallpaper helper $tool could not be built (see $VS_DEV/wallpaper-tool-build.log)"; exit 1; }
+fi
+[[ -x $tool ]] || { echo "FAIL: the wallpaper helper $tool is missing (apps/wallpaper-tool/build-direct.sh)"; exit 1; }
+
+settings_pid() { "$VS_ROOT/scripts/nestctl" clients -j | jq -r '[.[] | select(.class == "org.grassfield.Settings")][0].pid // empty'; }
+
 online_start
 vs_session "$VS_LANG"
+# The accessibility bus of the private bus (a11y-lib.sh), ended with the fixture server.
+trap 'a11y_stop; online_stop' EXIT
+a11y_start || { echo "FAIL: no accessibility bus on the nested private bus (see $VS_STATE/a11y-launcher.log)"; exit 1; }
 vs_reset
 cfg=$VS_DEV/config/grassfield.json
 rm -rf "$VS_DEV/cache/wallpapers/online"
@@ -35,24 +54,30 @@ wait_ready() { # up to 90 s for the output to be ready with an online picture
 }
 
 # --- 0. off by default
-vs_spawn "$VS_DEV/build/grassfield-settings" --section=wallpaper
+# Its accessibility tree on the private bus (Qt enables it only with an AT-SPI client unless told to).
+vs_spawn env QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1 "$VS_DEV/build/grassfield-settings" --section=wallpaper
 vs_wait_clients 1
 vs_sleep 3
 vs_capture wallpaper-online-ui-0-default
 check "off by default: no request before the user chose anything (requests: $(online_requests))" test "$(online_requests)" = 0
+pid=$(settings_pid)
+[[ -n $pid ]] || { echo "FAIL: no Settings window"; exit 1; }
 
-# --- 1. the disclosure
-tile_x=${WPO_TILE_X:-897}
-tile_y=${WPO_TILE_Y:-688}
-vs_pointer abs "$tile_x" "$tile_y" sleep 300 click >/dev/null
-vs_sleep 2
+# --- 1. the disclosure: the Online grid's Wikimedia Commons tile (its accessible name is the provider's full name, in
+# either language), chosen through its own action (WallpaperGrid's Accessible.onPressAction, what a click runs).
+use_name='^(Use Picture of the Day|Utiliser l’image du jour)$'
+if tile=$(a11y_find "$pid" "radio button" 'Wikimedia Commons' --press); then
+  echo "wallpaper-online-ui: chose the tile $tile"
+  check "the disclosure opens: its Use Picture of the Day button is shown" a11y_find "$pid" "(push )?button" "$use_name" --wait 5
+else
+  check "the Online grid's Wikimedia Commons tile is found (accessible radio button)" false
+fi
+vs_sleep 1
 vs_capture wallpaper-online-ui-1-disclosure
 check "choosing the tile alone changes nothing (source=$(jq -r '.wallpaper.source // "unset"' "$cfg" 2>/dev/null || echo unset), requests $(online_requests))" bash -c "[[ \$(jq -r '.wallpaper.source // \"unset\"' '$cfg' 2>/dev/null || echo unset) != online ]] && [[ $(online_requests) == 0 ]]"
 
-# --- 2. Use Picture of the Day
-use_x=${WPO_USE_X:-1205}
-use_y=${WPO_USE_Y:-787}
-vs_pointer abs "$use_x" "$use_y" sleep 300 click >/dev/null
+# --- 2. Use Picture of the Day (the disclosure's button, found by its name)
+check "Use Picture of the Day is pressed" a11y_find "$pid" "(push )?button" "$use_name" --press --wait 5
 vs_sleep 2
 check "the choice is written (source=$(jq -r '.wallpaper.source' "$cfg" 2>/dev/null) provider=$(jq -r '.wallpaper.online.provider' "$cfg" 2>/dev/null))" test "$(jq -r '[.wallpaper.source, .wallpaper.online.provider] | join(",")' "$cfg" 2>/dev/null)" = "online,commons"
 wait_ready || { echo "FAIL: the online picture never became ready"; fail=1; }
