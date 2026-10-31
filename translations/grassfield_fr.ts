@@ -6989,6 +6989,10 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
         <source>Now Playing: %1</source>
         <translation>En cours de lecture : %1</translation>
     </message>
@@ -9014,6 +9018,37 @@
     </message>
 </context>
 <context>
+    <name>ScreenShareMenu</name>
+    <message>
+        <source>Screen or window</source>
+        <translation>Écran ou fenêtre</translation>
+    </message>
+    <message>
+        <source>Window: %1</source>
+        <translation>Fenêtre&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A window</source>
+        <translation>Une fenêtre</translation>
+    </message>
+    <message>
+        <source>Part of %1</source>
+        <translation>Une partie de %1</translation>
+    </message>
+    <message>
+        <source>Entire screen: %1</source>
+        <translation>Écran entier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>To stop sharing, use the app that shares.</source>
+        <translation>Pour arrêter le partage, utilisez l’app qui partage.</translation>
+    </message>
+</context>
+<context>
     <name>ScrollBar</name>
     <message>
         <source>Scroll bar</source>
@@ -10087,6 +10122,10 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
         <source>Displays</source>
         <translation>Écrans</translation>
     </message>
@@ -10097,6 +10136,30 @@
     <message>
         <source>%1, %2</source>
         <translation>%1, %2</translation>
+    </message>
+    <message>
+        <source>%1, %2, can&apos;t be shared</source>
+        <translation>%1, %2, ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>This window can&apos;t be shared</source>
+        <translation>Cette fenêtre ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>Area to share</source>
+        <translation>Zone à partager</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Écran</translation>
+    </message>
+    <message>
+        <source>%1 × %2 on %3</source>
+        <translation>%1 × %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Drag over the display to choose the area to share.</source>
+        <translation>Faites glisser sur l’écran pour choisir la zone à partager.</translation>
     </message>
     <message>
         <source>No display can be shared.</source>
