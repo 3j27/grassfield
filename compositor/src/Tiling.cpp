@@ -1190,6 +1190,8 @@ namespace gf::tiler {
             outputs.reserve(all.size());
             for (const auto& m : all)
                 outputs.push_back(toRect(m->logicalBox()));
+            if (outputs.empty())
+                return; // no output enabled: every window would count as stray, and there is nowhere to gather them (review of 7096305)
             for (const auto& w : Desktop::windowState()->windows()) {
                 if (!w || !w->m_isMapped || !w->m_isFloating || w->isHidden() || fullscreenNow(w) || gf::stager::inStripStage(w))
                     continue;
