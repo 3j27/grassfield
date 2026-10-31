@@ -778,23 +778,27 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
 
 ### Functional requirements
 - SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
-  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: the veil over everything but the windows).
+  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: an even veil; the window or display
+  under the pointer outlined).
   - A drag captures that area.
-  - A click captures the window under the pointer (on a workspace with a fullscreen window, that window), or the display
-    under it when no window is there.
+  - A click captures the window drawn on top under the pointer (on a workspace with a fullscreen or zoomed window, that
+    window or one pinned over it), or the display under it when no window is there (the Desktop, the menu bar, the Dock).
   - Esc, or a second press while the crosshair shows, cancels without saving; only this helper's crosshair is cancelled.
 - SC2 Each file is saved on the Desktop as macOS names it, translated (the next display's " (2)"), and never overwrites a
   file; the Desktop never shows a picture being written. The Desktop is xdg-user-dir's, never the home folder.
 - SC3 The focused display's picture, or the selection, is copied to the clipboard as PNG.
 - SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
-  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes.
+  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes. The next capture
+  closes it first, so no picture shows the notice of the one before.
 - SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
   captures the owner's screen.
 
 ### Acceptance criteria
-- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp's box or 1x1 for a click,
-  notify-send's output ending before it does): every display for the screen, the focused one first; a drag, a click on a
-  window, on a fullscreen window, on a display only, and outside every display; the windows only as slurp's boxes; Esc and a
+- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
+  click, a click outside every box cancelled; notify-send's output ending before it does, under its own name in /proc):
+  every display for the screen, the focused one first; a drag, a click on a window, on a window behind a larger one in
+  front, on a fullscreen window and a pinned one over it, on a display only, and outside every display; the windows then
+  the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the next; Esc and a
   second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
   " (2)"; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
   notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
@@ -804,8 +808,8 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
   Desktop and in the clipboard; the notice and Preview.
 
 ### Known limitations
-A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click picks the smallest window under the
-pointer (slurp's rule), not the topmost: a floating window over a larger tiled one is picked only where it is the smaller
-(a fullscreen window is the only box of its workspace). The notification settings list the helper under its translated
+A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
+own box, without Grassfield's title bar (8-5). While the crosshair shows, slurp outlines the smallest box under the pointer,
+which can be a window behind a larger one; the picture is the window on top (the most recently focused under the pointer). The notification settings list the helper under its translated
 name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
 the toolbar's options are the later chantier's.

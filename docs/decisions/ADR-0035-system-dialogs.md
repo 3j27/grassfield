@@ -1151,7 +1151,13 @@ passwords too (D-12). Q12: the amendment text above.
   **Delivered in step 8.**
   - **The helper:** `packaging/bin/grassfield-capture`, `python3 -I`, standard library only, strings through `tr()`.
     - `screen` captures every enabled display, one picture each (`grim -o`), the focused one first (8-4).
-    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`. The boxes are the windows on the shown workspaces (on a workspace with a fullscreen window, only that window, since slurp picks the smallest box under the pointer); the veil covers the rest. A drag captures that area. A click on a window captures it (slurp answers its box); a click elsewhere (slurp answers 1x1) captures the display under it. Esc cancels, and a second press while the crosshair shows cancels it: `pkill` on this helper's exact slurp command line, so another program's slurp is left alone (review of step 8, MINORs 1-3).
+    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`.
+      - The boxes a click can pick are the windows on the shown workspaces, then each display's logical rectangle. They are filled with the veil itself, so the veil stays even; the box under the pointer takes the selection's fill and border. slurp 1.5.0, Arch's, cancels a click outside every box: without the displays, a click on the bare Desktop, the menu bar or the Dock captured nothing (counter-review of step 8, MAJOR A).
+      - On a workspace with a fullscreen or zoomed window (Hyprland's fullscreen modes 2 and 1), that window and the ones drawn over it (pinned, or allowed over it) are the workspace's boxes, never the ones behind.
+      - A drag captures that area.
+      - A click captures the window under it. slurp answers the smallest box under the pointer, so the helper reads the pointer (`hyprctl -j cursorpos`) and takes the window drawn on top there: one drawn over a fullscreen window first, then the most recently focused (Grassfield raises a window when it takes focus).
+      - A click on no window captures the display under it.
+      - Esc cancels, and a second press while the crosshair shows cancels it: `pkill` on this helper's exact slurp command line, so another program's slurp is left alone (review of step 8, MINORs 1-3; counter-review, MINORs B and C).
     - grim writes a hidden file of the helper's on the Desktop (xdg-user-dir, never the home folder or `/`, else `~/Desktop`), made with `O_EXCL`; it is then linked to the first free name, "Screenshot 2026-10-31 at 14.05.12.png", or « Capture d’écran 2026-10-31 à 14.05.12.png » in French, then " (2)" and on, so no file is ever overwritten and the Desktop never shows a picture being written (a file system without hard links gets a copy under an `O_EXCL` name).
     - The focused display's picture, or the selection, is copied with `wl-copy`.
     - The notice is the shell's ordinary banner (no `-t 0`: it would have stayed on screen, in the next screenshot too; review of step 8, MAJOR 2) with the picture (an `image-path` hint), Preview's icon, and "Open in Preview", both as the click and as a button. It opens the capture's pictures in `org.grassfield.Preview` through `systemd-run … uwsm-app`, as the Dock starts an app. The helper waits for notify-send's end (`communicate`), not for the end of its output, so a click is never taken for the wait running out (review of step 8, MAJOR 1: about 6 % of clicks were lost).
@@ -1159,14 +1165,15 @@ passwords too (D-12). Q12: the amendment text above.
   - **Packaging:** grim and slurp are declared.
   - **Tests:** `tests/shell/capture.sh` (every tool faked; the colours held to the tokens) and `tests/shell/session_services.sh` (the bindings).
 
-  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user; 8-4 after its review):
+  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user; 8-4 after its review, 8-5 after its counter-review):
   - **8-1. Shift-Cmd-5 and Print until the toolbar.**
     - Options: (a) nothing until the toolbar exists; (b) a selection, as Shift-Cmd-4.
     - **Choice: (b).**
     - Rule applied: a key the user knows from macOS must do something useful. The selection is what the toolbar opens on by default.
   - **8-2. How long "Open in Preview" stays live.** The notice's button works only while the helper waits.
     - Options: (a) wait until the notice is dismissed, however long; (b) wait 2 minutes, then close the notice.
-    - **Choice: (b).** notify-send is sent SIGINT, and closes the notice it showed (never one closed by a bare id, which could be another's after a restart of the shell).
+    - **Choice: (b).** notify-send is sent SIGINT and closes the notice it showed itself (by that notice's id, on its own connection); the helper sends no CloseNotification of its own, which could name another notice after a restart of the shell.
+    - The next capture closes the last one's notice the same way before it takes its picture, then leaves the banner 0.4 s to go (the shell's motion.normal is 220 ms), so a picture never shows the notice of the one before (counter-review of step 8, MINOR D). The pid is kept in `$XDG_RUNTIME_DIR/grassfield/capture-notice`, and only a `notify-send` of the user's with this helper's `-p` is signalled.
     - Rule applied: no helper waits without a bound. The picture stays on the Desktop, and Preview opens it from there.
   - **8-3. A picture too large for the notice.** The shell shows a notice image up to 8 MiB (`History.js`); a large multi-display PNG is bigger.
     - Options: (a) a second, scaled capture for the notice; (b) Preview's icon in its place (`-i org.grassfield.Preview`).
@@ -1176,6 +1183,11 @@ passwords too (D-12). Q12: the amendment text above.
     - Options: (a) the focused display; (b) every display, one file each, as macOS saves them ("… (2).png" for the next).
     - **Choice: (b).** The focused display comes first and gets the plain name; its picture is the one copied and shown in the notice; "Open in Preview" opens them all.
     - Rule applied: macOS first; a display left out is a picture the user expected and does not have.
+  - **8-5. A click on a window and Grassfield's title bar** (counter-review of step 8, MINOR E).
+    - Question: Hyprland gives a window's own box; the compositor plugin's title bar is a decoration above it, shown for windows that do not draw their own (`Titlebar.cpp` `shouldShow`: not client chrome, the decorate rule, not fullscreen). The helper cannot tell which windows carry it.
+    - Options: (a) extend every window's box upward by the title bar's height (wrong for every app that draws its own title bar: 32 pixels of whatever is above); (b) the window's own box, without Grassfield's title bar; (c) the plugin reports each window's decorated box (a compositor change, with its own gates C1-C3).
+    - **Choice: (b) now; (c) with the capture toolbar's chantier.**
+    - Rule applied: never capture pixels that are not the window's. A known limitation in the spec.
 - **Migrations and updates in a terminal (O3, O4):** accepted. They are Omarchy's maintenance tools running in a terminal, as
   a command-line update is on macOS; the Grassfield path is Software Update (ADR-0033), whose own sheet asks the questions.
 - **Omarchy menus (O5):** nothing opens (verified by code: the stand-in `omarchy-shell` fails as Omarchy's wrapper does);
