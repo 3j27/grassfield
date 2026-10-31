@@ -246,12 +246,20 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   run ends while the window watches it, a sheet asks once: "Restart your computer to finish updating" with "Restart Later" and
   "Restart" (or "Log out to finish updating Grassfield" with "Log Out Later" and "Log Out"); Later keeps the pane's row.
   Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
-  "Don't restart this computer yet" and offers no restart.
+  "Don't restart this computer yet" and offers no restart. While a run goes on, the pane's Restart… and Log Out… wait for
+  its end (step 4).
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
   download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
   one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
   Update Now stays available to try again after every outcome.
+- U31. The end of a run the shell saw going on (step 4) is one notice whose click opens Settings > General > Software
+  Update, unless Settings is the frontmost app (its pane, and its sheet of U29, say it): "Restart to finish updating",
+  "Some of Omarchy's last steps need its terminal", "Updates installed", "Don't restart this computer yet", "This update
+  needs a newer version of Grassfield", "This update needs Omarchy's terminal", "The update stopped before it finished" or
+  "The update could not be installed", each with one line saying what to do. Nothing for a run that installed nothing (up
+  to date), a dialog cancelled or refused, a log out (GF-083's notice says it), or a run that had already ended when the
+  shell started. The shell watches the runner's state in its runtime folder (made 0700 first, as the runner makes it).
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -384,8 +392,8 @@ owner decision O22). Omarchy's commands used:
 - The compatibility check covers five packages; another library Grassfield links can move unchecked.
 - A package conflict is found by pacman only inside the transaction (`--print` does not check them), after the checked
   databases became the system's: nothing is installed, and Grassfield Store refuses installs until an update finishes.
-- When the run ends while Settings is closed, nothing says so until Settings opens (the pane's row); the shell does not
-  announce it.
+- The end-of-run notice (U31) needs the shell to have seen the run going on: a run that started and ended while the shell
+  was not running (a crash, a restart of the shell) is said only by the pane's row.
 - The transient system service, the real polkit dialog and snapper are verified only on a real machine (A15).
 - A host can replay an old, validly signed database and hold back updates; pacman has no database expiry.
 - One signing key (owner decision O6): if it is ever compromised, revoking it stops every client's `[grassfield]` (`blocking`)

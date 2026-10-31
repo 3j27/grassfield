@@ -1039,7 +1039,8 @@ so that release goes to the terminal; a package update without an Omarchy releas
 - A conflict pacman reports only inside the transaction (`--print` does not check conflicts: measured) is found after the
   databases are committed; nothing is installed, and the pane offers Omarchy's terminal.
 - Settings follows the run by files; Omarchy's own `omarchy update`, started meanwhile, says an update is running.
-- When the run ends while Settings is closed, nothing announces it until Settings opens (the pane's row).
+- When the run ends while Settings is closed, nothing announced it until Settings opened (the pane's row): step 4 adds the
+  shell's notice (below).
 
 ### s3.9 Evidence (this branch)
 - `tests/integration/update_helper.sh` in a throwaway `archlinux:base` container (pacman 7.1, polkit 128): 80 PASS, 0 FAIL
@@ -1059,6 +1060,30 @@ so that release goes to the terminal; a package update without an Omarchy releas
 - NOT verified here: the transient systemd unit, snapper, paccache, the free-space and battery refusals, the real polkit
   dialog through the shell's agent, the PKGBUILD's BUILD-DEPS in grassfield-packages' build container (quickshell from its
   Omarchy package set), a nested shot. They are the integrator's nested pass and L2 (spec A15).
+
+## Step 4 as built (2026-10-31, branch `claude/software-update-step4`)
+The owner asked to go on while the integrator is away ("tu peux continuer et vérifier après"); the integrator reviews it
+afterwards. Three changes, none to the privileged code (the helper, the runner, the policy and Settings' allowlist are
+untouched):
+- **The flaky test of #44's merge note.** `test_theShellsAnswerEndsTheWait` built the "same" `software-update.json` with two
+  `Date.now()` calls around the page's creation; `checkedAt` keeps whole seconds, so across a second the pending logout looked
+  like a new answer (`answered()` compares `checkedAt`). One time for both: 2 failures in 30 runs before, 0 in 60 after.
+- **The end of a run is announced** (spec U31). The shell's service watches the runner's state
+  (`$XDG_RUNTIME_DIR/grassfield/software-update-run.json`, replaced by rename: measured with Quickshell's FileView, which
+  follows a rename, a removal and a late creation only while the folder exists, so the service makes the folder first, 0700
+  as the runner does). A run it saw going on is announced once when it ends, by `SoftwareUpdateLogic.runNotice`; a run
+  already ended when the shell started is not. shell.qml posts one notice opening the pane, unless Settings is the frontmost
+  app, where the pane and its end sheet say it. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune
+  intervention technique pour l'utilisateur »: macOS tells about a finished install that asks for a restart with a
+  notification when its window is not in front.
+- **Restart… and Log Out… wait for the run's end** in the pane: the system changes until then (the helper also blocks a
+  shutdown with logind).
+
+Evidence: `tests/shell/software_update_service.sh` (the real Quickshell, offscreen) with a new step r: a run found already
+ended is not announced, one seen going on is announced once as a restart, the same end written again and a cancelled run say
+nothing, an incompatible one is announced; `tst_softwareupdate` 26 (`test_runNotice`), `tst_settingssoftwareupdate` 22 (the
+disabled Restart… during a run), `tst_settingsmain` 8; check-i18n 0 unfinished. Not verified here: the notice in a real
+session (the integrator's nested pass), Settings in front skipping it.
 
 ## Review history
 Software Update step 3 (PR #44), the integrator's re-review of 1ce7c37..0294373 (independent opus): **PASS**, with two
