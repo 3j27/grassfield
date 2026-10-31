@@ -10,6 +10,9 @@
   forge --caller NAME              speaks gcr's protocol by hand (BeginPrompting, then PerformPrompt with the exchange) and
                                    puts "grassfield-caller": NAME among its own properties, as a caller that tries to pass
                                    for another one; prints "reply=<the prompter's answer>"
+  begins N                         BeginPrompting N times on N callback paths from one connection, without performing;
+                                   prints "begin <i> ok" or "begin <i> error <D-Bus error name>"
+  badperform                       a PerformPrompt of the wrong shape; prints "error <D-Bus error name>: <message>"
   holder --log FILE [--flags N]    requests org.gnome.keyring.SystemPrompter (flags N, default 0: queued behind an owner),
                                    prints "reply=<RequestName's answer>", serves the prompter object and writes every call
                                    it receives to FILE; runs until killed (a stock prompter, or an attacker queued behind
@@ -152,6 +155,33 @@ def forge(caller):
     loop.run()
 
 
+def prompter_sync(bus, method, params):
+    return bus.call_sync(NAME, "/org/gnome/keyring/Prompter", "org.gnome.keyring.internal.Prompter", method, params, None,
+                         Gio.DBusCallFlags.NONE, 5000, None)
+
+
+def begins(n):
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    for i in range(n):
+        try:
+            prompter_sync(bus, "BeginPrompting", GLib.Variant("(o)", ("/org/gnome/keyring/Prompt/held%d" % i,)))
+            print("begin %d ok" % i, flush=True)
+        except GLib.Error as e:
+            print("begin %d error %s" % (i, Gio.DBusError.get_remote_error(e)), flush=True)
+
+
+def badperform():
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    try:
+        prompter_sync(bus, "PerformPrompt", GLib.Variant("(s)", ("not gcr's shape",)))
+        print("no error", flush=True)
+    except GLib.Error as e:
+        name = Gio.DBusError.get_remote_error(e)
+        text = e.message
+        prefix = "GDBus.Error:%s: " % name
+        print("error %s: %s" % (name, text[len(prefix):] if text.startswith(prefix) else text), flush=True)
+
+
 def holder(log_path, flags):
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     log = open(log_path, "a", buffering=1)
@@ -171,7 +201,7 @@ def holder(log_path, flags):
 def main():
     private_bus_only()
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "holder"])
+    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "begins", "badperform", "holder"])
     ap.add_argument("count", nargs="?", type=int, default=0)
     ap.add_argument("--title")
     ap.add_argument("--message")
@@ -190,6 +220,10 @@ def main():
         many(args.count)
     elif args.mode == "forge":
         forge(args.caller)
+    elif args.mode == "begins":
+        begins(args.count)
+    elif args.mode == "badperform":
+        badperform()
     else:
         holder(args.log, args.flags)
 

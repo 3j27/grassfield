@@ -7,7 +7,8 @@
 #  1 refusals at start: outside a session, a development run on a bus that is not a private test bus or without --socket,
 #    a socket directory that is a symlink, a --peer-unit that is not a service name in a session
 #  2 the socket's directory is 0700 and the socket 0600; the bridge is not dumpable; the name is not taken without a shell
-#  3 a socket peer outside the expected unit is refused (the fake shell runs outside --peer-unit grassfield-shell.service);
+#  3 a socket peer outside the expected unit is refused (the fake shell runs outside --peer-unit grassfield-shell.service),
+#    and ten more at once leave one line in the bridge's output;
 #    a second shell connection is refused while one is connected; a hello of another version closes the connection
 #  4 the shell's hello: the bridge owns org.gnome.keyring.SystemPrompter
 #  5 a password from a real gcr client through the sx-aes-1 exchange: the prompt names the caller from its pidfd (the client's
@@ -17,7 +18,8 @@
 #  6 pinentry-gnome3 (GnuPG's prompt) is shown as "gnupg", on someone's behalf, and gets its PIN (SKIP when absent)
 #  7 a caller that stops prompting (StopPrompting) or leaves the bus: "cancel <id>" reaches the shell, the caller gets no
 #    password
-#  8 nine requests at once: the shell gets eight, the ninth is answered "cancelled" at once; the eight are answered
+#  8 nine requests at once (from two connections: one connection holds at most eight prompts, 11b): the shell gets
+#    eight, the ninth is answered "cancelled" at once; the eight are answered
 #  9 protocol errors: an answer to an id that is not outstanding is ignored (the request still waits for its real answer);
 #    "ok" without a password cancels that request; an over-long line closes the connection, cancels the outstanding
 #    request and releases the name; an answer before hello closes the connection
@@ -25,6 +27,8 @@
 #    the name is taken again
 # 11 an attacker that asks to replace the name's owner while the bridge holds it is only queued and receives no call at all and the client gets its password
 #    from the shell; when the shell goes, the name passes to the next in line (gcr's design: the known limitation)
+# 11b one connection holds at most 8 open prompts: its 9th BeginPrompting gets LimitsExceeded, another connection is
+#    still served; a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once (it never reaches gcr)
 # 12 queued behind a holder that owns the name first (the stock gcr-prompter for 10 s after its last prompt): "queued",
 #    then "owned" once the holder exits
 # 13 no test password in the bridge's journal output
@@ -169,6 +173,15 @@ check wait_until 5 bash -c 'grep -q "\"code\":\"refused\"" "$1" && grep -q "^#cl
 wait_until 3 grep -q "refused a connection" "$d/strict.log"
 desc="...the bridge's output says why, and the name stays free"
 check bash -c 'grep -q "refused a connection from pid .*: peer is not in grassfield-shell.service" "$1" && [[ -z $(dbus-send --bus="$2" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.gnome.keyring.SystemPrompter 2>/dev/null) ]]' _ "$d/strict.log" "$bus"
+python3 -I -c '
+import socket, sys
+for _ in range(10):
+    s = socket.socket(socket.AF_UNIX)
+    s.connect(sys.argv[1])
+    s.recv(200)
+    s.close()' "$d/run/grassfield/strict.sock"
+desc="ten more refused connections at once: still one line in the bridge's output (refusals are logged once per 10 s)"
+check bash -c '[[ $(grep -c "refused a connection" "$1") == 1 ]]' _ "$d/strict.log"
 kill "$strict_pid" 2>/dev/null
 
 shell_up badver "$sock"
@@ -265,14 +278,15 @@ check wait_until 5 grep -q "answer to $id5 ignored: not outstanding" "$d/main.lo
 
 # --- 8 nine at once ------------------------------------------------------------------------------------------------------
 before=$(lines s '"type":"prompt"')
-client c6 many 9
-desc="nine requests at once: the ninth is answered \"cancelled\" at once"
-check wait_until 15 bash -c '[[ $(grep -c "cancelled" "$1") == 1 ]]' _ "$d/c6.out"
+client c6 many 5
+client c6b many 4
+desc="nine requests at once from two callers: the ninth is answered \"cancelled\" at once"
+check wait_until 15 bash -c '[[ $(cat "$1" "$2" | grep -c "cancelled") == 1 ]]' _ "$d/c6.out" "$d/c6b.out"
 desc="...and the shell got eight of them"
 check wait_until 5 bash -c '[[ $(( $(grep -c "\"type\":\"prompt\"" "$1") - $2 )) == 8 ]]' _ "$d/s.shell" "$before"
 for id in $(prompt_ids s | tail -n 8); do say s "answer $id ok batch-$id"; done
 desc="...and the eight answers reach their eight callers"
-check wait_until 15 bash -c '[[ $(grep -c "password=batch-p" "$1") == 8 ]]' _ "$d/c6.out"
+check wait_until 15 bash -c '[[ $(cat "$1" "$2" | grep -c "password=batch-p") == 8 ]]' _ "$d/c6.out" "$d/c6b.out"
 
 # --- 9 protocol errors ----------------------------------------------------------------------------------------------------
 client c7 password --title "Errors"
@@ -324,6 +338,24 @@ check wait_until 5 owned_by "$attacker_pid"
 kill "$attacker_pid" 2>/dev/null
 wait_until 5 unowned
 
+# --- 11b one connection's share of open prompts; a malformed PerformPrompt ---------------------------------------------
+shell_up s5 "$sock"
+say s5 hello
+wait_until 5 owned_by "$main_pid"
+client hog begins 9
+desc="one connection holds at most 8 open prompts: its ninth BeginPrompting is answered LimitsExceeded"
+check wait_until 10 bash -c '[[ $(grep -c "^begin [0-7] ok$" "$1") == 8 ]] && grep -qx "begin 8 error org.freedesktop.DBus.Error.LimitsExceeded" "$1"' _ "$d/hog.out"
+client c11 password --title "After the hog"
+desc="...another connection is still served meanwhile"
+check wait_until 10 has_line s5 'After the hog'
+say s5 'answer last ok after-the-hog'
+check wait_until 10 grep -qx "password=after-the-hog" "$d/c11.out"
+client bad badperform
+desc="a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once, and never reaches gcr"
+check wait_until 10 grep -q "^error org.freedesktop.DBus.Error.InvalidArgs: PerformPrompt takes (o callback" "$d/bad.out"
+say s5 close
+wait_until 5 unowned
+
 # --- 12 queued behind a holder ---------------------------------------------------------------------------------------------
 client stock holder --log "$d/stock.calls"
 stock_pid=$client_pid
@@ -340,7 +372,7 @@ check wait_until 5 owned_by "$main_pid"
 
 # --- 13 nothing secret in the journal ----------------------------------------------------------------------------------------
 desc="no test password in the bridge's output"
-check bash -c '! grep -q -e "correct horse" -e pin-0451 -e batch-p -e invented-secret -e attacker-never -e too-late -e early-secret "$1"' _ "$d/main.log"
+check bash -c '! grep -q -e "correct horse" -e pin-0451 -e batch-p -e invented-secret -e attacker-never -e too-late -e early-secret -e after-the-hog "$1"' _ "$d/main.log"
 
 kill "$main_pid" 2>/dev/null
 desc="the bridge stops on SIGTERM and removes its socket"

@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <string>
 #include <sys/socket.h>
+#include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -334,6 +335,18 @@ TEST(PrompterPeer, CgroupLineAndUnit) {
     EXPECT_FALSE(cgroupIsUnit(QStringLiteral("/system.slice/grassfield-shell.service"), QStringLiteral("grassfield-shell.service"), 1000, true));
     EXPECT_FALSE(cgroupIsUnit(path + QStringLiteral("/child"), QStringLiteral("grassfield-shell.service"), 1000, true));
     EXPECT_TRUE(cgroupIsUnit(QStringLiteral("/system.slice/grassfield-shell.service"), QStringLiteral("grassfield-shell.service"), 1000, false));
+    // Only slices between the user's manager and the unit: a cgroup nested in a scope or another unit that merely ends
+    // with the unit's name is refused (security review of step 9a, NIT-1).
+    EXPECT_FALSE(cgroupIsUnit(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-foot.scope/grassfield-shell.service"),
+                              QStringLiteral("grassfield-shell.service"), 1000, true));
+    EXPECT_FALSE(cgroupIsUnit(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/evil.service/x/grassfield-shell.service"),
+                              QStringLiteral("grassfield-shell.service"), 1000, true));
+    EXPECT_FALSE(cgroupIsUnit(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/.slice/grassfield-shell.service"),
+                              QStringLiteral("grassfield-shell.service"), 1000, true));
+    EXPECT_TRUE(cgroupIsUnit(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/grassfield-shell.service"),
+                             QStringLiteral("grassfield-shell.service"), 1000, true));
+    EXPECT_TRUE(cgroupIsUnit(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/session.slice/grassfield-shell.service"),
+                             QStringLiteral("grassfield-shell.service"), 1000, true));
     // Hybrid hierarchies: only the 0:: line counts; none at all is no cgroup.
     EXPECT_EQ(unifiedCgroupPath("12:pids:/user.slice\n1:name=systemd:/user.slice/x.service\n0::/a/b.service\n"), QStringLiteral("/a/b.service"));
     EXPECT_EQ(unifiedCgroupPath("1:name=systemd:/x.service\n"), QString());
@@ -378,6 +391,52 @@ TEST(PrompterPeer, SocketPeerOfOwnCgroupIsAcceptedOthersRefused) {
     ::close(pair[1]);
     if (!ok.raceFree)
         std::fprintf(stderr, "note: this kernel has no SO_PEERPIDFD; the peer's cgroup was read through SO_PEERCRED's pid\n");
+}
+
+namespace {
+    PidfdAnswer pidfdInvalid(int) {
+        return {-1, EINVAL, -1}; // Linux 6.5 to 6.15 for a peer that exited and was reaped
+    }
+    PidfdAnswer pidfdUnknown(int) {
+        return {-1, ENOPROTOOPT, -1}; // a kernel without SO_PEERPIDFD
+    }
+    PidfdAnswer pidfdDenied(int) {
+        return {-1, EPERM, -1};
+    }
+} // namespace
+
+TEST(PrompterPeer, OnlyAKernelWithoutPidfdsFallsBackToThePid) {
+    const QString leaf = ownCgroupLeaf();
+    if (leaf.isEmpty())
+        GTEST_SKIP() << "this process sits at the root of its cgroup tree: no unit name to expect";
+    int pair[2];
+    ASSERT_EQ(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair), 0);
+    // EINVAL (a reaped peer on Linux 6.5-6.15) and any other error refuse: the PID may belong to another process now.
+    const PeerCheck invalid = checkSocketPeer(pair[0], ::getuid(), leaf, false, pidfdInvalid);
+    EXPECT_FALSE(invalid.accepted);
+    EXPECT_TRUE(invalid.reason.contains(QStringLiteral("no pidfd")));
+    EXPECT_FALSE(checkSocketPeer(pair[0], ::getuid(), leaf, false, pidfdDenied).accepted);
+    // ENOPROTOOPT (before Linux 6.5): SO_PEERCRED's PID, not race-free.
+    const PeerCheck old = checkSocketPeer(pair[0], ::getuid(), leaf, false, pidfdUnknown);
+    EXPECT_TRUE(old.accepted) << old.reason.toStdString();
+    EXPECT_FALSE(old.raceFree);
+    EXPECT_EQ(old.pid, ::getpid());
+    ::close(pair[0]);
+    ::close(pair[1]);
+}
+
+TEST(PrompterPeer, RefusalsAreLoggedOncePerWindow) {
+    LogThrottle throttle(10000);
+    qint64      suppressed = -1;
+    EXPECT_TRUE(throttle.allow(1000, &suppressed));
+    EXPECT_EQ(suppressed, 0);
+    for (int i = 0; i < 50; ++i)
+        EXPECT_FALSE(throttle.allow(1000 + i * 100, &suppressed));
+    EXPECT_TRUE(throttle.allow(11000, &suppressed));
+    EXPECT_EQ(suppressed, 50);
+    EXPECT_FALSE(throttle.allow(11001, &suppressed));
+    EXPECT_TRUE(throttle.allow(30000, &suppressed));
+    EXPECT_EQ(suppressed, 1);
 }
 
 TEST(PrompterPeer, SocketPathAndDirectory) {
@@ -447,8 +506,11 @@ class PrompterTrust : public ::testing::Test {
         ExeFacts f;
         f.path     = path;
         f.file     = fileIdOf(path);
-        f.alive    = true;
-        f.sameUser = true;
+        f.alive     = true;
+        f.sameUser  = true;
+        f.traced    = false;
+        f.codeKnown = true;
+        f.codeFiles = {path};
         return f;
     }
 
@@ -551,6 +613,64 @@ TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
     EXPECT_TRUE(keyring.name.isEmpty()); // the shell names the role in its own words
 }
 
+TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
+    entry(QStringLiteral("org.example.Editor.desktop"), "editor");
+    writeFile(m_top + QStringLiteral("/usr/bin/libtrusted.so"), "\x7f" "ELF", 0644);
+    ExeFacts clean = facts(bin(QStringLiteral("editor")));
+    clean.codeFiles.append(m_top + QStringLiteral("/usr/bin/libtrusted.so"));
+    EXPECT_EQ(requesterFor(clean, where()).role, QStringLiteral("app"));
+    // LD_PRELOAD or LD_LIBRARY_PATH code from the user's files, a library replaced since it was loaded, memfd code:
+    // the app's name is not lent (security review of step 9a, MINOR-2, decision 9-14).
+    for (const QString& foreign : {QStringLiteral("/home/u/.local/lib/evil.so"), m_top + QStringLiteral("/usr/bin/libtrusted.so (deleted)"),
+                                   QStringLiteral("/memfd:code (deleted)")}) {
+        ExeFacts preloaded = clean;
+        preloaded.codeFiles.append(foreign);
+        const RequesterView r = requesterFor(preloaded, where());
+        EXPECT_EQ(r.role, QStringLiteral("unidentified")) << foreign.toStdString();
+        EXPECT_EQ(r.path, bin(QStringLiteral("editor")));
+    }
+    ExeFacts unread = clean;
+    unread.codeKnown = false;
+    EXPECT_EQ(requesterFor(unread, where()).role, QStringLiteral("unidentified"));
+    // A traced process can run anyone's code: unidentified, whatever it runs (a known caller too).
+    ExeFacts traced = clean;
+    traced.traced   = true;
+    EXPECT_EQ(requesterFor(traced, where()).role, QStringLiteral("unidentified"));
+    ExeFacts tracedKeyring = facts(bin(QStringLiteral("keyringd")));
+    tracedKeyring.traced   = true;
+    EXPECT_EQ(requesterFor(tracedKeyring, where()).role, QStringLiteral("unidentified"));
+    // A known caller keeps its role with extra code: any program can make it ask anyway (the row names the program that
+    // asks, never a guarantee about the text; decision 9-14).
+    ExeFacts keyringPlugins = facts(bin(QStringLiteral("keyringd")));
+    keyringPlugins.codeFiles.append(QStringLiteral("/home/u/.local/lib/evil.so"));
+    EXPECT_EQ(requesterFor(keyringPlugins, where()).role, QStringLiteral("keyring"));
+}
+
+TEST(PrompterIdentity, MapsAndStatusParsing) {
+    bool              ok   = false;
+    const QStringList code = executableFiles("55d4a0e00000-55d4a0e02000 r--p 00000000 00:1f 1234                       /usr/bin/sleep\n"
+                                             "55d4a0e02000-55d4a0e06000 r-xp 00002000 00:1f 1234                       /usr/bin/sleep\n"
+                                             "7f00a0000000-7f00a0028000 r-xp 00028000 00:1f 99                         /usr/lib/libc.so.6\n"
+                                             "7f00a1000000-7f00a1001000 r-xp 00000000 00:00 0 \n"
+                                             "7f00a2000000-7f00a2001000 r-xp 00000000 00:1f 7                          /home/u/my lib.so (deleted)\n"
+                                             "7f00a3000000-7f00a3001000 rw-p 00000000 00:1f 8                          /usr/lib/data.bin\n"
+                                             "7ffd0a000000-7ffd0a002000 r-xp 00000000 00:00 0                          [vdso]\n",
+                                             &ok);
+    EXPECT_TRUE(ok);
+    EXPECT_EQ(code, (QStringList{QStringLiteral("/usr/bin/sleep"), QStringLiteral("/usr/lib/libc.so.6"), QStringLiteral("/home/u/my lib.so (deleted)")}));
+    executableFiles("garbage\n", &ok);
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(tracerPid("Name:\tsleep\nTracerPid:\t0\n"), 0);
+    EXPECT_EQ(tracerPid("TracerPid:\t4242\n"), 4242);
+    EXPECT_EQ(tracerPid("Name:\tsleep\n"), -1);
+    EXPECT_EQ(tracerPid("TracerPid:\tx\n"), -1);
+    // gcr-ssh-agent asks on behalf of ssh (security review of step 9a, NIT-4).
+    bool ssh = false;
+    for (const KnownCaller& k : knownCallers())
+        ssh = ssh || (k.path == QLatin1String("/usr/lib/gcr-ssh-agent") && k.role == QLatin1String("ssh"));
+    EXPECT_TRUE(ssh);
+}
+
 TEST_F(PrompterTrust, EveryFailureIsUnidentified) {
     entry(QStringLiteral("org.example.Editor.desktop"), "editor");
     ExeFacts gone = facts(bin(QStringLiteral("editor")));
@@ -605,6 +725,10 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     }
     EXPECT_EQ(running.path, QStringLiteral("/usr/bin/sleep"));
     EXPECT_TRUE(running.alive);
+    EXPECT_FALSE(running.traced);
+    EXPECT_TRUE(running.codeKnown);
+    EXPECT_TRUE(running.codeFiles.contains(QStringLiteral("/usr/bin/sleep")));
+    EXPECT_GE(running.codeFiles.size(), 2); // the program and at least the C library
     if (rootOwnsSystemFiles()) {
         running.sameUser = true;
         Where w;
@@ -619,7 +743,36 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     ::close(pidfd);
     EXPECT_FALSE(gone.alive);
     EXPECT_TRUE(gone.path.isEmpty());
+    EXPECT_TRUE(gone.codeFiles.isEmpty());
     EXPECT_EQ(requesterFor(gone).role, QStringLiteral("unidentified"));
+    // A traced child: TracerPid names this process.
+    const pid_t traced = ::fork();
+    if (traced == 0) {
+        if (::ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) != 0)
+            ::_exit(126);
+        ::execl("/usr/bin/sleep", "sleep", "5", static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ASSERT_GT(traced, 0);
+    int status = 0;
+    ASSERT_EQ(::waitpid(traced, &status, 0), traced); // stopped at its exec, or exited when ptrace is not allowed
+    if (WIFEXITED(status)) {
+        std::fprintf(stderr, "note: ptrace is not allowed here; the traced case was not run\n");
+        return;
+    }
+    const int tracedFd = pidfdOpen(traced);
+    ASSERT_GE(tracedFd, 0);
+    const ExeFacts underTrace = exeFactsOfPidfd(tracedFd);
+    ::close(tracedFd);
+    EXPECT_TRUE(underTrace.alive);
+    EXPECT_TRUE(underTrace.traced);
+    ExeFacts asKnown = underTrace;
+    asKnown.sameUser = true;
+    Where w;
+    w.known = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("gnupg")}};
+    EXPECT_EQ(requesterFor(asKnown, w).role, QStringLiteral("unidentified"));
+    ::kill(traced, SIGKILL);
+    ::waitpid(traced, nullptr, 0);
 }
 
 // --- the bus filter --------------------------------------------------------------------------------------------------------
@@ -685,38 +838,131 @@ TEST(PrompterFilter, OnlyGcrPropertiesAndTheBusSender) {
     g_variant_unref(anon);
 }
 
-TEST(PrompterFilter, MessagesThroughTheFilter) {
-    auto message = [](const char* path, const char* member, GVariant* body) {
-        GDBusMessage* m = g_dbus_message_new_method_call(kPrompterName, path, kPrompterIface, member);
-        g_dbus_message_set_sender(m, ":1.7");
+namespace {
+    GDBusMessage* call(const char* path, const char* member, GVariant* body, const char* sender = ":1.7", const char* iface = kPrompterIface) {
+        GDBusMessage* m = g_dbus_message_new_method_call(kPrompterName, path, iface, member);
+        g_dbus_message_set_sender(m, sender);
+        g_dbus_message_set_serial(m, 42);
         if (body)
             g_dbus_message_set_body(m, body);
         g_dbus_message_lock(m);
         return m;
-    };
+    }
+
+    GDBusMessage* ownerChanged(const char* name, const char* oldOwner, const char* newOwner, const char* sender = "org.freedesktop.DBus") {
+        GDBusMessage* m = g_dbus_message_new_signal("/org/freedesktop/DBus", "org.freedesktop.DBus", "NameOwnerChanged");
+        g_dbus_message_set_sender(m, sender);
+        g_dbus_message_set_body(m, g_variant_new("(sss)", name, oldOwner, newOwner));
+        return m;
+    }
+
+    std::string errorName(GDBusMessage* reply) {
+        return reply && g_dbus_message_get_message_type(reply) == G_DBUS_MESSAGE_TYPE_ERROR ? std::string(g_dbus_message_get_error_name(reply)) : std::string();
+    }
+} // namespace
+
+TEST(PrompterFilter, MessagesThroughTheFilter) {
+    CallerBook    book(limits::kPromptsPerCaller);
+    GDBusMessage* reply    = nullptr;
     GVariant*     body     = performBody({{"grassfield-caller", g_variant_new_string(":1.666")}});
-    GDBusMessage* perform  = message(kPrompterPath, "PerformPrompt", body);
-    GDBusMessage* filtered = promptFilter(nullptr, perform, TRUE, nullptr);
+    GDBusMessage* perform  = call(kPrompterPath, "PerformPrompt", body);
+    GDBusMessage* filtered = filterIncoming(book, perform, &reply);
     ASSERT_NE(filtered, nullptr);
+    EXPECT_EQ(reply, nullptr);
     EXPECT_NE(filtered, perform); // a sanitized copy
     GVariant* caller = property(g_dbus_message_get_body(filtered), "grassfield-caller");
     EXPECT_STREQ(g_variant_get_string(caller, nullptr), ":1.7");
     g_variant_unref(caller);
     g_object_unref(filtered);
-    // Other calls pass untouched; outgoing messages too.
-    GDBusMessage* begin = message(kPrompterPath, "BeginPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p1"));
-    EXPECT_EQ(promptFilter(nullptr, begin, TRUE, nullptr), begin);
-    g_object_unref(begin);
-    GDBusMessage* elsewhere = message("/elsewhere", "PerformPrompt", body);
-    EXPECT_EQ(promptFilter(nullptr, elsewhere, TRUE, nullptr), elsewhere);
+    // Without an interface field the call is sanitized all the same (whatever GDBus then does with it).
+    GDBusMessage* bare = call(kPrompterPath, "PerformPrompt", body, ":1.8", nullptr);
+    filtered           = filterIncoming(book, bare, &reply);
+    ASSERT_NE(filtered, nullptr);
+    EXPECT_NE(filtered, bare);
+    caller = property(g_dbus_message_get_body(filtered), "grassfield-caller");
+    EXPECT_STREQ(g_variant_get_string(caller, nullptr), ":1.8");
+    g_variant_unref(caller);
+    g_object_unref(filtered);
+    // Other calls and other interfaces pass untouched; outgoing messages are not even looked at by promptFilter.
+    GDBusMessage* other = call(kPrompterPath, "Introspect", nullptr, ":1.7", "org.freedesktop.DBus.Introspectable");
+    EXPECT_EQ(filterIncoming(book, other, &reply), other);
+    g_object_unref(other);
+    GDBusMessage* elsewhere = call("/elsewhere", "PerformPrompt", body);
+    EXPECT_EQ(filterIncoming(book, elsewhere, &reply), elsewhere);
     g_object_unref(elsewhere);
-    GDBusMessage* outgoing = message(kPrompterPath, "PerformPrompt", body);
-    EXPECT_EQ(promptFilter(nullptr, outgoing, FALSE, nullptr), outgoing);
+    FilterState   state;
+    GDBusMessage* outgoing = call(kPrompterPath, "PerformPrompt", body);
+    EXPECT_EQ(promptFilter(nullptr, outgoing, FALSE, &state), outgoing);
     g_object_unref(outgoing);
-    // A PerformPrompt of another shape never reaches gcr.
-    GDBusMessage* malformed = message(kPrompterPath, "PerformPrompt", g_variant_new("(s)", "x"));
-    EXPECT_EQ(promptFilter(nullptr, malformed, TRUE, nullptr), nullptr);
+    // A PerformPrompt of another shape never reaches gcr: its caller gets InvalidArgs, as a reply to its own call.
+    GDBusMessage* malformed = call(kPrompterPath, "PerformPrompt", g_variant_new("(s)", "x"));
+    EXPECT_EQ(filterIncoming(book, malformed, &reply), nullptr);
+    ASSERT_NE(reply, nullptr);
+    EXPECT_EQ(errorName(reply), "org.freedesktop.DBus.Error.InvalidArgs");
+    EXPECT_EQ(g_dbus_message_get_reply_serial(reply), 42u);
+    EXPECT_STREQ(g_dbus_message_get_destination(reply), ":1.7");
+    g_object_unref(reply);
     g_variant_unref(body);
+}
+
+TEST(PrompterFilter, EachCallerHoldsAtMostItsShareOfPrompts) {
+    CallerBook book(3);
+    EXPECT_TRUE(book.begin(":1.1", "/p/1"));
+    EXPECT_TRUE(book.begin(":1.1", "/p/2"));
+    EXPECT_TRUE(book.begin(":1.1", "/p/2")); // gcr refuses the repeat itself: not counted twice
+    EXPECT_TRUE(book.begin(":1.1", "/p/3"));
+    EXPECT_EQ(book.open(":1.1"), 3);
+    EXPECT_FALSE(book.begin(":1.1", "/p/4"));
+    EXPECT_TRUE(book.begin(":1.2", "/p/1")); // another caller keeps its own share
+    book.stop(":1.1", "/p/9");                // a stop for nothing frees nothing
+    EXPECT_FALSE(book.begin(":1.1", "/p/4"));
+    book.stop(":1.1", "/p/1");
+    EXPECT_TRUE(book.begin(":1.1", "/p/4"));
+    book.gone(":1.1");
+    EXPECT_EQ(book.open(":1.1"), 0);
+    EXPECT_EQ(book.callers(), 1);
+    book.stop(":1.2", "/p/1");
+    EXPECT_EQ(book.callers(), 0); // nothing kept for a caller with nothing open
+}
+
+TEST(PrompterFilter, BeginPromptingOverTheShareIsRefusedUntilStopOrDeparture) {
+    CallerBook    book(limits::kPromptsPerCaller);
+    GDBusMessage* reply = nullptr;
+    for (int i = 0; i < limits::kPromptsPerCaller; ++i) {
+        const std::string path = "/org/gnome/keyring/Prompt/p" + std::to_string(i);
+        GDBusMessage*     begin = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", path.c_str()));
+        EXPECT_EQ(filterIncoming(book, begin, &reply), begin);
+        EXPECT_EQ(reply, nullptr);
+        g_object_unref(begin);
+    }
+    GDBusMessage* over = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/over"));
+    EXPECT_EQ(filterIncoming(book, over, &reply), nullptr);
+    EXPECT_EQ(errorName(reply), "org.freedesktop.DBus.Error.LimitsExceeded");
+    EXPECT_EQ(g_dbus_message_get_reply_serial(reply), 42u);
+    g_object_unref(reply);
+    // Another connection is not affected.
+    GDBusMessage* other = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p0"), ":1.9");
+    EXPECT_EQ(filterIncoming(book, other, &reply), other);
+    g_object_unref(other);
+    // StopPrompting frees a place.
+    GDBusMessage* stop = call(kPrompterPath, "StopPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p0"));
+    EXPECT_EQ(filterIncoming(book, stop, &reply), stop);
+    g_object_unref(stop);
+    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    // A NameOwnerChanged that does not come from the bus daemon changes nothing; the bus's own one forgets the caller.
+    GDBusMessage* forged = ownerChanged(":1.7", ":1.7", "", ":1.9");
+    EXPECT_EQ(filterIncoming(book, forged, &reply), forged);
+    g_object_unref(forged);
+    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    GDBusMessage* acquired = ownerChanged("org.example.Name", "", ":1.7"); // a well-known name changing hands: ignored
+    EXPECT_EQ(filterIncoming(book, acquired, &reply), acquired);
+    g_object_unref(acquired);
+    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    GDBusMessage* left = ownerChanged(":1.7", ":1.7", "");
+    EXPECT_EQ(filterIncoming(book, left, &reply), left);
+    g_object_unref(left);
+    EXPECT_EQ(book.open(":1.7"), 0);
+    EXPECT_EQ(book.open(":1.9"), 1);
 }
 
 // --- the GcrPrompt object ---------------------------------------------------------------------------------------------------
