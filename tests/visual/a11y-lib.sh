@@ -14,6 +14,8 @@ a11y_start_time=none
 a11y_reg_pid=""
 a11y_reg_start_time=none
 a11y_run=""
+# Where the runtime folders go: /tmp (a test of a11y_sweep points it elsewhere: tests/visual/test_a11y_find.py).
+a11y_tmp=${A11Y_TMP:-/tmp}
 
 a11y_bus() { cat "$VS_DEV/bus.address"; }
 
@@ -40,13 +42,30 @@ a11y_spawn() {
     HOME="$a11y_run/home" GSETTINGS_BACKEND=memory setsid "$@" >"$log" 2>&1 </dev/null &
 }
 
+# a11y_sweep: the /tmp/gf-a11y-* folders an earlier run of this user left (a script killed before a11y_stop), removed when
+# they are this user's own real folders and no process still uses one (none has it as its XDG_RUNTIME_DIR, which the
+# launcher, its bus and the registry all have).
+a11y_sweep() {
+  local d p used
+  for d in "$a11y_tmp"/gf-a11y-??????; do
+    [[ -d $d && ! -L $d && -O $d && $d != "$a11y_run" ]] || continue
+    used=""
+    for p in /proc/[0-9]*; do
+      if grep -qzx -- "XDG_RUNTIME_DIR=$d" "$p/environ" 2>/dev/null; then used=$p; break; fi
+    done
+    if [[ -n $used ]]; then echo "a11y: $d is still used (${used#/proc/}): kept" >&2; else rm -rf -- "$d"; fi
+  done
+  return 0
+}
+
 a11y_start() {
   local launcher=/usr/lib/at-spi-bus-launcher registry=/usr/lib/at-spi2-registryd bus i
   [[ -x $launcher && -x $registry ]] || { echo "a11y: $launcher or $registry is not installed (at-spi2-core)" >&2; return 1; }
   bus=$(a11y_bus)
   case $bus in unix:path=/tmp/dbus-*) ;; *) echo "a11y: refusing bus '$bus' (not the nested private bus)" >&2; return 1 ;; esac
   a11y_registry_ready && return 0
-  a11y_run=$(mktemp -d /tmp/gf-a11y-XXXXXX) || return 1
+  a11y_sweep
+  a11y_run=$(mktemp -d "$a11y_tmp/gf-a11y-XXXXXX") || return 1
   mkdir -p "$a11y_run/home"
   if ! a11y_ready; then
     a11y_spawn "$VS_STATE/a11y-launcher.log" "$launcher" --launch-immediately
@@ -77,7 +96,7 @@ a11y_stop() {
   a11y_end "$a11y_reg_pid" "$a11y_reg_start_time"
   a11y_end "$a11y_pid" "$a11y_start_time"
   a11y_reg_pid="" a11y_pid=""
-  case $a11y_run in /tmp/gf-a11y-??????) rm -rf -- "$a11y_run" ;; esac
+  case $a11y_run in "$a11y_tmp"/gf-a11y-??????) rm -rf -- "$a11y_run" ;; esac
   a11y_run=""
   return 0
 }

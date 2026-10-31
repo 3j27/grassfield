@@ -51,5 +51,36 @@ class Guards(unittest.TestCase):
         self.assertIn("no accessibility bus", out.stderr)
 
 
+class Sweep(unittest.TestCase):
+    """a11y-lib.sh's a11y_sweep (review of fac5bff3, NIT): an earlier run's folder that no process uses goes; one in use, a
+    link and another user's name pattern stay."""
+
+    def test_stale_folders_go_and_used_ones_stay(self):
+        import tempfile
+        lib = os.path.join(HERE, "a11y-lib.sh")
+        with tempfile.TemporaryDirectory() as root:
+            stale = os.path.join(root, "gf-a11y-AAAAAA")
+            used = os.path.join(root, "gf-a11y-BBBBBB")
+            other = os.path.join(root, "gf-a11y-toolong")
+            link = os.path.join(root, "gf-a11y-CCCCCC")
+            for d in (stale, used, other):
+                os.makedirs(os.path.join(d, "home"))
+            os.symlink(stale, link)
+            holder = subprocess.Popen(["sleep", "30"], env={"PATH": os.environ.get("PATH", "/usr/bin"), "XDG_RUNTIME_DIR": used})
+            try:
+                script = 'VS_DEV=/nonexistent; source "$1"; a11y_sweep'
+                out = subprocess.run(["bash", "-c", script, "_", lib], env={"PATH": os.environ.get("PATH", "/usr/bin"), "A11Y_TMP": root},
+                                     capture_output=True, text=True, timeout=60)
+            finally:
+                holder.kill()
+                holder.wait()
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertFalse(os.path.exists(stale), "the stale folder goes")
+            self.assertTrue(os.path.isdir(used), "the folder in use stays: " + out.stderr)
+            self.assertIn("still used", out.stderr)
+            self.assertTrue(os.path.isdir(other), "a name of another length is not ours")
+            self.assertTrue(os.path.islink(link), "a link is not removed")
+
+
 if __name__ == "__main__":
     unittest.main()
