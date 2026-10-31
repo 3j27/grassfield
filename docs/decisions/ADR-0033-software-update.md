@@ -553,10 +553,12 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back**; added once grassfield-packages PR #3 was merged (follow-up, O22) |
 | O22 | O21's follow-up, `grassfield-keyring` in grassfield-desktop's `depends`: its install script then runs as root wherever grassfield-desktop is installed, the owner's machine included, and until `[grassfield]` is published a source build needs the keyring installed first (otherwise the install half of `makepkg -si`, its `pacman -U`, refuses grassfield-desktop) | add it now; a source build installs grassfield-packages' `keyring/` once with `makepkg -si` (keyless until O11: three empty files, it trusts nothing) (recommended) · hold it back until the repository is published (after M5) | **add it now** (« Accepter maintenant »); the owner builds the keyring once before the next `makepkg -si` (`docs/owner-setup/real-session.md` section 3) |
 | SU-M1 | Update Now (2026-10-29, the integrator's question after the incident of 2026-10-29) | as on a Mac: Grassfield's password dialog, a snapshot, Omarchy's update without a terminal through a Grassfield root helper behind its own polkit action, progress in Settings, Restart at the end, a compatibility check before the transaction (recommended) · keep Omarchy's terminal | **as on a Mac** (« Comme sur Mac », confirmed by the owner in the Claude Code session of step 3); "Step 3" |
+| SU-D4 | Telling the end of an Update Now run (step 4, delegated) | a notice for each end that leaves something to do or to know, whose click opens the pane, none for a restart or a log out while Settings' window is in front, whose end sheet asks it (recommended: macOS posts such a notification when its window is not in front) · a notice for a restart only · nothing outside the pane | **a notice for each end**, « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »; "Step 4 as built" |
 
 The owner gave every answer of O1-O22 on 2026-10-27: O1-O21 in this Claude Code session, through its question tool, and
 O22 to the integrator. SU-M1 was asked by the integrator on 2026-10-29 and confirmed by the owner through the question tool
-of the step 3 session, since it widens what runs as root. The answers to O1-O16 were recorded in `fd49abc` and confirmed again after the first review; O21 was asked
+of the step 3 session, since it widens what runs as root. SU-D4 was decided under the owner's delegation of 2026-10-27 (it
+changes nothing that runs as root and no security rule). The answers to O1-O16 were recorded in `fd49abc` and confirmed again after the first review; O21 was asked
 after the step 1 review. O22 was asked by the integrator on grassfield PR #24: it changes what runs as root on the owner's machine, which the owner's
 delegation of 2026-10-27 leaves to the owner. Why now rather than at publication: a user of the repository installs
 grassfield-desktop and gets the keyring with nothing to do, as omarchy depends on omarchy-keyring
@@ -1072,20 +1074,41 @@ untouched):
   (`$XDG_RUNTIME_DIR/grassfield/software-update-run.json`, replaced by rename: measured with Quickshell's FileView, which
   follows a rename, a removal and a late creation only while the folder exists, so the service makes the folder first, 0700
   as the runner does). A run it saw going on is announced once when it ends, by `SoftwareUpdateLogic.runNotice`; a run
-  already ended when the shell started is not. shell.qml posts one notice opening the pane, unless Settings is the frontmost
-  app, where the pane and its end sheet say it. « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune
-  intervention technique pour l'utilisateur »: macOS tells about a finished install that asks for a restart with a
-  notification when its window is not in front.
+  already ended when the shell started is not. shell.qml posts one notice opening the pane; a restart or a log out is not
+  posted while Settings' window (not About This Computer) is in front, since its end sheet asks it. GF-083's log-out notice
+  waits while a run goes on (an hour at most) and is never posted after the run's restart or log out: one notice says what
+  finishes the update. A dev session watches its own folder (ADR-0019 `UPDATE_RUN_DIR`). Decision SU-D4: « décision
+  déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: macOS
+  tells about a finished install that asks for a restart with a notification when its window is not in front.
 - **Restart… and Log Out… wait for the run's end** in the pane: the system changes until then (the helper also blocks a
   shutdown with logind).
 
 Evidence: `tests/shell/software_update_service.sh` (the real Quickshell, offscreen) with a new step r: a run found already
-ended is not announced, one seen going on is announced once as a restart, the same end written again and a cancelled run say
-nothing, an incompatible one is announced; `tst_softwareupdate` 26 (`test_runNotice`), `tst_settingssoftwareupdate` 22 (the
-disabled Restart… during a run), `tst_settingsmain` 8; check-i18n 0 unfinished. Not verified here: the notice in a real
-session (the integrator's nested pass), Settings in front skipping it.
+ended is not announced, one seen going on is announced once as a restart, the same end written again alone says nothing, a
+run configuring is a run going on, a cancelled run ends with no notice, an incompatible one is announced; a dev session's
+run folder is its own (0700) and the runtime folder is left alone. `tst_softwareupdate` 26 (`test_runNotice`),
+`tst_settingssoftwareupdate` 22 (Restart… and Log Out… disabled during a run, enabled after it), `tst_settingsmain` 8;
+check-i18n 0 unfinished. Not verified here: the notice in a real session (the integrator's nested pass, with
+`GRASSFIELD_UPDATE_RUN_DIR`), Settings in front skipping a restart, GF-083's notice held during a run (shell.qml, which no
+headless test loads).
 
 ## Review history
+Software Update step 4 (PR #82), an independent opus review of 9dbacaa7 while the integrator was away (read-only, mutants on
+copies): **PASS**, no BLOCKER or MAJOR; five minors and six nits, answered in the next commit:
+- **Minor 1**, step r did not test what it claimed: the same end written again was overwritten before it was read, and two
+  waits never checked their condition (mutants M2, a lost reset of the run going on, and M5, `configuring` not counted,
+  survived). The same end is now read alone after a pause, and each wait checks its condition.
+- **Minor 2**, a Settings window in front hid every end, About This Computer and other sections included (a failed startup
+  image's "Don't restart this computer yet" too): only a restart or a log out is skipped, and only for Settings' main window.
+- **Minor 3**, a run whose AUR apps wait for Omarchy's terminal said "This computer is up to date.": its own notice.
+- **Minor 4**, GF-083 posted "Log out to finish updating" during the run, then the run posted "Restart…"; a pkgrel-only
+  rebuild of grassfield-desktop was announced by nobody: GF-083's notice waits for the run, the run's log out is posted with
+  GF-083's text, and one notice says what finishes the update.
+- **Minor 5**, a dev shell watched the real session's runs: dev plumbing `UPDATE_RUN_DIR` (ADR-0019).
+- **Nits:** a relative `XDG_RUNTIME_DIR` is refused and `mkdir` gets `--`; the pane test checks the buttons enabled after a
+  run; the terminal notice names Omarchy's terminal; precedence and the unannounced ends are in U31 and the limits; SU-D4 is a
+  row of the decision table.
+
 Software Update step 3 (PR #44), the integrator's re-review of 1ce7c37..0294373 (independent opus): **PASS**, with two
 fail-open guards asked before the merge, answered in the next commits: an empty `pacman -Q` and an empty
 `pacman-conf --repo-list` are refused (exit 8), and the runner's `omarchy-migrate --pending` must answer by its contract;

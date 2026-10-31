@@ -13286,6 +13286,10 @@
         <translation>Mises à jour installées</translation>
     </message>
     <message>
+        <source>Apps from the AUR are updated in Omarchy&apos;s terminal. Open Software Update to update them.</source>
+        <translation>Les apps de l’AUR sont mises à jour dans le terminal d’Omarchy. Ouvrez Mise à jour de logiciels pour les mettre à jour.</translation>
+    </message>
+    <message>
         <source>This computer is up to date.</source>
         <translation>Cet ordinateur est à jour.</translation>
     </message>
@@ -13310,8 +13314,8 @@
         <translation>Cette mise à jour nécessite le terminal d’Omarchy</translation>
     </message>
     <message>
-        <source>Open Software Update to continue it there.</source>
-        <translation>Ouvrez Mise à jour de logiciels pour la poursuivre là-bas.</translation>
+        <source>Open Software Update to continue it in Omarchy&apos;s terminal.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour la poursuivre dans le terminal d’Omarchy.</translation>
     </message>
     <message>
         <source>The update stopped before it finished</source>

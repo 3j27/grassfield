@@ -337,21 +337,30 @@ ShellRoot {
                 root.run(b, "done", "done", "restart");
                 when(() => root.runEnds.length > 0, () => {
                     root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart"]), "r: its end is announced once, as a restart (" + root.runEnds + ")");
+                    // The same end written again, read alone (the pause): no second notice.
                     root.run(b, "done", "done", "restart");
-                    root.run(c, "configuring", "", "");
-                    when(() => SoftwareUpdate.runningOp === c, () => {
-                        root.run(c, "done", "cancelled", "");
-                        when(() => SoftwareUpdate.runningOp === "", () => {
-                            root.run(d, "authorizing", "", "");
-                            when(() => SoftwareUpdate.runningOp === d, () => {
-                                root.run(d, "done", "incompatible", "");
-                                when(() => root.runEnds.length > 1, () => {
-                                    root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart", "incompatible"]), "r: the same end again and a cancelled run say nothing; an incompatible one is announced (" + root.runEnds + ")");
-                                    stepJ();
+                    pause.next = () => {
+                        root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart"]), "r: the same end written again says nothing (" + root.runEnds + ")");
+                        root.run(c, "configuring", "", "");
+                        when(() => SoftwareUpdate.runningOp === c, () => {
+                            root.check(SoftwareUpdate.runningOp === c, "r: a run configuring is a run going on");
+                            root.run(c, "done", "cancelled", "");
+                            when(() => SoftwareUpdate.runningOp === "", () => {
+                                root.check(SoftwareUpdate.runningOp === "", "r: a cancelled run ends");
+                                root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart", ""]), "r: a cancelled run deserves no notice (" + JSON.stringify(root.runEnds) + ")");
+                                root.run(d, "authorizing", "", "");
+                                when(() => SoftwareUpdate.runningOp === d, () => {
+                                    root.check(SoftwareUpdate.runningOp === d, "r: the next run going on is seen");
+                                    root.run(d, "done", "incompatible", "");
+                                    when(() => root.runEnds.length > 2, () => {
+                                        root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart", "", "incompatible"]), "r: an incompatible one is announced (" + JSON.stringify(root.runEnds) + ")");
+                                        stepJ();
+                                    });
                                 });
                             });
                         });
-                    });
+                    };
+                    pause.restart();
                 });
             });
         };

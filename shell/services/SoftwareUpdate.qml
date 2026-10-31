@@ -20,10 +20,10 @@ import Grassfield.Ui
 //     posts the notification), never for a check the user started (U20, U22).
 //   - Update Now's runs (ADR-0033 "Step 4", U31): the runner's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json,
 //     replaced by rename) is watched; the end of a run this shell saw going on is announced once (`runEnded`; shell.qml posts
-//     the notice unless Settings is in front, where the pane says it). A run found already ended (the shell started after it)
-//     is never announced. The folder is made first (0700, as the runner makes it): a FileView sees no file in a missing folder.
-//   - A dev session runs the checker read-only with its cache under the dev state, or answers from GRASSFIELD_UPDATE_FIXTURE
-//     (ADR-0019). The update actions are Settings'; nothing here starts one.
+//     the notice, and holds GF-083's while the run goes on). A run found already ended (the shell started after it) is never
+//     announced. The folder is made first (0700, as the runner makes it): a FileView sees no file in a missing folder.
+//   - A dev session runs the checker read-only with its cache under the dev state, or answers from GRASSFIELD_UPDATE_FIXTURE,
+//     and watches its own run folder (UPDATE_RUN_DIR, ADR-0019). The update actions are Settings'; nothing here starts one.
 Singleton {
     id: root
 
@@ -43,11 +43,18 @@ Singleton {
 
     // A newly found release ("grassfield" or "omarchy", its version and the installed one) or a `blocking` episode.
     signal announce(string kind, string version, string installed)
-    // The end of an Update Now run this shell saw going on: SoftwareUpdateLogic.runNotice's kind (never "").
+    // The end of an Update Now run this shell saw going on: SoftwareUpdateLogic.runNotice's kind, "" when it deserves no
+    // notice (GF-083's notice, held while the run goes on, is then shown: shell.qml).
     signal runEnded(string kind)
 
-    // Update Now's runner state (U31), "" without a runtime folder; the operation this shell saw going on, "" when none.
-    readonly property string runFolder: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/grassfield" : ""
+    // Update Now's runner state (U31), "" without an absolute runtime folder; the operation this shell saw going on, "" when
+    // none. A dev session watches its own folder (dev plumbing UPDATE_RUN_DIR, else under its state; ADR-0019), never the
+    // real session's runs.
+    readonly property string runFolder: {
+        const runtime = String(Quickshell.env("XDG_RUNTIME_DIR") || "");
+        const dir = Mode.dev ? (Mode.devValue("UPDATE_RUN_DIR") || Mode.stateDir + "/update-run") : (runtime !== "" ? runtime + "/grassfield" : "");
+        return dir.startsWith("/") ? dir : "";
+    }
     readonly property string runPath: runFolder !== "" ? runFolder + "/software-update-run.json" : ""
     property string runningOp: ""
 
@@ -62,9 +69,7 @@ Singleton {
         if (run.op !== root.runningOp)
             return;
         root.runningOp = "";
-        const kind = SoftwareUpdateLogic.runNotice(run);
-        if (kind !== "")
-            root.runEnded(kind);
+        root.runEnded(SoftwareUpdateLogic.runNotice(run));
     }
 
     readonly property string statePath: Mode.stateDir + "/software-update.json"
@@ -442,7 +447,7 @@ Singleton {
     Process {
         id: prepareRun
         running: root.runFolder !== ""
-        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"", "sh", root.runFolder]
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 -- \"$1\"", "sh", root.runFolder]
         onRunningChanged: {
             if (!running)
                 runFile.path = root.runPath;

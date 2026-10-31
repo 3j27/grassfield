@@ -77,6 +77,8 @@ check grep -q "software-update-service: PASS" "$out"
 f="$tmp/state/software-update.json"
 desc="software-update.json is the user's alone: mode 600 in a folder of mode 700"
 check test "$(stat -c %a "$f" 2>/dev/null):$(stat -c %a "$tmp/state" 2>/dev/null)" == "600:700"
+desc="a dev session watches its own run folder (mode 700), never the session's runtime folder (ADR-0019 UPDATE_RUN_DIR)"
+check test "$(stat -c %a "$tmp/state/update-run" 2>/dev/null):$([[ -e $tmp/runtime/grassfield ]] && echo made)" == "700:"
 python3 -I "$root/tests/ci/qml_warnings.py" <"$out" || { echo "FAIL: QML runtime warnings"; fail=1; }
 
 # A stored update-running whose waiter did not survive the session: checked at once when the service reads the file.

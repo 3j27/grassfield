@@ -370,7 +370,7 @@ function runView(run, alive, progress, helperAlive) {
 }
 
 // The notice the end of an Update Now run deserves when the shell saw it going on (docs/specs/updates.md U31, ADR-0033
-// "Step 4"): "restart", "logout", "migrations", "installed", "bootimage", "incompatible", "terminal", "stopped", "failed",
+// "Step 4"): "restart", "logout", "migrations", "aur", "installed", "bootimage", "incompatible", "terminal", "stopped", "failed",
 // or "" for none (nothing installed and nothing to do: up to date; cancelled or refused in the dialog the person saw).
 function runNotice(run) {
     if (run === null || run.phase !== "done")
@@ -379,7 +379,9 @@ function runNotice(run) {
     case "done":
         if (run.restart === "restart" || run.restart === "logout")
             return run.restart;
-        return run.deferred.indexOf("migrations") >= 0 ? "migrations" : "installed";
+        if (run.deferred.indexOf("migrations") >= 0)
+            return "migrations";
+        return run.deferred.indexOf("aur") >= 0 ? "aur" : "installed";
     case "bootimage":
     case "incompatible":
         return run.result;

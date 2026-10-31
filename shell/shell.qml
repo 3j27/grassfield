@@ -329,15 +329,32 @@ ShellRoot {
     }
 
     // GF-083: a package update leaves the old shell and compositor plugin running until the next login (macOS: "Restart to
-    // finish installing"). One notice per run; nothing is shown while the versions are unknown.
+    // finish installing"). One notice per run; nothing is shown while the versions are unknown. While an Update Now run goes
+    // on, the notice waits for its end, which says what finishes the update (a restart covers the log out, ADR-0033 s3.7):
+    // onRunEnded below. A run still going on after an hour (its runner gone) no longer holds it.
     UpdateNotice {
         id: updateNotice
         property bool announced: false
-        onUpdatePendingChanged: {
-            if (updatePending && !announced) {
-                announced = true;
-                Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+        function announce(): void {
+            if (!updatePending || announced)
+                return;
+            if (SoftwareUpdate.runningOp !== "" && !updateNoticeHeld.expired) {
+                updateNoticeHeld.start();
+                return;
             }
+            announced = true;
+            Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+        }
+        onUpdatePendingChanged: announce()
+    }
+
+    Timer {
+        id: updateNoticeHeld
+        property bool expired: false
+        interval: 60 * 60 * 1000
+        onTriggered: {
+            expired = true;
+            updateNotice.announce();
         }
     }
 
@@ -364,25 +381,33 @@ ShellRoot {
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
         }
 
-        // The end of an Update Now run (U31): one notice whose click opens the pane, unless Settings is in front (its pane or
-        // its end sheet says it). "logout" has GF-083's notice above already (Grassfield's own files changed).
+        // The end of an Update Now run (U31): one notice whose click opens the pane. A restart or a log out is not posted when
+        // Settings' window is in front: its end sheet asks it there (U29). The restart and the log out are GF-083's notice
+        // too: it is never posted after them, and a notice it held for the run is posted after any other end.
         function onRunEnded(kind: string): void {
-            if (Compositor.frontAppId === "org.grassfield.Settings")
-                return;
+            updateNoticeHeld.stop();
+            const finishing = kind === "restart" || kind === "logout";
+            if (finishing)
+                updateNotice.announced = true;
+            const settings = Compositor.frontAppId === "org.grassfield.Settings"
+                && Compositor.frontToplevel !== Compositor.taggedToplevel("org.grassfield.Settings", "info");
             const open = () => SettingsApp.openSection("software-update");
             const notices = {
                 "restart": [qsTr("Restart to finish updating"), qsTr("The updates are installed. Restart when you're ready.")],
+                "logout": [qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version.")],
                 "migrations": [qsTr("Some of Omarchy's last steps need its terminal"), qsTr("The updates are installed. Open Software Update to finish them.")],
+                "aur": [qsTr("Updates installed"), qsTr("Apps from the AUR are updated in Omarchy's terminal. Open Software Update to update them.")],
                 "installed": [qsTr("Updates installed"), qsTr("This computer is up to date.")],
                 "bootimage": [qsTr("Don't restart this computer yet"), qsTr("The update could not prepare the computer's startup files. Open Software Update for details.")],
                 "incompatible": [qsTr("This update needs a newer version of Grassfield"), qsTr("Software Update checks again later and tells you when it's ready.")],
-                "terminal": [qsTr("This update needs Omarchy's terminal"), qsTr("Open Software Update to continue it there.")],
+                "terminal": [qsTr("This update needs Omarchy's terminal"), qsTr("Open Software Update to continue it in Omarchy's terminal.")],
                 "stopped": [qsTr("The update stopped before it finished"), qsTr("Open Software Update to try again.")],
                 "failed": [qsTr("The update could not be installed"), qsTr("Open Software Update to see why.")]
             };
             const notice = notices[kind];
-            if (notice)
+            if (notice && !(finishing && settings))
                 Notifications.postInternalAction(notice[0], notice[1], open);
+            updateNotice.announce();
         }
     }
 

@@ -254,12 +254,18 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
   Update Now stays available to try again after every outcome.
 - U31. The end of a run the shell saw going on (step 4) is one notice whose click opens Settings > General > Software
-  Update, unless Settings is the frontmost app (its pane, and its sheet of U29, say it): "Restart to finish updating",
-  "Some of Omarchy's last steps need its terminal", "Updates installed", "Don't restart this computer yet", "This update
-  needs a newer version of Grassfield", "This update needs Omarchy's terminal", "The update stopped before it finished" or
-  "The update could not be installed", each with one line saying what to do. Nothing for a run that installed nothing (up
-  to date), a dialog cancelled or refused, a log out (GF-083's notice says it), or a run that had already ended when the
-  shell started. The shell watches the runner's state in its runtime folder (made 0700 first, as the runner makes it).
+  Update: "Restart to finish updating", "Log out to finish updating", "Some of Omarchy's last steps need its terminal",
+  "Updates installed" (with "Apps from the AUR are updated in Omarchy's terminal." when some wait for it, as the pane says),
+  "Don't restart this computer yet", "This update needs a newer version of Grassfield", "This update needs Omarchy's
+  terminal", "The update stopped before it finished" or "The update could not be installed", each with one line saying
+  what to do. What finishes the update comes first: a restart, then a log out, then the migrations, then the AUR's apps
+  (the pane lists every one). A restart or a log out is not posted when Settings' window is in front, since its sheet of
+  U29 asks it; every other end is (the pane may show another section, and About This Computer has no pane). Nothing for a
+  run that installed nothing (up to date), a dialog cancelled or refused, or a run that had already ended when the shell
+  started. GF-083's "Log out to finish updating" waits while a run goes on and is never posted after the run's restart or
+  log out (a restart covers the log out, ADR-0033 s3.7); a run still going on after an hour no longer holds it. The shell
+  watches the runner's state in its runtime folder (made 0700 first, as the runner makes it); a dev session watches its own
+  folder (ADR-0019 `UPDATE_RUN_DIR`).
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -393,7 +399,9 @@ owner decision O22). Omarchy's commands used:
 - A package conflict is found by pacman only inside the transaction (`--print` does not check them), after the checked
   databases became the system's: nothing is installed, and Grassfield Store refuses installs until an update finishes.
 - The end-of-run notice (U31) needs the shell to have seen the run going on: a run that started and ended while the shell
-  was not running (a crash, a restart of the shell) is said only by the pane's row.
+  was not running (a crash, a restart of the shell) is said only by the pane's row. A runner killed during the run leaves
+  its state going on: no notice, and GF-083's waits an hour. A run folder removed during the session is no longer followed
+  until the shell starts again (Quickshell's FileView, measured by the step 4 review).
 - The transient system service, the real polkit dialog and snapper are verified only on a real machine (A15).
 - A host can replay an old, validly signed database and hold back updates; pacman has no database expiry.
 - One signing key (owner decision O6): if it is ever compromised, revoking it stops every client's `[grassfield]` (`blocking`)

@@ -316,7 +316,9 @@ TestCase {
         compare(Logic.runNotice(done("done", {restart: "restart"})), "restart");
         compare(Logic.runNotice(done("done", {restart: "logout"})), "logout");
         compare(Logic.runNotice(done("done", {deferred: ["migrations", "aur"]})), "migrations");
-        compare(Logic.runNotice(done("done", {deferred: ["aur"]})), "installed");
+        compare(Logic.runNotice(done("done", {deferred: ["aur"]})), "aur", "the pane says the AUR's apps wait for Omarchy's terminal");
+        compare(Logic.runNotice(done("done")), "installed");
+        compare(Logic.runNotice(done("done", {restart: "restart", deferred: ["migrations", "aur"]})), "restart", "what finishes the update first");
         compare(Logic.runNotice(done("bootimage", {restart: "restart"})), "bootimage", "never a restart after a failed startup image");
         compare(Logic.runNotice(done("incompatible")), "incompatible");
         compare(Logic.runNotice(done("terminal")), "terminal");
