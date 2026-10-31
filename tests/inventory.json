@@ -299,6 +299,8 @@
  {"path": "tests/integration/activity_owners.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/apps/activity_cost.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/apps/activity_actions.sh", "layer": "logic", "runner": "bare"},
+ {"path": "tests/apps/activity_efficiency.sh", "layer": "logic", "runner": "bare"},
+ {"path": "tests/apps/activity_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/unit/wallpaper-tool/tst_wallpaperlogic.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_commonsfetch.cpp", "layer": "logic"},
  {"path": "tests/unit/wallpaper-tool/tst_videotool.cpp", "layer": "logic"},

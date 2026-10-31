@@ -1,14 +1,20 @@
 // A-S13 (docs/specs/activity.md AM68, AM76; ADR-0038 g; step 4): Efficiency Mode. Available for one of the user's own
-// processes in an app unit, never a session process or another owner's (the tooltip says why), nothing without the user
+// processes in an app unit, never a session process or another owner's (the backend keeps why), nothing without the user
 // manager; the unit read again when the item is chosen (a unit it no longer applies to changes nothing); on sets the idle
 // weight and falls back to the lowest number on a systemd without it, off unsets it; a failed call says so.
 #include "efficiency.h"
+#include "procparse.h"
 
 #include <QSignalSpy>
 
 #include <gtest/gtest.h>
 
 #include <unistd.h>
+
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 using namespace activity;
 
@@ -154,4 +160,58 @@ TEST(Efficiency, TheRealProcessHandleReadsTheUnit)
     e.set(true);
     EXPECT_EQ(calls, 0);
     EXPECT_EQ(finished.at(0).at(0).toString(), QStringLiteral("The process has ended."));
+}
+
+namespace
+{
+
+// The cgroup file `name` of the live process's unit, "" when it cannot be read.
+std::string unitFile(int pid, const char *name)
+{
+    std::ifstream cg("/proc/" + std::to_string(pid) + "/cgroup");
+    std::string line, path;
+    while (std::getline(cg, line)) {
+        if (line.rfind("0::", 0) == 0)
+            path = line.substr(3);
+    }
+    std::ifstream f("/sys/fs/cgroup" + path + "/" + name);
+    std::string value;
+    std::getline(f, value);
+    return value;
+}
+
+} // namespace
+
+// A-E (L2, tests/apps/activity_efficiency.sh): on the user's own systemd manager, a throwaway unit's process (the script's
+// GRASSFIELD_ACTIVITY_LIVE_PID) in Efficiency Mode and back, through the real bus call and the real /proc descriptor.
+TEST(EfficiencyLive, OnAndOffOnARealUnit)
+{
+    const char *live = std::getenv("GRASSFIELD_ACTIVITY_LIVE_PID");
+    if (!live || !*live)
+        GTEST_SKIP() << "tests/apps/activity_efficiency.sh runs this case on a unit of its own";
+    const int pid = std::atoi(live);
+    std::ifstream statFile("/proc/" + std::to_string(pid) + "/stat");
+    std::stringstream text;
+    text << statFile.rdbuf();
+    StatFields st;
+    ASSERT_TRUE(parseStat(text.str(), st, false));
+    ASSERT_TRUE(Efficiency::userManagerPresent());
+    Efficiency e("/proc");
+    e.setSupported(true);
+    e.setTarget(Efficiency::Target{pid, st.starttime, QStringLiteral("test"), true, true, false, false});
+    ASSERT_TRUE(e.available());
+    QSignalSpy finished(&e, &Efficiency::finished);
+    e.set(true);
+    ASSERT_TRUE(finished.count() > 0 || finished.wait(10000));
+    EXPECT_EQ(finished.last().at(0).toString(), QString());
+    const bool idle = unitFile(pid, "cpu.idle") == "1", lowest = unitFile(pid, "cpu.weight") == "1";
+    EXPECT_TRUE(idle || lowest) << "cpu.idle " << unitFile(pid, "cpu.idle") << ", cpu.weight " << unitFile(pid, "cpu.weight");
+    std::printf("on: cpu.idle %s, cpu.weight %s\n", unitFile(pid, "cpu.idle").c_str(), unitFile(pid, "cpu.weight").c_str());
+    finished.clear();
+    e.set(false);
+    ASSERT_TRUE(finished.count() > 0 || finished.wait(10000));
+    EXPECT_EQ(finished.last().at(0).toString(), QString());
+    EXPECT_NE(unitFile(pid, "cpu.idle"), "1");
+    EXPECT_NE(unitFile(pid, "cpu.weight"), "1");
+    std::printf("off: cpu.idle %s, cpu.weight %s\n", unitFile(pid, "cpu.idle").c_str(), unitFile(pid, "cpu.weight").c_str());
 }
