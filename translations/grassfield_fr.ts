@@ -8251,8 +8251,72 @@
 <context>
     <name>PrintSheet</name>
     <message>
+        <source>Media &amp; Quality</source>
+        <translation>Support et qualité</translation>
+    </message>
+    <message>
+        <source>Printer Options</source>
+        <translation>Options de l’imprimante</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Feed From:</source>
+        <translation>Alimentation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Media Type:</source>
+        <translation>Type de support&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Quality:</source>
+        <translation>Qualité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Output Bin:</source>
+        <translation>Bac de sortie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Finishing:</source>
+        <translation>Finition&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Feed From</source>
+        <translation>Alimentation</translation>
+    </message>
+    <message>
+        <source>Media Type</source>
+        <translation>Type de support</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Output Bin</source>
+        <translation>Bac de sortie</translation>
+    </message>
+    <message>
+        <source>Finishing</source>
+        <translation>Finition</translation>
+    </message>
+    <message>
+        <source>Draft</source>
+        <translation>Brouillon</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Best</source>
+        <translation>Optimale</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
     </message>
     <message>
         <source>Untitled</source>
@@ -8261,6 +8325,30 @@
     <message>
         <source>Save as PDF</source>
         <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Page %1 of %2</source>
+        <translation>Page %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Preparing Preview…</source>
+        <translation>Préparation de l’aperçu…</translation>
+    </message>
+    <message>
+        <source>No Preview</source>
+        <translation>Aucun aperçu</translation>
+    </message>
+    <message>
+        <source>Previous Page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next Page</source>
+        <translation>Page suivante</translation>
     </message>
     <message>
         <source>Printer:</source>
@@ -8285,6 +8373,22 @@
     <message>
         <source>Add Printer…</source>
         <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Presets:</source>
+        <translation>Préréglages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Presets</source>
+        <translation>Préréglages</translation>
+    </message>
+    <message>
+        <source>Default Settings</source>
+        <translation>Réglages par défaut</translation>
+    </message>
+    <message>
+        <source>Last Used Settings</source>
+        <translation>Derniers réglages utilisés</translation>
     </message>
     <message>
         <source>Copies:</source>
@@ -8395,8 +8499,16 @@
         <translation>Noir et blanc</translation>
     </message>
     <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
         <source>Save as PDF…</source>
         <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Open in Preview</source>
+        <translation>Ouvrir dans la Visionneuse</translation>
     </message>
     <message>
         <source>Click the panel to use the keyboard in it.</source>

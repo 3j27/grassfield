@@ -2339,6 +2339,12 @@ QtObject {
     readonly property int filesPrintSheetWidth: 480
     // estimate: the print sheet's pop-ups (Printer, Pages, Paper Size, Two-Sided, Colour), as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
     readonly property int filesPrintFieldWidth: 240
+    // estimate: the print sheet's preview column for a document sent first (step 6b), left of the settings as in macOS's print panel: the page area and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewWidth: 300
+    // estimate: the page area of the print sheet's preview (a portrait A4 or US Letter page fills its height) [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewHeight: 360
+    // estimate: the compact "PDF" pull-down at the bottom left of the print sheet, its label and chevron, as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPdfMenuWidth: 76
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
