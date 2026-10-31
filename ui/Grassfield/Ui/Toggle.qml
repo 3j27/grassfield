@@ -80,7 +80,9 @@ T.Control {
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.dimmed ? Tokens.controlToggleDisabledKnobOpacity : 1
 
+        // Under Reduce Motion the knob jumps to its side; the track's colour still crossfades (ADR-0039 step 5).
         Behavior on x {
+            enabled: !Appearance.reduceMotion
             NumberAnimation {
                 duration: Appearance.duration(Tokens.motionFast)
                 easing.type: Easing.BezierSpline

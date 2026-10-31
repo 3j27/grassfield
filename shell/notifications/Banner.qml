@@ -25,8 +25,10 @@ Item {
     readonly property bool hovered: hover.hovered
     // Hover or drag pauses this notification's expiry timer.
     readonly property bool held: hovered || drag.active
-    // Entrance offset (slides in from the right edge).
-    property real slide: Tokens.notificationBannerWidth
+    // Entrance offset (slides in from the right edge). Under Reduce Motion the banner fades in where it stands instead
+    // (macOS: slides become fades; ADR-0039 step 5).
+    property real slide: Appearance.reduceMotion ? 0 : Tokens.notificationBannerWidth
+    property real entrance: Appearance.reduceMotion ? 0 : 1
 
     width: Tokens.notificationBannerWidth
     height: card.height
@@ -37,11 +39,22 @@ Item {
     // The default action (a click on the banner outside its buttons) for assistive technologies too (A11Y-09).
     Accessible.onPressAction: Notifications.activateDefault(root.key)
 
-    Component.onCompleted: slide = 0
+    Component.onCompleted: {
+        slide = 0;
+        entrance = 1;
+    }
 
     onHeldChanged: Notifications.holdBanner(key, held)
 
+    Behavior on entrance {
+        enabled: Appearance.reduceMotion
+        NumberAnimation {
+            duration: Appearance.duration(Tokens.motionNormal)
+        }
+    }
+
     Behavior on slide {
+        enabled: !Appearance.reduceMotion
         NumberAnimation {
             duration: Appearance.duration(Tokens.motionNormal)
             easing.type: Easing.BezierSpline
@@ -58,7 +71,7 @@ Item {
         x: root.slide + dragX
         width: root.width
         height: content.implicitHeight + 2 * Tokens.spacingMd
-        opacity: 1 - Math.min(1, Math.max(0, dragX / root.width))
+        opacity: root.entrance * (1 - Math.min(1, Math.max(0, dragX / root.width)))
 
         property real dragX: 0
 

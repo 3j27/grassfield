@@ -392,8 +392,9 @@ Variants {
 
                 // Only the slide animates (macOS: the column comes in from the right edge). The column's place follows
                 // the window at once: the window can still be 0 wide when the column is created, and animating x then
-                // swept the column across the whole screen from the left (owner, real session 2026-10-22).
-                property real slideOffset: host.shown ? 0 : width + Tokens.notificationCenterInset
+                // swept the column across the whole screen from the left (owner, real session 2026-10-22). Under Reduce
+                // Motion the column fades in at its place instead (macOS: slides become fades; ADR-0039 step 5).
+                property real slideOffset: host.shown || Appearance.reduceMotion ? 0 : width + Tokens.notificationCenterInset
                 property bool glide: false
                 // The column at rest on the output (the window covers it): every card's glass is judged over this area, wherever
                 // the list scrolls it (G-3 per surface).
@@ -421,7 +422,17 @@ Variants {
                     onActivated: list.tabStep(false)
                 }
 
+                opacity: host.shown || !Appearance.reduceMotion ? 1 : 0
+
+                Behavior on opacity {
+                    enabled: Appearance.reduceMotion
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionNormal)
+                    }
+                }
+
                 Behavior on slideOffset {
+                    enabled: !Appearance.reduceMotion
                     NumberAnimation {
                         duration: Appearance.duration(Tokens.motionNormal)
                         easing.type: Easing.BezierSpline
@@ -577,9 +588,10 @@ Variants {
                     spacing: Tokens.spacingSm
                     onYChanged: list.bumpTick()
 
-                    // Glides with the cards when the list shrinks or grows (not during the first layout).
+                    // Glides with the cards when the list shrinks or grows (not during the first layout); jumps with them
+                    // under Reduce Motion (NotificationList.still).
                     Behavior on y {
-                        enabled: panel.glide
+                        enabled: panel.glide && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.BezierSpline
