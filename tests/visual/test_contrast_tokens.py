@@ -808,6 +808,19 @@ class WindowSurfacePairs(unittest.TestCase):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
 
+    def test_dark_window_secondary_text_on_the_window_its_groups_and_its_sidebar(self):
+        # ADR-0039 Q3 (the owner, 2026-10-29: #A1A1A6, warm since ADR-0040's warm neutrals): the dark window's secondary text
+        # holds A2 where it is drawn, on the window, a group and the sidebar, and reads as secondary: the primary text keeps at
+        # least twice its contrast there (it had 10.7:1 against the text's 13.4:1, so subtitles read like titles).
+        ap = "dark"
+        fg = self.tok.color("colors", ap, "windowTextSecondary")
+        text = self.tok.color("colors", ap, "text")
+        for name, what in (("windowBackground", "the window"), ("groupFill", "a group"), ("sidebarFill", "the sidebar")):
+            bg = self.tok.color("colors", ap, name)
+            self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, dark: %.2f:1" % (what, wcag(fg, bg)))
+            self.assertGreaterEqual(wcag(text, bg) / wcag(fg, bg), 2.0,
+                                    "text %.2f:1 against secondary %.2f:1 on %s, dark" % (wcag(text, bg), wcag(fg, bg), what))
+
     def test_permission_alert_symbol_on_the_window(self):
         # grassfield-portal's permission alert (apps/files/qml/AccessAlert.qml): the frontend's symbolic icon, for an application
         # without an icon of its own, in the text colour on the opaque window (a graphic, 3:1). The theme's own grey was 1.2:1 on
