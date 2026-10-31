@@ -578,6 +578,21 @@ Goal: no input a process reads from the system, a file or another process can cr
   cases pass); `tests/shell/session_end.sh` exit 0 (36 PASS); `tests/shell/crash_watch.sh`: 69 PASS, the four new mutants caught, the one pre-existing timing check
   fails here as on main; `python3 -I tests/ci/inventory.py` ok (576); `git diff --check` clean. Still NOT run here:
   `clang-tidy` (`just check-tidy` on the owner's machine).
+- Merged 2026-10-30 as c9058737 (the opus security re-review PASS: 49 edge inputs on the shim, 12 of 12 shim mutants
+  killed, 484 tests on the merged tree). The merge review's follow-ups, done in front of S1's pull request:
+  1. Minor: `tests/shell/crash_watch.sh`'s `mutate()` passed silently when a mutant's pattern was gone from the helper
+     (the Python assert failed, the mutant file was never written, no decision line matched, "caught"): the
+     ignore-populated-flag mutant had been stale since 1b359f40. A missing pattern now fails the test, the mutant
+     follows the code, and a self-check mutates a pattern that is not there.
+  2. Nit: the lock status oracle read the bytes with Python's json, which refuses number tokens jq reads (`nan`, `inf`,
+     `+1`, `01`, `.5`, `5.`). The oracle now judges the shape on jq's own reading (`jq -c .`), so every lexical
+     difference (surrogates, nesting, the byte order mark, those tokens) is decided as jq decides it, and the "either"
+     verdict goes; seven such inputs are corpus checks.
+  3. Nit: the `{1,16}` of the address grammar: `tests/shell/session_end.sh` closes a 16-digit address and never
+     dispatches a 17-digit one; the harness's contract carries the bound.
+  4. Nit: two timing-sensitive cases of `session_end.sh` failed at load 35: the retried-first-query case waits up to
+     15 s instead of 3 (the run still ends as soon as the window is gone), and the second-run case waits until the
+     holder really has the lock (at most 5 s) instead of sleeping 0.5 s.
 
 ### Delivery order and what each step waits for
 | Step | Waits for | Pull requests |
