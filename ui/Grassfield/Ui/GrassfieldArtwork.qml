@@ -24,6 +24,22 @@ Item {
     readonly property var palette: ArtworkLogic.palette(Tokens, root.artwork, root.variant)
     readonly property var art: ArtworkLogic.flat(root.palette)
 
+    // ---- the moving variant (ADR-0040 IQ-W3 A, step 9; the Grassfield artwork only) ----
+    // `moving`: clouds drift across the sky and the sun's light changes slowly. It advances only while `playing` (the caller's
+    // pause policy: the desktop's is a video's, WallpaperConfig.playbackState), by wallpaper.movingFrameMs steps of a Timer,
+    // never every frame; paused, it holds where it is. Nothing of it enters the strip under the menu bar (the clouds stay
+    // between 0.1 and 0.34 of the height and above the hills), so the bar's tone and gate A2 stay those of the still picture.
+    property bool moving: false
+    property bool playing: false
+    property real motionMs: 0
+    readonly property bool movingOn: root.moving && root.palette.artwork === "grassfield"
+    Timer {
+        interval: Tokens.wallpaperMovingFrameMs
+        repeat: true
+        running: root.movingOn && root.playing
+        onTriggered: root.motionMs += interval
+    }
+
     // The sky (Field Rows: its base colour).
     Rectangle {
         anchors.fill: parent
@@ -69,6 +85,7 @@ Item {
         readonly property real r: spec ? root.height * spec.r : 0
         anchors.fill: parent
         visible: spec !== null
+        opacity: root.movingOn ? ArtworkLogic.lightAt(root.motionMs, Tokens.wallpaperMovingLightMs, Tokens.wallpaperMovingLightDepth) : 1
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
@@ -99,6 +116,47 @@ Item {
                 radiusY: glow.r
                 startAngle: 0
                 sweepAngle: 360
+            }
+        }
+    }
+
+    // The moving variant's clouds (seeded: the same sky on every output), under the hills.
+    Repeater {
+        model: root.movingOn ? ArtworkLogic.clouds(5, 4) : []
+
+        Item {
+            id: cloud
+
+            required property var modelData
+
+            x: root.width * ArtworkLogic.cloudX(cloud.modelData, root.motionMs, Tokens.wallpaperMovingCloudMs)
+            y: root.height * cloud.modelData.y
+            width: root.width * cloud.modelData.w
+            height: root.height * cloud.modelData.h * 2
+            opacity: root.palette.cloudAlpha
+            // One translucent shape (the overlaps of its parts do not show), drawn as one texture.
+            layer.enabled: true
+
+            // A long rounded base and three rounded tops.
+            Rectangle {
+                y: cloud.height * 0.55
+                width: cloud.width
+                height: cloud.height * 0.45
+                radius: height / 2
+                color: root.palette.cloud
+            }
+            Repeater {
+                model: [[0.1, 0.5], [0.3, 0.85], [0.56, 0.62]]
+
+                Rectangle {
+                    required property var modelData
+                    x: cloud.width * modelData[0]
+                    y: cloud.height - height
+                    width: cloud.height * modelData[1]
+                    height: width
+                    radius: width / 2
+                    color: root.palette.cloud
+                }
             }
         }
     }

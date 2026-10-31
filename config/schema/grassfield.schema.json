@@ -848,10 +848,11 @@
             "artwork",
             "wallpaperClock",
             "slideshow",
-            "clock"
+            "clock",
+            "moving"
           ],
           "default": "artwork",
-          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, or a clock alone."
+          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, a clock alone, or the moving Grassfield artwork (ADR-0040 step 9)."
         },
         "folder": {
           "type": "string",
@@ -1013,6 +1014,11 @@
           ],
           "description": "Which variant of the artwork shows: the time of day (the Grassfield artwork only; the others read it as automatic), the appearance's (automatic), or always the light or the dark one.",
           "default": "timeOfDay"
+        },
+        "moving": {
+          "type": "boolean",
+          "description": "The Grassfield artwork moves (ADR-0040 IQ-W3 A, step 9): clouds drift and the light changes slowly; it pauses like a video wallpaper (locked, full screen, idle, on battery unless videoOnBattery, Reduce Motion, the Reduced profile). Off by default.",
+          "default": false
         },
         "outputs": {
           "type": "array",

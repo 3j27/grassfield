@@ -742,6 +742,19 @@ SettingsPage {
                     }
                 }
 
+                // The moving Grassfield artwork (ADR-0040 IQ-W3 A, step 9): off by default; it pauses like a video wallpaper.
+                SettingsRow {
+                    visible: root.source === "builtin" && root.artwork === "grassfield"
+                    title: qsTr("Moving clouds")
+                    subtitle: qsTr("Clouds drift and the light changes slowly. Pauses on battery power, when the screen is locked or covered, and with Reduce Motion.")
+
+                    Toggle {
+                        accessibleName: qsTr("Moving clouds")
+                        checked: root.store.value("wallpaper.moving") === true
+                        onToggled: c => root.store.set("wallpaper.moving", c)
+                    }
+                }
+
                 SettingsRow {
                     visible: (root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile")
                     title: qsTr("Colour")

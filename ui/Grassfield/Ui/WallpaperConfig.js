@@ -37,6 +37,7 @@ const WALLPAPER_DEFAULTS = {
     online: {provider: "commons"},
     artwork: "grassfield",
     artworkVariant: "timeOfDay",
+    moving: false,
     outputs: []
 };
 
@@ -262,6 +263,7 @@ function normalize(raw) {
         online: {provider: isPlainObject(r.online) && oneOf(ONLINE_PROVIDERS, r.online.provider) ? r.online.provider : WALLPAPER_DEFAULTS.online.provider},
         artwork: oneOf(ARTWORKS, r.artwork) ? r.artwork : WALLPAPER_DEFAULTS.artwork,
         artworkVariant: oneOf(ARTWORK_VARIANTS, r.artworkVariant) ? r.artworkVariant : WALLPAPER_DEFAULTS.artworkVariant,
+        moving: typeof r.moving === "boolean" ? r.moving : WALLPAPER_DEFAULTS.moving,
         outputs: normalizeOutputs(r.outputs)
     };
     return settle(out);
@@ -292,7 +294,8 @@ function resolve(cfg, display) {
         provider: base.online.provider,
         // The artwork and its variant are chosen for every display (Settings > Wallpaper's Grassfield section, ADR-0040 step 2).
         artwork: base.artwork,
-        artworkVariant: base.artworkVariant
+        artworkVariant: base.artworkVariant,
+        moving: base.moving
     };
     for (const entry of base.outputs) {
         if (!sameDisplay(entry.display, display))

@@ -9,6 +9,9 @@ Item {
 
     property alias artwork: inner.artwork
     property alias variant: inner.variant
+    // The moving variant (ADR-0040 step 9): drawn when `moving`, advancing while `playing`.
+    property alias moving: inner.moving
+    property alias playing: inner.playing
     // Artwork palette (the desktop reads the tone's colours for the menu bar and every colour for the glass backdrop).
     readonly property alias art: inner.art
     readonly property alias palette: inner.palette

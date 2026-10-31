@@ -43,6 +43,9 @@ function palette(T, artwork, variant) {
         out.stops = [[0, out.sky[0]], [0.55, out.sky[1]], [0.78, out.sky[2]]];
         out.glow = {x: out.sunAt[0], y: out.sunAt[1], r: out.sunAt[2], alphas: [[0, 1], [0.35, 0.55], [1, 0]]};
         out.colours = out.sky.concat([out.sun], out.hills);
+        // The moving variant's clouds (step 9).
+        out.cloud = T["artworkCloud" + S];
+        out.cloudAlpha = v.set === "light" ? T.wallpaperMovingCloudOpacityLight : T.wallpaperMovingCloudOpacityDark;
     } else if (v.artwork === "meadow") {
         out.sky = T["artworkMeadow" + S + "Sky"];
         out.blades = T["artworkMeadow" + S + "Blades"];
@@ -183,6 +186,32 @@ function ridgelinePaths(w, h) {
 }
 
 // How many stars a night sky of w x h has (one per 9000 square pixels, as the mockup, at most 400).
+// The moving variant's clouds (ADR-0040 IQ-W3 A, step 9), seeded: [{y, w, h, speed, offset}], every value a fraction of the
+// picture (y the cloud's top, kept below the menu bar's strip: 0.1 to 0.34 of the height), `speed` relative to
+// wallpaper.movingCloudMs, `offset` where the cloud starts along its path.
+function clouds(seed, count) {
+    const rnd = random(seed);
+    const out = [];
+    for (let i = 0; i < count; i++)
+        out.push({y: 0.1 + rnd() * 0.22, w: 0.16 + rnd() * 0.12, h: 0.045 + rnd() * 0.03, speed: 0.6 + rnd() * 0.8, offset: rnd()});
+    return out;
+}
+
+// Where a cloud is after `ms` of motion: the left edge of its box as a fraction of the width, from -w to 1 (it enters on the
+// left, leaves on the right, and comes back on the left).
+function cloudX(cloud, ms, crossMs) {
+    const span = 1 + cloud.w;
+    const t = (cloud.offset + (crossMs > 0 ? ms / crossMs : 0) * cloud.speed) % 1;
+    return -cloud.w + t * span;
+}
+
+// The glow's opacity after `ms` of motion: 1 at the start, down to 1 - depth at half the period, back to 1.
+function lightAt(ms, periodMs, depth) {
+    if (periodMs <= 0)
+        return 1;
+    return 1 - depth * (0.5 - 0.5 * Math.cos(2 * Math.PI * (ms % periodMs) / periodMs));
+}
+
 function starCount(w, h) {
     return Math.max(0, Math.min(400, Math.round(w * h / 9000)));
 }

@@ -498,6 +498,8 @@ Scope {
             // wallpaper never creates one, so the idle lock still fires while a video plays); it ignores inhibitors because it
             // asks whether the user is away, not whether the session may sleep.
             readonly property bool videoWanted: shownDesc.video !== undefined && shownDesc.video !== ""
+            // The moving Grassfield artwork (ADR-0040 step 9) follows the same pause policy as a video (and needs the idle input).
+            readonly property bool movingWanted: feed.cfg.moving === true && shownDesc.kind === "art" && (shownDesc.artwork || "grassfield") === "grassfield"
             readonly property bool fullscreen: win.modelData ? Compositor.fullscreenOn(win.modelData.name, Compositor.topologyRevision) : false
             readonly property var effective: feed.cfg
             readonly property bool idle: root.devIdle !== "" ? root.devIdle === "1" : idleMonitor.isIdle
@@ -506,7 +508,7 @@ Scope {
 
             IdleMonitor {
                 id: idleMonitor
-                enabled: win.videoWanted
+                enabled: win.videoWanted || win.movingWanted
                 timeout: Tokens.wallpaperVideoIdleSeconds
                 respectInhibitors: false
             }
@@ -517,6 +519,7 @@ Scope {
                 id: slotA
                 z: 1
                 opacity: 1
+                moving: feed.cfg.moving === true
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotA
                 playPolicy: win.videoPolicy
@@ -529,6 +532,7 @@ Scope {
             WallpaperSlot {
                 id: slotB
                 z: 1
+                moving: feed.cfg.moving === true
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotB
                 playPolicy: win.videoPolicy

@@ -90,6 +90,46 @@ TestCase {
         compare(JSON.stringify(Artwork.stars(7, 5)), JSON.stringify(Artwork.stars(7, 5)));
     }
 
+    // ADR-0040 step 9 (IQ-W3 A): the moving variant's clouds and light.
+    function test_theMovingVariant() {
+        const c = Artwork.clouds(5, 4);
+        compare(JSON.stringify(c), JSON.stringify(Artwork.clouds(5, 4)), "seeded");
+        compare(c.length, 4);
+        for (const k of c) {
+            // Below the menu bar's strip (gate A2 holds as for the still picture) and above the hills.
+            verify(k.y >= 0.1 && k.y + 2 * k.h <= 0.5, JSON.stringify(k));
+            verify(k.speed > 0 && k.offset >= 0 && k.offset < 1);
+            for (const ms of [0, 1000, 60000, 240000, 1e9]) {
+                const x = Artwork.cloudX(k, ms, Tokens.wallpaperMovingCloudMs);
+                verify(x >= -k.w && x <= 1, ms + ": " + x);
+            }
+        }
+        // A cloud moves to the right, and comes back.
+        verify(Artwork.cloudX(c[0], 1000, 240000) > Artwork.cloudX(c[0], 0, 240000) || Artwork.cloudX(c[0], 0, 240000) > 0.9);
+        compare(Artwork.lightAt(0, 90000, 0.25), 1);
+        fuzzyCompare(Artwork.lightAt(45000, 90000, 0.25), 0.75, 1e-9);
+        fuzzyCompare(Artwork.lightAt(90000, 90000, 0.25), 1, 1e-9);
+        // The clouds' colours are tokens, per set.
+        compare(Artwork.palette(Tokens, "grassfield", "day.light").cloud, Tokens.artworkCloudLight);
+        compare(Artwork.palette(Tokens, "grassfield", "night.dark").cloudAlpha, Tokens.wallpaperMovingCloudOpacityDark);
+    }
+
+    function test_itMovesOnlyWhilePlaying() {
+        const item = createTemporaryObject(artComponent, testCase, {artwork: "grassfield", variant: "day.light", moving: true, playing: false});
+        wait(Tokens.wallpaperMovingFrameMs * 3);
+        compare(item.motionMs, 0, "paused: still");
+        item.playing = true;
+        tryVerify(() => item.motionMs >= 2 * Tokens.wallpaperMovingFrameMs, 2000);
+        item.playing = false;
+        const held = item.motionMs;
+        wait(Tokens.wallpaperMovingFrameMs * 3);
+        compare(item.motionMs, held, "paused again: it holds where it is");
+        // Another artwork: nothing moves.
+        const other = createTemporaryObject(artComponent, testCase, {artwork: "meadow", variant: "light", moving: true, playing: true});
+        wait(Tokens.wallpaperMovingFrameMs * 3);
+        compare(other.motionMs, 0);
+    }
+
     Component {
         id: artComponent
         GrassfieldArtwork {

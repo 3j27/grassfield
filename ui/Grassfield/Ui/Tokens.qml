@@ -2848,6 +2848,18 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
+    // ADR-0040 IQ-W3 A (step 9): the moving Grassfield artwork advances on a timer of this period while it plays, never every frame (a cloud crossing a 1920 px sky in wallpaper.movingCloudMs moves under 1 px per step); P1 and P3 are measured with it on before the merge (the integrator's condition)
+    readonly property int wallpaperMovingFrameMs: 100
+    // ADR-0040 IQ-W3 A (step 9): the time a cloud of speed 1 takes to cross the sky of the moving Grassfield artwork (slow, as clouds; estimate)
+    readonly property int wallpaperMovingCloudMs: 240000
+    // ADR-0040 IQ-W3 A (step 9): the period over which the sun's glow of the moving Grassfield artwork brightens and softens ("the light changes slowly"; estimate)
+    readonly property int wallpaperMovingLightMs: 90000
+    // ADR-0040 IQ-W3 A (step 9): how much of the glow's opacity the slow light change takes away at its softest (estimate)
+    readonly property real wallpaperMovingLightDepth: 0.25
+    // ADR-0040 IQ-W3 A (step 9): the clouds' opacity over a sky of the light set (artwork.cloudLight)
+    readonly property real wallpaperMovingCloudOpacityLight: 0.5
+    // ADR-0040 IQ-W3 A (step 9): the clouds' opacity over a sky of the dark set (artwork.cloudDark): faint, so the night stays dark
+    readonly property real wallpaperMovingCloudOpacityDark: 0.14
     // ADR-0040 section 6 (ID-3): the wallpaper window maps with its first frame (the output's last picture from the cache, else what the feed decides) at most this long after the shell starts or the output appears; then the artwork
     readonly property int wallpaperFirstShowTimeoutMs: 1500
     // ADR-0040 section 6 (IQ-W1 C): the slow crossfade between two phases of the Grassfield artwork through the two-slot model; Reduce Motion cuts
@@ -2869,6 +2881,10 @@ QtObject {
     // ADR-0040 section 2: Night's local time where the zone gives no point or the sun neither rises nor sets that day
     readonly property string wallpaperPhaseFixedNight: "20:30"
 
+    // ADR-0040 IQ-W3 A (step 9): the clouds of the moving Grassfield artwork in the light set, at wallpaper.movingCloudOpacityLight
+    readonly property string artworkCloudLight: "#FFFFFF"
+    // ADR-0040 IQ-W3 A (step 9): the clouds of the moving Grassfield artwork in the dark set (a cool grey, the moonlit side), at wallpaper.movingCloudOpacityDark
+    readonly property string artworkCloudDark: "#C8D3DC"
     // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sky gradient at 0, 0.55 and 0.78 of the height
     readonly property var artworkGrassfieldDawnLightSky: ["#3B4F7A", "#B49AB4", "#F6C9A0"]
     // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sun (the moon at Night) and its glow

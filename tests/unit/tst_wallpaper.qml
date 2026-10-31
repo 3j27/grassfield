@@ -957,6 +957,10 @@ TestCase {
             compare(r.artworkVariant, "dark", d.name);
         }
         compare(WallpaperConfig.resolve({}, panel).artwork, "grassfield");
+        // ADR-0040 step 9: the moving artwork, off by default, for every display.
+        compare(WallpaperConfig.resolve({}, panel).moving, false);
+        compare(WallpaperConfig.resolve({moving: true}, other).moving, true);
+        compare(WallpaperConfig.normalize({moving: "yes"}).moving, false);
         compare(WallpaperConfig.resolve({}, panel).artworkVariant, "timeOfDay");
     }
 

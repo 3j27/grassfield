@@ -222,6 +222,23 @@ and IQ-B3 here changes the palette only, not which controls read it.
   in Low Power Mode or on battery, under a full-screen app, while locked (and when idle, with Reduce Motion and in the
   Reduced profile, as the video policy already does); P1 and P3 are measured with it on before its pull request asks
   for a merge, and a cost over budget blocks it.
+- **Step 9 as built** (2026-10-31, in the one pull request; nothing in `shell/security`): `wallpaper.moving` (schema,
+  defaults, contract, `WallpaperConfig`; off by default) and the screen saver kind `moving` ("Clouds"). The Grassfield
+  artwork (`GrassfieldArtwork.qml`) draws four seeded clouds (`Artwork.clouds`: between 0.1 and 0.5 of the height, so
+  nothing enters the strip under the menu bar and the bar's tone and gate A2 stay those of the still picture; under the
+  hills) that drift across the sky (`wallpaper.movingCloudMs` 240 s for a cloud of speed 1) and a glow that softens by
+  `wallpaper.movingLightDepth` over `wallpaper.movingLightMs` (90 s); colours `artwork.cloudLight` and `cloudDark` at
+  `wallpaper.movingCloudOpacityLight` 0.5 and `Dark` 0.14. It advances by `wallpaper.movingFrameMs` (100 ms) steps of a
+  Timer, never every frame, only while `playing`; paused, it holds where it is. The desktop gives each slot the video's
+  pause policy (`WallpaperConfig.playbackState`: locked, full screen, Reduce Motion, the Reduced profile, on battery unless
+  "Play on battery power", idle), only while the slot is on screen; the idle monitor runs for it too. The screen saver's
+  kind plays while the saver is shown, still with Reduce Motion. Settings > Wallpaper shows "Moving clouds" under the
+  Grassfield artwork; Settings > Screen Saver adds "Clouds". Tests: `tst_artwork.qml` (the clouds' bounds and seeding,
+  the light, it moves only while playing), `tst_wallpaper.qml`, `tst_settingswallpaper.qml`, `tst_savermodel.qml`,
+  `tst_settingsscreensaver.qml`; an offscreen render of the four phases with clouds. **The integrator's condition is not
+  met in this container:** P1 and P3 with the moving variant on are NOT MEASURED (no nested session, no reference
+  machine), so the merge waits for that measurement, and a cost over budget blocks the variant (it stays off by default
+  meanwhile).
 - **First frame (ID-3).** The wallpaper window shows the **last applied wallpaper's prepared still** from the cache as
   its first frame, with the bar tone from its stored statistics, and maps only then (bounded by
   `wallpaper.firstShowTimeoutMs`, after which the artwork). When the feed's result is the same file, nothing fades.

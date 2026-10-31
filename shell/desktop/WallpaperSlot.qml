@@ -14,6 +14,9 @@ Item {
     // The artwork and its variant (ADR-0040 step 2; GrassfieldArtwork.qml): set with the kind "art".
     property string artwork: "grassfield"
     property string variant: "evening.dark"
+    // The moving variant of the Grassfield artwork (wallpaper.moving, ADR-0040 step 9): it advances only while the slot is on
+    // screen and the pause policy (`playPolicy`, the video's) says "play".
+    property bool moving: false
     property color color: "#000000"
     // file: URL of the prepared picture ("" releases it).
     property string url: ""
@@ -50,6 +53,8 @@ Item {
         visible: root.kind === "art"
         artwork: root.artwork
         variant: root.variant
+        moving: root.moving
+        playing: root.kind === "art" && root.onScreen && root.playPolicy === "play"
     }
 
     Rectangle {

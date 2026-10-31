@@ -281,6 +281,7 @@ Scope {
         online: rawValue("wallpaper.online"),
         artwork: rawValue("wallpaper.artwork"),
         artworkVariant: rawValue("wallpaper.artworkVariant"),
+        moving: rawValue("wallpaper.moving"),
         outputs: rawValue("wallpaper.outputs")
     })
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:

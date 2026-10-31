@@ -156,6 +156,7 @@
     },
     "artwork": "grassfield",
     "artworkVariant": "timeOfDay",
+    "moving": false,
     "outputs": []
   }
 }

@@ -68,6 +68,7 @@ TestCase {
                     "wallpaper.online.provider": "commons",
                     "wallpaper.artwork": "grassfield",
                     "wallpaper.artworkVariant": "timeOfDay",
+                    "wallpaper.moving": false,
                     "wallpaper.outputs": []
                 })
             property var writes: []
@@ -219,6 +220,24 @@ TestCase {
         // A picture: no variant pop-up.
         t.page.usePicture(testCase.pictures[0]);
         verify(!pop.visible);
+    }
+
+    // ADR-0040 step 9: the moving clouds, for the Grassfield artwork only, off by default.
+    function test_theMovingClouds() {
+        const t = make({"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield"});
+        const sw = find(t.page.contentItem, i => i.accessibleName === "Moving clouds" && i.toggled !== undefined);
+        verify(sw && sw.visible);
+        verify(!sw.checked);
+        sw.toggled(true);
+        compare(last(t.store), {"wallpaper.moving": true});
+        verify(sw.checked);
+        // Another artwork, or a picture: no switch.
+        t.store.set("wallpaper.artwork", "meadow");
+        verify(!sw.visible);
+        t.store.set("wallpaper.artwork", "grassfield");
+        verify(sw.visible);
+        t.page.usePicture(testCase.pictures[0]);
+        verify(!sw.visible);
     }
 
     function test_showAllAndThumbnails() {

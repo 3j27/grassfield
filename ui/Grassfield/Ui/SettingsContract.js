@@ -112,6 +112,7 @@ const DEFAULTS = {
     "wallpaper.online.provider": "commons",
     "wallpaper.artwork": "grassfield",
     "wallpaper.artworkVariant": "timeOfDay",
+    "wallpaper.moving": false,
     "wallpaper.outputs": []
 };
 
@@ -225,6 +226,7 @@ const ALL_DEFAULTS = {
     "wallpaper.online.provider": "commons",
     "wallpaper.artwork": "grassfield",
     "wallpaper.artworkVariant": "timeOfDay",
+    "wallpaper.moving": false,
     "wallpaper.outputs": []
 };
 
@@ -318,7 +320,7 @@ const RULES = {
     "search.clipboard.clearedAt": {"type": "integer", "min": 0, "max": 9999999999999},
     "search.clipboard.pinnedClearedAt": {"type": "integer", "min": 0, "max": 9999999999999},
     "screensaver.idleMinutes": {"type": "integer", "min": 0, "max": 240},
-    "screensaver.kind": {"type": "enum", "values": ["artwork", "wallpaperClock", "slideshow", "clock"]},
+    "screensaver.kind": {"type": "enum", "values": ["artwork", "wallpaperClock", "slideshow", "clock", "moving"]},
     "screensaver.folder": {"type": "wallpaperPath"},
     "store.sources.aur": {"type": "boolean"},
     "store.sources.flathub": {"type": "boolean"},
@@ -334,6 +336,7 @@ const RULES = {
     "wallpaper.online.provider": {"type": "enum", "values": ["commons", "apod"]},
     "wallpaper.artwork": {"type": "enum", "values": ["grassfield", "meadow", "rows", "ridgeline"]},
     "wallpaper.artworkVariant": {"type": "enum", "values": ["timeOfDay", "automatic", "light", "dark"]},
+    "wallpaper.moving": {"type": "boolean"},
     "wallpaper.outputs": {"type": "wallpaperOutputs"}
 };
 

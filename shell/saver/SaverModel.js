@@ -3,7 +3,7 @@
 // The screen saver's pure logic (ADR-0032): when it is armed, which saver, the clock's text and where the clock alone stands.
 // Saver.qml and SaverView.qml only run what this decides; tests/unit/tst_savermodel.qml.
 
-var KINDS = ["artwork", "wallpaperClock", "slideshow", "clock"];
+var KINDS = ["artwork", "wallpaperClock", "slideshow", "clock", "moving"];
 // The longest delay the settings allow (screensaver.idleMinutes), in seconds.
 var MAX_SECONDS = 240 * 60;
 
