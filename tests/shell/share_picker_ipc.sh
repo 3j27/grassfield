@@ -11,6 +11,7 @@
 #   5 another popup in the panel's place: cancelled (nothing reaches xdph), the stand-in ends;
 #   6 the session locks while the panel is open: cancelled; a request while locked: "locked", nothing shows;
 #   7 requests not of the stand-in's form (an id that is not 128-bit hex, a socket elsewhere): "refused", nothing shows.
+#   8 a request whose socket is not there (a stand-in that gave up): accepted, the connection fails, no panel ever shows.
 # The probe runs as a dev session (status and choose are dev hooks) and the stand-in reaches it through GRASSFIELD_SHELL_DIR
 # (honoured in a dev session only). Nothing here can reach a real Hyprland or shell: HYPRLAND_INSTANCE_SIGNATURE and
 # XDG_RUNTIME_DIR point at the test's own directory. Prints PASS/FAIL, exits non-zero on failure.
@@ -170,6 +171,13 @@ check test "$(ipc picker request "$(printf '%032x' 5)" "$tmp/elsewhere/$(printf 
 check test "$(ipc picker request "$(printf '%032x' 5)" "$runtime/grassfield/picker/../$(printf '%032x' 6).sock")" == refused
 check test "$(ipc picker request "$(printf '%032X' 171)" "$runtime/grassfield/picker/$(printf '%032x' 6).sock")" == refused
 check test "$(state '%(open)s')" == False
+
+# 8.
+desc="8 a request whose socket is not there (the stand-in gave up): accepted, the connection fails, the panel never shows"
+check test "$(ipc picker request "$(printf '%032x' 7)" "$runtime/grassfield/picker/$(printf '%032x' 8).sock")" == accepted
+check test "$(state '%(popup)s')" == ""
+check idle_within
+check test "$(state '%(popup)s')" == ""
 
 if ((fail)); then tail -20 "$tmp/shell.log"; fi
 exit $fail
