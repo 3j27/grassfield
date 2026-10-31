@@ -68,9 +68,11 @@ FocusScope {
                     }
                 }
 
-                // The shared ring outside the button, after a key only (ADR-0039 step 7).
+                // The shared ring outside the button, after a key only (ADR-0039 step 7); the focus it has on open is the
+                // pointer's when a click opened the menu (step 8).
                 KeyFocus {
                     id: muteFocus
+                    pointer: Popups.openedByPointer
                 }
 
                 FocusRing {

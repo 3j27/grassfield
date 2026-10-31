@@ -218,6 +218,19 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "a");
+        compare(activatedSpy.signalArguments[0][1], false, "chosen by the keyboard");
+    }
+
+    // How a row was chosen reaches the host (ADR-0039 step 8): a popup opened for it shows its ring after a key only.
+    function test_aClickIsThePointers() {
+        const m = makeMenu();
+        wait(50);
+        const p = centreOf(m, "Gamma");
+        const local = m.mapFromItem(null, p.x, p.y);
+        mouseClick(m, local.x, local.y);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "c");
+        compare(activatedSpy.signalArguments[0][1], true, "chosen by the pointer");
     }
 
     function test_escapeRequestsClose() {
@@ -250,6 +263,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "d2");
+        compare(activatedSpy.signalArguments[0][1], false, "the submenu passes the keyboard on");
     }
 
     // Swatch rows (Files colour tags): the keyboard reaches the row, Left/Right pick a swatch, Return activates the
@@ -273,6 +287,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "tag:2");
+        compare(activatedSpy.signalArguments[0][1], false);
         // Down skips the disabled row.
         keyClick(Qt.Key_Down);
         compare(m.currentIndex, 3);
@@ -295,6 +310,7 @@ TestCase {
         mouseClick(m, p.x, p.y);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "tag:1");
+        compare(activatedSpy.signalArguments[0][1], true);
     }
 
     // ---- pointer relay: press, drag, release with the pointer held by another surface (the menu bar) ----
@@ -346,6 +362,7 @@ TestCase {
         verify(m.releasePointer(p.x, p.y));
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "c");
+        compare(activatedSpy.signalArguments[0][1], true, "a release over the row is the pointer's");
         compare(closeSpy.count, 0);
     }
 
@@ -384,6 +401,7 @@ TestCase {
         verify(m.releasePointer(two.x, two.y));
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "d2");
+        compare(activatedSpy.signalArguments[0][1], true, "the submenu passes the pointer on");
     }
 
     function test_relayReleaseOnASubmenuRowKeepsTheMenuOpen() {

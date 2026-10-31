@@ -5,7 +5,8 @@ import QtQuick
 // focusable item and show its FocusRing with `visible: keyFocus.active`: the ring is for keyboard focus only (ADR-0039 step 7,
 // G7). A press on the item (any button, touch) marks its focus as the pointer's until the item loses it; the press itself is
 // only watched (a passive PointHandler), so the item's own MouseArea or TapHandler keeps every click. A host that moves the focus
-// to another item after a pointer action (a popover that opens on a click) sets that item's `pointer` first.
+// to another item after a pointer action (a popover that opens on a click) sets that item's `pointer` first; a surface that gives
+// an item the focus when it opens binds `pointer` to how it was opened (the shell's Popups.openedByPointer, step 8).
 Item {
     id: root
 

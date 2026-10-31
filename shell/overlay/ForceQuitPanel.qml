@@ -82,6 +82,8 @@ Dialog {
             KeyFocus {
                 id: listFocus
                 target: list
+                // The list has the focus on open: the pointer's when a click opened the panel (step 8).
+                pointer: Popups.openedByPointer
             }
 
             FocusRing {

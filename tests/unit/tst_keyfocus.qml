@@ -5,7 +5,9 @@ import "../../apps/settings/qml" as SettingsQml
 
 // KeyFocus (ADR-0039 step 7, G7): an item that is not a Control shows its focus ring after a key gave it the focus, never after a
 // click that took it; the click itself still reaches the item's own MouseArea. Then the same on real hosts: LinkText and
-// Settings' colour well (a click opens its popover, whose square takes the focus by code: no ring either).
+// Settings' colour well (a click opens its popover, whose square takes the focus by code: no ring either). Last, a surface that
+// gives an item the focus when it opens (the shell's volume menu, Force Quit, a stack: ADR-0039 step 8) binds `pointer` to how
+// it was opened (Popups.openedByPointer): no ring when a click opened it, the ring when a key did.
 TestCase {
     id: tc
 
@@ -65,6 +67,43 @@ TestCase {
             id: well
             accessibleName: "Colour"
             color: "#e5484d"
+        }
+    }
+
+    // A surface whose item has the focus when it opens, as the volume menu's mute button.
+    Component {
+        id: surfaceComponent
+
+        FocusScope {
+            id: surface
+
+            // How it was opened (the shell's Popups.openedByPointer).
+            property bool openedByPointer: false
+
+            y: 100
+            width: 60
+            height: 20
+
+            property alias ring: openRing
+            property alias button: openButton
+
+            Item {
+                id: openButton
+                width: 60
+                height: 20
+                focus: true
+                activeFocusOnTab: true
+
+                KeyFocus {
+                    id: openFocus
+                    pointer: surface.openedByPointer
+                }
+
+                FocusRing {
+                    id: openRing
+                    visible: openFocus.active
+                }
+            }
         }
     }
 
@@ -138,5 +177,23 @@ TestCase {
         verify(!well.open);
         verify(well.activeFocus, "Escape gives the well the focus back");
         verify(shownRing(well) !== null, "a key closed it: the well's ring");
+    }
+
+    function test_aSurfaceOpenedByAClickShowsNoRingOnOpen() {
+        const surface = createTemporaryObject(surfaceComponent, tc, {openedByPointer: true});
+        surface.forceActiveFocus();
+        verify(surface.button.activeFocus, "the item has the focus on open");
+        verify(!surface.ring.visible, "a click opened the surface: no ring");
+        // Away and back by the keyboard: the ring shows.
+        before.forceActiveFocus(Qt.TabFocusReason);
+        surface.button.forceActiveFocus(Qt.TabFocusReason);
+        verify(surface.ring.visible, "the focus a key gave shows the ring");
+    }
+
+    function test_aSurfaceOpenedByAKeyShowsItsRingOnOpen() {
+        const surface = createTemporaryObject(surfaceComponent, tc, {openedByPointer: false});
+        surface.forceActiveFocus();
+        verify(surface.button.activeFocus);
+        verify(surface.ring.visible, "a key opened the surface: the ring");
     }
 }

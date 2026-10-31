@@ -172,9 +172,11 @@ FocusScope {
     property real progress: 0
     readonly property real spread: Appearance.reduceMotion ? 1 : progress
 
-    // The popup's keyboard focus, for the current cell's ring (a press on the popup hands it to the pointer).
+    // The popup's keyboard focus, for the current cell's ring (a press on the popup hands it to the pointer, and so does a
+    // click that opened it: Popups.openedByPointer, step 8).
     KeyFocus {
         id: gridFocus
+        pointer: Popups.openedByPointer
     }
 
     NumberAnimation {
