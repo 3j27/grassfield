@@ -58,6 +58,7 @@
     "idleMinutes": 5,
     "displayOffBattery": 2,
     "displayOffPower": 10,
+    "requirePasswordAfterDisplayOff": "immediately",
     "showUser": true,
     "showMessage": false,
     "message": ""

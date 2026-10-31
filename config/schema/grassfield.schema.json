@@ -393,6 +393,20 @@
           "default": 10,
           "description": "Minutes without input on the power adapter before the displays turn off while the session is unlocked (Turn display off on power adapter when inactive); 0 = never."
         },
+        "requirePasswordAfterDisplayOff": {
+          "type": "string",
+          "enum": [
+            "immediately",
+            "5s",
+            "1m",
+            "5m",
+            "15m",
+            "1h",
+            "never"
+          ],
+          "default": "immediately",
+          "description": "When a display that turned off for inactivity locks the session (ADR-0040 IQ-T4 A, macOS's Require password after the display is turned off): at once (the lock is drawn just before the displays go off), after this delay with no input, or never. lock.idleMinutes stays the ceiling either way."
+        },
         "showUser": {
           "type": "boolean",
           "default": true,

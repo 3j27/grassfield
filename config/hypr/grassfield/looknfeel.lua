@@ -82,6 +82,11 @@ hl.config({
     animate_manual_resizes = false,
     animate_mouse_windowdragging = false,
     allow_session_lock_restore = true,
+    -- ADR-0040 IQ-T5 A (the owner's « Le retarder »): the red "lock screen died" screen waits past a normal shell restart
+    -- (the shell is back with its lock in about 1 to 2 s); the session stays locked by the compositor meanwhile and the screen
+    -- is black; a shell that does not come back still shows the red screen after the delay. VERIFY on 0.56.2 in the nested
+    -- pass: only black is drawn during the delay (tests/security/reload_locked.sh).
+    lockdead_screen_delay = 5000,
     session_lock_xray = false,
     -- The shell switches the displays off on an idle lock screen (D-4, shell/security/idle/Idle.qml); the compositor
     -- itself wakes them on any key or pointer motion, so a shell that is restarting can never leave the screen dark

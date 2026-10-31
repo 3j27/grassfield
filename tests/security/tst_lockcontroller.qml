@@ -120,6 +120,24 @@ TestCase {
         compare(unlockSpy.count, 1);
     }
 
+    // Opus review of f66cf08e (MINOR 1): Lock.lock() abandons a check in flight (controller.abort): a success that arrives
+    // after the lock request unlocks nothing, and no failure is counted or shaken.
+    function test_aLockRequestAbandonsACheckInFlight() {
+        ctl.releaseMs = 80;
+        ctl.submit("pw");
+        prompt();
+        compare(ctl.lockState, "authenticating");
+        ctl.abort();
+        compare(ctl.lockState, "locked");
+        compare(pam.aborts, 1);
+        compare(failedSpy.count, 0);
+        compare(ctl.failedAttempts, 0);
+        ctl.pamCompleted("success");
+        compare(ctl.lockState, "locked", "a late success is ignored");
+        wait(200);
+        compare(unlockSpy.count, 0);
+    }
+
     function test_aLostLockDuringTheFadeReacquires() {
         ctl.releaseMs = 80;
         ctl.submit("pw");

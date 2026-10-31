@@ -682,6 +682,21 @@ nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is
 VERIFIED until run).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
+- **The order of idle, the screen saver and display-off (ADR-0040 step 5; ID-8, IQ-T4 A, IQ-T5 A).** The idle lock is
+  requested at once, as before; the dim stays until that lock holds (`Idle.dimUntilLock`, at most
+  `IdleModel.DIM_UNTIL_LOCK_MAX_MS`), and the lock's content starts at the dim's level (`Lock.fromDim`: a shadow layer at
+  `idle.dimOpacity` over the wallpaper gives way to the scrim and the text as they fade in); a request that fails lifts the
+  dim at once and is logged. A screen saver on screen when a lock starts stays until the lock holds
+  (`Saver.lockStarting && wasShown`, at most `SaverModel.UNTIL_LOCK_MAX_MS`), then it is under the lock surfaces. A display
+  that turns off for inactivity locks the session (`lock.requirePasswordAfterDisplayOff`, `IdleModel.requireAfterDisplayOffMs`,
+  anything unknown is "immediately"): at once, the displays staying on until the lock holds (`IdleModel.displaysOff`, so the
+  lock is drawn just before they go off), or after the delay without input, or never; `lock.idleMinutes` stays the
+  ceiling. A lock request of any reason also abandons a password check in flight (`controller.abort()`: PAM aborted, back to
+  `locked`, no failure counted; opus review of f66cf08e, MINOR 1), so a check submitted just before the lid closes cannot
+  unlock after the sleep request. IQ-T5 A: `misc.lockdead_screen_delay = 5000` (`looknfeel.lua`): while a restarted shell
+  takes its lock back (about 1 to 2 s) the compositor keeps the session locked and draws black; the red "lock screen died"
+  screen comes only after 5 s. NOT VERIFIED (nested): the order on screen, a lock at display-off on a real display, only
+  black during the delay (`reload_locked.sh`).
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
   `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -p /usr/share/grassfield/shell call lock lid` on every close
   (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
@@ -847,7 +862,7 @@ after the release while input reached windows; `lock lock` answered `already-loc
 the sleep delay was released on the stale `secure`.
 
 Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
-1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`, `WlSessionLock.secure`), it asks
+1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`/`releasing`, `WlSessionLock.secure`), it asks
    Hyprland for the real session lock state (`ownershipProbe`: one `Hyprland.refreshMonitors()` request through
    Quickshell.Hyprland, no `hyprctl` process, never while unlocked or locking) once per second, and every 100 ms while
    a takeover is suspected (`LockMachine.takeoverSuspected`, R12 review #3): no lock surface of this shell has the
@@ -1062,7 +1077,7 @@ same directory and the modules move without moving a file), one step at a time u
 
 IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
 (when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
-hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating`;
+hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating|releasing`;
 `lock devReload` → `reloading` (soft reload), `lock devPauseOwnershipCheck` → `paused` (periodic ownership check off
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
 as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,

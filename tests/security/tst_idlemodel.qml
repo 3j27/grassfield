@@ -148,4 +148,19 @@ TestCase {
         compare(IdleModel.prepareForSleep("/org/freedesktop/login1: org.freedesktop.login1.Manager.SessionNew ('3', '/x')"), null);
         compare(IdleModel.prepareForSleep("Monitoring signals on object /org/freedesktop/login1"), null);
     }
+
+    // ADR-0040 IQ-T4 A: when a display that turned off for inactivity locks the session.
+    function test_requireAfterDisplayOffMs() {
+        compare(IdleModel.requireAfterDisplayOffMs("immediately"), 0);
+        compare(IdleModel.requireAfterDisplayOffMs("5s"), 5000);
+        compare(IdleModel.requireAfterDisplayOffMs("1m"), 60000);
+        compare(IdleModel.requireAfterDisplayOffMs("5m"), 300000);
+        compare(IdleModel.requireAfterDisplayOffMs("15m"), 900000);
+        compare(IdleModel.requireAfterDisplayOffMs("1h"), 3600000);
+        compare(IdleModel.requireAfterDisplayOffMs("never"), -1);
+        // Anything unknown: at once (the stricter choice).
+        for (const v of ["", "2m", "Never", undefined, null, 5, "constructor", "toString"])
+            compare(IdleModel.requireAfterDisplayOffMs(v), 0, String(v));
+        verify(IdleModel.DIM_UNTIL_LOCK_MAX_MS > 0 && IdleModel.DIM_UNTIL_LOCK_MAX_MS <= 10000);
+    }
 }

@@ -84,6 +84,10 @@ Item {
     // the field takes input from the first frame whatever this opacity is (opacity stops no input), and nothing waits for
     // the animation (the release is the controller's timer).
     property bool shown: false
+    // ADR-0040 ID-8 (step 5): when the lock follows the idle dim, its content starts at the dim's level: a shadow layer at the
+    // dim's opacity over the wallpaper gives way to the scrim and the text as they fade in. Taken at creation.
+    property real startDim: 0
+    property real frozenDim: 0
     property real contentOpacity: root.shown && !root.releasing ? 1 : 0
     Behavior on contentOpacity {
         NumberAnimation {
@@ -100,12 +104,13 @@ Item {
     onResumesChanged: clock.refresh()
 
     Component.onCompleted: {
-        // Focus first: no display statement ever comes before it.
+        // Focus first, then the content's fade-in: no display statement ever comes before them (opus review of f66cf08e).
         focusField();
+        root.shown = true;
+        root.frozenDim = root.startDim;
         root.frozenName = root.userName;
         root.frozenAvatar = root.avatarSource;
         root.adopt(root.offeredBackdrop);
-        root.shown = true;
     }
 
     // Nothing decided in time (a still that is still being checked, an output that showed no wallpaper yet): the artwork.
@@ -172,6 +177,14 @@ Item {
         asynchronous: true
         cache: false
         smooth: false
+    }
+
+    // The idle dim carried over (ID-8): from the dim's level to nothing as the content fades in.
+    Rectangle {
+        anchors.fill: parent
+        visible: root.frozenDim > 0
+        color: root.colors.shadow
+        opacity: root.frozenDim * (1 - root.contentOpacity)
     }
 
     // The banded scrim (IQ-W4 A): lock.dimOpacity from the top to the bottom of the date and clock and from the top of the

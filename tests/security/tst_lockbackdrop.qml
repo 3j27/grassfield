@@ -126,6 +126,7 @@ TestCase {
         verify(/releaseMs: Appearance\.duration\(Tokens\.lockFadeOutMs\)/.test(lock));
         verify(/inputEnabled: controller\.pamAvailable && !controller\.releasing/.test(lock));
         verify(/function lock\(reason: string\): string \{\s*(\/\/[^\n]*\n\s*)*if \(controller\.interruptRelease\(\)\)/.test(lock), "a lock request interrupts a release first");
+        verify(/if \(controller\.authenticating\) \{[^}]*controller\.abort\(\);\s*\}/.test(lock), "and abandons a check in flight");
         verify(/readonly property bool holding: Machine\.isHolding\(controller\.lockState\) && sessionLock\.secure/.test(lock));
         // The lock is released only from the controller's unlockRequested (after the fade), as before.
         compare((lock.match(/root\.release\(\)/g) || []).length, 1);
@@ -140,6 +141,36 @@ TestCase {
         verify(/duration: Appearance\.duration\(root\.releasing \? Tokens\.lockFadeOutMs : Tokens\.lockFadeInMs\)/.test(v));
         // The view knows nothing of the release: no signal, no call back into the lock.
         verify(!/signal\s+released|unlockRequested|controller\./.test(v));
+    }
+
+    // ADR-0040 step 5 (ID-8, IQ-T4 A, IQ-T5 A): the order of idle, the saver and display-off.
+    function test_theIdleOrder() {
+        const idle = source("shell/security/idle/Idle.qml");
+        // The idle lock is requested at once; the dim stays until it holds (bounded); a failed request lifts it at once.
+        const lockTimer = block(idle, "Timer {\n        id: lockTimer");
+        verify(/Lock\.fromDim = true;\s*const result = Lock\.lock\("idle"\);/.test(lockTimer));
+        verify(/\} else \{\s*Lock\.fromDim = false;\s*root\.dimmed = false;/.test(lockTimer));
+        verify(/interval: IdleModel\.DIM_UNTIL_LOCK_MAX_MS\s*onTriggered: root\.endDimUntilLock\(\)/.test(idle));
+        verify(/if \(Lock\.holding\) \{\s*root\.endDimUntilLock\(\);\s*root\.dimmed = false;/.test(idle));
+        // A display that turns off for inactivity locks: at once, after the delay, or never.
+        verify(/readonly property int requireAfterMs: IdleModel\.requireAfterDisplayOffMs\(Settings\.lockRequirePasswordAfterDisplayOff\)/.test(idle));
+        verify(/if \(root\.offForInactivity && !Lock\.locked\) \{\s*if \(root\.requireAfterMs === 0\)\s*root\.displayOffLock\(\);\s*else if \(root\.requireAfterMs > 0\)\s*displayOffLockTimer\.restart\(\);/.test(idle));
+        verify(/const result = Lock\.lock\("display-off"\);/.test(idle));
+        // The displays stay on until a lock holds (unchanged rule): the lock is drawn before they go off.
+        verify(/return inactiveOff === true && \(locked !== true \|\| holding === true\);/.test(source("shell/security/idle/IdleModel.js")));
+        // The saver stays until the lock holds, bounded.
+        const saver = source("shell/saver/Saver.qml");
+        verify(/readonly property bool lockStarting: Lock\.locked && !Lock\.holding/.test(saver));
+        verify(/readonly property bool shown: \(root\.lockStarting && root\.wasShown\) \|\| \(!Lock\.locked && /.test(saver));
+        verify(/interval: SaverModel\.UNTIL_LOCK_MAX_MS\s*onTriggered: root\.wasShown = false/.test(saver));
+        // The lock's content starts at the dim's level.
+        const lock = source("shell/security/lock/Lock.qml");
+        verify(/startDim: root\.fromDim \? Tokens\.idleDimOpacity : 0/.test(lock));
+        verify(/opacity: root\.frozenDim \* \(1 - root\.contentOpacity\)/.test(source("shell/security/lock/LockView.qml")));
+        // IQ-T5 A: the red "lock screen died" screen waits past a normal restart (1 to 2 s), not for ever.
+        const m = /^\s*lockdead_screen_delay = (\d+),/m.exec(source("config/hypr/grassfield/looknfeel.lua"));
+        verify(m !== null);
+        verify(Number(m[1]) >= 3000 && Number(m[1]) <= 10000, m[1]);
     }
 
     function test_engagingTheLockReadsNoneOfIt() {

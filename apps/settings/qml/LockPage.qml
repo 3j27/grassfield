@@ -54,11 +54,24 @@ SettingsPage {
         const delays = [root.store.value("lock.displayOffPower")].concat(root.hasBattery ? [root.store.value("lock.displayOffBattery")] : []);
         return delays.some(m => m > 0 && (root.idleMinutes === 0 || m < root.idleMinutes));
     }
-    readonly property string lockNote: root.idleMinutes === 0
+    // ADR-0040 IQ-T4 A: a display that turns off for inactivity locks the session, at once or after a delay, unless "Never".
+    readonly property string requireAfter: root.store.value("lock.requirePasswordAfterDisplayOff")
+    readonly property bool anyDisplayOff: [root.store.value("lock.displayOffPower")].concat(root.hasBattery ? [root.store.value("lock.displayOffBattery")] : []).some(m => m > 0)
+    readonly property bool displayLocks: root.requireAfter !== "never" && root.anyDisplayOff
+    readonly property string lockNote: root.displayLocks
+        ? (root.idleMinutes === 0
+            ? qsTr("The session locks when a display turns off for inactivity, as set below; otherwise it does not lock by itself.")
+            : root.requireAfter === "immediately"
+            ? qsTr("The session locks after this much time without keyboard or pointer input, or as soon as a display turns off.")
+            : qsTr("The session locks after this much time without keyboard or pointer input, or once a display has been off for the time set below. Until then, any input turns it back on without the password."))
+        : root.idleMinutes === 0
         ? qsTr("The session does not lock by itself: a display that turned off comes back on with any input, without the password.")
         : root.offFirst
         ? qsTr("The session locks after this much time without keyboard or pointer input. A display that turns off earlier is not locked: until the session locks, any input turns it back on without the password.")
         : qsTr("The session locks after this much time without keyboard or pointer input, whether the displays are on or off.")
+
+    // macOS's Require password after the display is turned off.
+    readonly property var requireAfterModel: [{id: "immediately", text: qsTr("Immediately")}, {id: "5s", text: qsTr("After 5 seconds")}, {id: "1m", text: qsTr("After 1 minute")}, {id: "5m", text: qsTr("After 5 minutes")}, {id: "15m", text: qsTr("After 15 minutes")}, {id: "1h", text: qsTr("After 1 hour")}, {id: "never", text: qsTr("Never")}]
 
     SettingsGroup {
         footnote: root.lockNote
@@ -84,6 +97,18 @@ SettingsPage {
                 model: root.minuteChoices(root.displayOffSteps, root.store.value("lock.displayOffPower"), root.forText)
                 value: String(root.store.value("lock.displayOffPower"))
                 onPicked: id => root.store.set("lock.displayOffPower", Number(id))
+            }
+        }
+
+        // ADR-0040 IQ-T4 A: when a display that turned off locks the session.
+        SettingsRow {
+            title: qsTr("Require password after the display turns off")
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Require password after the display turns off")
+                model: root.requireAfterModel
+                value: root.requireAfter
+                onPicked: id => root.store.set("lock.requirePasswordAfterDisplayOff", id)
             }
         }
 

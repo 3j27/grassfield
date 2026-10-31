@@ -355,6 +355,16 @@ and IQ-B3 here changes the palette only, not which controls read it.
   to unlocked, an always synchronous release, an error during the fade not relocking) each fail them. The fade-in from
   the idle dim's level (ID-8) is step 5. NOT VERIFIED (nested, required before the merge): L1 to L5 with the fades,
   `reload_locked.sh` (a soft reload during `releasing` must keep the lock: `persist.intent` stays true until `release()`).
+- **Step 5 as built** (2026-10-31; `shell/security`, under the opus security review): ID-8 (the dim stays until the lock it
+  led to holds, bounded; the lock's content starts at the dim's level; the saver on screen stays until the lock holds,
+  bounded), IQ-T4 A (`lock.requirePasswordAfterDisplayOff`, schema, contract, Settings > Lock Screen with its footnotes and
+  French strings; a display that turns off for inactivity locks at once, the displays on until the lock holds, or after
+  the delay, or never; `lock.idleMinutes` the ceiling), IQ-T5 A (`misc.lockdead_screen_delay = 5000`). With it, the opus
+  review of step 4b (PASS): its MINOR (a lock request now also abandons a password check in flight) and its NITs (the fade
+  starts right after the focus; the dev hook docs name `releasing`). Tests: `tst_idlemodel.qml` (+1),
+  `tst_lockcontroller.qml` (+1), `tst_lockbackdrop.qml` (+1: the order's wiring and the delay's bounds),
+  `tst_settingslock.qml` (+1, the footnotes), `test_contrast_tokens.py` (the carried dim declared). NOT VERIFIED (nested,
+  before the merge): the order on screen, the display-off lock on a real display, only black during the lockdead delay.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.

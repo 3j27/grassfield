@@ -65,6 +65,18 @@ function inactiveOffArmed(seconds, locked, offForInactivity, rearming, busInhibi
     return seconds > 0 && (locked !== true || offForInactivity === true) && rearming !== true && busInhibited !== true;
 }
 
+// When a display that turned off for inactivity locks the session (ADR-0040 IQ-T4 A, lock.requirePasswordAfterDisplayOff):
+// 0 at once, a delay in ms, or -1 never. Anything unknown reads as at once (fail closed: the stricter choice).
+var REQUIRE_AFTER_DISPLAY_OFF_MS = {immediately: 0, "5s": 5000, "1m": 60000, "5m": 300000, "15m": 900000, "1h": 3600000, never: -1};
+
+function requireAfterDisplayOffMs(choice) {
+    return typeof choice === "string" && Object.prototype.hasOwnProperty.call(REQUIRE_AFTER_DISPLAY_OFF_MS, choice) ? REQUIRE_AFTER_DISPLAY_OFF_MS[choice] : 0;
+}
+
+// The idle dim stays until the lock it led to holds (ADR-0040 ID-8), at most this long: a lock that never confirms does not
+// leave the screen dimmed for ever (the lock itself keeps trying; the dim is display only).
+var DIM_UNTIL_LOCK_MAX_MS = 5000;
+
 // The displays are off: the lock screen's monitor is idle, or the unlocked one turned them off (`inactiveOff`), but never
 // while a lock is being acquired (locked, not holding yet): the compositor confirms a lock only once it has drawn it on every
 // display, and a display that is off draws nothing (review of 6e61829: the sleep inhibitor would wait out its budget and the

@@ -6218,6 +6218,18 @@
         <translation>Après %1 minutes</translation>
     </message>
     <message>
+        <source>The session locks when a display turns off for inactivity, as set below; otherwise it does not lock by itself.</source>
+        <translation>La session se verrouille quand un écran s’éteint faute d’activité, selon le réglage ci-dessous ; sinon, elle ne se verrouille pas d’elle-même.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or as soon as a display turns off.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou dès qu’un écran s’éteint.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or once a display has been off for the time set below. Until then, any input turns it back on without the password.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou quand un écran est éteint depuis la durée réglée ci-dessous. D’ici là, toute saisie le rallume sans le mot de passe.</translation>
+    </message>
+    <message>
         <source>The session does not lock by itself: a display that turned off comes back on with any input, without the password.</source>
         <translation>La session ne se verrouille pas d’elle-même&#xa0;: un écran éteint se rallume à la moindre saisie, sans le mot de passe.</translation>
     </message>
@@ -6230,6 +6242,22 @@
         <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur, que les écrans soient allumés ou éteints.</translation>
     </message>
     <message>
+        <source>Immediately</source>
+        <translation>Immédiatement</translation>
+    </message>
+    <message>
+        <source>After 5 seconds</source>
+        <translation>Après 5 secondes</translation>
+    </message>
+    <message>
+        <source>After 5 minutes</source>
+        <translation>Après 5 minutes</translation>
+    </message>
+    <message>
+        <source>After 15 minutes</source>
+        <translation>Après 15 minutes</translation>
+    </message>
+    <message>
         <source>Turn display off on battery when inactive</source>
         <translation>Éteindre l’écran sur batterie en cas d’inactivité</translation>
     </message>
@@ -6240,6 +6268,10 @@
     <message>
         <source>Turn display off when inactive</source>
         <translation>Éteindre l’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Require password after the display turns off</source>
+        <translation>Exiger le mot de passe après l’extinction de l’écran</translation>
     </message>
     <message>
         <source>Require password after inactivity</source>

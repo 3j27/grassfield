@@ -95,6 +95,9 @@ Singleton {
     // account picture, decoded while the session is unlocked (Qt's pixmap cache; LockView asks for the same urls with the
     // same options and gets them at once). A surface takes them once. Nothing here can unlock or keep the lock from engaging.
     property var stills: null
+    // The lock follows the idle dim (ADR-0040 ID-8, set by Idle around its lock request): the surfaces' content starts at the
+    // dim's level. Display only; nothing on the lock path reads it.
+    property bool fromDim: false
     readonly property string avatarReady: root.stills ? root.stills.avatarReady : ""
     readonly property int backdrops: root.stills ? root.stills.revision : 0
     function backdropOf(output: string): var {
@@ -194,16 +197,22 @@ Singleton {
         return Machine.isHolding(controller.currentState()) && sessionLock.secure && verified;
     }
 
-    // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "lid" | "restore". Returns "ok",
+    // Engage the lock. reason: "ipc" | "menu" | "idle" | "display-off" | "sleep" | "lid" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
     // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once
     // a fresh answer confirms it (checkOwnership), never here on an earlier answer alone: relock()
     // releases the lock object first, and releasing the lock the compositor still uses unlocks the
     // session until the new lock arrives (R12 review #3: keys reached a window in forced runs).
     function lock(reason: string): string {
-        // A lock request during the release fade (ADR-0040 step 4b) brings the lock back: the PAM success is spent.
+        // A lock request during the release fade (ADR-0040 step 4b) brings the lock back: the PAM success is spent. A check
+        // still in flight is spent too (opus review of f66cf08e, MINOR 1: a password submitted just before the lid closes
+        // must not unlock after the sleep request): PAM is aborted, back to locked, no shake.
         if (controller.interruptRelease())
             console.info("grassfield-lock: lock requested (" + reason + ") during the release fade: the lock stays; a new password is needed");
+        if (controller.authenticating) {
+            console.info("grassfield-lock: lock requested (" + reason + ") during a password check: the check is abandoned; a new password is needed");
+            controller.abort();
+        }
         if (currentlyLocked()) {
             console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
             engage();
@@ -589,6 +598,7 @@ Singleton {
                 lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
                 releasing: controller.releasing
+                startDim: root.fromDim ? Tokens.idleDimOpacity : 0
                 inputEnabled: controller.pamAvailable && !controller.releasing
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
                 // In dev, a visible hint that password checks are off (PAM suppressed), so a GRASSFIELD_DEV value that
