@@ -723,42 +723,43 @@ Variants {
                     Accessible.name: info ? (info.title !== "" ? info.title : Apps.nameFor(info.appId)) : ""
                     Accessible.onPressAction: win.activateWindow(modelData)
 
+                    // The tiles re-lay out and settle back after a drag; under Reduce Motion they jump (ADR-0039 step 5).
                     Behavior on tx {
-                        enabled: win.progress >= 1
+                        enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.OutCubic
                         }
                     }
                     Behavior on ty {
-                        enabled: win.progress >= 1
+                        enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.OutCubic
                         }
                     }
                     Behavior on tw {
-                        enabled: win.progress >= 1
+                        enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.OutCubic
                         }
                     }
                     Behavior on th {
-                        enabled: win.progress >= 1
+                        enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.OutCubic
                         }
                     }
                     Behavior on ox {
-                        enabled: !thumb.dragging
+                        enabled: !thumb.dragging && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionFast)
                         }
                     }
                     Behavior on oy {
-                        enabled: !thumb.dragging
+                        enabled: !thumb.dragging && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionFast)
                         }

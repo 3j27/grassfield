@@ -60,8 +60,9 @@ T.Switch {
             border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
+            // Under Reduce Motion the knob jumps to its side (ADR-0039 step 5).
             Behavior on x {
-                enabled: !root.pressed
+                enabled: !root.pressed && !Appearance.reduceMotion
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
                     easing.type: Easing.BezierSpline

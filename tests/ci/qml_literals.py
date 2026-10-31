@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2-4, rule 6).
+"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2-5, rule 6).
 
   python3 -I tests/ci/qml_literals.py             scan the tree, exit 1 on any literal outside the allowlist
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples
@@ -23,10 +23,11 @@ Math.max or Math.min, a `||` or `??` fallback, the right operand of `&&` (`shown
 (`24 * 1`, judged by its value). A factor or a divisor of anything else (`Tokens.spacingLg * 3`, `width / 2`), a comparison's
 term, an index and an argument of any other function are arithmetic or logic, not design values. Numbers from -1 to 1 are
 allowed (a hairline, a flag, an off state); for opacity and scale, only 0, 1 and -1 (states and a mirror). A binding written as
-a block (`width: { return wide ? 240 : 120 }`) is read by the values it returns.
+a block (`width: { return wide ? 240 : 120 }`) or as a function it calls (`(function () { return 24; })()`) is read by the
+values it returns and the values of its locals (a for loop's counter and the functions it defines excepted).
 Anywhere in the code, outside comments:
-  colour      "#rrggbb" in any quotes, Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour ("white",
-              "Red"; "transparent" is not a colour)
+  colour      "#rrggbb" in any quotes, Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour in any
+              quotes ("white", "Red"; "transparent" is not a colour)
   opacity     a literal alpha given to withAlpha(), Qt.alpha() or a computed Qt.rgba/hsla/hsva (not 0 or 1)
 Only QML is read as QML: a handler, a function and an object literal (`{x: 0, y: 24}`) are code and data; their colours and
 alphas are still read. An object under an import alias (`qqc.Button { }`) is QML.
@@ -72,7 +73,7 @@ UNIT_CALLS = {"Qt.size", "Qt.point", "Qt.rect", "Math.max", "Math.min", "Math.ro
 COLOUR = re.compile(r"([\"'`])#[0-9A-Fa-f]{3,8}\1"
                     r"|Qt\.(?:rgba|hsla|hsva|rgb)\(\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*(?:,\s*-?[0-9.]+\s*)?\)")
 ALPHA_CALL = re.compile(r"(?<![\w.])(?:(?:[\w.]+\.)?withAlpha|Qt\.alpha|Qt\.rgba|Qt\.hsla|Qt\.hsva)\s*\(")
-NAMED = re.compile(r"[\"'][A-Za-z]+[\"']")
+NAMED = re.compile(r"([\"'`])[A-Za-z]+\1")
 
 # Colour literals that stay, by file: {path: (how many, why)}. A file holding more fails, so a new literal there is caught too.
 ALLOWED = {
@@ -139,6 +140,27 @@ def opening_kind(head):
 
 BINDING_HEAD = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+[\w.<>]+\s+)?[A-Za-z_][\w.]*\s*:\s*$")
 RETURN = re.compile(r"\breturn\b(?P<expr>[^;{}]*)")
+# A local's value in a binding's block (`const w = 24; return w`), a for loop's counter excepted.
+LOCAL = re.compile(r"\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=(?!=)(?P<expr>[^;{}]*)")
+BINDING_PREFIX = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+[\w.<>]+\s+)?[A-Za-z_][\w.]*\s*:")
+FUNCTION_OPEN = re.compile(r"(?:\bfunction\b\s*[\w$]*\s*\([^()]*\)|=>)\s*$")
+NESTED_FUNCTION = re.compile(r"(?:\bfunction\b\s*[\w$]*\s*\([^()]*\)|=>)\s*\{")
+
+
+def without_inner_functions(body):
+    """The block with the bodies of the functions it defines blanked (their returns are theirs, not the binding's)."""
+    chars = list(body)
+    for m in NESTED_FUNCTION.finditer(body):
+        level, j = 0, m.end() - 1
+        while j < len(body):
+            level += (body[j] == "{") - (body[j] == "}")
+            if level == 0:
+                break
+            j += 1
+        for k in range(m.end(), min(j, len(chars))):
+            if chars[k] != "\n":
+                chars[k] = " "
+    return "".join(chars)
 
 
 def statements(code):
@@ -157,8 +179,10 @@ def statements(code):
             block["lines"].extend([line] * len(chunk))
 
     def returned():
-        body = "".join(block["text"])
-        for m in RETURN.finditer(body):
+        body = without_inner_functions("".join(block["text"]))
+        values = [m for m in RETURN.finditer(body)]
+        values += [m for m in LOCAL.finditer(body) if not re.search(r"\bfor\s*\(\s*$", body[:m.start()])]
+        for m in values:
             if m.group("expr").strip():
                 out.append((block["head"] + m.group("expr"), block["head_lines"] + block["lines"][m.start("expr"):m.end("expr")]))
 
@@ -209,6 +233,11 @@ def statements(code):
                         block = {"head": head, "head_lines": list(lines), "text": [], "lines": [], "level": len(stack)}
                     stack.append((kind, [], [], 0))
                 else:
+                    # A function called in a binding (`width: (function() { return 24; })()`) is read by what it returns.
+                    prefix = BINDING_PREFIX.match(head)
+                    if kind == "js" and block is None and prefix and FUNCTION_OPEN.search(head):
+                        block = {"head": prefix.group(0), "head_lines": list(lines[:prefix.end()]), "text": [], "lines": [],
+                                 "level": len(stack)}
                     stack.append((kind, text + list(" OBJ "), lines + [line] * 5, depth))
                 text, lines, depth = [], [], 0
         elif c == "}":
@@ -533,6 +562,13 @@ SAMPLES = {
     "and value": ("Item { width: shown && 24 }", 1),
     "and condition": ("Item { width: shown && count > 3 ? Tokens.spacingLg : Tokens.spacingSm }", 0),
     "aliased type": ("import QtQuick.Controls as qqc\nItem {\n    qqc.Button { width: 30 }\n}", 1),
+    # The review of step 4 (ADR-0039 step 5).
+    "inner function's return": ("Item {\n    width: {\n        const pick = function () { return 24; };\n        return pick() * Tokens.spacingSm;\n    }\n}", 0),
+    "inner arrow's return": ("Item { height: { const f = r => { return 64; }; return rows.map(f).length * Tokens.menuItemHeight; } }", 0),
+    "value through a local": ("Item { width: { const w = 24; return w; } }", 1),
+    "loop counter": ("Item { width: { let s = 0; for (let i = 2; i < n; i++) s += Tokens.spacingSm; return s; } }", 0),
+    "called function": ("Item { width: (function () { return 24; })() }", 1),
+    "backtick colour": ("Rectangle { color: `red` }", 1),
     # Keys, units and groups the second pass of the review raised.
     "accent key": ('Item { property string tileColor: "blue" }', 0),
     "accent key in an index": ('Rectangle { color: Tokens.colorAccentLight[keys[id] || "graphite"] }', 0),

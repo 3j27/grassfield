@@ -106,9 +106,10 @@ Rectangle {
         onStatusChanged: if (status === Image.Ready && source !== "")
             slide.loaded()
 
+        // The slides' crossfade, capped under Reduce Motion like every other (ADR-0039 step 5).
         Behavior on opacity {
             NumberAnimation {
-                duration: Tokens.saverSlideFadeMs
+                duration: Appearance.duration(Tokens.saverSlideFadeMs)
             }
         }
     }

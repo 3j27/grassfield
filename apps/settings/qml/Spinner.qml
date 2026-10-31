@@ -4,7 +4,7 @@ import Grassfield.Ui
 
 // The progress spinner beside a section title while something is under way (macOS 27 Wi-Fi > Other Networks while it scans):
 // spokes around a centre, the head one in the secondary colour and the others fading behind it, one step at a time. It runs
-// only while visible.
+// only while visible, and stands still under Reduce Motion (ADR-0039 step 5): the fading spokes still say "under way".
 Item {
     id: root
 
@@ -18,7 +18,7 @@ Item {
 
     Timer {
         interval: Tokens.settingsSpinnerStepMs
-        running: root.running && root.visible
+        running: root.running && root.visible && !Appearance.reduceMotion
         repeat: true
         onTriggered: root.step = (root.step + 1) % Tokens.settingsSpinnerSpokes
     }
