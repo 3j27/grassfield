@@ -38,7 +38,8 @@
  {"path": "scripts/gates/frame_pacing.py", "reason": "judge of scripts/gates/frame-pacing.sh; --selftest and cases run by tests/shell/gates.sh"},
  {"path": "scripts/gates/session_start.py", "reason": "journal parser of scripts/gates/session-start.sh; --selftest and cases run by tests/shell/gates.sh"},
  {"path": "scripts/gates/coverage_report.py", "reason": "gcov summariser of scripts/gates/coverage.sh; tested on a toy program by tests/shell/gates.sh"},
- {"path": "tests/compositor/soak_lib.sh", "reason": "helper sourced by soak.sh (verdict and RSS-slope functions, tested by tests/shell/soak_lib.sh)"}
+ {"path": "tests/compositor/soak_lib.sh", "reason": "helper sourced by soak.sh (verdict and RSS-slope functions, tested by tests/shell/soak_lib.sh)"},
+ {"path": "tests/compositor/overlay_watch.sh", "reason": "diagnostic tool (no verdict): prints the overlay state changes of a nested session, used by hand"}
 ],
 "tests": [
  {"path": "tests/unit/tst_a11ypress.qml", "layer": "headless"},
@@ -508,6 +509,7 @@
  {"path": "tests/compositor/third_party_chrome.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/top_clamp.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/click_focus.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/overlay_unmap.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/cursor_refresh.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/desktop_focus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/double_click_setting.sh", "layer": "nested", "runner": "bare"},
