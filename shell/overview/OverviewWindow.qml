@@ -617,9 +617,12 @@ Variants {
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
                             // The add button is a bare plus at rest (macOS 27), a light glass circle under the pointer; a thumbnail
-                            // the material's fill.
+                            // the material's fill at rest, the neutral selection of an item on glass under the pointer or as a drop
+                            // target (which also takes the ring; one role each, ADR-0039 step 12, G6).
                             readonly property bool plusLit: tile.isPlus && (tileMouse.containsMouse || tile.focused)
-                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent") : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent")
+                                : tile.dropTarget || tileMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+                                : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                             border.width: tile.isPlus && !face.plusLit ? 0 : 1
                             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
@@ -948,7 +951,10 @@ Variants {
                         width: mini.width
                         height: mini.box.h
                         radius: Tokens.overviewThumbRadius
-                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (miniMouse.containsMouse ? 3 : 2))
+                        // The panel's fill at rest; the neutral selection of an item on glass under the pointer or the keyboard
+                        // (one role each, ADR-0039 step 12, G6).
+                        color: mini.focused || miniMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+                            : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                         border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : 1
                         border.color: mini.focused || miniMouse.containsMouse ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 

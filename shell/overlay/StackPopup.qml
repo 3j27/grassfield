@@ -332,10 +332,18 @@ FocusScope {
             Accessible.name: qsTr("Back to %1").arg(root.nested && root.trail.length > 1 ? DisplayName.text(Stacks.baseName(root.trail[root.trail.length - 2])) : DisplayName.text(root.info.name))
             Accessible.onPressAction: root.back()
 
+            // A control: the control fill, the control hover over it (ADR-0039 step 12, G6).
             Rectangle {
                 anchors.fill: parent
                 radius: Tokens.radiusControl
-                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (backMouse.containsMouse ? 3 : 1))
+                color: Appearance.buttonFill
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
+                    visible: backMouse.containsMouse
+                }
             }
 
             Icon {
@@ -403,7 +411,8 @@ FocusScope {
                     anchors.fill: parent
                     anchors.margins: Tokens.spacingXs / 2
                     radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                    // The neutral selection of an item on glass (one role, ADR-0039 step 12, G6).
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
                     visible: cell.current
 
                     // The current cell carries the shared ring while the keys move it (ADR-0039 step 7).

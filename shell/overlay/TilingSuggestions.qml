@@ -134,12 +134,12 @@ FocusScope {
                 Accessible.name: tile.modelData.toplevel.title
                 Accessible.onPressAction: root.choose(tile.index)
 
-                // The keyboard's and the pointer's window, a neutral highlight as the popover's rows.
+                // The keyboard's and the pointer's window: the neutral selection of an item on glass (one role, ADR-0039 step 12, G6).
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -Tokens.spacingXs
                     radius: Tokens.radiusMenu - Tokens.menuPadding
-                    color: Appearance.withAlpha(Appearance.colors.text, Tokens.materialHoverOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
                     visible: tile.highlighted
                 }
 

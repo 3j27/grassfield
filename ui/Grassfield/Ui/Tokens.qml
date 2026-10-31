@@ -265,6 +265,8 @@ QtObject {
     readonly property real materialBorderOpacity: Appearance.increaseContrast ? 0.5 : 0.14
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHoverOpacity: 0.12
+    // the neutral selection of an item on glass (one role, ADR-0039 step 12, G6): the current tile of the switcher and of a stack's grid, an Overview's minimized window under the pointer or the keyboard, the tiling suggestions' window; the hover ink (black in light, white in dark) at this alpha. macOS 27's App Switcher draws its selection #ACACAC on its #E5E5E5 glass, black at 0.25 (1.8:1; the 512 Pixels release capture Finder-App-Switcher) [ref: docs/audits/design-polish-2026-10-29.md § 3.10 Hover and selection roles]
+    readonly property real materialSelectionOpacity: 0.25
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialSeparatorOpacity: Appearance.increaseContrast ? 0.45 : 0.16
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
