@@ -520,7 +520,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   window in full screen is not minimized (Minimize greyed, Super+M nothing).
   Step 6c as built (ADR-0036 D63-D68): a click on the green light while its tiling popover is open (the popover's overlay
   takes it) runs the light, released over it: a Split View member leaves the Split View, a full-screen window leaves full
-  screen, with Alt a window enters it, else Zoom; then the popover closes (shell `WindowTiling.greenAction`). In full
+  screen, with Alt a window enters it, else Zoom; then the popover closes (shell `WindowTiling.greenAction`); the overlay's menu bar strip passes a press on to the bar
+  only while the bar is in view, so a Split View member's light under it is the light's (`WindowTiling.stripPress`). In full
   screen the plugin posts `titlebar-reveal` when the window's titlebar is revealed at the top edge of an output or goes
   away (ADR-0007); the menu bar there is in view while it is revealed and leaves with it, without its hide grace
   (`AutoHide.leaveNow`); an older plugin sends nothing and the bar keeps its own auto-hide. The Dock hides on an output
