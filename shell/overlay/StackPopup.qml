@@ -67,8 +67,9 @@ FocusScope {
     height: {
         if (fan)
             return vertical ? 2 * (Tokens.dockStackFanBend + iconSize / 2) : Tokens.dockStackFanStep * fanCount + iconSize + Tokens.dockMenuTailGap;
+        // A list is a menu (ADR-0039 step 8): its rows, then a separator band and the Open in Files row, nothing in between.
         if (view === "list")
-            return rowCount * Tokens.menuItemHeight + footerHeight + headerHeight + 2 * Tokens.menuPadding + Tokens.menuItemHeight / 2;
+            return rowCount * Tokens.menuItemHeight + headerHeight + Tokens.menuSeparatorHeight + Tokens.menuItemHeight + 2 * Tokens.menuPadding;
         return gridRows * Tokens.dockStackCellHeight + footerHeight + headerHeight + 2 * panelPad;
     }
 
@@ -487,17 +488,18 @@ FocusScope {
                     visible: row.current
                 }
 
+                // A menu row's icon and label (MenuItem: the icon at the inset, the label after it and its gap; ADR-0039 step 8).
                 StackIcon {
                     x: Tokens.menuItemPadding
                     anchors.verticalCenter: parent.verticalCenter
                     path: row.modelData.path
                     isDir: row.modelData.isDir
-                    size: Tokens.menuItemHeight - Tokens.spacingXs
+                    size: Tokens.menuIconSize
                 }
 
                 Text {
                     textFormat: Text.PlainText
-                    x: Tokens.menuItemPadding + Tokens.menuItemHeight
+                    x: Tokens.menuItemPadding + Tokens.menuIconSize + Tokens.spacingSm
                     width: parent.width - x - Tokens.menuItemPadding
                     anchors.verticalCenter: parent.verticalCenter
                     text: DisplayName.text(row.modelData.name)
@@ -522,7 +524,8 @@ FocusScope {
         MenuSeparator {
             x: Tokens.menuPadding
             width: parent.width - 2 * Tokens.menuPadding
-            y: parent.height - root.footerHeight - (root.view === "list" ? Tokens.menuPadding : root.panelPad) - height / 2
+            // In a list, the menus' separator band right above the Open in Files row.
+            y: root.view === "list" ? openRow.y - height : parent.height - root.footerHeight - root.panelPad - height / 2
         }
 
         Item {

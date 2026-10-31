@@ -192,6 +192,73 @@ TestCase {
         verify(right <= m.width - Tokens.menuPadding - Tokens.menuItemPadding + 0.5, "right edge " + right + " in a menu " + m.width + " wide");
     }
 
+    // One section header for every menu (ADR-0039 step 8, G17): MenuHeader, PopupMenu's `header` rows and the shell's
+    // hand-built menus (the sound menu, the tiling popover) alike: a row tall, the caption size in bold, the secondary colour,
+    // at the leading edge of the rows below it, after the check column when the menu keeps one.
+    Component {
+        id: headedMenuComponent
+        PopupMenu {
+            model: [{header: true, text: "Section"}, {id: "a", text: "Checked row", checked: true}, {id: "b", text: "Plain row"}]
+        }
+    }
+
+    Component {
+        id: headedPlainMenuComponent
+        PopupMenu {
+            model: [{header: true, text: "Section"}, {id: "a", text: "Plain row"}]
+        }
+    }
+
+    function quickText(root, text) {
+        for (const child of root.children) {
+            if (String(child).indexOf("QQuickText") === 0 && child.text === text)
+                return child;
+            const found = quickText(child, text);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function test_aHeaderStartsWithTheLabelsBelowIt_data() {
+        return [
+            {tag: "after the check column", component: headedMenuComponent, x: Tokens.menuCheckInset},
+            {tag: "at the plain inset", component: headedPlainMenuComponent, x: Tokens.menuItemPadding}
+        ];
+    }
+
+    function test_aHeaderStartsWithTheLabelsBelowIt(data) {
+        const m = createTemporaryObject(data.component, testCase);
+        wait(0);
+        const header = quickText(m, "Section");
+        const label = quickText(m, "Plain row");
+        verify(header !== null && label !== null);
+        compare(header.mapToItem(m, 0, 0).x, Tokens.menuPadding + data.x);
+        compare(header.mapToItem(m, 0, 0).x, label.mapToItem(m, 0, 0).x, "the header starts with the labels");
+        compare(header.parent.height, Tokens.menuItemHeight, "a row tall");
+        compare(header.font.pixelSize, Tokens.typographyCaptionSize);
+        compare(header.font.weight, Tokens.typographyMenuBoldWeight);
+        verify(Qt.colorEqual(header.color, Appearance.colors.textSecondary));
+        compare(header.parent.Accessible.role, Accessible.Heading);
+    }
+
+    Component {
+        id: headerComponent
+        MenuHeader {
+            width: 200
+        }
+    }
+
+    // A hand-built menu's header (the sound menu's Output) is the same one.
+    function test_aMenuHeaderStandsAlone() {
+        const plain = createTemporaryObject(headerComponent, testCase, {text: "Output"});
+        const checked = createTemporaryObject(headerComponent, testCase, {text: "Output", checkColumn: true});
+        compare(quickText(plain, "Output").x, Tokens.menuItemPadding);
+        compare(quickText(checked, "Output").x, Tokens.menuCheckInset);
+        compare(plain.implicitHeight, Tokens.menuItemHeight);
+        compare(checked.implicitWidth, Math.ceil(Tokens.menuCheckInset + quickText(checked, "Output").implicitWidth + Tokens.menuItemPadding));
+    }
+
     function test_highlightIsConcentricWithTheMenu() {
         const row = createTemporaryObject(itemComponent, testCase, {text: "Open", highlighted: true});
         let fill = null;

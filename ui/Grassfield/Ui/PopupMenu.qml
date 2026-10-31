@@ -308,27 +308,12 @@ FocusScope {
                     MenuSeparator {}
                 }
 
-                // A section title (macOS: small, bold, secondary), aligned with the labels of the rows below it.
+                // A section title, aligned with the labels of the rows below it.
                 Component {
                     id: headerComponent
-                    Item {
-                        implicitWidth: Math.ceil(headerText.x + headerText.implicitWidth + Tokens.menuItemPadding)
-                        implicitHeight: Tokens.menuItemHeight
-                        Accessible.role: Accessible.Heading
-                        Accessible.name: headerText.text
-
-                        Text {
-                            id: headerText
-                            textFormat: Text.PlainText
-                            x: root.checkColumns[row.index] === true ? Tokens.menuCheckInset : Tokens.menuItemPadding
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: row.modelData.text !== undefined ? row.modelData.text : ""
-                            color: Appearance.colors.textSecondary
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                            font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
-                            font.weight: Tokens.typographyMenuBoldWeight
-                        }
+                    MenuHeader {
+                        text: row.modelData.text !== undefined ? row.modelData.text : ""
+                        checkColumn: root.checkColumns[row.index] === true
                     }
                 }
 

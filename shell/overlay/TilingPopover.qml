@@ -311,21 +311,10 @@ FocusScope {
                     width: parent.width
                 }
 
-                Item {
+                // Section titles in the menus' header style (docs/specs/tiling.md; macOS 27 "Move & Resize"; ADR-0039 step 8).
+                MenuHeader {
                     width: parent.width
-                    height: Tokens.menuItemHeight
-
-                    Text {
-                        textFormat: Text.PlainText
-                        x: Tokens.menuItemPadding
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: section.modelData.title
-                        color: Appearance.colors.textSecondary
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyMenuSize
-                        font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
+                    text: section.modelData.title
                 }
 
                 Row {
@@ -351,11 +340,13 @@ FocusScope {
                             Accessible.onPressAction: if (glyphButton.enabledHere)
                                 root.run(glyphButton.modelData)
 
+                            // Hover and keyboard focus: the menus' selection, the glyph white on it (docs/specs/tiling.md, ADR-0024
+                            // "white on the accent"; ADR-0039 step 8).
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: Tokens.menuPadding
                                 radius: Tokens.radiusMenu - Tokens.menuPadding
-                                color: Appearance.withAlpha(Appearance.colors.text, Tokens.materialHoverOpacity)
+                                color: Appearance.colors.selection
                                 visible: glyphButton.highlighted && glyphButton.enabledHere
                             }
 
@@ -363,7 +354,8 @@ FocusScope {
                                 anchors.centerIn: parent
                                 zones: glyphButton.modelData.glyph ? glyphButton.modelData.glyph.zones : []
                                 own: glyphButton.modelData.glyph ? glyphButton.modelData.glyph.own : 0
-                                color: glyphButton.enabledHere ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                                color: !glyphButton.enabledHere ? Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                                    : glyphButton.highlighted ? Appearance.colors.selectionText : Appearance.colors.text
                             }
 
                             MouseArea {
@@ -390,21 +382,9 @@ FocusScope {
                 width: parent.width
             }
 
-            Item {
+            MenuHeader {
                 width: parent.width
-                height: Tokens.menuItemHeight
-
-                Text {
-                    textFormat: Text.PlainText
-                    x: Tokens.menuItemPadding
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Layouts")
-                    color: Appearance.colors.textSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyMenuSize
-                    font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
-                    font.weight: Tokens.typographyMenuBoldWeight
-                }
+                text: qsTr("Layouts")
             }
 
             Grid {
@@ -475,11 +455,12 @@ FocusScope {
                 Accessible.onPressAction: if (row.enabledHere)
                     root.run(row.modelData)
 
-                // The popover's rows take a neutral highlight (macOS), concentric with the popover.
+                // The menus' row highlight (MenuItem), concentric with the popover: the selection, the label white on it
+                // (docs/specs/tiling.md; macOS 27's Full Screen submenu; ADR-0039 step 8).
                 Rectangle {
                     anchors.fill: parent
                     radius: Tokens.radiusMenu - Tokens.menuPadding
-                    color: Appearance.withAlpha(Appearance.colors.text, Tokens.materialHoverOpacity)
+                    color: Appearance.colors.selection
                     visible: row.highlighted && row.enabledHere
                 }
 
@@ -511,7 +492,8 @@ FocusScope {
                     elide: Text.ElideRight
                     rightPadding: row.modelData.submenu ? Tokens.menuIconSize : 0
                     text: row.modelData.text
-                    color: row.enabledHere ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                    color: !row.enabledHere ? Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                        : row.highlighted ? Appearance.colors.selectionText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize
                     font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)

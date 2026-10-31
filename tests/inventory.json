@@ -117,6 +117,7 @@
  {"path": "tests/shell/screen_unplug_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/reduce_motion_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/focus_ring_wiring.sh", "layer": "logic"},
+ {"path": "tests/shell/menu_grammar_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/startup_settle_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/startup_settle.sh", "layer": "headless"},
  {"path": "tests/shell/ux_mutants.sh", "layer": "logic"},
