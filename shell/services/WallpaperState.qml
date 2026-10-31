@@ -148,6 +148,9 @@ Singleton {
 
     function stateJson(): string {
         const o = {displays: saved.displays};
+        // The last picture shown on each output (ADR-0040 ID-3): the first frame of the next start.
+        if (saved.stills && Object.keys(saved.stills).length > 0)
+            o.stills = saved.stills;
         const starting = [];
         for (const owner of Object.keys(videoStartingBy)) {
             if (!starting.some(m => m.path === videoStartingBy[owner]))
@@ -172,13 +175,20 @@ Singleton {
     // login session; "" when neither is known (every start counts as a login).
     readonly property string loginKey: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || Quickshell.env("XDG_SESSION_ID") || ""
 
-    // The prepared pictures on screen, for every output: the helper never prunes them from its cache.
+    // The prepared pictures on screen, for every output, and the stills of the next start (ADR-0040 ID-3: a still decoding
+    // while the first prepare runs): the helper never prunes them from its cache.
     function currentFiles(): var {
         const out = [];
         for (const name of Object.keys(outputs)) {
             const f = outputs[name].file;
             if (typeof f === "string" && f !== "")
                 out.push(f);
+        }
+        const stills = saved.stills || {};
+        for (const name of Object.keys(stills)) {
+            const st = WallpaperConfig.stillOf(saved, name, preparedDir);
+            if (st !== null && out.indexOf(st.file) < 0)
+                out.push(st.file);
         }
         return out;
     }
@@ -204,7 +214,23 @@ Singleton {
     function setCarousel(key: string, state: var): void {
         const all = Object.assign({}, saved.displays);
         all[key] = state;
-        saved = {displays: all};
+        saved = Object.assign({}, saved, {displays: all});
+        writeTimer.restart();
+    }
+
+    // ---- the first frame (ADR-0040 step 3, ID-3) ----
+    // The last picture an output showed, for its first frame at the next start: {file, strip, image, mean} or null (validated:
+    // one of the helper's own prepared pictures; WallpaperConfig.stillOf).
+    function stillOf(output: string): var {
+        return WallpaperConfig.stillOf(saved, output, preparedDir);
+    }
+
+    // The output now shows `desc` (a picture: kept as its still; anything else: its still goes). Written a short while after.
+    function setShown(output: string, desc: var): void {
+        const next = WallpaperConfig.withStill(saved, output, desc);
+        if (JSON.stringify(next.stills) === JSON.stringify(saved.stills || {}))
+            return;
+        saved = next;
         writeTimer.restart();
     }
 
@@ -251,7 +277,7 @@ Singleton {
         onLoaded: {
             try {
                 const o = JSON.parse(text());
-                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}};
+                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}, stills: o && typeof o.stills === "object" && o.stills !== null && !Array.isArray(o.stills) ? o.stills : {}};
                 // A marker left by the previous run: that video crashed the shell while it started. It becomes `videoBlocked`
                 // (no retry) and the marker is gone, so the next start does not read it again.
                 const markers = WallpaperConfig.videoMarkersOf(o && o.videoStarting !== undefined ? o.videoStarting : []);

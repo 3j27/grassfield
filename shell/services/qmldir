@@ -4,6 +4,8 @@ singleton SystemInfo 1.0 SystemInfo.qml
 singleton Popups 1.0 Popups.qml
 singleton Power 1.0 Power.qml
 singleton DayPhase 1.0 DayPhase.qml
+singleton Ground 1.0 Ground.qml
+singleton Journal 1.0 Journal.qml
 singleton Trash 1.0 Trash.qml
 singleton Audio 1.0 Audio.qml
 singleton Apps 1.0 Apps.qml

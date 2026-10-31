@@ -70,5 +70,8 @@ hl.layer_rule({ name = "gf-desktop-menu-blur", match = { namespace = "^grassfiel
 
 -- The menu bar and dock must appear instantly; panels fade.
 hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(menubar|dock)$" }, no_anim = true })
+-- The wallpaper maps with its final first frame and changes by the shell's own crossfade (ADR-0040 ID-3, ID-4): the
+-- compositor never fades it in under that.
+hl.layer_rule({ name = "gf-wallpaper-no-anim", match = { namespace = "^grassfield-wallpaper$" }, no_anim = true })
 -- The exit cover fades itself (ADR-0040 ID-10, one owner of motion: ID-4); the compositor adds no fade in or out.
 hl.layer_rule({ name = "gf-exit-cover-no-anim", match = { namespace = "^grassfield-exit-cover$" }, no_anim = true })

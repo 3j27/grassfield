@@ -2846,6 +2846,8 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
+    // ADR-0040 section 6 (ID-3): the wallpaper window maps with its first frame (the output's last picture from the cache, else what the feed decides) at most this long after the shell starts or the output appears; then the artwork
+    readonly property int wallpaperFirstShowTimeoutMs: 1500
     // ADR-0040 section 6 (IQ-W1 C): the slow crossfade between two phases of the Grassfield artwork through the two-slot model; Reduce Motion cuts
     readonly property int wallpaperPhaseFadeMs: 20000
     // ADR-0040 section 2 (the time-of-day rule): Dawn starts this many minutes before sunrise
@@ -2962,8 +2964,8 @@ QtObject {
     readonly property int sessionExitWaitMs: 1000
     // estimate: the exit cover lifts by itself when the session is still there this long after it came up (the helper that asked was killed before ending the session), so an exit that did not happen never leaves an opaque screen over the desktop (ADR-0040 ID-10, P-6 bounded waits)
     readonly property int sessionExitCoverHoldMs: 20000
-    // ADR-0040 ID-2 (P-1 one ground): the colour the exit cover fades to, the session's Hyprland background_color of config/hypr/grassfield/looknfeel.lua (held equal by tests/unit/tst_sessionexit.qml) until step 3 makes the ground the shown wallpaper's
-    readonly property string sessionGround: "#1E1C18"
+    // ADR-0040 ID-2 (P-1 one ground): the default artwork's ground (Artwork.ground of the dark Grassfield evening, held equal by tests/unit/tst_artwork.qml), the session's Hyprland background_color of config/hypr/grassfield/looknfeel.lua (held equal by tests/unit/tst_sessionexit.qml); the shell replaces it with the shown wallpaper's (shell/services/Ground.qml) and falls back to it
+    readonly property string sessionGround: "#2F6D5F"
 
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     readonly property int windowLightDiameter: 14

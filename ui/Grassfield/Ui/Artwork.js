@@ -65,7 +65,18 @@ function palette(T, artwork, variant) {
         out.glow = {x: 0.5, y: 0.78, r: 0.45, alphas: [[0, 0.9], [1, 0], [1, 0]]};
         out.colours = out.sky.concat(out.hills, [out.sun]);
     }
+    out.ground = ground(out);
     return out;
+}
+
+// The artwork's ground (ADR-0040 ID-2, P-1): one colour that stands for the whole picture before it draws and after it goes
+// (the compositor's background, the wallpaper window's own colour, the exit cover): the sRGB mean of the sky's middle and the
+// middle of the land (a hill, a blade, a band).
+function ground(p) {
+    const land = p.hills.length > 0 ? p.hills[Math.min(1, p.hills.length - 1)] : p.blades.length > 0 ? p.blades[1] : p.bands[3];
+    // In whole channel values (the tokens are "#RRGGBB"), a half rounded up: the same result on every engine.
+    const ch = i => Math.round((parseInt(p.tone.next.substr(i, 2), 16) + parseInt(land.substr(i, 2), 16)) / 2).toString(16).padStart(2, "0");
+    return ("#" + ch(1) + ch(3) + ch(5)).toUpperCase();
 }
 
 // The flat colour map callers read (`art`): skyTop and skyMid are the tone's two colours, then every colour drawn.

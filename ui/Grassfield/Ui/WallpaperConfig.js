@@ -997,3 +997,52 @@ function artworkVariantFor(artwork, choice, dark, phase) {
         return dark ? "evening.dark" : "day.light";
     return (["dawn", "day", "evening", "night"].indexOf(phase) >= 0 ? phase : "evening") + "." + set;
 }
+
+// ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3) ----
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const STILL_NAME = /^[0-9a-f]{32}\.(jpg|png)$/;
+
+// The last picture shown on `output` ({file, strip, image, mean}) from the stored state (wallpaper.json "stills"), or null. The
+// file must be one of the helper's own prepared pictures (a plain cache name in `preparedDir`): the shell decodes nothing else
+// (ADR-0016). The statistics are kept only when they have the helper's shape.
+function stillOf(saved, output, preparedDir) {
+    const all = isPlainObject(saved) && isPlainObject(saved.stills) ? saved.stills : {};
+    const s = typeof output === "string" && Object.prototype.hasOwnProperty.call(all, output) ? all[output] : null;
+    if (!isPlainObject(s) || typeof s.file !== "string" || !validPath(preparedDir))
+        return null;
+    const dir = preparedDir.replace(/\/+$/, "");
+    const slash = s.file.lastIndexOf("/");
+    if (s.file.substring(0, slash) !== dir || !STILL_NAME.test(s.file.substring(slash + 1)))
+        return null;
+    const stats = v => isPlainObject(v) && typeof v.mean === "number" && typeof v.p5 === "number" && typeof v.p95 === "number" ? v : null;
+    const strip = isPlainObject(s.strip) && stats(s.strip.all) ? s.strip : null;
+    return {file: s.file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
+}
+
+// The stored state with output's still set from the description now on screen (a picture without a video), or removed (any
+// other kind: the artwork and a colour need no still). A new object; at most 16 outputs are kept.
+function withStill(saved, output, desc) {
+    const base = isPlainObject(saved) ? saved : {};
+    const stills = Object.assign({}, isPlainObject(base.stills) ? base.stills : {});
+    if (desc && desc.kind === "picture" && !desc.video && typeof desc.url === "string" && desc.url.indexOf("file://") === 0)
+        stills[output] = {file: desc.url.substring(7), strip: desc.strip || null, image: desc.image || null, mean: typeof desc.mean === "string" ? desc.mean : ""};
+    else
+        delete stills[output];
+    const names = Object.keys(stills);
+    for (let i = 0; i < names.length - 16; i++)
+        delete stills[names[i]];
+    return Object.assign({}, base, {stills: stills});
+}
+
+// The ground of a description (ADR-0040 ID-2): a picture's mean colour, a colour itself, the artwork's ground; `fallback` (the
+// static default, session.ground) for anything else.
+function groundOf(desc, artGround, fallback) {
+    if (desc && desc.kind === "picture" && typeof desc.mean === "string" && HEX.test(desc.mean))
+        return desc.mean.toUpperCase();
+    if (desc && desc.kind === "color" && typeof desc.color === "string" && HEX.test(desc.color))
+        return desc.color.toUpperCase();
+    if (desc && desc.kind === "art" && typeof artGround === "string" && HEX.test(artGround))
+        return artGround.toUpperCase();
+    return fallback;
+}
+

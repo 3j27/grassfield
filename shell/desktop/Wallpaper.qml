@@ -202,7 +202,10 @@ Scope {
             }
             exclusionMode: ExclusionMode.Ignore
             focusable: false
-            color: win.shown ? win.shown.art.skyTop : slotA.art.skyTop
+            // The ground under the wallpaper (ADR-0040 ID-2): what a hotplugged output shows before its first frame is drawn.
+            color: Ground.of(win.modelData ? win.modelData.name : "")
+            // Mapped only once the first frame is drawn (ADR-0040 ID-3).
+            visible: win.firstReady
             WlrLayershell.layer: WlrLayer.Background
             WlrLayershell.namespace: "grassfield-wallpaper"
 
@@ -225,12 +228,17 @@ Scope {
                         probe.loadImage(imageUrl);
                     return;
                 }
-                // The override is gone (or never was): the bar follows what is on screen.
-                reportTone(toneDesc());
+                // The override is gone (or never was): the bar follows what is on screen. Before the first frame nothing is on
+                // screen: the first frame reports its own tone (showFirst), never the default artwork's first.
+                if (win.firstReady)
+                    reportTone(toneDesc());
             }
             onImageFileChanged: Qt.callLater(measure)
             onHeightChanged: Qt.callLater(measure)
-            Component.onCompleted: Qt.callLater(measure)
+            Component.onCompleted: {
+                Qt.callLater(measure);
+                Qt.callLater(win.begin);
+            }
 
             // The whole image is drawn stretched onto a canvas scaled so that the bar's strip is toneSampleRows px tall; only
             // that top strip is read back.
@@ -263,7 +271,8 @@ Scope {
             function measureGrid(desc: var): void {
                 if (!win.modelData)
                     return;
-                if (!desc || desc.kind === "color" || (desc.video !== undefined && desc.video !== "") || VisualFixtures.wallpaperFile !== "" || !win.shown || win.width <= 0) {
+                // (Not before the first frame: the window is not mapped yet, nothing can be grabbed; markReady measures again.)
+                if (!desc || desc.kind === "color" || (desc.video !== undefined && desc.video !== "") || VisualFixtures.wallpaperFile !== "" || !win.shown || win.width <= 0 || !win.firstReady) {
                     Backdrop.reportGrid(win.modelData.name, null);
                     return;
                 }
@@ -305,6 +314,105 @@ Scope {
                 screenInfo: win.modelData
                 onDisplayChanged: win.show(win.withArt(feed.display), "normal")
             }
+
+            // ---- the first frame (ADR-0040 step 3, ID-3) ----
+            // The window maps with its final first frame: the output's last picture (its still from wallpaper.json, its tone from
+            // the stored statistics, so the bar is right before anything shows), once decoded; the artwork or a colour at once; at
+            // most wallpaper.firstShowTimeoutMs, then the artwork. Until then every description goes straight into slot A, no fade;
+            // a feed result that is the still's file changes nothing.
+            property bool firstReady: false
+            property bool feedSeen: false
+            function stillDesc(): var {
+                const st = win.modelData ? WallpaperState.stillOf(win.modelData.name) : null;
+                return st ? {kind: "picture", color: "", url: "file://" + st.file, strip: st.strip, image: st.image, mean: st.mean, video: ""} : null;
+            }
+            function begin(): void {
+                if (win.firstReady || !WallpaperState.stateReady)
+                    return;
+                const still = win.stillDesc();
+                if (still !== null && !win.feedSeen)
+                    win.showFirst(still);
+                else if (win.feedSeen)
+                    win.showFirst(win.withArt(feed.display));
+            }
+            function showFirst(desc: var): void {
+                // The feed's result is the still already in slot A: nothing changes (its description is the fuller one).
+                if (slotA.kind === desc.kind && sameContent(desc, shownDesc) && (desc.kind !== "picture" || slotA.url === desc.url)) {
+                    shownDesc = desc;
+                    if (desc.kind !== "picture" || slotA.pictureReady)
+                        win.markReady();
+                    return;
+                }
+                loadTimer.stop();
+                fadeIn.stop();
+                incoming = null;
+                pendingDesc = null;
+                fadePending = false;
+                shown = slotA;
+                slotA.z = 2;
+                slotB.opacity = 0;
+                shownDesc = desc;
+                slotA.kind = desc.kind;
+                if (desc.kind === "color")
+                    slotA.color = desc.color;
+                if (desc.kind === "art") {
+                    slotA.artwork = desc.artwork || "grassfield";
+                    slotA.variant = desc.variant || "evening.dark";
+                }
+                slotA.video = desc.video || "";
+                slotA.videoFit = desc.fit || "fill";
+                slotA.posterMs = desc.posterMs || 0;
+                slotA.videoPath = desc.path || "";
+                reportTone(desc);
+                if (desc.kind === "picture") {
+                    slotA.url = desc.url;
+                    if (slotA.pictureReady)
+                        win.markReady();
+                } else {
+                    slotA.url = "";
+                    win.markReady();
+                }
+            }
+            function markReady(): void {
+                if (win.firstReady)
+                    return;
+                win.firstReady = true;
+                firstTimer.stop();
+                shownOnce = true;
+                win.settled(win.shownDesc, win.shown);
+                // The window maps now: what needs its size (the glass grid) is measured again.
+                Qt.callLater(win.measure);
+                console.info("grassfield-shell: wallpaper first " + win.shownDesc.kind + (win.shownDesc.kind === "art" ? " " + (win.shownDesc.artwork || "grassfield") + " " + (win.shownDesc.variant || "evening.dark") : "") + " source=" + feed.cfg.source + " output=" + (win.modelData ? win.modelData.name : ""));
+                Journal.shown("wallpaper", win.modelData ? win.modelData.name : "");
+            }
+            // What is on screen now is final: its ground (ADR-0040 ID-2) and, for a picture, the still of the next start (ID-3).
+            function settled(desc: var, slot: WallpaperSlot): void {
+                if (!win.modelData)
+                    return;
+                Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.palette.ground, Tokens.sessionGround));
+                WallpaperState.setShown(win.modelData.name, desc);
+            }
+            Timer {
+                id: firstTimer
+                interval: Tokens.wallpaperFirstShowTimeoutMs
+                running: true
+                onTriggered: {
+                    if (win.firstReady)
+                        return;
+                    console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": the first frame took longer than " + interval + " ms; the artwork shows");
+                    win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
+                }
+            }
+            Connections {
+                target: WallpaperState
+                function onStateReadyChanged(): void {
+                    win.begin();
+                }
+            }
+            Component.onDestruction: Journal.hidden("wallpaper", win.modelData ? win.modelData.name : "")
+
+            // The output's height: the window's own is not known before it maps (the first frame's tone is reported before).
+            readonly property real fullHeight: win.modelData ? win.modelData.height : win.height
 
             // ---- the artwork's variant (ADR-0040 section 2): the choice, the appearance and the phase of the day ----
             readonly property string artVariant: WallpaperConfig.artworkVariantFor(feed.cfg.artwork, feed.cfg.artworkVariant, Appearance.dark, DayPhase.shown)
@@ -413,6 +521,13 @@ Scope {
             // Nothing has been shown yet: the first content cuts in (no fade from the default artwork).
             property bool shownOnce: false
             function show(desc: var, mode: string): void {
+                // Before the first frame: straight into slot A (once the stored still could be read).
+                if (!win.firstReady) {
+                    win.feedSeen = true;
+                    if (WallpaperState.stateReady)
+                        win.showFirst(desc);
+                    return;
+                }
                 // A fade in flight is complete at once: its content is ready (a fade only starts then).
                 if (fadeIn.running)
                     finishFade();
@@ -488,6 +603,12 @@ Scope {
             }
 
             function slotLoaded(slot: WallpaperSlot): void {
+                // The first frame's picture is decoded: the window maps.
+                if (!win.firstReady) {
+                    if (slot === slotA && win.shownDesc.kind === "picture" && slot.url === win.shownDesc.url)
+                        win.markReady();
+                    return;
+                }
                 // Only the picture that is wanted NOW may start a fade: a decode that a newer request superseded (its slot
                 // still holds the old url, or the dev hook has not started the new decode yet) never does.
                 // (The signal itself says the Image is Ready for a non-empty url; the slot's own `pictureReady` binding may not
@@ -497,6 +618,12 @@ Scope {
             }
 
             function slotFailed(slot: WallpaperSlot): void {
+                // The first frame's picture cannot be read: the artwork shows instead.
+                if (!win.firstReady && slot === slotA) {
+                    console.warn("wallpaper: cannot load the first frame " + slot.url + "; the artwork shows");
+                    win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
+                    return;
+                }
                 if (slot !== incoming || !fadePending)
                     return;
                 // The previous wallpaper stays.
@@ -516,8 +643,8 @@ Scope {
                     return;
                 }
                 // Two artworks blend for the whole fade: the band covers the moments neither tone reads (gate A2).
-                if (shownDesc.kind === "art" && pendingDesc.kind === "art" && win.modelData && height > 0)
-                    BarTone.reportArtFade(win.modelData.name, Qt.color(shown.art.skyTop), Qt.color(shown.art.skyMid), Tokens.menubarHeight / (shown.palette.tone.at * height), Qt.color(incoming.art.skyTop), Qt.color(incoming.art.skyMid), Tokens.menubarHeight / (incoming.palette.tone.at * height), win.toneSwitchAt);
+                if (shownDesc.kind === "art" && pendingDesc.kind === "art" && win.modelData && win.fullHeight > 0)
+                    BarTone.reportArtFade(win.modelData.name, Qt.color(shown.art.skyTop), Qt.color(shown.art.skyMid), Tokens.menubarHeight / (shown.palette.tone.at * win.fullHeight), Qt.color(incoming.art.skyTop), Qt.color(incoming.art.skyMid), Tokens.menubarHeight / (incoming.palette.tone.at * win.fullHeight), win.toneSwitchAt);
                 // The bar's tone follows the new wallpaper once it dominates: from the fade's own progress (the incoming
                 // slot's opacity reaching 60 %), not from a timer (a fade is frame-driven, a timer is not).
                 toneDone = false;
@@ -553,6 +680,7 @@ Scope {
                 }
                 // The tone of the wallpaper that is on screen now.
                 reportTone(shownDesc);
+                win.settled(shownDesc, shown);
             }
 
             function reportTone(desc: var): void {
@@ -573,8 +701,8 @@ Scope {
                     BarTone.reportColor(win.modelData.name, Qt.color(desc.color));
                 else if (source === "none")
                     BarTone.reportUnmeasured(win.modelData.name);
-                else if (height > 0)
-                    BarTone.reportGradient(win.modelData.name, Qt.color(slot.art.skyTop), Qt.color(slot.art.skyMid), Tokens.menubarHeight / (slot.palette.tone.at * height));
+                else if (win.fullHeight > 0)
+                    BarTone.reportGradient(win.modelData.name, Qt.color(slot.art.skyTop), Qt.color(slot.art.skyMid), Tokens.menubarHeight / (slot.palette.tone.at * win.fullHeight));
             }
 
             NumberAnimation {

@@ -227,6 +227,38 @@ and IQ-B3 here changes the palette only, not which controls read it.
   `wallpaper.firstShowTimeoutMs`, after which the artwork). When the feed's result is the same file, nothing fades.
   This removes the artwork-then-picture sequence (W-7) and the late tone switch (W-8), and keeps ADR-0016's rule that
   the shell decodes only the helper's own output.
+- **Step 3 as built** (in the one pull request of 2026-10-31; nothing in `shell/security`):
+  - **First frame (ID-3).** Each output's wallpaper window maps only with its first frame (`visible: win.firstReady`).
+    Once a picture without a video is on screen its still is recorded in `wallpaper.json` (`stills`, per output: the
+    prepared file, the strip and whole-picture statistics, the mean colour; ADR-0020 row), and at the next start
+    `WallpaperConfig.stillOf` reads it back only when it is one of the helper's own pictures (a 32-hex cache name directly in
+    the prepared folder: the shell still decodes nothing else). The still goes into slot A with the bar tone of its stored
+    strip, and the window maps once it is decoded; the artwork and a colour map at once. Before that frame every result of
+    the feed goes straight into slot A (no fade); when the feed's result is the still's file nothing changes. A still that
+    cannot be decoded, or nothing within `wallpaper.firstShowTimeoutMs` (1500 ms), gives the artwork. A video has no still
+    (its poster lives in the video cache): it waits for the feed within the same bound. The bar's tone is never reported
+    from the default artwork before the first frame.
+  - **Ground (ID-2).** `Artwork.ground` (the sRGB mean of the sky's middle and the middle of the land, in whole channel
+    values) gives each palette a ground; the default artwork's, `#2F6D5F`, is now `session.ground` and `looknfeel.lua`'s
+    `background_color` (`tst_artwork.qml` and `tst_sessionexit.qml` hold the three equal). `WallpaperConfig.groundOf` gives
+    the ground of what an output shows (a picture's mean colour from the helper, a colour, the artwork's), reported to the
+    `Ground` service when it is on screen. The wallpaper window's own colour is its output's ground, the exit cover's is
+    `Ground.current` (the first screen's), and `Compositor.qml` sets Hyprland's `misc.background_color` to that one through
+    the request socket like the blur (`Minimized.groundCall`): at start, on each change (debounced), after a config reload;
+    an error answer stops the pushes until the next change and the static default stays. VERIFY on 0.56.2 (section
+    "Not verified"): that the call is accepted at run time and repaints the background.
+  - **No compositor fade (ID-4).** `gf-wallpaper-no-anim` in `windows.lua`.
+  - **Hotplug (ID-15, the wallpaper's part).** A new output's window takes the same path: unmapped (the compositor's
+    ground shows) until its still or its feed's first result, then mapped once; `Ground.of` gives an output without a
+    report the compositor's ground.
+  - **Measurement (ID-16).** `Journal` logs `grassfield-shell: shown wallpaper <output> <ms>` when a window maps and
+    `hidden` when it goes, plus `grassfield-shell: wallpaper first <kind> [<artwork> <variant>] source=<source>
+    output=<output>`; `tests/visual/appear-once.sh` comes with step 6, which adds the bars' lines.
+  - Tests: `tst_wallpaper.qml` (`stillOf` refuses any file but a cache name in the prepared folder, `withStill`,
+    `groundOf`, the window's contract from its source), `tst_artwork.qml` (every palette's ground, the default's equal to
+    `session.ground`), `tst_minimized.qml` (`groundCall` interpolates only `#rrggbb`), `tst_sessionexit.qml` (the cover and
+    the compositor read `Ground.current`). NOT VERIFIED (nested): the first frame at start and at a shell restart, the
+    hotplug, the background colour after a change and a reload.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.
@@ -373,8 +405,8 @@ greeter's or the firmware's (`mockups/t1-transitions.svg`). When the session the
 compositor's exit both fail, or `systemctl` refuses), the helper lifts the cover and exits 4; a cover nobody lifts (the
 helper was killed) lifts itself after `session.exitCoverHoldMs`; `session cover` and `lift` are actions of the shell's IPC
 surface (`docs/specs/security.md`: another process of the user can hide the desktop for that long at most), `session
-state` a dev hook. Until step 3 the ground is `session.ground`, the session's
-Hyprland background colour (`tests/unit/tst_sessionexit.qml` holds them equal). Tests: `tst_popupkinds.qml`,
+state` a dev hook. Since step 3 the ground is the shown wallpaper's (`Ground.current`, which the shell also sets as
+Hyprland's background colour), `session.ground` the static default (`tests/unit/tst_sessionexit.qml`). Tests: `tst_popupkinds.qml`,
 `tst_sessionexit.qml`, `tests/shell/session_end.sh` (the helper against a stand-in `qs`: the real one would reach the
 session's shell), `tests/fuzz/fuzz_helpers.py` session-end (the wait stays within `EXIT_WAIT` whatever the shell answers).
 Legal (ID-17): E2 of `docs/legal/visual-review.md` adds the countdown, its macOS-like sentences and the exit fade.
@@ -389,7 +421,7 @@ Legal (ID-17): E2 of `docs/legal/visual-review.md` adds the countdown, its macOS
 | `session.exitFadeMs`, `session.exitWaitMs` | 400, 1000 | ID-10 |
 | `session.exitCountdownSeconds` | 60 | ID-21 (step 7) |
 | `session.exitCoverHoldMs` | 20000 | ID-10, P-6: a cover nobody lifted lifts itself (step 7) |
-| `session.ground` | `#1E1C18`, the session's Hyprland background colour | ID-2, until step 3 makes the ground the shown wallpaper's (step 7) |
+| `session.ground` | `#2F6D5F` since step 3 (the default artwork's ground; `#1E1C18` in step 7), the session's static Hyprland background colour | ID-2: the shown wallpaper's ground replaces it at run time (step 3) |
 | `wallpaper.firstShowTimeoutMs` | 1500 | ID-3 |
 | `lock.fadeInMs`, `lock.fadeOutMs` | 200, 200 | IQ-T2 A |
 | `lock.scrimClearOpacity`, `lock.scrimFeather` | 0.25, 48 | IQ-W4 A; A2 per band |

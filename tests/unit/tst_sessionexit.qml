@@ -41,7 +41,13 @@ TestCase {
         verify(ns !== null);
         compare(ns[1], "grassfield-exit-cover");
         verify(/WlrLayershell\.layer: WlrLayer\.Overlay/.test(cover), "above the menu bar, the Dock and the popups");
-        verify(/color: Tokens\.sessionGround/.test(cover));
+        // The ground of what is on screen (ADR-0040 step 3), the compositor's background colour too (Compositor.qml pushes it);
+        // the static session.ground until a wallpaper reports one.
+        verify(/color: Ground\.current/.test(cover));
+        const ground = source("shell/services/Ground.qml");
+        verify(/\?\? Tokens\.sessionGround;/.test(ground), "the static default without a report");
+        const comp = source("shell/platform/Compositor.qml");
+        verify(/readonly property string ground: Ground\.current/.test(comp) && /Minimized\.groundCall\(root\.ground\)/.test(comp), "the compositor gets the same ground");
         verify(/duration: root\.fadeMs/.test(cover) && /readonly property int fadeMs: Appearance\.duration\(Tokens\.sessionExitFadeMs\)/.test(cover));
         // The compositor neither fades it (one owner of motion, ID-4) nor blurs it (it is opaque).
         const lua = source("config/hypr/grassfield/windows.lua");

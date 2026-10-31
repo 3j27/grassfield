@@ -27,6 +27,17 @@ TestCase {
         compare(Artwork.flat(p).skyMid, "#2F6F7E");
     }
 
+    // The ground (ADR-0040 ID-2): the default artwork's is the session's static one (looknfeel.lua's background_color,
+    // tests/unit/tst_sessionexit.qml), the mean of the sky's middle and the land's.
+    function test_theGroundOfTheDefaultIsTheSessionGround() {
+        const p = Artwork.palette(Tokens, "grassfield", Artwork.DEFAULT_VARIANT);
+        compare(p.ground, Tokens.sessionGround.toUpperCase());
+        compare(Artwork.palette(Tokens, "grassfield", "day.light").ground, "#98C6AE");
+        compare(Artwork.palette(Tokens, "meadow", "light").ground, "#A5CD9B");
+        compare(Artwork.palette(Tokens, "rows", "dark").ground, "#1F3D28");
+        compare(Artwork.palette(Tokens, "ridgeline", "dark").ground, "#111D1E");
+    }
+
     function test_unknownNamesReadAsTheDefault() {
         compare(Artwork.parse("nope", "x"), {artwork: "grassfield", phase: "evening", set: "dark"});
         compare(Artwork.parse("grassfield", "noon.light"), {artwork: "grassfield", phase: "evening", set: "dark"});
@@ -53,6 +64,7 @@ TestCase {
                 verify(testCase.hex.test(c), a + " " + v + ": " + c);
             verify(testCase.hex.test(p.tone.top) && testCase.hex.test(p.tone.next), a + " " + v + ": the tone");
             verify(p.tone.at > 0 && p.tone.at <= 1);
+            verify(testCase.hex.test(p.ground), a + " " + v + ": the ground");
             compare(p.stops.length, 3, a + " " + v);
         }
         // The two sets of the Grassfield artwork differ at every phase; the dark Evening is the only one kept from before.

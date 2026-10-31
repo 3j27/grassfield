@@ -8,8 +8,9 @@ import qs.services
 
 // The exit cover (ADR-0040 ID-10, step 7): once Log Out, Restart or Shut Down has closed every window, the whole screen fades
 // to the ground in one movement (session.exitFadeMs) and the session ends under it, instead of the menu bar, the Dock and the
-// wallpaper vanishing one by one. The ground is the session's Hyprland background colour (session.ground, ID-2), so the cover
-// and what remains once the shell itself has stopped are the same colour; the black that follows is the greeter's or the
+// wallpaper vanishing one by one. The ground is the session's Hyprland background colour (Ground.current, ID-2: the shown
+// wallpaper's ground, which the shell sets as that colour; session.ground before), so the cover and what remains once the
+// shell itself has stopped are the same colour on every output; the black that follows is the greeter's or the
 // firmware's. packaging/bin/grassfield-session-end asks for it (`qs ipc call session cover`, which answers how many
 // milliseconds the fade lasts) and waits for it, at most session.exitWaitMs; when the session then cannot be ended it lifts
 // the cover (`qs ipc call session lift`). A cover the helper could not lift (it was killed) lifts by itself after
@@ -93,7 +94,7 @@ Scope {
 
             Rectangle {
                 anchors.fill: parent
-                color: Tokens.sessionGround
+                color: Ground.current
                 opacity: 0
 
                 NumberAnimation on opacity {

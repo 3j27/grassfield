@@ -39,7 +39,7 @@ Persisted files today (GF-092). Several state-like files live in `~/.config` and
 | `wallpaper-recent.json` | config (`backend.cpp:110`) | Settings (top-level array) | none | state, `{version, recents}` |
 | `recent-items.json` | state | shell | none | add v1 |
 | `wallpaper-online.json` | state | shell | none | add v1 |
-| `wallpaper.json` (carousel) | state | shell | none | add v1 |
+| `wallpaper.json` (carousel; `stills` since ADR-0040 step 3) | state | shell | none | add v1 (`stills`: per output, the last picture shown, `{file, strip, image, mean}`, the first frame of the next start; additive, ignored by an older shell; a file that is not one of the helper's prepared pictures is not read; at most 16 outputs) |
 | `airplane.json` | state (`Airplane.js:82`) | shell | none | add v1 |
 | `show-desktop.json` | state (shell UX branch) | shell | check after the merge | add v1 |
 | `notifications.json`, `widgets.json`, `desktop-icons.json`, `search-usage.json` | state | shell | yes | none |

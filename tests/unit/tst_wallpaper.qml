@@ -967,4 +967,92 @@ TestCase {
         // An unknown choice reads as the default (Time of Day).
         compare(v("grassfield", "sometimes", false, "day"), "day.light");
     }
+
+    // ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3) ----
+    readonly property string prep: "/home/u/.cache/grassfield/wallpapers/prepared"
+    readonly property var stripStats: ({all: {mean: 0.4, p5: 0.1, p95: 0.7}})
+
+    function test_stillOfReadsOnlyTheHelpersOwnPictures() {
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const good = {stills: {"eDP-1": {file: prep + "/" + name, strip: stripStats, image: {mean: 0.3, p5: 0.1, p95: 0.6}, mean: "#336699"}}};
+        const s = WallpaperConfig.stillOf(good, "eDP-1", prep);
+        compare(s.file, prep + "/" + name);
+        compare(s.strip.all.mean, 0.4);
+        compare(s.image.p95, 0.6);
+        compare(s.mean, "#336699");
+        // The prepared folder may carry a trailing slash.
+        compare(WallpaperConfig.stillOf(good, "eDP-1", prep + "/").file, prep + "/" + name);
+        // Another output, no stills, nothing stored: null.
+        compare(WallpaperConfig.stillOf(good, "DP-3", prep), null);
+        compare(WallpaperConfig.stillOf({}, "eDP-1", prep), null);
+        compare(WallpaperConfig.stillOf(null, "eDP-1", prep), null);
+        compare(WallpaperConfig.stillOf({stills: []}, "0", prep), null);
+        // Anything that is not a cache name directly in the prepared folder is never decoded (ADR-0016).
+        for (const f of [prep + "/sub/" + name, prep + "/../" + name, "/etc/passwd", prep + "/" + name + ".png", prep + "/0123456789ABCDEF0123456789ABCDEF.jpg", prep + "/x.jpg", "/tmp/" + name, prep + name, 12])
+            compare(WallpaperConfig.stillOf({stills: {o: {file: f}}}, "o", prep), null, String(f));
+        // No usable prepared folder: nothing is read.
+        compare(WallpaperConfig.stillOf(good, "eDP-1", ""), null);
+        compare(WallpaperConfig.stillOf(good, "eDP-1", "relative/prepared"), null);
+        // Statistics of another shape are dropped, the picture stays.
+        const odd = WallpaperConfig.stillOf({stills: {o: {file: prep + "/" + name, strip: {all: {mean: "x"}}, image: [1], mean: "red"}}}, "o", prep);
+        compare(odd.strip, null);
+        compare(odd.image, null);
+        compare(odd.mean, "");
+        // An inherited key is not a stored output.
+        compare(WallpaperConfig.stillOf({stills: {}}, "constructor", prep), null);
+    }
+
+    function test_withStillKeepsThePictureOnScreen() {
+        const url = "file://" + prep + "/0123456789abcdef0123456789abcdef.jpg";
+        const pic = {kind: "picture", color: "", url: url, strip: stripStats, image: null, mean: "#112233", video: ""};
+        const saved = {displays: {k: {seed: 1}}};
+        const a = WallpaperConfig.withStill(saved, "eDP-1", pic);
+        compare(a.displays, saved.displays, "the carousel is kept");
+        compare(a.stills["eDP-1"], {file: prep + "/0123456789abcdef0123456789abcdef.jpg", strip: stripStats, image: null, mean: "#112233"});
+        verify(saved.stills === undefined, "a new object: the stored state is not changed in place");
+        // What is written reads back.
+        compare(WallpaperConfig.stillOf(a, "eDP-1", prep).file, prep + "/0123456789abcdef0123456789abcdef.jpg");
+        // The artwork, a colour, a video: the still goes.
+        for (const d of [{kind: "art"}, {kind: "color", color: "#000000"}, Object.assign({}, pic, {video: "file:///v.mp4"}), null])
+            verify(!("eDP-1" in WallpaperConfig.withStill(a, "eDP-1", d).stills), JSON.stringify(d));
+        // At most 16 outputs.
+        let many = {};
+        for (let i = 0; i < 20; i++)
+            many = WallpaperConfig.withStill(many, "out-" + i, pic);
+        compare(Object.keys(many.stills).length, 16);
+        verify("out-19" in many.stills, "the newest is kept");
+    }
+
+    function test_groundOf() {
+        compare(WallpaperConfig.groundOf({kind: "picture", mean: "#a0b0c0"}, "#2F6D5F", "#000000"), "#A0B0C0");
+        compare(WallpaperConfig.groundOf({kind: "color", color: "#ff8800"}, "#2F6D5F", "#000000"), "#FF8800");
+        compare(WallpaperConfig.groundOf({kind: "art"}, "#2f6d5f", "#000000"), "#2F6D5F");
+        // Nothing usable: the static default.
+        compare(WallpaperConfig.groundOf({kind: "picture", mean: ""}, "#2F6D5F", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf({kind: "color", color: "red"}, "#2F6D5F", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf({kind: "art"}, "", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf(null, "#2F6D5F", "#000001"), "#000001");
+    }
+
+    // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
+    // its first frame, bounded by the token; the compositor adds no fade; the journal lines are logged.
+    function test_theWindowMapsOnceWithItsFirstFrame() {
+        function text(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText;
+        }
+        const w = text("../../shell/desktop/Wallpaper.qml");
+        verify(/visible: win\.firstReady/.test(w));
+        verify(/interval: Tokens\.wallpaperFirstShowTimeoutMs/.test(w));
+        compare(Tokens.wallpaperFirstShowTimeoutMs, 1500);
+        verify(/color: Ground\.of\(/.test(w), "the ground under the wallpaper");
+        verify(/Journal\.shown\("wallpaper"/.test(w) && /Journal\.hidden\("wallpaper"/.test(w));
+        verify(/WallpaperState\.setShown\(/.test(w) && /WallpaperState\.stillOf\(/.test(w));
+        const lua = text("../../config/hypr/grassfield/windows.lua");
+        const noAnim = (lua.match(/^hl\.layer_rule\(\{.*no_anim = true.*\}\)$/gm) || []).map(r => /namespace = "([^"]+)"/.exec(r)[1]);
+        verify(noAnim.some(p => new RegExp(p).test("grassfield-wallpaper")), "a no_anim layer rule matches the wallpaper");
+    }
 }
