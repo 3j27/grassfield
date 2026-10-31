@@ -25,16 +25,20 @@ command -v qs >/dev/null || { echo "SKIP: share_picker_ipc: Quickshell (qs) is n
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 tmp=$(mktemp -d "$root/.dev/share-picker-ipc.XXXXXX" 2>/dev/null || { mkdir -p "$root/.dev" && mktemp -d "$root/.dev/share-picker-ipc.XXXXXX"; })
-fake="" shell="" standin=""
+fake="" shell="" standin="" runtime=""
 cleanup() {
   local p
   for p in $fake $shell $standin; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$tmp"
+  rm -rf "$tmp" "$runtime"
 }
 trap cleanup EXIT
 sig=gf-share-picker
-mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg" "$tmp/bin" "$tmp/fake" "$tmp/stock"
-chmod 700 "$tmp/runtime" "$tmp/cache"
+# The runtime directory is short and of its own: a Unix socket's path holds at most 107 bytes (the picker's channel is
+# <runtime>/grassfield/picker/<32 hex>.sock), and the test's directory can be deep in the tree.
+runtime=$(mktemp -d /tmp/gfspi.XXXXXX)
+mkdir -p "$runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg" "$tmp/bin" "$tmp/fake" "$tmp/stock"
+chmod 700 "$runtime" "$tmp/cache"
+((${#runtime} + 54 <= 107)) || { echo "FAIL: share_picker_ipc: the runtime directory $runtime is too long for a socket"; exit 1; }
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
@@ -59,13 +63,13 @@ def serve(name, handler):
 threading.Thread(target=serve, args=(".socket2.sock", held.append), daemon=True).start()
 serve(".socket.sock", answer)
 PY
-python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" &
+python3 -I "$tmp/fake.py" "$runtime/hypr/$sig" &
 fake=$!
-for _ in $(seq 50); do [[ -S $tmp/runtime/hypr/$sig/.socket.sock && -S $tmp/runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
+for _ in $(seq 50); do [[ -S $runtime/hypr/$sig/.socket.sock && -S $runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
 base_env=(-u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST
   GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig"
-  XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache")
+  XDG_RUNTIME_DIR="$runtime" XDG_CACHE_HOME="$tmp/cache")
 # Qt's offscreen platform names its screen only through its configuration file: two displays, as Hyprland names them.
 printf '{"screens": [{"name": "DP-1", "x": 0, "y": 0, "width": 800, "height": 600, "logicalDpi": 96, "dpr": 1},
   {"name": "HDMI-A-1", "x": 800, "y": 0, "width": 640, "height": 480, "logicalDpi": 96, "dpr": 1}]}\n' >"$tmp/screens.json"
@@ -118,7 +122,7 @@ check bash -c '[[ ! -e $1/stock.ran && ! -s $1/standin.err ]]' _ "$tmp"
 share
 shown_within || true
 desc="2 a second request while the panel is open: busy"
-check test "$(ipc picker request "$(printf '%032x' 1)" "$tmp/runtime/grassfield/picker/$(printf '%032x' 2).sock")" == busy
+check test "$(ipc picker request "$(printf '%032x' 1)" "$runtime/grassfield/picker/$(printf '%032x' 2).sock")" == busy
 desc="2 a window's choice reaches xdph as its handle"
 check test "$(ipc picker choose window 777 no)" == ok
 ended_within "$standin" 3 || true
@@ -155,16 +159,16 @@ check test "$(ipc probe lock on)" == ok
 check bash -c 'for ((i = 0; i < 60; i++)); do kill -0 "$1" 2>/dev/null || break; sleep 0.05; done; ! kill -0 "$1" 2>/dev/null && [[ ! -s $2/standin.out ]]' _ "$standin" "$tmp"
 check test "$(state '%(open)s %(shown)s %(popup)s')" == "False False "
 desc="6 a request while locked: locked, nothing shows"
-check test "$(ipc picker request "$(printf '%032x' 3)" "$tmp/runtime/grassfield/picker/$(printf '%032x' 4).sock")" == locked
+check test "$(ipc picker request "$(printf '%032x' 3)" "$runtime/grassfield/picker/$(printf '%032x' 4).sock")" == locked
 check test "$(state '%(open)s')" == False
 ipc probe lock off >/dev/null
 
 # 7.
 desc="7 requests not of the stand-in's form are refused and nothing shows: an id that is not 128-bit hex, a socket elsewhere, a name that is not 128-bit hex"
-check test "$(ipc picker request "$(printf '%031x' 5)" "$tmp/runtime/grassfield/picker/$(printf '%032x' 6).sock")" == refused
+check test "$(ipc picker request "$(printf '%031x' 5)" "$runtime/grassfield/picker/$(printf '%032x' 6).sock")" == refused
 check test "$(ipc picker request "$(printf '%032x' 5)" "$tmp/elsewhere/$(printf '%032x' 6).sock")" == refused
-check test "$(ipc picker request "$(printf '%032x' 5)" "$tmp/runtime/grassfield/picker/../$(printf '%032x' 6).sock")" == refused
-check test "$(ipc picker request "$(printf '%032X' 171)" "$tmp/runtime/grassfield/picker/$(printf '%032x' 6).sock")" == refused
+check test "$(ipc picker request "$(printf '%032x' 5)" "$runtime/grassfield/picker/../$(printf '%032x' 6).sock")" == refused
+check test "$(ipc picker request "$(printf '%032X' 171)" "$runtime/grassfield/picker/$(printf '%032x' 6).sock")" == refused
 check test "$(state '%(open)s')" == False
 
 if ((fail)); then tail -20 "$tmp/shell.log"; fi

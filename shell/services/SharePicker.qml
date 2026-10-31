@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.lib
+import qs.platform
 import "SharePicker.js" as Logic
 
 // The screen-sharing picker's channel (ADR-0035 D-6, step 7a; spec system-dialogs.md section 3). xdph runs the stand-in
@@ -161,7 +162,9 @@ Singleton {
                 connected: channel.connected,
                 popup: Popups.kind,
                 outputs: root.outputs(),
-                windows: root.windows
+                windows: root.windows,
+                // The windows whose live thumbnail has a source (a toplevel Hyprland knows at that address).
+                sources: root.windows.filter(w => w.address !== "" && Compositor.toplevelByAddress(w.address) !== null).length
             });
         }
 

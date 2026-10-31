@@ -10,7 +10,7 @@ const ID = /^[0-9a-f]{32}$/;
 const SOCKET = /^[0-9a-f]{32}\.sock$/;
 const OUTPUT = /^[A-Za-z0-9._-]{1,64}$/;
 const HANDLE = /^[0-9]{1,10}$/;
-const ADDRESS = /^0x[0-9a-f]{1,16}$/;
+const ADDRESS = /^0x([0-9a-f]{1,16})$/;
 const MAX_WINDOWS = 256;
 const MAX_TEXT = 256;
 
@@ -27,7 +27,7 @@ function validRequest(id, path, runtimeDir) {
 
 // The stand-in's first line, `<id> list <json>`: the windows xdph listed, or null when the line is not that request's list.
 // Each window keeps its handle (what the answer names), its app id and title (plain text, capped) and Hyprland's address
-// (the live thumbnail's source; "" when xdph had none).
+// as Compositor.toplevelByAddress takes it, lower-case hex without "0x" (the live thumbnail's source; "" when xdph had none).
 function parseList(line, id) {
     const head = id + " list ";
     if (typeof line !== "string" || !line.startsWith(head))
@@ -52,7 +52,7 @@ function parseList(line, id) {
             handle: w.handle,
             appId: typeof w["class"] === "string" ? w["class"].slice(0, MAX_TEXT) : "",
             title: typeof w.title === "string" ? w.title.slice(0, MAX_TEXT) : "",
-            address: typeof w.address === "string" && ADDRESS.test(w.address) ? w.address : ""
+            address: typeof w.address === "string" && ADDRESS.test(w.address) ? ADDRESS.exec(w.address)[1] : ""
         });
     }
     return out;
@@ -75,6 +75,25 @@ function selection(kind, value, remember, outputs, windows) {
     if (kind === "window" && typeof value === "string" && windows.some(w => w.handle === value))
         return flags + "/window:" + value;
     return "";
+}
+
+// What a tile stands for, kept as the selection so that it never moves to another tile when the list changes under it (a
+// display plugged in, the windows sorted again once app names arrive): a display's name, a window's handle.
+function keyOf(tab, tile) {
+    if (!tile)
+        return "";
+    return tab === "screen" ? String(tile.name) : String(tile.handle);
+}
+
+// The tile of `key` in `tiles`, or -1 when it is gone (the selection then clears: Share is dimmed again).
+function indexOfKey(tab, tiles, key) {
+    if (key === "")
+        return -1;
+    for (let i = 0; i < tiles.length; i++) {
+        if (keyOf(tab, tiles[i]) === key)
+            return i;
+    }
+    return -1;
 }
 
 // The tile the arrow keys move to in a grid of `count` tiles, `columns` wide: Left/Right step, Up/Down move by a row; the

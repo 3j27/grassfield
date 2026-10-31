@@ -18,25 +18,28 @@ Dialog {
     id: root
 
     property string tab: "screen"
-    property int current: -1
+    // The chosen tile by what it stands for (SharePicker.js keyOf), never by its place: "" for none.
+    property string chosen: ""
     property bool remember: false
     readonly property var screens: Quickshell.screens
     readonly property var windows: Logic.ordered(SharePicker.windows, appId => Apps.nameFor(appId))
     readonly property var tiles: root.tab === "screen" ? root.screens : root.windows
+    readonly property int current: Logic.indexOfKey(root.tab, root.tiles, root.chosen)
     readonly property int columns: Logic.columnsFor(grid.width, Tokens.panelSharePickerTileWidth, Tokens.spacingMd)
 
+    function choose(index: int): void {
+        root.chosen = index >= 0 && index < root.tiles.length ? Logic.keyOf(root.tab, root.tiles[index]) : "";
+    }
+
     function shareCurrent(): void {
-        if (root.current < 0 || root.current >= root.tiles.length)
+        if (root.current < 0)
             return;
-        if (root.tab === "screen")
-            SharePicker.share("screen", root.screens[root.current].name, root.remember);
-        else
-            SharePicker.share("window", root.windows[root.current].handle, root.remember);
+        SharePicker.share(root.tab, root.chosen, root.remember);
     }
 
     function show(tab: string): void {
         root.tab = tab;
-        root.current = -1;
+        root.chosen = "";
         grid.forceActiveFocus();
     }
 
@@ -46,10 +49,6 @@ Dialog {
     panelWidth: Tokens.panelSharePickerWidth
 
     onRejected: SharePicker.cancel()
-    onTilesChanged: {
-        if (root.current >= root.tiles.length)
-            root.current = -1;
-    }
 
     content: [
         SegmentedControl {
@@ -105,7 +104,7 @@ Dialog {
                     else if (cmd && event.key === Qt.Key_2)
                         root.show("window");
                     else if (!cmd && keys[event.key] !== undefined)
-                        root.current = Logic.moved(root.current, keys[event.key], root.tiles.length, root.columns);
+                        root.choose(Logic.moved(root.current, keys[event.key], root.tiles.length, root.columns));
                     else if (!cmd && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
                         root.shareCurrent();
                     else
@@ -129,7 +128,7 @@ Dialog {
                     Accessible.role: Accessible.ListItem
                     Accessible.name: tile.isScreen ? tile.label : qsTr("%1, %2").arg(Apps.nameFor(tile.modelData.appId)).arg(tile.label)
                     Accessible.selected: tile.selected
-                    Accessible.onPressAction: root.current = tile.index
+                    Accessible.onPressAction: root.choose(tile.index)
 
                     Item {
                         id: thumb
@@ -154,7 +153,7 @@ Dialog {
                         ScreencopyView {
                             id: view
 
-                            readonly property real ratio: implicitWidth > 0 && implicitHeight > 0 ? implicitWidth / implicitHeight : Tokens.tilingSuggestThumbAspect
+                            readonly property real ratio: implicitWidth > 0 && implicitHeight > 0 ? implicitWidth / implicitHeight : Tokens.panelSharePickerThumbAspect
 
                             anchors.centerIn: parent
                             width: ratio >= thumb.width / thumb.height ? thumb.width : thumb.height * ratio
@@ -167,7 +166,7 @@ Dialog {
 
                         TintedIcon {
                             anchors.centerIn: parent
-                            size: Tokens.panelAlertIconGlyph
+                            size: Tokens.panelSharePickerIconSize
                             visible: tile.source === null
                             source: ThemeIcons.appIcon(tile.entry ? tile.entry.icon : (tile.isScreen ? "" : tile.modelData.appId), "application-x-executable")
                             asynchronous: true
@@ -204,11 +203,11 @@ Dialog {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            root.current = tile.index;
+                            root.choose(tile.index);
                             grid.forceActiveFocus();
                         }
                         onDoubleClicked: {
-                            root.current = tile.index;
+                            root.choose(tile.index);
                             root.shareCurrent();
                         }
                     }

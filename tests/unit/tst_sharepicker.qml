@@ -35,9 +35,9 @@ TestCase {
             {handle: "4294967295", class: "firefox", title: "A page", address: ""}
         ]);
         compare(Logic.parseList(line, id), [
-            {handle: "123456", appId: "org.gnome.TextEditor", title: "notes.txt", address: "0x55d48e82834e"},
+            {handle: "123456", appId: "org.gnome.TextEditor", title: "notes.txt", address: "55d48e82834e"},
             {handle: "4294967295", appId: "firefox", title: "A page", address: ""}
-        ]);
+        ], "the address as Compositor.toplevelByAddress takes it: lower-case hex without 0x");
         compare(Logic.parseList(line, "f" + id.slice(1)), null, "another request's list");
         compare(Logic.parseList(id + " wait", id), null);
         compare(Logic.parseList(id + " list {", id), null, "not JSON");
@@ -85,6 +85,24 @@ TestCase {
         compare(Logic.selection("window", "999", false, [], windows), "", "a window xdph did not list");
         compare(Logic.selection("region", "DP-1@0,0,1,1", false, ["DP-1"], windows), "", "no region in step 7a");
         compare(Logic.selection("screen", "DP-1", "yes", ["DP-1"], windows), "/screen:DP-1", "only true ticks Remember");
+    }
+
+    // The selection is what a tile stands for: when the tiles are listed again in another order (a display plugged in, app
+    // names that arrive and sort the windows again) it stays on that display or window, and clears when it is gone.
+    function test_theSelectionFollowsItsTileNotItsPlace() {
+        const screens = [{name: "DP-1"}, {name: "HDMI-A-1"}];
+        compare(Logic.keyOf("screen", screens[1]), "HDMI-A-1");
+        compare(Logic.indexOfKey("screen", [{name: "eDP-1"}, {name: "DP-1"}, {name: "HDMI-A-1"}], "HDMI-A-1"), 2, "a display plugged in before it");
+        compare(Logic.indexOfKey("screen", [{name: "DP-1"}], "HDMI-A-1"), -1, "the display unplugged: nothing selected");
+        const w = (h, a) => ({handle: h, appId: a, title: "", address: ""});
+        compare(Logic.keyOf("window", w("777", "firefox")), "777");
+        compare(Logic.indexOfKey("window", [w("123", "b"), w("777", "a")], "777"), 1);
+        compare(Logic.indexOfKey("window", [w("777", "a"), w("123", "b")], "777"), 0, "sorted again: the same window");
+        compare(Logic.indexOfKey("window", [w("123", "b")], "777"), -1, "the window closed: nothing selected");
+        compare(Logic.indexOfKey("window", [w("123", "b")], ""), -1, "nothing chosen");
+        compare(Logic.indexOfKey("screen", [{name: "777"}], "777"), 0);
+        compare(Logic.indexOfKey("window", [{name: "777"}], "777"), -1, "a key of the other tab names nothing");
+        compare(Logic.keyOf("screen", null), "");
     }
 
     function test_theArrowsMoveInTheGrid() {

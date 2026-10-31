@@ -691,6 +691,10 @@ QtObject {
     readonly property int panelSharePickerTileWidth: 176
     // estimate: panel.sharePickerTileWidth at 16:10, the box a display or a window is fitted into with its own aspect (ADR-0035 D-6, step 7a)
     readonly property int panelSharePickerThumbHeight: 110
+    // the 16:10 box of panel.sharePickerThumbHeight, the aspect a thumbnail takes until its capture has a size (ADR-0035 D-6, step 7a)
+    readonly property real panelSharePickerThumbAspect: 1.6
+    // an app's icon in a thumbnail's place when the window has no capture source: the size of an alert's symbol (panel.alertIconGlyph), unchanged (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerIconSize: 48
     // rows of tiles shown before the grid scrolls, so that the sheet stays smaller than a laptop's display (ADR-0035 D-6, step 7a)
     readonly property int panelSharePickerRows: 2
     // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
