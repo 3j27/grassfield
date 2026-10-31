@@ -185,6 +185,16 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   (integrator nested pass of 1ee992e, MAJOR C; ADR-0036 D57). The reply gains `"unfit":["<hex>",…]` (always present): the
   windows that can be tiled now and do not fit half of their output; the shell reads it again when the Window menu opens
   and greys its Full Screen Tile for those (integrator PASS on 8316ed2, for later).
+- Window tiling, step 6c (2026-10-30, additive, ADR-0036 D64-D68, docs/specs/tiling.md TL33): event
+  `{"type":"titlebar-reveal","output":"<name>","revealed":bool}`: the titlebar the plugin draws over a full-screen window
+  (ADR-0015 P6) was revealed at the top edge of that output, or went away (the pointer left it, the window left full
+  screen or closed, the plugin unloads); posted on each change of the set of outputs with a revealed titlebar, coalesced
+  per output (the latest wins). The shell's menu bar on that output then stays in view while it is revealed and leaves with
+  it (macOS: the menu bar and the toolbar come and go together). No feature and no verb: an older plugin never sends it
+  and the menu bar keeps its own auto-hide; the shell forgets every output when the plugin goes away. Nothing is
+  revealed while the session is locked (`revealable()`), so no `true` is posted then. No new verb or reply field:
+  the Split View, the green light under an open popover (the shell runs `unsplit` or its own full-screen and Zoom
+  requests) and the gathering of windows left off every output after an unplug (the plugin's own move) use what exists.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -212,6 +222,7 @@ event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
 event tile-hover: address state x y w h tileable splittable
+event titlebar-reveal: output revealed
 event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
