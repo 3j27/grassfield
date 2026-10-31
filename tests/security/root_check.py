@@ -1,37 +1,37 @@
 #!/usr/bin/env python3
-"""The security root (shell/security.qml) holds nothing but ShellRoot and IpcHandler (ADR-0041 step 1, S1): read as the
-QML engine reads it, not line by line (the integrator's review of eecf953, major 1: a next-line brace, a comment before the
-brace, an indented or tab import and a singleton's property all slipped past a line-based grep).
+"""The security root (shell/security.qml) holds nothing but ShellRoot and IpcHandler (ADR-0041 step 1, S1): a bounded,
+readable check beside the hash pin of tests/security/security_unit.sh (the integrator's decision on #75, round 2: a static
+check cannot model all of QML, so the reviewed root is pinned by its SHA-256 and every change to it goes through the opus
+security review; this check stays as the second, readable one). Read as the engine reads it, not line by line (round 1: a
+next-line brace, a comment before the brace, an indented import and a singleton's property slipped past a grep).
 
   python3 -I tests/security/root_check.py <root.qml>            exit 0 "ok", or 1 with every rule the root breaks
   python3 -I tests/security/root_check.py --selftest <root.qml>  the root passes and each planted mutant is refused
 
-Rules, on the file with comments (// and /* */) removed and string literals blanked:
-  1. no `/` and no backtick outside comments and strings: no regex literal (whose `//` would read as a comment and hide
-     what follows it) and no template string; so a `//` or `/*` outside a string is always a comment;
-  2. every `import` stands at the start of a line (wherever indented) and names QtQuick, Quickshell or Quickshell.Io,
-     nothing else (no qs.* module, no Grassfield.Ui, no file or directory, no dynamic import());
-  3. every object instantiated (`Name {`, the file joined on whitespace) is ShellRoot or IpcHandler;
-  4. none of these names: a loader (Loader, LazyLoader, Component but Component.onCompleted/onDestruction), a source:
-     property, createComponent, createQmlObject, execDetached, Process, openUrlExternally, callLater, eval, Function,
-     include, XMLHttpRequest, any `Qt.` or `qs.` name, a window or popup (…Window, Popup…), a socket, and the security
-     modules' names (Lock, Idle, SleepInhibitor, AuthAgent, Pam…, Polkit…, Wl…).
+Rules:
+  1. the whole file is ASCII (a U+2028 ends a `//` comment for QML's lexer, and would hide code behind one; no other
+     non-ASCII character has a place in this root) and holds no `\\` (no escape spells a name) and no backtick;
+  2. with comments (// and /* */) removed and string literals blanked: no `/` (a regex literal's `//` would read as a
+     comment) and no `[` (a name written as a string: Qt["createQmlObject"], Quickshell["execDetached"]);
+  3. every identifier of the code is one the root uses today (ALLOWED_IDENTIFIERS: an allow-list, never a deny-list: a
+     window, a loader, a process, Qt, Reflect, reload, an animation or a security module is simply not in it);
+  4. every `import` stands at the start of a line (wherever indented) and names QtQuick, Quickshell or Quickshell.Io;
+  5. every object instantiated (`Name {`, the file joined on whitespace) is ShellRoot or IpcHandler, and IpcHandler
+     exactly once, with target "security" and the two functions state and heartbeat and no other function.
 Standard library only; no Qt needed."""
 import re
 import sys
 
 ALLOWED_IMPORTS = {"QtQuick", "Quickshell", "Quickshell.Io"}
 ALLOWED_TYPES = {"ShellRoot", "IpcHandler"}
-DENIED = [r"\bLoader\b", r"\bLazyLoader\b", r"\bComponent\b(?!\.onCompleted\b|\.onDestruction\b)", r"\bsource\s*:",
-          r"createComponent", r"createQmlObject", r"execDetached", r"\bProcess\b", r"openUrlExternally", r"callLater",
-          r"\beval\b", r"\bFunction\b", r"\binclude\b", r"XMLHttpRequest", r"\bQt\.", r"\bqs\.", r"Window\b", r"Popup",
-          r"Socket", r"\bLock\b", r"\bIdle\b", r"SleepInhibitor", r"AuthAgent", r"\bPam[A-Z]", r"Polkit", r"\bWl[A-Z]",
-          r"\bimport\s*\("]
+ALLOWED_IDENTIFIERS = {"import", "QtQuick", "Quickshell", "Io", "ShellRoot", "id", "root", "settings", "watchFiles", "false",
+                       "readonly", "property", "string", "hosted", "int", "sequence", "Component", "onCompleted", "console",
+                       "info", "IpcHandler", "target", "function", "state", "return", "heartbeat"}
 
 
-def strip(src):
-    """The source without comments, its string literals blanked to "". Raises ValueError on a backtick, an unterminated
-    comment or string."""
+def strip(src, blank_strings=True):
+    """The source without comments; its string literals blanked to "" unless `blank_strings` is False. Raises ValueError on
+    a backtick, an unterminated comment or string."""
     out, i, n = [], 0, len(src)
     while i < n:
         c = src[i]
@@ -50,7 +50,7 @@ def strip(src):
                 j += 2 if src[j] == "\\" else 1
             if j >= n or src[j] != c:
                 raise ValueError("an unterminated string")
-            out.append('""')
+            out.append('""' if blank_strings else src[i:j + 1])
             i = j + 1
         elif c == "`":
             raise ValueError("a template string")
@@ -61,13 +61,24 @@ def strip(src):
 
 
 def problems(src):
+    out = []
+    if any(ord(c) > 127 for c in src):
+        out.append("a character outside ASCII")
+    if "\\" in src:
+        out.append("a backslash")
+    if out:
+        return out  # the scanner below trusts an ASCII, escape-free file
     try:
         code = strip(src)
+        with_strings = strip(src, blank_strings=False)
     except ValueError as e:
         return [str(e)]
-    out = []
     if "/" in code:
         out.append("a `/` outside comments and strings (a regex literal, or code hidden behind one)")
+    if "[" in code:
+        out.append("a `[` outside strings (a name written as a string)")
+    for name in sorted(set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", code)) - ALLOWED_IDENTIFIERS):
+        out.append(f"the identifier {name}")
     imports = []
     for line in code.splitlines():
         m = re.match(r"^\s*import\s+(\S+)", line)
@@ -82,9 +93,14 @@ def problems(src):
     for name in sorted(set(re.findall(r"\b([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*)\s*\{", joined))):
         if name not in ALLOWED_TYPES:
             out.append(f"{name} instantiated")
-    for pattern in DENIED:
-        if re.search(pattern, joined):
-            out.append(f"the name {pattern}")
+    if len(re.findall(r"\bIpcHandler\s*\{", joined)) != 1:
+        out.append("not exactly one IpcHandler")
+    joined_strings = " ".join(with_strings.split())
+    if joined_strings.count('target: "security"') != 1 or re.search(r"\btarget\b", joined_strings) is None or len(re.findall(r"\btarget\s*:", joined_strings)) != 1:
+        out.append("the IpcHandler's target is not security, once")
+    functions = re.findall(r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*:\s*string\s*\{", joined)
+    if sorted(functions) != ["heartbeat", "state"] or len(re.findall(r"\bfunction\b", joined)) != 2:
+        out.append("the functions are not state and heartbeat, each once")
     return out
 
 
@@ -95,6 +111,7 @@ def mutants(src):
     assert src.count(head) == 1 and src.count(body) == 1, "the root is not the one this selftest knows"
     top = lambda line: src.replace(head, head + line, 1)
     into = lambda text: src.replace(body, body + text + "\n", 1)
+    handler = "IpcHandler\n{\ntarget: \"security2\"\nfunction x(): string { return \"\"; }\n}"
     return [
         ("a window with its brace on the next line", into("FloatingWindow\n{\n}")),
         ("a window with a comment before its brace", into("FloatingWindow /* x */ {\n}")),
@@ -116,6 +133,18 @@ def mutants(src):
         ("Qt.createComponent", into("function j() { Qt.createComponent(\"x\"); }")),
         ("a second import line of an allowed module with a version and a hidden one after it", top("import QtQuick 2.15 as Q\nimport Quickshell.Wayland as W\n")),
         ("eval", into("function k() { return eval(\"1\"); }")),
+        ("a name written as a string: Qt[\"createQmlObject\"]", into("Component.onDestruction: Qt[\"createQmlObject\"](\"import Quickshell.Wayland; WlSessionLock { locked: true }\", root)")),
+        ("a name taken through Reflect.get", into("Component.onDestruction: Reflect.get(Qt, \"createQmlObject\")(\"x\", root)")),
+        ("a name written as a string: Quickshell[\"execDetached\"]", into("Component.onDestruction: Quickshell[\"execDetached\"]([\"qs\"])")),
+        ("a U+2028 ending a // comment before a window", into("// note FloatingWindow { }")),
+        ("a window spelled with Unicode escapes", into("\\u0046loatingWindow {\n}")),
+        ("execDetached spelled with Unicode escapes", into("Component.onDestruction: Quickshell.\\u0065xecDetached([\"qs\"])")),
+        ("a second IpcHandler with a next-line brace", into(handler)),
+        ("a NumberAnimation on sequence", into("NumberAnimation on sequence { }")),
+        ("Quickshell.reload(true)", into("Component.onDestruction: Quickshell.reload(true)")),
+        ("a third function in the handler", src.replace("        function state(): string {", "        function third(): string { return \"\"; }\n        function state(): string {", 1)),
+        ("the handler's target renamed", src.replace('target: "security"', 'target: "lock"', 1)),
+        ("CRLF line endings with a hidden window", into("FloatingWindow\r\n{\r\n}")),
     ]
 
 
@@ -125,6 +154,9 @@ def main(argv):
         ok = True
         found = problems(src)
         print(("PASS: " if not found else "FAIL: ") + "security unit root selftest: the root itself passes" + ("" if not found else " [" + "; ".join(found) + "]"))
+        ok = ok and not found
+        found = problems(src.replace("\n", "\r\n"))
+        print(("PASS: " if not found else "FAIL: ") + "security unit root selftest: the root itself passes with CRLF line endings" + ("" if not found else " [" + "; ".join(found) + "]"))
         ok = ok and not found
         for what, text in mutants(src):
             found = problems(text)

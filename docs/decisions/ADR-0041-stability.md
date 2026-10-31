@@ -351,6 +351,23 @@ down, how sleep behaves) is written in the table at the end of this step.
      again with the lock's surfaces, and decide the start-limit behaviour (R5's rows for the security unit).
   Evidence: `tests/security/security_unit.sh` 39 PASS (the root check, its twenty-one selftest lines); `python3 -I
   tests/ci/inventory.py` ok (596); `git diff --check` clean.
+- Review round 2 (2026-10-31, the integrator's opus security re-review of cdc77ef: FAIL, with the integrator's decision):
+  the name deny-list could still be bypassed, each bypass run by an offscreen `qml`: a name written as a string
+  (`Qt["createQmlObject"](…)`, `Reflect.get(Qt, "createQmlObject")(…)`, `Quickshell["execDetached"](…)`: strings were
+  blanked before names were matched), a U+2028 ending a `//` comment for QML's lexer, and Unicode escapes spelling a
+  name outside strings; a second `IpcHandler` with a next-line brace, `NumberAnimation on sequence { }` and
+  `Quickshell.reload(true)` passed too. **Decision: a static check cannot model all of QML; the real guard is that every
+  change to this root gets the opus security review.** So `tests/security/security_unit.sh` pins the reviewed root by
+  its SHA-256 (comments included) and fails on any difference with "shell/security.qml changed: security review
+  required, then update the pinned hash"; `root_check.py` stays as the bounded, readable second check: the whole file
+  ASCII, no backslash, no backtick; outside comments and strings no `/` and no `[`; every identifier one of the
+  twenty-seven the root uses today (an allow-list: a window, a loader, a process, `Qt`, `Reflect`, `reload`, an
+  animation or a security module is simply not in it); imports and types as before; exactly one `IpcHandler` with
+  target `security` and the functions `state` and `heartbeat` only, counted on the joined code. Its selftest plants
+  thirty-two mutants (the three bypasses, the second handler, the animation, the reload, a third function, a renamed
+  target, CRLF with a hidden window, and the earlier twenty) and the root passes with LF and with CRLF. Evidence:
+  `security_unit.sh` 53 PASS; `python3 -I tests/ci/inventory.py` ok; `git diff --check` clean. Rule for every later
+  change of the root (S2, S3, S4): the review first, then the new hash in the same pull request.
 
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
