@@ -580,9 +580,9 @@ since the channel's keyring must be grassfield-packages' `keyring/`, the whole p
   pane's "Update Now" of step 2 remains as "Update in Terminal…" for an update that needs a person (s3.6). ADR-0030's root
   helpers gain this one.
 - **SU-M2 (step 5), 2026-10-31.** A migration that needs root (it names `sudo`, or an Omarchy command that does) no longer
-  sends the update to Omarchy's terminal by itself: the helper runs Omarchy's migrations after the transaction as the
-  person, in `grassfield-update-migrate.service`, whose `sudo` gets each command a transient root unit, granted by
-  polkit to that unit alone ("Step 5"). s3.6's rejected option is now the owner's decision; what needs a person (`gum`,
+  sends the update to Omarchy's terminal by itself: the helper runs that update's migrations after the transaction as the
+  person (an administrator), in `grassfield-update-migrate.service` under a group of its own, whose `sudo` gets each
+  command a transient root unit, granted by polkit to that unit alone ("Step 5"). s3.6's rejected option is now the owner's decision; what needs a person (`gum`,
   `/dev/tty`, `pkexec`, `su`, `run0`, `doas`, a `sudo` by its path) still goes to the terminal. ADR-0030's amendment for
   step 3 gains the rule.
 
@@ -1072,51 +1072,72 @@ so that release goes to the terminal; a package update without an Omarchy releas
 ## Step 5: one password for the migrations' sudo (SU-M2, 2026-10-31, branch `claude/software-update-su-m2`)
 The owner chose « Mot de passe unique » (SU-M2): the password typed for Update Now also covers the `sudo` commands of
 Omarchy's migrations. This step widens what runs as root, and the security rules ask for an opus PASS before the merge. It
-says what the person's single authorization now covers, and what keeps anything else from using it.
+says what the person's single authorization now covers, and what keeps anything else from using it. An independent opus
+review of the first version (b369f16) failed it (see "Review history"); this text is the version that answers it.
 
 ### s5.1 What changes
 - **The scan has two sets** (s3.6). What needs a person: `pkexec`, `su`, `run0`, `doas`, `gum`, `/dev/tty`, or a `sudo` by
-  its path (`/usr/bin/sudo`, `/bin/sudo`: not the unit's `sudo`), or an Omarchy command that reaches one of them. What
-  needs root: `sudo` and Omarchy's `omarchy:requires-sudo=true` header, or a command that reaches one of them. Both are
-  computed the same way as before (the command files of the new package, else the installed ones, until the set stops
-  growing; comments count). A migration that needs a person still sends the run to the terminal before any change
+  its path (`/usr/bin/sudo`, `/usr/sbin/sudo`, `/bin/sudo`: not the unit's `sudo`), or an Omarchy command that reaches one of
+  them. What needs root: `sudo` and Omarchy's `omarchy:requires-sudo=true` header, or a command that reaches one of them.
+  Both are computed the same way as before (the command files of the new package, else the installed ones, until the set
+  stops growing; comments count). A migration that needs a person still sends the run to the terminal before any change
   (`needs migration`, now listing those that need root too).
-- **A run whose pending migrations need root and nothing that needs a person** goes on when the four conditions below hold.
-  The helper then runs `omarchy-migrate` itself, after `pacman -Su` succeeded and before it reads its log (Omarchy's own
-  order: migrations after the transaction). It runs as the person, in the transient system unit
-  `grassfield-update-migrate.service`, with:
-  - `NoNewPrivileges=yes`, so no setuid program runs (no real `sudo`, `pkexec` or `su`);
-  - `PATH=/usr/lib/grassfield/update-sudo:/usr/share/omarchy/bin:/usr/bin` and `OMARCHY_PATH=/usr/share/omarchy`;
-  - the person's runtime folder and session bus, and two session values (below);
-  - standard input `/dev/null`, its output appended to the run's log, at most 30 minutes;
-  - `KillMode=control-group`: every process of the unit ends with it.
-  The exit file then says `migrations ran`. The runner does not run `omarchy-migrate` again, but still reads what is left
+- **A run whose new migrations need root and nothing that needs a person** goes on when the conditions below hold. After
+  `pacman -Su` succeeded, the helper runs those migrations itself, before it reads its log (Omarchy's own order: migrations
+  after the transaction). It does not call `omarchy-migrate`; it runs the same loop (Omarchy 4.0.6, `bin/omarchy-migrate`:
+  each migration in order, `bash -euo pipefail`, its marker after it, the first failure stops), but only for this update's
+  scanned migrations, by name. A marker removed meanwhile never brings another migration into the unit.
+  It runs them in the transient system unit `grassfield-update-migrate.service`:
+  - as the person's uid, with the **primary group `grassfield-update`**, which has no member (sysusers.d), and the person's
+    own group as a supplementary one. The kernel lets a process open another's `/proc` entries (descriptors, environment,
+    memory, folder) or attach to it only when all its uids and all its gids match. None of the person's other processes
+    can therefore reach into the unit; this is measured in s5.6;
+  - with `NoNewPrivileges=yes`, so no setuid program runs (no real `sudo`, `pkexec` or `su`, no `newgrp`);
+  - with `PrivateTmp=yes`: its `/tmp` is its own, and the root units of its `sudo` join it (`JoinsNamespaceOf`). A
+    temporary file a migration hands to a root command (4.0.6's `1791403252` does `mktemp` then `sudo install`) is out of
+    other processes' reach;
+  - with `PATH=/usr/lib/grassfield/update-sudo:/usr/share/omarchy/bin:/usr/bin` and `OMARCHY_PATH=/usr/share/omarchy`;
+  - with the person's runtime folder and session bus, and two session values (s5.2);
+  - with standard input `/dev/null`, and its output in `/run/grassfield-update/<op-id>.migrations` (root's, 0600, cut at
+    the log's 8 MiB, read with the log for a failed startup image). Its output holds root commands' output too, so it never
+    joins the 0644 log;
+  - at most 30 minutes; when it ends, every process left is stopped within 5 seconds (`TimeoutStopSec=5s`,
+    `KillMode=control-group`).
+- **After the unit, the helper waits** (30 minutes at most) for any root unit its `sudo` started. A long command (pacman)
+  therefore ends under the run's lock and sleep inhibitor, never after the pane says the run is done. It then reads again
+  the packages s3.4 and s3.7 follow: a migration may run pacman itself, as `1791403252` does. A change there gives the end
+  its restart or log out, and is logged as not checked against the record.
+- **The exit file says `migrations ran`.** The runner then does not run `omarchy-migrate`, but still reads what is left
   pending: a migration that failed stays pending (`deferred migrations`, "Finish in Terminal…"), as before.
-- **Otherwise** the run goes to Omarchy's terminal before any change, exactly as in step 3 (exit 7, `needs migration`),
-  and its log says why.
+- **Otherwise** the run goes to Omarchy's terminal before any change, exactly as in step 3 (exit 7, `needs migration`), and
+  its log says why.
 
-The four conditions:
+The conditions, checked in this order:
 1. The helper runs in `grassfield-update.service` (a system run by systemd; never in place).
 2. A person: pkexec's caller has a real uid of 1000 or more with an entry in the password database.
-3. Yama's `ptrace_scope` is 1 or more.
-4. A trial `sudo -n /usr/bin/true` through a migrations' unit succeeded. This proves the whole channel (the unit, the rule,
+3. That person is an administrator: a member of `wheel` (Arch's polkit rule and Omarchy's sudoers). The grant is that
+   person's own `sudo`, never more than they have in Omarchy's terminal (the review's BLOCKER).
+4. No migration from before this update is pending (the runner's names): the unit runs this update's own migrations only.
+5. The group `grassfield-update` exists, has no member, and is not the person's own group.
+6. The sudo and the rule are installed.
+7. A trial `sudo -n /usr/bin/true` through a migrations' unit succeeded. This proves the whole channel (the unit, the rule,
    polkit, systemd) before anything changes.
 
 ### s5.2 The person
 - The helper reads no variable for itself; step 3's rule stands. The instance pkexec started reads two things from its
-  parent's `/proc` entries: the parent is pkexec's caller, the runner, which waits for it (pkexec refuses a caller that is
-  gone).
+  parent's `/proc` entries. The parent is pkexec's caller, the runner, which waits for it. pkexec refuses a caller that has
+  been re-parented to PID 1; a caller re-parented to a subreaper runs as the same uid, so it is harmless.
   - **Its real uid.** Below 1000 (root, a system user), no migration runs here.
   - **`WAYLAND_DISPLAY` and `HYPRLAND_INSTANCE_SIGNATURE`**, kept only when they match `wayland-[0-9]{1,4}` and
     `[A-Za-z0-9_]{1,128}`, so a migration can reach the session as it does in Omarchy's terminal. They go into the user
     unit's environment only; nothing as root reads them.
 - It passes them to its unit instance as `unit <op-id> <uid> <wayland> <hyprland> [<migration>...]`. The helper takes that
-  form only inside `grassfield-update.service` (its cgroup, which only root can create). pkexec's caller can only start the
-  `run` form.
+  form only inside `grassfield-update.service` (its cgroup, which only root can create); elsewhere it is a usage error.
+  pkexec's caller can only start the `run` form.
 
 ### s5.3 The channel, and what keeps anything else from using it
-- **The migrations' `sudo`** (`/usr/lib/grassfield/update-sudo/sudo`, alone in its folder, first in the unit's PATH)
-  runs as the person and is not the boundary. It takes Omarchy 4.0.6's forms of sudo's command line:
+- **The migrations' `sudo`** (`/usr/lib/grassfield/update-sudo/sudo`, alone in its folder, first in the unit's PATH) runs
+  as the person and is not the boundary. It takes Omarchy 4.0.6's forms of sudo's command line:
   - `-n`, `-H`, `-u USER`/`#uid`, `--`;
   - `-v`, `-k`, `-K` without a command: success;
   - `-l`: exit 1.
@@ -1127,6 +1148,7 @@ The four conditions:
   - a unit named `grassfield-update-root-<32 hex>.service`;
   - the target user;
   - the caller's working folder, standard input, output and error;
+  - the unit's `/tmp`;
   - `SUDO_USER`, `SUDO_UID`, `SUDO_GID`.
   The command's exit status is sudo's. Its arguments reach it unexpanded.
 - **The boundary is polkit's rule** `/usr/share/polkit-1/rules.d/49-grassfield-update.rules`. For
@@ -1134,78 +1156,128 @@ The four conditions:
   - YES when `no_new_privileges` is set, the verb is `start` and the unit is `grassfield-update-root-<32 hex>.service`;
   - NO for anything else that unit asks;
   - untouched for every other subject.
-  polkit 128 sets `system_unit` only from a pidfd it got from the bus (dbus-broker), which a process cannot forge: measured
-  in a container that runs systemd. A process of the person's in a session scope, another unit, the same unit name without
-  NoNewPrivileges, and another root unit name were all refused, with no dialog (`tests/integration/update_migrate.sh`).
+  polkit 128 sets `system_unit` only from a pidfd it got from the bus (dbus-broker), which a process cannot forge. The review
+  logged it: a unit of that name in the person's own manager is `user@<uid>.service`, and a pkexec subject has none.
 - **Who can be in that unit.** Only root can create a system unit and its cgroup, and only the unit's own descendants are
-  in it. The helper creates it only after the person's password, and only for the migrations (and the trial). It ends with
-  them, killing what they left.
-- **Who could steer a process in that unit.** The person's other processes run as the same uid:
-  - Yama (`ptrace_scope` ≥ 1, condition 3) keeps them from attaching to it, writing its memory, or taking its descriptors
-    (`pidfd_getfd`).
-  - NoNewPrivileges keeps the unit itself from gaining anything through a setuid program.
-  - What remains is what the person's files can do to the migrations: a command a migration runs may read the person's
-    configuration. Omarchy's own terminal update has the same exposure. It authenticates `sudo` once (`sudo -v`, in
-    `omarchy-update-stay-awake`), and its migrations' `sudo` then asks nothing while that credential lasts, for any
-    process in that terminal.
-  - Grassfield's channel is narrower in time and place: one unit, for the migrations alone, while they run.
-- **What a root command can do:** anything, as with `sudo`. That is the decision: the authorization of Update Now covers the
-  `sudo` commands of Omarchy's own migrations, packaged by Omarchy in `/usr/share/omarchy/migrations` (root's files).
+  in it. The review confirmed this: writing `cgroup.procs` is refused, and `AttachProcessesToUnit` is refused for a unit that
+  is not delegated. The helper creates the unit only after an administrator's password, only for this update's migrations
+  (and the trial), and stops what is left within 5 seconds of their end.
+- **Who could steer a process in that unit.**
+  - The first version relied on Yama, which was wrong. Yama restricts attaching, not opening `/proc/<pid>/fd`. The review
+    reopened the pipe on which the migration loop reads its list, and the standard input of a root command, from another
+    process of the same uid, and got root.
+  - The unit's own primary group closes that path. The kernel's `ptrace_may_access` requires all uids and gids to match
+    unless the caller has `CAP_SYS_PTRACE`, for `/proc/<pid>/fd`, `environ`, `cwd`, `mem` and attaching alike. Measured:
+    a process of the person's is refused the unit's pipe, environment, folder and temporary files.
+  - NoNewPrivileges keeps the unit's processes from leaving that group (`newgrp`, `sg`). The person cannot join it: it has
+    no member and no password. A file of the person's cannot carry the group's setgid bit, since the kernel clears it for
+    an owner who is not a member.
+- **What remains.**
+  - **The person's own files that a migration reads.** A command a migration runs may read the person's configuration, in
+    their home folder or their runtime folder. Their session's servers (bus, Hyprland) answer it.
+  - **Omarchy's own terminal update has the same exposure, and more.** It authenticates `sudo` once (`sudo -v`, in
+    `omarchy-update-stay-awake`). Any process in that terminal can then use the credential while it lasts, and can reopen
+    its pipes.
+  - **Grassfield's channel is narrower:**
+    - one unit, for this update's own migrations, chosen by name;
+    - only while they run;
+    - only for an administrator who typed a password for it;
+    - temporary files and `/proc` out of other processes' reach.
+- **What a root command can do:** anything, as with `sudo`. That is the decision: the authorization of Update Now covers
+  the `sudo` commands of the migrations Omarchy ships with this update in `/usr/share/omarchy/migrations` (root's files).
   Grassfield does not filter them; a filter would break migrations it cannot foresee.
 
 ### s5.4 What still goes to Omarchy's terminal (data: Omarchy 4.0.6)
 Omarchy 4.0.4 → 4.0.6 adds 14 migrations. Under the two sets:
-- four need root only and now run without the terminal: `1790114905`, `1791403252`, `1791581004`, `1791621765`;
+- four need root only: `1790114905`, `1791403252`, `1791581004`, `1791621765`;
 - two need a person: `1790017600` and `1792334754`. They reach `gum` through `omarchy-install-hermes-cli` /
   `omarchy-install-openclaw-cli` → `omarchy-agent` → `omarchy-default-agent` →
-  `omarchy-launch-floating-terminal-with-presentation`. That chain is a name the scan finds in a command's text, not a
-  path known to run.
+  `omarchy-launch-floating-terminal-with-presentation`. That chain is a name the scan finds in a command's text, not a path
+  known to run.
 So that release still goes to the terminal: the scan stays conservative, and loosening it is a separate question. A release
-whose migrations only call `sudo` runs without one.
+whose new migrations only call `sudo` runs without one. A migration pending from before the update also sends the run to
+the terminal, a rare case (Omarchy runs pending migrations at login).
 
 ### s5.5 Limits
-- A migration's own `pacman -Syu` installs what the mirror serves at that moment, unchecked by s3.4. For example,
-  `1791403252` calls `omarchy-update-system-pkgs`; the same is true in Omarchy's terminal. Right after the helper's
-  transaction it finds nothing new unless the mirror moved in between.
-- A migration that starts a process meant to outlive it (a detached daemon) loses it when the unit ends. Omarchy's own
-  restarts that go through the user's systemd manager (`uwsm-app`, `systemctl --user`) are not affected.
-- The channel needs systemd ≥ 254 (`--expand-environment`), polkit with `system_unit` (128 measured) and a bus that hands
-  polkit a pidfd (dbus-broker 37 measured). Anything else fails the trial, and the run goes to the terminal with nothing
-  changed.
-- A kernel without Yama, or with `ptrace_scope` 0, goes to the terminal. Arch's kernel has Yama at 1 by default: to verify
-  on the owner's machine (`cat /proc/sys/kernel/yama/ptrace_scope`).
+- **Files a migration creates in the person's home get the group `grassfield-update`.** They are still the person's own
+  (owner and permissions unchanged).
+- **A migration's own `pacman -Syu` is not checked by s3.4.** For example, `1791403252` calls
+  `omarchy-update-system-pkgs`; the same is true in Omarchy's terminal. Its changes to the packages s3.7 follows are read
+  again and give the end its restart.
+- **A process a migration starts to outlive it** (a detached daemon) is stopped with the unit. Omarchy's restarts that go
+  through the user's systemd manager (`uwsm-app`, `systemctl --user`) are not affected.
+- **The channel needs** systemd ≥ 254 (`--expand-environment`), polkit with `system_unit` (128 measured), a bus that hands
+  polkit a pidfd (dbus-broker 37 measured) and `JoinsNamespaceOf`. Anything else fails the trial, and the run goes to the
+  terminal with nothing changed.
+- **The scan does not follow `source`.** A migration that sources another migration file is judged by its own text alone
+  (pre-existing from step 3; the review's NIT 11). It runs in the unit only if it is this update's.
 
 ### s5.6 Evidence (this branch)
-- **`tests/integration/update_migrate.sh`, new: 41 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container with
-  systemd 262 as PID 1 (cgroup2 mounted), dbus-broker 37, polkit 128, sudo 1.9.17, and the real helper, runner, policy,
-  `sudo` and rule.
-  - **The channel:** root id; standard input, working folder, exit status and arguments passed through; `-u`, `-v`, `-n`,
-    `-l`; `-E`, `-i` and an assignment refused; no lookup in the caller's PATH; another unit name and any other unit
-    operation refused; the real sudo blocked by NoNewPrivileges; nothing left.
+- **`tests/integration/update_migrate.sh` (new, A16): 50 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container
+  with systemd 262 as PID 1 (cgroup2 mounted), dbus-broker 37, polkit 128, sudo 1.9.17, and the REAL helper, runner,
+  policy, `sudo`, rule and group (no change to any of them).
+  - **The channel:**
+    - root id; standard input, folder, exit status, arguments and the unit's temporary files passed through;
+    - `-u`, `-v`, `-n`, `-l`; `-E`, `-i` and an assignment refused; no lookup in the caller's PATH;
+    - another unit name, a root unit name without its 32 hex digits, another verb on a root unit, and any other unit
+      operation refused;
+    - the real sudo blocked; nothing left.
+  - **The review's MAJOR:** a process of the person's cannot open the unit's pipe, environment, folder or temporary files.
   - **Refusals:** outside the unit, in another unit, and without NoNewPrivileges.
-  - **The real helper from carol's runner through pkexec:** goes to the terminal (this kernel has no Yama), nothing
-    installed.
-  - **A copy whose `GU_YAMA` line names a test file holding 1** (the one change, checked by `diff`):
-    - the update installed;
-    - the migration ran as carol, with carol's session values;
-    - its `sudo tee` and `sudo install` ran as root;
-    - `migrations ran`, and the runner did not run it again;
-    - a failing `sudo` left the migration pending;
-    - a `gum` migration went to the terminal;
-    - a rule that grants nothing failed the trial (terminal, nothing installed);
-    - no rule installed went to the terminal;
-    - the rule back, the run went through.
-- **`tests/integration/update_helper.sh` (step 3's, no systemd: the helper in place): 80 PASS, 0 failures.** The `sudo`
-  migrations still go to the terminal there (no unit).
+  - **The helper from a runner through pkexec:**
+    - a user who is not an administrator goes to the terminal (the review's BLOCKER);
+    - so does a run while the group has a member, while a migration from before the update is pending, with a rule that
+      grants nothing, and with no rule;
+    - for an administrator, the update installed, the migration ran as the person (its file the person's, group
+      `grassfield-update`) with its sudo commands as root, a temporary file reached its root command, `migrations ran`,
+      and its output was root's alone;
+    - a failing sudo left the migration pending;
+    - `gum`, and `sudo` with `gum`, went to the terminal;
+    - root without pkexec's user has no person;
+    - the unit's form outside the unit is a usage error.
+  - **Mutants of the rule:** dropping its verb check or loosening its unit name each fail the test. `NO` → `NOT_HANDLED` is
+    equivalent here: the unit has no session, so no agent and no implicit authorization.
+- **`tests/integration/update_helper.sh` (step 3's, no systemd: the helper in place): 80 PASS, 0 failures.**
 - **Probes before the design:** a pkexec subject never carries `system_unit` (polkit sets it only from a bus pidfd), so a
-  rule on pkexec could not work; `systemd-run` from the unit carries it; unit names and verbs reach the rule as `unit` and
-  `verb`.
+  rule on pkexec could not work. `systemd-run` from the unit carries it; unit names and verbs reach the rule as `unit` and
+  `verb`. A primary group of its own keeps another process of the same uid out of a unit's `/proc` entries. A root unit
+  can join a unit's private `/tmp`.
 - **Not verified here:**
-  - Yama's value and the whole flow on the owner's machine (L2);
+  - the whole flow on the owner's machine (L2);
   - a real Omarchy 4.0.6 migration that needs root;
   - the polkit dialog (the container lets the runner through).
 
 ## Review history
+Software Update step 5 (SU-M2), an independent opus security review of b369f16 while the integrator was away: **FAIL**, 1
+BLOCKER and 1 MAJOR, both reproduced in a container that runs systemd. The rule itself could not be spoofed, and the
+helper's new inputs held. Answered in the next commit:
+- **BLOCKER**, a non-administrator got root. Update Now is `auth_admin`, so a standard account gets an administrator's
+  password for it, and the first version then ran the migrations as that account with root's sudo. Now the person must be
+  in `wheel` (condition 3); a test runs a user outside it.
+- **MAJOR**, Yama does not keep the person's other processes out. `/proc/<pid>/fd` is a read check, which Yama leaves
+  alone. A process of the same uid reopened the pipe the migration list is read from, and a root command's standard input,
+  and got root; it could also force a run by deleting a marker. The fix has three parts:
+  - the unit runs under a primary group of its own with no member, which closes every `/proc` and ptrace access by a
+    different gid (measured);
+  - the unit has its own `/tmp`, joined by its root units;
+  - the helper runs this update's own migrations by name instead of `omarchy-migrate`, and goes to the terminal while an
+    older one is pending.
+  Yama is no longer a condition. s5.3 now says what remains: the person's files, as in Omarchy's terminal.
+- **Minors.**
+  - The unit's leftovers get 5 seconds; the helper waits for the root units before it ends.
+  - The packages a migration's own pacman changes are read again for the end.
+  - The migrations' output is root's alone (0600, capped), no longer in the 0644 log.
+  - The test now covers the rule's verb and unit name (the review's surviving mutants), a non-administrator, a group with
+    a member, a pending older migration, root without a person, the unit form outside the unit, and a migration with both
+    `sudo` and `gum`.
+- **Nits.**
+  - The spec's stale limit is fixed.
+  - The counts are fixed (the earlier "41" counted the summary line).
+  - The pkexec sentence is corrected.
+  - `/usr/bin/id` is now called by its path.
+  - `/usr/sbin/sudo` now counts as a sudo by its path.
+  - The scan's `source` gap is listed in s5.5.
+
 Software Update step 3 (PR #44), the integrator's re-review of 1ce7c37..0294373 (independent opus): **PASS**, with two
 fail-open guards asked before the merge, answered in the next commits: an empty `pacman -Q` and an empty
 `pacman-conf --repo-list` are refused (exit 8), and the runner's `omarchy-migrate --pending` must answer by its contract;

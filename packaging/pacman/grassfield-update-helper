@@ -14,13 +14,14 @@
 # its arguments (omarchy-update-requires-free-space, omarchy-update-pkg-prune, omarchy-snapshot, omarchy-update-stay-awake,
 # omarchy-update-keyring, omarchy-update-system-pkgs, omarchy-update-analyze-logs, omarchy-update-restart; pinned in
 # docs/upstream/omarchy.lock). Omarchy's own files are read as data only: the new omarchy package's migrations and
-# commands, extracted where only root reads, for the scan. One exception, SU-M2 (s5): when the pending migrations use
-# `sudo` and nothing that needs a person, it runs `omarchy-migrate` after the transaction AS THE PERSON who chose Update
-# Now, in the transient unit grassfield-update-migrate.service, whose `sudo` (/usr/lib/grassfield/update-sudo/sudo) gets
-# each command a transient root unit from systemd, granted by polkit to that unit alone
-# (/usr/share/polkit-1/rules.d/49-grassfield-update.rules). That person is pkexec's caller, this process's parent: its real
-# uid, and two values of its session (WAYLAND_DISPLAY, HYPRLAND_INSTANCE_SIGNATURE), read from /proc and checked, for that
-# unit only.
+# commands, extracted where only root reads, for the scan. One exception, SU-M2 (s5): when the migrations this update adds
+# use `sudo` and nothing that needs a person, it runs them after the transaction AS THE PERSON who chose Update Now (an
+# administrator: a member of wheel), in the transient unit grassfield-update-migrate.service, under the primary group
+# grassfield-update that no one is a member of (so none of that person's other processes can open the unit's /proc
+# entries), whose `sudo` (/usr/lib/grassfield/update-sudo/sudo) gets each command a transient root unit from systemd,
+# granted by polkit to that unit alone (/usr/share/polkit-1/rules.d/49-grassfield-update.rules). That person is pkexec's
+# caller, this process's parent: its real uid, and two values of its session (WAYLAND_DISPLAY,
+# HYPRLAND_INSTANCE_SIGNATURE), read from /proc and checked, for that unit only.
 # Exit: 0 done, or up to date (`packages 0`); 1 failed during the transaction (the system can be partly updated); 2 usage,
 # or an operation id used before; 3 busy (another run, or a process holding pacman's db.lck); 4 less than 10 GiB free on /;
 # 5 on battery below 50 %; 6 needs a newer Grassfield (the compatibility check); 7 needs a person (Omarchy's terminal; also a
@@ -82,14 +83,16 @@ GU_TRACKED=(qt6-base quickshell hyprland aquamarine kcoreaddons)
 GU_TOOLKIT=(qt6-base quickshell aquamarine kcoreaddons)
 # s3.6: what makes an Omarchy migration or command need a person; s5: what makes it need root (sudo, which SU-M2 gives it).
 GU_PERSON_WORDS='pkexec|su|run0|doas|gum'
-GU_PERSON_EXTRA='/dev/tty|/(usr/)?bin/sudo([^[:alnum:]_.-]|$)'   # a sudo by its path is not the unit's sudo
+GU_PERSON_EXTRA='/dev/tty|/(usr/)?s?bin/sudo([^[:alnum:]_.-]|$)'   # a sudo by its path is not the unit's sudo
 GU_ROOT_WORDS='sudo'
-# s5 (SU-M2): the migrations' unit, its sudo, the polkit rule that lets that unit alone start root units, and Yama, which
-# keeps the person's other processes from taking control of the unit's.
+# s5 (SU-M2): the migrations' unit, its primary group (sysusers.d, no member: the kernel lets a process open another's /proc
+# entries, descriptors included, or attach to it, only when all its uids AND gids match), its sudo, the polkit rule that
+# lets that unit alone start root units, and the group of the administrators (Arch's polkit rule, Omarchy's sudoers).
 GU_MIGRATE_UNIT=grassfield-update-migrate
+GU_MIGRATE_GROUP=grassfield-update
+GU_ADMIN_GROUP=wheel
 GU_SUDO_DIR=/usr/lib/grassfield/update-sudo
 GU_RULE=/usr/share/polkit-1/rules.d/49-grassfield-update.rules
-GU_YAMA=/proc/sys/kernel/yama/ptrace_scope
 
 usage() {
   echo "usage: grassfield-update-helper run <op-id> [<migration>...] (run by grassfield-update-run through pkexec)" >&2
@@ -203,7 +206,7 @@ say "run $* (operation $op)"
 # The files of older operations: the 16 newest kept; a temporary folder an interrupted run left goes too.
 mapfile -t olds < <(find "$GU_DIR" -maxdepth 1 -type f -name '*.started' -printf '%T@ %f\n' | sort -rn | awk -v keep="$GU_KEEP" 'NR > keep { sub(/\.started$/, "", $2); print $2 }')
 for old in "${olds[@]}"; do
-  [[ $old =~ ^[0-9a-f]{32}$ ]] && rm -f -- "$GU_DIR/$old".{started,log,exit,progress}
+  [[ $old =~ ^[0-9a-f]{32}$ ]] && rm -f -- "$GU_DIR/$old".{started,log,exit,progress,migrations}
 done
 
 # One run at a time: a lock only root can open. Every program started below gets `9<&-`: a process a package's scriptlet
@@ -320,20 +323,54 @@ download() { # package
 }
 (umask 077 && mkdir -m 0700 -- "$work") || finish 8 "cannot make $work"
 
-# s5 (SU-M2): a program as the person, in grassfield-update-migrate.service: no new privileges (no setuid program, so no
-# real sudo or pkexec), its sudo first in PATH, Omarchy's folder, the person's runtime folder and session bus, and the two
-# session values pkexec's caller had; standard input /dev/null, its output appended to this run's log (as Omarchy's own
-# update keeps its migrations' output in its transcript). Every process of the unit ends with it. Its exit status.
+# s5 (SU-M2): a program as the person, in grassfield-update-migrate.service:
+#   - the person's uid, the primary group grassfield-update (no member) and the person's own group as a supplementary one
+#     (its files stay its own); the person's other processes then cannot open the unit's /proc entries (descriptors,
+#     environment, memory) or attach to it (the step 5 review's MAJOR: a pipe of the unit could be reopened through
+#     /proc/<pid>/fd by any process of the same uid and gid);
+#   - no new privileges (no setuid program, so no real sudo or pkexec), a /tmp of its own that the root units of its sudo
+#     join (no other process can reach its temporary files), its sudo first in PATH, Omarchy's folder, the person's runtime
+#     folder and session bus, and the two session values pkexec's caller had;
+#   - standard input /dev/null, its output to $migrations (root's, 0600; read below with the log), at most 30 minutes,
+#     and every process of the unit ends with it, given 5 seconds.
+# Its exit status.
+migrations=$GU_DIR/$op.migrations
 migrate_unit() { # program [argument...]
   local env=(--setenv=PATH="$GU_SUDO_DIR:/usr/share/omarchy/bin:/usr/bin" --setenv=OMARCHY_PATH=/usr/share/omarchy
     --setenv=XDG_RUNTIME_DIR="/run/user/$caller_uid" --setenv=DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$caller_uid/bus")
   [[ $caller_wayland != - ]] && env+=(--setenv=WAYLAND_DISPLAY="$caller_wayland")
   [[ $caller_hypr != - ]] && env+=(--setenv=HYPRLAND_INSTANCE_SIGNATURE="$caller_hypr")
+  (umask 077 && : >>"$migrations") && [[ -f $migrations && ! -L $migrations ]] || return 1
   systemd-run --unit="$GU_MIGRATE_UNIT" --description="Grassfield Software Update: Omarchy's migrations" --collect --quiet \
-    --wait --service-type=exec --expand-environment=no --uid="$caller_uid" -p NoNewPrivileges=yes -p RuntimeMaxSec=30min \
-    -p KillMode=control-group -p 'WorkingDirectory=~' -p StandardInput=null -p StandardOutput=append:"$log" \
-    -p StandardError=append:"$log" "${env[@]}" -- "$@" 9<&-
+    --wait --service-type=exec --expand-environment=no --uid="$caller_uid" --gid="$GU_MIGRATE_GROUP" \
+    -p SupplementaryGroups="$caller_gid" -p NoNewPrivileges=yes -p PrivateTmp=yes -p RuntimeMaxSec=30min \
+    -p TimeoutStopSec=5s -p KillMode=control-group -p 'WorkingDirectory=~' -p StandardInput=null \
+    -p StandardOutput=append:"$migrations" -p StandardError=append:"$migrations" "${env[@]}" -- "$@" 9<&-
 }
+# The root units the migrations' sudo started (one per command): the run waits for them (30 minutes at most), so a long
+# command (pacman) ends under this run's lock and sleep inhibitor, never after it.
+wait_root_units() {
+  local i
+  for ((i = 0; i < 1800; i++)); do
+    [[ -z $(systemctl list-units --plain --no-legend --state=activating,active,deactivating 'grassfield-update-root-*' 9<&- 2>/dev/null) ]] && return 0
+    sleep 1
+  done
+  say "a migration's root command still runs after 30 minutes"
+}
+# s5: the loop of omarchy-migrate (Omarchy 4.0.6, bin/omarchy-migrate: each pending migration in order, `bash -euo pipefail`,
+# its marker after it; the first failure stops), for the migrations this update adds only, by name: a marker removed meanwhile
+# never brings an older migration into the unit. Run as the person; it reads nothing but its arguments and the person's
+# markers.
+GU_MIGRATE_LOOP='set -uo pipefail
+state=$HOME/.local/state/omarchy/migrations
+mkdir -p -- "$state" || exit 1
+for name in "$@"; do
+  [[ -f $state/$name || ! -f /usr/share/omarchy/migrations/$name ]] && continue
+  printf "\nRunning migration (%s)\n" "${name%.sh}"
+  bash -euo pipefail "/usr/share/omarchy/migrations/$name" 3<&- || exit 1
+  touch -- "$state/$name" || exit 1
+done'
+
 
 # --- The compatibility check (s3.4) -------------------------------------------------------------------------------------
 compare_key() { # package version -> the part of the version that must match
@@ -402,6 +439,7 @@ fi
 mig_dir=/usr/share/omarchy/migrations
 bin_dirs=(/usr/bin /usr/share/omarchy/bin)
 pending=("$@")
+before=$#   # the first $before names are the runner's: migrations pending from before this update
 if [[ -n ${after[omarchy]-} ]]; then
   download omarchy
   file=$(cached omarchy) || finish 8 "omarchy's package file is not in pacman's cache"
@@ -490,19 +528,27 @@ if ((${#pending[@]})); then
     finish 7 "Omarchy's migrations ${needs[*]} need a person: Omarchy's terminal update runs them"
   fi
   # s5 (SU-M2): migrations that need root run here, after the transaction, as the person, with their sudo commands as root.
-  # Only in grassfield-update.service, for a person of uid 1000 or more, with Yama keeping that person's other processes
-  # from taking control of the migrations' (ptrace_scope 1 or more), and once the whole channel answered a trial `sudo
-  # true` through it (the unit, the polkit rule, systemd). Otherwise Omarchy's terminal, as before: nothing changed yet.
+  # Only in grassfield-update.service; for a person of uid 1000 or more who is an administrator (wheel: the grant is an
+  # administrator's sudo, never more than that person has in Omarchy's terminal; the step 5 review's BLOCKER); when no
+  # migration from before this update is pending (the unit runs this update's own migrations, by name); with the unit's own
+  # group in place; and once the whole channel answered a trial `sudo true` through it (the unit, the polkit rule,
+  # systemd). Otherwise Omarchy's terminal, as before: nothing changed yet.
   if ((${#rooted[@]})); then
-    why=""
-    yama=""
-    [[ -r $GU_YAMA ]] && read -r yama <"$GU_YAMA"
+    why="" caller_name="" caller_gid=""
+    if [[ $caller_uid != - ]]; then
+      IFS=: read -r caller_name _ _ caller_gid _ < <(getent passwd "$caller_uid" 2>/dev/null 9<&-)
+    fi
+    IFS=: read -r _ _ migrate_gid migrate_members < <(getent group "$GU_MIGRATE_GROUP" 2>/dev/null 9<&-)
     if ! in_unit; then
       why="no systemd unit for this run"
-    elif [[ $caller_uid == - ]] || ! getent passwd "$caller_uid" >/dev/null 2>&1 9<&-; then
+    elif [[ ! $caller_name =~ ^[a-z_][a-z0-9_-]{0,31}\$?$ || ! $caller_gid =~ ^[0-9]{1,10}$ ]]; then
       why="no person to run them as"
-    elif [[ ! $yama =~ ^[1-3]$ ]]; then
-      why="Yama does not keep other processes from controlling them (kernel.yama.ptrace_scope ${yama:-missing})"
+    elif ! id -Gn -- "$caller_name" 2>/dev/null 9<&- | tr ' ' '\n' | grep -qx -- "$GU_ADMIN_GROUP"; then
+      why="$caller_name is not an administrator ($GU_ADMIN_GROUP)"
+    elif ((before > 0)); then
+      why="migrations from before this update are pending"
+    elif [[ ! ${migrate_gid-} =~ ^[0-9]{1,10}$ || -n ${migrate_members-} || $migrate_gid == "$caller_gid" ]]; then
+      why="the group $GU_MIGRATE_GROUP is missing, has members, or is the person's own"
     elif [[ ! -f $GU_RULE || -L $GU_RULE || ! -x $GU_SUDO_DIR/sudo || -L $GU_SUDO_DIR/sudo ]]; then
       why="Grassfield's sudo for migrations is not installed"
     elif ! migrate_unit "$GU_SUDO_DIR/sudo" -n /usr/bin/true; then
@@ -650,12 +696,31 @@ progress finishing
 # s5 (SU-M2): Omarchy's migrations, as Omarchy's update runs them after its transaction; before the log is read below, which
 # then covers their output too. A failure leaves the failed one and those after it pending: the runner sees them.
 if ((migrate_here)); then
-  say "omarchy-migrate as uid $caller_uid, its sudo commands as root (SU-M2)"
-  migrate_unit /usr/share/omarchy/bin/omarchy-migrate || say "omarchy-migrate failed: Omarchy's terminal update finishes it"
+  mapfile -t ordered < <(printf '%s\n' "${!seen[@]}" | sort)
+  say "Omarchy's migrations of this update as $caller_name, their sudo commands as root (SU-M2): ${ordered[*]}"
+  migrate_unit /usr/bin/bash -c "$GU_MIGRATE_LOOP" grassfield-migrate "${ordered[@]}" ||
+    say "a migration failed: it stays pending, Omarchy's terminal update finishes it"
+  wait_root_units
   outcome+=("migrations ran")
+  # Their output, root's alone (it holds the root commands' output too), at most the log's cap.
+  size=$(stat -c %s -- "$migrations" 2>/dev/null || echo 0)
+  ((size <= GU_LOG_MAX)) || truncate -s "$GU_LOG_MAX" -- "$migrations"
+  say "the migrations' output: $migrations"
+  # A migration may run pacman itself (Omarchy 4.0.6's 1791403252 runs omarchy-update-system-pkgs): what it changed of the
+  # packages s3.4 and s3.7 follow is read again, for the end's restart, and logged when the record does not match.
+  declare -A now=()
+  while read -r name version; do now[$name]=$version; done < <(pacman -Q -- "${GU_TRACKED[@]}" grassfield-desktop 2>/dev/null 9<&-)
+  for pkg in "${GU_TRACKED[@]}" grassfield-desktop; do
+    expected=${after[$pkg]-${installed[$pkg]-}}
+    [[ ${now[$pkg]-} == "$expected" ]] && continue
+    say "a migration changed $pkg: ${expected:-none} -> ${now[$pkg]:-none} (not checked against the record)"
+    after[$pkg]=${now[$pkg]:-removed}
+  done
 fi
-# omarchy-update-analyze-logs, on this run's log.
-if grep -q 'Updating linux initcpios' -- "$log" && ! grep -q 'Initcpio image generation successful' -- "$log"; then
+# omarchy-update-analyze-logs, on this run's log and the migrations' output.
+logs=("$log")
+((migrate_here)) && logs+=("$migrations")
+if grep -q 'Updating linux initcpios' -- "${logs[@]}" && ! grep -q 'Initcpio image generation successful' -- "${logs[@]}"; then
   outcome+=("bootimage failed")
 fi
 # omarchy-update-restart's kernel rule: no package's kernel under /usr/lib/modules is the running one.

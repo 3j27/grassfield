@@ -12,17 +12,20 @@
 #   container's CA bundle. Exit 0 all PASS (or SKIP without docker), 1 a FAIL, 2 usage.
 #
 # What it shows:
-#   - the channel: in grassfield-update-migrate.service (as carol, NoNewPrivileges) the sudo runs commands as root with
-#     standard input, output, working folder, exit status and arguments passed through, looks a name up in root's folders
-#     only, accepts Omarchy's sudo options and refuses the others; outside that unit (a plain process of carol's, another
-#     unit, the unit without NoNewPrivileges, another root unit name) systemd refuses, with no dialog; the real sudo cannot
-#     run in the unit; nothing of the unit is left after it;
-#   - the helper, from carol's runner through pkexec: the real helper sends a migration that needs root to Omarchy's
-#     terminal here, nothing installed (the container's kernel has no Yama, which it requires); a copy whose Yama path is a
-#     test file holding 1 (the one change, stated) installs, runs the migration as carol with its sudo commands as root,
-#     says `migrations ran`, and the runner does not run it again; a sudo command that fails leaves the migration pending
-#     (`deferred migrations`); a migration that needs a person still goes to the terminal; without the rule, the trial
-#     sudo fails and the run goes to the terminal, nothing installed.
+#   - the channel: in grassfield-update-migrate.service (as carol, under the group grassfield-update, NoNewPrivileges, its
+#     own /tmp) the sudo runs commands as root with standard input, output, working folder, exit status, arguments and the
+#     unit's temporary files passed through, looks a name up in root's folders only, accepts Omarchy's sudo options and
+#     refuses the others; from the unit, another unit name, a root unit name without its 32 hex digits, another verb on a
+#     root unit and any other unit operation are refused; the real sudo cannot run there; nothing of the unit is left;
+#   - carol's other processes cannot open the unit's pipe, environment, folder or temporary files (the step 5 review's
+#     MAJOR: /proc/<pid>/fd), and outside that unit (a plain process of carol's, another unit, the unit without
+#     NoNewPrivileges) systemd refuses, with no dialog;
+#   - the REAL helper from a user's runner through pkexec: dave, not an administrator, goes to Omarchy's terminal (the
+#     review's BLOCKER); so does a run while the unit's group has a member, or while a migration from before the update is
+#     pending, or with a rule that grants nothing or none; carol, an administrator: the update installed, the migration run
+#     as carol with its sudo as root and its own /tmp, `migrations ran`, its output root's alone; a failing sudo leaves the
+#     migration pending; a migration that needs a person (gum, or sudo and gum) goes to the terminal; root without
+#     pkexec's user has no person; the unit's own form is refused outside the unit.
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
@@ -91,34 +94,43 @@ install -Dm755 /src/packaging/bin/grassfield-update-run "$R"
 install -Dm644 /src/packaging/pacman/org.grassfield.packages.policy /usr/share/polkit-1/actions/org.grassfield.packages.policy
 install -Dm755 /src/packaging/pacman/grassfield-update-sudo "$SUDO"
 install -Dm644 /src/packaging/pacman/49-grassfield-update.rules "$RULE"
-useradd -m carol
-uid=$(id -u carol)
-# carol's runner has no agent to ask the password through in a container: polkit lets it through (the dialog is the
-# owner's L2); the rule under test is the packaged one.
+install -Dm644 /src/packaging/pacman/grassfield-update.sysusers /usr/lib/sysusers.d/grassfield-update.conf
+quiet systemd-sysusers
+expect "the migrations' unit's group exists, with no member" bash -c 'getent group grassfield-update | grep -qE "^grassfield-update:x:[0-9]+:$"'
+# carol is an administrator (wheel, as Omarchy's user is); dave is not.
+useradd -m -G wheel carol
+useradd -m dave
+uid=$(id -u carol) duid=$(id -u dave)
+# The runners have no agent to ask the password through in a container: polkit lets carol's and dave's through (an
+# administrator's password, typed for dave's in a real session; the dialog is the owner's L2); the rule under test is the
+# packaged one.
 cat >/etc/polkit-1/rules.d/50-grassfield-test.rules <<'EOF'
 polkit.addRule(function(action, subject) {
-  if (action.id == "org.grassfield.packages.update-system" && subject.user == "carol") return polkit.Result.YES;
+  if (action.id == "org.grassfield.packages.update-system" && (subject.user == "carol" || subject.user == "dave")) return polkit.Result.YES;
   return polkit.Result.NOT_HANDLED;
 });
 EOF
 systemctl restart polkit
 cp /var/cache/pacman/pkg/archlinux-keyring-"$(ver archlinux-keyring)"-any.pkg.tar.zst "$W/keyring.pkg.tar.zst" ||
   { echo "FAIL: the installed archlinux-keyring's package file is not in the cache"; exit 1; }
-mkdir -p "/run/user/$uid" && chown carol: "/run/user/$uid" && chmod 700 "/run/user/$uid"
+mkdir -p "/run/user/$uid" "/run/user/$duid" && chown carol: "/run/user/$uid" && chown dave: "/run/user/$duid" &&
+  chmod 700 "/run/user/$uid" "/run/user/$duid"
 
 say "the channel: the migrations' sudo inside grassfield-update-migrate.service (the helper's properties)"
 # The unit as the helper's migrate_unit makes it.
-in_migrate() { # [property...] -- program [argument...]
-  local props=(-p NoNewPrivileges=yes)
+in_migrate() { # [--no-nnp] [--no-wait] -- program [argument...]
+  local props=(-p NoNewPrivileges=yes) wait=(--wait --pipe)
   if [[ ${1-} == --no-nnp ]]; then props=(); shift; fi
-  systemd-run --unit=grassfield-update-migrate --collect --quiet --wait --pipe --service-type=exec --expand-environment=no \
-    --uid=carol "${props[@]}" -p 'WorkingDirectory=~' --setenv=PATH="/usr/lib/grassfield/update-sudo:/usr/share/omarchy/bin:/usr/bin" "$@"
+  if [[ ${1-} == --no-wait ]]; then wait=(); shift; fi
+  systemd-run --unit=grassfield-update-migrate --collect --quiet "${wait[@]}" --service-type=exec --expand-environment=no \
+    --uid=carol --gid=grassfield-update -p SupplementaryGroups=carol "${props[@]}" -p PrivateTmp=yes -p TimeoutStopSec=5s \
+    -p 'WorkingDirectory=~' --setenv=PATH="/usr/lib/grassfield/update-sudo:/usr/share/omarchy/bin:/usr/bin" "$@"
 }
 cat >"$W/channel.sh" <<'EOF'
 #!/bin/bash
 set -u
 r() { printf '%s=%s\n' "$1" "$2"; }
-r whoami "$(id -un)"
+r whoami "$(id -un):$(id -gn)"
 r root "$(sudo id -u)"
 echo through-stdin | sudo tee /root/tee-test >/dev/null; r tee "$?"
 cd /tmp && r pwd "$(sudo pwd)"
@@ -138,14 +150,21 @@ r root-home "$(sudo printenv HOME)"
 r literal "$(sudo echo '$HOME' '%n')"
 mkdir -p "$HOME/bin" && printf '#!/bin/sh\necho pwned\n' >"$HOME/bin/gu-evil" && chmod 755 "$HOME/bin/gu-evil"
 PATH=$HOME/bin:$PATH sudo gu-evil >/dev/null 2>&1; r lookup "$?"
+tmp=$(mktemp) && echo private-tmp >"$tmp" && r tmp-root "$(sudo cat "$tmp")"
 systemd-run --quiet --wait --no-ask-password --unit=run-gu-x.service true 2>/dev/null; r other-name "$?"
+systemd-run --quiet --wait --no-ask-password --unit=grassfield-update-root-x.service true 2>/dev/null; r short-name "$?"
+sudo sleep 6 &
+sleep 2
+root_unit=$(systemctl list-units --plain --no-legend 'grassfield-update-root-*' | awk 'NR == 1 { print $1 }')
+systemctl --no-ask-password stop "$root_unit" 2>/dev/null; r stop-root "$?:${root_unit:+named}"
+wait
 systemctl --no-ask-password stop polkit 2>/dev/null; r stop-polkit "$?"
 /usr/bin/sudo -n true 2>/dev/null; r real-sudo "$?"
 EOF
 chmod 755 "$W/channel.sh"
 out=$(in_migrate -- "$W/channel.sh" 2>&1)
 get() { sed -n "s/^$1=//p" <<<"$out"; }
-expect "the unit's processes are carol's" test "$(get whoami)" == carol
+expect "the unit's processes are carol's, under the group grassfield-update" test "$(get whoami)" == carol:grassfield-update
 expect "sudo id -u -> 0" test "$(get root)" == 0
 expect "standard input reaches the command (tee as root)" test "$(get tee):$(cat /root/tee-test 2>/dev/null):$(stat -c %U /root/tee-test 2>/dev/null)" == "0:through-stdin:root"
 expect "the working folder is the caller's" test "$(get pwd)" == /tmp
@@ -158,10 +177,28 @@ expect "sudo env VAR=... command works (Omarchy's form)" test "$(get env-command
 expect "SUDO_USER carol, HOME /root" test "$(get sudo-user):$(get root-home)" == "carol:/root"
 expect "arguments reach the command unexpanded" test "$(get literal)" == '$HOME %n'
 expect "a name is not looked up in the caller's PATH (command not found)" test "$(get lookup)" == 1
+expect "a file of the unit's own /tmp reaches its root command" test "$(get tmp-root)" == private-tmp
 expect "another unit name from the unit -> refused" test "$(get other-name)" != 0
+expect "a root unit name without its 32 hex digits -> refused" test "$(get short-name)" != 0
+expect "stopping a root unit from the unit (another verb) -> refused" bash -c '[[ $1 == [1-9]*:named ]]' _ "$(get stop-root)"
 expect "any other unit operation from the unit -> refused (polkit still active)" test "$(get stop-polkit)" != 0 -a "$(systemctl is-active polkit)" == active
 expect "the real sudo cannot run in the unit (NoNewPrivileges)" test "$(get real-sudo)" != 0
 expect "nothing of the unit is left" bash -c '! systemctl is-active --quiet grassfield-update-migrate.service && test -z "$(systemctl list-units --all --plain --no-legend "grassfield-update-migrate*" "grassfield-update-root-*")"'
+
+say "carol's other processes cannot reach into the unit (the step 5 review's MAJOR)"
+cat >"$W/holder.sh" <<'EOF'
+#!/bin/bash
+exec 3< <(sleep 40)
+echo held >/tmp/gu-held
+sleep 30
+EOF
+chmod 755 "$W/holder.sh"
+in_migrate --no-wait -- "$W/holder.sh"
+sleep 2
+pid=$(systemctl show -p MainPID --value grassfield-update-migrate.service)
+probe=$(runuser -u carol -- bash -c "exec 9>/proc/$pid/fd/3 && echo fd-opened; cat /proc/$pid/environ >/dev/null 2>&1 && echo environ-read; readlink /proc/$pid/cwd >/dev/null 2>&1 && echo cwd-read; ls /tmp/gu-held 2>/dev/null && echo tmp-seen; echo done" 2>/dev/null)
+expect "a process of carol's cannot open the unit's pipe, environment, folder or temporary files ($pid)" test "${pid:-0}:$probe" == "$pid:done" -a "${pid:-0}" != 0
+systemctl stop grassfield-update-migrate.service
 
 say "the channel refuses everything else"
 out=$(runuser -u carol -- "$SUDO" id -u 2>&1); rc=$?
@@ -211,15 +248,19 @@ for command in omarchy-gu-sudo omarchy-gu-indirect omarchy-notification-dismiss;
 done
 omarchy_commands+=("usr/bin/omarchy-migrate:/omarchy/bin/omarchy-migrate" "usr/share/omarchy/bin/omarchy-migrate->/usr/bin/omarchy-migrate")
 base_files=("usr/share/omarchy/version=4.0.4" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/100.sh=echo 100 >>\"\$HOME/migrations.log\"")
-# 700: needs root (sudo, and a command that calls it), writes on both sides and records its session.
-m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"'
+# 700 needs root (sudo, and a command that calls it): it writes on both sides, hands a temporary file to a root command (as
+# 4.0.6's 1791403252 does with mktemp and sudo install), and records its session and group.
+m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; t=$(mktemp); echo from-tmp >"$t"; sudo install -m 644 "$t" /root/su-m2-tmp; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"'
+m700f="usr/share/omarchy/migrations/700.sh=$m700"
 mkpkg omarchy 1 "${base_files[@]}"
-mkpkg omarchy 2 "${base_files[@]}" "usr/share/omarchy/migrations/700.sh=$m700"
-mkpkg omarchy 3 "${base_files[@]}" "usr/share/omarchy/migrations/700.sh=$m700" "usr/share/omarchy/migrations/750.sh=sudo false"
-mkpkg omarchy 4 "${base_files[@]}" "usr/share/omarchy/migrations/700.sh=$m700" "usr/share/omarchy/migrations/750.sh=sudo false" \
-  "usr/share/omarchy/migrations/800.sh=gum confirm 'Continue?'"
-mkpkg omarchy 5 "${base_files[@]}" "usr/share/omarchy/migrations/700.sh=$m700" "usr/share/omarchy/migrations/750.sh=sudo false" \
-  "usr/share/omarchy/migrations/740.sh=sudo touch /root/su-m2-740"
+mkpkg omarchy 2 "${base_files[@]}" "$m700f"
+mkpkg omarchy 3 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh=sudo false"
+mkpkg omarchy 4 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh=sudo false" \
+  "usr/share/omarchy/migrations/800.sh=gum confirm 'Continue?'" "usr/share/omarchy/migrations/810.sh=sudo true; gum confirm 'Sure?'"
+mkpkg omarchy 5 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh=sudo false" \
+  "usr/share/omarchy/migrations/900.sh=sudo touch /root/su-m2-900"
+mkpkg omarchy 6 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh=sudo false" \
+  "usr/share/omarchy/migrations/900.sh=sudo touch /root/su-m2-900" "usr/share/omarchy/migrations/950.sh=sudo touch /root/su-m2-950"
 publish() {
   rm -f "$W/repo"/*
   cp "$W/keyring.pkg.tar.zst" "$W/repo/archlinux-keyring-$(ver archlinux-keyring)-any.pkg.tar.zst"
@@ -244,73 +285,98 @@ Server = file://$W/repo
 EOF
 quiet pacman -Syy
 quiet pacman -S --noconfirm grassfield-desktop qt6-base omarchy-keyring omarchy || { echo "FAIL: installing the base set (see $W/log)"; exit 1; }
-# carol has run 100 already (Omarchy's marker).
-mkdir -p /home/carol/.local/state/omarchy/migrations && touch /home/carol/.local/state/omarchy/migrations/100.sh
-chown -R carol: /home/carol/.local
+# carol and dave have run 100 already (Omarchy's marker).
+for u in carol dave; do
+  mkdir -p "/home/$u/.local/state/omarchy/migrations" && touch "/home/$u/.local/state/omarchy/migrations/100.sh"
+  chown -R "$u:" "/home/$u/.local"
+done
 expect "the base set installed (omarchy 1)" test "$(ver omarchy)" == 1-1
 
-say "the helper, from carol's runner (pkexec, the unit grassfield-update.service)"
-runner() {
-  runuser -u carol -- env -i HOME=/home/carol USER=carol XDG_RUNTIME_DIR="/run/user/$uid" PATH=/usr/bin LANG=C.UTF-8 \
+say "the REAL helper, from a runner (pkexec, the unit grassfield-update.service)"
+runner() { # user
+  local u=$1 i
+  i=$(id -u "$u")
+  runuser -u "$u" -- env -i HOME="/home/$u" USER="$u" XDG_RUNTIME_DIR="/run/user/$i" PATH=/usr/bin LANG=C.UTF-8 \
     WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=gu_test_123 "$R" </dev/null >/dev/null 2>&1
 }
 # phase, result, and whether migrations are deferred (a container has no running kernel's package and only test
 # repositories: the restart and `aur` that follow from that are not this test's).
 state() { python3 -I -c 'import json,sys; s=json.load(open(sys.argv[1])); print(s["phase"], s["result"], "migrations" if "migrations" in s["deferred"] else "-")' \
-  "/run/user/$uid/grassfield/software-update-run.json" 2>/dev/null; }
+  "/run/user/$(id -u "$1")/grassfield/software-update-run.json" 2>/dev/null; }
 last() { cat "$D/last" 2>/dev/null; }
+logsays() { grep -q -- "$2" "$D/$1.log"; }
 
 publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-2
-runner; op=$(last)
-expect "the real helper: no Yama in this kernel -> done terminal, needs migration 700, omarchy stays 1 ($(state))" \
-  test "$(state):$(exitfile "$op"):$(ver omarchy)" == "done terminal -:7|needs migration 700|:1-1"
-expect "  its log says why (Yama), and that the person was carol's uid" bash -c "grep -q 'Yama does not keep' '$D/$op.log'"
-expect "  it ran in grassfield-update.service" bash -c "! grep -q 'no systemd unit' '$D/$op.log'"
-expect "  nothing of the migration ran" test ! -e /root/su-m2-root -a ! -e /home/carol/su-m2-user
-
-say "the helper with Yama's value in a test file (a copy whose GU_YAMA is /run/gu-yama: the one change)"
-echo 1 >/run/gu-yama
-sed 's|^GU_YAMA=/proc/sys/kernel/yama/ptrace_scope$|GU_YAMA=/run/gu-yama|' /src/packaging/pacman/grassfield-update-helper >"$H"
-expect "  the copy differs from the helper by that line only" test "$(diff /src/packaging/pacman/grassfield-update-helper "$H" | grep -c '^[<>]')" == 2
-runner; op=$(last)
-expect "omarchy 2 (700 needs root) -> done done, omarchy 2 installed, migrations ran ($(state))" \
-  test "$(state):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done -:2-1:1"
-expect "  700's sudo commands ran as root (tee, install)" test "$(cat /root/su-m2-root 2>/dev/null):$(stat -c %U /etc/su-m2-marker 2>/dev/null)" == "root-side:root"
-expect "  700 ran as carol (its file is carol's), once, and is marked done in carol's state" \
-  test "$(stat -c %U /home/carol/su-m2-user 2>/dev/null):$(grep -c 700 /home/carol/migrations.log):$(test -f /home/carol/.local/state/omarchy/migrations/700.sh && echo marked)" == "carol:1:marked"
+runner dave; op=$(last)
+expect "dave, not an administrator: 700 needs root -> done terminal, needs migration 700, omarchy stays 1 ($(state dave))" \
+  test "$(state dave):$(exitfile "$op"):$(ver omarchy)" == "done terminal -:7|needs migration 700|:1-1"
+expect "  its log says why (the step 5 review's BLOCKER)" logsays "$op" "dave is not an administrator (wheel)"
+gpasswd -a dave grassfield-update >/dev/null
+runner carol; op=$(last)
+expect "the unit's group with a member -> done terminal, omarchy stays 1 ($(state carol))" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
+expect "  its log says why" logsays "$op" "grassfield-update is missing, has members"
+gpasswd -d dave grassfield-update >/dev/null
+runner carol; op=$(last)
+expect "carol, an administrator: done done, omarchy 2 installed, migrations ran ($(state carol))" \
+  test "$(state carol):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done -:2-1:1"
+expect "  700's sudo commands ran as root (tee, install, a file of its own /tmp)" \
+  test "$(cat /root/su-m2-root 2>/dev/null):$(stat -c %U /etc/su-m2-marker 2>/dev/null):$(cat /root/su-m2-tmp 2>/dev/null)" == "root-side:root:from-tmp"
+expect "  700 ran as carol (its file carol's, group grassfield-update), once, marked done in carol's state" \
+  test "$(stat -c %U:%G /home/carol/su-m2-user 2>/dev/null):$(grep -c 700 /home/carol/migrations.log):$(test -f /home/carol/.local/state/omarchy/migrations/700.sh && echo marked)" == "carol:grassfield-update:1:marked"
 expect "  700 had carol's session values (Wayland display, Hyprland instance)" test "$(cat /home/carol/su-m2-session 2>/dev/null)" == "wayland-1 gu_test_123"
-expect "  the log has the migration's output and says SU-M2" bash -c "grep -q 'Running migration (700)' '$D/$op.log' && grep -q 'SU-M2' '$D/$op.log'"
+expect "  the migrations' output is root's alone (0600), not in the 0644 log" \
+  bash -c "test \"\$(stat -c %U:%a '$D/$op.migrations')\" == root:600 && grep -q 'Running migration (700)' '$D/$op.migrations' && ! grep -q 'Running migration' '$D/$op.log'"
+expect "  the log names the migrations it ran (SU-M2)" logsays "$op" "SU-M2): 700.sh"
 expect "  nothing of the migrations' unit or its root units is left" \
   test -z "$(systemctl list-units --all --plain --no-legend 'grassfield-update-migrate*' 'grassfield-update-root-*')"
 
 publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-3
-runner; op=$(last)
-expect "omarchy 3 (750: sudo false) -> done done with deferred migrations, omarchy 3 installed ($(state))" \
-  test "$(state):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done migrations:3-1:1"
+runner carol; op=$(last)
+expect "omarchy 3 (750: sudo false) -> done done with deferred migrations, omarchy 3 installed ($(state carol))" \
+  test "$(state carol):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done migrations:3-1:1"
 expect "  750 stays pending for carol" test ! -f /home/carol/.local/state/omarchy/migrations/750.sh
+touch /home/carol/.local/state/omarchy/migrations/750.sh   # Omarchy's terminal finished it
 
 publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-4
-runner; op=$(last)
-expect "omarchy 4 (800 asks with gum) -> done terminal, needs migration 800 and 750, omarchy stays 3 ($(state))" \
-  test "$(state):$(ver omarchy):$(exitfile "$op")" == "done terminal -:3-1:7|needs migration 800|needs migration 750|"
+runner carol; op=$(last)
+expect "omarchy 4 (800 asks with gum; 810 calls sudo and gum) -> done terminal, both need a person, omarchy stays 3 ($(state carol))" \
+  bash -c '[[ $1 == "done terminal -:3-1" ]] && grep -qx "needs migration 800" "$2" && grep -qx "needs migration 810" "$2"' _ "$(state carol):$(ver omarchy)" "$D/$op.exit"
 
 publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-5
+rm /home/carol/.local/state/omarchy/migrations/100.sh
+runner carol; op=$(last)
+expect "a migration from before this update pending (100), 900 needs root -> done terminal, omarchy stays 3 ($(state carol))" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:3-1"
+expect "  its log says why (the unit runs this update's own migrations only)" logsays "$op" "migrations from before this update are pending"
+touch /home/carol/.local/state/omarchy/migrations/100.sh && chown carol: /home/carol/.local/state/omarchy/migrations/100.sh
+
 cp "$RULE" "$W/rule.saved"
 echo '// emptied by the test' >"$RULE"
 sleep 2   # polkitd reloads its rules when a file changes
-runner; op=$(last)
-expect "a rule that grants nothing: the trial sudo fails -> done terminal, needs migration 750 and 740, omarchy stays 3 ($(state))" \
-  test "$(state):$(ver omarchy):$(exitfile "$op")" == "done terminal -:3-1:7|needs migration 750|needs migration 740|"
-expect "  its log says the trial failed; 740 did not run" bash -c "grep -q 'the trial sudo through the migrations. unit failed' '$D/$op.log' && test ! -e /root/su-m2-740"
+runner carol; op=$(last)
+expect "a rule that grants nothing: the trial sudo fails -> done terminal, needs migration 900, omarchy stays 3 ($(state carol))" \
+  test "$(state carol):$(ver omarchy):$(exitfile "$op")" == "done terminal -:3-1:7|needs migration 900|"
+expect "  its log says the trial failed; 900 did not run" bash -c "grep -q 'the trial sudo through the migrations. unit failed' '$D/$op.log' && test ! -e /root/su-m2-900"
 rm -f "$RULE"
-runner; op=$(last)
-expect "no rule installed -> done terminal, omarchy stays 3 ($(state))" test "$(state):$(ver omarchy)" == "done terminal -:3-1"
-expect "  its log says the sudo for migrations is not installed" grep -q "sudo for migrations is not installed" "$D/$op.log"
+runner carol; op=$(last)
+expect "no rule installed -> done terminal, omarchy stays 3 ($(state carol))" test "$(state carol):$(ver omarchy)" == "done terminal -:3-1"
+expect "  its log says the sudo for migrations is not installed" logsays "$op" "sudo for migrations is not installed"
 cp "$W/rule.saved" "$RULE"
 sleep 2
-runner; op=$(last)
-expect "the rule back: omarchy 5 installed, 740 (before 750) ran its sudo, 750 still fails (deferred) ($(state))" \
-  test "$(state):$(ver omarchy):$(test -e /root/su-m2-740 && echo ran)" == "done done migrations:5-1:ran"
+runner carol; op=$(last)
+expect "the rule back: omarchy 5 installed, 900's sudo ran ($(state carol))" \
+  test "$(state carol):$(ver omarchy):$(test -e /root/su-m2-900 && echo ran)" == "done done -:5-1:ran"
+
+say "the helper's own inputs"
+publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-6
+op=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+env -i PATH=/usr/bin "$H" run "$op" </dev/null >/dev/null 2>&1; rc=$?
+expect "root itself, without pkexec's user (no person): 950 needs root -> exit 7, needs migration 950, omarchy stays 5" \
+  test "$rc:$(exitfile "$op"):$(ver omarchy)" == "7:7|needs migration 950|:5-1"
+expect "  its log says why" logsays "$op" "no person to run them as"
+env -i PATH=/usr/bin "$H" unit "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" "$uid" - - </dev/null >/dev/null 2>&1; rc=$?
+expect "the unit form outside grassfield-update.service -> usage (2)" test "$rc" == 2
 
 echo
 if ((fails)); then echo "update_migrate: $fails FAIL"; exit 1; fi
