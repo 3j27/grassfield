@@ -57,6 +57,8 @@ Window {
     property int pages: -1
     property int page: 0
     property string pageSource: ""
+    // A page asked and not drawn yet.
+    property bool pageDrawing: false
     // The printer's own options (print::toQml(Capabilities).options) and the disclosure sections that hold them, as macOS
     // groups them; the sections open ({id: true}).
     readonly property var optionList: sheet.capabilities.options ? sheet.capabilities.options : []
@@ -168,8 +170,9 @@ Window {
         return name;
     }
     // A value's name: the printer's (CUPS's), except the standard ones CUPS leaves as numbers (IPP's print-quality and
-    // finishings enums), named here.
-    function valueLabel(name: string, value: string, label: string): string {
+    // finishings enums), named here in the UI language by their keyword; another keyword keeps CUPS's name, or the keyword in
+    // words (the security review of step 6b, NIT).
+    function valueLabel(name: string, value: string, label: string, keyword: string): string {
         if (name === "print-quality") {
             if (value === "3")
                 return qsTr("Draft");
@@ -178,8 +181,40 @@ Window {
             if (value === "5")
                 return qsTr("Best");
         }
-        if (name === "finishings" && value === "3")
-            return qsTr("None");
+        if (name === "finishings") {
+            switch (keyword) {
+            case "none":
+                return qsTr("None");
+            case "staple":
+                return qsTr("Staple");
+            case "punch":
+                return qsTr("Punch");
+            case "fold":
+                return qsTr("Fold");
+            case "bind":
+                return qsTr("Bind");
+            case "saddle-stitch":
+                return qsTr("Saddle Stitch");
+            case "staple-top-left":
+                return qsTr("Staple Top Left");
+            case "staple-bottom-left":
+                return qsTr("Staple Bottom Left");
+            case "staple-top-right":
+                return qsTr("Staple Top Right");
+            case "staple-bottom-right":
+                return qsTr("Staple Bottom Right");
+            case "staple-dual-left":
+                return qsTr("Two Staples Left");
+            case "staple-dual-top":
+                return qsTr("Two Staples Top");
+            case "punch-dual-left":
+                return qsTr("Two Holes Left");
+            case "punch-dual-top":
+                return qsTr("Two Holes Top");
+            }
+            if (value === "3")
+                return qsTr("None");
+        }
         return label;
     }
 
@@ -196,6 +231,9 @@ Window {
         if (next === sheet.page)
             return;
         sheet.page = next;
+        // The page before goes at once (never under the new number): "Preparing Preview…" until this one is drawn.
+        sheet.pageSource = "";
+        sheet.pageDrawing = true;
         sheet.requestPage();
     }
 
@@ -285,12 +323,14 @@ Window {
                 return;
             sheet.pages = pages;
             sheet.page = 0;
+            sheet.pageDrawing = pages > 0;
             sheet.requestPage();
         }
         function onPageRendered(id: int, page: int, source: string): void {
             if (id !== sheet.requestId || page !== sheet.page)
                 return;
             sheet.pageSource = source;
+            sheet.pageDrawing = false;
         }
         function onPdfCancelled(id: int): void {
             if (id !== sheet.requestId)
@@ -402,7 +442,7 @@ Window {
                     anchors.centerIn: parent
                     visible: !pageImage.visible
                     textFormat: Text.PlainText
-                    text: sheet.pages < 0 ? qsTr("Preparing Preview…") : qsTr("No Preview")
+                    text: sheet.pages < 0 || sheet.pageDrawing ? qsTr("Preparing Preview…") : qsTr("No Preview")
                     color: Appearance.colors.textSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
@@ -772,7 +812,8 @@ Window {
                                 }
                                 model: optionRow.modelData.values.map(v => ({
                                             id: String(v.value),
-                                            text: sheet.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label))
+                                            text: sheet.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label),
+                                                                   String(v.keyword || ""))
                                         }))
                                 onPicked: id => sheet.setOption(String(optionRow.modelData.name), id)
                             }

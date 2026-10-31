@@ -8319,6 +8319,58 @@
         <translation>Aucune</translation>
     </message>
     <message>
+        <source>Staple</source>
+        <translation>Agrafe</translation>
+    </message>
+    <message>
+        <source>Punch</source>
+        <translation>Perforation</translation>
+    </message>
+    <message>
+        <source>Fold</source>
+        <translation>Pliage</translation>
+    </message>
+    <message>
+        <source>Bind</source>
+        <translation>Reliure</translation>
+    </message>
+    <message>
+        <source>Saddle Stitch</source>
+        <translation>Piqûre à cheval</translation>
+    </message>
+    <message>
+        <source>Staple Top Left</source>
+        <translation>Agrafe en haut à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Left</source>
+        <translation>Agrafe en bas à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Top Right</source>
+        <translation>Agrafe en haut à droite</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Right</source>
+        <translation>Agrafe en bas à droite</translation>
+    </message>
+    <message>
+        <source>Two Staples Left</source>
+        <translation>Deux agrafes à gauche</translation>
+    </message>
+    <message>
+        <source>Two Staples Top</source>
+        <translation>Deux agrafes en haut</translation>
+    </message>
+    <message>
+        <source>Two Holes Left</source>
+        <translation>Deux trous à gauche</translation>
+    </message>
+    <message>
+        <source>Two Holes Top</source>
+        <translation>Deux trous en haut</translation>
+    </message>
+    <message>
         <source>Untitled</source>
         <translation>Sans titre</translation>
     </message>

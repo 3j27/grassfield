@@ -109,7 +109,9 @@ TestCase {
     readonly property var optionCaps: Object.assign({}, test.officeCaps, {
         options: [{name: "media-source", section: "quality", defaultValue: "auto", values: [{value: "auto", label: "Automatic"}, {value: "tray-1", label: "Tray 1"}]},
             {name: "print-quality", section: "quality", defaultValue: "4", values: [{value: "3", label: "3"}, {value: "4", label: "4"}, {value: "5", label: "5"}]},
-            {name: "output-bin", section: "printer", defaultValue: "upper", values: [{value: "upper", label: "Upper Bin"}, {value: "lower", label: "Lower Bin"}]}]
+            {name: "output-bin", section: "printer", defaultValue: "upper", values: [{value: "upper", label: "Upper Bin"}, {value: "lower", label: "Lower Bin"}]},
+            {name: "finishings", section: "printer", defaultValue: "3", values: [{value: "3", label: "None", keyword: "none"},
+                    {value: "20", label: "Staple Top Left", keyword: "staple-top-left"}, {value: "99", label: "Odd Thing", keyword: "odd-thing"}]}]
     })
 
     function choices(fields: var): var {
@@ -381,6 +383,8 @@ TestCase {
         printerOptions.forceActiveFocus();
         keyClick(Qt.Key_Space);
         verify(test.control(sheet, "Output Bin") !== null);
+        compare(test.control(sheet, "Finishing").model.map(m => m.text), ["None", "Staple Top Left", "Odd Thing"],
+                "the standard finishings named by their keyword (in the UI language), another one as the printer named it");
         test.button(sheet, "Print").clicked();
         compare(fakeHost.answers.length, 1);
         compare(fakeHost.answers[0].choices.options["print-quality"], "5");
@@ -415,8 +419,12 @@ TestCase {
         const previous = test.control(sheet, "Previous Page");
         const next = test.control(sheet, "Next Page");
         verify(!previous.enabled);
+        fakeHost.pageRendered(7, 0, "image://printpreview/first");
+        compare(sheet.pageSource, "image://printpreview/first");
         next.clicked();
         compare(fakeHost.rendered[fakeHost.rendered.length - 1].page, 1);
+        compare(sheet.pageSource, "", "the page before goes at once, never under the new number");
+        verify(test.find(sheet.contentItem, it => it.text === "Preparing Preview…" && it.visible) !== null, "until the new page is drawn");
         fakeHost.pageRendered(7, 0, "image://printpreview/late");
         compare(sheet.pageSource, "", "a page no longer shown is not shown");
         sheet.requestActivate();
