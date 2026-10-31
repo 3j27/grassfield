@@ -15,7 +15,8 @@ SettingsPage {
     title: qsTr("Appearance")
 
     readonly property var colorNames: ({
-            multicolor: qsTr("Multicolour"),
+            // The default (stored as "multicolor"): the brand green, named after the product (ADR-0040 step 1c, IQ-B3 A).
+            multicolor: qsTr("Grassfield"),
             blue: qsTr("Blue"),
             purple: qsTr("Purple"),
             pink: qsTr("Pink"),
@@ -29,7 +30,7 @@ SettingsPage {
     readonly property var paletteNames: [qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
     readonly property string iconMode: root.store.value("icons.mode")
 
-    // An accent's colour in the current appearance (Multicolour: the Grassfield green).
+    // An accent's colour in the current appearance (Grassfield: the brand green).
     function accentOf(name: string): color {
         const r = Accent.resolve(name, Appearance.dark, Tokens);
         return r ? r.accent : (Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent);

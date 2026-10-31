@@ -71,7 +71,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: button.text
             // Dimmed while disabled (the label only: the capsule keeps its grey).
-            color: Appearance.withAlpha(Appearance.colors.accent, button.enabled ? 1 : Tokens.storeButtonDisabledOpacity)
+            color: Appearance.withAlpha(Appearance.colors.accentInk, button.enabled ? 1 : Tokens.storeButtonDisabledOpacity)
             readonly property int size: root.large ? Tokens.storeButtonLargeTextSize : Tokens.storeButtonTextSize
             font.family: Appearance.fontFamily
             font.pixelSize: size

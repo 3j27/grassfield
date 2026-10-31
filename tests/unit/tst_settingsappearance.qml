@@ -170,6 +170,24 @@ TestCase {
         compare(last(t.store), ["accent.color", "graphite"]);
     }
 
+    // ADR-0040 step 1c (IQ-B3 A): the default is named "Grassfield" and drawn as one swatch of the brand green, in place of
+    // macOS's Multicolour wheel; the pickable Green is a light green apart from it (the owner's choice B of 2026-10-30).
+    function test_theDefaultAccentIsGrassfield() {
+        const t = make();
+        const swatches = named(t.page, "Accent colour");
+        compare(swatches.model[0].name, "Grassfield");
+        compare(Accent.NAMES[0], "multicolor", "the stored value keeps its name");
+        const brand = Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent;
+        verify(Qt.colorEqual(swatches.model[0].color, brand), String(swatches.model[0].color));
+        const green = swatches.model[Accent.NAMES.indexOf("green")];
+        compare(green.name, "Green");
+        verify(!Qt.colorEqual(green.color, brand));
+        // One flat disc: no colour wheel (no Shape) in the picker.
+        verify(!find(swatches, i => i.preferredRendererType !== undefined), "no colour wheel");
+        const disc = find(swatches, i => i.radius !== undefined && i.width === Tokens.settingsAccentSwatchSize && Qt.colorEqual(i.color, brand));
+        verify(disc, "the first swatch is a disc of the brand green");
+    }
+
     function test_textHighlightPopup() {
         const t = make();
         const popup = named(t.page, "Text highlight colour");

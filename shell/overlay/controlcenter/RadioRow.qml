@@ -71,7 +71,7 @@ NavItem {
             size: Tokens.quicksettingsDiskGlyph
             name: root.iconName
             // On: the accent glyph on the white disk (the selection shade, which holds 3:1 on white for every accent but
-            // yellow; yellow takes its dark selection text).
+            // yellow and green, light accents with dark marks; they take their dark selection text).
             color: !root.on ? Appearance.colors.text : (Accent.contrast(String(Appearance.colors.selection), String(Appearance.colors.knob)) >= 3 ? Appearance.colors.selection : Appearance.colors.selectionText)
         }
 

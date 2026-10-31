@@ -1256,10 +1256,6 @@
         <translation>Couleur d’accentuation</translation>
     </message>
     <message>
-        <source>Multicolour</source>
-        <translation>Multicolore</translation>
-    </message>
-    <message>
         <source>Light</source>
         <translation>Clair</translation>
     </message>
@@ -1278,6 +1274,10 @@
     <message>
         <source>Purple</source>
         <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
     </message>
     <message>
         <source>Pink</source>

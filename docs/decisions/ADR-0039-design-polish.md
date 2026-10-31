@@ -181,9 +181,10 @@ secondary lines read like titles (`shots/settings-desktop-dark-2x-crop.png`). Ev
 **Q4. One green for "on" in the dark appearance.** Switches and slider fills use the bright green #4FB36B; checkboxes,
 radio buttons, default buttons and selected rows the deeper #2E8049 chosen for white text (owner decision of 2026-10-26).
 - (a) Switches and slider fills on #2E8049 too (each accent's dark selection fill). Pros: one green for "on"; the white knob
-  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.82–2.77:1 to 4.85–4.89:1 for every other accent but yellow. Cons: a
-  darker switch than macOS's bright one; with the yellow accent the knob stays under 3:1 (2.02:1 on #E0B000, 1.50:1 today),
-  because the yellow pair keeps dark marks.
+  goes from 2.63:1 to 4.88:1 (WCAG 1.4.11), and from 1.82–2.77:1 to 4.85–4.89:1 for every other accent but yellow and
+  green. Cons: a darker switch than macOS's bright one; with the yellow or the green accent the knob stays under 3:1 (2.02:1
+  on #E0B000, 2.52:1 on #6DB53C), because their pairs keep dark marks (green since ADR-0040 step 1c, the owner's light Green
+  of 2026-10-30).
 - (b) Keep both greens. Pros: brighter switches. Cons: two greens side by side in one Settings row; the knob under 3:1.
 - (c) Checkboxes and radio buttons on #4FB36B with a dark mark. Pros: one bright green. Cons: breaks white-on-accent (F1,
   2026-10-26) with a dark checkmark, which macOS never draws.
@@ -256,8 +257,8 @@ Asked with AskUserQuestion after step 0 was written; the answers verbatim where 
   shade per accent of 2026-10-26), so "the same as on macOS 27" is option (a): switches and slider fills move to it. Step 11
   first checks this on the dark macOS 27 release captures (a switch and a checkbox side by side); if they show two fills, the
   step follows what they show and records it here. The fill is each accent's dark selection colour: the white knob reaches
-  4.85–4.89:1 for every accent but yellow, whose pair keeps dark marks; there the knob stays at 2.02:1 (1.50:1 today), and
-  step 11 gives it the outline Increase Contrast draws (step 1) or records the limit.
+  4.85–4.89:1 for every accent but yellow and green, whose pairs keep dark marks (green since ADR-0040 step 1c); there the
+  knob stays at 2.02:1 and 2.52:1, and step 11 gives it the outline Increase Contrast draws (step 1) or records the limit.
 
 ## Coordination with the identity lane (ADR-0040, pull request #46)
 The integrator's review named nine overlaps. Whichever pull request merges second rebases; the owner of each is:
