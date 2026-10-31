@@ -10426,6 +10426,10 @@
         <translation>Une partie de la mise à jour n’est utilisée qu’après votre prochaine ouverture de session.</translation>
     </message>
     <message>
+        <source>Log out to finish updating</source>
+        <translation>Fermez la session pour terminer la mise à jour</translation>
+    </message>
+    <message>
         <source>Restart…</source>
         <translation>Redémarrer…</translation>
     </message>

@@ -327,27 +327,40 @@ ShellRoot {
         return JSON.stringify({version: 1, state: "up-to-date", channel: "stable", checkedAt: new Date().toISOString(), grassfield: {installed: "1.0.3-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}, others: 0, otherPackages: [], toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.0-1", installedAt: at, built: "6.11.2-1", moved: true}]}});
     }
 
+    // The saved file, or {} while it is not valid JSON (it is rewritten atomically, but read here between writes).
+    function saved(): var {
+        try {
+            return JSON.parse(root.stateText() || "{}");
+        } catch (e) {
+            return {};
+        }
+    }
+
+    // The install time the saved file's toolkit list carries ("" before the service saved an answer with one): what a
+    // step waits for, since the check's end is not the save's (the integrator's review of e03013d, major B).
+    function savedToolkitAt(): string {
+        const s = root.saved();
+        return s.toolkit && s.toolkit.packages && s.toolkit.packages[0] ? String(s.toolkit.packages[0].installedAt) : "";
+    }
+
     function stepT(): void {
         SoftwareUpdate.sessionStartedAt = Date.parse("2026-10-28T10:00:00Z");
         const before = root.announced;
-        let n = calls().length;
         put("answer", toolkitAnswer("2026-10-28T09:00:00Z"));
         SoftwareUpdate.request("omarchy");
-        when(() => !SoftwareUpdate.checking && calls().length === n + 1, () => {
-            const saved1 = JSON.parse(root.stateText() || "{}");
-            root.check(root.announced === before && !SoftwareUpdate.toolkitLogout && saved1.toolkitLogout === undefined && saved1.toolkit.packages.length === 1, "t1: a package installed before the session's start asks for nothing (" + (root.announced - before) + " announced, toolkit flag " + saved1.toolkitLogout + ")");
-            n = calls().length;
+        when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T09:00:00Z", () => {
+            const saved1 = root.saved();
+            root.check(root.announced === before && !SoftwareUpdate.toolkitLogout && saved1.toolkitLogout === undefined && saved1.logoutPending === true, "t1: a package installed before the session's start asks for nothing (" + (root.announced - before) + " announced, toolkit flag " + saved1.toolkitLogout + ", GF-083's own log out kept " + saved1.logoutPending + ")");
             put("answer", toolkitAnswer("2026-10-28T11:00:00Z"));
             SoftwareUpdate.request("omarchy");
-            when(() => !SoftwareUpdate.checking && calls().length === n + 1, () => {
-                const saved2 = JSON.parse(root.stateText() || "{}");
+            when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T11:00:00Z" && root.saved().toolkitLogout === true, () => {
+                const saved2 = root.saved();
                 root.check(root.announced === before + 1 && root.lastAnnounce[0] === "toolkit" && SoftwareUpdate.toolkitLogout, "t2: a package installed after the session's start: announced once as toolkit (" + (root.announced - before) + ", " + JSON.stringify(root.lastAnnounce) + ")");
                 root.check(saved2.logoutPending === true && saved2.toolkitLogout === true && saved2.announced.indexOf("toolkit " + SoftwareUpdate.sessionStartedAt) >= 0, "t2: the pending log out written with its reason and the announcement marked: " + JSON.stringify([saved2.logoutPending, saved2.toolkitLogout, saved2.announced]));
-                n = calls().length;
                 put("answer", toolkitAnswer("2026-10-28T11:30:00Z"));
                 SoftwareUpdate.request("omarchy");
-                when(() => !SoftwareUpdate.checking && calls().length === n + 1, () => {
-                    root.check(root.announced === before + 1 && SoftwareUpdate.toolkitLogout && JSON.parse(root.stateText() || "{}").toolkitLogout === true, "t3: a later update in the same session announces nothing more, the log out stays due (" + (root.announced - before) + ")");
+                when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T11:30:00Z", () => {
+                    root.check(root.announced === before + 1 && SoftwareUpdate.toolkitLogout && root.saved().toolkitLogout === true, "t3: a later update in the same session announces nothing more, the log out stays due (" + (root.announced - before) + ")");
                     put("answer", answer(null, null));
                     root.callsAtIpc = calls().length;
                     console.log("software-update-service: ipc-ready");

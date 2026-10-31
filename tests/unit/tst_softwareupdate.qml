@@ -110,7 +110,9 @@ TestCase {
 
     function test_aToolkitReplacedUnderTheSessionAsksForALogOutOnce() {
         const start = Logic.timeOf("2026-10-28T10:00:00Z");
-        compare(Logic.sessionStart("ab12cd_" + Math.floor(start / 1000) + "_42", 5), start, "the session's start from the instance signature");
+        const signature = "ab12cd_" + Math.floor(start / 1000) + "_42";
+        compare(Logic.sessionStart(signature, start + 60000), start, "the session's start from the instance signature, before the shell's own");
+        compare(Logic.sessionStart(signature, start - 60000), start - 60000, "never later than the shell's start (a later signature would hide installs)");
         compare(Logic.sessionStart("", 5), 5, "the shell's own start without a signature");
         compare(Logic.sessionStart(undefined, 5), 5);
         compare(Logic.sessionStart("junk", 5), 5);
@@ -118,7 +120,17 @@ TestCase {
         const a = toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", true);
         verify(Logic.toolkitLogout(a, start), "installed after the session started");
         verify(!Logic.toolkitLogout(a, Logic.timeOf("2026-10-28T12:00:00Z")), "installed before: the session already runs on it");
-        verify(Logic.toolkitLogout(toolkitAnswer("failed", null, false), start), "an unreadable time counts as this session, whatever the record says");
+        // An unreadable install time (a pacman database outside its default path): asked once, then recorded, so the next
+        // session does not ask again for the same installed version (the review of e03013d, minor).
+        const unknown = toolkitAnswer("failed", null, false);
+        verify(Logic.toolkitLogout(unknown, start, {}), "an unreadable time counts as this session once, whatever the record says");
+        const asked = Logic.withToolkitAsked(Logic.normalize(null), Logic.toolkitReplaced(unknown, start, {}));
+        compare(Logic.toolkitAsked(asked), {"qt6-base": "6.12.0-1"}, "...and the installed version is recorded as asked for");
+        verify(!Logic.toolkitLogout(unknown, start, Logic.toolkitAsked(asked)), "the same installed version asks no more");
+        verify(Logic.toolkitLogout(answer("failed", {toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.1-1", installedAt: null, built: "6.11.2-1", moved: true}]}}), start, Logic.toolkitAsked(asked)), "another version asks again");
+        compare(Logic.toolkitAsked(Logic.combine(asked, answer("up-to-date"))), {"qt6-base": "6.12.0-1"}, "kept through an answer");
+        compare(Logic.toolkitAsked(Logic.withToolkitAsked(asked, Logic.toolkitReplaced(a, start, {}))), {"qt6-base": "6.12.0-1"}, "a readable time records nothing");
+        compare(Logic.toolkitAsked({toolkitAsked: {a: 1, b: "x"}}), {b: "x"}, "strings only");
         verify(Logic.toolkitLogout(toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", false), start), "a pkgrel rebuild replaces the file too: a log out, without a move");
         verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: {record: false, packages: []}}), start), "nothing listed");
         verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: null}), start), "no list");
@@ -143,16 +155,17 @@ TestCase {
         compare(Logic.toolkitPackages(f).length, 1, "the file keeps the list");
         f = Logic.withLogoutPending(f, true, true);
         compare(f.logoutPending, true);
-        compare(f.toolkitLogout, true, "the pane words its row for the toolkit");
+        compare(f.toolkitLogout, true, "two flags: Grassfield's own log out and the toolkit's");
         f = Logic.combine(f, answer("update-running"));
         compare(Logic.toolkitPackages(f).length, 1, "an answer without the list (update-running) keeps the file's");
         compare(f.toolkitLogout, true, "and the flags");
-        verify(Logic.toolkitLogout(f, start), "a restarted shell re-reads the log out from the file");
-        f = Logic.withLogoutPending(f, true, false);
-        compare(f.toolkitLogout, undefined, "GF-083's own log out alone");
+        verify(Logic.toolkitLogout(f, start, Logic.toolkitAsked(f)), "a restarted shell re-reads the log out from the file");
         f = Logic.withLogoutPending(f, false, true);
-        compare(f.logoutPending, undefined);
-        compare(f.toolkitLogout, undefined, "no toolkit flag without a pending log out");
+        compare(f.logoutPending, undefined, "the toolkit's alone: the pane's generic title");
+        compare(f.toolkitLogout, true);
+        f = Logic.withLogoutPending(f, true, false);
+        compare(f.logoutPending, true, "Grassfield's own alone");
+        compare(f.toolkitLogout, undefined);
         compare(Logic.news(Logic.normalize(null), a, Logic.timeOf("2026-10-28T12:00:00Z")), [], "nothing to announce when it was installed before the session");
         compare(Logic.news(Logic.normalize(null), available("1.0.1-1"), start).map(n => n.kind), ["grassfield"], "an answer without the list announces as before");
     }

@@ -7,7 +7,8 @@ import qs.services
 // Restart=always brought it back after a toolkit package was replaced under the session. Run by
 // tests/shell/software_update_service.sh with HYPRLAND_INSTANCE_SIGNATURE naming the session's start (10:00) and a stored
 // file whose toolkit lists qt6-base installed at 11:00, the log out due and its announcement marked: at load the log out is
-// due again (the session's start, not this shell's), and a check with the same answer announces nothing more. Prints
+// due again (the session's start, not this shell's; GF-083's own flag is this shell's to re-derive), and a check with the
+// same answer announces nothing more. Prints
 // "software-update-restart: PASS" or FAIL <why>.
 ShellRoot {
     id: root
@@ -63,8 +64,8 @@ ShellRoot {
                     return root.fail("the session's start is " + SoftwareUpdate.sessionStartedAt + ", not the signature's " + start);
                 if (!SoftwareUpdate.toolkitLogout)
                     return root.fail("the log out is not due again at load");
-                if (root.saved().logoutPending !== true || root.saved().toolkitLogout !== true)
-                    return root.fail("the file lost the pending log out: " + JSON.stringify(root.saved()));
+                if (root.saved().toolkitLogout !== true)
+                    return root.fail("the file lost the toolkit's log out: " + JSON.stringify(root.saved()));
                 root.phase = 1;
                 waited = 0;
                 SoftwareUpdate.request("omarchy");

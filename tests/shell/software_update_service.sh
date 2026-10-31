@@ -104,7 +104,7 @@ start=$(date -u -d 2026-10-28T10:00:00Z +%s)
 mkdir -p "$tmp/fake3" && mkdir -p -m 700 "$tmp/state3"
 cp "$tmp/fake/checker" "$tmp/fake3/checker"
 toolkit='{"record":true,"packages":[{"name":"qt6-base","installed":"6.12.0-1","installedAt":"2026-10-28T11:00:00Z","built":"6.11.2-1","moved":true}]}'
-printf '{"version":1,"state":"up-to-date","channel":"stable","checkedAt":"2026-10-28T11:30:00Z","grassfield":{"installed":"1.0.1-1","available":null},"omarchy":{"installed":"4.0.6-1","available":null},"others":0,"otherPackages":[],"toolkit":%s,"announced":["toolkit %s000"],"logoutPending":true,"toolkitLogout":true}\n' "$toolkit" "$start" >"$tmp/state3/software-update.json"
+printf '{"version":1,"state":"up-to-date","channel":"stable","checkedAt":"2026-10-28T11:30:00Z","grassfield":{"installed":"1.0.1-1","available":null},"omarchy":{"installed":"4.0.6-1","available":null},"others":0,"otherPackages":[],"toolkit":%s,"announced":["toolkit %s000"],"toolkitLogout":true}\n' "$toolkit" "$start" >"$tmp/state3/software-update.json"
 chmod 600 "$tmp/state3/software-update.json"
 printf '{"version":1,"state":"up-to-date","channel":"stable","checkedAt":"2026-10-28T12:00:00Z","grassfield":{"installed":"1.0.1-1","available":null},"omarchy":{"installed":"4.0.6-1","available":null},"others":0,"otherPackages":[],"toolkit":%s}\n' "$toolkit" >"$tmp/fake3/answer"
 out3="$tmp/out3.txt"

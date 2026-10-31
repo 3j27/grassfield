@@ -133,12 +133,16 @@ Singleton {
             return;
         }
         const items = SoftwareUpdateLogic.news(file, answer, sessionStartedAt);
-        if (SoftwareUpdateLogic.toolkitLogout(answer, sessionStartedAt)) {
+        const replaced = SoftwareUpdateLogic.toolkitReplaced(answer, sessionStartedAt, SoftwareUpdateLogic.toolkitAsked(file));
+        if (replaced.length > 0) {
             if (!toolkitLogout)
-                console.info("software update: a toolkit package was replaced under this session (log out due): " + SoftwareUpdateLogic.toolkitReplaced(answer, sessionStartedAt).map(p => p.name + " " + p.installed + (p.moved ? " (not the version Grassfield was built with: " + p.built + ")" : "")).join(", "));
+                console.info("software update: a toolkit package was replaced under this session (log out due): " + replaced.map(p => p.name + " " + p.installed + (p.moved ? " (not the version Grassfield was built with: " + p.built + ")" : "")).join(", "));
             toolkitLogout = true;
         }
-        save(SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items), logoutDue, toolkitLogout));
+        let next = SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items);
+        if (replaced.length > 0)
+            next = SoftwareUpdateLogic.withToolkitAsked(next, replaced);
+        save(SoftwareUpdateLogic.withLogoutPending(next, logoutPending, toolkitLogout));
         console.info("software update: " + answer.state + (answer.error ? " (" + answer.error + ")" : "") + (items.length > 0 ? ", new: " + items.map(n => n.id).join(", ") : ""));
         if (!user) {
             for (const n of items)
@@ -169,17 +173,19 @@ Singleton {
     }
 
     onLogoutDueChanged: {
-        if (loaded && (file.logoutPending === true) !== logoutDue)
-            save(SoftwareUpdateLogic.withLogoutPending(file, logoutDue, toolkitLogout));
+        if (loaded && ((file.logoutPending === true) !== logoutPending || (file.toolkitLogout === true) !== toolkitLogout))
+            save(SoftwareUpdateLogic.withLogoutPending(file, logoutPending, toolkitLogout));
     }
 
-    // At load: a log out an earlier shell found due for the toolkit (a crash and Restart=always in between) is still due:
-    // the file's list against the session's start, not this shell's (the integrator's review of 9043ac4, major 2).
+    // At load: a log out an earlier shell found due for the toolkit (a crash and Restart=always in between) is still due
+    // when the file's list, against the session's start (not this shell's), says so; a previous session's flag is not (the
+    // integrator's review of 9043ac4, major 2, and of e03013d). The caller saves the adopted file once.
     function adopt(f: var): var {
         const n = SoftwareUpdateLogic.normalize(f);
-        if (SoftwareUpdateLogic.toolkitLogout(n, sessionStartedAt))
+        const replaced = SoftwareUpdateLogic.toolkitReplaced(n, sessionStartedAt, SoftwareUpdateLogic.toolkitAsked(n));
+        if (replaced.length > 0)
             toolkitLogout = true;
-        return SoftwareUpdateLogic.withLogoutPending(n, logoutDue, toolkitLogout);
+        return SoftwareUpdateLogic.withLogoutPending(replaced.length > 0 ? SoftwareUpdateLogic.withToolkitAsked(n, replaced) : n, logoutPending, toolkitLogout);
     }
 
     // ---- automatic checks (U7) ----
@@ -449,6 +455,7 @@ Singleton {
             }
             root.file = root.adopt(f);
             root.loaded = true;
+            root.save(root.file);
             root.reschedule();
             root.resume();
         }
