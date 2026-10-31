@@ -73,7 +73,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   override-redirect) gets a titlebar decoration 32 px (logical) tall above its content; tiled and
   full-screen windows get none (zero extents). A full-screen window's titlebar is revealed by the pointer at the top
   edge of its monitor (P6 below, macOS): it is the pointer's way out of full screen.
-- **FR3** The titlebar background uses the window's corner radius and rounding power on its top corners,
+- **FR3** The titlebar background is the window's own colour (`titlebar.background*`, the window tokens, ADR-0039 Q8) with a
+  one-point hairline at its foot (`titlebar.rule*`, the apps' toolbar rule), drawn inside the bar. It uses the window's corner radius and rounding power on its top corners,
   is square at the bottom, and the bar and the content join square (macOS: one shape, no curve where they meet);
   the window border and shadow wrap titlebar + content. Hyprland 0.56.2 rounds the surface's four corners with one
   radius, so under the surface the plugin fills the two cut top corners with the bar colour, then draws the content's

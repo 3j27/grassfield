@@ -2969,10 +2969,10 @@ QtObject {
     // estimate: after the window got the keyboard back, the action waits this long more so that the application has read its keyboard enter before the action arrives over D-Bus [ref: docs/specs/menu-bridge.md MB12]
     readonly property int focusReturnMenuActionSettleMs: 30
 
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundDark: "#2A2824"
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundLight: "#EFECE7"
+    // the compositor-drawn titlebar of server-side-decorated (third-party) windows, dark appearance: the window's own colour (color.dark.windowBackground), the owner's answer to ADR-0039 Q8 (a) of 2026-10-29, where it was a band of its own (#2A2824, the warm #28282C); a hairline under it (titlebar.rule*) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarBackgroundDark: "#2B2925"
+    // the same, light appearance: the window's own colour (color.light.windowBackground, the warm white), ADR-0039 Q8 (a), where it was a grey band (#EFECE7, the warm #ECECEE: 236 on a white window) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarBackgroundLight: "#FDFCF9"
     // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarTitleDark: "#EFECE7"
     // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -2997,6 +2997,16 @@ QtObject {
     readonly property real titlebarPreviewRimOpacity: 0.22
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
+    // the hairline under the bar, light appearance: the apps' toolbar rule (color.light.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarRuleLight: "#000000"
+    // its opacity: the apps' separator opacity in the light appearance (material.separatorOpacityLight) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real titlebarRuleOpacityLight: 0.08
+    // the hairline under the bar, dark appearance (color.dark.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarRuleDark: "#FFFFFF"
+    // its opacity: the apps' separator opacity in the dark appearance (material.separatorOpacity) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real titlebarRuleOpacityDark: 0.16
+    // its width, one point, as every separator (ADR-0039 D5) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property int titlebarRuleWidth: 1
 
     // window 1180 pt wide (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeWindowWidth: 1180

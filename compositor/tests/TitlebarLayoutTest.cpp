@@ -408,11 +408,12 @@ TEST(Theme, ColorsAreGrassfieldValues) {
     EXPECT_FLOAT_EQ(kCloseColor.b, 0x4B / 255.F);
     EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xD9 / 255.F);
     EXPECT_FLOAT_EQ(kZoomColor.g, 0xA6 / 255.F);
-    // The warm neutrals of 2026-10-30 (ADR-0040): #2A2824 and #EFECE7 (red above blue), the cool #28282C and #ECECEE warmed.
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 42 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.b, 36 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.r, 239 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.b, 231 / 255.F);
+    // The window's own colours (ADR-0039 Q8, step 21), warm (ADR-0040): #2B2925 and #FDFCF9 (red above blue), where the bar
+    // was a band of its own (#2A2824, #EFECE7).
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 43 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.b, 37 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.r, 253 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.b, 249 / 255.F);
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.a, 1.F);
 }
 
@@ -430,6 +431,11 @@ TEST(Theme, PaletteComesFromTheTokensForBothAppearances) {
     EXPECT_TRUE(same(light.inactiveLight, fromHex(tokens::kTitlebarInactiveButtonLight)));
     EXPECT_TRUE(same(light.previewTint, fromHex(tokens::kTitlebarPreviewTintLight, static_cast<float>(tokens::kTitlebarPreviewTintAlpha))));
     EXPECT_TRUE(same(dark.previewRim, fromHex(tokens::kTitlebarPreviewRimDark, static_cast<float>(tokens::kTitlebarPreviewRimOpacity))));
+    // The hairline under the bar: the apps' separator, black at 0.08 in the light appearance, white at 0.16 in the dark one
+    // (ADR-0039 Q8, step 21), one point wide.
+    EXPECT_TRUE(same(light.rule, fromHex(0x000000, 0.08F)));
+    EXPECT_TRUE(same(dark.rule, fromHex(0xFFFFFF, 0.16F)));
+    EXPECT_DOUBLE_EQ(kTitlebarRuleWidth, 1.0);
     // A light bar and dark text in the light appearance, the reverse in the dark one; the title readable on its bar.
     const auto luma = [](const Rgba& c) { return (0.2126F * c.r) + (0.7152F * c.g) + (0.0722F * c.b); };
     EXPECT_GT(luma(light.background), 0.8F);

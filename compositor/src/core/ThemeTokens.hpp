@@ -7,10 +7,10 @@
 #include <string_view>
 
 namespace gf::theme::tokens {
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundDark = 0x2A2824;
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundLight = 0xEFECE7;
+    // the compositor-drawn titlebar of server-side-decorated (third-party) windows, dark appearance: the window's own colour (color.dark.windowBackground), the owner's answer to ADR-0039 Q8 (a) of 2026-10-29, where it was a band of its own (#2A2824, the warm #28282C); a hairline under it (titlebar.rule*) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarBackgroundDark = 0x2B2925;
+    // the same, light appearance: the window's own colour (color.light.windowBackground, the warm white), ADR-0039 Q8 (a), where it was a grey band (#EFECE7, the warm #ECECEE: 236 on a white window) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarBackgroundLight = 0xFDFCF9;
     // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarTitleDark = 0xEFECE7;
     // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -35,6 +35,16 @@ namespace gf::theme::tokens {
     inline constexpr double kTitlebarPreviewRimOpacity = 0.22;
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr int kTitlebarPreviewRimWidth = 2;
+    // the hairline under the bar, light appearance: the apps' toolbar rule (color.light.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarRuleLight = 0x000000;
+    // its opacity: the apps' separator opacity in the light appearance (material.separatorOpacityLight) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr double kTitlebarRuleOpacityLight = 0.08;
+    // the hairline under the bar, dark appearance (color.dark.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarRuleDark = 0xFFFFFF;
+    // its opacity: the apps' separator opacity in the dark appearance (material.separatorOpacity) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr double kTitlebarRuleOpacityDark = 0.16;
+    // its width, one point, as every separator (ADR-0039 D5) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr int kTitlebarRuleWidth = 1;
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     inline constexpr int kWindowLightDiameter = 14;
     // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing
