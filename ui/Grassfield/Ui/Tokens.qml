@@ -2496,8 +2496,8 @@ QtObject {
     readonly property int previewToolbarButtonSize: 28
     // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewThumbnailWidth: 140
-    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
-    readonly property int previewSidebarItemHeight: 28
+    // estimate: Preview app (docs/specs/preview.md); a PDF's file-name row, which grows with Text size so the selection ring keeps clear of its descenders (ADR-0039 step 4) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
+    readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSearchWidth: 200
     // page background of PDF thumbnails (documents are white in both themes) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2 and 3, rule 6).
+"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2-4, rule 6).
 
   python3 -I tests/ci/qml_literals.py             scan the tree, exit 1 on any literal outside the allowlist
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples
@@ -19,15 +19,17 @@ are all read:
   colour      ...color, and every property declared `property color`
 In such a binding, a number is a literal where it stands as a value: the whole value (`radius: 6`), a ternary's branch
 (`width: major ? 2 : 1`), an added or subtracted offset (`Tokens.menuIconSize + 4`), an argument of Qt.size, Qt.point, Qt.rect,
-Math.max or Math.min, a `||` or `??` fallback. A factor or a divisor (`Tokens.spacingLg * 3`, `width / 2`), a comparison's term,
-an index and an argument of any other function are arithmetic or logic, not design values. Numbers from -1 to 1 are allowed
-(a hairline, a flag, an off state); for opacity and scale, only 0, 1 and -1 (states and a mirror).
+Math.max or Math.min, a `||` or `??` fallback, the right operand of `&&` (`shown && 24`), a product of numbers alone
+(`24 * 1`, judged by its value). A factor or a divisor of anything else (`Tokens.spacingLg * 3`, `width / 2`), a comparison's
+term, an index and an argument of any other function are arithmetic or logic, not design values. Numbers from -1 to 1 are
+allowed (a hairline, a flag, an off state); for opacity and scale, only 0, 1 and -1 (states and a mirror). A binding written as
+a block (`width: { return wide ? 240 : 120 }`) is read by the values it returns.
 Anywhere in the code, outside comments:
-  colour      "#rrggbb", Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour ("white", "Red";
-              "transparent" is not a colour)
+  colour      "#rrggbb" in any quotes, Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour ("white",
+              "Red"; "transparent" is not a colour)
   opacity     a literal alpha given to withAlpha(), Qt.alpha() or a computed Qt.rgba/hsla/hsva (not 0 or 1)
-Only QML is read as QML: a JavaScript block (a handler, a function, `width: { ... }`) and an object literal (`{x: 0, y: 24}`) are
-code and data; their colours and alphas are still read.
+Only QML is read as QML: a handler, a function and an object literal (`{x: 0, y: 24}`) are code and data; their colours and
+alphas are still read. An object under an import alias (`qqc.Button { }`) is QML.
 
 Exceptions: ALLOWED below (a file and how many colour literals it may hold, with the reason), or a comment on the line naming
 the kinds it excepts and why: `// literal-ok radius: concentric with the menu's 12 at a 5 inset (spec)`.
@@ -64,10 +66,10 @@ TOKEN = re.compile(r"\s*(?:(?P<num>(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
                    r"|(?P<name>[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)"
                    r"|(?P<op>===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|=>|\.\.\.|[-+*/%?:<>!=&|^~()\[\],{}.;]))")
 MULTIPLY = {"*", "/", "%"}
-COMPARE = {"<", ">", "<=", ">=", "==", "===", "!=", "!==", "&&", "!"}
+COMPARE = {"<", ">", "<=", ">=", "==", "===", "!=", "!==", "!"}
 # Functions whose arguments are in the unit of the result: a number in them is a value like any other.
 UNIT_CALLS = {"Qt.size", "Qt.point", "Qt.rect", "Math.max", "Math.min", "Math.round", "Math.floor", "Math.ceil", "Math.abs"}
-COLOUR = re.compile(r"\"#[0-9A-Fa-f]{3,8}\""
+COLOUR = re.compile(r"([\"'`])#[0-9A-Fa-f]{3,8}\1"
                     r"|Qt\.(?:rgba|hsla|hsva|rgb)\(\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*,\s*-?[0-9.]+\s*(?:,\s*-?[0-9.]+\s*)?\)")
 ALPHA_CALL = re.compile(r"(?<![\w.])(?:(?:[\w.]+\.)?withAlpha|Qt\.alpha|Qt\.rgba|Qt\.hsla|Qt\.hsva)\s*\(")
 NAMED = re.compile(r"[\"'][A-Za-z]+[\"']")
@@ -129,19 +131,36 @@ def split_comments(text):
 def opening_kind(head):
     """What a `{` opens in QML, from the statement before it: an object, a group or `X on y` (QML), or a block (JavaScript)."""
     head = head.strip()
-    if not head or re.search(r"(?:^|[\s:,\[(])[A-Z]\w*(?:\.[A-Z]\w*)*$", head) or re.search(r"\bon\s+[\w.]+$", head) \
+    if not head or re.search(r"(?:^|[\s:,\[(])(?:[A-Za-z_]\w*\.)*[A-Z]\w*$", head) or re.search(r"\bon\s+[\w.]+$", head) \
             or re.fullmatch(r"[a-z]\w*(?:\.[a-z]\w*)*", head):
         return "qml"
     return "js"
 
 
+BINDING_HEAD = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+[\w.<>]+\s+)?[A-Za-z_][\w.]*\s*:\s*$")
+RETURN = re.compile(r"\breturn\b(?P<expr>[^;{}]*)")
+
+
 def statements(code):
     """[(text, [line of each character])] of the QML statements of a comment-free source (JavaScript blocks and object
-    literals left out; an object literal inside an expression stands as OBJ)."""
+    literals left out; an object literal inside an expression stands as OBJ). A binding written as a block
+    (`width: { return wide ? 240 : 120 }`) gives one statement per value it returns."""
     out = []
     stack = []                       # (kind, saved text, saved lines, saved depth)
     text, lines, depth = [], [], 0
     line, i, n = 1, 0, len(code)
+    block = None                     # the JavaScript block of a binding: {"head", "head_lines", "text", "lines", "level"}
+
+    def keep(chunk):
+        if block is not None:
+            block["text"].extend(chunk)
+            block["lines"].extend([line] * len(chunk))
+
+    def returned():
+        body = "".join(block["text"])
+        for m in RETURN.finditer(body):
+            if m.group("expr").strip():
+                out.append((block["head"] + m.group("expr"), block["head_lines"] + block["lines"][m.start("expr"):m.end("expr")]))
 
     def flush():
         nonlocal text, lines
@@ -165,17 +184,29 @@ def statements(code):
             if not in_js:
                 text.extend(code[i:j + 1])
                 lines.extend([line] * (j + 1 - i))
+            else:
+                keep(code[i:j + 1])
             line += code[i:j + 1].count("\n")
             i = j + 1
             continue
         if c == "{":
             if in_js:
+                keep(c)
                 stack.append(("js", None, None, 0))
             else:
                 head = "".join(text)
                 inner = depth > 0 and re.search(r"[(\[,:?=]\s*$|^\s*$|return\s*$", head) and not re.search(r"[A-Z]\w*\s*$", head)
-                kind = "js" if inner else opening_kind(head.split(":")[-1] if depth == 0 else re.split(r"[(\[,]", head)[-1])
+                if inner:
+                    kind = "js"
+                elif depth == 0:
+                    # `name: {` is a binding or a handler written as a block (JavaScript); `name: Type {` an object.
+                    after = head.split(":")[-1]
+                    kind = "js" if ":" in head and not after.strip() else opening_kind(after)
+                else:
+                    kind = opening_kind(re.split(r"[(\[,]", head)[-1])
                 if depth == 0:
+                    if kind == "js" and block is None and BINDING_HEAD.match(head):
+                        block = {"head": head, "head_lines": list(lines), "text": [], "lines": [], "level": len(stack)}
                     stack.append((kind, [], [], 0))
                 else:
                     stack.append((kind, text + list(" OBJ "), lines + [line] * 5, depth))
@@ -185,10 +216,15 @@ def statements(code):
                 flush()
             if stack:
                 _kind, saved, saved_lines, saved_depth = stack.pop()
+                if block is not None and len(stack) == block["level"]:
+                    returned()
+                    block = None
+                else:
+                    keep(c)
                 if saved is not None and not (stack and stack[-1][0] == "js"):
                     text, lines, depth = saved, saved_lines, saved_depth
         elif in_js:
-            pass
+            keep(c)
         elif c in "([":
             depth += 1
             text.append(c)
@@ -271,6 +307,28 @@ def enclosures(tokens, i):
     return out
 
 
+def numeric_product(tokens, i):
+    """The value of the product or quotient token i stands in when every operand is a number (`24 * 1`), with the index of
+    its first operand; None when an operand is anything else (`Tokens.spacingLg * 3`, `(w - width) / 2 * 2`)."""
+    first = last = i
+    while first >= 2 and tokens[first - 1][1] in MULTIPLY:
+        if tokens[first - 2][0] != "num":
+            return None
+        first -= 2
+    while last + 2 < len(tokens) and tokens[last + 1][1] in MULTIPLY:
+        if tokens[last + 2][0] != "num":
+            return None
+        last += 2
+    value = float(tokens[first][1])
+    for k in range(first + 2, last + 1, 2):
+        operand, op = float(tokens[k][1]), tokens[k - 1][1]
+        if op == "*":
+            value *= operand
+        elif operand:
+            value = value / operand if op == "/" else value % operand
+    return first, value
+
+
 def value_hits(tokens, kind):
     """[(line, excerpt)] of the numbers (or, in a colour binding, the named colours) that stand as values in an expression."""
     hits = []
@@ -283,10 +341,16 @@ def value_hits(tokens, kind):
         if prev in ("-", "+") and (i < 2 or tokens[i - 2][0] == "op" and tokens[i - 2][1] not in (")", "]")):
             sign = -1 if prev == "-" else 1
             prev = tokens[i - 2][1] if i >= 2 else None
-        if prev in COMPARE or nxt in COMPARE or prev == ".":
+        # `shown && 24` gives 24: the right operand of && is a value, its left one a condition.
+        if prev in COMPARE or nxt in COMPARE or nxt == "&&" or prev == ".":
             continue
+        # A factor or a divisor of something else is arithmetic; a number times a number (`24 * 1`) is still a literal, judged
+        # once, by its value.
+        product = None
         if tkind == "num" and (prev in MULTIPLY or nxt in MULTIPLY):
-            continue
+            product = numeric_product(tokens, i)
+            if product is None or product[0] != i:
+                continue
         # An index, a factor in parentheses, or an argument of a function that changes the unit (Math.sin, a lookup).
         if any(e in ("[", "*") or e and e not in UNIT_CALLS for e in enclosures(tokens, i)):
             continue
@@ -296,7 +360,7 @@ def value_hits(tokens, kind):
             continue
         if kind == "colour":
             continue
-        number = sign * float(value)
+        number = sign * (product[1] if product else float(value))
         if kind in ("opacity", "scale"):
             if number not in (0.0, 1.0, -1.0):
                 hits.append((line, value))
@@ -457,6 +521,18 @@ SAMPLES = {
     "marked": ("Rectangle { radius: 7 // literal-ok radius: concentric with a 12 menu at a 5 inset, see the spec\n}", 0),
     "marked for another kind": ("Rectangle { radius: 7; width: 30 // literal-ok radius: concentric with a 12 menu, the spec\n}", 1),
     "marker in a string": ('Text { text: "literal-ok radius: not a comment at all"; radius: 7 }', 1),
+    # The review of step 3 (ADR-0039 step 4).
+    "single-quoted hex": ("Rectangle { color: '#FFFFFF' }", 1),
+    "template hex": ("Rectangle { color: `#FFFFFF` }", 1),
+    "binding block": ("Item { width: { return wide ? 240 : 120 } }", 2),
+    "multi-line binding block": ("Item {\n    width: {\n        if (wide)\n            return 240;\n        return Tokens.settingsPickerWidth;\n    }\n}", 1),
+    "block with an inner block": ("Item {\n    height: {\n        for (const r of rows) {\n            if (r.big)\n                return 64;\n        }\n        return Tokens.menuItemHeight;\n    }\n}", 1),
+    "handler with a return": ("Item { onClicked: { return 24; } }", 0),
+    "literal times one": ("Item { width: 24 * 1; radius: 6 / 1 }", 2),
+    "half a pixel": ("Item { x: Math.round((preview.width - width) / 2 * 2) / 2; width: 0.5 * 2 }", 0),
+    "and value": ("Item { width: shown && 24 }", 1),
+    "and condition": ("Item { width: shown && count > 3 ? Tokens.spacingLg : Tokens.spacingSm }", 0),
+    "aliased type": ("import QtQuick.Controls as qqc\nItem {\n    qqc.Button { width: 30 }\n}", 1),
     # Keys, units and groups the second pass of the review raised.
     "accent key": ('Item { property string tileColor: "blue" }', 0),
     "accent key in an index": ('Rectangle { color: Tokens.colorAccentLight[keys[id] || "graphite"] }', 0),
