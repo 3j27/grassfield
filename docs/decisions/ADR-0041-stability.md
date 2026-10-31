@@ -430,6 +430,14 @@ of the session, never in a terminal.
   in `tests/integration/update_helper.sh`; `tests/shell/session_services.sh` for the checker's reader;
   `tst_softwareupdate.qml` for the pane's sentences and the greyed "Hold again"; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the s3.4 table name the same
   packages; `tests/shell/compositor_rebuild.sh` for the notice's action.
+- Integrator, nested: the notice on a fake `/var/lib/pacman/local`; the reload guard with a fake `db.lck` during a display
+  trial; "Update Extension" from the notice.
+- Owner, real session: the next Omarchy toolkit move: Update Now says "needs a newer version of Grassfield" (today's
+  L2 item of ADR-0033) and `omarchy update` is refused by pacman with the hold's name; after the matching build is
+  published both go through, then "Log out to finish updating" appears once.
+- Review: opus security for the helper's two verbs (root through polkit, the same rules as `grassfield-channel-helper`);
+  the integrator for the rest; two pull requests at least (2b and 2d need no owner answer, 2a waits for SQ-3 and the
+  repository).
 
 ### Step 2b as built, first slice (2026-10-31, the branch of the stability lane; the toolkit as installed and the log out)
 - `grassfield-update-check` lists, before every other step and in every state it answers (repair, not-set-up, failed,
@@ -489,8 +497,241 @@ of the session, never in a terminal.
   `tst_softwareupdate.qml` (QtTest), `tests/shell/software_update_service.sh` (offscreen Quickshell: the probe's steps
   t1-t3 and `restart.qml`), the notice and the pane's row (nested), the list on a real system
   (`grassfield-update-check | jq .toolkit`).
+- Review round 2 (2026-10-31, the integrator's review of e03013d: FAIL, two new majors): the docs commit of round 1
+  had replaced everything between the Step 2b section and "Delivery order" (Steps 3-8 and "Step 5 as built, first
+  part" were gone from this file; restored from main, this section inserted before Step 3); the probe's steps t1-t3
+  read the state file before the service had saved it (`toolkit` undefined): each step now waits for the saved list to
+  carry its answer's install time (and, at t2, the flag). Minor: an unreadable install time counted as "this session"
+  at every start, so a pacman database outside its default path asked at every session: the file now records the
+  installed versions a log out was asked for on an unreadable time (`toolkitAsked`), and asks again only for another
+  version. Nits: the signature's time is clamped to the shell's start (a later one would hide installs); the service
+  saves once after adopting the file at load, so a previous session's flag does not stay on disk until the next check;
+  GF-083's `logoutPending` and the toolkit's `toolkitLogout` are separate flags in the file, so the pane's title says
+  "Log out to finish updating Grassfield" only when Grassfield itself was updated and "Log out to finish updating" when
+  only the system libraries were (with the French entries).
 - Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root;
   nothing under `shell/security/` changes.
+
+### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
+Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
+- `tests/integration/chaos.sh` (nested, bare): for each row of audit section 1.1 that the nested session can run (the
+  shell unlocked and locked, SIGSEGV and SIGKILL, once and in a loop until safe mode; the bridge; both portals mid-request;
+  crash-watch, battery-watch, automount; the ANR stand-in; one Grassfield app and one third-party app), kill it and
+  check: the unit's state and the time to come back (R1 ≤ 3 s for the shell, from the journal), the lock state
+  (`hyprctl -j monitors` `LOCK`) before, during and after, what was replayed (badges and registrations after a bridge
+  restart, the notification history after a shell restart, the Open panel's last folder after a portal restart), the
+  notice for an app (one, with Reopen) and none for a service, and one journal line per silent loss (`P-8`, `P-9`: the
+  unit's own `Restart=` log is enough when it comes back; the start-limit failure must say what stopped).
+- Proof: the script's report, one row per process, with the capture of what the user sees at the worst moment.
+- Tests: the script itself (inventory layer `nested`), plus a `logic` self-test on fakes; `scripts/gates/r1-restart.sh
+  --journal` on the nested unit's journal becomes the R1 verdict.
+- Integrator, nested: the whole script on a quiet machine, twice; the R1 figure recorded in `docs/testing/gates.md`.
+- Owner, real session: nothing until step 1 ships; then the R1 journal check after their step-1 kills.
+- Review: the integrator; security only where the script touches the lock (it reads, never unlocks).
+
+### Step 4: endurance and bounds: the memory slope, descriptors, timers; the plugin's log budget; the guards proven (T-3, T-7, I-6, I-7, M-10, M-11)
+Goal: the 6 MB/h is explained or fixed; every resource guard is seen to act; a loop in the compositor cannot fill a disk.
+- `tests/shell/endurance.sh` (nested, bare, hours): scripted activity in rounds (Overview open and close, Apps, Search
+  typing, notifications in and out, lock and unlock with the dev PAM gate, a display added and removed, an icon-mode
+  switch, the DST hour simulated with `TZ` and a fake clock, a sleep simulated through the marker's sleep count),
+  sampling every minute RSS and `RssAnon`, the count of `/proc/<pid>/fd`, `Threads`, and the number of live repeating
+  QML timers through a dev-only IPC hook (`SEC-04` class dev); verdict by `soak_lib.sh`'s slope function against a
+  threshold the owner accepts (proposed: RSS slope ≤ 1 MB/h after the first 30 min, descriptors and timers flat).
+- The guards proven: a dev-only hook allocates until `MemoryMax` (the shell is killed, back within 3 s, the lock kept),
+  another spins the GUI thread (the compositor's frame time stays within P3 under `CPUQuota`), the bridge's `MemoryMax`
+  (already `menu_bridge_memory.sh` case G).
+- The compositor: every loop-prone path (layer-pointer refresh, overview retargeting, stages focus) gets the plugin's
+  log budget (`compositor/src/core`), with a unit test that a path logging in a loop stops after its budget; the real
+  session's Hyprland log state is recorded (`hyprctl getoption debug:disable_logs`, owner) and, if logs are on, the
+  session sets the bound Hyprland offers (NOT VERIFIED which option exists in 0.56.2: the step reads the installed
+  `hl.meta.lua`).
+- Proof: an 8 h endurance report with the four series and the verdict; the guard hooks' three captures; the log-budget
+  unit test; if the slope is above the threshold, the allocation site (Qt's own tools, `malloc_info` through a dev
+  hook, or the icon-mode and wallpaper paths first, the two known growers) and the fix in its own pull request.
+- Tests: the endurance script (nested), the guard hooks' tests (nested), the budget test (compositor gtest).
+- Integrator, nested: the 8 h run on a quiet machine; a 1 h run becomes part of `just release-check`.
+- Owner, real session: `scripts/gates/rss.sh` over a week of normal use (the existing P2 tool, repeated), to compare
+  with the nested slope.
+- Review: the integrator; R13 (compositor-engineer) for the plugin changes; security for the dev hooks' gates.
+
+### Step 5: fuzzing of the parsers (T-1)
+Goal: no input a process reads from the system, a file or another process can crash or hang it.
+- In-tree, no new dependency: a mutation harness (`tests/fuzz/`, gtest for C++, a Python mutator for the scripts' readers,
+  a QML harness for the JS readers) that takes each existing corpus and applies random byte and token mutations for a
+  budget of iterations under ASan/UBSan (the `--asan` builds exist), with a saved seed so a failure reproduces. Readers,
+  in the order of exposure: the plugin's gfc/1 request reader and the shell's event parser (another process of the user
+  can send either), the menu bridge's socket and DBusMenu layouts (any app), the ANR stand-in's `anr report`, `qs ipc`
+  arguments of every action, `hyprctl -j` consumers (`grassfield-session-end`, `grassfield-lid`, the `omarchy-shell`
+  stand-in's `jq` filter, the lock's monitor model), `/proc` and `/sys` readers (Activity Monitor, the crash watcher),
+  `.desktop` readers (the Apps model, the crash watcher, `entry-names.sh`, `hidden-entries.sh`), every file of the
+  ADR-0020 table (JSON readers; the Lua files Settings writes are checked by `Hyprland --verify-config` on the mutated
+  output, so a Settings write can never produce a file the compositor refuses), the Store's catalog, AppStream and pacman
+  output readers, the journal JSON of the crash watcher. libFuzzer behind a CMake option, dev only, is a later option
+  (clang is already a `just check-tidy` tool; it adds no package).
+- Proof: the harness's report per reader (iterations, mutations, 0 crashes, 0 hangs over the bound); every finding fixed
+  in its own commit with the reproducing seed as a regression case.
+- Tests: the harness runs in `scripts/dev/test.sh`'s sanitized pass with a short budget; `just release-check` runs the
+  long budget.
+- Integrator, nested: none needed (offscreen); the gfc/1 cases also run against the nested plugin through
+  `scripts/nestctl` for the request side.
+- Review: the integrator; security for the lock's monitor model and the stand-in (they are security modules' inputs).
+
+### Step 6: hang detection, and the extension after a compositor crash (T-6, M-8, M-10) — SQ-5, SQ-6
+- **6a. The liveness probe** (SQ-5, option A): `grassfield-shell-watchdog.timer` and its `.service` (`Type=oneshot`,
+  every 30 s): `qs ipc -p /usr/share/grassfield/shell call capabilities status` with a 5 s `timeout`; three misses in
+  a row (a state file in the runtime directory) → `systemctl --user kill --signal=SIGKILL grassfield-shell.service`: the
+  main process dies by a signal, so the unit fails, `Restart=always` brings it back, `OnFailure=` runs and step 1's
+  detector counts it (a hang that repeats ends in safe mode too). A plain `systemctl restart` is a stop, which never
+  fails the unit and would never reach safe mode (review of 2c0bd74, finding 3). Hyprland's ANR pings xdg toplevels only;
+  the shell's surfaces are layer surfaces and get no ping: nothing else can see a frozen shell. The probe reads, never
+  unlocks; a restart while locked keeps the compositor's lock (L1).
+- **6b. The extension after a crash** (SQ-6, option A): `compositor.lua` reads, at the first parse, whether a Hyprland
+  crash report newer than the last login names `grassfield-compositor` (the report's path and shape are read from the
+  installed Hyprland, data; `coredumpctl` is the fallback); if so it loads nothing, writes why in the runtime note, and
+  the shell posts "The compositor extension was turned off after a crash" with "Turn On Again" (Settings > Desktop &
+  Dock > Windows). One login without the extension, never a silent permanent loss.
+- Proof: a dev-only hook blocks the GUI thread 20 s → the probe restarts the shell within 100 s, the lock kept; a
+  nested Hyprland crash with the plugin loaded (the C1 soak's own crash classification) → the next nested start loads
+  no extension and shows the notice; `abi_mismatch.sh` unchanged.
+- Tests: the probe's logic on a fake `qs` and `systemctl`; `tests/shell/compositor_rebuild.sh` gains the crash-report
+  case; the hook under `qs` offscreen.
+- Integrator, nested: both proofs. Owner, real session: nothing specific.
+- Review: security (the probe restarts the process that holds the lock; the dev hook's gate); R13 for `compositor.lua`.
+
+### Step 7: the known incidents as regressions, and the two open ones (T-8, I-2, I-3, I-4, I-5)
+- A package-upgrade simulation in nested: replace the installed-layout copy of `config/hypr` under a running session
+  (unlink and recreate, as pacman does), then reload: no error bar, every bind present (I-2's proof made repeatable).
+- `tst_wallclock` gains the spring-forward night (the skipped hour): no freeze, no spin; `wall_clock_only.sh` stays.
+- The portal's 25 s (I-4): the owner runs `systemctl --user show-environment | grep GTK_USE_PORTAL` and
+  `journalctl --user -b -u xdg-desktop-portal-gtk -u xdg-desktop-portal -o short-monotonic` (read-only, provided as a
+  script `docs/audits/stability-2026-10-29/owner-checks.sh`); if the hypothesis holds (x-d-p-gtk inherits
+  `GTK_USE_PORTAL=1` and waits out D-Bus's 25 s method timeout on itself), the fix is one packaged drop-in,
+  `xdg-desktop-portal-gtk.service.d/10-grassfield.conf` with `UnsetEnvironment=GTK_USE_PORTAL`, checked by
+  `tests/integration/portal_settings.sh` on the private bus with the real x-d-p-gtk; if it does not, the measurement
+  says what does.
+- The Store's stale-database wording (I-5): the messages asked on PR #36 are settled in that lane; this ADR adds only
+  the chaos row (a Store operation in flight when the Store is killed shows its outcome at the next start).
+- `tests/ci/socket_errors.py` stays; the r7 proof of I-1 becomes a container case of step 2c (Quickshell from the rc
+  mirror).
+- Proof, tests, integrator: each item names its own; owner: the portal measurement.
+- Review: the integrator; ADR-0035's owner for the drop-in.
+
+### Step 8: crash reports, local only (SQ-4, M-1, M-6)
+- With option A: the crash watcher's notice gains a second action, "Show Report", which writes
+  `$XDG_STATE_HOME/grassfield/crash-reports/<app>-<time>.txt` (0600; `coredumpctl info` of that dump, the signal, the
+  executable, the time, the Grassfield and toolkit versions; never the core itself) and opens it in a Grassfield text
+  window of the system dialogs (ADR-0035) with Copy and Close. Nothing is sent anywhere, ever (`PrivateNetwork=yes` stays
+  on the watcher); at most 32 reports are kept, the oldest removed.
+- Proof: `tests/shell/crash_watch.sh` gains the action and the file; a capture of the window (en, fr).
+- Review: the integrator; security for the new window (it shows untrusted text: plain `textFormat`, the existing rule
+  of `scripts/dev/check-textformat.py`).
+
+### Step 5 as built, first part (2026-10-29, branch of the stability lane; the readers that need no Qt)
+- `compositor/tests/ParserFuzzTest.cpp`: an in-tree mutator (xorshift seed, twelve operations: bit flips, special bytes,
+  dictionary tokens, deleted, duplicated and swapped slices, truncation, number extremes, nesting, splices, growth past
+  the cap, raw bytes) over every core reader of untrusted text: `overview::parseRequest`, `overviewfocus::parseRequest`,
+  `stages::parseRequest`, `tiling::parseArrange`, `minimize::parseAddress`, the config readers (`parseAppearance`,
+  `parseDoubleClickAction`, `parseEffect`, `parseStagesEnabled`, `switchOf` + `parseBool`, `parsePlace`, `outputNameOk`,
+  `isFunnelShaderFault` outside a dev session), `appmenu::isValidBusName/ObjectPath/Address`, `json::CReader`,
+  `gfc::jsonEscape` (a round trip through the reader) and `stages::sanitizedText`. Properties: no crash, two reads agree,
+  at most 50 ms per call and 2 ms on average, and on an accepted input every invariant of the header (caps, distinct
+  addresses, finite numbers, ranges, name grammars, the catalogue). 2000 iterations per parser in the suite,
+  `GF_FUZZ_ITERATIONS` for more, `GF_FUZZ_SEED` for another seed. `compositor/build-direct.sh tests-asan` builds the suite
+  with ASan and UBSan without Hyprland's headers (the `tests` mode no longer needs them either); `scripts/dev/test.sh`
+  runs that binary when it exists; `scripts/gates/release-check.sh` gains the step `comp-asan` (50 000 iterations).
+- `tests/fuzz/mutate.py` (the same mutator in Python, with a self-test), `tests/fuzz/fuzz_helpers.py` and its runner
+  `tests/fuzz/helpers_fuzz.sh` (inventory layer `logic`): `grassfield-crash-watch` (the four real journal fixtures with
+  mutated text and values, desktop entries, `cgroup.events`, locale names), `grassfield-session-end` (`hyprctl -j
+  clients`), `grassfield-battery-watch` (sysfs), the ANR stand-in's client matcher, the `lock status` filter of the
+  `omarchy-shell` stand-in and `sleep-lock-gate`; each with its contract and a corpus sanity check (the seeds must be
+  accepted or decided as the contract says, so the accepting path is proven to run).
+- Findings, each fixed with a deterministic regression case:
+  1. `grassfield-crash-watch` `scope_state`: a `cgroup.events` that is not UTF-8 raised `UnicodeDecodeError`, a
+     `populated` line without its value raised `IndexError` (seed 1, iterations 1 and 23). The worker thread caught the
+     exception, but the candidate then stayed pending and was looked at again every poll, its deadline never reached.
+     Now "unknown" (a bounded, replacement-decoded read); cases in `tests/shell/crash_watch.sh`. The kernel never writes
+     such a file: a robustness defect, not a user-visible one.
+  2. `omarchy-shell lock status`: jq's `index("LOCK")` on a string finds a substring and `.[]` walks an object's values
+     like an array's, so a monitor whose `solitaryBlockedBy` were a string such as `"UNLOCKED"`, or an object of
+     monitors, read as secure. Hyprland 0.56.2 always answers an array of objects with an array; the filter now requires
+     both arrays (fail closed on any other shape); cases in `tests/security/sleep_lock_units.sh`. **The stand-in is the
+     sleep-lock fail-safe (D-12, SEC-02): this hunk needs the opus security review before the merge.**
+  3. The harness's own first version had three wrong oracles (an address prefix `0X` the parser accepts, a UTF-8 demand
+     the JSON reader never promised, a quote check that counted `\"`) and one dangling `string_view`; they are fixed in
+     the harness, not in the product, and are named here so a reviewer does not take them for product findings.
+- Evidence (Ubuntu 24.04 container, g++ 13.3, gtest 1.14; no Qt, no Quickshell, no Hyprland headers):
+  `compositor/build-direct.sh tests` → 468 tests passed (457 before); `tests-asan` → 468 passed; `GF_FUZZ_ITERATIONS=100000`
+  on the sanitized binary → 11 fuzz tests passed, 1.1 million inputs, worst call 10.8 ms (`sanitizedText` on 2 KiB),
+  15.5 s in all; `tests/fuzz/helpers_fuzz.sh` → PASS at 1500 and at 20 000 iterations (crash-watch 8909 of 20 000
+  accepted, session-end 2396, battery 3568, ANR matcher 397, lock status 83 of 4000, sleep-lock gate 2567 of 4000);
+  `tests/security/sleep_lock_units.sh` exit 0; `tests/shell/crash_watch.sh` exit 0; `python3 -I tests/ci/inventory.py`
+  ok (570 tests). `clang-tidy` could not run here (the container's clang 18 has no `std::expected` with libstdc++ 13);
+  the two lints it did report on the test file (an embedded NUL literal, adjacent literals) are fixed. The owner's
+  machine runs `just check-tidy`.
+- Not in this part (needs Qt or Quickshell offscreen): the shell's QML and JS readers, the bridge, Activity Monitor, the
+  Store (`docs/testing/README.md` "Fuzzing" lists them).
+- Review round 1 (2026-10-30; the integrator's independent opus security review of 265e6c7: FAIL, two majors, four minors,
+  three nits; each answered with a new commit on the same branch):
+  1. Major: `jq -e` without `-s` decides on the LAST of several JSON values, so `[unlocked] [locked]` and
+     `4294967296[locked]` read as secure (the harness itself finds the second at 10 000 iterations). The filter now
+     slurps and demands exactly one value (`jq -e -s 'length == 1 and (.[0] | ...)'`); both inputs, a scalar after a
+     locked array and an empty answer are cases of `tests/security/sleep_lock_units.sh` and of the harness's corpus
+     checks. The fail-closed claim holds again: anything but one array of objects each listing LOCK is not secure.
+  2. Major: a scenario's seed came from `hash(name)`, which is randomised per process and which `python3 -I` cannot pin
+     (it ignores PYTHONHASHSEED), so two runs of one seed mutated different inputs (58 and 49 accepted of 300 here with
+     the old seed). Now `zlib.crc32(name)`; `helpers_fuzz.sh` ends with two runs of one seed that must print the same
+     counts, and `GF_FUZZ_TRACE=1` prints a finding's whole traceback.
+  3. Minor: the lock status oracle read a lone surrogate escape where jq 1.7 and 1.8 refuse it (a false finding, fail
+     closed). The oracle now answers "either" for a locked shape jq may refuse (a lone surrogate, nesting past jq's 256
+     levels) and skips a leading byte order mark as jq does.
+  4. Minor: "every reader" claimed too much. `grassfield-update-check` is fuzzed now (checkupdates' and pacman's output,
+     vercmp's answer, its failures and last-success files, the release notes, pacman.conf and the repository file, with
+     stub children so nothing runs): its reading of `{"first": 1e999}` raised OverflowError (a defect that predates this
+     change), and a time the program never wrote (negative, beyond tomorrow, a bool, a string) now starts a fresh
+     episode instead of a raise or an unrepresentable `retryAt`; a notes document nested past Python's recursion limit
+     is "nested too deep" (a ValueError its caller catches) rather than an uncaught RecursionError. The four name readers
+     (`isGrassfieldNamespace`, `classifyLayer`, `splitZone`, `capabilityCandidate`) are fuzzed against their headers.
+  5. Minor: `helpers_fuzz.sh` inherited the caller's session (HYPRLAND_INSTANCE_SIGNATURE, D-Bus). It now starts the
+     harness without DISPLAY, WAYLAND_DISPLAY, HYPRLAND_INSTANCE_SIGNATURE and the D-Bus addresses, with every home under
+     its scratch directory (as `scripts/dev/isolated.sh` starts a client), and the harness drops them itself on a direct
+     run: the owner's session is never reachable from a test.
+  6. Minor: the 50 ms bound was wall-clock time (18.3 ms seen under ASan on a loaded machine). The bound is CPU time of
+     the thread now: 50 ms per call and 2 ms on average, 200 ms and 8 ms under the sanitizers (`__SANITIZE_ADDRESS__`,
+     or clang's `__has_feature`).
+  7. Nits: the trailing blank line of `docs/testing/README.md` (`git diff --check` clean); the parser without its "a
+     window is given twice" check survived 2000 iterations (killed at 8312): the arrange test now copies one quoted
+     token over another in one input of four, and that mutant dies at iteration 29; two `scope_state` guards
+     covered each other: three cases (a stray byte on a later line, the populated line after a frozen one, a directory
+     in the file's place) and four mutants of `scope_state` in `tests/shell/crash_watch.sh` tell each guard apart.
+  8. Found by this round's long run (the new seeds mutate other inputs): `grassfield-session-end` matched a window
+     address with `^0x[0-9a-fA-F]+$` and `re.match`, and `$` also matches before a trailing newline, so an address
+     `0x1\n` from a `hyprctl -j clients` answer went into the Lua close expression (seed 1, iteration 19129 of 20 000).
+     Now `fullmatch` on `0x[0-9a-fA-F]{1,16}`; a case in `tests/shell/session_end.sh`. The same slip in
+     `grassfield-update-check`'s version and date checks of the notes is fixed the same way (the harness's oracle shared
+     the regex, so it is not a harness finding).
+- Evidence of the round (same container): `compositor/build-direct.sh tests` and `tests-asan` → 479 tests passed each
+  (14 fuzz tests, 11 before); the sanitized fuzz tests at 2000 iterations: worst call 0.33 ms of CPU time
+  (`gfc.jsonEscape`; 0.54 ms on a first, loaded run); `tests/fuzz/helpers_fuzz.sh` → PASS at 1500 (update-check 172 of 1500 accepted,
+  determinism PASS) and at 20 000 (crash-watch 8801 of 20 000 accepted, session-end 2434, battery 3552, ANR matcher 390, lock status 77 of
+  4000, sleep-lock gate 2546 of 4000, update-check 2163); `tests/security/sleep_lock_units.sh` exit 0 (the four new stand-in
+  cases pass); `tests/shell/session_end.sh` exit 0 (36 PASS); `tests/shell/crash_watch.sh`: 69 PASS, the four new mutants caught, the one pre-existing timing check
+  fails here as on main; `python3 -I tests/ci/inventory.py` ok (576); `git diff --check` clean. Still NOT run here:
+  `clang-tidy` (`just check-tidy` on the owner's machine).
+- Merged 2026-10-30 as c9058737 (the opus security re-review PASS: 49 edge inputs on the shim, 12 of 12 shim mutants
+  killed, 484 tests on the merged tree). The merge review's follow-ups, done in front of S1's pull request:
+  1. Minor: `tests/shell/crash_watch.sh`'s `mutate()` passed silently when a mutant's pattern was gone from the helper
+     (the Python assert failed, the mutant file was never written, no decision line matched, "caught"): the
+     ignore-populated-flag mutant had been stale since 1b359f40. A missing pattern now fails the test, the mutant
+     follows the code, and a self-check mutates a pattern that is not there.
+  2. Nit: the lock status oracle read the bytes with Python's json, which refuses number tokens jq reads (`nan`, `inf`,
+     `+1`, `01`, `.5`, `5.`). The oracle now judges the shape on jq's own reading (`jq -c .`), so every lexical
+     difference (surrogates, nesting, the byte order mark, those tokens) is decided as jq decides it, and the "either"
+     verdict goes; seven such inputs are corpus checks.
+  3. Nit: the `{1,16}` of the address grammar: `tests/shell/session_end.sh` closes a 16-digit address and never
+     dispatches a 17-digit one; the harness's contract carries the bound.
+  4. Nit: two timing-sensitive cases of `session_end.sh` failed at load 35: the retried-first-query case waits up to
+     15 s instead of 3 (the run still ends as soon as the window is gone), and the second-run case waits until the
+     holder really has the lock (at most 5 s) instead of sleeping 0.5 s.
 
 ### Delivery order and what each step waits for
 | Step | Waits for | Pull requests |
