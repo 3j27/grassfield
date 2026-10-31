@@ -1526,7 +1526,7 @@ TEST(TilingSplit, AWindowTooWideForAHalfDoesNotFit) {
               R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true,"unfitZones":[]})");
 }
 
-// ADR-0036 D63 (capture defect of 2026-10-30): Quarters at 1440 x 900 with Settings (minimum 560 x 420, its own chrome) came
+// ADR-0036 D69 (capture defect of 2026-10-30): Quarters at 1440 x 900 with Settings (minimum 560 x 420, its own chrome) came
 // out with shifted rows. The plugin now offers a window only the zones it fits: the capture's work area (menu bar 24, Dock 82,
 // margins on) gives quarters 385 px tall, so Settings fits the left and right halves and not one quarter, the top or bottom
 // half, nor a third.
@@ -1558,7 +1558,7 @@ TEST(TilingFitZone, TheCaptureCaseFitsTheHalvesAndNoQuarter) {
         << "leave carries nothing else";
 }
 
-// D63: the zones offered are the places' and the catalogue's, each once, named as the shell's glyph tokens; with every one
+// D69: the zones offered are the places' and the catalogue's, each once, named as the shell's glyph tokens; with every one
 // listed the event still fits Hyprland's 1024-byte cut; the reply lists the windows that do not fit some zone.
 TEST(TilingFitZone, EveryOfferedZoneOnceAndTheEventStaysSmall) {
     const auto zones = offeredZones();
@@ -1584,7 +1584,7 @@ TEST(TilingFitZone, EveryOfferedZoneOnceAndTheEventStaysSmall) {
               R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":[],"fixed":[],"unfitZones":[{"address":"a1","zones":["0,0,6,6","0,0,12,6"]}],"suggestion":null})");
 }
 
-// D63: members that fit their zones keep the catalogue's frames exactly (fitFrames moves nothing): Quarters is four equal
+// D69: members that fit their zones keep the catalogue's frames exactly (fitFrames moves nothing): Quarters is four equal
 // quarters, the rows and the columns aligned, whatever their minimum below the quarter.
 TEST(TilingFitZone, MembersThatFitKeepTheCatalogueFrames) {
     const Area                     area{Rect{0, 24, 1440, 794}, kMargin, Grid{0, 0, 1}};

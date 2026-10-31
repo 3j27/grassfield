@@ -87,7 +87,7 @@
 #                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
-#   fit wide       (D63, after the step 4c cases) an xdgact window wider than a quarter: its open event's unfitZones lists the
+#   fit wide       (D69, after the step 4c cases) an xdgact window wider than a quarter: its open event's unfitZones lists the
 #                  quarters and the left and right halves, not the top half (an ordinary window's lists none); a quarter and
 #                  Quarters asked by it are refused (nothing moves), the top half places it; Quarters asked by an ordinary
 #                  window leaves it out and its quarters share rows and columns; the reply's unfitZones lists it
@@ -1850,7 +1850,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
   fi
 
-  # ADR-0036 D63 (capture defect of 2026-10-30: Quarters at 1440 x 900 with a window taller than a quarter came out with
+  # ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with a window taller than a quarter came out with
   # shifted rows): a window is placed only in a zone it fits. An xdgact window at least half the output plus 200 px wide fits
   # the top and bottom halves (the whole width) and no quarter nor left or right half: the popover's event lists those zones;
   # a quarter is refused and moves nothing, the top half places it; Quarters asked by it is refused; Quarters asked by an

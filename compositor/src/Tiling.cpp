@@ -439,7 +439,7 @@ namespace gf::tiler {
             return tiling::zoneFrame(zone, area);
         }
 
-        // ADR-0036 D63 (D57's model for every place): `w` fits the frame `place` starts from (startFrame). Fill and Center always
+        // ADR-0036 D69 (D57's model for every place): `w` fits the frame `place` starts from (startFrame). Fill and Center always
         // do (Fill takes the window as far as its minimum allows, Center keeps its size).
         bool fitsPlace(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
             if (place == tiling::Place::Fill || place == tiling::Place::Center)
@@ -651,7 +651,7 @@ namespace gf::tiler {
             const int64_t from  = split ? split->home : m->m_activeWorkspace->m_id;
             const auto&   all   = Desktop::windowState()->windows(); // bottom to top
             // A zone takes only a window that fits it (TL8: a Split View's other half since the nested pass of 1ee992e, MAJOR C;
-            // every zone since D63, so that a pick never shifts the layout's rows or columns).
+            // every zone since D69, so that a pick never shifts the layout's rows or columns).
             const auto fits = [&](const PHLWINDOW& w) { return tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
             for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
                 const auto& w = *it;
@@ -904,7 +904,7 @@ namespace gf::tiler {
             }
             if (rel.snap) {
                 if (!tile(w, rel.snap->place, rel.snap->monitor.lock()))
-                    endMove(w); // refused (D63: its minimum grew since the preview): Free where it was dropped
+                    endMove(w); // refused (D69: its minimum grew since the preview): Free where it was dropped
                 return;
             }
             if (const auto r = s.book.find(idOf(w)); r && r->state == tiling::TileState::Tiled) {
@@ -1703,7 +1703,7 @@ namespace gf::tiler {
         const auto           area  = areaFor(m);
         const auto           place = tiling::dragPlace(pointer.x, pointer.y, output, area.box, options, alt);
         if (!place || !fitsPlace(w, *place, area, m->m_name, w->m_workspace->m_id))
-            return std::nullopt; // D63: no preview of a place the window does not fit (the release only moves it)
+            return std::nullopt; // D69: no preview of a place the window does not fit (the release only moves it)
         return Snap{*place, toCBox(placeFrame(w, *place, area, m->m_name, w->m_workspace->m_id)), m};
     }
 
@@ -1773,9 +1773,9 @@ namespace gf::tiler {
         const auto onDesktop = monitorOf(w) == m ? std::optional<int64_t>{w->m_workspace->m_id} : std::nullopt; // its own Desktop's area, shown or not
         const auto area      = areaFor(m, onDesktop);
         if (!fitsPlace(w, place, area, m->m_name, w->m_workspace->m_id)) {
-            // D63: never a tile larger than its place (it would overlap its neighbours and shift their rows or columns); the
+            // D69: never a tile larger than its place (it would overlap its neighbours and shift their rows or columns); the
             // shell greys that place (unfitZones), so this is a key, a stale menu or a request of another client.
-            logRequest(Log::INFO, "tile {:x}: refused: its minimum does not fit {} on {} (TL8, D63)", idOf(w), tiling::nameOf(place), m->m_name);
+            logRequest(Log::INFO, "tile {:x}: refused: its minimum does not fit {} on {} (TL8, D69)", idOf(w), tiling::nameOf(place), m->m_name);
             notify(tiling::Reason::Invalid);
             return false;
         }
@@ -2353,7 +2353,7 @@ namespace gf::tiler {
                 return;
             }
         }
-        // D63 (D57's model for every arrangement): each given window fits its zone as the glyph shows it, else nothing moves (it
+        // D69 (D57's model for every arrangement): each given window fits its zone as the glyph shows it, else nothing moves (it
         // would overlap its neighbours and shift the layout's rows or columns); the shell greys those (unfitZones).
         const auto* layout = tiling::layoutById(request->layout); // parseArrange checked the id
         if (!layout) {
@@ -2365,7 +2365,7 @@ namespace gf::tiler {
             const int zone = request->zone ? *request->zone : static_cast<int>(i);
             if (zone < 0 || zone >= static_cast<int>(layout->zones.size()) ||
                 !tiling::fitsZone(constraintsOf(windows[i]), layout->zones[static_cast<size_t>(zone)], area)) {
-                refuse(std::format("{:x} does not fit zone {} of {} (TL8, D63)", idOf(windows[i]), zone, request->layout));
+                refuse(std::format("{:x} does not fit zone {} of {} (TL8, D69)", idOf(windows[i]), zone, request->layout));
                 return;
             }
         }
@@ -2408,7 +2408,7 @@ namespace gf::tiler {
             for (size_t i = 0; i < windows.size(); ++i)
                 zoneIndex.push_back(static_cast<int>(i));
             // TL6: then each remaining zone takes the topmost tileable window (stacking order) on that output and Desktop, in the
-            // active stage, that fits it (D63: a window too large for a zone is left for another zone or left out; a zone no
+            // active stage, that fits it (D69: a window too large for a zone is left for another zone or left out; a zone no
             // window fits stays empty, for the suggestion).
             if (request->fill && Desktop::windowState()) {
                 const auto& all = Desktop::windowState()->windows(); // bottom to top
@@ -2503,7 +2503,7 @@ namespace gf::tiler {
                 splits.push_back(d);
         }
         // D57: the windows that do not fit half of their output (the Window menu greys their Full Screen Tile); the windows of
-        // fixed size (the Window menu greys their Zoom and tiling items, ADR-0040 step 1b); D63: the zones each tileable window
+        // fixed size (the Window menu greys their Zoom and tiling items, ADR-0040 step 1b); D69: the zones each tileable window
         // does not fit (the Window menu greys those Halves, Quarters and Arrange items).
         std::vector<uint64_t>          unfit;
         std::vector<uint64_t>          fixed;

@@ -174,7 +174,7 @@ namespace gf::tiling {
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
     // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
-    // enter and open also carry "unfitZones" (always, [] when it fits every zone): the zones it does not fit (unfitZones, D63;
+    // enter and open also carry "unfitZones" (always, [] when it fits every zone): the zones it does not fit (unfitZones, D69;
     // the popover greys the places, arrangements and Layouts zones that would put it there). Under kMaxEventBytes even with
     // every offered zone listed.
     std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false,
@@ -646,7 +646,7 @@ namespace gf::tiling {
     // the mode it is in (`inMode`: Exit Full Screen, Unzoom); any other window toggles as Hyprland's dispatcher does.
     bool sizeKeyActs(bool fixed, bool inMode);
 
-    // ---- what a window fits (ADR-0036 D63: D57's model for every place and arrangement) ----
+    // ---- what a window fits (ADR-0036 D69: D57's model for every place and arrangement) ----
 
     // A window with limits `c` fits zone `zone` of `area`: fitsFrame on the zone's frame as its glyph shows it (zoneFrame). The
     // plugin places a window only in a zone it fits (a place, a zone of the Layouts section, an arrangement's every member),
@@ -726,7 +726,7 @@ namespace gf::tiling {
     // its second window (TL33), "unfit" the windows that do not fit half of their output (the Window menu greys their Full
     // Screen Tile, D57), "fixed" the windows of fixed size (fixedSize: the Window menu greys their Zoom and tiling items),
     // "unfitZones" the windows that do not fit some offered zone with those zones (always present; the Window menu greys those
-    // Halves, Quarters and Arrange items, D63), "suggestion" null without one.
+    // Halves, Quarters and Arrange items, D69), "suggestion" null without one.
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
                           std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {}, std::span<const uint64_t> fixed = {},
                           std::span<const WindowFit> unfitZones = {});

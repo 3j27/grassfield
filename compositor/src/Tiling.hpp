@@ -103,7 +103,7 @@ namespace gf::tiler {
     // popover greys Left and Right of Screen otherwise; split refuses it).
     bool splittable(const PHLWINDOW& w);
 
-    // The zones (core zoneName) `w` does not fit on its output's Desktop (core unfitZones, ADR-0036 D63): the tile-hover
+    // The zones (core zoneName) `w` does not fit on its output's Desktop (core unfitZones, ADR-0036 D69): the tile-hover
     // event's "unfitZones" (the popover greys those places, arrangements and Layouts zones; tile, arrange and a drag's preview
     // refuse them). Empty for a window on no output.
     std::vector<std::string> unfitZones(const PHLWINDOW& w);
@@ -176,7 +176,7 @@ namespace gf::tiler {
     void tileRequest(std::string_view address, std::string_view place);
 
     // hl.plugin.grassfield.arrange(json) (core parseArrange): a layout of the catalogue filled with the given windows, then
-    // with the next tileable windows in stacking order (TL6) that fit their zone (D63: each zone takes the topmost one that
+    // with the next tileable windows in stacking order (TL6) that fit their zone (D69: each zone takes the topmost one that
     // fits it). A given window that does not fit its zone is refused. Untrusted; a refused request posts reason "invalid"
     // (or "locked") and changes nothing.
     void arrangeRequest(std::string_view json);

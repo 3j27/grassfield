@@ -134,7 +134,7 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
   the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
   fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
-  Since ADR-0036 D63 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
+  Since ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
   with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
   as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
   arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
