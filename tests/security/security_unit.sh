@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # ADR-0041 step 1, S1 (the owner's SQ-1 B): the security process runs beside the UI and hosts nothing moved yet. Static
 # (data layer): the root shell/security.qml (a root of its own next to shell.qml, imports only QtQuick, Quickshell and
-# Quickshell.Io, never reloads on a file change, one IpcHandler `security` with `state` and `heartbeat`, instantiates no
-# security module and nothing that locks, unlocks, authorizes or draws), grassfield-security.service (loads that root by path
-# from the system tree, the same cleared environment as the UI's unit, Restart=always with a start limit a loop reaches,
-# session-only, no NoNewPrivileges for the helpers of S2/S3, provisional resource guards), the autostart (started just before
+# Quickshell.Io, never reloads on a file change, one IpcHandler `security` with `state` and `heartbeat`, instantiates
+# ShellRoot and IpcHandler only and names no loader, process, URL opener or security module: tests/security/root_check.py
+# reads it as the engine does, comments stripped and the file joined, with a selftest of planted mutants),
+# grassfield-security.service (loads that root by path from the system tree, the same cleared environment as the UI's
+# unit, Restart=always with a start limit a loop reaches, session-only, no NoNewPrivileges for the helpers of S2/S3, memory
+# guards from the measurement and the UI unit's CPU quota), the autostart (started just before
 # the shell, --no-block), the PKGBUILD, grassfield-security-status (read-only, calls the target by the unit's path), and the
 # IPC surface table. qmllint parses the root when it is installed. Plain shell test: PASS/FAIL lines, non-zero on failure.
 set -euo pipefail
@@ -17,16 +19,16 @@ unit=packaging/systemd/grassfield-security.service
 ui=packaging/systemd/grassfield-shell.service
 helper=packaging/bin/grassfield-security-status
 
-desc="root: a root of its own next to shell.qml, imports only QtQuick, Quickshell and Quickshell.Io (no qs.* module, no Grassfield.Ui)"
-check bash -c '[[ -f "$1" && -f shell/shell.qml ]] && [[ "$(grep -E "^import " "$1" | sort | tr "\n" " ")" == "import QtQuick import Quickshell import Quickshell.Io " ]]' _ "$qml"
+desc="root: a root of its own next to shell.qml"
+check bash -c '[[ -f "$1" && -f shell/shell.qml ]]' _ "$qml"
+desc="root: read as the engine reads it (comments stripped, the file joined, imports wherever they stand): imports QtQuick, Quickshell and Quickshell.Io only, instantiates ShellRoot and IpcHandler only, names no loader, process, URL opener, Qt. or qs. name, regex literal, template string or security module"
+check python3 -I tests/security/root_check.py "$qml"
+desc="root check selftest: the root passes and each planted mutant (a next-line brace, a comment before the brace, an indented or tab import, a singleton's property, execDetached, openUrlExternally, Process, callLater, a Loader, a file import, a regex literal, a template string, a dynamic import, a Component, eval) is refused"
+check python3 -I tests/security/root_check.py --selftest "$qml"
 desc="root: never reloads on a file change (settings.watchFiles: false)"
 check grep -qE '^\s*settings\.watchFiles: false' "$qml"
 desc="root: one IpcHandler, target security, functions state and heartbeat, and nothing else that answers IPC"
 check bash -c '[[ $(grep -c "IpcHandler {" "$1") == 1 ]] && grep -qE "^\s*target: \"security\"" "$1" && grep -qE "^\s*function state\(\): string" "$1" && grep -qE "^\s*function heartbeat\(\): string" "$1" && [[ $(grep -cE "^\s*function " "$1") == 2 ]]' _ "$qml"
-desc="root: instantiates ShellRoot and IpcHandler only (an allow-list: no window, popup, loader, process, socket or security module)"
-check bash -c '[[ "$(grep -v "^\s*//" "$1" | grep -oE "\b[A-Z][A-Za-z0-9_.]*\s*\{" | sed -E "s/\s*\{//" | sort -u | tr "\n" " ")" == "IpcHandler ShellRoot " ]]' _ "$qml"
-desc="root: loads nothing at run time either: no Loader, LazyLoader, Component, source:, createComponent, createQmlObject or file import"
-check bash -c '! grep -v "^\s*//" "$1" | grep -qE "Loader|Component\s*\{|\bsource\s*:|createComponent|createQmlObject|import \""' _ "$qml"
 desc="root: logs its ready line for the start-time measurement"
 check grep -q 'grassfield-security: ready' "$qml"
 if [[ -x /usr/lib/qt6/bin/qmllint ]]; then
