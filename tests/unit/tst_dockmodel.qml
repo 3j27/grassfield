@@ -20,6 +20,19 @@ TestCase {
         return null;
     }
 
+    // ADR-0036 D66: in full screen the Dock hides and comes back at its edge, over the window.
+    function test_hidesInFullScreen() {
+        verify(!DockModel.hides(false, true, false, false), "setting off, the Dock's output, settled, no full screen");
+        verify(DockModel.hides(true, true, false, false), "the setting");
+        verify(DockModel.hides(false, false, false, false), "an output without the Dock");
+        verify(DockModel.hides(false, true, true, false), "a Dock that just moved here");
+        verify(DockModel.hides(false, true, false, true), "a full-screen window or a Split View Desktop");
+        compare(DockModel.hides(0, 1, 0, undefined), false, "a boolean");
+        verify(DockModel.overlayLayer(true));
+        verify(!DockModel.overlayLayer(false));
+        compare(DockModel.overlayLayer(undefined), false, "a boolean");
+    }
+
     function test_pinnedKeepOrderAndSkipUnknown() {
         const list = DockModel.merge(["chromium", "ghost", "foot"], [], lookup);
         compare(list.map(i => i.key).join(","), "chromium,foot");

@@ -7,32 +7,32 @@ QtObject {
 
     // color roles, dark appearance
     readonly property var colorDark: ({
-        text: "#F5F5F7",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
-        textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
+        text: "#F8F5F0",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F5F5F7 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        textSecondary: "#DFDDD7",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #DCDCE4 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         accent: "#4FB36B",  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         indicator: "#FFFFFF",  // Dock fidelity fix: running dot, pure white in dark mode like macOS; the per-appearance shelf tint (dock.tintAlphaDark) keeps it at 3:1 or more over any backdrop [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        materialTint: "#1D1F24",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialTint: "#211F1B",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1D1F24 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         materialHighlight: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         materialBorder: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         shadow: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         accentText: "#06240F",  // dark text on the bright green: contrast above 4.5:1 (gate A2, tested) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         knob: "#FFFFFF",  // estimate; slider and toggle knobs [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
+        fieldFill: "#F8F5F0",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F5F5F7 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fieldText: "#1D1B18",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1B1B1F at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         barText: "#FFFFFF",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        windowBackground: "#292929",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
-        groupFill: "#313131",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024)
+        windowBackground: "#2B2925",  // opaque app window, dark appearance: macOS 27 System Settings 39-42 grey, neutral (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #292929 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        groupFill: "#33312D",  // inset group of an app window, dark appearance: macOS 27 System Settings groups #313030 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #313131 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         statusOn: "#45C565",  // own green of a status dot, dark appearance: 5.8:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-        sidebarFill: "#232323",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet) [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
-        windowTextSecondary: "#DCDCE4",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
+        sidebarFill: "#25231F",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+        windowTextSecondary: "#DFDDD7",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #DCDCE4 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         chipFill: "#FFFFFF",  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#FF6B63",  // own value: the CPU Load graph's System share (AM29), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#5AA2FF",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -48,33 +48,33 @@ QtObject {
 
     // color roles, light appearance
     readonly property var colorLight: ({
-        text: "#1B1B1F",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
-        textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
-        accent: "#26763F",  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        text: "#1D1B18",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1B1B1F at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        textSecondary: "#3D3B37",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #3A3A42 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        accent: "#195E3F",  // own Grassfield green, not copied: the brand green of the light appearance, deeper and calmer since the owner's choice of 2026-10-30 (the light appearance only, after a comparison board; it was #26763F): white text 7.7:1 [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         hover: "#000000",  // estimate; drawn at hoverOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        materialTint: "#F3F4F6",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialTint: "#F6F4EF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F3F4F6 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         materialHighlight: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         materialBorder: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         shadow: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         accentText: "#FFFFFF",  // white on the darker light-mode green: contrast above 4.5:1 (gate A2, tested) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         knob: "#FFFFFF",  // estimate; slider and toggle knobs [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
+        fieldFill: "#F8F5F0",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F5F5F7 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fieldText: "#1D1B18",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1B1B1F at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         barText: "#000000",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         destructiveText: "#FFFFFF",  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        windowBackground: "#FFFFFF",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
-        groupFill: "#F7F7F7",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
+        windowBackground: "#FDFCF9",  // opaque app window, light appearance: macOS 27 System Settings content 255 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): the white of #FFFFFF, warmed
+        groupFill: "#F9F7F2",  // inset group of an app window, light appearance: macOS 27 System Settings groups 247 on 255, no border (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F7F7F7 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         statusOn: "#2E9E48",  // own green of a status dot (Wi-Fi Connected, a service that is up): 3.2:1 on the light group fill (a graphic: 3:1), the text beside it says the same [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusWarn: "#B78300",  // own yellow of a status dot (a service that is up without an address): 3.1:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-        sidebarFill: "#ECECEC",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
-        windowTextSecondary: "#6E6E73",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs)
-        chipFill: "#FFFFFF",  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
+        sidebarFill: "#EEECE7",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEC at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        windowTextSecondary: "#716E6A",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E6E73 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        chipFill: "#FDFCF9",  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): the white of #FFFFFF, warmed [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#D7372F",  // own value: the CPU Load graph's System share (AM29), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#1F6FD8",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphRead: "#1F6FD8",  // own value: the Disk graph's reads (AM42), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -121,10 +121,17 @@ QtObject {
         orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-        greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings. A light green, as macOS's Green, clearly apart from the brand green color.light.accent (OKLab distance 0.29 from the brand green #195E3F, 0.21 from #26763F; #3A7512 was 0.04): the owner's choice B of 2026-10-30 (IQ-B3 A) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        greenText: "#10240A",  // text and icons on the light green accent: dark, 6.5:1 (white would be 2.5:1; as yellowText) (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py) [ref: docs/decisions/ADR-0040-identity.md step 1c]
         graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+    })
+
+    // color roles, accentInkLight appearance
+    readonly property var colorAccentInkLight: ({
+        pink: "#BD2F6C",  // the lightest shade of the light pink accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        yellow: "#816500",  // the lightest shade of the light yellow accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
+        green: "#467427"  // the lightest shade of the light green accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
     })
 
     // color roles, selectionDark appearance
@@ -143,8 +150,8 @@ QtObject {
         orangeText: "#FFFFFF",  // text on the dark-appearance orange selection fill (A2: tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // dark-appearance selection fill, yellow: yellow keeps its light pair (dark text): a lighter shade would only lower the contrast [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         yellowText: "#241C00",  // text on the dark-appearance yellow selection fill (A2: tests/visual/test_contrast_tokens.py)
-        green: "#408014",  // dark-appearance selection fill, green: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
-        greenText: "#FFFFFF",  // text on the dark-appearance green selection fill (A2: tests/visual/test_contrast_tokens.py)
+        green: "#6DB53C",  // dark-appearance selection fill, green: the light accent itself, as yellow's: it holds dark text, and a selection is never darker than the light accent (the owner's choice B of 2026-10-30, ADR-0040 step 1c) [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
+        greenText: "#10240A",  // text on the dark-appearance green selection fill: dark, 6.5:1, as on the light accent (A2: tests/visual/test_contrast_tokens.py)
         graphite: "#6C717D",  // dark-appearance selection fill, graphite: the light accent lightened (HSL lightness, hue and saturation kept) to the lightest shade with white at 4.85:1 or more [ref: docs/audits/ui-finesse-2026-10-25/action-plan.md § Owner decisions; ADR-0024]
         graphiteText: "#FFFFFF"  // text on the dark-appearance graphite selection fill (A2: tests/visual/test_contrast_tokens.py)
     })
@@ -552,8 +559,8 @@ QtObject {
     readonly property int menuWindowTitleMax: 40
     // label inset from the row edge in a menu section that holds a checkable row: 24 from the menu edge with the 5 of menu.padding (macOS 26 reference: 16 without, 24 with a check column, 38 with icons; macOS 27 keeps icons on their own rows) [ref: docs/audits/visual-tahoe-2026-10-25.md Menus; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
     readonly property int menuCheckInset: 19
-    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1) [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
-    readonly property string menuSwatchMark: "#1B1B1F"
+    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1B1B1F at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
+    readonly property string menuSwatchMark: "#1D1B18"
 
     // F1 gap 18: slider track 6 (Settings reference) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrack: 6
@@ -2500,8 +2507,8 @@ QtObject {
     readonly property int previewToolbarButtonSize: 28
     // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewThumbnailWidth: 140
-    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
-    readonly property int previewSidebarItemHeight: 28
+    // estimate: Preview app (docs/specs/preview.md); a PDF's file-name row, which grows with Text size so the selection ring keeps clear of its descenders (ADR-0039 step 4) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
+    readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSearchWidth: 200
     // page background of PDF thumbnails (documents are white in both themes) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
@@ -2560,8 +2567,8 @@ QtObject {
     readonly property int previewGlanceContentInset: 5
     // estimate: font size of the text lines in a text file's sidebar thumbnail (tiny, like the page it stands for)
     readonly property int previewThumbnailTextSize: 6
-    // estimate: ink of the text lines in the sidebar thumbnail of a text file (drawn on the white paper, in both themes)
-    readonly property string previewPaperInk: "#4A4A4A"
+    // estimate: ink of the text lines in the sidebar thumbnail of a text file (drawn on the white paper, in both themes); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #4A4A4A at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+    readonly property string previewPaperInk: "#4C4A46"
     // estimate: time one image stays in a slideshow [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSlideshowInterval: 3000
 
@@ -2763,10 +2770,10 @@ QtObject {
     readonly property int folderIconPlateSamples: 12
     // estimate: icon size buckets of the plate measure (one measure per icon file and bucket); a larger icon uses the last [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property var folderIconPlateBuckets: [32, 64, 128, 256]
-    // estimate: the view behind a translucent (Clear mode) icon in dark appearance, composited under the plate when its shade is chosen [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property string folderIconPlateBackdropDark: "#1e1f24"
-    // estimate: the view behind a translucent (Clear mode) icon in light appearance [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property string folderIconPlateBackdropLight: "#f4f5f7"
+    // estimate: the view behind a translucent (Clear mode) icon in dark appearance, composited under the plate when its shade is chosen; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1E1F24 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
+    readonly property string folderIconPlateBackdropDark: "#211F1B"
+    // estimate: the view behind a translucent (Clear mode) icon in light appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F4F5F7 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
+    readonly property string folderIconPlateBackdropLight: "#F7F5F0"
     // estimate: 1 px light edge under an engraved symbol (the engraved look) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string folderIconGlyphHighlight: "#40ffffff"
     // estimate: offset of that edge over the icon edge (at least 1 px) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
@@ -2874,10 +2881,10 @@ QtObject {
     readonly property string windowMinimizeColor: "#D9A93B"
     // plugin kZoomColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     readonly property string windowZoomColor: "#4FA64F"
-    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    readonly property string windowInactiveLightDark: "#5A5A5E"
-    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    readonly property string windowInactiveLightLight: "#D1D1D3"
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #5A5A5E at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    readonly property string windowInactiveLightDark: "#5C5A56"
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #D1D1D3 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    readonly property string windowInactiveLightLight: "#D4D1CC"
     // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
     readonly property real windowLightBorderOpacity: 0.18
     // estimate: a pressed light darkens by this much
@@ -2933,24 +2940,24 @@ QtObject {
     // estimate: after the window got the keyboard back, the action waits this long more so that the application has read its keyboard enter before the action arrives over D-Bus [ref: docs/specs/menu-bridge.md MB12]
     readonly property int focusReturnMenuActionSettleMs: 30
 
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundDark: "#28282C"
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundLight: "#ECECEE"
-    // window title on the dark titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarTitleDark: "#ECECEE"
-    // window title on the light titlebar, drawn at titleOpacity [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarTitleLight: "#28282C"
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarBackgroundDark: "#2A2824"
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarBackgroundLight: "#EFECE7"
+    // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarTitleDark: "#EFECE7"
+    // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarTitleLight: "#2A2824"
     // estimate: the title a little softer than full ink, both appearances [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property real titlebarTitleOpacity: 0.85
-    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarInactiveButtonDark: "#5A5A5E"
-    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarInactiveButtonLight: "#D1D1D3"
-    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarPreviewTintDark: "#1D1F24"
-    // the same, light appearance (color.light.materialTint) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarPreviewTintLight: "#F3F4F6"
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #5A5A5E at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarInactiveButtonDark: "#5C5A56"
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #D1D1D3 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarInactiveButtonLight: "#D4D1CC"
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #1D1F24 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarPreviewTintDark: "#211F1B"
+    // the same, light appearance (color.light.materialTint); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #F3F4F6 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
+    readonly property string titlebarPreviewTintLight: "#F6F4EF"
     // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property real titlebarPreviewTintAlpha: 0.45
     // the preview's edge, dark appearance (color.dark.materialBorder) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -3006,9 +3013,9 @@ QtObject {
     readonly property int storeAccountNameGap: 8
     // estimate: the initials in the circle [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeAccountInitialsSize: Math.round(14 * Appearance.textScale)
-    // A2: the capture's grey (about #9EA4AE) darkened until white initials hold 4.5:1 (computed 4.8:1) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property string storeAccountCircleFill: "#6E7480"
-    // white initials on the account circle (4.8:1 on accountCircleFill, computed) [ref: docs/audits/store-2026-10-27/parity.md]
+    // A2: the capture's grey (about #9EA4AE) darkened until white initials hold 4.5:1 (computed 4.67:1 since the warm neutrals, 4.69:1 before); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E7480 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property string storeAccountCircleFill: "#76746F"
+    // white initials on the account circle (4.67:1 on accountCircleFill, computed) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property string storeAccountInitials: "#FFFFFF"
     // the page's content 40 pt from the sidebar edge and from the window's right edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeContentMargin: 40

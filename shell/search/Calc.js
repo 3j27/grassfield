@@ -1,4 +1,5 @@
 .pragma library
+.import "Numbers.js" as Numbers
 
 // Safe calculator (pure, unit-tested). Own tokenizer and recursive-descent parser: the input is
 // never passed to eval, Function or any dynamic lookup. Identifiers resolve through explicit
@@ -200,20 +201,29 @@ function isExpression(input) {
     return /[a-z+\-*/%^()×÷]/i.test(input);
 }
 
-// Display text: 12 significant digits, no trailing zeros.
-function format(value) {
+// Display text: 12 significant digits, no trailing zeros, written in the locale (a decimal comma and grouping in French,
+// "19 560"); the exponent form beyond 1e15 and under 1e-9. Without a locale: plain.
+function format(value, locale) {
     if (value === 0)
         return "0";
     const abs = Math.abs(value);
     if (abs >= 1e15 || abs < 1e-9)
-        return value.toExponential(8).replace(/\.?0+e/, "e");
-    return Number(value.toPrecision(12)).toString();
+        return Numbers.localize(value.toExponential(8).replace(/\.?0+e/, "e"), locale);
+    const rounded = Number(value.toPrecision(12));
+    if (rounded === 0)
+        return "0";
+    const digits = Math.max(0, 11 - Math.floor(Math.log10(Math.abs(rounded))));
+    return Numbers.localize(Numbers.trimmed(rounded, Math.min(20, digits)), locale);
 }
 
-// Provider entry point: {text, value} or null.
-function answer(input) {
-    if (typeof input !== "string" || !isExpression(input))
+// Provider entry point: {text, value} or null. `locale` (optional, Qt.locale()): numbers are read and written the way the
+// language does ("1,5 * 2" in French, "19 560").
+function answer(input, locale) {
+    if (typeof input !== "string")
         return null;
-    const r = evaluate(input);
-    return r.ok ? {value: r.value, text: format(r.value)} : null;
+    const text = Numbers.normalizeInput(input, locale);
+    if (!isExpression(text))
+        return null;
+    const r = evaluate(text);
+    return r.ok ? {value: r.value, text: format(r.value, locale)} : null;
 }

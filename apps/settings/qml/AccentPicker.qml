@@ -1,16 +1,16 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Shapes
 import Grassfield.Ui
 
 // The accent colours of Settings > Appearance > Theme (macOS 27, docs/audits/settings-parity-2026-10-26.md § Appearance):
-// one round swatch per accent, in its colour in the current appearance (Multicolour a colour wheel), the chosen one in an
-// accent ring with its name under it. One focus stop: Left/Right (and Up/Down) move the choice; the keyboard focus is a ring
-// in the focus colour outside the selection ring. The box is the swatches with room for the ring; the name may reach past it.
+// one round swatch per accent, in its colour in the current appearance (the first, "Grassfield", the brand green: ADR-0040
+// step 1c, in place of macOS's Multicolour wheel), the chosen one in an accent ring with its name under it. One focus stop:
+// Left/Right (and Up/Down) move the choice; the keyboard focus is a ring in the focus colour outside the selection ring. The
+// box is the swatches with room for the ring; the name may reach past it.
 FocusScope {
     id: root
 
-    // [{color, name}], in the order of Accent.NAMES; the first one is Multicolour.
+    // [{color, name}], in the order of Accent.NAMES; the first one is Grassfield (the default).
     property var model: []
     property int currentIndex: -1
     property string accessibleName: ""
@@ -90,62 +90,9 @@ FocusScope {
             }
 
             Rectangle {
-                visible: swatch.index > 0
                 anchors.fill: parent
                 radius: width / 2
                 color: swatch.modelData.color
-            }
-
-            // Multicolour: a colour wheel of the other accents.
-            Shape {
-                visible: swatch.index === 0
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                ShapePath {
-                    strokeColor: "transparent"
-                    fillGradient: ConicalGradient {
-                        centerX: swatch.size / 2
-                        centerY: swatch.size / 2
-                        angle: 90
-                        GradientStop {
-                            position: 0
-                            color: root.model.length > 1 ? root.model[1].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 0.17
-                            color: root.model.length > 2 ? root.model[2].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 0.33
-                            color: root.model.length > 3 ? root.model[3].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 0.5
-                            color: root.model.length > 4 ? root.model[4].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 0.67
-                            color: root.model.length > 5 ? root.model[5].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 0.83
-                            color: root.model.length > 7 ? root.model[7].color : "transparent"
-                        }
-                        GradientStop {
-                            position: 1
-                            color: root.model.length > 1 ? root.model[1].color : "transparent"
-                        }
-                    }
-                    PathAngleArc {
-                        centerX: swatch.size / 2
-                        centerY: swatch.size / 2
-                        radiusX: swatch.size / 2
-                        radiusY: swatch.size / 2
-                        startAngle: 0
-                        sweepAngle: 360
-                    }
-                }
             }
 
             Rectangle {

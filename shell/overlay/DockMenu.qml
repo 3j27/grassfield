@@ -324,7 +324,7 @@ PopupMenu {
             // macOS: a recent document opens in the app that used it (its Exec line with the file field code). When that app
             // cannot take the file the failure is shown; another app never opens it instead.
             if (!data.entry || !Apps.openDocument(data.entry, item.path))
-                Popups.notice(qsTr("The document can’t be opened"), qsTr("%1 can’t open “%2”.").arg(data.entry && Apps.displayName(data.entry) !== "" ? Apps.displayName(data.entry) : qsTr("This app")).arg(DisplayName.text(Stacks.baseName(item.path))));
+                Popups.notice(qsTr("The document can’t be opened"), qsTr("%1 can’t open “%2”.").arg(data.entry && Apps.displayName(data.entry) !== "" ? Apps.displayName(data.entry) : qsTr("This app")).arg(DisplayName.text(Stacks.baseName(item.path))), "document");
             break;
         case "trashOpen":
             Trash.open();

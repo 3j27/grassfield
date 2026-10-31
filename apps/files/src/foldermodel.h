@@ -87,8 +87,8 @@ class FolderModel : public QSortFilterProxyModel
     // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
     // never dimmed: they open. Every item of the Applications location is dimmed in a panel (a launcher, not a file), except
     // in Choose Application: `applications` (desktop ids) names the ones it takes, `allApplications` takes every one, and
-    // `listedApplications` (the document type's applications) are listed even when the grid hides them (ApplicationsLogic's
-    // Environment::shownIds).
+    // `listed` (desktop ids) the ones the location lists there even when the Apps grid hides them (NoDisplay=true: the
+    // candidates the Open With submenu shows).
     Q_PROPERTY(QVariantMap chooser READ chooser WRITE setChooser NOTIFY chooserChanged)
     // The Applications location (grassfield-apps:/, ApplicationsLogic): the desktop entries the user sees, read-only.
     Q_PROPERTY(bool isApplications READ isApplications NOTIFY urlChanged)
@@ -215,7 +215,9 @@ public:
 
 signals:
     // The Applications location was built (id -> .desktop path of every row): FilesApp keeps it for Copy and Get Info.
-    void applicationsListed(const QVariantMap &paths, const QVariantMap &names); // id -> .desktop path, id -> the name the row shows
+    // The Applications location's own list: id -> .desktop path, id -> the name the row shows. Not sent by a listing with
+    // chooser `listed` (a Choose Application panel's, which lists more).
+    void applicationsListed(const QVariantMap &paths, const QVariantMap &names);
     void urlChanged();
     void sortChanged();
     void showHiddenChanged();
@@ -415,5 +417,6 @@ private:
     // desktop ids), or every one.
     QSet<QString> m_chooserApplications;
     bool m_chooserAllApplications = false;
-    QSet<QString> m_chooserListedApplications;
+    // ...and the ones it lists although the Apps grid hides them (ApplicationsLogic::Environment::alsoListed).
+    QSet<QString> m_chooserListed;
 };

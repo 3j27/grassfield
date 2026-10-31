@@ -24,7 +24,9 @@ function filterFor(request, filterIndex) {
 
 // FolderModel.chooser for Choose Application (kind "application"): the Applications location's items it takes, the
 // frontend's candidates and its last choice under "Recommended Applications" (filter 0), every one under "All Applications"
-// (filter 1); one at a time; anything else (a file elsewhere) is dimmed.
+// (filter 1); one at a time; anything else (a file elsewhere) is dimmed. Under both, the location lists the candidates and
+// the last choice even when the Apps grid hides them (`listed`: NoDisplay=true, as Omarchy's image viewer imv is): the Open
+// With submenu offers them, and the panel showed nothing to preselect, Open dimmed.
 function applicationFilter(recommended, lastChoice, filterIndex) {
     const ids = (recommended || []).slice();
     if (lastChoice && ids.indexOf(lastChoice) < 0)
@@ -36,8 +38,7 @@ function applicationFilter(recommended, lastChoice, filterIndex) {
         single: true,
         applications: filterIndex === 1 ? [] : ids,
         allApplications: filterIndex === 1,
-        // Listed even when the Applications grid hides them (Omarchy's imv): Open With lists them too.
-        listedApplications: ids
+        listed: ids
     };
 }
 

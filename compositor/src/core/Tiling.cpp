@@ -576,6 +576,18 @@ namespace gf::tiling {
         return Rect{x, y, std::max(1.0, w), std::max(1.0, h)};
     }
 
+    bool strayFrame(const Rect& frame, std::span<const Rect> outputs) {
+        return std::ranges::none_of(outputs, [&frame](const Rect& o) {
+            return std::min(frame.x + frame.w, o.x + o.w) > std::max(frame.x, o.x) && std::min(frame.y + frame.h, o.y + o.h) > std::max(frame.y, o.y);
+        });
+    }
+
+    Rect gatheredFrame(const Rect& frame, const Rect& area) {
+        const double w = std::max(1.0, std::round(std::min(frame.w, area.w)));
+        const double h = std::max(1.0, std::round(std::min(frame.h, area.h)));
+        return Rect{std::round(area.x + ((area.w - w) / 2)), std::round(area.y + ((area.h - h) / 2)), w, h};
+    }
+
     Rect frameOf(const Rect& surface, double titlebar) {
         return Rect{surface.x, surface.y - titlebar, surface.w, surface.h + titlebar};
     }

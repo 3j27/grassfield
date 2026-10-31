@@ -392,8 +392,9 @@ Variants {
 
                 // Only the slide animates (macOS: the column comes in from the right edge). The column's place follows
                 // the window at once: the window can still be 0 wide when the column is created, and animating x then
-                // swept the column across the whole screen from the left (owner, real session 2026-10-22).
-                property real slideOffset: host.shown ? 0 : width + Tokens.notificationCenterInset
+                // swept the column across the whole screen from the left (owner, real session 2026-10-22). Under Reduce
+                // Motion the column fades in at its place instead (macOS: slides become fades; ADR-0039 step 5).
+                property real slideOffset: host.shown || Appearance.reduceMotion ? 0 : width + Tokens.notificationCenterInset
                 property bool glide: false
                 // The column at rest on the output (the window covers it): every card's glass is judged over this area, wherever
                 // the list scrolls it (G-3 per surface).
@@ -421,7 +422,17 @@ Variants {
                     onActivated: list.tabStep(false)
                 }
 
+                opacity: host.shown || !Appearance.reduceMotion ? 1 : 0
+
+                Behavior on opacity {
+                    enabled: Appearance.reduceMotion
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionNormal)
+                    }
+                }
+
                 Behavior on slideOffset {
+                    enabled: !Appearance.reduceMotion
                     NumberAnimation {
                         duration: Appearance.duration(Tokens.motionNormal)
                         easing.type: Easing.BezierSpline
@@ -577,9 +588,10 @@ Variants {
                     spacing: Tokens.spacingSm
                     onYChanged: list.bumpTick()
 
-                    // Glides with the cards when the list shrinks or grows (not during the first layout).
+                    // Glides with the cards when the list shrinks or grows (not during the first layout); jumps with them
+                    // under Reduce Motion (NotificationList.still).
                     Behavior on y {
-                        enabled: panel.glide
+                        enabled: panel.glide && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.BezierSpline
@@ -668,13 +680,29 @@ Variants {
                 }
             }
 
-            // Widget gallery: a glass panel at the bottom left (macOS), over the desktop; its own blur region.
+            // Widget gallery: a glass panel at the bottom left (macOS), over the desktop and clear of the Dock; its own blur region.
             Loader {
                 id: gallery
-                x: Tokens.widgetGalleryInsetLeft
-                y: host.height - height - Tokens.notificationCenterInset
-                width: Tokens.widgetGalleryWidth
-                height: Math.min(Tokens.widgetGalleryMaxHeight, (host.height - Tokens.menubarHeight) * Tokens.widgetGalleryHeightFraction)
+
+                readonly property string screenName: win.modelData ? win.modelData.name : ""
+                readonly property var dock: Compositor.dockScreenName === "" || Compositor.dockScreenName === screenName ? Settings.dockFootprint : ({
+                        left: 0,
+                        right: 0,
+                        bottom: 0
+                    })
+                readonly property var rect: CenterLogic.galleryRect(host.width, host.height, {
+                    menubar: Tokens.menubarHeight,
+                    inset: Tokens.notificationCenterInset,
+                    insetLeft: Tokens.widgetGalleryInsetLeft,
+                    width: Tokens.widgetGalleryWidth,
+                    maxHeight: Tokens.widgetGalleryMaxHeight,
+                    fraction: Tokens.widgetGalleryHeightFraction
+                }, dock)
+
+                x: rect.x
+                y: rect.y
+                width: rect.width
+                height: rect.height
                 active: panel.galleryOpen
                 sourceComponent: WidgetGallery {
                     screenName: (win.modelData ? win.modelData.name : "")

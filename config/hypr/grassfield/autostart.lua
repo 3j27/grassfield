@@ -23,14 +23,19 @@ hl.on("hyprland.start", function()
   -- The Settings portal backend (ADR-0035 D-8) is started next, without waiting for it (--no-block): the shell never waits
   -- on it, and an app that reads the portal before it is up starts it by D-Bus activation and gets its values.
   --
+  -- The security process (ADR-0041 step 1, S1: grassfield-security.service, a second Quickshell process beside the UI
+  -- that hosts nothing moved yet; the lock, idle, the sleep inhibitor and the polkit agent move into it at S2 and S3) is
+  -- started just before the shell, without waiting for it (--no-block): the shell never waits on it, and until S2 the
+  -- shell keeps every security module.
+  --
   -- grassfield-shell runs as a systemd user service so it restarts on crash (gate R1). It starts even when the
-  -- import, the bridge, the handover or the portal backend failed (";"): the bar then shows T0.
+  -- import, the bridge, the handover, the portal backend or the security process failed (";"): the bar then shows T0.
   --
   -- Session services that Omarchy's own session provides through its shell or its autostart (02 §5.3): crash and
   -- low-battery notifications, the pending-migrations notice, removable media (udiskie). Each unit has the same
   -- ConditionEnvironment and skips itself where it does not apply (no battery, no udiskie).
   local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service"
-  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
+  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
 
   -- What Omarchy's autostart does besides starting its shell: the power profile for the current power source, the
   -- post-boot hooks of ~/.config/omarchy/hooks, and the lid state (clamshell with an external display at start).

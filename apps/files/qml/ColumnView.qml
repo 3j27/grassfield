@@ -136,6 +136,10 @@ FocusScope {
         anchors.fill: parent
         contentWidth: strip.width
         contentHeight: height
+        // The preview column a file selection opens is scrolled into view, as Finder does: selecting a file keeps the
+        // location, so no sync (which scrolls to the end) follows, and in a narrow window the column stayed past the right
+        // edge (nested pass of 2026-10-31). The strip widens once its Row has laid the column out.
+        onContentWidthChanged: if (previewColumn.active) root.scrollToEnd()
         flickableDirection: Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
         acceptedButtons: Qt.NoButton
@@ -156,6 +160,7 @@ FocusScope {
             // Preview column for a selected file (View > Show Preview, the column view's own setting): the preview pane on the
             // window's white.
             Loader {
+                id: previewColumn
                 active: root.previewInfo !== null && root.tab.app.columnPreview
                 width: active ? Tokens.filesPreviewPaneWidth : 0
                 height: strip.height

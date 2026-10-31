@@ -35,18 +35,22 @@ QtObject {
         return "";
     }
 
+    // The names go through qsTranslate with this file's context, not qsTr: in the nested French session qsTr here returned the
+    // English source for the first moments of the singleton's life (the gallery's first rows and the placed Clock stayed English
+    // while qsTranslate("Registry", ...) in the same call gave the French text; probe of 2026-10-30). The context is the same, the
+    // catalog entries too (lupdate reads qsTranslate). tests/shell/widgets_translate_guard.sh holds both files to it.
     function title(id: string): string {
         switch (id) {
         case "clock":
-            return qsTr("Clock");
+            return qsTranslate("Registry", "Clock");
         case "calendar":
-            return qsTr("Calendar");
+            return qsTranslate("Registry", "Calendar");
         case "battery":
-            return qsTr("Battery");
+            return qsTranslate("Registry", "Battery");
         case "nowplaying":
-            return qsTr("Now Playing");
+            return qsTranslate("Registry", "Now Playing");
         case "system":
-            return qsTr("System");
+            return qsTranslate("Registry", "System");
         }
         return id;
     }
@@ -54,11 +58,11 @@ QtObject {
     function sizeLabel(size: string): string {
         switch (size) {
         case "small":
-            return qsTr("Small");
+            return qsTranslate("Registry", "Small");
         case "medium":
-            return qsTr("Medium");
+            return qsTranslate("Registry", "Medium");
         case "large":
-            return qsTr("Large");
+            return qsTranslate("Registry", "Large");
         }
         return size;
     }

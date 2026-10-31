@@ -20,8 +20,32 @@ function parse(data) {
     return {keyboard: keyboard, layout: layout};
 }
 
+// A layout name a person can read. A virtual keyboard that brings its own keymap (wtype, a remapper, a remote desktop) has no
+// layout names in it: Hyprland reports xkb's failure word, "error", for it. That keyboard is not an input source (macOS: the
+// input source is the system's, one per user setting, a virtual keyboard never changes it), so its events are ignored
+// and "error" is never shown.
+function named(layout) {
+    const text = String(layout === undefined || layout === null ? "" : layout).trim();
+    return text !== "" && !/^(error|unknown|none|\(unknown\))$/i.test(text);
+}
+
+// English needs no lookup (the names are English already); so does an empty language.
+function needsLookup(language) {
+    const text = String(language === undefined || language === null ? "" : language).trim();
+    return text !== "" && !/^en([_.@-]|$)/i.test(text);
+}
+
+// The helper's answer for one name: its first line, the English name when there is none (the helper prints one line per name).
+function lookupResult(output, english) {
+    const line = String(output === undefined || output === null ? "" : output).split("\n")[0].trim();
+    return line === "" || line.length > 128 ? english : line;
+}
+
 // Next state and whether to show the HUD. state: {last: {keyboard: layout}}. Show when the keyboard had a different layout.
+// An event without a readable layout name changes nothing and shows nothing.
 function step(state, event) {
+    if (!named(event.layout))
+        return {state: {last: Object.assign({}, state && state.last ? state.last : {})}, show: false};
     const last = Object.assign({}, state && state.last ? state.last : {});
     const known = last[event.keyboard];
     last[event.keyboard] = event.layout;

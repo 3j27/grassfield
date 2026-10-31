@@ -60,7 +60,7 @@ SettingsPage {
     }
 
     // The category's colour, the same in the bar, the legend and the row's tile (the tiles' colours, which carry a white glyph:
-    // no yellow).
+    // no yellow; green's white glyph is 2.5:1 since ADR-0040 step 1c, the owner's light Green, as macOS draws it).
     function tile(id: string): string {
         return ({applications: "orange", documents: "blue", downloads: "green", desktop: "blue", pictures: "pink", music: "red",
                 videos: "purple"})[id] || "graphite";

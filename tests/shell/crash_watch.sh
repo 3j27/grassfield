@@ -385,7 +385,10 @@ check has "loop 1 True 2"
 # Mutation tests: every mutant of a rule must make the decisions fail.
 mutate() { # name, text to replace, replacement, optional mode (decisions | owner)
   local name=$1 dest=$tmp/mutant-$1 mode=${4:-decisions}
-  python3 -I - "$helper" "$dest" "$2" "$3" <<'PY'
+  # A pattern the helper no longer holds is a failure of the test, never a silent pass: the mutant file was not written,
+  # the decisions could not run, and nothing matched (ignore-populated-flag went stale that way; the integrator's merge
+  # review of #62).
+  python3 -I - "$helper" "$dest" "$2" "$3" <<'PY' || { echo "MUTANT PATTERN NOT FOUND: $name" >&2; return 1; }
 import sys
 src, dest, old, new = sys.argv[1:5]
 text = open(src).read()
@@ -401,6 +404,9 @@ PY
   echo "MUTANT SURVIVED: $name" >&2
   return 1
 }
+desc="mutation: a pattern the helper no longer holds fails the test instead of passing silently"
+if mutate pattern-gone "NO SUCH TEXT IN THE HELPER" "x" 2>/dev/null; then stale=1; else stale=0; fi
+check test "$stale" -eq 0
 while IFS='|' read -r name old new mode; do
   desc="mutation: $name is caught"
   check mutate "$name" "$old" "$new" "$mode"
@@ -416,7 +422,7 @@ drop-emptied-check|if state in ("gone", "empty"):|if True:
 populated-counts-as-quit|if state in ("gone", "empty"):|if state in ("gone", "empty", "populated"):
 unknown-counts-as-quit|if state in ("gone", "empty"):|if state in ("gone", "empty", "unknown"):
 no-deadline|elif now >= item["deadline"]:|elif False:
-ignore-populated-flag|{"0": "empty", "1": "populated"}.get(line.split()[1], "unknown")|"empty"
+ignore-populated-flag|{"0": "empty", "1": "populated"}.get(words[1], "unknown")|"empty"
 dir-without-events-is-gone|if os.path.isdir(base) or not os.path.isfile(|if not os.path.isfile(
 missing-tree-is-gone|if os.path.isdir(base) or not os.path.isfile((root or CGROUP_ROOT) + "/cgroup.controllers"):|if os.path.isdir(base):
 drop-exe-fallback|if found is None and cand["exe"] != cand["appid"]:|if False:

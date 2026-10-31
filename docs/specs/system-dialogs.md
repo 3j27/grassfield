@@ -18,7 +18,8 @@ measurements.
    push buttons at the bottom right); the frame moves into `Grassfield.Ui` (a public type, `docs/specs/ui-api.md`) in the
    first step whose surface lives outside the shell process. The panel material of ADR-0024 and the existing tokens
    (`Tokens.panelAlertWidth`, `radiusAlert`, `panelSheet*`, `radiusSheet`, `buttonHeight`, `alertButtonHeight`,
-   `controlFocusOutline`). No hardcoded value; a new measured value is a new token with its source note. F1 target as ADR-0024 (geometry ±1 pt, tints ±0.1); A2 holds at every transparency ≤ 0.6
+   `controlFocusOutline`). The blur behind a dialog in the shell's Overlay takes the corner the dialog draws
+   (`Dialog.cornerRadius`: an alert's `radiusAlert`, a sheet's `radiusSheet`; ADR-0039 step 4). No hardcoded value; a new measured value is a new token with its source note. F1 target as ADR-0024 (geometry ±1 pt, tints ±0.1); A2 holds at every transparency ≤ 0.6
    and with Reduce Transparency (opaque tint).
 2. **Appearance.** Light, dark and auto follow `appearance` live (`ui/Grassfield/Ui/AutoAppearance.js`; the C++ copy in
    `apps/autoappearance.h` for processes outside the shell); the accent follows `accent.color`; Increase Contrast and Reduce
@@ -230,7 +231,9 @@ ADR-0035 5b-1 to 5b-7):
 - OW1 as the macOS panel: the Open panel in the Applications location, titled "Choose Application", the document named over the
   browser ("Choose an application to open the document “notes.txt”."); the Enable pop-up's "Recommended Applications" (the
   frontend's candidates and its last choice) and "All Applications" (every one), the others dimmed; the last choice selected
-  once listed; Open, Return or a double-click answers the application's desktop id, Cancel or Esc answers 1; UpdateChoices
+  once listed; the candidates and the last choice are listed under both even when the Apps grid hides them (NoDisplay=true,
+  OnlyShowIn elsewhere: Omarchy's image viewer imv is NoDisplay and the type's default, which the Open With submenu offers;
+  FolderModel.chooser `listed`, 2026-10-30); Open, Return or a double-click answers the application's desktop id, Cancel or Esc answers 1; UpdateChoices
   changes the candidates of the open panel; the search field and the views are the Open panel's. No "Always Open With" box
   (5b-3).
 - A-OW1: `tests/unit/portal/tst_appchooser.cpp` (every option in, the answer and its token out, a desktop id that is not one
@@ -256,8 +259,6 @@ Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
   under its panel), `tests/unit/tst_filesbrowser.qml` (Other…, the panel over the browser window), `tst_filesglobalmenu.qml`,
   `tst_fileskiosheets.qml`, `tst_filepanel.qml` (a click and a right-click on a dimmed item in each view); the look in a nested
   session is the integrator's.
-- Delivered with step 6a (5c-8): the panel lists the type's applications the Applications grid hides (NoDisplay, as Omarchy's
-  imv), so the default one is preselected and Open is enabled; `tst_applications.cpp`, `tst_folderchooser.cpp`.
 
 ## 3. Screen-sharing picker (P10; ADR-0035 D-6)
 

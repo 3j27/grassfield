@@ -9,6 +9,7 @@ import Grassfield.Ui
 import qs.lib
 import qs.services // layering-exception: GF-087
 import "Minimized.js" as Minimized
+import "QuickLook.js" as QuickLook
 import "ShowDesktop.js" as ShowDesktop
 import "ScreenChoice.js" as ScreenChoice
 import "SpaceGeometry.js" as SpaceGeometry
@@ -25,6 +26,29 @@ Singleton {
     readonly property var toplevels: ToplevelManager.toplevels
     readonly property var focusedToplevel: ToplevelManager.activeToplevel
     readonly property string focusedAppId: focusedToplevel ? focusedToplevel.appId : ""
+
+    // Quick Look (Glance, platform/QuickLook.js) belongs to the app that opened it (macOS): while it has the focus the menu
+    // bar and the app menus stay with the window that was in front before it. `regularToplevel` is the last focus that was not
+    // a quick look. `front` is who was in front before it ("desktop" or "window", QuickLook.frontAfter): a quick look opened from the
+    // desktop belongs to the desktop. Anything that acts on the focused window keeps using focusedToplevel.
+    readonly property bool quickLookFocused: !!focusedToplevel && QuickLook.isQuickLook(focusedToplevel.appId)
+    readonly property bool quickLookOpen: {
+        const list = toplevels ? toplevels.values : [];
+        return list.some(t => QuickLook.isQuickLook(t.appId));
+    }
+    property var regularToplevel: null
+    property string front: "window"
+    // A quick look is open (focused or not, a shell popup may hold the keyboard) and the desktop is what it belongs to.
+    readonly property bool quickLookFromDesktop: front === "desktop" && (quickLookFocused || quickLookOpen)
+    readonly property var frontToplevel: {
+        if (!quickLookFocused)
+            return focusedToplevel;
+        if (front === "desktop")
+            return null;
+        const list = toplevels ? toplevels.values : [];
+        return regularToplevel && list.indexOf(regularToplevel) >= 0 ? regularToplevel : null;
+    }
+    readonly property string frontAppId: frontToplevel ? frontToplevel.appId : ""
 
     // Last Stages state (StagesFront.parse of the reply StagesLink fetched: the `stages` event is only a change notice) or
     // null (Stages off, not active, or its state unknown). Set by applyStagesState only.
@@ -779,6 +803,14 @@ Singleton {
     // The plugin's tile-hover event (WindowTiling.parseHover): {address, state: "enter" | "leave" | "open", light, tileable}.
     signal tileHover(var hover)
 
+    // The outputs where a full-screen window's titlebar is revealed at the top edge (the plugin's titlebar-reveal event,
+    // WindowTiling.revealsAfter; ADR-0036 D65): the menu bar there comes and goes with it. Empty without the plugin.
+    property var titlebarReveals: []
+
+    function titlebarRevealedOn(screenName: string): bool {
+        return root.titlebarReveals.indexOf(screenName) >= 0;
+    }
+
     // The window Hyprland names `address` (lower-case hex without 0x), as a foreign-toplevel handle, or null.
     function toplevelByAddress(address: string): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
@@ -837,6 +869,8 @@ Singleton {
 
         function onPluginPresentChanged(): void {
             root.pushPluginConfig();
+            if (!Capabilities.pluginPresent)
+                root.titlebarReveals = []; // a plugin gone (unloaded, Hyprland restarted) reveals nothing any more
         }
     }
 
@@ -1234,6 +1268,9 @@ Singleton {
                 const notice = WindowTiling.parseNotice(event.data);
                 if (notice)
                     root.tilingNotice(notice);
+                const reveal = WindowTiling.parseTitlebarReveal(event.data);
+                if (reveal)
+                    root.titlebarReveals = WindowTiling.revealsAfter(root.titlebarReveals, reveal);
                 return;
             }
             if (event.name === "urgent") {
@@ -1527,7 +1564,42 @@ Singleton {
     onFocusedToplevelChanged: {
         if (focusedToplevel)
             recency.set(focusedToplevel, Date.now());
+        noteRegularFocus();
     }
+
+    // The window in front before a quick look (see frontToplevel). Focus passes through "no window" between two windows, so that
+    // is not remembered; a window's app id can arrive after it takes the focus, so one without an id yet is not remembered
+    // either (it could be the quick look itself) and the id's arrival is looked at too. The quick look test reads the id
+    // directly: the quickLookFocused binding may not have caught up yet when this runs.
+    function noteRegularFocus(): void {
+        if (focusedToplevel && focusedToplevel.appId !== "" && !QuickLook.isQuickLook(focusedToplevel.appId)) {
+            regularToplevel = focusedToplevel;
+            front = QuickLook.frontAfter(front, {type: "regularFocused"});
+        }
+    }
+
+    Connections {
+        target: DesktopState
+
+        function onHoldsKeyboardChanged(): void {
+            if (DesktopState.holdsKeyboard)
+                root.front = QuickLook.frontAfter(root.front, {type: "desktopHeld"});
+            else
+                frontSettle.restart();
+        }
+    }
+
+    // The desktop let go of the keyboard: once the focus has landed, a regular window with it means the user is back in that window.
+    Timer {
+        id: frontSettle
+        interval: 250
+        onTriggered: {
+            const t = root.focusedToplevel;
+            root.front = QuickLook.frontAfter(root.front, {type: "settled", focusedRegular: !!t && t.appId !== "" && !QuickLook.isQuickLook(t.appId)});
+        }
+    }
+
+    onFocusedAppIdChanged: noteRegularFocus()
 
     // Window to raise when an app is clicked: the most recently focused one.
     function mostRecent(list: var): var {

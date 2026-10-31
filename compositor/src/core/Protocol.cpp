@@ -1,5 +1,7 @@
 #include "Protocol.hpp"
 
+#include <format>
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -101,6 +103,15 @@ namespace gf::gfc {
 
     std::string keyboardFocusJson(std::string_view windowAddress) {
         return windowEventJson("keyboard-focus", windowAddress);
+    }
+
+    std::string titlebarRevealJson(std::string_view output, bool revealed) {
+        std::string out;
+        appendHeader(out, "titlebar-reveal");
+        out += R"(,"output":")";
+        out += jsonEscape(output);
+        out += std::format(R"(","revealed":{}}})", revealed);
+        return out;
     }
 
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview, bool desktopFocus, bool stagesAvailable, bool stagesEnabled,

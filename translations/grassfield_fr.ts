@@ -1256,10 +1256,6 @@
         <translation>Couleur d’accentuation</translation>
     </message>
     <message>
-        <source>Multicolour</source>
-        <translation>Multicolore</translation>
-    </message>
-    <message>
         <source>Light</source>
         <translation>Clair</translation>
     </message>
@@ -1278,6 +1274,10 @@
     <message>
         <source>Purple</source>
         <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
     </message>
     <message>
         <source>Pink</source>
@@ -7145,6 +7145,89 @@
     </message>
 </context>
 <context>
+    <name>MenuBridge</name>
+    <message>
+        <source>Ctrl</source>
+        <translation>Ctrl</translation>
+    </message>
+    <message>
+        <source>Shift</source>
+        <translation>Maj</translation>
+    </message>
+    <message>
+        <source>Alt</source>
+        <translation>Alt</translation>
+    </message>
+    <message>
+        <source>Super</source>
+        <translation>Super</translation>
+    </message>
+    <message>
+        <source>Space</source>
+        <translation>Espace</translation>
+    </message>
+    <message>
+        <source>Enter</source>
+        <translation>Entrée</translation>
+    </message>
+    <message>
+        <source>Del</source>
+        <translation>Suppr</translation>
+    </message>
+    <message>
+        <source>Ins</source>
+        <translation>Inser</translation>
+    </message>
+    <message>
+        <source>Backspace</source>
+        <translation>Retour arrière</translation>
+    </message>
+    <message>
+        <source>Esc</source>
+        <translation>Échap</translation>
+    </message>
+    <message>
+        <source>Tab</source>
+        <translation>Tab</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Gauche</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Droite</translation>
+    </message>
+    <message>
+        <source>Up</source>
+        <translation>Haut</translation>
+    </message>
+    <message>
+        <source>Down</source>
+        <translation>Bas</translation>
+    </message>
+    <message>
+        <source>Home</source>
+        <translation>Début</translation>
+    </message>
+    <message>
+        <source>End</source>
+        <translation>Fin</translation>
+    </message>
+    <message>
+        <source>PageUp</source>
+        <translation>Page préc.</translation>
+    </message>
+    <message>
+        <source>PageDown</source>
+        <translation>Page suiv.</translation>
+    </message>
+    <message>
+        <source>Print</source>
+        <translation>Impr. écran</translation>
+    </message>
+</context>
+<context>
     <name>MenuLayer</name>
     <message>
         <source>Context menu</source>
@@ -9441,6 +9524,11 @@
     <message>
         <source>password</source>
         <translation>mot de passe</translation>
+    </message>
+    <message>
+        <source>Lock Screen</source>
+        <comment>Settings page</comment>
+        <translation>Écran verrouillé</translation>
     </message>
     <message>
         <source>Privacy &amp; Security</source>

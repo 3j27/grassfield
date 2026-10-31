@@ -100,7 +100,9 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   accessibility paths (the x's accessibility press behaves like Space on it). Tab and Shift+Tab follow the visual order (top to bottom, then the widgets, then Edit Widgets and the close circle; inside a card: card, x, buttons):
   Qt's focus chain follows delegate CREATION order (newer cards sit above older ones) and moves the focus before any parent sees the key, so two
   `Shortcut`s (Tab, Shift+Tab; off while the widget gallery or a widget menu is open) run `ListView.tabStep`, which redirects only where Qt's next
-  item would leave the card, and otherwise focuses Qt's own next item. Reduce Motion: see above.
+  item would leave the card, and otherwise focuses Qt's own next item. Reduce Motion: see above; a banner fades in where it stands
+  instead of sliding in (`Banner.entrance`), the banners jump down for the OSD, the column fades in at its place instead of
+  sliding in and its footer jumps with the cards (ADR-0039 step 5; `tests/shell/reduce_motion_wiring.sh`).
   A group that empties forgets its "Show All" (`expandedApps`, also when the whole Center empties): its next cards arrive collapsed.
   One focus invariant for the whole column (macOS model: the focused element never disappears from under the keyboard): the element that
   holds the focus always exists, is visible and enabled; when it goes away the focus moves, visibly, to the nearest remaining element of the

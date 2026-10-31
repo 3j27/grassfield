@@ -5,6 +5,7 @@ import qs.menubar
 import qs.platform
 import qs.services
 import "TilingNav.js" as TilingNav
+import "../platform/WindowTiling.js" as WindowTiling
 
 // The tiling popover of a window's zoom light (docs/specs/tiling.md TL22-TL27, parity rows M19-M24): popup kind "tiling",
 // opened by services/TilingHover from the plugin's tile-hover event, under the light. Its content is AppMenuModel's
@@ -174,14 +175,42 @@ FocusScope {
         return root.currentKey.startsWith(prefix) ? Number(root.currentKey.slice(prefix.length)) : -1;
     }
 
+    // The green light under (x, y), overlay coordinates: a click there is the light's (greenClick), not a click outside.
+    function onLight(x: real, y: real): bool {
+        return WindowTiling.inLight(root.light, x, y);
+    }
+
+    // A click on the green light while the popover is open (ADR-0036 D64, macOS: the button under its popover still works; the
+    // overlay above it takes the click, the plugin never sees it): the light's own action (WindowTiling.greenAction), then the
+    // popover closes. `alt`: Alt held at the click (the popover also follows Alt from its keys).
+    function greenClick(alt: bool): void {
+        const window = root.toplevel;
+        if (!window) {
+            Popups.close(); // the window went away (a null handle could match another window with no wayland handle)
+            return;
+        }
+        switch (WindowTiling.greenAction(root.fullscreen, root.inSplit, root.altHeld || alt)) {
+        case "unsplit":
+            Compositor.unsplit(window);
+            break;
+        case "leaveFullscreen":
+        case "enterFullscreen":
+            Compositor.toggleFullscreen(window);
+            break;
+        case "toggleZoom":
+            Compositor.toggleZoom(window);
+            break;
+        }
+        Popups.close();
+    }
+
     // The pointer anywhere on the output (overlay coordinates). Opened by the hover, the popover closes once the pointer has
     // stayed away from both the light and the popover for tiling.hoverDelay; it never closes for a pointer it has not seen.
     function pointerAt(x: real, y: real): void {
         if (!root.hoverOpened)
             return;
         const p = root.mapFromItem(null, x, y);
-        const l = root.light;
-        const inLight = l !== null && x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h;
+        const inLight = root.onLight(x, y);
         const s = subMenu.mapFromItem(null, x, y);
         const inSub = root.subRow >= 0 && subMenu.containsPoint(s.x, s.y);
         if (inLight || inSub || root.contains(p))

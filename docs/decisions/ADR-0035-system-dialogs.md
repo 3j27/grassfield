@@ -723,15 +723,16 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   macOS's disabled items take no click; (a) left a selection out of sight that Return answered (review of step 5c, MINOR 2);
   (c) is macOS's, but the views' movers take the current row as their origin, a change of every view for a key path the
   panel's Return already keeps safe.
-- **5c-8. The type's applications the Applications grid hides** (integrator nested pass of step 5c, MINOR; delivered with step
-  6a): on Omarchy every image's default, imv, has `NoDisplay=true`, so Other… opened with nothing preselected and Open dimmed
-  while Open With listed it. Options: (a) leave such applications out of the candidates and Open With; (b) list them in the
-  panel. **Choice: (b)**: the panel names the type's applications (`listedApplications`) and the Applications listing shows them
-  although the grid hides them (NoDisplay, a helper, OnlyShowIn/NotShowIn, a terminal's server); Hidden=true (deleted), no Name or
+- **5c-8. The type's applications the Applications grid hides** (integrator nested pass of step 5c, MINOR): on Omarchy every
+  image's default, imv, has `NoDisplay=true`, so Other… opened with nothing preselected and Open dimmed while Open With listed
+  it. Options: (a) leave such applications out of the candidates and Open With; (b) list them in the panel. **Choice: (b)**:
+  the panel names its candidates and its last choice (`listed`) and the Applications listing shows them although the grid
+  hides them (`alsoListed`: NoDisplay, a helper, OnlyShowIn/NotShowIn, a terminal's server); Hidden=true (deleted), no Name or
   not an application still hide one; the location itself lists what the grid lists. (a) would take the user's own default away
-  from Open With. With it (same pass, NITs): the keyboard Hyprland gives back to a Files window that a panel blocks (after an
-  exclusive layer closes) goes on to the panel, and a name that starts with a right-to-left letter keeps to the left edge of
-  the list and column views, as Finder's.
+  from Open With. Main delivered it (1258a475, with 073ac15f: a panel's list is not the location's count); step 6a had the same
+  fix under other names and took main's when main 4a842164 was merged in. Step 6a delivered, from the same pass (NITs): the
+  keyboard Hyprland gives back to a Files window that a panel blocks (after an exclusive layer closes) goes on to the panel,
+  and a name that starts with a right-to-left letter keeps to the left edge of the list and column views, as Finder's.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names

@@ -623,7 +623,9 @@ Variants {
                 }
             }
 
+            // Under Reduce Motion the results take their height at once (ADR-0039 step 5).
             Behavior on height {
+                enabled: !Appearance.reduceMotion
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
                     easing.type: Easing.OutCubic

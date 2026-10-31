@@ -35,9 +35,10 @@ TestCase {
         return GlassTint.floorAlpha(c.materialTint, [c.text, c.textSecondary], c.fill, Tokens.materialFillOpacity, lumMin, lumMax, need);
     }
 
-    // Today's material over any backdrop: the secondary text is the binding constraint (light 0.78, dark 0.82).
+    // Today's material over any backdrop: the secondary text is the binding constraint (light 0.79, dark 0.82; light 0.78 with
+    // the cool neutrals before the owner's warm ones of 2026-10-30, ADR-0040).
     function test_worstCaseFloors() {
-        compare(floorOf(false, 0, 1, 4.5), 0.78);
+        compare(floorOf(false, 0, 1, 4.5), 0.79);
         compare(floorOf(true, 0, 1, 4.5), 0.82);
     }
 
@@ -85,12 +86,12 @@ TestCase {
             compare(dk.dark, true);
             compare(dk.colors.text, Tokens.colorDark.text);
             compare(dk.colors.materialTint, Tokens.colorDark.materialTint);
-            compare(dk.colors.text, "#F5F5F7");
+            compare(dk.colors.text, "#F8F5F0");
             const lt = Appearance.glassBand("menu", 0.49, strips.light, false);
             compare(lt.dark, false);
             compare(lt.colors.text, Tokens.colorLight.text);
             compare(lt.colors.materialTint, Tokens.colorLight.materialTint);
-            compare(lt.colors.text, "#1B1B1F");
+            compare(lt.colors.text, "#1D1B18");
         }
     }
 
@@ -150,7 +151,7 @@ TestCase {
         Appearance.dark = false;
         const b = bandOf(strips.owner, 0.49);
         compare(b.dark, true);
-        compare(b.colors.text, "#F5F5F7");
+        compare(b.colors.text, "#F8F5F0");
         verify(b.alpha < 0.79);
         verify(b.alpha < Appearance.tintAlpha(0.49));
         verify(bandStates(b.colors, b.alpha, strips.owner).capsule >= 4.5);
@@ -217,7 +218,7 @@ TestCase {
 
     function test_unknownBackdropTakesTheWorstCase() {
         Appearance.dark = false;
-        compare(Appearance.glassAlpha("menu", Tokens.materialDefaultTransparency, "nowhere"), 0.78);
+        compare(Appearance.glassAlpha("menu", Tokens.materialDefaultTransparency, "nowhere"), 0.79);
         Appearance.dark = true;
         compare(Appearance.glassAlpha("menu", Tokens.materialDefaultTransparency, "nowhere"), 0.82);
         compare(Appearance.glassAlpha("menu", 0, "nowhere"), 1);
