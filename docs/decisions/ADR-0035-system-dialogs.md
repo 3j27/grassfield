@@ -871,11 +871,11 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
   - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels (`SharePicker.js` `regionFor`, `regionKey`, `parseRegion`).
   - The shell refuses an area past its display; the stand-in checks it again (SP3).
 - **Windows that hide from capture:**
-  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, in one process with 1 s per window (`blockedHandles`).
-  - Such a window is greyed with "This window can't be shared" and is never answered.
+  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, all at once, 1 s each at most, each answer on its own line after its address (`blockedHandles`, which matches answers by address, so one meant for another request marks none).
+  - Such a window is greyed with "This window can't be shared" and is never answered: no window is answered at all until Hyprland's answers have come (review of step 7b, MINOR 1 and 3).
 - **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
-  - It shows while xdph has a stream (`sharingStreams`: PipeWire nodes named `xdph-streaming-…`) and never gives way when the status area is crowded.
-  - Its menu has one row per stream, named by the choice the picker answered just before it (10 s, `streamLabels`), or "Screen or window" when there was none (a share restored with a token), plus "To stop sharing, use the app that shares."
+  - It shows while xdph has a stream (`sharingStreams`: video nodes whose `node.name` is xdph's program name, `xdg-desktop-portal-hyprland`) and never gives way when the status area is crowded.
+  - Its menu has one row per stream. A row is named by the choice the picker answered within the last 10 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
 - **Tests:**
   - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
   - `share_picker_ipc.sh`, cases 9-11:
@@ -889,10 +889,10 @@ Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no tech
   - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
   - Options:
     - (a) the event, minus the shell's own captures (every capturing surface would have to declare itself);
-    - (b) xdph's PipeWire streams, which exist only while an app shares through the portal (xdph 1.4.1 names each `xdph-streaming-<random>`, `src/portals/Screencopy.cpp:1015-1017`; Quickshell's PipeWire service lists the nodes);
+    - (b) xdph's PipeWire streams, which exist only while an app shares through the portal. xdph 1.4.1 names each stream `xdph-streaming-<random>` (`src/portals/Screencopy.cpp:1015-1017`), but PipeWire keeps that name in `media.name`, which a node's registry entry does not carry, and gives the node xdph's program name, `xdg-desktop-portal-hyprland` (review of step 7b, BLOCKER 1: the first build looked for `xdph-streaming-` in the node's name and never lit; measured with a stream made as xdph makes it, `tests/shell/share_picker_ipc.d/fake-xdph-stream.c`). Quickshell's PipeWire service lists the nodes with their names and types;
     - (c) a compositor plugin hook that reports the client.
   - **Choice: (b).**
-  - Rule applied: the indicator must never light for the system's own previews, and it must light for every app that shares through the portal. A recorder that captures without the portal (wf-recorder, OBS's Wayland capture) is not shown: a known limitation, which (c) could close later.
+  - Rule applied: the indicator must never light for the system's own previews, and it must light for every app that shares through the portal. A recorder that captures without the portal (wf-recorder, OBS's Wayland capture) is not shown: a known limitation, which (c) could close later. Any PipeWire client can name a video node after xdph and light the indicator with nothing shared (no exposure; a known limitation).
 - **7-10. Where the area is chosen.**
   - Options: (a) a full-screen crosshair over the displays, as screenshots will have (D-10, step 8); (b) dragging on the chosen display's live preview inside the panel.
   - **Choice: (b).**
