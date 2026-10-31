@@ -190,7 +190,7 @@ TestCase {
             else
                 combo.visible = false;
             tryCompare(combo, "open", false);
-            menu.activated({id: "y", text: "Why"});
+            menu.activated({id: "y", text: "Why"}, false);
             compare(tc.picks, [], "a " + state + " combo does not pick");
             verify(!combo.activeFocus, "and does not take the focus back");
             combo.enabled = true;
@@ -231,7 +231,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         tryCompare(combo, "open", true);
         const menu = combo.list as PopupMenu;
-        menu.activated({id: "y", text: "Why"});
+        menu.activated({id: "y", text: "Why"}, false);
         compare(tc.picks, ["y"]);
         compare(combo.displayText, "Ex", "shows the host's value until it changes");
         combo.value = "y";
